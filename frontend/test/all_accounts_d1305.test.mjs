@@ -325,5 +325,5 @@ test('the source keeps the house rules: no browser pop-up in the table, the reco
   assert.doesNotMatch(table, /window\.(confirm|alert|prompt)\(/);
   const consoleSrc = read('frontend/src/pages/admin/consoles/UsersConsole.jsx');
   assert.match(consoleSrc, /<AllAccounts\s+scopeLine=\{accountScope\}\s+controlsFor=\{\(u\) => drawsAccountControls\(u, viewer\)\}\s+onOpen=\{openRecord\}\s+onAction=\{runAction\}\s+onRows=\{setUsers\}\s+reloadKey=\{reloadKey\}\s+\/>/);
-  assert.match(read('frontend/src/pages/hq/AccountsPage.jsx'), /<UsersConsole onImpersonate=\{onImpersonate\} \/>/);
+  assert.match(read('frontend/src/pages/hq/AccountsPage.jsx'), /<UsersConsole onImpersonate=\{onImpersonate\} reloadKey=\{keys\.directory\} onChanged=\{\(\) => invalidate\('directory_change'\)\} \/>/);
 });

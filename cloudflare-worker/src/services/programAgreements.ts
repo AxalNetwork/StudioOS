@@ -9,7 +9,9 @@
  * executed one is superseded only when its replacement is executed, so an amendment can be sent while the
  * signed version stays in force.
  *
- * `licence_uid` IS `territory_licences.uid` until #5057's shared licence identity exists; #5057 repoints it.
+ * `licence_uid` IS THE SHARED LICENCE UID (`licences.uid`, D5057). A territory licence's shared uid is its own
+ * `territory_licences.uid`, so every row written before D5057 already names its shared licence; migration
+ * 202611090932 refuses a row that names no shared licence.
  *
  * EVERY WRITE IS A BATCH OF STATEMENTS built here: the history line (`licence_agreement_events`) is inserted
  * from the row as it stands, THEN the row is updated, so the two commit together and the event names the

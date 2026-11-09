@@ -6,6 +6,8 @@ import { reportError } from '../../../lib/log';
 import { AdminPageHeader, actionGhost, usePhoneWidth } from '../../../ui';
 import { kindWord, statusWord } from '../../../lib/programGrants';
 import { AnswerDialog, GrantLightbox, ReasonDialog } from './GrantDialogs';
+import { StudioPricing } from './ProgramPricing';
+import { programPricingApi } from '../../../lib/api/programPricing.js';
 import { Tile } from './GridView';
 import {
   FROZEN_LINE, GRANTS_PATH, NOT_RECORDED, dayWord, historyRow, requestRow, studioCsv, studioRows, studioTiles,
@@ -119,6 +121,8 @@ export default function StudioView({ uid, requests, reloadAll }) {
   const [licence, reloadLicence] = useRead(() => programGrantsApi.licence(uid), [uid]);
   const [defaults, reloadDefaults] = useRead(() => programGrantsApi.defaults(), []);
   const [usage, reloadUsage] = useRead(() => programGrantsApi.inUse(uid), [uid]);
+  // D5018: base → country-adjusted → accepted for each program, read on its own so a failure says so here only.
+  const [pricing, reloadPricing] = useRead(() => programPricingApi.forLicence(uid), [uid]);
   const [act, setAct] = useState(null);
   const [done, setDone] = useState('');
   const [historyOf, setHistoryOf] = useState(null);
@@ -132,8 +136,12 @@ export default function StudioView({ uid, requests, reloadAll }) {
   const frozen = lic?.status === 'suspended' ? FROZEN_LINE : null;
   const mine = items.filter((r) => r.licence?.uid === uid && r.status === 'open').map((r) => requestRow(r, now));
   const history = (read?.history || []).filter((e) => !historyOf || e.program_key === historyOf).map(historyRow);
-  const after = (line) => { setAct(null); setDone(line); reloadLicence(); reloadUsage(); reloadAll(); };
+  const after = (line) => { setAct(null); setDone(line); reloadLicence(); reloadUsage(); reloadPricing(); reloadAll(); };
   const defaultsOf = (key) => list.find((d) => d.program_key === key);
+  const priceOf = (key) => {
+    const row = pricing.data?.programs?.find((p) => p.program_key === key);
+    return row ? { ...row, snapshot_uid: pricing.data?.snapshot?.uid ?? null } : null;
+  };
 
   if (licence.status === 'missing') {
     return (
@@ -251,6 +259,7 @@ export default function StudioView({ uid, requests, reloadAll }) {
               </section>
             </div>
           </div>
+          <StudioPricing uid={uid} read={pricing} onRetry={reloadPricing} />
         </>
       ) : null}
 
@@ -265,7 +274,7 @@ export default function StudioView({ uid, requests, reloadAll }) {
         if (act.key === 'grant' || act.key === 'change') {
           return (
             <GrantLightbox mode={act.key} licence={lic} defaults={defaultsOf(r.program.key)} grant={r.grant}
-              startTerms={r.grant?.state === 'draft' ? r.grant.terms : undefined} request={r.request}
+              startTerms={r.grant?.state === 'draft' ? r.grant.terms : undefined} request={r.request} price={priceOf(r.program.key)}
               onClose={close} onDone={() => after(act.key === 'change' ? `${name}: terms saved.` : `${name} granted to ${studio}.`)} />
           );
         }

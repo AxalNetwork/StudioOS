@@ -11,6 +11,7 @@
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { levelLabel, sharedView } from './capTableAccess.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 export const GROUP_ORDER = ['Founders', 'Investors', 'Option pool', 'Other'];
 const GROUP_OF_TYPE = { founder: 'Founders', preferred: 'Investors', safe: 'Investors', option_pool: 'Option pool', common: 'Other' };
@@ -76,5 +77,5 @@ export function askOutcome(err) {
   if (code === 'already_shared') return { asked: false, line: 'The founder already shares it with you. Reload to see it.', reload: true };
   // D1130 (CT22b): the ask is an investor's, for a venture they were introduced to. Anyone else is told why, once.
   if (code === 'investors_only' || code === 'not_a_venture') return { asked: false, line: ASK_NOT_YOURS, final: true };
-  return { asked: false, line: err?.message || 'Your ask could not be sent. Try again.' };
+  return { asked: false, line: userFacingRaiseError(err, { fallback: 'Your ask could not be sent. Try again.' }) };
 }

@@ -4,7 +4,7 @@ import { lovableHandler } from '../services/lovable/launch';
 import { readCapTable } from '../services/capTableToday';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
+import { CONNECTOR_METADATA, REGISTRY, getDescriptor } from '../integrations/registry';
 import { MODULE_LABELS, fedCounts } from '../integrations/fed';
 import { syncArrivals, syncArrivalsText, syncErrorWords } from '../integrations/githubFeeds';
 import { acceptDesignProposal, dismissDesignProposal, solutionDesignFromCode } from '../integrations/providers/github/solutionDesign';
@@ -64,10 +64,12 @@ type Query = { q?: string; filter?: string; sort?: string; page?: string };
  * without the parts: that was 31 of its 52 statements, every one of them a
  * read the overview never showed.
  */
-type ReadOpts = { parts: boolean; rows: boolean; query?: Query };
-const FULL: ReadOpts = Object.freeze({ parts: true, rows: true });
+type ReadOpts = { parts: boolean; rows: boolean; query?: Query;
+  /** #4603 part 2b: facts only the module page shows (Founding team's option pool), read from a store of their own. */
+  pageFacts: boolean };
+const FULL: ReadOpts = Object.freeze({ parts: true, rows: true, pageFacts: true });
 /** #4603 part 2: the overview needs no record rows from a module that says its counts in facts. */
-const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false });
+const OVERVIEW: ReadOpts = Object.freeze({ parts: false, rows: false, pageFacts: false });
 const PAGE_SIZE = 25;
 /** The page number exactly as `pageBuildRows` reads it. */
 function pageOf(raw: unknown): number {
@@ -226,7 +228,13 @@ const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_grou
  * search, or a sort on anything but an ordinal key reads every record and
  * pages in memory, as before.
  */
-type ListSql = { keys: Record<string, string>; orders: Record<string, readonly string[]>; defaultSort: string; readOrder: string };
+type ListSql = { keys: Record<string, string>; orders: Record<string, readonly string[]>; defaultSort: string; readOrder: string;
+  /**
+   * A key whose filter is not its sort expression: `pageBuildRows` lowercases a
+   * filtered value but ranks it as stored. `values` are the only filter values
+   * SQL answers; any other value pages in memory.
+   */
+  filters?: Record<string, { sql: string; values: readonly string[] }> };
 type PageSql = { where: string; binds: string[]; order: string; page: number };
 
 /** The SQL that answers this query's page, or null when it must be paged in memory. */
@@ -236,10 +244,11 @@ function listPageSql(list: ListSql, query: Query): PageSql | null {
   for (const part of (query.filter ?? '').split(',').filter(Boolean)) {
     const at = part.indexOf(':');
     if (at <= 0) continue;
-    const key = part.slice(0, at);
-    if (!Object.hasOwn(list.keys, key)) return null;
-    where.push(' AND COALESCE(' + list.keys[key] + ", '') = ?");
-    binds.push(part.slice(at + 1).toLocaleLowerCase());
+    const key = part.slice(0, at), wanted = part.slice(at + 1).toLocaleLowerCase();
+    const own = list.filters && Object.hasOwn(list.filters, key) ? list.filters[key] : null;
+    if (own ? !own.values.includes(wanted) : !Object.hasOwn(list.keys, key)) return null;
+    where.push(' AND COALESCE(' + (own ? own.sql : list.keys[key]) + ", '') = ?");
+    binds.push(wanted);
   }
   const sort = query.sort || list.defaultSort;
   const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
@@ -544,44 +553,104 @@ async function prototypeGithub(env: Env, p: Project) {
   }
 }
 
-async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
-  const items = rows(await env.DB.prepare(
+/**
+ * #4603 part 2b (D4603): Product roadmap's items. Column sorts by its stored
+ * value (`pageBuildRows` ranks the key as stored) and filters by it lowercased
+ * (as `pageBuildRows` compares). SQL's `LOWER` is ASCII-only, so only the four
+ * column values filter in SQL: no non-ASCII character lowercases to a letter
+ * of now, next, later or done, so `LOWER` and `toLocaleLowerCase` agree on them.
+ * Theme and KPI are free text and filter in memory.
+ */
+/** The four columns, in board order: the list's ordinal sort, and what the writers accept (D690). */
+const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
+const ROADMAP_FROM = `FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
+      WHERE o.project_id = ?`;
+const ROADMAP_COLS = 'SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id, u.name AS owner';
+const ROADMAP_LIST: ListSql = {
+  keys: { column: 'o.kanban_status' }, orders: { column: ROADMAP_COLUMNS }, defaultSort: 'column', readOrder: 'o.sort_order, o.id',
+  filters: { column: { sql: 'LOWER(o.kanban_status)', values: ROADMAP_COLUMNS } },
+};
+const isPosthogKpi = (k: unknown) => typeof k === 'string' && k.startsWith('posthog-');
+function roadmapRow(i: any, kpiWords: (k: unknown) => unknown): RecordRow {
+  // Moves reads the feedback theme an item answers and the KPI it moves.
+  return record(i.id,
+    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
+    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
+    { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
+      kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null });
+}
+/** Every roadmap item, in read order. The in-memory path, and what part 2b's tests compare the SQL page against. */
+export async function roadmapItemRows(env: Env, projectId: number): Promise<RecordRow[]> {
+  const items = await roadmapItems(env, projectId);
+  const kpiWords = await roadmapKpiWords(env, projectId, items.some(x => isPosthogKpi(x.kpi_key)));
+  return items.map(i => roadmapRow(i, kpiWords));
+}
+async function roadmapItems(env: Env, projectId: number): Promise<any[]> {
+  // A literal, so the schema guard reads its columns (the paged read is built and is not read by it).
+  return rows(await env.DB.prepare(
     `SELECT o.id, o.objective, o.kanban_status, o.owner_user_id, o.target_date, o.kpi_key, o.feedback_theme, o.feature_id,
             u.name AS owner
        FROM roadmap_okrs o LEFT JOIN users u ON u.id = o.owner_user_id
       WHERE o.project_id = ? ORDER BY o.sort_order, o.id`,
-  ).bind(p.id).all<any>());
-  const moves = rows(await env.DB.prepare(
-    `SELECT m.okr_id, m.to_status, m.moved_at FROM okr_column_moves m
+  ).bind(projectId).all<any>());
+}
+/** D1606: a PostHog KPI reads its value and source, or why it has none, never its key. Read when any item names one, as before. */
+async function roadmapKpiWords(env: Env, projectId: number, posthogNamed: boolean): Promise<(k: unknown) => unknown> {
+  const posthog = posthogNamed ? await posthogKpiTexts(env, projectId) : new Map<string, string>();
+  return (k: unknown) => (isPosthogKpi(k) ? posthog.get(k as string) ?? 'PostHog metric · Not recorded: no longer tracked' : k);
+}
+
+async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads an item row.
+  // One row per stored column value: the Now/Next/Later/Done counts, the total, and whether any item names a PostHog KPI.
+  const byColumn = rows(await env.DB.prepare(
+    `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
+       FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
+  ).bind(p.id).all<{ kanban_status: string; n: number; posthog: number }>());
+  const itemCount = byColumn.reduce((t, r) => t + number(r.n), 0);
+  const buckets = ROADMAP_COLUMNS.map(s => byColumn.filter(r => r.kanban_status === s).reduce((t, r) => t + number(r.n), 0));
+  const posthogNamed = byColumn.some(r => number(r.posthog) === 1);
+  // Items shipped per month: each month's distinct items moved to Done, one row per month.
+  const months = new Map(rows(await env.DB.prepare(
+    `SELECT substr(m.moved_at, 1, 7) AS month, COUNT(DISTINCT m.okr_id) AS n FROM okr_column_moves m
        JOIN roadmap_okrs o ON o.id = m.okr_id AND o.project_id = m.project_id
-      WHERE m.project_id = ? AND m.to_status = 'done' AND datetime(m.moved_at) <= datetime('now') ORDER BY m.moved_at`,
-  ).bind(p.id).all<any>());
-  const buckets = ['now', 'next', 'later', 'done'].map(s => items.filter(i => i.kanban_status === s).length);
-  const months = new Map<string, Set<number>>();
-  for (const m of moves) {
-    const month = String(m.moved_at).slice(0, 7);
-    if (!months.has(month)) months.set(month, new Set());
-    months.get(month)!.add(number(m.okr_id));
-  }
+      WHERE m.project_id = ? AND m.to_status = 'done' AND datetime(m.moved_at) <= datetime('now')
+      GROUP BY substr(m.moved_at, 1, 7)`,
+  ).bind(p.id).all<{ month: string; n: number }>()).map(r => [String(r.month), number(r.n)]));
   const trend = [...months.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const series: ChartSpec[] = items.length ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
-  if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, ids]) => ids.size), labels: trend.map(([month], at) => ({ at, label: month })) });
+  const series: ChartSpec[] = itemCount ? [{ kind: 'stack', rows: ['Now', 'Next', 'Later', 'Done'].map((label, n) => ({ label, parts: [buckets[n]] })), tones: ['v1'] }] : [];
+  if (trend.length) series.push({ kind: 'vbars', values: trend.map(([, n]) => n), labels: trend.map(([month], at) => ({ at, label: month })) });
   const thisMonth = new Date().toISOString().slice(0, 7);
-  // D1606: a PostHog KPI reads its value and source, or why it has none, never its key.
-  const posthog = items.some(i => typeof i.kpi_key === 'string' && i.kpi_key.startsWith('posthog-')) ? await posthogKpiTexts(env, p.id) : new Map<string, string>();
-  const kpiWords = (k: unknown) => (typeof k === 'string' && k.startsWith('posthog-') ? posthog.get(k) ?? 'PostHog metric · Not recorded: no longer tracked' : k);
-  // Moves reads the feedback theme an item answers and the KPI it moves.
-  const itemRows = items.map(i => record(i.id,
-    { item: i.objective, column: i.kanban_status, moves: [i.feedback_theme, kpiWords(i.kpi_key)].filter(v => typeof v === 'string' && v.trim()).join(' · ') || null, owner: i.owner, date: i.target_date },
-    { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
-    { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
-      kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));
-  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
+  let itemRows: RecordRow[] = [];
+  let themes: Filter['options'] = [], kpis: Filter['options'] = [];
+  let paged: ModuleRead['paged'];
+  if (opts.rows) {
+    const sql = opts.query ? listPageSql(ROADMAP_LIST, opts.query) : null;
+    const kpiWords = await roadmapKpiWords(env, p.id, posthogNamed);
+    if (sql) {
+      const read = await sqlPage(env, ROADMAP_COLS, ROADMAP_FROM, sql, p.id, itemCount);
+      itemRows = read.found.map(i => roadmapRow(i, kpiWords));
+      paged = read.paged;
+      // The Theme and KPI filters offer every item's values, not the page's: one row per distinct value.
+      const values = rows(await env.DB.prepare(
+        `SELECT 'theme' AS key, feedback_theme AS value FROM roadmap_okrs WHERE project_id = ? AND feedback_theme IS NOT NULL GROUP BY feedback_theme
+         UNION ALL
+         SELECT 'kpi' AS key, kpi_key AS value FROM roadmap_okrs WHERE project_id = ? AND kpi_key IS NOT NULL GROUP BY kpi_key`,
+      ).bind(p.id, p.id).all<{ key: string; value: unknown }>());
+      const of = (key: string) => optionsOf(values.filter(v => v.key === key).map((v, at) => record(at, {}, { [key]: v.value as any })), key);
+      themes = of('theme'); kpis = of('kpi');
+    } else {
+      itemRows = (await roadmapItems(env, p.id)).map(i => roadmapRow(i, kpiWords));
+      themes = optionsOf(itemRows, 'theme'); kpis = optionsOf(itemRows, 'kpi');
+    }
+  }
+  return { card: card('product-roadmap', itemCount ? 'ok' : 'empty', series, 'All time', itemCount ? null : 'No roadmap items yet. Now, Next and Later appear here.', itemCount ? next(p, 'product-roadmap', buckets[1] ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
     cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
-    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
-      sort: { key: 'column', label: 'Column' }, orders: { column: ['now', 'next', 'later', 'done'] } },
-    facts: { items: items.length, shipped_this_month: months.get(thisMonth)?.size ?? 0 },
+    list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: themes }, { key: 'kpi', label: 'KPI', options: kpis }],
+      sort: { key: 'column', label: 'Column' }, orders: { column: [...ROADMAP_COLUMNS] } },
+    ...(paged ? { paged } : {}),
+    facts: { items: itemCount, shipped_this_month: months.get(thisMonth) ?? 0 },
     ...(opts.parts ? { parts: { github: await roadmapGithub(env, p), vercel: await fromVercel('product_roadmap', async () => roadmapVercel(env, p.id, RELEASES_SHOWN, await projectMember(env, p, viewer))) } } : {}) };
 }
 
@@ -665,7 +734,10 @@ async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; s
 async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // Vesting belongs to a holder, but its own row is user-keyed. Both keys
   // must agree; a founder's other company's schedule must never be joined.
-  const holders = rows(await env.DB.prepare(
+  // #4603 part 2b: founders only, the rows this reader keeps. The card draws
+  // every founder (a segment and a vesting bar each), so every founder is read;
+  // investors and option holders are not, nor is their agreement.
+  const founderRows = rows(await env.DB.prepare(
     `SELECT h.id, h.name, h.founder_role, h.ownership_pct, h.shares,
             v.start_date, v.cliff_months, v.total_months, v.vested_shares,
             (SELECT d.status FROM documents d
@@ -675,9 +747,8 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
              ORDER BY d.created_at DESC, d.id DESC LIMIT 1) AS agreement_status
        FROM cap_table_holders h
        LEFT JOIN cap_table_vesting v ON v.holder_id = h.id AND v.user_id = h.user_id
-      WHERE h.project_id = ? ORDER BY h.id`,
+      WHERE h.project_id = ? AND h.founder_role IS NOT NULL ORDER BY h.id`,
   ).bind(p.id).all<any>());
-  const founderRows = holders.filter(h => h.founder_role != null);
   const equityKnown = founderRows.length && founderRows.every(h => h.ownership_pct != null);
   const series: ChartSpec[] = [];
   if (equityKnown) series.push({ kind: 'stack', rows: [{ label: 'Equity', parts: founderRows.map(h => number(h.ownership_pct)) }], tones: founderRows.map((_, i) => ['v1', 'v2', 'v3', 'grey'][i % 4]), legend: founderRows.map((h, i) => ({ label: h.name, tone: ['v1', 'v2', 'v3', 'grey'][i % 4] })) });
@@ -697,7 +768,8 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
+    // #4603 part 2b: the option pool is a module-page fact (the overview and the phone read the card only), so the overview does not read the cap table.
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(opts.pageFacts ? await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source })) : {}),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
     ...(opts.parts ? { parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } } : {}) };
@@ -797,12 +869,18 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     const ad = a.keys!.due as string | null, bd = b.keys!.due as string | null;
     return ad == null && bd == null ? 0 : ad == null ? 1 : bd == null ? -1 : ad.localeCompare(bd);
   })[0] : null;
+  // #4603 part 2b: the phone index's Company creation row, as facts: how many
+  // filings there are, and the earliest open filing's date (#1693's keys, as the
+  // index read them from the rows). The overview then reads no record rows here;
+  // the steps are still read, since the card's timeline draws every one.
+  const nextFilingDue = combined.filter(r => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string').map(r => String(r.keys!.due)).sort()[0] ?? null;
   return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', nextFiling ? `Complete ${nextFiling.cells.filing}` : null) : next(p, 'company-creation', 'Add filing', true)),
-    cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
+    cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: opts.rows ? combined : [],
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],
     sort: { key: 'due', label: 'Due' }, orders: { state: ['overdue', 'due_soon', 'upcoming', 'filed'] } },
-    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null },
+    facts: { ip: p.spinout_ip_meta ? JSON.parse(p.spinout_ip_meta) : null, incorporation: p.incorporation_meta ? JSON.parse(p.incorporation_meta) : null,
+      filings: combined.length, next_filing_due: nextFilingDue },
     ...(opts.parts ? { parts: {
       github: await fromGithub('company_creation', async () => companyFromCode(env, p.id, await projectMember(env, p, viewer))),
       vercel: await fromVercel('company_creation', async () => companyFromVercel(env, p.id, await projectMember(env, p, viewer))),
@@ -861,10 +939,13 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     const editable = k !== 'workspace' && (row?.integration_id == null || row.integration_user_id === viewer.id);
     return { used_by: row?.used_by ?? null, feeds, ...(editable ? { sync: row?.integration_id == null ? row?.sync_request ?? null : syncOf(row.config_json) } : {}) };
   };
-  const viewerMember = p.company_id != null && !!await env.DB.prepare(
+  // #4603 part 2b: the company's tools are listed only in the Tools part. Without
+  // it (the overview) they are counted, and only the failing ones are read, for
+  // the card's Reconnect; who the viewer is to the company is read only for it too.
+  const viewerMember = opts.parts && p.company_id != null && !!await env.DB.prepare(
     'SELECT 1 FROM user_company_links WHERE user_id = ? AND company_id = ?',
   ).bind(viewer.id, p.company_id).first();
-  const tools = p.company_id == null ? [] : rows(await env.DB.prepare(
+  const tools = !opts.parts || p.company_id == null ? [] : rows(await env.DB.prepare(
     `SELECT i.id, i.user_id, i.provider_key, i.status, i.last_synced_at, i.last_error_at, u.name AS owner_name
        FROM integrations i
        JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
@@ -872,6 +953,26 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
        LEFT JOIN users u ON u.id = i.user_id
       WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') ORDER BY i.id`,
   ).bind(p.company_id).all<any>());
+  const toolCounts = p.company_id == null ? null : opts.parts
+    ? { total: tools.length, connected: tools.filter(tool => tool.status === 'active').length, failing: tools.filter(tool => tool.status === 'error').length }
+    : await env.DB.prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN i.status = 'active' THEN 1 ELSE 0 END), 0) AS connected,
+              COALESCE(SUM(CASE WHEN i.status = 'error' THEN 1 ELSE 0 END), 0) AS failing
+         FROM integrations i
+         JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+         JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+        WHERE i.provider_key NOT IN ('google_calendar','microsoft_365')`,
+    ).bind(p.company_id).first<{ total: number; connected: number; failing: number }>().then(r => ({ total: number(r?.total), connected: number(r?.connected), failing: number(r?.failing) }));
+  // The card's Reconnect names the first failing tool the registry knows (`getDescriptor`, an exact
+  // lookup over REGISTRY's keys), in the list's order: one row, the keys bound as a JSON list.
+  const failingTools = opts.parts ? tools.filter(tool => tool.status === 'error') : p.company_id == null ? [] : rows(await env.DB.prepare(
+    `SELECT i.id, i.provider_key, i.status, i.last_error_at
+       FROM integrations i
+       JOIN integration_companies ic ON ic.integration_id = i.id AND ic.company_id = ? AND ic.enabled = 1
+       JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
+      WHERE i.provider_key NOT IN ('google_calendar','microsoft_365') AND i.status = 'error'
+        AND i.provider_key IN (SELECT value FROM json_each(?)) ORDER BY i.id LIMIT 1`,
+  ).bind(p.company_id, JSON.stringify(REGISTRY.map(d => d.key))).all<any>());
   const toolRows = tools.map((tool, index) => {
     const descriptor = getDescriptor(tool.provider_key);
     const metadata = CONNECTOR_METADATA[tool.provider_key];
@@ -886,7 +987,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       action: href ? { text: 'Open', href } : null,
     });
   });
-  const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));
+  const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));
   // Code and Hosting are shown only in the Tools part, so the overview (OVERVIEW) does not read them.
   const code = !opts.parts || p.company_id == null ? null : await codeSystems(env, p, viewer, viewerMember);
   // D1097 (#2962): Vercel as the Hosting system, beside GitHub's Code system. Its own read, Unreadable on its own.
@@ -908,7 +1009,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
   const failedSystem = failing ? byKind.get(failing) : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
-  const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && tools.length === 0;
+  const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
   return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     // Used by shows the recorded Used by, else what the system feeds.
@@ -917,8 +1018,8 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
         used_by: (edit.used_by as string | null) ?? ((edit.feeds as string[]).map(key => FEEDS_LABEL[key]).join(' · ') || null) }, { state }, edit); }),
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
       orders: { state: ['failing', 'connected', 'not_connected'] } },
-    facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: p.company_id == null ? null : tools.filter(tool => tool.status === 'active').length,
-      tools_failing: p.company_id == null ? null : tools.filter(tool => tool.status === 'error').length, tools_total: p.company_id == null ? null : tools.length },
+    facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
+      tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
     ...(opts.parts ? { parts: { tools: {
       cols: [['tool','Tool'],['category','Category'],['state','State'],['last_sync','Last good sync'],['failed_at','Failed at'],['feeds','Feeds'],['owner','Owner'],['action','Action']].map(([key,label]) => ({key,label})),
       rows: toolRows, total: p.company_id == null ? null : toolRows.length,
@@ -1462,7 +1563,6 @@ app.patch('/risks/:id', async c => {
 // D690 (#1695 decision 4). An item's KPI is one of the venture's, read
 // through `growKpis.ts`: another venture's `custom-<uid>` is a 404 (decision
 // 16), any other key off the list a 400. Old rows keep the key they hold.
-const ROADMAP_COLUMNS = ['now', 'next', 'later', 'done'] as const;
 async function kpiChecked(c: WriteCall, p: Project, body: Record<string, unknown>): Promise<string | null | undefined | Response> {
   if (!Object.hasOwn(body, 'kpi_key')) return undefined;
   if (body.kpi_key == null || body.kpi_key === '') return null;

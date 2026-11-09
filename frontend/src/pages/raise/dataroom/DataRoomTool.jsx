@@ -22,6 +22,7 @@ import { useVenture } from '../../cycles/VentureContext.jsx';
 import {
   HOME_PATH, LINE, TABS, TITLE, roomCan, tabHref, tabSearch,
 } from './dataRoomModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1101 (#2456) — the Data room tool's tab bar and its tab pages. CycleRoute
@@ -108,7 +109,7 @@ function useRoom(venture, reload) {
     setState((s) => (s.status === 'ready' && s.projectId === projectId ? { ...s, refreshing: true } : { status: 'loading', room: null }));
     Promise.resolve().then(() => api.dataRoom(projectUid))
       .then((room) => { if (alive) setState({ status: 'ready', room, uid: projectUid, projectId }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, projectUid, status, reload]);
   return state;

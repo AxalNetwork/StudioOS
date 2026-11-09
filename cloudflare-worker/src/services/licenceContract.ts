@@ -76,6 +76,7 @@ export function mergeValues(
   territories: string[],
   seats: Array<{ seat_type: string; seats_licensed: number }> = [],
   terms: LicenceTerms | null = null,
+  exclusivity: ExclusivityMerge | null = null,
 ): Record<string, string | null> {
   const flat = ledgerValues(licence, territories, seats);
   // D803 (#2240): the same values under `licence.<name>`, and D797's terms
@@ -83,7 +84,41 @@ export function mergeValues(
   const named: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(flat)) named[`licence.${k}`] = v;
   for (const [k, v] of Object.entries(termValues(terms, licence.currency))) named[`terms.${k}`] = v;
+  for (const [k, v] of Object.entries(exclusivityValues(exclusivity, licence.currency))) named[`exclusivity.${k}`] = v;
   return { ...flat, ...named };
+}
+
+/**
+ * D5019 (#5019): a contractual exclusivity, as `{{exclusivity.<name>}}` fields. Only a version marked contractual is
+ * given; a field with nothing recorded stays null, so the contract shows it unfilled rather than inventing a figure.
+ */
+export type ExclusivityMerge = {
+  scope_type: string; countries: string[]; regions: string[]; starts_on: string | null; ends_on: string | null;
+  review_on: string | null; cure_period_days: number | null;
+  targets: Array<{ year: number; period_start: string; period_end: string; min_revenue_cents: number | null; min_cohorts: number | null; min_active_members: number | null }>;
+};
+
+const SCOPE_WORDS: Record<string, string> = {
+  non_exclusive: 'non-exclusive', country_exclusive: 'exclusive in each named country', regional_exclusive: 'exclusive in each named region',
+  master_franchise: 'a master franchise over the named territory',
+};
+
+export function exclusivityValues(x: ExclusivityMerge | null, currency: string | null): Record<string, string | null> {
+  if (!x) return {};
+  const money = (c: number | null) => (c === null ? null : `${currency || ''} ${(c / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 })}`.trim());
+  const out: Record<string, string | null> = {
+    scope: SCOPE_WORDS[x.scope_type] ?? null,
+    territory: [...x.countries, ...x.regions].join(', ') || null,
+    starts_on: x.starts_on, ends_on: x.ends_on, review_on: x.review_on,
+    cure_period_days: x.cure_period_days === null ? null : String(x.cure_period_days),
+  };
+  for (const t of x.targets) {
+    out[`year_${t.year}_period`] = `${t.period_start} to ${t.period_end}`;
+    out[`year_${t.year}_min_revenue`] = money(t.min_revenue_cents);
+    out[`year_${t.year}_min_cohorts`] = t.min_cohorts === null ? null : String(t.min_cohorts);
+    out[`year_${t.year}_min_active_members`] = t.min_active_members === null ? null : String(t.min_active_members);
+  }
+  return out;
 }
 
 /** Basis points as a percentage with at most two decimals: 25 → "0.25%", 2000 → "20%". */

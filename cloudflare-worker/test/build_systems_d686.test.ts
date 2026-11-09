@@ -78,7 +78,7 @@ const checks: MutationCheck[]=[
  const departed=await request(route,env,'/modules/operating-systems?project=101');
  snap([member.status,before,owned?.cells.tool,owned?.cells.owner,team?.cells.tool,team?.cells.owner,outside?.cells.owner,partner.status,partnerRow?.cells.owner,JSON.stringify(admin.body).includes('Private teammate account'),JSON.stringify(partner.body).includes('Private teammate account'),member.body.parts.tools.rows.some((r:any)=>r.cells.tool==='HubSpot' && r.cells.owner!=='You'),departed.body.parts.tools.rows.some((r:any)=>r.cells.tool==='Salesforce')],
  [200,3,'HubSpot','You','Salesforce','Two',null,200,null,false,false,false,false]);db.close();}},
- {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
+ {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
  snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],

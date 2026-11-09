@@ -14,6 +14,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { teamRaw, teamFile } from './_hqTeamSource.mjs';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -234,11 +235,19 @@ test('HQ can sign out ONE account, and the control is drawn only where it can ru
 
   // The SPA half. The control lives on HQ · Team rather than here, because that
   // page is already one row per admin and already super-admin gated.
-  const team = read('frontend/src/pages/hq/HqTeamTable.jsx');
-  assert.match(team, /api\.hqForceReauthUser\(row\.user_id, reason\.trim\(\)\)/,
+  // D5044 — the action is its own file (`team/SignOutAccountAction.jsx`) on the shared action
+  // model; the route, the trimmed reason and the floor are pinned there.
+  const signOut = read('frontend/src/pages/hq/team/SignOutAccountAction.jsx');
+  assert.match(signOut, /api\.hqForceReauthUser\(row\.user_id, r\)/,
     'the row action does not reach the per-account route');
-  assert.match(team, /reason\.trim\(\)\.length < 8/,
+  assert.match(signOut, /signOut\.submit\(reason\.trim\(\)\)/, 'the reason sent is not the trimmed reason typed');
+  assert.match(signOut, /export const SIGN_OUT_REASON_MIN = 8;/,
     'the reason floor the server enforces is not mirrored, so the button offers a refusal');
+  assert.match(signOut, /reason\.trim\(\)\.length < SIGN_OUT_REASON_MIN/,
+    'the button does not wait for the floor');
+  const team = teamRaw();
+  assert.ok(!teamFile('BranchAccountSearch.jsx').includes('hq-team-revoke'),
+    'a revoke control reached the branch search, where the route it calls cannot act');
 
   // AND ONLY ON HQ-HELD ROWS. `bumpJwtMinIat` writes HQ's `users` table; a branch
   // admin's account lives in the branch's own database, so the same button on a

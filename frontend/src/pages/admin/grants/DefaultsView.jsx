@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { programGrantsApi } from '../../../lib/api/programGrants.js';
 import { actionGhost } from '../../../ui';
 import { DefaultsDialog, ReasonDialog } from './GrantDialogs';
 import { defaultsCards } from './grantsModel';
+import { ReferencePrices } from './ProgramPricing';
+import { programPricingApi } from '../../../lib/api/programPricing.js';
+import { reportError } from '../../../lib/log';
 
 /**
  * D987 (#2778) — GR6: the terms new grants start from, one card per program
@@ -32,6 +35,13 @@ export default function DefaultsView({ grid, reload }) {
   const [done, setDone] = useState('');
   const g = grid.status === 'ready' ? grid.data : null;
   const cards = useMemo(() => (g ? defaultsCards(g.programs, g) : []), [g]);
+  // D5018: the global reference prices, read on their own.
+  const [prices, setPrices] = useState({ status: 'loading', data: null });
+  const loadPrices = useCallback(() => {
+    programPricingApi.defaults().then((data) => setPrices({ status: 'ready', data }))
+      .catch((e) => { reportError('program-pricing:defaults', e); setPrices({ status: 'error', data: null }); });
+  }, []);
+  useEffect(() => { loadPrices(); }, [loadPrices]);
 
   return (
     <div className="flex flex-col gap-3.5" data-testid="grants-defaults-view">
@@ -77,6 +87,8 @@ export default function DefaultsView({ grid, reload }) {
           );
         })}
       </div>
+
+      <ReferencePrices read={prices} reload={loadPrices} />
 
       {act?.key === 'switch' ? (() => {
         const on = !!act.card.grantable;

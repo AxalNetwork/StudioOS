@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
@@ -11,6 +11,10 @@ import {
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
 import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './GovernanceAttention';
+import GovernanceWorkspace from './GovernanceWorkspace';
+import HighRiskMove, { MOVE_WORD } from './HighRiskMove';
+
+const isHighRisk = (to) => Object.prototype.hasOwnProperty.call(MOVE_WORD, to);
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -22,11 +26,13 @@ import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './Govern
  * the Super Admin's alone: another admin sees only how many are withheld. The
  * ownership metadata is the Super Admin's alone too.
  */
-export default function GovernanceTab() {
+export default function GovernanceTab({ workspaceLink = null }) {
   const [revision, setRevision] = useState(0);
   const [panel, setPanel] = useState(null); // { kind: 'new', entity, category? } | { kind: 'doc', uid } | { kind: 'ownership' }
   const read = useRead(() => adminGovernanceApi.list(), [revision]);
   const [params] = useSearchParams();
+  // D4811 part 5: `/admin/contracts/governance/doc/:uid` is one record's workspace.
+  const { uid: workspaceUid } = useParams();
   const changed = () => setRevision((n) => n + 1);
   const data = read.data;
   // D4811 part 2: `?entity=<key>` is one entity's page, `?records=<state>` a summary count's records.
@@ -40,7 +46,9 @@ export default function GovernanceTab() {
         <p className="text-[12.5px] text-axal-muted">Operating agreements, formation certificates, member registers, resolutions and signing authority records of the three Axal entities. A file is never replaced: a corrected one is a new version.</p></div>
     </div>
     <ReadState read={read} what="Governance documents">
-      {data && (focus ? <>
+      {data && (workspaceUid ? <GovernanceWorkspace key={`${workspaceUid}:${revision}`} uid={workspaceUid} categories={data.categories} entities={data.entities}
+        onEdit={() => open(workspaceUid)} />
+      : focus ? <>
         <EntityAttention entity={focus} onAdd={(category) => add(focus, category)} onOpen={open} />
         <EntityCard entity={focus} categories={data.categories} onNew={() => add(focus)} onOpen={open} />
       </> : drill ? <DrillList entities={data.entities} state={drill} onAdd={add} onOpen={open} /> : <>
@@ -53,7 +61,7 @@ export default function GovernanceTab() {
     </ReadState>
     {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} category={panel.category} categories={data.categories} superAdmin={data.super_admin}
       onClose={() => setPanel(null)} onCreated={(uid) => { changed(); setPanel({ kind: 'doc', uid }); }} />}
-    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} />}
+    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} workspaceLink={workspaceLink} />}
     {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => { setPanel(null); changed(); }} />}
   </section>;
 }
@@ -126,13 +134,15 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged }) {
+function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged, workspaceLink }) {
   const [revision, setRevision] = useState(0);
   const read = useRead(() => adminGovernanceApi.read(uid), [uid, revision]);
   const refresh = () => { setRevision((n) => n + 1); onChanged(); };
   const d = read.data?.document;
   return <SidePanel title={d ? d.title : 'Governance document'} onClose={onClose} testId="governance-document-panel">
     <ReadState read={read} what="This document">{d && <>
+      {/* D4811 part 5: the desk draws the door (its doors are the Contracts page's); the panel only places it. */}
+      {workspaceLink?.(d.uid)}
       <div className="flex flex-wrap items-center gap-2 text-xs"><StatusPill status={d.status} /><span className="text-axal-muted">{categories.find((c) => c.key === d.category)?.label}</span>{d.confidential && <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px]">Confidential</span>}</div>
       <StatusMoves document={d} versions={read.data.versions} onDone={refresh} />
       <Details document={d} superAdmin={superAdmin} onDone={refresh} />
@@ -158,7 +168,9 @@ function StatusMoves({ document: d, versions, onDone }) {
     {d.executed_version != null && <p className="text-xs">Executed from the signed copy, v{d.executed_version}.</p>}
     {d.status === 'executed' && d.executed_version == null && d.envelope_id != null && <p className="text-xs">Executed from completed envelope #{d.envelope_id}.</p>}
     <div className="flex flex-wrap gap-2">{d.next_statuses.map((to) => <button key={to} type="button" className={button} disabled={busy} onClick={() => { setAsking(to); setError(''); }}>{moveLabel(d.status, to)}</button>)}</div>
-    {asking && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
+    {/* D4811 part 6: executing and archiving are high-risk: Scope → Review → Result, with the reason, the word and the evidence. */}
+    {asking && isHighRisk(asking) && <HighRiskMove to={asking} document={d} versions={versions} onClose={() => setAsking(null)} onDone={onDone} />}
+    {asking && !isHighRisk(asking) && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
       <p>Move “{d.title}” from {statusLabel(d.status)} to {statusLabel(asking)}?</p>
       {asking === 'executed' && hint && <p className="text-amber-700 dark:text-amber-300">{hint}</p>}
       <div className="flex gap-2"><button type="button" className={button} onClick={() => setAsking(null)}>Cancel</button>
