@@ -4977,7 +4977,17 @@ export const api = {
   // one anti-joined against `portfolio_positions` server-side, so "no support"
   // is two stored sets compared rather than the ledger's silence read as an
   // answer.
-  portfolioSupportList: () => request('/portfolio-support'),
+  // D4647 (#4647): `state` narrows the ledger in the Worker, so an outstanding
+  // promise older than the newest page is still reachable; `before` is the
+  // last listed entry's id (`page.next_before`), never an offset.
+  portfolioSupportList: ({ state, before, limit } = {}) => {
+    const q = new URLSearchParams();
+    if (state) q.set('state', state);
+    if (before != null) q.set('before', String(before));
+    if (limit != null) q.set('limit', String(limit));
+    const query = q.toString();
+    return request(`/portfolio-support${query ? `?${query}` : ''}`);
+  },
   // Logging is open to an investor for a company already in their book, not
   // admin-only like the valuation writes: a ledger the workers cannot write to
   // stays empty, which is the state IP3 existed in.

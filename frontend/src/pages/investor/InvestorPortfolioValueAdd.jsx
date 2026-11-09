@@ -57,9 +57,15 @@ const EMPTY = {
   entries: [], companies: [], untouched: [],
   totals: {
     delivered: 0, promised: 0, withdrawn: 0, hours_recorded: 0,
-    entries_without_hours: 0, companies_in_book: 0, companies_supported: 0,
+    entries_without_hours: 0, companies_in_book: 0, companies_supported: 0, entries_total: 0,
   },
+  page: { limit: 0, state: null, returned: 0, has_more: false, next_before: null },
 };
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/** Which stored state each row-filtering view asks the Worker for (D4647). */
+const ROW_STATE = { delivered: 'delivered', outstanding: 'promised' };
 
 export default function InvestorPortfolioValueAdd() {
   const [filter, setFilter] = useState('all');
@@ -67,27 +73,35 @@ export default function InvestorPortfolioValueAdd() {
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState('');
 
-  const load = useCallback(async () => {
+  // D4647 (#4647): the ledger is read for the state being shown, so the rows
+  // the view asks for are the ones the Worker sends. Filtering a single page
+  // in the browser hid every outstanding promise older than that page, while
+  // the totals beside it counted them.
+  const load = useCallback(async (show = filter) => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const result = await api.portfolioSupportList();
-      setState({ loading: false, error: '', data: { ...EMPTY, ...result, totals: { ...EMPTY.totals, ...(result?.totals || {}) } } });
+      const result = await api.portfolioSupportList({ state: ROW_STATE[show] || undefined });
+      setState({ loading: false, error: '', data: {
+        ...EMPTY, ...result,
+        totals: { ...EMPTY.totals, ...(result?.totals || {}) },
+        page: { ...EMPTY.page, ...(result?.page || {}) },
+      } });
     } catch (error) {
       // An unreadable ledger is not an empty one. The page says which it is
       // rather than drawing the empty state over a failed read.
       setState({ loading: false, error: error?.message || 'The support ledger could not be read.', data: EMPTY });
     }
-  }, []);
-  useEffect(() => { load(); }, [load]);
+  }, [filter]);
+  useEffect(() => { load(filter); }, [load, filter]);
 
-  const { entries, companies, untouched, totals } = state.data;
+  const { entries, companies, untouched, totals, page } = state.data;
   // `company` is a VIEW, not a row predicate — the rollup rather than a
   // narrower set of entries. The other three read `state` directly.
   const byCompany = filter === 'company';
+  // The Worker already sent this state's rows (D4647); the same predicate
+  // stays here so a page in flight is never drawn under the new filter.
   const visible = useMemo(() => entries.filter((row) => (
-    filter === 'delivered' ? row.state === 'delivered'
-      : filter === 'outstanding' ? row.state === 'promised'
-        : true
+    ROW_STATE[filter] ? row.state === ROW_STATE[filter] : true
   )), [entries, filter]);
 
   const logSupport = useCallback(() => {
@@ -142,6 +156,16 @@ export default function InvestorPortfolioValueAdd() {
   };
 
   const unreadable = Boolean(state.error);
+  // D4647 (#4647): the count beside the ledger is the WHOLE authorized
+  // ledger's, which the Worker now groups in SQL, and the line says plainly
+  // when this page is only part of it. `entries.length` was both the shown
+  // rows and the claimed total, so a book with more entries than one page
+  // under-stated the work it exists to make auditable.
+  const more = page.has_more ? `, the newest ${plural(visible.length, 'entry', 'entries')} shown` : '';
+  const ledgerLine = unreadable ? 'The ledger could not be read. This is not a claim that it is empty.'
+    : filter === 'outstanding' ? `${plural(totals.promised, 'promised entry', 'promised entries')}, still open${more}`
+      : filter === 'delivered' ? `${plural(totals.delivered, 'delivered entry', 'delivered entries')}${more}`
+        : `${plural(totals.entries_total, 'recorded entry', 'recorded entries')}${more}`;
   const hours = totals.entries_without_hours > 0 && totals.hours_recorded === 0
     ? 'Not recorded'
     : `${totals.hours_recorded} h`;
@@ -166,14 +190,14 @@ export default function InvestorPortfolioValueAdd() {
     {state.loading ? <Skeleton /> : <>
       <section className="i4-stats">
         <Stat label="Delivered" value={unreadable ? 'Unavailable' : totals.delivered} note={unreadable ? 'Ledger unreadable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
-        <Stat label="Hours logged" value={unreadable ? 'Unavailable' : hours} note={unreadable ? 'Ledger unreadable' : totals.entries_without_hours === 0 ? (entries.length ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
+        <Stat label="Hours logged" value={unreadable ? 'Unavailable' : hours} note={unreadable ? 'Ledger unreadable' : totals.entries_without_hours === 0 ? (totals.entries_total ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
         <Stat label="Outstanding" value={unreadable ? 'Unavailable' : totals.promised} note={unreadable ? 'Ledger unreadable' : 'Promised and not yet delivered'} />
         <Stat label="No support at all" value={unreadable ? 'Unavailable' : untouched.length} note={unreadable ? 'Ledger unreadable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
       </section>
       {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} />}
       {byCompany
         ? <PerCompany companies={companies} unreadable={unreadable} />
-        : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
+        : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{ledgerLine}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
       {/* The artboard's band. Its foot read "Feeds the LP reporting pack." —
           false: accepting a draft stamps `accepted_at` and nothing else, and
           no LP report reads this store, so the foot now says what happens. */}
@@ -274,7 +298,7 @@ function ValueAddRail({ totals, entries, unreadable }) {
       stance="Support ledger"
       note="Recorded support work, written by the people who did it. Introductions requested through the quota, dealroom membership and calendar activity are never relabelled as value-add."
       coverage={[
-        unreadable ? 'Support ledger unreadable' : `${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
+        unreadable ? 'Support ledger unreadable' : `${plural(totals.entries_total, 'recorded entry', 'recorded entries')} across ${plural(totals.companies_in_book, 'accessible company', 'accessible companies')}`,
         unreadable ? 'Hours unavailable' : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hour count`,
       ]}
       unavailable={[

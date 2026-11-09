@@ -176,7 +176,10 @@ widened guard on this very sentence, which is the rule working.)
 /api/capital       → capital.ts
 /api/tickets       → tickets.ts
 /api/deals         → deals.ts
-/api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70)
+/api/portfolio-support → portfolio_support.ts  (the IP3 value-add ledger, D70;
+                         D4647: the totals and the per-company rollup are grouped
+                         over the whole authorized ledger, while `?limit=`,
+                         `?before=<id>` and `?state=` narrow only what is listed)
 /api/founder/validate → founder_validate.ts, founder_validate_sessions.ts  (D657's interview sessions: /interviews/:id/sessions, /sessions/*; D685's one-call setup POST /sessions and PUT /sessions/:id/points/:pointId; its processing POST /sessions/:id/{finish,process,summarise}; GET /sessions/active)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654/D686 Share an update: venture and open-call context, shipped facts, validated audience, retry-safe send, co-founder authors, author/recipient pages)
 /api/cycles/grow   → cycle_grow.ts  (D664/D686: the Grow overview, module reads including update ask replies and Updates history, and store writes; shared card types live in cycleCards)

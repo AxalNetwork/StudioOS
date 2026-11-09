@@ -29,6 +29,19 @@
  * that makes `investor_introductions` useless as a ledger: a status column
  * written once and never updated, so every row reads outstanding forever.
  *
+ * THE PAGE NARROWS WHAT IS LISTED, NEVER WHAT IS COUNTED (D4647, #4647).
+ * `totals`, the per-company rollup and `untouched` were accumulated from the
+ * 400 rows the read listed — there was no COUNT(*) in this file — so a book
+ * with more entries than one page silently understated every figure, on the
+ * one desk whose stated purpose is to make that work auditable. They are
+ * grouped in SQL over the whole authorized population now, and ignore both
+ * `?before=` and `?state=`. The order is `created_at DESC, id DESC`, because
+ * `created_at` is a second-resolution stamp and a batch written in one request
+ * ties; the cursor is an entry's own id, never an offset, which shifts under
+ * every write. `?state=` narrows the listing in SQL, so an outstanding promise
+ * older than the newest page is still reachable — a promise nobody can page to
+ * is the defect below with a different cause.
+ *
  * Mounted at /api/portfolio-support.
  */
 import { Hono } from 'hono';
@@ -93,37 +106,97 @@ async function scopeFor(c: any, user: User): Promise<{ ids: number[] | null; emp
   return supportBookIds(c.env, user, await investorActiveCompany(c, user));
 }
 
-// GET /api/portfolio-support — the ledger, the per-company rollup, and the
-// companies in the book that carry no entry at all.
+/**
+ * D4647 (#4647) — the page's cursor and how wide it may be.
+ *
+ * `before` is an entry's own `id`, not an offset: an offset page shifts under
+ * every write, so a reader paging back could miss a row or see one twice.
+ * `state` narrows the ledger in SQL rather than in the page, so an
+ * outstanding promise older than the newest page is still reachable — the
+ * defect this route's own header says it exists to end was a status that
+ * "reads outstanding forever", and a promise nobody can page to is the same
+ * defect with a different cause.
+ */
+const PAGE_DEFAULT = 400;
+const PAGE_MAX = 400;
+function pageOf(c: { req: { query: (k: string) => string | undefined } }) {
+  const raw = c.req.query('limit');
+  const asked = raw == null || raw === '' ? PAGE_DEFAULT : Number(raw);
+  const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, PAGE_MAX) : PAGE_DEFAULT;
+  const beforeRaw = c.req.query('before');
+  const before = beforeRaw != null && /^[0-9]{1,18}$/.test(beforeRaw) ? Number(beforeRaw) : null;
+  const stateRaw = c.req.query('state');
+  const state = stateRaw && SUPPORT_STATES.has(stateRaw) ? stateRaw : null;
+  return { limit, before, state, stateAsked: stateRaw ?? null };
+}
+
+/** The zeros the empty-scope answer and a book with no entry both report. */
+const NO_TOTALS = {
+  delivered: 0, promised: 0, withdrawn: 0,
+  hours_recorded: 0, entries_without_hours: 0,
+  companies_in_book: 0, companies_supported: 0,
+  entries_total: 0,
+};
+
+// GET /api/portfolio-support — the ledger as one page, the per-company rollup
+// and the totals over the WHOLE authorized population, and the companies in
+// the book that carry no entry at all.
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const { ids, empty } = await scopeFor(c, user);
+    const page = pageOf(c);
+    if (page.stateAsked != null && page.state == null) return c.json({ detail: 'state must be promised, delivered or withdrawn' }, 400);
     if (empty) {
       return c.json({
-        entries: [], companies: [], untouched: [],
-        totals: {
-          delivered: 0, promised: 0, withdrawn: 0,
-          hours_recorded: 0, entries_without_hours: 0,
-          companies_in_book: 0, companies_supported: 0,
-        },
+        entries: [], companies: [], untouched: [], totals: { ...NO_TOTALS },
+        page: { limit: page.limit, state: page.state, returned: 0, has_more: false, next_before: null },
       });
     }
     const csv = ids == null ? null : ids.join(',');
 
-    const [entries, book] = await Promise.all([
+    const [entries, rollup, book] = await Promise.all([
+      // D4647: one page, ordered by id so the order is total — `created_at` is
+      // a second-resolution stamp, so a batch written in one request ties — and
+      // `limit + 1` read so `has_more` is answered without a second count.
       c.env.DB.prepare(
-        `SELECT s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
+        `SELECT s.id, s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
                 s.promised_at, s.delivered_at, s.withdrawn_at, s.summary, s.outcome,
                 s.recorded_by, s.created_at, s.updated_at,
                 p.uid AS project_uid, p.name AS project_name
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
-          ORDER BY s.created_at DESC
-          LIMIT 400`,
-      ).bind(csv, csv).all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
+            AND (? IS NULL OR s.id < ?)
+            AND (? IS NULL OR s.state = ?)
+          ORDER BY s.created_at DESC, s.id DESC
+          LIMIT ?`,
+      ).bind(csv, csv, page.before, page.before, page.state, page.state, page.limit + 1)
+        .all<SupportRow & { id: number }>().catch(() => ({ results: [] as Array<SupportRow & { id: number }> })),
+      // D4647: every total and every per-company figure is grouped in SQL over
+      // the WHOLE authorized population. They were accumulated from the page,
+      // so a book with more entries than one page under-reported every one of
+      // them — a ledger that silently understates the work it exists to make
+      // auditable. The page narrows what is LISTED, never what is COUNTED, so
+      // the rollup ignores `before` and `state`.
+      c.env.DB.prepare(
+        `SELECT s.project_id,
+                COUNT(*) AS entries,
+                COALESCE(SUM(CASE WHEN s.state = 'delivered' THEN 1 ELSE 0 END), 0) AS delivered,
+                COALESCE(SUM(CASE WHEN s.state = 'withdrawn' THEN 1 ELSE 0 END), 0) AS withdrawn,
+                COALESCE(SUM(CASE WHEN s.state NOT IN ('delivered', 'withdrawn') THEN 1 ELSE 0 END), 0) AS promised,
+                COALESCE(SUM(CASE WHEN s.hours IS NULL THEN 1 ELSE 0 END), 0) AS entries_without_hours,
+                COALESCE(SUM(CASE WHEN s.hours IS NULL THEN 0 ELSE s.hours END), 0) AS hours,
+                p.uid AS project_uid, p.name AS project_name
+           FROM portfolio_support_entries s
+           LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+          GROUP BY s.project_id`,
+      ).bind(csv, csv).all<{
+        project_id: number; entries: number; delivered: number; withdrawn: number; promised: number;
+        entries_without_hours: number; hours: number; project_uid: string | null; project_name: string | null;
+      }>().catch(() => ({ results: [] as never[] })),
       // The book itself, so "no support at all" is an anti-join over two stored
       // sets rather than an inference from the ledger's silence.
       c.env.DB.prepare(
@@ -134,8 +207,11 @@ r.get('/', async (c) => {
       ).bind(csv, csv).all<{ project_id: number; project_uid: string | null; project_name: string | null }>(),
     ]);
 
-    const rows = entries.results || [];
+    const read = entries.results || [];
+    const hasMore = read.length > page.limit;
+    const rows = hasMore ? read.slice(0, page.limit) : read;
     const bookRows = book.results || [];
+    const rollupRows = rollup.results || [];
 
     const byProject = new Map<number, {
       project_id: number; project_uid: string | null; name: string;
@@ -157,18 +233,25 @@ r.get('/', async (c) => {
 
     let hoursRecorded = 0;
     let withoutHours = 0;
+    let entriesTotal = 0;
     const counts = { delivered: 0, promised: 0, withdrawn: 0 } as Record<string, number>;
-    for (const s of rows) {
-      const x = bump(Number(s.project_id), s.project_uid ?? null, s.project_name ?? null);
-      x.entries += 1;
-      if (s.state === 'delivered') { x.delivered += 1; counts.delivered += 1; }
-      else if (s.state === 'withdrawn') { x.withdrawn += 1; counts.withdrawn += 1; }
-      else { x.promised += 1; counts.promised += 1; }
+    for (const g of rollupRows) {
+      const x = bump(Number(g.project_id), g.project_uid ?? null, g.project_name ?? null);
+      x.entries += Number(g.entries);
+      x.delivered += Number(g.delivered);
+      x.withdrawn += Number(g.withdrawn);
+      x.promised += Number(g.promised);
       // An entry with no hours is COUNTED, never summed as zero: the reader is
       // told how much of the total is unmeasured rather than shown a total that
       // silently understates it.
-      if (s.hours == null) { x.entries_without_hours += 1; withoutHours += 1; }
-      else { x.hours += Number(s.hours); hoursRecorded += Number(s.hours); }
+      x.entries_without_hours += Number(g.entries_without_hours);
+      x.hours += Number(g.hours);
+      counts.delivered += Number(g.delivered);
+      counts.withdrawn += Number(g.withdrawn);
+      counts.promised += Number(g.promised);
+      withoutHours += Number(g.entries_without_hours);
+      hoursRecorded += Number(g.hours);
+      entriesTotal += Number(g.entries);
     }
 
     const companies = [...byProject.values()].sort((a, b) => b.entries - a.entries || a.name.localeCompare(b.name));
@@ -190,6 +273,13 @@ r.get('/', async (c) => {
         entries_without_hours: withoutHours,
         companies_in_book: inBook.size,
         companies_supported: companies.filter((x) => x.entries > 0 && inBook.has(x.project_id)).length,
+        entries_total: entriesTotal,
+      },
+      // What this page is, beside what the totals count. `next_before` is the
+      // last listed entry's id: pass it back to read the page before it.
+      page: {
+        limit: page.limit, state: page.state, returned: rows.length, has_more: hasMore,
+        next_before: hasMore && rows.length ? Number(rows[rows.length - 1].id) : null,
       },
     });
   } catch (e) { return mapError(c, e); }

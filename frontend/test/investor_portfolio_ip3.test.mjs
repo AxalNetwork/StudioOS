@@ -229,8 +229,12 @@ test('all four chips are live and the page implements each one', () => {
   assert.ok(!FILTERS.includes('NO_SUPPORT_LEDGER'), 'the retired reason constant is back');
 
   const code = codeOnly(P);
-  assert.match(code, /filter === 'delivered' \? row\.state === 'delivered'/, 'Delivered no longer reads state');
-  assert.match(code, /filter === 'outstanding' \? row\.state === 'promised'/, 'Outstanding no longer reads state');
+  // D4647 (#4647): the two row-filtering chips now name the STORED state they
+  // ask the Worker for, so an outstanding promise older than the newest page
+  // is still reachable; the same map still narrows a page already in flight.
+  assert.match(code, /const ROW_STATE = \{ delivered: 'delivered', outstanding: 'promised' \};/, 'the chips no longer name a stored state');
+  assert.match(code, /api\.portfolioSupportList\(\{ state: ROW_STATE\[show\] \|\| undefined \}\)/, 'the view no longer asks the Worker for its state');
+  assert.match(code, /ROW_STATE\[filter\] \? row\.state === ROW_STATE\[filter\] : true/, 'the rows drawn are no longer held to the filter');
   // `company` is a VIEW, like IP2's `Rules` — a rollup, not a narrower row set.
   assert.match(code, /const byCompany = filter === 'company';/, 'the By company view is gone');
   assert.match(code, /\{byCompany\s*\n?\s*\? <PerCompany/, 'By company no longer swaps the body');
@@ -263,9 +267,16 @@ test('an unrecorded hour count is never a zero, on the page or in the total', ()
   // that nothing was timed.
   assert.match(P, /totals\.entries_without_hours > 0 && totals\.hours_recorded === 0\s*\n?\s*\? 'Not recorded'/,
     'a ledger of untimed entries reports 0 hours');
-  // The route counts the untimed entries rather than folding them in.
-  assert.match(ROUTE, /if \(s\.hours == null\) \{ x\.entries_without_hours \+= 1; withoutHours \+= 1; \}/,
+  // The route counts the untimed entries rather than folding them in. D4647
+  // (#4647): it counts them in SQL, over the whole authorized population, and
+  // sums only the hours that are recorded — an untimed entry is never a zero
+  // in either figure.
+  assert.match(ROUTE, /COALESCE\(SUM\(CASE WHEN s\.hours IS NULL THEN 1 ELSE 0 END\), 0\) AS entries_without_hours/,
     'the route no longer counts untimed entries separately');
+  assert.match(ROUTE, /COALESCE\(SUM\(CASE WHEN s\.hours IS NULL THEN 0 ELSE s\.hours END\), 0\) AS hours/,
+    'an untimed entry is summed as zero hours');
+  assert.match(ROUTE, /withoutHours \+= Number\(g\.entries_without_hours\);/,
+    'the total no longer carries the untimed count');
   assert.match(ROUTE, /if \(v === undefined \|\| v === null \|\| v === ''\) return null;/,
     'an empty hours field is coerced to a number');
   // And the form sends absence as absence.
