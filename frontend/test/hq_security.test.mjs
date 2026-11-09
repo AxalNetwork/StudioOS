@@ -75,6 +75,14 @@ test('the page reads three endpoints and writes through six, and nothing else', 
   // as its one write; it is still this page's write, so it is pinned there.
   assert.match(readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/security/PrivacyActions.jsx'), 'utf8'), /send = api\.hqCloseDsrRequest\b/,
     'the Record outcome dialog writes through something other than hqCloseDsrRequest');
+  // D4803 slice 4 — the Trust workspace makes one read of its own, the Trust
+  // Center editor's (`trustCenterAdminApi.read`), and publishes through the
+  // editor's `publish`; nothing else.
+  const TRUST = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/security/TrustWorkspace.jsx'), 'utf8')
+    + readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/security/TrustActions.jsx'), 'utf8');
+  assert.deepEqual([...new Set([...TRUST.matchAll(/\bapi\.(\w+)\(/g)].map((m) => m[1]))].sort(), ['publish', 'read'],
+    'the Trust workspace reaches for something other than the Trust Center read and Publish');
+  assert.match(TRUST, /api = trustCenterAdminApi/, 'the Trust workspace reads through something other than the editor\'s API');
   assert.deepEqual(calls, [
     'hqEndImpersonation', 'hqForceReauthUser', 'hqGovernance', 'hqRevokeSession',
     'hqRevokeSessions', 'hqSecurityForceReauth', 'hqSecurityOverview', 'hqSecuritySessions',

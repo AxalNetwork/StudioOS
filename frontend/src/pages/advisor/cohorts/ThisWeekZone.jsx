@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import { Card } from '../../../ui';
-import { api } from '../../../lib/api';
 import { NothingYet, Pill, Unrecorded, ZoneBody, ZoneHeading } from '../expertise/kit';
-import { BatchPicker, FromTheLab, NoBatch, StatedLimit, WEEK_TONE, cohortLabel } from './kit';
+import { FromTheLab, NoBatch, StatedLimit, WEEK_TONE, cohortLabel } from './kit';
+import { CohortLoading, useCohortWorkspace } from './CohortWorkspace';
 
 /**
  * Cohorts · This week — where the batch is in the Lab's four-week cycle.
@@ -22,46 +22,15 @@ import { BatchPicker, FromTheLab, NoBatch, StatedLimit, WEEK_TONE, cohortLabel }
  * "week 1" for one would invent the single fact this page exists to report.
  */
 export default function ThisWeekZone() {
-  const [assignments, setAssignments] = useState({ loading: true, error: '', items: [] });
-  const [cycleId, setCycleId] = useState(null);
-  const [weeks, setWeeks] = useState({ loading: false, error: '', data: null });
-
-  const loadAssignments = useCallback(async () => {
-    setAssignments((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorCohorts();
-      const items = Array.isArray(res?.items) ? res.items : [];
-      setAssignments({ loading: false, error: '', items });
-      setCycleId(items[0]?.cohort_cycle_id ?? null);
-    } catch (e) {
-      setAssignments({ loading: false, error: e?.message || 'Your cohort assignments could not be read.', items: [] });
-    }
-  }, []);
-
-  useEffect(() => { loadAssignments(); }, [loadAssignments]);
-
-  const load = useCallback(async () => {
-    if (cycleId == null) return;
-    setWeeks((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const data = await api.listMyAdvisorCohortWeeks(cycleId);
-      // `available: false` is the worker saying it could not read the Lab's
-      // record. It is an error, never an empty week — treating it as empty
-      // would report a failed read as a batch with no progress.
-      if (data && data.available === false) {
-        setWeeks({ loading: false, error: data.detail || 'The Lab’s week record could not be read.', data: null });
-        return;
-      }
-      setWeeks({ loading: false, error: '', data });
-    } catch (e) {
-      setWeeks({ loading: false, error: e?.message || 'This batch could not be read.', data: null });
-    }
-  }, [cycleId]);
-
-  useEffect(() => { load(); }, [load]);
+  // D4813: the cohort is the workspace's (header selector, `?cohort=`), and so
+  // is its week record — read once in the provider, so this page and the
+  // header's "Week n of 4" cannot disagree about which week it is.
+  const ws = useCohortWorkspace();
+  const weeks = ws.weeks;
+  const load = ws.reloadWeeks;
 
   const d = weeks.data;
-  const current = assignments.items.find((a) => a.cohort_cycle_id === cycleId);
+  const current = ws.current;
   const week = d?.current_week ?? null;
 
   return (
@@ -69,16 +38,16 @@ export default function ThisWeekZone() {
       <ZoneHeading
         title="Where the batch is this week"
         blurb="The Lab's own week record for the cohort you were assigned. Read-only, and about the founders' progress rather than yours."
-        action={<BatchPicker items={assignments.items} value={cycleId} onChange={setCycleId} />}
       />
 
       <ZoneBody
-        loading={assignments.loading}
-        error={assignments.error}
-        onRetry={loadAssignments}
-        isEmpty={assignments.items.length === 0}
+        loading={ws.assignments.loading}
+        error={ws.assignments.error}
+        onRetry={ws.reloadAssignments}
+        isEmpty={ws.assignments.items.length === 0}
         empty={<NoBatch />}
       >
+        {weeks.loading && <CohortLoading what="the week record" />}
         <ZoneBody loading={weeks.loading} error={weeks.error} onRetry={load}
           isEmpty={!d}
           empty={<NothingYet title="Nothing recorded for this cohort" body="The Lab has no week record against this cycle." />}>

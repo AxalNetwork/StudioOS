@@ -20,10 +20,10 @@ import Sheet from '../../ui/Sheet';
 import { mailApi } from '../../lib/api/mail.js';
 import RecordCompose from './RecordCompose.jsx';
 import { isPersonRef, recipientFor, sendingAccount } from './emailModel.js';
-import { BODY, MUTED } from './emailParts.jsx';
+import { BODY, BTN, MUTED } from './emailParts.jsx';
 
 export const READING = 'Reading their records…';
-export const UNREADABLE = 'Unreadable: this person’s records could not be read. Close and try again.';
+export const UNREADABLE = 'Unreadable: this person’s records could not be read. Try again.';
 export const NOT_SHARED = 'This member has not shared an email address yet. You can write once they do.';
 
 /**
@@ -42,7 +42,8 @@ export default function RecordEmailSheet({ person, label = '', from = null, read
     // which told a member who HAD shared that they had not (NOT_SHARED is a
     // false statement of fact) and silently blocked their composer too. No
     // catch here: a failed shares read reaches the same `unreadable` state as
-    // a failed accounts or context read, below.
+    // a failed accounts or context read, below. D4664 (finding 10): that
+    // state offers Try again, which reads the same person again.
     Promise.all([api.accounts(), api.shares(), api.context(ref)])
       .then(([a, s, pack]) => setState({ status: 'ready', accounts: a?.accounts ?? [], shares: s?.items ?? [], pack }))
       .catch(() => setState({ status: 'unreadable' }));
@@ -54,6 +55,7 @@ export default function RecordEmailSheet({ person, label = '', from = null, read
       <p className={state.status === 'unreadable' ? BODY : MUTED} role={state.status === 'unreadable' ? 'alert' : 'status'} data-testid="record-email-state">
         {state.status === 'unreadable' ? UNREADABLE : READING}
       </p>
+      {state.status === 'unreadable' && ref && <button type="button" className={`mt-3 ${BTN}`} onClick={load} data-testid="record-email-retry">Try again</button>}
     </Sheet>;
   }
   const { pack, shares, accounts } = state;

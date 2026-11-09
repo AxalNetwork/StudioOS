@@ -176,7 +176,9 @@ test('every Expertise zone carries the canvas’s own heading and line', () => {
 test('a zone reaches the shell with its own heading, not the bucket’s line', () => {
   // The wiring, not just the table: `title` was `isRoot ? … : undefined` and
   // `intro` was `INTRO[prefix]` flat, which is what made all five identical.
-  assert.match(ROUTES, /title=\{isRoot \? bucketTitle\(bucket\) : zoneHead\?\.h1\}/,
+  // D4813: Cohorts heads every section "Cohorts" (its canvas's header, with
+  // the section in the tabs below); every other bucket keeps this wiring.
+  assert.match(ROUTES, /title=\{cohorts \? 'Cohorts' : \(isRoot \? bucketTitle\(bucket\) : zoneHead\?\.h1\)\}/,
     'a zone no longer passes its own heading to the shell');
   assert.match(ROUTES, /intro=\{zoneHead\?\.sub \|\| INTRO\[prefix\]\}/,
     'a zone no longer prefers its own line over the bucket sentence');

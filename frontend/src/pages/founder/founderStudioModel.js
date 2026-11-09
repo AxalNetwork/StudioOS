@@ -27,6 +27,12 @@ export const READY = 'ready';
 export const SPRINT_DAYS = 28;
 
 export const failedRead = (reason) => ({ failed: String(reason || 'Source unavailable') });
+/**
+ * D4619 (#4619): the venture a link named is not one of this member's. A failed read (so every zone that depends on
+ * the venture is Unreadable, never another venture's figures) that carries the ID it was asked for.
+ */
+export const unavailableProject = (id) => ({ failed: 'This venture is not available to your account.', unavailable: String(id) });
+export const isUnavailableProject = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string' && typeof r.unavailable === 'string';
 const isFailed = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string';
 
 /** The state of one read: loading, unreadable, or ready. */

@@ -773,6 +773,20 @@ funds.patch('/:id', async (c) => {
   }
   const act = fundPatchAct(gp.fund, body);
   await assertFundAct(c, gp, act);
+  // D4812 follow-up (#4812): a new GP of record is an existing, active
+  // account. Checked after the act's gate, so a caller who may not change the
+  // GP never learns which accounts exist. Null (no GP named) stays allowed,
+  // and any role may be named: a non-admin GP moves the fund to "run by an
+  // outside GP", as before.
+  if (act === 'fund.gp_of_record' && body.gp_user_id !== null) {
+    const next = Number(body.gp_user_id);
+    const named = Number.isSafeInteger(next) && next > 0 && String(body.gp_user_id) === String(next)
+      ? await c.env.DB.prepare(`SELECT 1 AS ok FROM users WHERE id = ? AND is_active = 1`).bind(next).first<{ ok: number }>()
+      : null;
+    if (!named) {
+      return refuse(c, 400, { code: 'gp_account_invalid', message: 'The general partner of record must be an existing, active account.' });
+    }
+  }
   const f = await Funds.update(c.env, id, body);
   // D714 decision 4: the edit wrote no audit row. The changed field names, and
   // for the control fields their old and new values.

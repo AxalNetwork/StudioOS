@@ -243,7 +243,7 @@ export async function checklistRead(env: Env, projectId: number, now: number = D
                      WHERE rp.project_id = g.project_id AND rp.stage = 'committed'
                        AND rp.email IS NOT NULL AND u.email IS NOT NULL AND LOWER(rp.email) = LOWER(u.email)) AS committed,
             EXISTS (SELECT 1 FROM pairwise_ndas n
-                     WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id)
+                     WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id AND COALESCE(owner.is_active, 1) = 1)
                        AND n.party_b_user_id = g.investor_user_id AND n.status = 'active'
                        AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))) AS nda
        FROM data_room_grants g

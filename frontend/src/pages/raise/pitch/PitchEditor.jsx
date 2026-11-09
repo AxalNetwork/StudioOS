@@ -244,8 +244,6 @@ export default function PitchEditor() {
   // Share and Export need only the version on screen, so the page opens them
   // itself, editor or not; every other ⋯ item is the editor's.
   const [shareDialog, setShareDialog] = useState(null);
-  // D4598: the saved version the Share/Export gate checked, `{ id, version }`; null when a dialog opens without one.
-  const [checked, setChecked] = useState(null);
   // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
   const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
   const youId = presence.you?.user_id ?? user?.id ?? null;
@@ -266,11 +264,16 @@ export default function PitchEditor() {
       onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null}
       editors={presence.editors} youId={youId} />
   ) : null;
+  // D4598 (#4598) part 2: Export and Share now run their own check, on the exact content
+  // their action would send, so they need the kit and the stale-figure read `usePreflight`
+  // measures against — the same ones `Editor` passes its own two runs (`pf`, `gatePf`).
+  const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
+  const refreshData = refresh.status === 'ok' ? refresh.data : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
-    <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}}
+    <ShareDialog projectId={projectId} deck={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} onCreated={() => {}}
       onReviewCards={(uid) => { setShareDialog(null); actionRef.current?.('review_cards', uid); }} />
   ) : shareDialog === 'export' && current ? (
-    <ExportDialog versions={versionList} current={current} checked={checked} onClose={() => setShareDialog(null)} />
+    <ExportDialog versions={versionList} current={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} />
   ) : null;
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
@@ -324,7 +327,7 @@ export default function PitchEditor() {
         onOpenAsk={onOpenAsk}
         onChrome={setChrome}
         actionRef={actionRef}
-        onSend={(kind, cleared) => { setChecked(cleared ?? null); setShareDialog(kind); }}
+        onSend={(kind) => setShareDialog(kind)}
       />
     </Shell>
   );
@@ -769,13 +772,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
   const gateView = gate && !gp.running && gp.current ? gateOf(gp.groups, gate) : null;
-  // The saved version the gate checked, handed to the dialog it opens.
-  const cleared = { id: base.deck.id ?? null, version: base.deck.version ?? null };
   useEffect(() => {
     if (!gate || gp.running) return;
     // A check that finished on an older state of the version (or of the edits) runs again on this one.
     if (!gp.current) { gp.run(); return; }
-    if (gateView && !gateView.open) { setGate(null); onSend?.(gate, cleared); }
+    // D4598 (#4598) part 2: this first-look check is the saved version's cards, before a
+    // variant or "what is included" is chosen; the dialog it opens now runs its own check
+    // on top of this, against the exact combination it ends up with.
+    if (gateView && !gateView.open) { setGate(null); onSend?.(gate); }
   }, [gate, gp.running, gp.current, gateView?.open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const staleMap = useMemo(() => {
@@ -949,7 +953,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {gate && (gp.running || gateView?.open) ? (
         <PreflightGate gate={gateView} progress={gp.running ? gp.progress : null} version={base.deck.version ?? null} dirty={dirty}
           onShow={dirty ? null : show} onSave={dirty && !readOnly ? () => { setGate(null); setDialog({ kind: 'save' }); } : null}
-          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k, cleared); }} onClose={() => setGate(null)} />
+          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k); }} onClose={() => setGate(null)} />
       ) : null}
       {/* D4598: the saved version's own check, measured off screen like the panel's. */}
       {dirty && gatePf.running && gatePf.running.done < gatePf.running.total ? (

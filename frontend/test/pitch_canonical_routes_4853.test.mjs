@@ -124,7 +124,13 @@ async function appAt(route) {
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
   try {
     await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route] }, h(App), h(Landed))); });
-    for (let i = 0; i < 60; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
+    // Settle: 60 ticks, then on until the Studio's gate has decided (no `gate-loading`, some page marker drawn) or
+    // 10 s pass. A fixed count alone failed on a loaded CI runner once H4 (#5168) moved modules to on-demand chunks.
+    const step = () => act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
+    const drawn = () => select(dom.document, '[data-testid="pitch-studio-gate-loading"]').length === 0
+      && ['overview', 'decks', 'script', 'analytics', 'unread', 'locked'].some((t) => select(dom.document, `[data-testid="pitch-studio-${t}"]`).length);
+    for (let i = 0; i < 60; i += 1) await step();
+    for (const until = Date.now() + 10_000; !drawn() && Date.now() < until;) await step();
     // The Studio's page marker: `pitch-studio-<tab>`, one per tab (the mini DOM takes exact attribute selectors only).
     const marks = ['overview', 'decks', 'script', 'analytics', 'gate-loading', 'unread', 'locked'].filter((t) => select(dom.document, `[data-testid="pitch-studio-${t}"]`).length)
       .map((t) => `pitch-studio-${t}`);

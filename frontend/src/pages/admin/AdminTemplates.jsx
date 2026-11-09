@@ -52,7 +52,7 @@ function detectMergeFields(body) {
   return Array.from(seen).sort();
 }
 
-export default function AdminTemplates({ onOpenUsage, recordedPublication = false }) {
+export default function AdminTemplates({ onOpenUsage, recordedPublication = false, openSlug = null }) {
   const { user } = useAuth() || {};
   // D717 (#1854): below `md` the Templates tab is the phone's read-only list.
   const phone = usePhoneWidth(BELOW_MD_QUERY);
@@ -60,7 +60,9 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [unavailable, setUnavailable] = useState(false);
-  const [editing, setEditing] = useState(null); // { slug } | { isNew:true } | null
+  const [editing, setEditing] = useState(openSlug ? { slug: openSlug } : null); // { slug } | { isNew:true } | null
+  // D4811 part 4: a search result opens its template here (?tab=templates&open=<slug>).
+  useEffect(() => { if (openSlug) setEditing({ slug: openSlug }); }, [openSlug]);
   // D147 — the push to every branch. `undefined` means "not pushed in this
   // session", which is a different thing from a push that reached nobody, and
   // the two render differently below.
