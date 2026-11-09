@@ -56,6 +56,11 @@ import { holdsLicence } from '../services/accountLicences';
  * co-founder's upload takes its folder's visibility and the default tier.
  * Anyone else gets 404, as before.
  *
+ * CAPABILITIES (D5074, #5074). `GET /:projectUid` and the support read carry
+ * `capabilities`, the whole map from `services/dataRoomCapabilities.ts`, and
+ * every founder-side write asks the same function (`roomCan`) before it acts,
+ * so what the page is told it may do is what the Worker enforces.
+ *
  * ADMIN SIDE (D1102; no owner writes)
  *   GET    /:projectUid                       aggregate summary, no names/identities
  *   POST   /:projectUid/support-read          required reason; founder-visible audit
@@ -117,6 +122,7 @@ import { deckSourceReady, sourceFile, sourceState, sourceQuote, typedFile, fileK
 import { investorEvidence, RaiseEvidenceError } from '../services/raiseEvidence';
 import { defaultDeps as searchDeps, filesToIndex, forgetFile, indexFile, searchRoom } from '../services/dataRoomSearch';
 import { SupportHistoryError, supportPage, supportReadHistory } from '../services/supportReads';
+import { roomCan, roomCapabilities } from '../services/dataRoomCapabilities';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -146,6 +152,7 @@ type RoomRole = 'owner' | 'cofounder';
 type RoomAccess = { project: ProjectRow; role: RoomRole };
 
 const OWNER_ONLY = { detail: 'Only the room’s owner can do this.', code: 'owner_only' } as const;
+const FOUNDER_ONLY = { detail: 'Only the venture’s founder can send the NDA: they sign it as party A.', code: 'founder_only' } as const;
 /** The fields that are a gate: only the owner sets them (D1103). */
 const GATE_FIELDS = ['visibility', 'access_tier', 'access_expires_at', 'apply_to_contents'] as const;
 const namesGate = (body: any) => GATE_FIELDS.some((k) => body?.[k] !== undefined);
@@ -402,6 +409,7 @@ r.post('/:projectUid/search/index', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'search_index', user)) return c.json(OWNER_ONLY, 403);
     const deps = searchDeps(c.env, Number(user.id), room.project.id);
     if (!deps.index) return c.json({ available: false, reason: 'Data room search is not switched on yet.' });
     const { files, remaining } = await filesToIndex(c.env, room.project.id);
@@ -534,7 +542,7 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
  * ------------------------------------------------------------------ */
 
 /** The same detail read for the owner and a reasoned, audited support read. */
-async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'support' = 'owner') {
+async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'support' = 'owner', user: { role?: string | null } | null = null) {
     const folders = await env.DB.prepare(
       `SELECT id, uid, name, parent_id, visibility, display_order
          FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
@@ -611,8 +619,10 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
     return {
       deck_sources_available: deckSourcesAvailable,
       project: { uid: project.uid, name: project.name },
-      // D1103 — what the caller may do here: `owner` shares and sets gates.
+      // D1103 — who the caller is here. D5074 — what they may do, from the one function every
+      // write below asks (`services/dataRoomCapabilities.ts`); the page draws controls from this, never from `role`.
       role,
+      capabilities: roomCapabilities(role, user),
       folders: folders.results || [],
       files: (files.results || []).map(f => ({ ...f, ...(states.get(f.uid) || {}) })),
       grants: (grants.results || []).map(({ id, folders_scoped, ...g }) => ({
@@ -700,11 +710,12 @@ r.get('/:projectUid', async (c) => {
       await requireAdmin(c);
       const project = await summaryProject(c.env, c.req.param('projectUid'));
       if (!project) return c.json({ detail: 'Project not found' }, 404);
-      return c.json(await roomSummary(c.env, project));
+      // D5074: an admin reads the summary; the room opens only through the reasoned support read.
+      return c.json({ ...await roomSummary(c.env, project), capabilities: roomCapabilities('summary', user) });
     }
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    return c.json(await roomDetails(c.env, room.project, room.role));
+    return c.json(await roomDetails(c.env, room.project, room.role, user));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -757,7 +768,7 @@ r.post('/:projectUid/support-read', async (c) => {
       surface: 'data_room', projectId: project.id, founderId: project.founder_id ?? null, admin: { id: Number(admin.id), role: admin.role }, reason,
       link: `/raise/data-room?project_id=${project.id}`,
     });
-    const detail = await roomDetails(c.env, { ...project, name: '' }, 'support');
+    const detail = await roomDetails(c.env, { ...project, name: '' }, 'support', admin);
     // Fetching the name belongs to the audited detail read, not the summary.
     const named = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(project.id).first<{ name: string }>();
     return c.json({ ...detail, project: { uid: project.uid, name: named?.name ?? null }, mode: 'support', read_only: true });
@@ -773,12 +784,13 @@ r.post('/:projectUid/folders', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'edit', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     const name = String(body.name || '').trim();
     if (!name) return c.json({ detail: 'name is required' }, 400);
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
-    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'set_gate', user) && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     // A parent must belong to the SAME project, or a folder could be re-homed
     // into another founder's tree by uid.
@@ -808,11 +820,12 @@ r.patch('/:projectUid/folders/:uid', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'edit', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
     // D1103 — a co-founder organises; only the owner changes a gate.
-    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'set_gate', user) && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     const sets: string[] = []; const params: any[] = [];
     if (body.name !== undefined) { sets.push('name = ?'); params.push(String(body.name).slice(0, NAME_MAX)); }
@@ -874,6 +887,7 @@ r.delete('/:projectUid/folders/:uid', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'delete_folder', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     // D1103 — the folder leaves every grant's scope with it, by hand, since D1
     // may run with foreign keys off. A scoped grant left naming nothing opens
@@ -899,6 +913,7 @@ r.post('/:projectUid/files', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'upload', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
 
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
@@ -907,7 +922,7 @@ r.post('/:projectUid/files', async (c) => {
     const name = String(body.name || '').trim();
     if (!name) return c.json({ detail: 'name is required' }, 400);
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
-    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'set_gate', user) && namesGate(body)) return c.json(OWNER_ONLY, 403);
 
     const dataUri = String(body.data || '');
     const comma = dataUri.indexOf(',');
@@ -945,7 +960,7 @@ r.post('/:projectUid/files', async (c) => {
 
     const { uid } = await storeDataRoomFile(c.env, {
       project, user, folderId, name, bytes, contentType: declaredMime,
-      visibility: body.visibility ? String(body.visibility) : room.role === 'owner' ? 'nda' : folderVisibility,
+      visibility: body.visibility ? String(body.visibility) : roomCan(room.role, 'set_gate', user) ? 'nda' : folderVisibility,
       access: access.values,
     });
     return c.json({ uid, size_bytes: bytes.byteLength }, 201);
@@ -1056,7 +1071,7 @@ r.put('/:projectUid/files/:uid/deck-source', async (c) => {
     if (user.role === 'admin') return c.json({ code: 'support_read_required', detail: 'Use an audited support read.' }, 403);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'deck_source', user)) return c.json(OWNER_ONLY, 403);
     if (!await deckSourceReady(c.env)) return c.json({ code: 'deck_sources_unavailable', detail: 'Deck sources are not available yet.' }, 503);
     const file = await sourceFile(c.env, room.project.id, c.req.param('uid'));
     if (!file) return c.json({ detail: 'File not found' }, 404);
@@ -1092,11 +1107,12 @@ r.patch('/:projectUid/files/:uid', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'edit', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     if (badVisibility(body.visibility)) return c.json({ detail: 'invalid visibility' }, 400);
     // D1103 — a co-founder renames, moves and matches; only the owner changes a gate.
-    if (room.role !== 'owner' && namesGate(body)) return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'set_gate', user) && namesGate(body)) return c.json(OWNER_ONLY, 403);
     const access = await accessFields(c.env, project.id, body);
     if ('refusal' in access) return c.json({ detail: access.refusal }, access.status as any);
 
@@ -1140,7 +1156,7 @@ r.delete('/:projectUid/files/:uid', async (c) => {
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     const { project } = room;
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'delete', user)) return c.json(OWNER_ONLY, 403);
     const removed = await removeDataRoomFile(c.env, { project, userId: Number(user.id), uid: c.req.param('uid') });
     if (!removed) return c.json({ detail: 'File not found' }, 404);
     return c.json({ ok: true });
@@ -1187,6 +1203,7 @@ r.post('/:projectUid/files/:uid/download', async (c) => {
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'download', user)) return c.json(OWNER_ONLY, 403);
     const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
     if (!file) return c.json({ detail: 'File not found' }, 404);
     const link = await founderLink(c.env, room.project, Number(user.id), file, file.r2_key, null);
@@ -1230,6 +1247,7 @@ r.post('/:projectUid/files/:uid/versions/:n/download', async (c) => {
     if (!c.env.FILES) return c.json({ detail: 'storage_not_configured' }, 503);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'download', user)) return c.json(OWNER_ONLY, 403);
     const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
     const n = versionOf(c.req.param('n'));
     const version = file && n != null ? await c.env.DB.prepare(
@@ -1253,6 +1271,7 @@ r.post('/:projectUid/files/:uid/versions/:n/current', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
+    if (!roomCan(room.role, 'make_current', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const file = await roomFile(c.env, project.id, c.req.param('uid'));
     const n = versionOf(c.req.param('n'));
@@ -1386,7 +1405,7 @@ async function activityTarget(c: any) {
     if (!g) return { refused: c.json({ code: 'unknown_investor', detail: 'This room has no such grant.' }, 404) };
     userId = Number(g.investor_user_id);
   }
-  return { room, q: parsed.q, userId };
+  return { room, q: parsed.q, userId, viewer: user };
 }
 
 r.get('/:projectUid/activity', async (c) => {
@@ -1401,6 +1420,7 @@ r.get('/:projectUid/activity.csv', async (c) => {
   try {
     const t = await activityTarget(c);
     if ('refused' in t) return t.refused;
+    if (!roomCan(t.room.role, 'export', t.viewer)) return c.json(OWNER_ONLY, 403);
     const out = await activityCsv(c.env, t.room.project.id, t.q, t.userId);
     if ('tooMany' in out) {
       return refuse(c, 413, {
@@ -1563,7 +1583,7 @@ r.post('/:projectUid/grants', async (c) => {
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     const { project } = room;
     // D1103 — only the owner shares.
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'share', user)) return c.json(OWNER_ONLY, 403);
     const body = await c.req.json().catch(() => ({} as any));
     // Checked before the address is looked up, so a refusal says nothing about who has an account.
     const fields = await grantFields(c.env, project.id, body);
@@ -1618,7 +1638,7 @@ r.get('/:projectUid/share-candidates', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'share', user)) return c.json(OWNER_ONLY, 403);
     const rows = (await c.env.DB.prepare(
       `SELECT uid, name, firm, stage, email FROM raise_prospects
         WHERE project_id = ? ORDER BY COALESCE(firm, name, email), id LIMIT 500`,
@@ -1639,7 +1659,7 @@ r.patch('/:projectUid/grants/:uid', async (c) => {
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     const { project } = room;
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'share', user)) return c.json(OWNER_ONLY, 403);
     const body = await c.req.json().catch(() => ({} as any));
     const fields = await grantFields(c.env, project.id, body);
     if ('refusal' in fields) return c.json({ detail: fields.refusal }, fields.status);
@@ -1668,7 +1688,7 @@ r.delete('/:projectUid/grants/:uid', async (c) => {
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     const { project } = room;
     // D1103 — only the owner revokes.
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'share', user)) return c.json(OWNER_ONLY, 403);
     // Revoked, not deleted: the access log points at a user whose grant is
     // gone, and the founder still needs to read what that investor opened.
     const res = await c.env.DB.prepare(
@@ -1704,7 +1724,7 @@ r.get('/:projectUid/requests', async (c) => {
     let diligence: unknown[] | null = null;
     try { diligence = await diligenceOf(c.env, room.project.id); }
     catch (e) { console.warn('[data_room] diligence requests unreadable:', (e as Error)?.message); }
-    return c.json({ requests, open: requests.filter((q) => q.state === 'open').length, can_answer: room.role === 'owner',
+    return c.json({ requests, open: requests.filter((q) => q.state === 'open').length, can_answer: roomCan(room.role, 'answer_requests', user),
       diligence, ...(diligence === null ? { diligence_unreadable: true } : {}) });
   } catch (e) { return mapError(c, e); }
 });
@@ -1750,7 +1770,7 @@ r.post('/:projectUid/requests/:uid/accept', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'answer_requests', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     const fields = await grantFields(c.env, project.id, body);
@@ -1800,7 +1820,7 @@ r.post('/:projectUid/requests/:uid/decline', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    if (!roomCan(room.role, 'answer_requests', user)) return c.json(OWNER_ONLY, 403);
     const { project } = room;
     const body = await c.req.json().catch(() => ({} as any));
     const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
@@ -1845,13 +1865,15 @@ r.post('/:projectUid/grants/:uid/nda', async (c) => {
     const user = await requireAuth(c);
     const room = await roomProject(c, user, c.req.param('projectUid'));
     if (!room) return c.json({ detail: 'Project not found' }, 404);
-    if (room.role !== 'owner') return c.json(OWNER_ONLY, 403);
+    // D5074: the capability the room read reports. A co-founder is refused as the owner's (D1104);
+    // an owner who is not the venture's founder account cannot sign as party A.
+    if (!roomCan(room.role, 'send_nda', user)) return c.json(room.role === 'owner' ? FOUNDER_ONLY : OWNER_ONLY, 403);
     const { project } = room;
     const founder = await c.env.DB.prepare(
       `SELECT u.id, u.email, u.name FROM projects p JOIN users u ON u.founder_id = p.founder_id
         WHERE p.id = ? AND u.id = ? AND u.role = 'founder'`,
     ).bind(project.id, user.id).first<{ id: number; email: string; name: string | null }>();
-    if (!founder) return c.json({ detail: 'Only the venture’s founder can send the NDA: they sign it as party A.', code: 'founder_only' }, 403);
+    if (!founder) return c.json(FOUNDER_ONLY, 403);
     const grant = await c.env.DB.prepare(
       `SELECT g.investor_user_id, u.email, u.name FROM data_room_grants g JOIN users u ON u.id = g.investor_user_id
         WHERE g.uid = ? AND g.project_id = ? AND g.status = 'active'

@@ -30,7 +30,6 @@ export const ENDING_SOON_DAYS = 14;
 export const MATRIX_COLUMNS = 6;
 
 const who = (g) => g?.investor_name || g?.investor_email || NOT_RECORDED;
-export const isOwner = (room) => room?.role === 'owner';
 
 /** A grant's state now: in force, ended (its date passed) or revoked. */
 export function grantState(g, now = Date.now()) {

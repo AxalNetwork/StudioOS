@@ -81,22 +81,6 @@ export const WAITS = Object.freeze({
   books: 'The books of each administered fund are not drawn here yet. The fund ledger read exists; this part draws it.',
 });
 
-/**
- * The canvas's amber count flags on the tabs, from the overview only: overdue
- * call lines on Capital calls, matches to review on Reconciliation, prepared
- * drafts on Reports. A block that is not `ok` flags nothing, never a zero it
- * did not read.
- */
-export function tabFlags(overview) {
-  const sum = (block, f) => (block?.state === 'ok' && Array.isArray(block.items)
-    ? block.items.reduce((n, x) => n + (Number.isSafeInteger(Number(f(x))) ? Number(f(x)) : 0), 0) : 0);
-  return {
-    calls: sum(overview?.funds, (f) => f.overdue_lines),
-    reconciliation: sum(overview?.matches, (m) => Number(m.proposed || 0) + Number(m.needs_review || 0)),
-    reports: sum(overview?.drafts, (d) => d.prepared),
-  };
-}
-
 /** FND20a, in the canvas's words (D1160): the title and its line, said together. */
 export const HQ_ONLY = 'Fund administration runs on HQ. Axal VC’s funds and entity accounts are not administered from a branch.';
 export const PAYMENT_INSTRUCTIONS_ADMIN = 'Only the Super Admin can see or change payment instructions.';
@@ -170,7 +154,7 @@ export function refusalText(e, fallback) {
 
 export const TITLE = 'Fund administration';
 /** The canvas's muted line under the title. */
-export const LINE = 'Run the Axal VC funds: LPs, capital calls, distributions, NAV, fees, reports and cash. Admins prepare; the Super Admin issues.';
+export const LINE = 'Run the Axal VC funds: LPs, capital, portfolio, reporting and books.';
 /** FND16: the notice `/funds` and `/funds/performance` add when they forward an admin here. */
 export const MOVED_KEY = 'fund-ops';
 export const MOVED_NOTICE = 'Fund Ops is now Fund administration, under Fund admin.';
@@ -189,11 +173,10 @@ export function fundOpsTarget(pathname, search = '', hash = '') {
 export const PER_FUND = Object.freeze(['calls', 'distributions', 'fees', 'reports']);
 
 /**
- * The fund filter (FND2): All funds, then each administered fund. On a tab
- * that acts on one fund, All funds is not offered and the chosen fund is the
- * one `?fund=` names, else the first, as the tab reads it. Elsewhere the
- * filter is kept in the address for the next tab and the tab says it shows
- * every fund.
+ * The fund scope (FND2, D4812 FA-08): All funds, then each administered fund.
+ * On a view that acts on one fund, All funds is not offered and the chosen
+ * fund is the one `?fund=` names, else the first, as the view reads it. Every
+ * other view reads the scope itself (D4812), so nothing says it is "kept".
  */
 export function fundFilter(funds, search, view) {
   const wanted = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('fund');
@@ -203,13 +186,8 @@ export function fundFilter(funds, search, view) {
     perFund,
     pills: [...(perFund ? [] : [{ key: 'all', label: 'All funds', id: null, on: !chosen }]),
       ...(funds || []).map((f) => ({ key: `f-${f.id}`, label: f.name, id: f.id, on: chosen?.id === f.id }))],
-    // D1164: NAV & performance reads one fund when one is chosen, so the filter is not just kept there.
-    note: !perFund && chosen && !HONOURS_FILTER.includes(view) ? FILTER_KEPT : null,
   };
 }
-/** D1164/D1165: All-fund views whose chosen fund narrows the read: performance and report packs. */
-export const HONOURS_FILTER = Object.freeze(['performance', 'reportPacks']);
-export const FILTER_KEPT = 'This tab shows every fund. The filter is kept for Capital calls, Distributions, Fees and Reports.';
 
 /** An address under the console with the fund filter set (or cleared, for All funds), keeping the path. */
 export function withFund(pathname, search, id) {
@@ -218,24 +196,6 @@ export function withFund(pathname, search, id) {
   if (id == null) p.delete('fund'); else p.set('fund', String(id));
   const q = p.toString();
   return `${pathname}${q ? `?${q}` : ''}`;
-}
-
-/**
- * Each tab's count (FND1): a number that was read, a dash with its reason, or
- * the amber flag with what waits. Never a zero for a value no read gives.
- */
-export function tabCounts(overview) {
-  const ok = overview?.funds?.state === 'ok' && Array.isArray(overview.funds.items);
-  const flags = tabFlags(overview);
-  const flag = (n, key) => (n > 0 ? { kind: 'flag', value: n, testId: `fund-admin-flag-${key}` } : null);
-  return {
-    funds: ok ? { kind: 'num', value: overview.funds.items.length } : overview ? { kind: 'dash', tip: 'The administered funds could not be read.' } : { kind: 'load' },
-    lps: { kind: 'dash', tip: 'Not counted here: the LPs tab reads its own roster (D1162).' },
-    calls: flag(flags.calls, 'calls'),
-    reports: flag(flags.reports, 'reports'),
-    // D1157: Reconciliation is a part of Banking, so its matches flag the Banking tab.
-    banking: flag(flags.reconciliation, 'banking'),
-  };
 }
 
 /**
@@ -260,9 +220,11 @@ export function headerPrimary(view, access, fund, fundId = null) {
   return null;
 }
 
-/** The More menu (FND1): HQ › Funds for the Super Admin, LP applications, and Export. */
+/** The More menu (FND1): Funds (D4812), HQ › Funds for the Super Admin, LP applications, and Export. */
 export function moreItems(access) {
   return [
+    // D4812: Funds is no longer a peer tab; the fund list and each fund's settings open from here and from the Overview.
+    { key: 'funds', label: 'Funds and fund settings', to: `${BASE}/funds` },
     ...(access?.super_admin === true ? [{ key: 'hq-funds', label: 'All deployments’ funds (HQ › Funds)', to: '/admin/funds' }] : []),
     { key: 'lp-applications', label: 'LP applications (Approvals)', to: '/admin/lp-applications' },
     { key: 'export', label: 'Export the funds (CSV)' },

@@ -7,23 +7,43 @@
  * steps through what was opened. Pure, so the tests read it without a page.
  */
 
-/** The detail tabs, in the order the tab bar draws them. `step` is the page's internal number. */
+/**
+ * The detail tabs. `step` is the page's internal number; `section` is the
+ * canvas section (D4819, part 3) the tab sits under. Within a section the tabs
+ * are drawn in this order, and the first is the one the section opens on.
+ */
 export const LICENCE_TABS = Object.freeze([
-  { key: 'entity', step: 1, label: '1. Entity' },
-  { key: 'territory', step: 2, label: '2. Territory' },
-  { key: 'seats', step: 3, label: '3. Seats' },
-  { key: 'terms', step: 4, label: '4. Terms' },
-  { key: 'contract', step: 5, label: '5. Contract' },
-  { key: 'deploy', step: 6, label: '6. Deploy' },
-  { key: 'schedule', step: 11, label: 'Terms schedule', testId: 'licence-schedule-tab' },
-  { key: 'brand', step: 10, label: 'Brand kit', testId: 'licence-brand-tab', whiteLabelOnly: true },
-  { key: 'admins', step: 8, label: 'Administrators' },
-  { key: 'notices', step: 9, label: 'Notices' },
-  { key: 'fee-invoices', step: 12, label: 'Annual fee invoices', testId: 'licence-fee-invoices-tab' },
-  { key: 'history', step: 7, label: 'History' },
+  { key: 'overview', step: 13, label: 'Overview', section: 'overview', testId: 'licence-overview-tab' },
+  { key: 'entity', step: 1, label: 'Entity', section: 'overview' },
+  { key: 'brand', step: 10, label: 'Brand kit', testId: 'licence-brand-tab', whiteLabelOnly: true, section: 'overview' },
+  { key: 'terms', step: 4, label: 'Terms', section: 'terms' },
+  { key: 'territory', step: 2, label: 'Territory', section: 'terms' },
+  { key: 'schedule', step: 11, label: 'Terms schedule', testId: 'licence-schedule-tab', section: 'terms' },
+  { key: 'contract', step: 5, label: 'Contract', section: 'agreement' },
+  { key: 'admins', step: 8, label: 'Administrators', section: 'access' },
+  { key: 'seats', step: 3, label: 'Seats', section: 'access' },
+  { key: 'deploy', step: 6, label: 'Branch and domain', section: 'operations' },
+  { key: 'notices', step: 9, label: 'Notices', section: 'operations' },
+  { key: 'fee-invoices', step: 12, label: 'Annual fee invoices', testId: 'licence-fee-invoices-tab', section: 'operations' },
+  { key: 'history', step: 7, label: 'History', section: 'history' },
 ]);
 
-export const DEFAULT_TAB = 'entity';
+/**
+ * D4819 (#4819), Build part 3 — the canvas's six sections (Overview, Terms,
+ * Agreement, Access, Operations, History), in its order. Every tab above
+ * belongs to exactly one, so nothing the detail view offered before is lost:
+ * a section with more than one tab draws them as a second row.
+ */
+export const LICENCE_SECTIONS_NAV = Object.freeze([
+  { key: 'overview', label: 'Overview' },
+  { key: 'terms', label: 'Terms' },
+  { key: 'agreement', label: 'Agreement' },
+  { key: 'access', label: 'Access' },
+  { key: 'operations', label: 'Operations' },
+  { key: 'history', label: 'History' },
+]);
+
+export const DEFAULT_TAB = 'overview';
 export const KIND_KEYS = Object.freeze(['all', 'subsidiary', 'white_label']);
 
 /** The tabs a licence of this kind shows. */
@@ -38,6 +58,14 @@ export function tabFromParam(param, kind) {
 
 export const stepOfTab = (key) => (LICENCE_TABS.find((t) => t.key === key) || LICENCE_TABS[0]).step;
 export const tabOfStep = (step) => (LICENCE_TABS.find((t) => t.step === step) || LICENCE_TABS[0]).key;
+
+/** The section a tab sits under. */
+export const sectionOfTab = (key) => (LICENCE_TABS.find((t) => t.key === key) || LICENCE_TABS[0]).section;
+
+/** The tabs of one section a licence of this kind shows; the first is where the section opens. */
+export function sectionTabs(section, kind) {
+  return tabsFor(kind).filter((t) => t.section === section);
+}
 
 export const kindFromParam = (param) => (KIND_KEYS.includes(param) ? param : 'all');
 

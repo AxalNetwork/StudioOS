@@ -18,18 +18,18 @@ import {
 import { revenuePageSource } from './_revenuePage.mjs';
 
 const render = (el) => renderedText(renderToStaticMarkup(el));
-const actions = (statement) => renderToStaticMarkup(React.createElement(StatementActions, { statement, onUpdate: async () => ({}) }));
+const actions = (statement) => renderToStaticMarkup(React.createElement(StatementActions, { statement, onUpdate: async () => ({}), onStart: () => {} }));
 const COMPLETE = { complete: true, unreported_streams: 0, estimated_streams: 0 };
 const FLOOR = { complete: false, unreported_streams: 3, estimated_streams: 0 };
 const row = (extra) => ({ uid: 'st_1', licence_uid: 'lic_fr', brand_name: 'Axal France', period: '2026-Q3', owed_cents: 3500, currency: 'EUR', paid_cents: 0, disputed_cents: 0, ...extra });
 
-test('a floor draft offers no "Mark as issued"; a complete draft does', () => {
+test('a floor draft offers no "Mark issued"; a complete draft does', () => {
   const floor = actions(row({ status: 'draft', ...FLOOR }));
-  assert.doesNotMatch(renderedText(floor), /Mark as issued(?! is unavailable)/);
+  assert.doesNotMatch(renderedText(floor), /Mark issued…/);
   assert.match(floor, /data-testid="hq-statement-no-issue"/);
   assert.match(renderedText(floor), /unavailable while the owed figure is a floor/);
   const full = renderedText(actions(row({ status: 'draft', ...COMPLETE })));
-  assert.match(full, /Mark as issued/);
+  assert.match(full, /Mark issued…/);
   assert.equal(statementAllowsIssue(row({ status: 'draft', ...FLOOR })), false);
   assert.equal(statementAllowsIssue(row({ status: 'draft', ...COMPLETE, estimated_streams: 1 })), false, 'an estimate is a floor too');
   assert.equal(statementAllowsIssue(row({ status: 'issued', ...COMPLETE })), false, 'only a draft is issued');
@@ -50,11 +50,10 @@ test('no rendered sentence promises a re-draw after a void', () => {
   }
 });
 
-test('payment is labelled as setting the total paid, not adding a receipt', () => {
+test('D5039: a payment is a receipt added to what was paid, not a total typed over it', () => {
   const t = renderedText(actions(row({ status: 'issued', ...COMPLETE })));
-  assert.match(t, /Set total paid/);
-  assert.match(t, /Replaces the total received so far; it does not add a receipt/);
-  assert.doesNotMatch(t, /Record payment/);
+  assert.match(t, /Record payment…/);
+  assert.doesNotMatch(t, /Set total paid|Mark paid in full/, 'the ungoverned total is back');
 });
 
 test('a dispute can be cleared with 0, and a positive one still needs a reason', () => {
