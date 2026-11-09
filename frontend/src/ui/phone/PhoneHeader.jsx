@@ -115,6 +115,7 @@ export function PhoneHeader({ user, onLogout, branchFact }) {
               aria-haspopup="dialog"
               aria-expanded={sheet === 'account'}
               data-testid="phone-account-button"
+              data-tour="account-menu"
               className={TARGET}
             >
               <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-[rgba(255,255,255,.92)] text-[10px] font-extrabold text-[#6d28d9]">
