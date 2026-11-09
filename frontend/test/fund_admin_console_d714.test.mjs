@@ -312,16 +312,24 @@ test('the gated acts call what they name, with the previewed figures', async () 
   assert.deepEqual(s.calls.find((c) => c[0] === 'markPaid'), ['markPaid', 91]);
   await m.unmount();
   const fees = await open(SUPER, 'fees');
+  // D4812 part 5: each act is Review → Confirm (+ the code for a Super Admin act) → Receipt.
+  const through = async (mm, id, code = '123456') => {
+    await mm.click(`${id}-continue`);
+    if (code) await mm.type(`${id}-confirm-code`, code);
+    await mm.submit(mm.form(`${id}-confirm-submit`));
+    await mm.click(`${id}-done-done`);
+  };
   await fees.m.click('fee-issue');
-  await fees.m.click('fee-confirm-submit');
+  assert.ok(!fees.s.calls.some((c) => c[0] === 'issuePeriod'), 'Issue opens the review');
+  await through(fees.m, 'fee-flow');
   assert.deepEqual(fees.s.calls.find((c) => c[0] === 'issuePeriod'), ['issuePeriod', 7, '2026Q4', 'd'.repeat(64)]);
   await fees.m.click('fee-terms-confirm-terms-1');
-  await fees.m.click('fee-confirm-submit');
+  await through(fees.m, 'fee-flow');
   assert.deepEqual(fees.s.calls.find((c) => c[0] === 'confirmTerms'), ['confirmTerms', 7, 'terms-1']);
   await fees.m.unmount();
   const rec = await open(ADMIN, 'reconciliation');
   await rec.m.click('match-confirm-m-prop');
-  await rec.m.click('match-confirm-submit-m-prop');
+  await through(rec.m, 'match-flow-m-prop', null);
   assert.deepEqual(rec.s.calls.find((c) => c[0] === 'confirmMatch'), ['confirmMatch', 'm-prop']);
   await rec.m.click('match-reject-m-rev');
   await rec.m.type('match-reason-m-rev', 'too short');
@@ -333,6 +341,8 @@ test('the gated acts call what they name, with the previewed figures', async () 
   const rep = await open(SUPER, 'reports');
   await rep.m.click(`draft-issue-${'a'.repeat(32)}`);
   await rep.m.submit(rep.m.form(`draft-text-${'a'.repeat(32)}`));
+  assert.ok(!rep.s.calls.some((c) => c[0] === 'issue'), 'Issue opens the review');
+  await through(rep.m, `draft-flow-${'a'.repeat(32)}`);
   assert.deepEqual(rep.s.calls.find((c) => c[0] === 'issue'), ['issue', 'a'.repeat(32), { figures_sha256: 'f'.repeat(64), acknowledgement: undefined }]);
   await rep.m.unmount();
 });
