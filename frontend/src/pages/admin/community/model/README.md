@@ -17,8 +17,9 @@ place.
 - `period.js` — the period control: 4, 12 or 52 weeks, 12 by default, the
   worker's default too.
 - `constants.js` — the page's fixed words and numbers.
-- `queues.js` — the two review queues, Waiting on you's counts, the oldest wait
-  and Needs your attention (D4820: Overdue first, five rows, and `clear`).
+- `queues.js` — the review queues (events, jobs and, since D4820 part 3, the
+  wellbeing experts to verify), Waiting on you's counts, the oldest wait and
+  Needs your attention (D4820: Overdue first, five rows, and `clear`).
 - `events.js` — the Events card: show-up, Next up, the funnel, the waitlists,
   events by type.
 - `jobs.js` — the Jobs card.

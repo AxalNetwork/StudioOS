@@ -46,7 +46,7 @@ export { NEEDS_ROWS, buildNeeds, oldestWait } from './model/queues.js';
 export { buildEventsFunnel, buildNextUp } from './model/events.js';
 export { buildJobs } from './model/jobs.js';
 export { buildCircles, rosterOf } from './model/people.js';
-export { biggestChange, buildActivity, buildWho } from './model/activity.js';
+export { biggestChange, buildActivity, buildWho, participationInsight } from './model/activity.js';
 export { buildWellbeing } from './model/wellbeing.js';
 export { KPI_KEYS, buildConsoles, buildKpis, buildTiles, pageFailed } from './model/page.js';
 export { activityEmpty, bookingsEmpty, circlesEmpty, eventsEmpty, expertsEmpty, funnelEmpty, isEmptyCommunity, jobsEmpty, rosterEmpty } from './model/empty.js';
