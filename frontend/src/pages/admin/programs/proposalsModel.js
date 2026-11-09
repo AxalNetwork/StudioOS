@@ -284,6 +284,9 @@ const SENTENCES = {
   unknown_template: 'One of the contract templates is no longer in the library. Choose again.',
   nothing_to_change: 'There is nothing new to save.',
   bad_field: 'New program takes Basics and How it runs only.',
+  // D4873 (#4873, part 3): a decision names the revision it decides.
+  revision_changed: 'This proposal was sent again after you opened it. Read the new revision, then decide. Nothing was decided.',
+  expected_revision_required: 'Reload the proposal, then decide. Nothing was decided.',
   admin_frozen: FROZEN,
   branch_suspended: SUSPENDED,
 };
@@ -296,3 +299,74 @@ export function proposalRefusal(err) {
   if (Number(err?.status) === 403) return 'Only HQ can do this.';
   return TRY_AGAIN;
 }
+
+/* ------------------------------------------------------------------ *
+ * D4873 (#4873, part 3): revisions, and the review drawer (PG04)
+ * ------------------------------------------------------------------ */
+
+/** What HQ did with one revision, in words. */
+export const REVISION_OUTCOME = Object.freeze({
+  approved_studio: 'approved for this studio',
+  approved_catalogue: 'approved for the catalogue',
+  sent_back: 'sent back by HQ',
+  declined: 'declined by HQ',
+});
+
+export const SPEC_NOT_RECORDED = 'What this revision held is not recorded: it was sent before revisions were kept, and edited since.';
+
+/** "Revision 2". */
+export const revisionLabel = (n) => (Number.isInteger(Number(n)) && Number(n) > 0 ? `Revision ${Number(n)}` : 'Revision not recorded');
+
+/** "4 Nov 2026, 10:12 UTC", in UTC as D1 stores it; null when there is no stamp. */
+export function stampLabel(stamp) {
+  const ms = parseStamp(stamp);
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
+}
+
+/** The revisions the Worker sent, oldest first; `[]` for a read from before revisions were kept. */
+export const revisionsOf = (p) => (Array.isArray(p?.revisions) ? p.revisions : []);
+
+/** The revision the drawer shows: the one asked for, else the latest. */
+export function shownRevision(p, wanted = null) {
+  const all = revisionsOf(p);
+  return all.find((r) => r.revision === wanted) || all[all.length - 1] || null;
+}
+
+/** One history line: "12 Oct · Revision 1 sent · sent back by HQ: “Add eligibility”". */
+export function historyLine(r) {
+  const parts = [dayLabel(r.sent_at), `${revisionLabel(r.revision)} sent`].filter(Boolean);
+  if (r.outcome) parts.push(`${REVISION_OUTCOME[r.outcome] || r.outcome}${r.hq_note ? `: “${r.hq_note}”` : ''}`);
+  else parts.push('waiting for HQ');
+  return parts.join(' · ');
+}
+
+/** The queue's Submitted cell: "Sent 4 Nov · 3 days" while waiting, "Decided 21 Oct" once decided. */
+export function submittedLabel(row, now = Date.now()) {
+  if (row?.status === 'sent') {
+    const ms = parseStamp(row.sent_at);
+    if (!Number.isFinite(ms)) return 'Sent · not recorded';
+    const days = Math.max(0, Math.floor((now - ms) / 86_400_000));
+    return `Sent ${dayLabel(row.sent_at)} · ${days === 0 ? 'today' : `${days} ${days === 1 ? 'day' : 'days'}`}`;
+  }
+  const day = dayLabel(row?.decided_at);
+  return day ? `Decided ${day}` : dayLabel(row?.sent_at) ? `Sent ${dayLabel(row.sent_at)}` : NOT_SENT;
+}
+
+/**
+ * The three decisions the drawer offers (PG04), each through Scope → Review → Result: the button picks it, a review
+ * says what it does to which revision, Confirm sends it. Approve carries its scope (this studio only, or the catalogue).
+ */
+export const ACTIONS = Object.freeze([
+  { key: 'decline', label: 'Decline', tone: 'danger' },
+  { key: 'send_back', label: 'Send back', tone: 'ghost' },
+  { key: 'approve', label: 'Approve', tone: 'primary' },
+]);
+export const approveLabel = (n) => `Approve ${revisionLabel(n).toLowerCase()}`;
+export const reviewTitle = (outcome, n) => {
+  const verb = outcome === 'decline' ? 'Decline' : outcome === 'send_back' ? 'Send back' : 'Approve';
+  return `${verb} ${revisionLabel(n).toLowerCase()}?`;
+};
+export const outcomeOf = (key) => OUTCOMES.find((o) => o.key === key) || null;
