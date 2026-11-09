@@ -7,7 +7,8 @@ import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import LibraryZone from '../src/pages/research/LibraryZone.jsx';
 import { api } from '../src/lib/api.js';
-import { MAX_POLLS, batchSummary, hasPending, nextStep, pollDelay, reindexTargets, runBatch } from '../src/pages/research/libraryIndexing.js';
+import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from '../src/pages/research/libraryIndexing.js';
+import { rowProblem } from '../src/pages/research/researchStates.js';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const h = React.createElement;
@@ -45,10 +46,10 @@ test('the batch runs at most two at once, waits for all, and reports each outcom
 });
 
 test('a failed read offers a retry, an unreadable file a replacement; both say the recorded reason', () => {
-  assert.deepEqual(nextStep(doc('a', 'failed', { index_note: 'Conversion is unavailable.' })), { note: 'Conversion is unavailable.', action: 'Re-index' });
-  assert.equal(nextStep(doc('a', 'unsupported')).action, 'Replace the file');
-  assert.equal(nextStep(doc('a', 'indexed')), null);
-  assert.equal(nextStep(doc('a', 'failed', { source: 'client' })), null);
+  assert.deepEqual(rowProblem(doc('a', 'failed', { index_note: 'Conversion is unavailable.' })), { reason: 'Conversion is unavailable.', action: 'retry', label: 'Retry' });
+  assert.equal(rowProblem(doc('a', 'unsupported')).action, 'replace');
+  assert.equal(rowProblem(doc('a', 'indexed')), null);
+  assert.equal(rowProblem(doc('a', 'failed', { source: 'client' })), null);
 });
 
 function stubs(reads) {
@@ -68,6 +69,7 @@ async function mountLibrary() {
   await settle();
   return { ui, close: async () => { await ui.unmount(); globalThis.matchMedia = oldMedia; } };
 }
+const byTid = (ui, id) => ui.nodes().find((n) => ui.props(n)?.['data-testid'] === id) || null;
 /** Lets every pending promise run without a timer, so it works with mocked timers too. */
 const settle = async () => { await act(async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); }); };
 const tick = async (_ui, ms) => { await act(async () => { mock.timers.tick(ms); }); await settle(); };
@@ -82,7 +84,7 @@ test('a pending document reaches indexed on the still-open page, and the watchin
     await tick(m.ui, 2000);
     await tick(m.ui, 3000);
     assert.equal(s.calls.documents, 3);
-    assert.match(m.ui.text(), /Answerable in Ask/);
+    assert.match(m.ui.text(), /✓ Indexed/);
     await tick(m.ui, 60000);
     assert.equal(s.calls.documents, 3, 'nothing pending, so nothing more is read');
   } finally { await m.close(); s.restore(); mock.timers.reset(); }
@@ -113,7 +115,11 @@ test('the failed row names its recorded reason and the next step', async () => {
   const s = stubs([lib([doc('a', 'failed', { index_note: 'Conversion is unavailable right now.' }), doc('b', 'unsupported')])]);
   const m = await mountLibrary();
   try {
-    assert.match(m.ui.text(), /Conversion is unavailable right now\. Re-index to try again\./);
+    // D3701 RS-06: the reason sits under the name and the row offers Retry.
+    assert.match(m.ui.text(), /Conversion is unavailable right now\./);
+    // Mutation checked: `problem?.action === 'retry'` → `false` drops the button.
+    assert.ok(byTid(m.ui, 'library-retry-a'), 'the failed row offers Retry');
+    assert.equal(byTid(m.ui, 'library-retry-b'), null, 'an unsupported file is replaced, not retried');
     assert.match(m.ui.text(), /Remove it and add a version with readable text\./);
   } finally { await m.close(); s.restore(); }
 });

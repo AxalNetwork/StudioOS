@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { communityApi } from '../../../lib/api/community';
-import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, SUB, useBoxRead, useSettled } from './CommunityLightbox';
+import { BoxShell, BoxTable, Failed, ListControls, Pager, Reading, SUB, useBoxRead, useSettled, MANAGE } from './CommunityLightbox';
 import { AS_ENTERED_FOOT, CIRCLES, CIRCLES_LINE, circleRow, circlesQuery, initialState, listPage } from './lightboxModel';
 
 /**
@@ -31,7 +32,7 @@ export default function CirclesLightbox({ onClose }) {
   const id = 'community-box-circles';
 
   return (
-    <BoxShell id={id} title={CIRCLES.title} sub={CIRCLES_LINE} onClose={onClose}>
+    <BoxShell id={id} title={CIRCLES.title} sub={CIRCLES_LINE} onClose={onClose} manage={<Link to="/admin/circles" className={MANAGE}>Manage circles →</Link>}>
       {(phone) => (
         <>
           <ListControls id={id} spec={CIRCLES} state={state} setState={setState} phone={phone} />

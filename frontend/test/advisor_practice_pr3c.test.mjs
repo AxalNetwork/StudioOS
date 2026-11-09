@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const API = read('frontend/src/lib/api.js');
@@ -32,7 +33,8 @@ const G = codeOnly(GRANT);
 const ENGAGEMENTS = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
 const E = codeOnly(ENGAGEMENTS);
 const DELIVERY = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 
 // ---------------------------------------------------------------------------
 // One writer, and it is the client's

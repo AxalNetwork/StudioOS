@@ -5,15 +5,15 @@
 import React from 'react';
 import { OVERDUE_HOURS } from '../communityModel';
 
-export const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
+export const BTN = 'inline-flex min-h-[36px] max-md:min-h-[44px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
 export const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 export const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
 export const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-white text-axal-destructive dark:border-red-900 dark:bg-gray-900 dark:text-red-400`;
 export const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 export const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 export const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-// #4717 package 6: a text link is at least 24px tall (WCAG 2.5.8), whatever its type size.
-export const LINK = 'inline-flex min-h-[24px] items-center text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
+// #4717 package 6: a text link is at least 24px tall (WCAG 2.5.8), whatever its type size; D4820 part 2: 44px on a phone (CM09).
+export const LINK = 'inline-flex min-h-[24px] max-md:min-h-[44px] items-center text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
 export const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 export const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 export const MONO = 'font-mono tabular-nums';

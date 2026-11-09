@@ -3547,8 +3547,9 @@ export const api = {
   hqFunds: () => request('/admin/hq/funds'),
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
-  // costs one zone rather than the page.
-  hqRevenue: () => request('/admin/revenue/summary'),
+  // costs one zone rather than the page. D5039: `period` is a quarter key
+  // (`2026-Q4`); without it the Worker answers for today's quarter.
+  hqRevenue: (period) => request(`/admin/revenue/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   // HQ · Content and Platform (canvas H6). Two reads, two pages: the
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.
@@ -3589,6 +3590,10 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  // D5031 (#5031) — the HQ-local half alone (escalations, HQ's ticket queues,
+  // the mirror strip, the SLA policy): it never waits on a branch, so the page
+  // draws HQ's desk while the branch hosts are still answering `hqSupport`.
+  hqSupportLocal: () => request('/admin/hq-support/local'),
   hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
@@ -4351,6 +4356,8 @@ export const api = {
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #4715 (D4715): signing, renewals, endings and corrections to signed terms, oldest first.
+  listMyAdvisorEngagementEvents: (id) => request(`/advisors/me/engagements/${id}/events`),
   // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
   advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
     request(`/advisors/me/engagements/${id}/advance`, {

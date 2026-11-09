@@ -222,6 +222,54 @@ export async function readLicenceTerms(env: Env, licenceUid: string): Promise<Li
   return termsFromRow(row);
 }
 
+/**
+ * D4819 (#4819) — WHO TOOK THE REVISION A STALE TERMS WRITE LOST TO, AND WHEN,
+ * so the conflict board (L07) can say "M. Okafor changed these at 14:24".
+ *
+ * Only a record that names the revision is believed. The core terms' writers
+ * (this PATCH and a renewal) put the `terms_revision` they produced in their
+ * event; the event that carries `current_revision` is the write. When none
+ * does (the other write is still pushing to its branch and has not logged, or
+ * it wrote before D4819), both are null and the screen says it is not
+ * recorded. The latest terms event is never offered in its place: it may be
+ * an older change than the one that won.
+ */
+export async function coreTermsChangedBy(env: Env, licenceId: number, revision: number | null): Promise<{ changed_by: string | null; changed_at: string | null }> {
+  if (revision === null) return { changed_by: null, changed_at: null };
+  try {
+    const row = await env.DB.prepare(
+      `SELECT e.created_at, u.name AS actor_name
+         FROM licence_events e LEFT JOIN users u ON u.id = e.actor_user_id
+        WHERE e.licence_id = ? AND e.event IN ('terms_changed', 'renewed')
+          AND CASE WHEN json_valid(e.detail_json) = 1 THEN json_extract(e.detail_json, '$.terms_revision') END = ?
+        ORDER BY e.id DESC LIMIT 1`,
+    ).bind(licenceId, revision).first<{ created_at: string | null; actor_name: string | null }>();
+    return { changed_by: row?.actor_name ?? null, changed_at: row?.created_at ?? null };
+  } catch (e) {
+    console.warn('[licences] terms attribution unreadable', (e as Error).message);
+    return { changed_by: null, changed_at: null };
+  }
+}
+
+/**
+ * D4819 — the same for the schedule. `licence_terms` keeps its last writer and
+ * time in the statement that bumps its revision, so the row names the write
+ * that holds the revision. A row written without them (or no row) is null.
+ */
+export async function scheduleChangedBy(env: Env, licenceUid: string): Promise<{ changed_by: string | null; changed_at: string | null }> {
+  try {
+    const row = await env.DB.prepare(
+      `SELECT t.updated_at, u.name AS actor_name
+         FROM licence_terms t LEFT JOIN users u ON u.id = t.updated_by_user_id
+        WHERE t.licence_uid = ?`,
+    ).bind(licenceUid).first<{ updated_at: string | null; actor_name: string | null }>();
+    return { changed_by: row?.actor_name ?? null, changed_at: row?.updated_at ?? null };
+  } catch (e) {
+    console.warn('[licences] schedule attribution unreadable', (e as Error).message);
+    return { changed_by: null, changed_at: null };
+  }
+}
+
 /** What changed between two records: each changed key with its before and after. */
 export function termsDiff(before: LicenceTermsRecord | null, after: LicenceTermsRecord): Record<string, { before: unknown; after: unknown }> {
   const diff: Record<string, { before: unknown; after: unknown }> = {};

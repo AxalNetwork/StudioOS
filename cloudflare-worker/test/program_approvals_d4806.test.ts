@@ -40,7 +40,7 @@ const ROLE: Record<number, string> = { [SUPER]: 'admin', [LIS1]: 'admin', [OTHER
 function built(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
   loadSchema(db, { below: 560 });
-  for (const m of ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql', '563_referral_partner_terms.sql', '202611031502_influencer_program.sql', '202611072010_program_approved_specs.sql']) {
+  for (const m of ['560_program_registry.sql', '561_program_proposals.sql', '562_program_grants_draft.sql', '563_referral_partner_terms.sql', '202611031502_influencer_program.sql', '202611072010_program_approved_specs.sql', '202611082300_programs_member_access_modules_4873.sql']) {
     db.exec(readFileSync(resolve(MIGRATIONS, m), 'utf8'));
   }
   return db;

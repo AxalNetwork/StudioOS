@@ -263,7 +263,8 @@ test('the item: its facts and history, or why not (gone, missing, unread with a 
 });
 
 test('Assign: each admin with what they hold now, the caller marked; the title; a refusal said with the list re-read', () => {
-  assert.deepEqual(assignChoices(INBOX, 7).choices.map((c) => c.label), ['Admin A · you · 14 now', 'Admin B · 3 now']);
+  // D4814 (AP-05): "You · 14 assigned", you first, then lowest workload (assignChoices' own tests are in admin_approvals_v2_4814).
+  assert.deepEqual(assignChoices(INBOX, 7).choices.map((c) => c.label), ['Admin A · You · 14 assigned', 'Admin B · 3 assigned']);
   assert.equal(assignChoices({ reviewers: null, reviewers_reason: 'Admins could not be read.' }, 7).text, 'Admins could not be read.');
   assert.equal(assignTitle([{ who: 'Person A', laneLabel: 'KYC' }]), 'Assign Person A’s identity check');
   assert.equal(assignTitle([{}, {}, {}]), 'Assign 3 items');
@@ -506,14 +507,15 @@ test('mounted, Inbox: the ⋯ menu copies the item\'s link; the bulk bar assigns
     await v.change('approvals-pick-jobs:3');
     assert.match(v.of('approvals-bulk'), /2 selected\s*Assign…\s*Clear/);
     await v.click('approvals-bulk-assign');
-    assert.match(v.of('approvals-assign'), /Assign 2 items\s*They see it under Assigned to me\. Assigning decides nothing\./);
-    assert.match(v.of('approvals-assign-7'), /Admin A · you · 14 now/);
+    // D4814 (AP-05): the note says assigning changes ownership only; each reviewer shows the items they own.
+    assert.match(v.of('approvals-assign'), /Assign 2 items.*Assigning changes ownership only\. It does not decide these items\./s);
+    assert.match(v.of('approvals-assign-7'), /Admin A\s*You · 14 assigned/);
     assert.equal(v.props('approvals-assign-send').disabled, true, 'nobody chosen, nothing sent');
     await v.change('approvals-assign-pick-8');
     const before = v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length;
     await v.click('approvals-assign-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/approvals/assignments', body: { assignee_user_id: 8, items: [{ lane: 'kyc', item_id: 41 }, { lane: 'jobs', item_id: 3 }] } }]);
-    assert.match(v.of('approvals-toast'), /Assigned to Admin B\./);
+    assert.match(v.of('approvals-toast'), /2 items are now assigned to Admin B\./);
     assert.ok(!v.has('approvals-assign'));
     assert.ok(v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length > before, 'the list is read again');
     refuse = true;
@@ -534,11 +536,12 @@ test('mounted, the item (APR3): its own address over the Inbox, the facts, Assig
     assert.equal(v.at.path, '/admin/approvals/items/kyc-41');
     assert.ok(v.has('approvals-inbox'), 'the Inbox stays underneath');
     assert.ok(v.seen.includes('/api/admin/approvals/items/kyc/41'));
-    assert.match(v.of('approvals-item'), /Item\s*Person A\s*Esc to close/);
-    assert.match(v.of('approvals-item-facts'), /Submitted\s*20 Oct 2026, 08:00\s*Profile\s*Identity check\s*Item ID\s*41\s*Lane\s*KYC · People and accounts/);
-    assert.match(v.of('approvals-item-assigned'), /Assigned\s*Admin A\s*Assign…/);
+    assert.match(v.of('approvals-item'), /Item · KYC\s*Person A\s*Waiting 4 d 7 h/);
+    assert.match(v.of('approvals-item-facts'), /Submitted\s*20 Oct 2026, 08:00\s*Profile \/ request\s*Identity check\s*Item ID\s*41\s*Lane\s*KYC · People and accounts/);
+    // D4814 (AP-04): the owner first, with when they took it; the caller owns it, so no Assign to me.
+    assert.match(v.of('approvals-item-assigned'), /Owner\s*Admin A · you\s*Owner since 21 Oct 2026, 09:00 · assigned by Admin B\s*Change…$/);
     assert.match(v.of('approvals-item-history'), /Assigned to Admin A by Admin B · 21 Oct 2026/);
-    assert.match(v.of('approvals-item'), /Open in KYC & KYB\s*This lane is decided on its own page, where its rules and messages live\./);
+    assert.match(v.of('approvals-item-continue'), /Continue review in KYC & KYB →\s*Close\s*This decision is completed in KYC & KYB, where its evidence and notification rules live\./);
     await v.click('approvals-item-close');
     assert.equal(v.at.path, '/admin/approvals');
     assert.ok(!v.has('approvals-item'));
@@ -1100,7 +1103,8 @@ test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age
   const v = await mount('/admin/approvals', h(AdminApprovals));
   try {
     assert.deepEqual(v.ids('approvals-card-').filter((x) => /^approvals-card-[a-z_]+:\d+$/.test(x)), ['approvals-card-kyc:41', 'approvals-card-due_diligence:9', 'approvals-card-jobs:3']);
-    assert.match(v.of('approvals-card-kyc:41'), /KYC\s*Person A\s*Identity check\s*4 d 7 h · Over 72 hours\s*Review in KYC & KYB ›/);
+    // D4814 (AP-14): name, request · lane, the age in words, the owner, where review continues, then Open and ⋯.
+    assert.match(v.of('approvals-card-kyc:41'), /Person A\s*Identity check · KYC\s*4 d 7 h · Over 72 hours\s*Assigned to Admin A\s*Review in KYC & KYB\s*Open\s*⋯/);
     assert.equal(v.of('approvals-card-age-jobs:3'), 'Age not recorded');
     assert.equal(v.props('approvals-card-open-kyc:41').href, '/admin/approvals/items/kyc-41');
     assert.match(v.props('approvals-cards').className, /\bmd:hidden\b/);
@@ -1109,7 +1113,7 @@ test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age
     await v.click('approvals-card-more-kyc:41');
     assert.ok(v.has('approvals-row-sheet'));
     assert.equal(v.props('approvals-row-sheet-layer')['data-phone'], 'sheet', '⋯ is a bottom sheet');
-    assert.equal(v.props('approvals-row-sheet-open').href, '/admin/approvals/items/kyc-41');
+    assert.match(v.of('approvals-row-sheet-open-in'), /^Open in KYC & KYB ↗$/, 'D4814: the sheet opens the lane\'s page; the card has Open');
     await v.click('approvals-row-sheet-assign');
     assert.ok(!v.has('approvals-row-sheet'), 'the sheet closes');
     assert.ok(v.has('approvals-assign'), 'Assign… opens its dialog');
