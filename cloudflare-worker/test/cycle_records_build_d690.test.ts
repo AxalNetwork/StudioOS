@@ -400,7 +400,8 @@ function recorded() {
   db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, shares, ownership_pct, founder_role) VALUES (4, ${FOUNDER}, ${P}, 'Seed fund', 50, 5, NULL)`);
   db.exec(`INSERT INTO formation_step_checks (step_id, key, done_at) VALUES (2, 'fill', '2026-10-10')`);
   db.exec(`INSERT INTO incorporations (id, user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at, packet_ready_at, filed_on) VALUES
-    (8, ${FOUNDER}, ${P}, 'DE', 'Kestrel Works Inc', 50000, 'filed', '2026-09-01', '2026-09-05', NULL)`);
+    (8, ${FOUNDER}, ${P}, 'DE', 'Kestrel Works Inc', 50000, 'filed', '2026-09-01', '2026-09-05', NULL),
+    (18, 20, ${P_OTHER}, 'DE', 'Harbour Labs Inc', 50000, 'filed', '2026-09-02', '2026-09-06', NULL)`);
   // The founder's HubSpot is enabled for this company, one the founder is also in, and one the founder is not in.
   db.exec(`INSERT INTO company_profiles (id, uid, company_name) VALUES (${COMPANY}, 'c5', 'Kestrel Works'), (98, 'c98', 'Wren Holdings'), (99, 'c99', 'Okafor Ventures')`);
   db.exec(`INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('l3', ${FOUNDER}, 98), ('l4', 12, 99)`);
@@ -517,7 +518,7 @@ test('test 2: filings read decision 8, and a lab- or obligation- row declares no
   assert.deepEqual(lab.body.actions, [], 'a lab- row declares no action');
   assert.deepEqual(pillText(lab.body), ['Filed']);
   assert.deepEqual(pillText((await one(db, 'company-creation', 'lab-8-2')).body), ['Upcoming'], 'a step with no date is Upcoming');
-  assert.deepEqual(section(lab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: '/raise/legal-engine/incorporation' });
+  assert.deepEqual(section(lab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P}` });
   assert.equal((await one(db, 'company-creation', 'lab-8-3')).status, 404, 'a lab step is 0 to 2');
   db.close();
 });
@@ -582,7 +583,7 @@ test('test 4: a founder record gates Documents, needs a founder role, and vests 
   assert.deepEqual(section(ana, 'contributions').rows, [{ a: 'Closed the first pilot', b: '9 Oct 2026' }]);
   assert.deepEqual(section(ana, 'cap_table').rows, [{ a: 'Shares', b: '600 shares' }]);
   // #1695 adds the writes after it (Log, Edit); Edit split stays the cap table's link.
-  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', '/raise/cap-table']);
+  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', `/raise/cap-table?project_id=${P}`]);
   assert.equal(factOf((await one(db, 'founding-team', 'h-2')).body, 'Vested today').value, '25%', 'stored vested shares over shares');
   db.close();
 });
@@ -666,5 +667,24 @@ test('test 11: records.linkable is false until Build registers, then true on eve
   assert.equal(hasRecords('build'), true);
   const db = recorded();
   for (const slug of SLUGS) assert.equal((await read(db, slug)).body.records.linkable, true, slug);
+  db.close();
+});
+
+// D5068 (#5068): Edit split and the Lab's Incorporation row carry the
+// venture that read them, not a stale one from an earlier call in the same
+// process. P is read first so a cached/default venture would leak P's id
+// into P_OTHER's links if either href were built without its own project.
+test('test 12 (D5068): Edit split and Incorporation keep the venture that read them, venture A after venture B', async () => {
+  const db = recorded();
+  const ana = (await one(db, 'founding-team', 'h-1')).body;
+  assert.equal(ana.actions.find((a: any) => a.key === 'edit-split')?.href, `/raise/cap-table?project_id=${P}`);
+  const other = (await one(db, 'founding-team', 'h-9', OTHER_FOUNDER, P_OTHER)).body;
+  assert.equal(other.actions.find((a: any) => a.key === 'edit-split')?.href, `/raise/cap-table?project_id=${P_OTHER}`,
+    'venture B\'s edit-split stays venture B\'s, read right after venture A\'s');
+  const kestrelLab = await one(db, 'company-creation', 'lab-8-1');
+  assert.deepEqual(section(kestrelLab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P}` });
+  const harbourLab = await one(db, 'company-creation', 'lab-18-1', OTHER_FOUNDER, P_OTHER);
+  assert.deepEqual(section(harbourLab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P_OTHER}` },
+    'venture B\'s Incorporation link names venture B even though venture A\'s read came first');
   db.close();
 });

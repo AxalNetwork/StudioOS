@@ -6,6 +6,8 @@ import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import StorageRefusal from '../../account/StorageRefusal.jsx';
 import { storageRefusal } from '../../account/storagePageModel.js';
 import { GATES, MAX_UPLOAD_MB, QUEUE_WORDS, folderChoices, queueEntry, storageLine, uploadRefusal } from './filesModel.js';
+import { roomCan } from './dataRoomModel.js';
+import { useVenture } from '../../cycles/VentureContext.jsx';
 
 /**
  * D1106 (#2986) — DR4, Upload: the sheet at `/raise/data-room/new`, in place of
@@ -42,21 +44,24 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // D5074 (#5074): the room's uid is the page's venture context, never looked up here.
+  const venture = useVenture(projectId);
+  const { projectUid, status: ventureStatus } = venture;
   useEffect(() => {
-    let alive = true;
+    if (ventureStatus === 'missing') { setRead({ status: 'refused' }); return undefined; }
+    if (ventureStatus === 'unreadable') { setRead({ status: 'error' }); return undefined; }
     setRead({ status: 'loading' });
-    cyclesWrite.formOptions('raise', projectId, 'data-room')
-      .then(async (opts) => {
-        const uid = String(opts?.project_uid || '');
-        if (!uid) { const e = new Error('no room'); e.status = 404; throw e; }
-        const room = await api.dataRoom(uid);
-        if (alive) setRead({ status: 'ready', uid, room, answers: answerChips(opts).filter((o) => o.value) });
-      })
+    if (ventureStatus !== 'ready' || !projectUid) return undefined;
+    let alive = true;
+    Promise.all([api.dataRoom(projectUid), cyclesWrite.formOptions('raise', projectId, 'data-room')])
+      .then(([room, opts]) => { if (alive) setRead({ status: roomCan(room, 'upload') ? 'ready' : 'refused', uid: projectUid, room, answers: answerChips(opts).filter((o) => o.value) }); })
       .catch((error) => { if (alive) setRead({ status: [403, 404].includes(error?.status) ? 'refused' : 'error' }); });
     return () => { alive = false; };
-  }, [projectId, tick]);
+  }, [projectId, projectUid, ventureStatus, tick]);
+  const again = () => { if (ventureStatus === 'unreadable') venture.retry?.(); setTick((t) => t + 1); };
 
-  const owner = read.room?.role !== 'cofounder';
+  // D5074: a gate goes with an upload only when the Worker's capabilities allow it.
+  const owner = roomCan(read.room, 'set_gate');
   const add = (list) => {
     const picked = Array.from(list || []);
     setFiles((f) => [...f, ...picked]);
@@ -101,7 +106,7 @@ export default function DataRoomUpload({ projectId, onClose, onSaved }) {
         {read.status === 'refused' ? <p className="m-0" data-testid="dataroom-upload-refused">You do not have access to this venture’s data room.</p> : null}
         {read.status === 'error' ? (
           <p role="alert" className="m-0 flex flex-wrap gap-2 text-[12.5px] text-red-700 dark:text-red-300" data-testid="dataroom-upload-unreadable">
-            Unreadable: the room could not be read, so nothing can be added yet. <button type="button" className="font-semibold underline" onClick={() => setTick((t) => t + 1)}>Try again</button>
+            Unreadable: the room could not be read, so nothing can be added yet. <button type="button" className="font-semibold underline" onClick={again}>Try again</button>
           </p>
         ) : null}
         <label className="flex cursor-pointer flex-col items-start gap-1 rounded-[10px] border-[1.5px] border-dashed border-axal-lavender-edge bg-axal-lavender px-4 py-4 dark:border-violet-800 dark:bg-violet-950/40"
