@@ -18,5 +18,6 @@ export function raiseEvidenceTables(db: any) {
   if (exists('readiness_scores')) {
     db.exec(sql('536_readiness_stated_evidence.sql'));
     db.exec(sql('558_readiness_scores_nullable_score.sql'));
+    db.exec(sql('202611091000_readiness_input_hash.sql'));
   }
 }

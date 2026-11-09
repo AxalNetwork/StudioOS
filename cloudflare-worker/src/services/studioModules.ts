@@ -142,7 +142,8 @@ export const STUDIO_MODULES: readonly StudioModule[] = [
   { key: 'usage_quota', profile: 'investor', title: 'Usage & quota', group: 'investor', purpose: 'Your plan’s limits, and what you used.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
   { key: 'deal_lifecycle', profile: 'investor', title: 'Deal lifecycle', group: 'investor', purpose: 'Deals by stage. Read-only here.', href: null, reads: ['/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   // The canvas draws this locked to Investor Pro; `/api/dashboard` is not behind a paywall, so it is not locked (D1418).
-  { key: 'scored_opportunities', profile: 'investor', title: 'AI-scored opportunities', group: 'investor', purpose: 'Ventures that match your thesis, scored.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
+  // D4623: its scores are the retired matching engine's (D378), historical and never recalculated; the title says so.
+  { key: 'scored_opportunities', profile: 'investor', title: 'Historical match scores', group: 'investor', purpose: 'Historical scores from the retired matching engine, as recorded.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
   { key: 'quick_stats', profile: 'investor', title: 'Quick stats', group: 'investor', purpose: 'Your flow, watchlist and commitments.', href: null, reads: ['/api/dashboard', '/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   { key: 'portfolio_glance', profile: 'investor', title: 'Portfolio glance', group: 'investor', purpose: 'Companies, invested and returns.', href: null, reads: ['/api/positions/analytics'], default_size: '1/2' },
   { key: 'upcoming_events', profile: 'investor', title: 'Upcoming events', group: 'investor', purpose: 'Events you are going to.', href: null, reads: ['/api/calendar/events'], default_size: '1/2' },

@@ -1,5 +1,5 @@
 import { ReadFailure as Unreadable } from './parts';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Pill, Unrecorded } from '../../../ui';
 import { FundActControl } from '../../../lib/fundActs';
@@ -9,6 +9,8 @@ import {
   NOT_OURS_NOTE_MAX, NOT_OURS_REASONS, PAYMENT_INSTRUCTIONS_ADMIN, PAYMENT_INSTRUCTIONS_LINK, REJECT_REASON_MIN, actRow, balanceText, ending,
   money, notOursText, refusalText,
 } from './fundAdminModel';
+import { ActFlow } from './MoneyFlow';
+import { actButton, matchEffects } from './moneyFlowModel';
 import { Line, NUM, Note, Panel, Section, Table } from './parts';
 import { useRead } from './useRead';
 
@@ -133,6 +135,8 @@ const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
 function MatchRow({ m, apis, access, onChanged }) {
   const [rejecting, setRejecting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // D4812 part 5: the list is read again when the receipt closes, so a reload never unmounts the receipt.
+  const confirmedRef = useRef(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -155,11 +159,14 @@ function MatchRow({ m, apis, access, onChanged }) {
       <Line a={`${money(m.amount_cents) ?? 'Not recorded'} · ${targetName(m)}`}
         b={<span className={NUM}>{`${m.posted_on || 'not posted'} · ${m.counterparty_name || 'No counterparty recorded'} · ${m.entity_key} ${ending(m.last_four)}${m.reason ? ` · ${m.reason}` : ''}`}</span>}
         chip={<Pill tone={m.state === 'needs_review' ? 'warn' : m.state === 'confirmed' ? 'ok' : m.state === 'rejected' ? 'danger' : 'neutral'}>{GROUPS.find(([k]) => k === m.state)?.[1] || m.state}</Pill>} action={actions} />
-      {confirming && <Lightbox phone="sheet" title="Confirm this match?" label="Confirm bank match" testId={`match-dialog-${m.uid}`} onClose={() => { if (!busy) setConfirming(false); }}>
-        <Note>Links this bank transaction to {targetName(m)}. It records a match and moves no money.</Note>
-        <FundActControl access={access} act="mercury.reconcile"><div className="p-4"><button type="button" className={BTN.primary} disabled={busy} data-testid={`match-confirm-submit-${m.uid}`} onClick={() => run(async () => { await apis.mercury.confirmMatch(m.uid); setConfirming(false); }, 'The match could not be confirmed.')}>Confirm match</button></div></FundActControl>
-        {error && <p role="alert" className={ERR}>{error}</p>}
-      </Lightbox>}
+      {/* D4812 part 5: confirming a match goes through the flow; an Admin's act, so no code. */}
+      {confirming && <ActFlow apis={apis} access={access} act="mercury.reconcile" testId={`match-flow-${m.uid}`} title="Confirm bank match"
+        sub="Links this bank transaction to what it pays." effects={matchEffects(m, targetName(m))}
+        label={actButton('Confirm', m.amount_cents, 'match')}
+        consequences={[`Links this transaction to ${targetName(m)}.`, 'It records a match and moves no money.']}
+        run={() => apis.mercury.confirmMatch(m.uid)}
+        receipt={() => [['Match', `${money(m.amount_cents) ?? 'Not recorded'} · ${targetName(m)}`], ['Audit', 'Recorded as mercury.reconcile']]}
+        onClose={() => { setConfirming(false); if (confirmedRef.current) onChanged(); }} onDone={() => { confirmedRef.current = true; }} />}
       {rejecting && (
         <Lightbox phone="sheet" title="Reject this match?" label="Reject bank match" onClose={() => { if (!busy) setRejecting(false); }}><Note>Rejects the proposed pair. The transaction stays recorded; a reason is kept.</Note>
         <form className="flex flex-col gap-2 border-b border-axal-hairline bg-[#faf9fc] px-4 py-3 sm:px-5 dark:border-gray-800 dark:bg-gray-950/40" onSubmit={(e) => { e.preventDefault(); run(() => apis.mercury.rejectMatch(m.uid, reason.trim()), 'The match could not be rejected.'); }}>
