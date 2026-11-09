@@ -91,7 +91,12 @@ test('both dialog bodies keep the header\'s inset, so a phone sheet\'s fields ne
   // `p-1` the fields sat 4px from the edge of a 390px sheet while the title
   // sat 20px in — found by loading the page at 390px, not by any source pin.
   const src = readFileSync(new URL('../src/pages/AdvisorsPage.jsx', import.meta.url), 'utf8');
-  const bodies = [...src.matchAll(/<Lightbox[\s\S]*?>\s*(?:\{[^\n]*\}\s*)*<form className="([^"]*)"/g)].map((m) => m[1]);
+  // Plain string scanning: each Lightbox's first <form>, read up to its closing quote.
+  const FORM = '<form className="';
+  const bodies = src.split('<Lightbox').slice(1).map((chunk) => {
+    const at = chunk.indexOf(FORM);
+    return at < 0 ? null : chunk.slice(at + FORM.length, chunk.indexOf('"', at + FORM.length));
+  }).filter((c) => c !== null);
   assert.equal(bodies.length, 2, 'the booking and review dialogs each open on their form');
   for (const cls of bodies) assert.match(cls, /(?:^|\s)px-5(?:\s|$)/, `a dialog form is inset ${cls}, not px-5 like its header`);
 });
