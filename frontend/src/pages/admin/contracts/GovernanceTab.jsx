@@ -11,6 +11,9 @@ import {
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
 import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './GovernanceAttention';
+import HighRiskMove, { MOVE_WORD } from './HighRiskMove';
+
+const isHighRisk = (to) => Object.prototype.hasOwnProperty.call(MOVE_WORD, to);
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -158,7 +161,9 @@ function StatusMoves({ document: d, versions, onDone }) {
     {d.executed_version != null && <p className="text-xs">Executed from the signed copy, v{d.executed_version}.</p>}
     {d.status === 'executed' && d.executed_version == null && d.envelope_id != null && <p className="text-xs">Executed from completed envelope #{d.envelope_id}.</p>}
     <div className="flex flex-wrap gap-2">{d.next_statuses.map((to) => <button key={to} type="button" className={button} disabled={busy} onClick={() => { setAsking(to); setError(''); }}>{moveLabel(d.status, to)}</button>)}</div>
-    {asking && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
+    {/* D4811 part 6: executing and archiving are high-risk: Scope → Review → Result, with the reason, the word and the evidence. */}
+    {asking && isHighRisk(asking) && <HighRiskMove to={asking} document={d} versions={versions} onClose={() => setAsking(null)} onDone={onDone} />}
+    {asking && !isHighRisk(asking) && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
       <p>Move “{d.title}” from {statusLabel(d.status)} to {statusLabel(asking)}?</p>
       {asking === 'executed' && hint && <p className="text-amber-700 dark:text-amber-300">{hint}</p>}
       <div className="flex gap-2"><button type="button" className={button} onClick={() => setAsking(null)}>Cancel</button>
