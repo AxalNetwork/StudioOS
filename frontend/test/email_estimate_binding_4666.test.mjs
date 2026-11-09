@@ -199,3 +199,30 @@ test('both draft surfaces send the quote of their own estimate and give Shorter 
     assert.doesNotMatch(src, /disabled=\{busy\} onClick=\{shorter\}/, `${f}: Shorter is no longer pressable on busy alone`);
   }
 });
+
+test('navigating draft versions re-keys Shorter\'s estimate to that version: the approved and executed snapshot is the same stored text', async () => {
+  let made = 0;
+  // Both versions read the same, so only the version itself tells their estimates apart.
+  const api = fakeApi({
+    draft: () => { made += 1; return Promise.resolve({ draft: { uid: `dr-${made}`, subject: 'Same subject', body: 'Same body.', sources: [] } }); },
+  });
+  const page = await mounted(sheet(api));
+  try {
+    await page.press(page.by('compose-draft'));
+    await page.press(page.byText('Regenerate'));
+    await page.settle(450);
+    assert.match(page.text(), /version 2 of 2/);
+    await page.press(page.byLabel('Previous version'));
+    assert.match(page.text(), /version 1 of 2/);
+    assert.equal(page.disabled(page.by('compose-shorter')), true, 'shut the moment the version changed: the second version\'s estimate is no answer for the first');
+    await page.settle(450);
+    const asked = api.calls.filter(([n, , b]) => n === 'revise' && b?.estimate === true);
+    const last = asked.at(-1);
+    assert.equal(last[1], 'dr-1', 'the estimate is of the version on screen');
+    assert.deepEqual(last[2].base, { subject: 'Same subject', body: 'Same body.' }, 'it names that version\'s text');
+    assert.equal(page.disabled(page.by('compose-shorter')), false);
+    await page.press(page.by('compose-shorter'));
+    const run = api.calls.filter(([n, , b]) => n === 'revise' && !b?.estimate).at(-1);
+    assert.deepEqual([run[1], run[2].quote, run[2].base], ['dr-1', 'q1.revise.dr-1', last[2].base], 'the run is the approved operation: same version, same quote, same text');
+  } finally { await page.close(); }
+});

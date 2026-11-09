@@ -15,8 +15,9 @@ import {
   isHqLane, laneViews, tabOf,
 } from './approvalsModel';
 import {
-  AGE_FILTERS, ATTENTION_LINE, BAND_PARTS, OUTCOME_FILTERS, SEARCH_MIN, SORTS, WORK_VIEWS,
-  assignChoices, assignItems, assignTitle, bandedRows, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
+  AGE_FILTERS, ASSIGN_NOTE, ATTENTION_LINE, BAND_PARTS, OUTCOME_FILTERS, OVERDUE_UNOWNED, SEARCH_MIN, SORTS, WORK_VIEWS,
+  assignButton, assignChoices, assignItems, assignNames, assignNoteRest, assignTitle, collectOverdue, continueLine, overdueAssignLine, overdueAssignTitle,
+  ownershipCallout, queueStep, bandedRows, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
   filterChips, hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, itemOfPath,
   itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
@@ -128,6 +129,25 @@ function DoorFor({ lane }) {
 }
 
 /**
+ * D4814: a lane's door dressed as a button or a list action — "Continue
+ * review in KYC & KYB →", "Open in Due diligence ↗". The door itself stays the
+ * literal link above (the reachability walk and the lane tests read those
+ * lines); the words go around it and the link is stretched over the whole
+ * control, so all of it is the target. A lane with no page to open (Best-Fit,
+ * an HQ page not built yet) is plain words, never a control that goes nowhere.
+ */
+function DressedDoor({ lane, before, after, className, plain, testId }) {
+  const dest = reviewDestination(lane);
+  if (/no review page yet|not built yet|^its own page$/.test(dest)) return <span className={plain} data-testid={testId}>{dest}</span>;
+  return (
+    <span data-testid={testId}
+      className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
+      {before}<DoorFor lane={lane} />{after}
+    </span>
+  );
+}
+
+/**
  * One read, answered alone: `{ status: 'loading' | 'ready' | 'error', reply,
  * error, reload }`. `key` says when to read again; `enabled` false reads nothing.
  */
@@ -203,80 +223,132 @@ function FailedCard({ title, line, error, onRetry, testId }) {
   );
 }
 
-/** The ⋯ menu on a row: Open, Assign…, Copy link (APR1). */
-function RowMenu({ row, search, onAssign, onCopy }) {
+/**
+ * D4814 (AP-17): a row's ⋯ as a disclosure popover, not an ARIA menu — the
+ * trigger says whether it is open, Tab moves through Assign…, Copy link and
+ * Open in [destination] ↗, Esc or a click outside closes it and focus goes
+ * back to ⋯. Review is never only in here: the row's Review button stays.
+ */
+function RowActions({ row, onAssign, onCopy }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const trigger = useRef(null);
+  const popId = `approvals-pop-${row.lane}-${row.id}`;
+  const close = (refocus) => { setOpen(false); if (refocus) trigger.current?.focus?.(); };
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  const ITEM = 'flex min-h-[36px] items-center px-3 py-1.5 text-left text-[12.5px] text-axal-ink hover:bg-gray-50 focus-visible:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 dark:focus-visible:bg-gray-800';
   return (
-    <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`More for ${row.who}`} onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
+    <div ref={wrap} className="relative" data-testid={`approvals-actions-${row.key}`}
+      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); close(true); } }}
+      onBlur={(e) => { if (open && e.relatedTarget && wrap.current && !wrap.current.contains(e.relatedTarget)) setOpen(false); }}>
+      <button ref={trigger} type="button" aria-expanded={open} aria-controls={popId} aria-label={`More actions for ${row.who}`} onClick={() => setOpen((o) => !o)}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
       {open ? (
-        <div role="menu" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[150px] flex-col py-1 shadow-lg`}>
-          <Link role="menuitem" to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} data-testid={`approvals-menu-${row.key}-open`} className="px-3 py-1.5 text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => setOpen(false)}>Open</Link>
-          <button role="menuitem" type="button" data-testid={`approvals-menu-${row.key}-assign`} className="px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => { setOpen(false); onAssign([row]); }}>Assign…</button>
-          <button role="menuitem" type="button" data-testid={`approvals-menu-${row.key}-copy`} className="px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => { setOpen(false); onCopy(row); }}>Copy link</button>
+        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
+          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(false); onAssign([row]); }}>Assign…</button>
+          <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
+          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
       ) : null}
     </div>
   );
 }
 
-/** The Assign dialog (APR3a): one admin, and it decides nothing. */
-function AssignDialog({ items, inbox, callerId, onClose, onDone }) {
+/**
+ * The Assign dialog. D4814 (AP-05): it says first that assigning changes
+ * ownership only, names who it is about, and lists the reviewers as a radio
+ * group — you, then lowest workload, then alphabetical, each with the items
+ * they own now. The button names the person. `line` is what a caller adds
+ * (Assign overdue…'s cap).
+ */
+function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
   const choices = assignChoices(inbox?.reply, callerId);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
+  const list = choices.state === 'ready' ? choices.choices : [];
   const send = async () => {
     if (!pick || busy) return;
     setBusy(true);
     try {
       await adminApprovalsApi.assign(pick, assignItems(items));
-      const who = inbox?.reply?.reviewers?.find((r) => r.id === pick)?.name;
-      onDone(`Assigned to ${who || 'that admin'}.`);
+      const who = list.find((c) => c.id === pick);
+      onDone(`${items.length === 1 ? `${items[0].who} is` : `${items.length.toLocaleString('en-US')} items are`} now assigned to ${who ? (who.you ? 'you' : who.name) : 'that admin'}.`);
     } catch (e) {
       onDone(refusalToast(e));
     }
   };
+  const heading = title || assignTitle(items);
   return (
-    <Lightbox label={assignTitle(items)} title={assignTitle(items)} sub="They see it under Assigned to me. Assigning decides nothing." onClose={onClose} testId="approvals-assign" width={460}
+    <Lightbox label={heading} eyebrow="Assign" title={heading} onClose={onClose} testId="approvals-assign" width={480}
       footer={(
         <div className={FOOT}>
           <button type="button" className={BTN} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!pick || busy} onClick={send} data-testid="approvals-assign-send">{busy ? 'Assigning…' : 'Assign'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!pick || busy} onClick={send} data-testid="approvals-assign-send">{busy ? 'Assigning…' : assignButton(list, pick)}</button>
         </div>
       )}>
-      <div className="flex flex-col gap-1.5 px-5 py-4">
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <p className="m-0 flex gap-2 rounded-[8px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="approvals-assign-note">
+          <span aria-hidden="true">i</span><span><b>{ASSIGN_NOTE}</b> {assignNoteRest(items.length)}</span>
+        </p>
+        {items.length > 1 ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="approvals-assign-names">{assignNames(items)}</p> : null}
+        {line ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-line">{line}</p> : null}
         {choices.state !== 'ready' ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-unread">{choices.text}</p> : (
-          <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-            <legend className="sr-only">Assign to</legend>
-            {choices.choices.map((c) => (
-              <label key={c.id} className="flex min-h-[40px] items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100" data-testid={`approvals-assign-${c.id}`}>
-                <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
-                {c.label}
-              </label>
-            ))}
-          </fieldset>
+          <>
+            <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" data-testid="approvals-assign-list">
+              <legend className="sr-only">Reviewer</legend>
+              {list.map((c) => (
+                <label key={c.id} className={`flex min-h-[44px] items-center gap-2.5 rounded-[8px] border px-3 text-[13px] text-axal-ink dark:text-gray-100 ${pick === c.id ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline dark:border-gray-700'}`} data-testid={`approvals-assign-${c.id}`}>
+                  <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
+                  <b className="flex-1">{c.name}</b>
+                  {c.load ? <small className={`${SUB} ${MONO}`}>{c.load}</small> : null}
+                </label>
+              ))}
+            </fieldset>
+            <p className={`m-0 ${SUB}`} data-testid="approvals-assign-order">{choices.note}</p>
+          </>
         )}
       </div>
     </Lightbox>
   );
 }
 
-/** The item at its own address (APR3): the facts, who holds it, its history, and the page that decides it. */
-function ItemDrawer({ at, onClose, onAssign }) {
+/**
+ * The item at its own address (APR3). D4814 (AP-04, AP-15): the owner first,
+ * with Assign to me and Change…, then the facts, then History; its place in
+ * the queue with the rows before and after it; and the action names where
+ * review continues ("Continue review in KYC & KYB →") with why it is there.
+ */
+function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
   const read = useRead(() => adminApprovalsApi.item(at.lane, at.id), `${at.lane}-${at.id}`);
   const v = itemView(read);
   const ready = v.state === 'ready';
+  const row = ready ? [{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }] : null;
+  const mine = ready && v.assignee.kind === 'person' && canTake && Number(v.assignee.id) === Number(canTake);
+  const stepper = step ? (
+    <div className="flex items-center gap-1.5" data-testid="approvals-item-step">
+      <span className={`${SUB} ${MONO}`} data-testid="approvals-item-pos">{step.pos}</span>
+      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={BTN_SM} data-testid="approvals-item-prev">‹</Link>
+        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>‹</span>}
+      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={BTN_SM} data-testid="approvals-item-next">›</Link>
+        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>›</span>}
+    </div>
+  ) : null;
   return (
-    <Sheet label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow="Item" title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
-      sub={ready ? 'Esc to close' : null}
+    <Sheet label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow={ready ? `Item · ${v.laneLabel}` : 'Item'} title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
+      headerActions={stepper}
+      sub={ready ? <span>Waiting <span className={MONO}>{v.age}</span><UrgencyPill sla={v.sla} /></span> : null}
       footer={ready ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-3 max-sm:flex-col-reverse max-sm:items-stretch">
+        <div className="flex flex-col gap-2" data-testid="approvals-item-continue">
+          <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
+            <DressedDoor lane={v.lane} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
             <button type="button" className={BTN} onClick={onClose}>Close</button>
-            <span className="text-[12.5px]">Open in <DoorFor lane={v.lane} /></span>
           </div>
-          <p className={`m-0 ${SUB}`}>This lane is decided on its own page, where its rules and messages live.</p>
+          <p className={`m-0 ${SUB}`} data-testid="approvals-item-why">{continueLine(v.lane)}</p>
         </div>
       ) : null}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="approvals-item-body">
@@ -293,25 +365,35 @@ function ItemDrawer({ at, onClose, onAssign }) {
         ) : null}
         {ready ? (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.plain}`}>{v.laneLabel}</span>
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[v.band.tone] || PILL.plain}`}>Waiting {v.age}</span>
-            </div>
-            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13px]" data-testid="approvals-item-facts">
-              <dt className={EYE}>Submitted</dt><dd className="m-0">{v.submitted}</dd>
-              <dt className={EYE}>Profile</dt><dd className="m-0">{v.what}</dd>
-              <dt className={EYE}>Item ID</dt><dd className={`m-0 ${MONO}`}>{v.id}</dd>
-              <dt className={EYE}>Lane</dt><dd className="m-0">{v.laneLabel}{v.group ? ` · ${v.group}` : ''}</dd>
-            </dl>
-            <section className="flex flex-wrap items-center justify-between gap-2" data-testid="approvals-item-assigned">
-              <div>
-                <div className={EYE}>Assigned</div>
-                <div className="text-[13px]">{v.assignee.text}{v.assigneeReason ? <span className={SUB}> · {v.assigneeReason}</span> : null}</div>
+            <section className="flex flex-col gap-1.5" data-testid="approvals-item-assigned">
+              <h3 className={`m-0 ${EYE}`}>Owner</h3>
+              <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700">
+                <div className="min-w-0 flex-1">
+                  {v.assignee.kind === 'none' ? <span className="text-[13px] font-bold text-axal-amber-deep dark:text-amber-200" data-testid="approvals-item-owner">Unassigned</span>
+                    : v.assignee.kind === 'unread' ? <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="approvals-item-owner">Not read</span>
+                      : <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="approvals-item-owner">{v.assignee.text}{mine ? <span className={SUB}> · you</span> : null}</span>}
+                  {v.assignee.kind === 'unread' ? <span className={`block ${SUB}`}>{v.assigneeReason || 'The assignment record could not be read for this item.'}</span>
+                    : v.ownerLine ? <span className={`block ${SUB}`} data-testid="approvals-item-owner-line">{v.ownerLine}</span> : null}
+                </div>
+                {v.assignee.kind !== 'unread' ? (
+                  <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                    {canTake && !mine ? <button type="button" className={BTN_SM} onClick={() => onTake(row, read.reload)} data-testid="approvals-item-take">Assign to me</button> : null}
+                    <button type="button" className={BTN_SM} onClick={() => onAssign(row, read.reload)} data-testid="approvals-item-assign">Change…</button>
+                  </div>
+                ) : null}
               </div>
-              <button type="button" className={BTN} onClick={() => onAssign([{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }], read.reload)} data-testid="approvals-item-assign">Assign…</button>
+            </section>
+            <section className="flex flex-col gap-1.5">
+              <h3 className={`m-0 ${EYE}`}>Facts</h3>
+              <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13px]" data-testid="approvals-item-facts">
+                <dt className={EYE}>Submitted</dt><dd className="m-0">{v.submitted}</dd>
+                <dt className={EYE}>Profile / request</dt><dd className="m-0">{v.what}</dd>
+                <dt className={EYE}>Item ID</dt><dd className={`m-0 ${MONO}`}>{v.id}</dd>
+                <dt className={EYE}>Lane</dt><dd className="m-0">{v.laneLabel}{v.group ? ` · ${v.group}` : ''}</dd>
+              </dl>
             </section>
             <section className="flex flex-col gap-1" data-testid="approvals-item-history">
-              <div className={EYE}>History</div>
+              <h3 className={`m-0 ${EYE}`}>History</h3>
               {v.history.state !== 'ready' ? <p className={`m-0 ${SUB}`}>{v.history.text}</p>
                 : v.history.lines.length ? (
                   <ul className="m-0 flex list-none flex-col gap-1 p-0">
@@ -346,36 +428,49 @@ function WaitingOnHq({ read }) {
   );
 }
 
-/** D1047 (APR15): one item as a phone card — lane, who, what, its age and where it is decided, and ⋯. */
-function RowCard({ row, search, onMore }) {
+/**
+ * D1047 (APR15), D4814 (AP-14): one item as a phone card — name, request and
+ * lane, its age with the band in words, who owns it (Unassigned in amber),
+ * then Open, Assign when nobody owns it, and ⋯. Every target is 44px.
+ */
+function RowCard({ row, search, onMore, onAssign }) {
   const age = cardAge(row);
+  const a = row.assignee;
   return (
-    <li className="flex items-start gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={EYE}>{row.laneLabel}</span>
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[13.5px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
-        <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what}</span>
+    <li className="flex flex-col gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what} · {row.laneLabel}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
-          <span className="text-[12px] text-axal-ink dark:text-gray-100">Review in <DoorFor lane={row.lane} /> ›</span>
+          <span className="text-[12px]" data-testid={`approvals-card-owner-${row.key}`}>
+            {a.kind === 'none' ? <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
+              : a.kind === 'unread' ? <span className={SUB}>Owner not read</span>
+                : <span className="text-axal-ink dark:text-gray-100">Assigned to {a.text}</span>}
+          </span>
         </div>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Review in {reviewDestination(row.lane)}</span>
       </div>
-      <button type="button" aria-label={`More for ${row.who}`} onClick={() => onMore(row)}
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
+      <div className="flex gap-2">
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={`${BTN_PRIMARY} flex-1`} data-testid={`approvals-card-review-${row.key}`}>Open</Link>
+        {a.kind === 'none' ? <button type="button" className={`${BTN} flex-1`} onClick={() => onAssign([row])} data-testid={`approvals-card-assign-${row.key}`}>Assign</button> : null}
+        <button type="button" aria-label={`More actions for ${row.who}`} onClick={() => onMore(row)}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
+      </div>
     </li>
   );
 }
 
 const SHEET_ITEM = 'flex min-h-[44px] items-center rounded-[8px] px-3 text-left text-[14px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
 
-/** D1047 (APR15): a card's ⋯ as a bottom sheet: Open, Assign…, Copy link. */
-function RowSheet({ row, search, onAssign, onCopy, onClose }) {
+/** D1047 (APR15), D4814: a card's ⋯ as a bottom sheet: Assign…, Copy link, Open in [destination] — a list of actions, not a menu. */
+function RowSheet({ row, onAssign, onCopy, onClose }) {
   return (
-    <Lightbox label={`More for ${row.who}`} title={row.who} sub={row.laneLabel} phone="sheet" onClose={onClose} testId="approvals-row-sheet" width={420}>
-      <div className="flex flex-col gap-1 px-3 py-3" role="menu">
-        <Link role="menuitem" to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={SHEET_ITEM} onClick={onClose} data-testid="approvals-row-sheet-open">Open</Link>
-        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
-        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
+    <Lightbox label={`More actions for ${row.who}`} title={row.who} sub={row.laneLabel} phone="sheet" onClose={onClose} testId="approvals-row-sheet" width={420}>
+      <div className="flex flex-col gap-1 px-3 py-3">
+        <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
+        <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
+        <span onClickCapture={onClose}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
       </div>
     </Lightbox>
   );
@@ -543,6 +638,25 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
     chooseView(WORK_VIEWS[(i + step + WORK_VIEWS.length) % WORK_VIEWS.length].key);
   };
   const onType = (v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); };
+  const callout = ownershipCallout(inbox);
+  // D4814 (AP-01): Assign overdue… reads the overdue items nobody holds from
+  // every lane (not this page), oldest first, up to what one Assign takes.
+  const [gathering, setGathering] = useState(false);
+  const assignOverdue = async () => {
+    if (gathering) return;
+    setGathering(true);
+    try {
+      const { rows: due, total } = await collectOverdue((page) => adminApprovalsApi.inbox(page, OVERDUE_UNOWNED));
+      if (!due.length) toast('Every overdue item has an owner now. The list is up to date.');
+      else onAssign(due, null, { title: overdueAssignTitle(due), line: overdueAssignLine(due, total) });
+      if (!due.length) inbox.reload();
+    } catch (e) {
+      toast(`The overdue items could not be read, so nothing was assigned. ${refusalToast(e)}`);
+    } finally {
+      setGathering(false);
+    }
+  };
+  const somePicked = picked.length > 0 && !allPicked;
 
   return (
     <div className="flex flex-col gap-4">
@@ -617,25 +731,31 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
               </p>
             ) : null}
             {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
-            {picked.length ? (
-              <div className="sticky top-0 z-[1] flex flex-wrap items-center gap-2 border-b border-axal-hairline bg-axal-lavender px-3 py-2 dark:border-gray-700 dark:bg-violet-950/40" data-testid="approvals-bulk">
-                <span className="text-[12.5px] font-bold">{picked.length.toLocaleString('en-US')} selected</span>
-                <button type="button" className={BTN} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
-                <button type="button" className={BTN} onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
+            {callout ? (
+              <div role="note" className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-amber-900 dark:bg-amber-950/30 dark:text-gray-100" data-testid="approvals-own-callout">
+                <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-[11px] font-bold text-axal-amber-deep dark:bg-amber-900 dark:text-amber-200">!</span>
+                <span className="min-w-0 flex-1 basis-[260px]">{callout.text}{callout.cause ? ` ${callout.cause}` : ''}</span>
+                <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                  {view !== 'unassigned' ? <button type="button" className={BTN_SM} onClick={() => chooseView('unassigned')} data-testid="approvals-own-show">Show unassigned</button> : null}
+                  {callout.assignOverdue > 0 ? (
+                    <button type="button" className={`${BTN_PRIMARY} sm:min-h-[30px]`} disabled={gathering} onClick={assignOverdue} data-testid="approvals-own-assign-overdue">{gathering ? 'Reading overdue items…' : 'Assign overdue…'}</button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
             {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={5} /></div>
               : rows.length ? (
                 <>
                   <ul className="m-0 list-none p-0 md:hidden" data-testid="approvals-cards">
-                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onMore={(row) => setSheet({ kind: 'row', row })} />)}
+                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onAssign={onAssign} onMore={(row) => setSheet({ kind: 'row', row })} />)}
                   </ul>
                   <div className="hidden overflow-x-auto md:block">
                     <table className="w-full min-w-[760px]" data-testid="approvals-table">
                       <thead>
                         <tr className="border-b border-axal-hairline dark:border-gray-700">
                           <th scope="col" className={`${TH} w-10`}>
-                            <input type="checkbox" aria-label="Select all on this page" checked={allPicked}
+                            <input type="checkbox" aria-label="Select all on this page" checked={allPicked} aria-checked={somePicked ? 'mixed' : allPicked}
+                              ref={(el) => { if (el) el.indeterminate = somePicked; }}
                               onChange={() => setSelected(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} data-testid="approvals-pick-all" />
                           </th>
                           <th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Owner</th><th scope="col" className={TH}>Review</th>
@@ -651,7 +771,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
                           );
                           const r = l.row;
                           return (
-                            <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-row-${r.key}`}>
+                            <tr key={r.key} aria-selected={selected.has(r.key)} className={`border-b border-axal-hairline last:border-0 dark:border-gray-700 ${selected.has(r.key) ? 'bg-axal-lavender dark:bg-violet-950/30' : ''}`} data-testid={`approvals-row-${r.key}`}>
                               <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
                               <td className={TD}>
                                 <Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link>
@@ -661,7 +781,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
                               <td className={TD}><span className={MONO}>{r.age}</span><UrgencyPill sla={r.sla} /></td>
                               <td className={TD}><OwnerCell row={r} callerId={callerId} onAssign={onAssign} /></td>
                               <td className={TD}><ReviewCell row={r} search={loc.search} /></td>
-                              <td className={TD}><RowMenu row={r} search={loc.search} onAssign={onAssign} onCopy={copy} /></td>
+                              <td className={TD}><RowActions row={r} onAssign={onAssign} onCopy={copy} /></td>
                             </tr>
                           );
                         })}
@@ -697,6 +817,17 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
                 <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
                   <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
                   <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
+                </div>
+              </div>
+            ) : null}
+            {/* D4814 (AP-03): the bulk bar floats over the bottom of the queue; its
+                holder has no height, so selecting a row moves nothing below it. */}
+            {picked.length ? (
+              <div className="pointer-events-none sticky bottom-4 z-20 h-0" data-testid="approvals-bulk-holder">
+                <div role="region" aria-label="Bulk actions" className="pointer-events-auto mx-auto flex w-max max-w-[calc(100%-24px)] -translate-y-[calc(100%+12px)] flex-wrap items-center gap-2 rounded-[12px] bg-axal-ink px-3 py-2 text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" data-testid="approvals-bulk">
+                  <span className="text-[12.5px]"><b className={MONO}>{picked.length.toLocaleString('en-US')}</b> selected</span>
+                  <button type="button" className={BTN_PRIMARY} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
+                  <button type="button" className="inline-flex min-h-[44px] items-center rounded-[8px] px-3 text-[12.5px] font-bold hover:bg-white/10 sm:min-h-[36px] dark:hover:bg-gray-900/10" onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
                 </div>
               </div>
             ) : null}
@@ -740,7 +871,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
         <FiltersPanel q={q} superAdmin={superAdmin} reviewers={reviewers} n={n}
           setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)} onClear={clearFilters} />
       ) : null}
-      {sheet?.kind === 'row' ? <RowSheet row={sheet.row} search={loc.search} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'row' ? <RowSheet row={sheet.row} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }
@@ -943,7 +1074,22 @@ export function ApprovalsPage({ viewer = null }) {
     const t = setTimeout(() => setToastText(null), 8000);
     return () => clearTimeout(t);
   }, [toastText]);
-  const openAssign = (rows, after) => setAssignFor({ rows, after });
+  const openAssign = (rows, after, opts = {}) => setAssignFor({ rows, after, ...opts });
+  // D4814 (AP-04): Assign to me takes the item at once — it changes the owner
+  // only, as Assign does — and is offered only to an admin the Worker lists as
+  // a reviewer (a Super Admin who is not one cannot be assigned).
+  const reviewers = inbox.status === 'ready' && Array.isArray(inbox.reply?.reviewers) ? inbox.reply.reviewers : [];
+  const canTake = user?.id != null && reviewers.some((r) => Number(r.id) === Number(user.id)) ? user.id : null;
+  const take = async (rows, after) => {
+    try {
+      await adminApprovalsApi.assign(canTake, assignItems(rows));
+      setToastText(`${rows[0].who} is now assigned to you.`);
+    } catch (e) {
+      setToastText(refusalToast(e));
+    }
+    inbox.reload();
+    after?.();
+  };
   const doneAssign = (text) => {
     const after = assignFor?.after;
     setAssignFor(null);
@@ -986,8 +1132,11 @@ export function ApprovalsPage({ viewer = null }) {
       {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} superAdmin={superAdmin} studio={studio} callerId={user?.id ?? null} onAssign={openAssign} toast={setToastText} /> : null}
       {tab === 'lanes' ? <Lanes views={views} glance={glance} superAdmin={superAdmin} /> : null}
       {tab === 'decided' ? <Decided decided={decided} /> : null}
-      {item ? <ItemDrawer key={`${item.lane}-${item.id}`} at={item} onClose={closeItem} onAssign={openAssign} /> : null}
-      {assignFor ? <AssignDialog items={assignFor.rows} inbox={inbox} callerId={user?.id} onClose={() => setAssignFor(null)} onDone={doneAssign} /> : null}
+      {item ? (
+        <ItemDrawer key={`${item.lane}-${item.id}`} at={item} step={onInbox && inbox.status === 'ready' ? queueStep(inbox.reply, item) : null} search={loc.search}
+          canTake={canTake} onClose={closeItem} onAssign={openAssign} onTake={take} />
+      ) : null}
+      {assignFor ? <AssignDialog items={assignFor.rows} title={assignFor.title} line={assignFor.line} inbox={inbox} callerId={user?.id} onClose={() => setAssignFor(null)} onDone={doneAssign} /> : null}
       {toastText ? (
         <div role="status" className="fixed bottom-6 left-1/2 z-50 flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-[10px] bg-axal-ink px-4 py-2.5 text-[13px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" data-testid="approvals-toast">
           {toastText}

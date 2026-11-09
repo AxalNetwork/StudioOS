@@ -255,6 +255,8 @@ export function waitingChart(read) {
     const memberLine = def.key === 'referrals' && Number(d.waiting_on_member) > 0 ? `${nf(d.waiting_on_member)} waiting on the member` : null;
     return {
       ...def, state: 'ready', count: Number(d.count) || 0, parts,
+      // D4873: the oldest item's age, for Needs attention's Overdue and Eadwyn's "review the oldest first".
+      oldestHours: d.oldest_hours === null || d.oldest_hours === undefined || !(Number(d.count) > 0) ? null : Number(d.oldest_hours),
       text: `${nf(Number(d.count) || 0)} waiting`,
       sub: [d.aged, d.oldest_hours !== null && d.oldest_hours !== undefined && Number(d.count) > 0 ? `oldest ${ageText(d.oldest_hours)}` : null, memberLine,
         !aged && Number(d.count) > 0 ? 'no recorded age' : null,

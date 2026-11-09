@@ -51,6 +51,7 @@ async function fixture({ answer = GOOD as unknown, balance = 5000000 } = {}) {
     UNIQUE (project_id, version, field_key))`);
   f.db.exec(between(mig('463_raise_record_stores.sql'), 'CREATE TABLE IF NOT EXISTS narrative_version_meta'));
   f.db.exec(mig('544_narrative_sections.sql'));
+  f.db.exec(mig('202611082100_narrative_version_revision.sql'));
   // Version 2, for a seed fund: its Traction words hold two figures.
   f.db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version, investor_type) VALUES
       (1, '__version__', 'seed_fund', 2, 'seed_fund'),

@@ -139,6 +139,14 @@ export function ProposalsSummary({ waiting }) {
       <div className="flex flex-col gap-0.5">
         <h2 className={H2}>{QUEUE_TITLE}</h2>
         <p className={`m-0 ${SUB}`} data-testid="proposals-summary-text">{s.text}</p>
+        {/* D4873 (PG01): only the summary here; search, filters and review live at /admin/programs/proposals. */}
+        {s.state === 'ready' && s.count > 0 ? (
+          <dl className="m-0 mt-1 flex flex-wrap gap-x-5 gap-y-1" data-testid="proposals-summary-facts">
+            <div className="flex flex-col"><dt className={SUB}>awaiting review</dt><dd className="m-0 font-mono text-[15px] font-semibold text-axal-ink dark:text-gray-100">{s.count.toLocaleString('en-US')}</dd></div>
+            {s.oldest ? <div className="flex flex-col"><dt className={SUB}>oldest</dt><dd className="m-0 font-mono text-[15px] font-semibold text-axal-ink dark:text-gray-100" data-testid="proposals-summary-oldest">{s.oldest}</dd></div> : null}
+            <div className="flex flex-col"><dt className={SUB}>latest studio</dt><dd className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="proposals-summary-studio">{s.latestStudio || 'Not read here yet'}</dd></div>
+          </dl>
+        ) : null}
       </div>
       <Link to="/admin/programs/proposals" className={PRIMARY} data-testid="proposals-summary-open">Open proposals</Link>
     </section>

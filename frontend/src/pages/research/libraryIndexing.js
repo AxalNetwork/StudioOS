@@ -66,17 +66,6 @@ export function batchSummary(results, titleOf = (uid) => uid) {
   };
 }
 
-/**
- * What a row says it can do next, from its recorded state and note. A failed
- * read is retried; a file nothing could be read from is replaced, because
- * reading it again reads nothing again.
- */
-export function nextStep(d) {
-  if (d.source === 'client') return null;
-  if (d.index_state === 'failed') return { note: d.index_note || 'The last read failed.', action: 'Re-index' };
-  if (d.index_state === 'unsupported') return { note: d.index_note || 'No text could be read from this file.', action: 'Replace the file' };
-  if (d.index_state === 'partial') return { note: d.index_note || 'Some passages were not indexed.', action: 'Re-index' };
-  return null;
-}
+// What a row says it can do next is `rowProblem` in `researchStates.js` (D3701).
 
 export { isAnswerable };

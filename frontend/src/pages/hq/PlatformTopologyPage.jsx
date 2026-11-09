@@ -333,6 +333,7 @@ export default function PlatformTopologyPage() {
     <WorkerRail
       workspace="Topology"
       role="super_admin"
+      operations
       stance="Reads the architecture back"
       note="This rail reads back what the page loaded: HQ's own bindings, the RPC surface in both directions, and the registry of branches. It changes nothing."
       coverage={coverage}

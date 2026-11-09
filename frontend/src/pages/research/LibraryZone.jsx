@@ -12,7 +12,8 @@ import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { createRecordGate } from './recordGate.js';
-import { MAX_POLLS, batchSummary, hasPending, nextStep, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
+import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
+import { answerabilityOf, indexStateOf, rowProblem } from './researchStates.js';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -56,21 +57,10 @@ import { MAX_POLLS, batchSummary, hasPending, nextStep, pollDelay, reindexTarget
  * has opened anything to you.
  */
 
-const STATE_LABEL = {
-  indexed: 'Answerable',
-  // D4605: some passages indexed, the rest not; Ask answers from what was.
-  partial: 'Partly answerable',
-  pending: 'Reading…',
-  unsupported: 'Not answerable',
-  failed: 'Not answerable',
-};
-const STATE_TONE = {
-  indexed: 'ok',
-  partial: 'warn',
-  pending: 'neutral',
-  unsupported: 'warn',
-  failed: 'danger',
-};
+// D3701 (RS-06): index state and answerability are two columns with two
+// vocabularies, named once in `researchStates.js`. This file used to say
+// "Answerable" inside the index-state pill, so the two read as one fact.
+const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
 const KINDS = [
   { value: 'document', label: 'Document' },
@@ -388,8 +378,8 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         />
       )}
       <ZoneHeading
-        title="Your library"
-        blurb="The documents Ask reads from. What is answerable here is exactly what Ask can cite."
+        title="Evidence Library"
+        blurb="Your documents. Only indexed documents can be cited in Ask."
         action={payload ? (
           <Pill tone={payload.not_indexed > 0 ? 'warn' : 'ok'}>
             {payload.indexed} answerable
@@ -485,17 +475,53 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           />
         )}
       >
+        {/* D3701 RS-10C: on a phone the rows are cards, each with both
+            states and its Retry. The table below is for wider screens. */}
+        <ul className="space-y-2.5 sm:hidden" data-testid="library-cards">
+          {visible.map((d) => {
+            const ix = indexStateOf(d);
+            const an = answerabilityOf(d);
+            const problem = rowProblem(d);
+            return (
+              <li key={d.uid}>
+                <Card className="p-3.5">
+                  <p className="break-words text-[13px] font-bold text-axal-ink dark:text-gray-100">{d.title}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <Pill tone={ix.tone} className="!text-[10px]">{mark(ix)}</Pill>
+                    <Pill tone={an.tone} className="!text-[10px]">{mark(an)}</Pill>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-gray-600 dark:text-gray-400">
+                    {KINDS.find((k) => k.value === d.kind)?.label || d.kind}
+                    {' · '}
+                    {d.created_at ? `added ${String(d.created_at).slice(0, 10)}` : 'added: Not recorded'}
+                  </p>
+                  {problem ? <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">{problem.reason}</p> : null}
+                  {problem?.action === 'retry' ? (
+                    <button type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                      data-testid={`library-card-retry-${d.uid}`}
+                      className="mt-2.5 min-h-[44px] w-full rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink disabled:opacity-60 dark:border-gray-700 dark:text-gray-100">
+                      Retry
+                    </button>
+                  ) : null}
+                  {problem?.action === 'replace' ? <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">{problem.label}</p> : null}
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden sm:block">
         <Instrument
           testid="library-documents"
           title="Library"
-          meta="Index state is Ask’s reach, stated as a column"
+          meta="Indexed is not the same as answerable"
           cols="2.2fr 1fr 1fr .9fr 1.4fr"
-          head={['Document', 'Kind', 'Source year', 'Index state', 'In Ask']}
-          rows={visible.map((d) => ({
+          head={['Document', 'Kind', 'Source year', 'Index state', 'Answerable in Ask']}
+          rows={visible.map((d) => {
+            const ix = indexStateOf(d);
+            const an = answerabilityOf(d);
+            const problem = rowProblem(d);
+            return {
             key: d.uid,
-            // The row a reader has to act on, tinted so the eye finds it before
-            // the column does. `In Ask` says what it means; the tint says where.
-            rowClass: d.in_ask ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
             cells: [
               {
                 text: d.title,
@@ -504,14 +530,18 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 // and the marks are the artboard's `seam` and `ours`.
                 seam: d.source === 'client' ? (d.source_label || 'From client') : null,
                 ours: d.source === 'client' ? null : 'Ours',
-                sub: fmtBytes(d.size_bytes) || 'Size not recorded',
+                // RS-06: a Failed or Unsupported row says why under its name.
+                sub: problem
+                  ? `${problem.reason}${problem.action === 'replace' ? ` ${problem.label}` : ''}`
+                  : (fmtBytes(d.size_bytes) || 'Size not recorded'),
               },
               { pill: KINDS.find((k) => k.value === d.kind)?.label || d.kind, pillTone: KIND_TONE[d.kind] || 'neutral' },
               // Source year is recorded separately from the upload date (D549).
               { text: d.source_year == null ? 'Not recorded' : String(d.source_year), sub: d.created_at ? `Added ${String(d.created_at).slice(0, 10)}` : 'Added: Not recorded' },
               {
-                pill: STATE_LABEL[d.index_state] || d.index_state,
-                pillTone: STATE_TONE[d.index_state] || 'neutral',
+                // What the indexer did, in its own words (D3701).
+                pill: mark(ix),
+                pillTone: ix.tone,
                 // The passage count belongs beside the state and nowhere else:
                 // NULL, not 0, because "never read" and "read into nothing" are
                 // different facts and only one means Ask can cite the file.
@@ -523,15 +553,18 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
               // green its state reads — which is exactly why the two columns
               // are separate.
               {
-                text: d.in_ask
-                  ? (d.index_state === 'partial' ? 'Answerable in Ask, in part' : 'Answerable in Ask')
-                  : (d.source === 'client'
-                    ? 'Indexed in their library, not yours'
-                    : d.index_state === 'pending' ? 'Being read now' : 'Not answerable until indexed'),
-                // D4612: the recorded reason, and the step that would help.
-                sub: nextStep(d) ? `${nextStep(d).note} ${nextStep(d).action === 'Replace the file' ? 'Remove it and add a version with readable text.' : 'Re-index to try again.'}` : null,
+                pill: mark(an),
+                pillTone: an.tone,
+                sub: an.why,
                 node: (
                   <>
+                    {problem?.action === 'retry' ? (
+                      <button type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                        data-testid={`library-retry-${d.uid}`}
+                        className="rounded-[6px] border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-ink disabled:opacity-60 dark:border-gray-700 dark:text-gray-100">
+                        Retry
+                      </button>
+                    ) : null}
                     <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
                       Open
                     </button>
@@ -543,12 +576,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                     {d.source !== 'client' && (
                       <>
                         <DocumentMetadata document={d} onSaved={load} />
-                        <button
-                          type="button" disabled={busy} onClick={() => reindex(d.uid)}
-                          className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                        >
-                          Re-index
-                        </button>
+                        {problem?.action === 'retry' ? null : (
+                          <button
+                            type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                            className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            Re-index
+                          </button>
+                        )}
                         <button
                           type="button" disabled={busy} onClick={() => remove(d.uid)}
                           className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -561,9 +596,11 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 ),
               },
             ],
-          }))}
+            };
+          })}
           note={`Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
         />
+        </div>
 
         {/* THE ARTBOARD'S PAIR NOTE, and the only one in the Research set. It
             earns its place because the `In Ask` column above is meaningless

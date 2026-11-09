@@ -28,11 +28,12 @@ export function saveError(e) {
   return e?.message || 'The terms could not be saved. Nothing was changed.';
 }
 
-function TermInput({ field, value, onChange, currency }) {
-  const id = `term-input-${field.key}`;
+// D4819: also the Terms section's amendment input, which names its own id and its error (`describedBy`).
+export function TermInput({ field, value, onChange, currency, id = `term-input-${field.key}`, describedBy, invalid }) {
+  const a11y = { 'aria-describedby': describedBy || undefined, 'aria-invalid': invalid ? true : undefined };
   if (field.type === 'enum') {
     return (
-      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label}>
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label} {...a11y}>
         <option value="">{NOT_RECORDED}</option>
         {field.values.map((v) => <option key={v} value={v}>{enumLabel(v)}</option>)}
       </select>
@@ -40,7 +41,7 @@ function TermInput({ field, value, onChange, currency }) {
   }
   if (field.type === 'bool') {
     return (
-      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label}>
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label} {...a11y}>
         <option value="">{NOT_RECORDED}</option>
         <option value="yes">Yes</option>
         <option value="no">No</option>
@@ -50,14 +51,14 @@ function TermInput({ field, value, onChange, currency }) {
   if (field.type === 'text') {
     return (
       <textarea id={id} rows={2} maxLength={field.max} className={inputCls} value={value}
-        placeholder={NOT_RECORDED} aria-label={field.label} onChange={(e) => onChange(e.target.value)} />
+        placeholder={NOT_RECORDED} aria-label={field.label} onChange={(e) => onChange(e.target.value)} {...a11y} />
     );
   }
   const unit = unitOf(field, currency);
   return (
     <div className="flex items-center gap-2">
       <input id={id} inputMode="decimal" className={inputCls} value={value} placeholder={NOT_RECORDED}
-        aria-label={field.label} onChange={(e) => onChange(e.target.value)} />
+        aria-label={field.label} onChange={(e) => onChange(e.target.value)} {...a11y} />
       {unit && <span className="shrink-0 text-[11px] text-gray-500">{unit}</span>}
     </div>
   );

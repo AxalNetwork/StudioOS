@@ -169,7 +169,7 @@ test('3: a key the tool sends back is kept through a rename; a malformed or repe
   loaded.founders[0].name = 'Mira Okafor-Lind';
   loaded.founders[1].key = 'Tomas Reyes';
   loaded.safes[0].key = 'e-1';
-  const r = await call(db, 'PUT', `/scenarios/${first.body.uid}`, { name: 'Kestrel cap table', inputs: loaded, project_id: P });
+  const r = await call(db, 'PUT', `/scenarios/${first.body.uid}`, { name: 'Kestrel cap table', inputs: loaded, project_id: P, expected_revision: first.body.revision });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(keys(r.body.inputs), {
     founders: ['Mira Okafor-Lind=e-1', 'Tomas Reyes=e-2'], safes: ['Harbour Angels=e-3'], rounds: ['Seed=e-4'],
@@ -794,6 +794,7 @@ function cycleFixture() {
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('606_use_of_funds_scenarios.sql'));
+  db.exec(sqlOf('202611082130_uof_scenario_revision.sql'));
   addColumnsFrom(db, sqlOf('607_raise_money_cents.sql'), 'raise_prospect_events'); // D1190: a meeting's start
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
   raiseEvidenceTables(db);
@@ -865,7 +866,7 @@ test('4 (who): a partner, an advisor member, an investor and another venture\'s 
     ['PATCH', '/deck-links/1', { allow_download: false }],
     ['POST', '/holders', { name: 'Juno', group: 'founders', instrument: 'common', shares: 10 }],
     ['PATCH', '/holders/h-1', { shares: 10 }],
-    ['PUT', '/use-of-funds', { sections: [{ key: 'product', pct: 100 }] }],
+    ['PUT', '/use-of-funds', { expected_revision: 0, sections: [{ key: 'product', pct: 100 }] }],
     ['POST', '/prospects', { name: 'Northwind Angels', stage: 'identified' }],
     ['PATCH', '/prospects/1', { stage: 'meeting' }],
     ['PUT', '/prospects/1/next-step', { next_step: 'x' }],
@@ -1112,7 +1113,7 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
   db.prepare('UPDATE projects SET use_of_funds_meta = ? WHERE id = ?').run(JSON.stringify({ milestone_costs: { '1': { bucket: 'eng', cost: 5000 } }, deck_synced_at: '2026-10-01T00:00:00Z' }), C_P);
   db.prepare('INSERT INTO roadmap_okrs(id,project_id,objective) VALUES(1,?,?)').run(C_P,'Product milestone');
   const body = {
-    amount_to_raise_cents: 2_000_000_00, runway_months: 20,
+    expected_revision: 0, amount_to_raise_cents: 2_000_000_00, runway_months: 20,
     sections: [
       { key: 'product', pct: 40, milestone_label: 'Ship the pilot', milestone_by: '2027-06' }, { key: 'go-to-market', pct: 30 },
       { key: 'infrastructure', pct: 10 }, { key: 'operations', pct: 10 }, { key: 'reserve', pct: 10 },
@@ -1136,13 +1137,15 @@ test('11: Edit split round-trips the five sections, the milestones and the runwa
   assert.equal(rows.product.monthly, 40_000, 'monthly is amount ÷ runway');
   assert.equal(rows.product.milestone, 'Ship the pilot by 2027-06');
 
-  const off = { ...body, sections: body.sections.map((s) => (s.key === 'reserve' ? { ...s, pct: 5 } : s)) };
+  const rev = (db.prepare('SELECT revision FROM uof_scenarios WHERE project_id = ? AND is_base = 1').get(C_P) as any).revision; // the first save took revision 0 → 1 (D5069)
+  assert.equal(rev, 1);
+  const off = { ...body, expected_revision: rev, sections: body.sections.map((s) => (s.key === 'reserve' ? { ...s, pct: 5 } : s)) };
   const bad = await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), off);
   assert.deepEqual([bad.status, bad.body.detail], [400, 'Use of Funds must total exactly 100%.']);
   for (const b of [
-    { sections: [{ key: 'marketing', pct: 100 }] }, { sections: [{ key: 'product', pct: 50 }, { key: 'product', pct: 50 }] },
-    { ...body, runway_months: 0 }, { ...body, amount_to_raise_cents: 12.5 },
-    { sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
+    { expected_revision: rev, sections: [{ key: 'marketing', pct: 100 }] }, { expected_revision: rev, sections: [{ key: 'product', pct: 50 }, { key: 'product', pct: 50 }] },
+    { ...body, expected_revision: rev, runway_months: 0 }, { ...body, expected_revision: rev, amount_to_raise_cents: 12.5 },
+    { expected_revision: rev, sections: [{ key: 'product', pct: 100, milestone_label: 'x', milestone_by: 'soon' }] },
   ]) assert.equal((await cyc(db, C_FOUNDER, 'PUT', q('/use-of-funds'), b)).status, 400, JSON.stringify(b));
   assert.equal((db.prepare('SELECT use_of_funds_meta FROM projects WHERE id = ?').get(C_P) as any).use_of_funds_meta, p.use_of_funds_meta, 'a refused split writes nothing');
   assert.deepEqual(logs(db, "entity_type = 'raise.use-of-funds' AND action = 'split_saved'").map((x) => x.entity_id), ['product', 'go-to-market', 'infrastructure', 'operations', 'reserve']);
@@ -1194,7 +1197,7 @@ test('13: every write logs its record\'s row — project, raise.<slug>, the reco
     ['PATCH', '/narrative-versions/1', { why_now: 'Northwind asked' }],
     ['POST', '/deck-links', { deck_id: 5, investor_label: 'Kite Partner', expires_days: 7 }],
     ['POST', '/holders', { name: 'Ines Duarte', group: 'founders', instrument: 'common', shares: 1_000_000 }],
-    ['PUT', '/use-of-funds', { sections: [{ key: 'product', pct: 100 }] }],
+    ['PUT', '/use-of-funds', { expected_revision: 0, sections: [{ key: 'product', pct: 100 }] }],
     ['POST', '/prospects', { name: 'Northwind Angels' }],
     ['PUT', '/data-room/files/4/checklist', { item: 'incorporation' }],
   ];

@@ -18,9 +18,10 @@ import { codeOnly } from './_codeOnly.mjs';
 import {
   CeilingEditor, ceilingPayload, CEILING_ENFORCEMENT, UNAVAILABLE,
 } from '../src/pages/hq/RevenuePage.jsx';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
+const PAGE = codeOnly(revenuePageSource());
 const PLATFORM = raw('frontend/src/pages/hq/PlatformPage.jsx');
 const API = raw('frontend/src/lib/api.js');
 const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ');
