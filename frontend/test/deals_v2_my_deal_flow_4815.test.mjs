@@ -41,7 +41,7 @@ test('each zone counts its own reply, and a missing or unavailable reply is Unre
   // Mutation checked: counting every decision (decided too) → commit reads 3 and this fails.
   assert.deepEqual(Object.fromEntries(Object.entries(byKey).map(([k, i]) => [k, i.count])),
     { screening: 2, commit: 2, closing: 1, rooms: 2 });
-  assert.deepEqual(OTHER_ACTIVITY.map((z) => z.href), ['/deals/screening', '/deals/commit', '/deals/closing', '#deal-rooms']);
+  assert.deepEqual(OTHER_ACTIVITY.map((z) => z.href), ['/deals/screening', '/deals/commit', '/deals/closing', '/deals/rooms']);
 
   const gone = otherActivityItems({
     screening: ok({ desk: { available: false, reason: 'x' } }),
@@ -59,7 +59,7 @@ test('each zone counts its own reply, and a missing or unavailable reply is Unre
 
 test('the line links each zone to its route; the surviving heading appears only when the flow is unreadable', () => {
   const out = html(h(OtherDealActivityLine, { reads: READS }));
-  for (const href of ['/deals/screening', '/deals/commit', '/deals/closing']) assert.ok(out.includes(`href="${href}"`), href);
+  for (const href of ['/deals/screening', '/deals/commit', '/deals/closing', '/deals/rooms']) assert.ok(out.includes(`href="${href}"`), href);
   assert.match(out, /Other deal activity/);
   assert.doesNotMatch(out, new RegExp(OTHER_ACTIVITY_SURVIVING));
   assert.doesNotMatch(out, /other-activity-retry/);
@@ -95,6 +95,7 @@ test('a deal room whose access could not be read offers Try again, never Request
 test('each Deals route names itself in the browser tab', () => {
   assert.equal(dealsPageTitle({ isRoot: true }), 'Deal flow · Axal VC');
   assert.equal(dealsPageTitle({ isCompare: true }), 'Compare · Axal VC');
+  assert.equal(dealsPageTitle({ isRooms: true }), 'Deal rooms · Axal VC');
   assert.equal(dealsPageTitle({ slug: 'commit' }), 'Investment committee · Axal VC');
   assert.equal(dealsPageTitle({ slug: 'closing' }), 'Closing · Axal VC');
   assert.equal(dealsPageTitle({ slug: 'screening' }), 'Screening · Axal VC');

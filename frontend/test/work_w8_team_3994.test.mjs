@@ -228,7 +228,9 @@ test('My tasks is placed in every licence\'s workspace, and the item sheet\'s As
   const places = [
     ['frontend/src/pages/Dashboard.jsx', /<MyTasks licence="founder" testId="studio-my-tasks" \/>/],
     ['frontend/src/pages/work/WorkPage.jsx', /<MyTasks licence="founder" project=\{id\} title="My items" testId="work-mine" \/>/],
-    ['frontend/src/workspaces/investor/InvestorDealsRoutes.jsx', /<MyTasks licence="investor" testId="deals-my-tasks" \/>/],
+    // D4815 (#4815): the investor's My tasks moved from /deals to Studio.
+    ['frontend/src/pages/Dashboard.jsx', /<MyTasks licence="investor" testId="studio-investor-my-tasks" \/>/],
+    ['frontend/src/pages/studio/MultiLicenceStudio.jsx', /!held\.includes\('founder'\) && <MyTasks licence="investor" testId="studio-investor-my-tasks" \/>/],
     ['frontend/src/pages/advisor/practice/EngagementsZone.jsx', /<MyTasks licence="advisor" testId="practice-my-tasks" \/>/],
     ['frontend/src/pages/partner/delivery/BoardZone.jsx', /<MyTasks licence="partner" testId="delivery-my-tasks" \/>/],
     ['frontend/src/pages/hq/HqHomePage.jsx', /<MyTasks licence="admin" testId="hq-my-tasks" \/>/],
