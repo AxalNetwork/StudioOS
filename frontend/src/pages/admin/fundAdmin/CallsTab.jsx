@@ -156,7 +156,7 @@ export function CallsTab({ apis, access, fund, overview }) {
           <Tiles testId="calls-tiles" cols="lg:grid-cols-3" items={tiles.map((t) => ({ ...t, testId: `calls-tile-${t.key}` }))} />
           <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="calls-issue-line">
             <FundActControl access={access} act="capital_call.issue" testId="calls-issue-refused">
-              <span data-testid="calls-issue-allowed">New capital call previews the split; you issue it after the preview and your step-up.</span>
+              <span data-testid="calls-issue-allowed">New capital call previews the split and its effect; you issue it after the review, with your authenticator code.</span>
             </FundActControl>
           </p>
           {check && <p role="status" className={`m-0 text-[12px] ${check.same ? 'text-axal-positive dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`} data-testid="calls-issued-check">
@@ -180,10 +180,11 @@ export function CallsTab({ apis, access, fund, overview }) {
           {data.truncated && <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">This fund has more calls or lines than one read returns; the oldest are not shown, and the totals cover only what was read.</p>}
         </>}
       </div>}
-      {dialog?.kind === 'new' && <NewCallDialog apis={apis} access={access} fund={fund}
-        onClose={() => setDialog(null)} onIssued={async (preview) => { setDialog(null); setIssued({ preview }); await ledger.reload(); }} />}
+      {/* D4812 part 2: the dialog stays open on its Receipt step; the ledger is read again beneath it. */}
+      {dialog?.kind === 'new' && <NewCallDialog apis={apis} access={access} fund={fund} summary={data?.summary ?? null}
+        onClose={() => setDialog(null)} onIssued={async (preview) => { setIssued({ preview }); await ledger.reload(); }} />}
       {dialog?.kind === 'receipt' && <ReceiptDialog apis={apis} fund={fund} line={dialog.line} call={dialog.call}
-        onClose={() => setDialog(null)} onDone={async () => { setDialog(null); await ledger.reload(); }} />}
+        onClose={() => setDialog(null)} onDone={async () => { await ledger.reload(); }} />}
       {dialog?.kind === 'notices' && <CallNoticesDialog apis={apis} access={access} call={dialog.call} onClose={() => setDialog(null)} />}
     </FundFrame>
   );
