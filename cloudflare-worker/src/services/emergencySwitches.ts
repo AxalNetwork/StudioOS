@@ -20,13 +20,16 @@
  *     so. A thrown mirror decides without touching D1 at all.
  *
  * READINGS travel as the D1 store's do (D203): one `get` per switch held for
- * OPERATOR_SWITCH_TTL_MS per isolate, keyed on the binding, never a module
+ * OPERATOR_SWITCH_TTL_MS per isolate, keyed on the D1 binding
+ * (`bindingKey(env)`, GOTCHAS "Schema readiness is per binding") and dropped
+ * when the KV binding beside it is not the one it was read from; never a module
  * variable; the writing isolate clears its own reading; a failed read keeps
  * the last good reading and is retried after the same TTL, never latched. KV
  * itself is eventually consistent (about a minute across locations), so
  * every other location follows within about a minute.
  */
 import type { Env } from '../types';
+import { bindingKey } from '../util/schemaBootstrap';
 
 /** One isolate keeps a reading this long, as the D1 store's (services/operatorSwitches.ts). */
 export const EMERGENCY_TTL_MS = 30_000;
@@ -57,8 +60,16 @@ const kvOf = (env: Env): MinimalKV | null => {
   return store && typeof store.get === 'function' && typeof store.put === 'function' ? store : null;
 };
 
-interface Reading { good: { record: EmergencyRecord | null } | null; checked_at: number; error: string | null }
+interface Reading { store: MinimalKV; good: { record: EmergencyRecord | null } | null; checked_at: number; error: string | null }
 const readings = new WeakMap<object, Map<string, Reading>>();
+
+/** This binding's readings, by switch key. */
+function readingsFor(env: Env): Map<string, Reading> {
+  const key = bindingKey(env);
+  let byKey = readings.get(key);
+  if (!byKey) { byKey = new Map(); readings.set(key, byKey); }
+  return byKey;
+}
 
 const UNREADABLE = 'The emergency switch store did not answer.';
 
@@ -80,16 +91,16 @@ export async function readEmergencySwitch(env: Env, key: string, opts: { now?: n
   const store = kvOf(env);
   if (!store) return { bound: false };
   const now = opts.now ?? Date.now();
-  let byKey = readings.get(store);
-  if (!byKey) { byKey = new Map(); readings.set(store, byKey); }
-  const held = byKey.get(key);
+  const byKey = readingsFor(env);
+  // A reading taken from another KV binding is not this one's.
+  const held = byKey.get(key)?.store === store ? byKey.get(key) : undefined;
   let next: Reading;
   if (held && !opts.fresh && now - held.checked_at < EMERGENCY_TTL_MS) next = held;
   else {
     try {
-      next = { good: { record: parseEmergency(await store.get(emergencyKey(key))) }, checked_at: now, error: null };
+      next = { store, good: { record: parseEmergency(await store.get(emergencyKey(key))) }, checked_at: now, error: null };
     } catch {
-      next = { good: held?.good ?? null, checked_at: now, error: UNREADABLE };
+      next = { store, good: held?.good ?? null, checked_at: now, error: UNREADABLE };
     }
     byKey.set(key, next);
   }
@@ -108,7 +119,7 @@ export const emergencyThrown = (read: EmergencyRead | null | undefined): boolean
 export async function writeEmergencySwitch(env: Env, key: string, record: { thrown: boolean; revision: number | null }, now = Date.now()): Promise<boolean> {
   const store = kvOf(env);
   if (!store) return false;
-  readings.get(store)?.delete(key);
+  readingsFor(env).delete(key);
   try {
     await store.put(emergencyKey(key), JSON.stringify({ thrown: record.thrown, revision: record.revision, set_at: new Date(now).toISOString() }));
     return true;
