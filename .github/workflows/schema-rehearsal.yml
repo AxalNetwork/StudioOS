@@ -1,0 +1,84 @@
+name: Schema rehearsal (hosted provisioning and restore)
+
+# #4591 (audit R2-03, item 5). Owner-approved 2026-11-09. Proves, in the real
+# account, that the repository can provision a D1 from its committed files and
+# that a database it built survives an export and a restore:
+#
+#   1. create an empty EU D1 `studioos-rehearsal-<run>-src`;
+#   2. provision it through `migrate-d1.mjs --rehearsal` itself: --bootstrap,
+#      a plain run, then --dry-run must report nothing pending;
+#   3. compare it with a fresh local build of the same files, with the same
+#      functions `check-baseline-drift.mjs` holds production to;
+#   4. seed the #4566 synthetic fixtures (synthetic.invalid addresses only)
+#      and check foreign keys;
+#   5. export it, create `studioos-rehearsal-<run>-dst`, and import the export
+#      through the D4558 drill's chunked import (`dr-drill-split.mjs`);
+#   6. compare: every object's SQL and every table's row count, and foreign keys;
+#   7. delete both databases, pass or fail.
+#
+# NEVER PRODUCTION. It reads and writes only the two databases it created, each
+# through a generated config that declares that one database and nothing else
+# (scripts/lib/schemaRehearsal.mjs). It does not touch the backups bucket, the
+# drill's heartbeat, a branch or a Worker.
+#
+# DISPATCH ONLY. No schedule and no push trigger: each run creates two
+# databases, so each is a decision. Cost is a few hundred D1 row writes.
+#
+# Its result is a HOSTED REHEARSAL over synthetic data. It is not a production
+# observation and not a Time Travel restore (documentation/operations/SCHEMA_DRIFT.md §5).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: schema-rehearsal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rehearse:
+    name: provision, seed, export, restore, compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      # Secrets are scoped to this one step. The script deletes both databases
+      # from its own `finally`, so a failed comparison still cleans up.
+      - name: Rehearse
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/schema-rehearsal.mjs --run "r${GITHUB_RUN_ID}" --summary "$RUNNER_TEMP/schema-rehearsal.json"
+
+      - name: Summary (counts and verdicts only)
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/schema-rehearsal.json"
+          if [ -f "$f" ]; then
+            { echo '## Schema rehearsal (#4591)'; echo; echo '```json'; cat "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No summary was written; the script failed before it could write one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: schema-rehearsal-summary
+          path: ${{ runner.temp }}/schema-rehearsal.json
+          if-no-files-found: warn
+          retention-days: 90
