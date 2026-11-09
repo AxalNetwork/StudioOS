@@ -45,7 +45,7 @@ export const FALLBACK_TITLES = Object.freeze({
   lab_tools: 'Lab tools',
   usage_quota: 'Usage & quota',
   deal_lifecycle: 'Deal lifecycle',
-  scored_opportunities: 'AI-scored opportunities',
+  scored_opportunities: 'Historical match scores',
   quick_stats: 'Quick stats',
   portfolio_glance: 'Portfolio glance',
   upcoming_events: 'Upcoming events',
