@@ -544,7 +544,8 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
-import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
+// #4574 H4: an old address's redirect, loaded when one is hit: its model pulls the whole forecast model into the shell.
+const UseOfFundsMovedRedirect = lazy(() => import('./pages/raise/useoffunds/UseOfFundsMovedRedirect'));
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
