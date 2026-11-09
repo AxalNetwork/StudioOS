@@ -20,6 +20,10 @@ export default function adminProgramsGenericRoutes({ guard }) {
       <Route path="/admin/programs/:key" element={guard(['admin'], <GenericProgramPage />)} />
       <Route path="/admin/programs/:key/how-it-runs" element={guard(['admin'], <GenericProgramPage />)} />
       <Route path="/admin/programs/:key/activity" element={guard(['admin'], <GenericProgramPage />)} />
+      {/* D4873 (part 4, PG03): the shell's other core sections. A literal address (`/refer-and-earn/settings`) still ranks higher. */}
+      <Route path="/admin/programs/:key/availability" element={guard(['admin'], <GenericProgramPage />)} />
+      <Route path="/admin/programs/:key/participation" element={guard(['admin'], <GenericProgramPage />)} />
+      <Route path="/admin/programs/:key/settings" element={guard(['admin'], <GenericProgramPage />)} />
     </>
   );
 }
