@@ -109,18 +109,22 @@ export function recentRunAction(run: { runtime_error_code: string | null; callba
 export async function readRecentBotFailures(env: Env, now = Date.now()) {
   if (branchOf(env)) return { state: 'not_recorded' as const, runs: [] };
   const since = now - 30 * DAY;
-  const base = 'uid, platform, status, failure_code, failure_detail, created_at, started_at, ended_at';
-  const runtime = 'runtime_stage, runtime_error_code, runtime_version, runtime_start_ms, runtime_callback_seen_at';
-  const read = (cols: string) => env.DB.prepare(`SELECT ${cols} FROM meeting_bots WHERE status = 'failed' AND created_at >= ?
-    ORDER BY created_at DESC, uid DESC LIMIT ?`).bind(since, RECENT_FAILED_RUNS).all<FailedRow>();
   let rows: FailedRow[]; let startup = true;
   try {
     const exists = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meeting_bots'").first();
     if (!exists) return { state: 'not_recorded' as const, runs: [] };
-    try { rows = (await read(`${base}, ${runtime}`)).results ?? []; }
-    catch (e) {
+    try {
+      rows = (await env.DB.prepare(`SELECT uid, platform, status, failure_code, failure_detail, created_at, started_at, ended_at,
+        runtime_stage, runtime_error_code, runtime_version, runtime_start_ms, runtime_callback_seen_at
+        FROM meeting_bots WHERE status = 'failed' AND created_at >= ? ORDER BY created_at DESC, uid DESC LIMIT ?`)
+        .bind(since, RECENT_FAILED_RUNS).all<FailedRow>()).results ?? [];
+    } catch (e) {
       if (!/no such column/i.test(String((e as Error)?.message ?? e))) throw e;
-      startup = false; rows = (await read(base)).results ?? [];
+      // Before migration 202611090953: the same runs, without startup facts.
+      startup = false;
+      rows = (await env.DB.prepare(`SELECT uid, platform, status, failure_code, failure_detail, created_at, started_at, ended_at
+        FROM meeting_bots WHERE status = 'failed' AND created_at >= ? ORDER BY created_at DESC, uid DESC LIMIT ?`)
+        .bind(since, RECENT_FAILED_RUNS).all<FailedRow>()).results ?? [];
     }
   } catch { return { state: 'unreadable' as const, runs: [] }; }
   return { state: 'ok' as const, runs: rows.filter((r) => PLATFORMS.has(r.platform)).map((r) => {
