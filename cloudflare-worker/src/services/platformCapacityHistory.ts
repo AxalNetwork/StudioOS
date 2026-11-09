@@ -5,8 +5,9 @@
  * once, change severity in place, clear on recovery and can be muted.
  *
  * WHAT IS STORED. Only the deployment-wide metrics the capacity read returns
- * (`SNAPSHOT_KEY`): D1 size and its ratio to the limit, and each queue's
- * backlog and oldest age. Each row is a number, a unit, an availability and a
+ * (`SNAPSHOT_KEY`): D1 size and its ratio to the limit, each queue's backlog
+ * and oldest age, and (part 3) the agent sweep's counts and ages and the last
+ * verified restore's age. Each row is a number, a unit, an availability and a
  * level. No member, company, tenant, file name, SQL or secret reaches either
  * table, and nothing here is tenant usage, so the HQ view leaks none.
  *
@@ -20,6 +21,9 @@
  *     same episode on every sweep (the partial unique index holds this even
  *     if two sweeps race);
  *   - a MEASURED ok (including an empty queue) clears the open episode;
+ *   - a `not_running` signal (part 3: its subsystem is off) holds what is
+ *     open and opens nothing; a `not_verified` one (a failed or absent
+ *     restore drill) carries its reader's level, so it opens and holds;
  *   - an UNREADABLE source neither clears a level episode nor opens one: an
  *     outage is not a recovery. A source that was measured in the last 48
  *     hours and has stopped answering opens an `unavailable` episode (a
@@ -39,7 +43,8 @@ import { branchOf } from '../util/branch';
 import { levelFor, readPlatformCapacity, type Level, type Metric } from './platformCapacity';
 
 /** The metrics the snapshot keeps: the capacity read's own fixed keys, nothing else. */
-export const SNAPSHOT_KEY = /^(d1\.size_bytes|d1\.size_ratio|queue\.(job|agent)\.(backlog_messages|backlog_bytes|oldest_age_seconds))$/;
+// Part 3 adds the agent sweep (#4592, #4593) and the last verified restore (#4558).
+export const SNAPSHOT_KEY = /^(d1\.size_bytes|d1\.size_ratio|queue\.(job|agent)\.(backlog_messages|backlog_bytes|oldest_age_seconds)|agents\.sweep\.(eligible|examined|admitted|refused|resent|oldest_eligible_age_seconds)|agents\.repair\.(pending|unresolved|oldest_age_seconds)|dr\.restore\.last_verified_age_seconds)$/;
 
 /** Days of history the trend reads and the projection may fit. */
 export const HISTORY_DAYS_DEFAULT = 90;
@@ -79,6 +84,12 @@ export function evaluateAlerts(
   for (const m of metrics) {
     if (!alertable(m)) continue;
     const cur = openBy.get(m.key);
+    // Part 3: a subsystem that is off has nothing to read. It neither opens nor
+    // clears: turning a feature off is not a recovery.
+    if (m.availability === 'not_running') {
+      if (cur) out.push({ kind: 'touch', id: cur.id, key: m.key, value: null });
+      continue;
+    }
     // The level with hysteresis, the open episode's severity as the previous level.
     const prev: Level | undefined = cur && cur.severity !== 'unavailable' ? cur.severity : undefined;
     const level: Level = m.availability === 'measured' && m.thresholds ? levelFor(m.value, m.thresholds, prev) : m.level;

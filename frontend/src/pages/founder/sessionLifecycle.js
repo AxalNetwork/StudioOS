@@ -57,9 +57,11 @@ export function lifecycle({ bot = null, session = null, processing = null } = {}
   let kind = null;
   const stage = processing?.stage ?? null;
 
+  // D5153: a failure before the runtime reported is the service's, not the meeting's.
+  const infrastructure = bot?.status === 'failed' && bot?.failure_category === 'infrastructure';
   if (bot && bot.status === 'failed') {
     failed = true; kind = 'bot';
-    failedAt = own(BOT_FAIL_STEP, bot.failure_code) ? BOT_FAIL_STEP[bot.failure_code] : 'joining';
+    failedAt = infrastructure ? 'joining' : own(BOT_FAIL_STEP, bot.failure_code) ? BOT_FAIL_STEP[bot.failure_code] : 'joining';
   } else if (stage === 'failed') {
     failed = true; kind = 'processing';
     failedAt = PROCESSING.has(processing?.failed_stage) ? processing.failed_stage : null;
@@ -88,7 +90,7 @@ export function lifecycle({ bot = null, session = null, processing = null } = {}
         : !failed && s.key === current ? (s.key === 'ready' ? 'done' : 'current')
           : index >= 0 && i < index ? 'done' : 'todo',
     })),
-    current, failedAt, failed, unreadable, kind,
+    current, failedAt, failed, unreadable, kind, infrastructure,
   };
 }
 
@@ -118,6 +120,8 @@ const CAUSES = Object.freeze({
   summarising: ['The summary model did not answer in time'],
   placing: ['The placement step did not finish'],
 });
+// D5153: the only cause when the runtime never started; never a provider's.
+const INFRASTRUCTURE_CAUSES = Object.freeze(['Eadwyn AI’s recording service did not start in time']);
 export function failureView(view, { botFailure = null, processingError = null } = {}) {
   if (!view?.failed) return null;
   const title = view.kind === 'bot'
@@ -125,7 +129,7 @@ export function failureView(view, { botFailure = null, processingError = null } 
     : (processingError || 'Processing stopped. Your audio is safe.');
   return {
     title,
-    causes: view.failedAt ? (CAUSES[view.failedAt] || []) : [],
+    causes: view.kind === 'bot' && view.infrastructure ? [...INFRASTRUCTURE_CAUSES] : view.failedAt ? (CAUSES[view.failedAt] || []) : [],
     retry: view.kind === 'processing' ? 'process' : 'new-session',
   };
 }

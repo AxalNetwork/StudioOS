@@ -6,6 +6,12 @@
 // A reader may read; only an editor may write. A blocking finding (layout,
 // overflow, an image block with no image) is refused 422 `finding_blocking`.
 // Only the finding's id is kept, never its words.
+//
+// D4598 (#4598) part 2 — the effective content a PROPOSED share link would send:
+//   POST /api/decks/:id/preflight/link-cards  { variant_uid?, include? }
+//        → { deck_id, version, theme, slides }
+// Share's dialog checks this, not the saved version alone, before Create link: a
+// variant and "what is included" change which cards and blocks the link carries.
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -15,5 +21,9 @@ export const deckPreflightApi = {
   setDismissed: (deckId, { version, finding_id, dismissed, severity }) => request(`/decks/${enc(deckId)}/preflight/dismissals`, {
     method: 'PUT',
     body: JSON.stringify({ version, finding_id, dismissed: !!dismissed, ...(severity ? { severity } : {}) }),
+  }),
+  linkCards: (deckId, { variantUid = null, include = null } = {}) => request(`/decks/${enc(deckId)}/preflight/link-cards`, {
+    method: 'POST',
+    body: JSON.stringify({ variant_uid: variantUid, ...(include ? { include } : {}) }),
   }),
 };
