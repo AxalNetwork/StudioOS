@@ -32,7 +32,7 @@
  * the admin who pressed Run. Neither prompts nor outputs are stored.
  */
 import type { Env } from '../../types';
-import { checkCase, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
+import { EVALUATOR, caseSha, checkCase, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
 import { missingTools, type OutputKind } from './skills';
 import { versionOf, versionTools, toolLabel, type SkillRow, type VersionRow } from './skillLinks';
 import { skillRunRefusal } from './skillModeration';
@@ -210,7 +210,9 @@ async function evaluateSkill(env: Env, s: SkillRow, v: VersionRow, models: strin
   return out;
 }
 
-const EVAL_INSERT = `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+// D4531 slice 3: each row names the evaluator that judged it and the case text it ran (migration 202611090904).
+const EVAL_INSERT = `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by, evaluator_version, case_sha256)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * Run every golden case of each published Axal skill (at most `SKILLS_PER_RUN`)
@@ -227,7 +229,7 @@ export async function evaluatePublished(env: Env, adminId: number, models: strin
     `SELECT * FROM agent_skills WHERE scope = 'hq' AND status = 'published' AND current_version >= 1 AND (? IS NULL OR id = ?) ORDER BY id LIMIT ?`,
   ).bind(onlySkillId, onlySkillId, SKILLS_PER_RUN).all<SkillRow>()).results ?? [];
   const record: Record_ = async (s, v, c, model, r) => {
-    await env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId).run();
+    await env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId, EVALUATOR.version, await caseSha(c)).run();
   };
   const regressions: Regression[] = [];
   let results = 0;
@@ -345,7 +347,7 @@ export async function continueCampaign(env: Env, adminId: number, uid: unknown, 
   const batch: CampaignBatch = { ...empty, regressions: [], evaluated: [], campaign: null as unknown as CampaignProgress };
   const record: Record_ = async (s, v, k, model, r) => {
     await env.DB.batch([
-      env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, k.key, k.name, model, r.result, r.detail, r.usage_log_id, adminId),
+      env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, k.key, k.name, model, r.result, r.detail, r.usage_log_id, adminId, EVALUATOR.version, await caseSha(k)),
       env.DB.prepare(`INSERT INTO agent_skill_eval_campaign_items (campaign_id, skill_id, version, case_key, model_id, eval_id)
         VALUES (?, ?, ?, ?, ?, last_insert_rowid())`).bind(c.id, s.id, v.version, k.key, model),
     ]);
