@@ -51,7 +51,7 @@ function Queue({ title, testId, read, what, meta, empty, foot, onFoot, children 
   return <section aria-label={title} className={`${card} flex flex-col`} data-testid={testId}>
     <header className="flex items-baseline justify-between gap-2 border-b border-axal-hairline px-4 py-3"><h2 className="text-[13px] font-bold">{title}</h2>{meta && <span className="font-mono text-[11px] text-axal-muted">{meta}</span>}</header>
     <ReadState read={read} what={what}>{read.data && (rows.length ? <ul className="flex-1 divide-y divide-axal-hairline">{rows}</ul> : <p className="flex-1 px-4 py-3 text-[12px] text-axal-muted">{empty}</p>)}</ReadState>
-    <button type="button" onClick={onFoot} className="min-h-[44px] border-t border-axal-hairline px-4 py-2 text-left text-[12px] font-semibold text-violet-700 dark:text-violet-300">{foot} →</button>
+    <button type="button" onClick={onFoot} className="min-h-[44px] border-t border-axal-hairline px-4 py-2 text-left text-[12px] font-semibold text-violet-700 dark:text-violet-300">{foot}</button>
   </section>;
 }
 
