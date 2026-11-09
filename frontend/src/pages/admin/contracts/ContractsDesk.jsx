@@ -15,12 +15,13 @@ import EnvelopeWizard from './EnvelopeWizard';
 import { BankAccountsLink, FundStructureDoor } from './FundStructureSheet';
 import { useRead, ReadState, button } from './parts';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
+import ContractSearch from './ContractSearch';
 import MetricStrip from './MetricStrip';
 import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
 const tabs = [['agreements', 'Agreements'], ['ndas', 'NDAs'], ['partner-deals', 'Partner deals'], ['templates', 'Templates'], ['forms', 'Forms'], ['document-types', 'Document types']];
-const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention'];
+const filterKeys = ['status', 'q', 'doc_type', 'party_role', 'provider', 'sort', 'direction', 'offset', 'template', 'signed_recent', 'attention', 'open'];
 /**
  * `section="governance"` (D4563, #4563) draws Corporate Governance, the tab at its own
  * address `/admin/contracts/governance` (tabs are paths), after Templates. HQ only.
@@ -47,6 +48,13 @@ export default function ContractsDesk({ section = null }) {
     if (governance) go(`/admin/contracts${next.toString() ? `?${next}` : ''}`); else setParams(next);
     setSelected(null);
   }
+  // D4811 part 4: a search result opens its record: a tab (with the template open), an agreement's panel, or a governance entity.
+  const openResult = (target) => {
+    // From the governance address the desk's panel is not mounted, so the agreement is found in the list instead.
+    if (target.kind === 'agreement') { if (governance) navigate('agreements', { q: target.title }); else setSelected(target.uid); return; }
+    if (target.kind === 'path') { go(target.to); return; }
+    navigate(target.tab, target.filters);
+  };
   // D4811 part 3: the six-cell strip (board CT-01) opens the records behind each count.
   const drill = (target) => (target.kind === 'tab' ? navigate(target.tab) : navigate('agreements', target.filters));
   // D4811 part 9 (CT-07 "Eadwyn"): the rail starts collapsed, shows what needs a person instead of models and prices,
@@ -57,6 +65,7 @@ export default function ContractsDesk({ section = null }) {
   return <RailFrame rail={rail} data-testid="hq-contracts-page"><div className="space-y-5 text-axal-ink dark:text-gray-100">
     <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{superAdmin ? 'HQ' : 'Admin'} · Contracts</p><h1 className="text-2xl font-extrabold tracking-tight">Contracts</h1><p className="mt-1 text-[12.5px] text-axal-muted">Every agreement the platform sends, signs or keeps, and the templates behind them.</p></div><div className="flex flex-wrap items-center gap-2">{!branchOfUser(user) && <FundStructureDoor />}{superAdmin && !branchOfUser(user) && <BankAccountsLink />}<button type="button" className={`${button} bg-violet-600 text-white`} onClick={() => { const next = new URLSearchParams(params); next.set('new', ''); setParams(next); }}>New envelope</button><HeaderAsk /></div></header>
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
+    <ContractSearch onOpen={openResult} />
     <ReadState read={stats} what="Contract counts"><MetricStrip stats={stats.data} onDrill={drill} /></ReadState>
     <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto border-b border-axal-hairline">{tabs.filter(([id]) => superAdmin || id !== 'document-types').map(([id, label]) => <React.Fragment key={id}><button type="button" className={`whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold ${!governance && id === tab ? 'border-violet-600 text-axal-ink dark:text-white' : 'border-transparent text-axal-muted'}`} aria-current={!governance && id === tab ? 'page' : undefined} onClick={() => navigate(id)}>{label}</button>
         {/* D4563 (#4563): Corporate Governance sits beside the template library, at its own path. HQ only. */}
@@ -65,7 +74,7 @@ export default function ContractsDesk({ section = null }) {
       <Link to="/admin/contracts/closings" className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-[13px] font-semibold text-axal-muted" data-testid="contracts-tab-closings">Closings</Link></nav>
     {governance ? (hqDesk ? <GovernanceTab /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
-        : tab === 'templates' ? <AdminTemplates recordedPublication onOpenUsage={slug => navigate('agreements', { template: slug })} />
+        : tab === 'templates' ? <AdminTemplates recordedPublication openSlug={params.get('open') || null} onOpenUsage={slug => navigate('agreements', { template: slug })} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
     <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/programs/spinout-lab/formation" className="underline">Open its Formation tab.</Link></p>
     {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)} />}

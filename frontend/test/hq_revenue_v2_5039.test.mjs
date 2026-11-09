@@ -285,7 +285,10 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   assert.match(fr, /HQ saved ✓ Branch synced ✓ Enforced[^]*?Not reported[^]*?Not recorded[^]*?Missing/);
   assert.doesNotMatch(fr, /€10,000\.00[^]*€10,000\.00/, 'the whole ceiling was drawn as Remaining');
   const dach = text(h.split('data-testid="hq-revenue-ceiling-state-dach-2026-Q4"')[1].split('</tr>')[0]);
-  assert.match(dach, /€2,100\.00 €3,900\.00 Stale · 23 d/);
+  // PromotionsSection reads the real clock, so the fixture's age (23 days before NOW) is counted from now, not from NOW:
+  // a literal "23 d" turned into "24 d" one day after NOW and failed frontend-1 on 2026-11-09.
+  const ageDays = Math.floor((Date.now() - (NOW - 23 * DAY)) / DAY);
+  assert.match(dach, new RegExp(`€2,100\\.00 €3,900\\.00 Stale · ${ageDays} d`));
   const none = text(h.split('data-testid="hq-revenue-no-ceiling-pt"')[1].split('</tr>')[0]);
   assert.match(none, /No ceiling configured · Discounts currently allowed/);
   const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null }));
