@@ -39,10 +39,10 @@ import { logAdminAction } from '../services/adminAudit';
 import {
   BLOCK_KEYS, BLOCK_LABELS, CONTENT_REFUSALS, type ContentRefusal, allSubprocessors, blocksIn, changes, isBlockKey,
   newUid, parseBody, parseCheckedAt, parseNote, parseSubprocessor, publish, reportOnFile,
-  pendingReviewToken, PUBLISH_KEY_RE,
+  pendingReviewToken, PUBLISH_KEY_RE, publishedRevision,
 } from '../services/trustContent';
 import { ensureAdminAuditLogTable } from './admin';
-import { sendSubprocessorNotices, subscriberCounts } from '../services/subprocessorNotices';
+import { noticeDeliveries, sendSubprocessorNotices, subscriberCounts } from '../services/subprocessorNotices';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -62,13 +62,16 @@ r.get('/', async (c) => {
     // below then makes the token stale, which refuses a Publish of drafts the
     // page did not show, instead of letting one through.
     const pendingToken = await pendingReviewToken(c.env);
-    const [published, drafts, subprocessors, reports, log, subscribers] = await Promise.all([
+    const [published, drafts, subprocessors, reports, log, subscribers, revision, notices] = await Promise.all([
       blocksIn(c.env, 'published'),
       blocksIn(c.env, 'draft'),
       allSubprocessors(c.env),
       c.env.DB.prepare('SELECT uid, size_bytes, uploaded_at FROM trust_certification_reports ORDER BY uploaded_at DESC, id DESC').all(),
       changes(c.env, 50),
       subscriberCounts(c.env),
+      // D4803 (SE07) — each its own read with its own unreadable state.
+      publishedRevision(c.env),
+      noticeDeliveries(c.env),
     ]);
     return c.json({
       blocks: BLOCK_KEYS.map((k) => ({ key: k, label: BLOCK_LABELS[k], published: published[k], draft: drafts[k] })),
@@ -79,6 +82,10 @@ r.get('/', async (c) => {
       reports: reports.results || [],
       changes: log,
       subscribers,
+      revision,
+      notices,
+      // D4803 — when this read was made, so a stale review can say what it was of.
+      read_at: new Date().toISOString(),
       pending_token: pendingToken,
     });
   } catch (e) { return mapError(c, e); }

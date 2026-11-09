@@ -46,6 +46,7 @@
   --k-external_google: #1e40af; --k-external_microsoft: #0369a1;
   --k-work_item: #155e75;
   --k-agent_session: #0f766e;
+  --k-grow_campaign: #854d0e; --k-ad_flight: #831843; --k-newsletter_send: #1e3a8a; --k-sequence_step: #365314;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -86,6 +87,7 @@
   --k-external_google: #bfdbfe; --k-external_microsoft: #7dd3fc;
   --k-work_item: #a5f3fc;
   --k-agent_session: #2dd4bf;
+  --k-grow_campaign: #fef08a; --k-ad_flight: #fbcfe8; --k-newsletter_send: #c7d2fe; --k-sequence_step: #ecfccb;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -162,6 +164,11 @@
 .cal-dot[data-kind='external_microsoft'] { background: var(--k-external_microsoft); border-radius: 0 0 50% 50%; }
 /* D1614 W4 (#3972): a project's work item, its own hue and a notched square. */
 .cal-dot[data-kind='work_item'] { background: var(--k-work_item); border-radius: 0 0 50% 0; }
+/* #5131 (D1486 §e): Grow's campaign plans, ad flights, newsletter sends and sequence steps, each its own hue and shape. */
+.cal-dot[data-kind='grow_campaign'] { background: var(--k-grow_campaign); border-radius: 50%; transform: scale(.7); }
+.cal-dot[data-kind='ad_flight'] { background: var(--k-ad_flight); border-radius: 99px; transform: scaleY(.55); }
+.cal-dot[data-kind='newsletter_send'] { background: var(--k-newsletter_send); border-radius: 50% 50% 0 50%; transform: rotate(45deg) scale(.8); }
+.cal-dot[data-kind='sequence_step'] { background: var(--k-sequence_step); border-radius: 2px; transform: rotate(45deg) scale(.6); }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }

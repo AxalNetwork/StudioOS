@@ -9,6 +9,7 @@ import {
   CLAIM_STATES, NO_CLAIMS, NO_RECORDS, SOURCE_LABELS, SOURCE_ORDER, STATE_LABELS, STATE_TONE,
   claimLine, filterClaims, itemLine, lastChecked, recordSource, sectionOptions, sourceBar,
 } from './claimsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D912 (#2696, part 6 of #2454) — NAR6, the Claims tab, and NAR7, the claim
@@ -38,7 +39,7 @@ const LAVENDER = 'rounded-[10px] border border-axal-lavender-edge bg-axal-lavend
 const SEG = { connector: 'bg-axal-violet', signed: 'bg-emerald-600', document: 'bg-sky-600', recorded: 'bg-amber-500', typed: 'bg-gray-400' };
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
 
-function refusal(e, fallback) { return (typeof e?.message === 'string' && e.message.trim()) || fallback; }
+function refusal(e, fallback) { return userFacingRaiseError(e, { fallback, scope: 'raise:narrative' }); }
 
 export default function ClaimsTab({ projectId, version, search = '', admin = false, phone = false }) {
   const [state, setState] = useState({ status: 'loading', data: null });

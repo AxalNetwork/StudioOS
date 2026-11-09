@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layers, Plus, Users, RefreshCw, Download } from 'lucide-react';
 import { api } from '../../lib/api';
+import { userFacingRaiseError } from '../../lib/raiseErrors.js';
 
 const money = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const moneyShort = (v) => {
@@ -39,7 +40,7 @@ export function RoundClosesPanel({ projectId, onError }) {
   const load = async () => {
     setLoading(true);
     try { setData(await api.raiseCloses(projectId)); }
-    catch (e) { onError?.(e.message || 'Failed to load closes'); }
+    catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to load closes' })); }
     finally { setLoading(false); }
   };
   useEffect(() => { if (projectId) load(); /* eslint-disable-next-line */ }, [projectId]);
@@ -53,13 +54,13 @@ export function RoundClosesPanel({ projectId, onError }) {
       setForm({ name: '', target_date: '', state: 'planned' });
       setAdding(false);
       load();
-    } catch (e) { onError?.(e.message || 'Failed to add close'); }
+    } catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to add close' })); }
     finally { setBusy(false); }
   };
 
   const setState = async (id, state) => {
     try { await api.raiseCloseUpdate(id, { state }); load(); }
-    catch (e) { onError?.(e.message || 'Failed to update close'); }
+    catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to update close' })); }
   };
 
   if (loading) return <div className="p-6 text-sm text-gray-500">Loading closes…</div>;
@@ -223,7 +224,7 @@ export function ProRataPanel({ projectId, onError }) {
   const load = async () => {
     setLoading(true);
     try { setData(await api.raiseProRata(projectId)); }
-    catch (e) { onError?.(e.message || 'Failed to load pro-rata'); }
+    catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to load pro-rata' })); }
     finally { setLoading(false); }
   };
   useEffect(() => { if (projectId) load(); /* eslint-disable-next-line */ }, [projectId]);
@@ -234,13 +235,13 @@ export function ProRataPanel({ projectId, onError }) {
       const r = await api.raiseProRataCreate({ project_id: projectId, seed_from_cap_table: true });
       if (r.added === 0) onError?.('No new cap-table holders to import.');
       load();
-    } catch (e) { onError?.(e.message || 'Failed to import holders'); }
+    } catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to import holders' })); }
     finally { setBusy(false); }
   };
 
   const patch = async (id, body) => {
     try { await api.raiseProRataUpdate(id, body); load(); }
-    catch (e) { onError?.(e.message || 'Failed to update'); }
+    catch (e) { onError?.(userFacingRaiseError(e, { fallback: 'Failed to update' })); }
   };
 
   if (loading) return <div className="p-6 text-sm text-gray-500">Loading pro-rata…</div>;

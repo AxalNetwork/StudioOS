@@ -4,6 +4,8 @@
  *   POST /api/admin/branches/:code/support-session   { target_user_id, reason }
  *   POST /api/admin/branches/:code/accounts/:userId/move   { destination_code, reason }
  *   POST /api/admin/branches/:code/admins/:userId/unbind   { reason }   (D262)
+ *   GET  /api/admin/account-moves                          (D5043) open partial moves
+ *   POST /api/admin/account-moves/:uid/retry-invitation    (D5043) no body
  *
  * THIS ROUTE IS WHERE THE THREE UNCROSSABLE CHECKS HAPPEN, and that is the
  * whole architecture of the feature in one sentence. `requireFactor(c,'totp')`,
@@ -50,6 +52,11 @@ import { SUPPORT_REASON_MIN, MOVE_REASON_MIN, UNBIND_REASON_MIN } from '../rpc/b
 import { logAdminAction } from '../services/adminAudit';
 import type { Context } from 'hono';
 import { rawText, refusalBody } from '../util/refusal';
+import {
+  MOVE_OP_RE, claimRetry, isDestinationActiveRefusal, listOpenMoves, publicMove, readMove,
+  recordInviteOutcome, recordMoveStarted, recordMovedOut, recordSourceRefused,
+  type MoveErrorCode, type MoveRow,
+} from '../services/accountMoves';
 
 /**
  * D278 — A BRANCH'S REFUSAL IS PASSED THROUGH; A TRANSPORT FAILURE IS NOT.
@@ -301,6 +308,23 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
 
     const actorName = str((admin as { name?: string }).name, 200) || 'Axal VC HQ';
 
+    // D5043 — THE MOVE IS RECORDED BEFORE THE SOURCE IS CALLED. The record is
+    // what "Retry invitation" reads if the second leg fails, so a move HQ
+    // cannot record is refused here, with nothing done on either branch.
+    let operation: string;
+    try {
+      operation = await recordMoveStarted(c.env, {
+        from, to, branchUserId: userId, reason, actorUserId: admin.id, actorName,
+      });
+    } catch (e) {
+      return c.json(refusalBody({
+        code: 'move_not_recorded',
+        message: 'HQ could not record this move, so it was not started: nothing was done on either branch. '
+          + 'Try again in a moment.',
+        raw: e,
+      }), 503);
+    }
+
     let movedOut;
     try {
       movedOut = await (source.stub as any).moveAccountOut(c.env.HQ_RPC_SECRET, {
@@ -313,12 +337,22 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       // NOTHING HAS HAPPENED YET when this throws, so it is a clean refusal
       // rather than a partial move — the branch validates before it writes.
       mirrorBranchAction(c.env, 'account_moved_out', 'failed', from);
+      await recordSourceRefused(c.env, operation, branchWords(e) ?? 'the source could not be reached');
       return branchRefusal(c, e, 'source_refused');
     }
     mirrorBranchAction(c.env, 'account_moved_out', 'ok', from);
+    // The proof the retry needs: the source answered that it closed the account.
+    const recoverable = await recordMovedOut(c.env, operation, {
+      email: movedOut?.target?.email ?? null,
+      name: movedOut?.target?.name ?? null,
+      role: movedOut?.target?.role ?? null,
+    });
 
     // THE SECOND LEG, REPORTED AND NEVER THROWN. See the header.
-    let invited: { ok: boolean; uid?: string; email_sent?: boolean; reason?: string };
+    let invited: {
+      ok: boolean; stored?: boolean; uid?: string; email_sent?: boolean; reason?: string;
+      invite_link?: string; reused?: boolean; code?: MoveErrorCode;
+    };
     try {
       const inv = await (destination.stub as any).inviteAccount(c.env.HQ_RPC_SECRET, {
         hq_actor_name: actorName,
@@ -327,9 +361,13 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
         role: movedOut?.target?.role ?? 'exploring',
         moved_from_code: from,
         reason,
+        // D5043 — the destination keeps one invitation per move under this.
+        move_ref: operation,
       });
       invited = {
         ok: true,
+        // D5043 — STORED and SENT are two facts, and the reply names both.
+        stored: true,
         uid: inv?.uid,
         // NOT the same thing as `ok`. The invitation existing and the person
         // being told about it are two facts, and migration 236 already draws
@@ -337,6 +375,9 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
         // has heard of, and HQ has to see that to pass the link on by hand.
         email_sent: Boolean(inv?.email_sent),
         ...(inv?.email_reason ? { reason: inv.email_reason } : {}),
+        // The branch hands the link over only when its message did not leave
+        // (`InviteResult.invite_link`), so the operator can pass it on by hand.
+        ...(!inv?.email_sent && typeof inv?.invite_link === 'string' ? { invite_link: inv.invite_link } : {}),
       };
       // The invitation LANDING is the branch answering; whether the mail left
       // is the branch's own business and migration 236's separate fact. The
@@ -344,12 +385,20 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       mirrorBranchAction(c.env, 'account_invited', 'ok', to);
     } catch (e) {
       mirrorBranchAction(c.env, 'account_invited', 'failed', to);
+      const words = branchWords(e);
       invited = {
         ok: false,
+        code: isDestinationActiveRefusal(words) ? 'destination_active'
+          : words !== null ? 'destination_refused' : 'destination_unreachable',
         reason: `The account was closed on ${from} and the invitation on ${to} did not land: `
-          + `${branchWords(e) ?? logUnreachable(e)}. `
+          + `${words ?? logUnreachable(e)}. `
           + `Retry the invitation alone — moving them out again would be refused, correctly.`,
       };
+    }
+    if (recoverable) {
+      await recordInviteOutcome(c.env, operation, invited.ok
+        ? { ok: true, invite_uid: invited.uid ?? null, email_sent: Boolean(invited.email_sent), email_reason: invited.reason ?? null }
+        : { ok: false, code: invited.code ?? 'destination_unreachable', message: invited.reason ?? '' });
     }
 
     try {
@@ -358,7 +407,7 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       ).bind(
         'hq_account_moved',
         JSON.stringify({
-          from, to, target_user_id: userId, reason,
+          from, to, target_user_id: userId, reason, operation,
           invited_ok: invited.ok, email_sent: invited.email_sent ?? false,
         }),
         await hashEmail(admin.email),
@@ -374,6 +423,9 @@ r.post('/branches/:code/accounts/:userId/move', async (c) => {
       moved_out: true,
       target: movedOut?.target ?? null,
       invited,
+      // D5043 — the move's HQ record. `recoverable` is false only when HQ could
+      // not stamp the source's answer, and then Retry invitation is not offered.
+      operation: { uid: operation, recoverable },
       // STATED IN THE RESPONSE, not only in the docs: D.6 is a re-invite, not a
       // record migration, and an operator who assumed otherwise would tell the
       // person something false about where their work went.
@@ -467,6 +519,199 @@ r.post('/branches/:code/admins/:userId/unbind', async (c) => {
       branch: code,
       unbound: res?.unbound ?? [],
       skipped: res?.skipped ?? [],
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * GET /api/admin/account-moves
+ *
+ * D5043 — the moves HQ Team still has to finish or follow up, read from HQ's
+ * own record (`hq_account_moves`), so a refresh or a later visit finds a
+ * partial move instead of losing it with the reply it arrived in. Super Admin,
+ * as every move is. It reads HQ's database only; no branch is called.
+ */
+r.get('/account-moves', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const rows = await listOpenMoves(c.env);
+    return c.json({ items: rows.map(publicMove) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * POST /api/admin/account-moves/:uid/retry-invitation   (no body)
+ *
+ * D5043 — finish a move whose destination invitation did not land. The ONE
+ * input is the operation uid. Email, name and role are what the source
+ * answered when it closed the account, the destination is the move's, and the
+ * reason is the move's: nothing the browser sends reaches the invitation, so
+ * this cannot be used to invite an arbitrary person onto a branch.
+ *
+ * The move's own bar, in the move's order: TOTP, a recent step-up, Super Admin.
+ * Then the record must prove the source closed the account (`moved_out_at`);
+ * a move whose invitation already landed answers what landed and calls no
+ * branch (`retried: false`); a claim on the row lets one retry run at a time;
+ * and the destination's `move_ref` lookup answers an invitation it already
+ * stored for this move instead of writing a second one. Every attempt and
+ * outcome is audited, after the outcome is recorded: an audit write that
+ * fails never undoes an invitation that landed (`logAdminAction` never throws).
+ */
+r.post('/account-moves/:uid/retry-invitation', async (c) => {
+  try {
+    await requireFactor(c, 'totp');
+    await requireStepUp(c);
+    const admin = await requireSuperAdmin(c);
+
+    const uid = str(c.req.param('uid'), 40);
+    if (!MOVE_OP_RE.test(uid)) {
+      return c.json({ error: 'bad_operation', message: 'That is not a move operation id.' }, 400);
+    }
+    const row = await readMove(c.env, uid);
+    if (!row) {
+      return c.json({
+        error: 'move_not_found',
+        message: 'HQ has no move recorded under that id, so there is nothing to retry.',
+      }, 404);
+    }
+
+    const audit = (outcome: string, extra: Record<string, unknown> = {}) =>
+      logAdminAction(c.env, admin.id, admin.email, 'hq_account_move_invite_retried', {
+        operation: uid, branch: row.to_code, from: row.from_code, branch_user_id: row.branch_user_id,
+        outcome, ...extra,
+      });
+
+    // PROOF FIRST. No stamp means the source never answered that it closed
+    // the account, and inviting the person could give them two homes.
+    if (!row.moved_out_at) {
+      await audit('refused_not_moved_out');
+      return c.json({
+        error: 'move_out_not_proven',
+        message: row.status === 'source_refused'
+          ? `${row.from_code} refused this move, so the account was never closed and there is no invitation to retry.`
+          : `HQ has no record that ${row.from_code} closed this account, so no invitation is sent. `
+            + 'Search for the account on that branch before doing anything else.',
+        operation: publicMove(row),
+      }, 409);
+    }
+
+    const landed = (r0: MoveRow) => ({
+      ok: true,
+      stored: true,
+      uid: r0.invite_uid ?? undefined,
+      email_sent: r0.invite_email_sent === 1,
+      ...(r0.invite_email_reason ? { reason: r0.invite_email_reason } : {}),
+    });
+
+    // ALREADY FINISHED: answer what landed, call no branch.
+    if (row.status === 'invited') {
+      await audit('already_invited', { invite_uid: row.invite_uid });
+      return c.json({ operation: publicMove(row), retried: false, invited: landed(row) });
+    }
+    if (!row.target_email) {
+      await audit('refused_no_email');
+      return c.json({
+        error: 'move_target_unrecorded',
+        message: `${row.from_code} did not report an email for this account when it closed it, so there is no `
+          + 'address to invite. Ask the branch for it; HQ will not invite an address it did not record.',
+        operation: publicMove(row),
+      }, 409);
+    }
+    if (!c.env.HQ_RPC_SECRET) {
+      return c.json({
+        error: 'hq_rpc_secret_unset',
+        message: 'HQ_RPC_SECRET is not set on this Worker, so the destination cannot tell this call '
+          + 'from any other Worker in the account. Set it, then try again.',
+      }, 409);
+    }
+
+    if (!(await claimRetry(c.env, uid))) {
+      const now = (await readMove(c.env, uid)) ?? row;
+      if (now.status === 'invited') {
+        await audit('already_invited', { invite_uid: now.invite_uid });
+        return c.json({ operation: publicMove(now), retried: false, invited: landed(now) });
+      }
+      await audit('refused_in_progress');
+      return c.json({
+        error: 'retry_in_progress',
+        message: 'This invitation is being asked for already. Wait a moment and read the move again.',
+        operation: publicMove(now),
+      }, 409);
+    }
+
+    const fail = async (code: MoveErrorCode, message: string, status: 409 | 502) => {
+      await recordInviteOutcome(c.env, uid, { ok: false, code, message });
+      await audit(code);
+      const after: MoveRow = { ...row, status: 'invite_failed', last_error_code: code, last_error: message,
+        attempts: Number(row.attempts ?? 0) + 1 };
+      return c.json({ error: code, message, operation: publicMove(after), retried: true }, status);
+    };
+
+    const destination = branchByCode(c.env, row.to_code);
+    if (!destination) {
+      mirrorBranchAction(c.env, 'account_invited', 'not_deployed', row.to_code);
+      return fail('destination_not_bound',
+        `No branch Worker is bound for ${row.to_code}, so the invitation cannot be sent yet. `
+        + 'The account stays closed on ' + row.from_code + '.', 409);
+    }
+
+    let inv;
+    try {
+      inv = await (destination.stub as any).inviteAccount(c.env.HQ_RPC_SECRET, {
+        hq_actor_name: str((admin as { name?: string }).name, 200) || 'Axal VC HQ',
+        email: row.target_email,
+        name: row.target_name,
+        role: row.target_role ?? 'exploring',
+        moved_from_code: row.from_code,
+        reason: row.reason,
+        move_ref: uid,
+      });
+    } catch (e) {
+      mirrorBranchAction(c.env, 'account_invited', 'failed', row.to_code);
+      const words = branchWords(e);
+      if (isDestinationActiveRefusal(words)) {
+        return fail('destination_active',
+          `${row.to_code} already has an active account for this person, so no invitation was created. `
+          + `If they registered there themselves, nothing more is needed; their account on ${row.from_code} stays closed.`,
+          409);
+      }
+      if (words !== null) {
+        return fail('destination_refused', `${row.to_code} refused the invitation: ${words}`, 409);
+      }
+      return fail('destination_unreachable',
+        `${row.to_code} ${logUnreachable(e)}, so no invitation is known to have been created. `
+        + 'Retry again in a moment; a retry cannot create a second invitation for this move.', 502);
+    }
+    mirrorBranchAction(c.env, 'account_invited', 'ok', row.to_code);
+
+    const emailSent = Boolean(inv?.email_sent);
+    const emailReason = inv?.email_reason ? String(inv.email_reason) : null;
+    // The outcome is recorded FIRST; the audit after it. Neither can undo the
+    // invitation, which already exists on the destination.
+    const recorded = await recordInviteOutcome(c.env, uid, {
+      ok: true, invite_uid: inv?.uid ?? null, email_sent: emailSent, email_reason: emailReason,
+    });
+    await audit('invited', { invite_uid: inv?.uid ?? null, email_sent: emailSent, reused: Boolean(inv?.reused) });
+
+    const after: MoveRow = {
+      ...row, status: 'invited', invite_uid: inv?.uid ?? null, invite_email_sent: emailSent ? 1 : 0,
+      invite_email_reason: emailReason, last_error_code: null, last_error: null,
+      attempts: Number(row.attempts ?? 0) + 1,
+    };
+    return c.json({
+      operation: publicMove(after),
+      retried: true,
+      recorded,
+      invited: {
+        ok: true,
+        stored: true,
+        uid: inv?.uid,
+        email_sent: emailSent,
+        ...(emailReason ? { reason: emailReason } : {}),
+        ...(!emailSent && typeof inv?.invite_link === 'string' ? { invite_link: inv.invite_link } : {}),
+        ...(inv?.reused ? { reused: true } : {}),
+        ...(inv?.accepted ? { accepted: true } : {}),
+      },
     });
   } catch (e) { return mapError(c, e); }
 });

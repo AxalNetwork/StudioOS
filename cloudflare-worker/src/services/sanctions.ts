@@ -472,6 +472,11 @@ export type ScreeningSummary =
       last_run_at: string | null;
       hits_total: number;
       unreviewed_hits: number;
+      /** D4803 (SE07): hits a reviewer has noted, and when the latest note was made. */
+      reviewed_hits: number;
+      last_reviewed_at: string | null;
+      /** D4803: whether the newest run matched a list; null when no run has been asked for. */
+      last_run_hit: boolean | null;
       path: '/trust';
       how: string;
     }
@@ -483,9 +488,12 @@ export async function screeningSummary(env: Env): Promise<ScreeningSummary> {
       `SELECT COUNT(*) AS runs_total,
               MAX(run_at) AS last_run_at,
               COALESCE(SUM(CASE WHEN hit = 1 THEN 1 ELSE 0 END), 0) AS hits_total,
-              COALESCE(SUM(CASE WHEN hit = 1 AND reviewed_at IS NULL THEN 1 ELSE 0 END), 0) AS unreviewed_hits
+              COALESCE(SUM(CASE WHEN hit = 1 AND reviewed_at IS NULL THEN 1 ELSE 0 END), 0) AS unreviewed_hits,
+              COALESCE(SUM(CASE WHEN hit = 1 AND reviewed_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS reviewed_hits,
+              MAX(CASE WHEN hit = 1 THEN reviewed_at END) AS last_reviewed_at,
+              (SELECT hit FROM sanctions_screenings ORDER BY datetime(run_at) DESC, id DESC LIMIT 1) AS last_run_hit
          FROM sanctions_screenings`,
-    ).first<{ runs_total: number; last_run_at: string | null; hits_total: number; unreviewed_hits: number }>();
+    ).first<{ runs_total: number; last_run_at: string | null; hits_total: number; unreviewed_hits: number; reviewed_hits: number; last_reviewed_at: string | null; last_run_hit: number | null }>();
     if (!row) return { available: false, reason: 'The sanctions_screenings table answered no row.' };
     return {
       available: true,
@@ -493,6 +501,9 @@ export async function screeningSummary(env: Env): Promise<ScreeningSummary> {
       last_run_at: row.last_run_at ?? null,
       hits_total: Number(row.hits_total ?? 0),
       unreviewed_hits: Number(row.unreviewed_hits ?? 0),
+      reviewed_hits: Number(row.reviewed_hits ?? 0),
+      last_reviewed_at: row.last_reviewed_at ?? null,
+      last_run_hit: row.last_run_hit === null || row.last_run_hit === undefined ? null : Number(row.last_run_hit) === 1,
       path: '/trust',
       how: SANCTIONS_SCREENING_HOW,
     };

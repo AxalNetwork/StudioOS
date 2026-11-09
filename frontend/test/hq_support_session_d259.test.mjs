@@ -25,20 +25,25 @@ import { resolve, join } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
+import { teamRaw, teamFile } from './_hqTeamSource.mjs';
 import { MoveHit } from '../src/pages/hq/HqTeamTable.jsx';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const TEAM_RAW = raw('frontend/src/pages/hq/HqTeamTable.jsx');
+// D5044 — HQ Team is split into `pages/hq/team/`: the rules below are read wherever they now live.
+const TEAM_RAW = teamRaw();
 const TEAM = codeOnly(TEAM_RAW);
+const SEARCH = codeOnly(teamFile('BranchAccountSearch.jsx'));
+const SUPPORT = codeOnly(teamFile('SupportSessionAction.jsx'));
+const GOVERNED = codeOnly(teamFile('governedAction.js'));
 const API = codeOnly(raw('frontend/src/lib/api.js'));
 const ACCOUNTS = raw('frontend/src/pages/hq/AccountsPage.jsx');
 
-/** `MoveHit`'s own body, bounded by the next top-level function. */
+/** `MoveHit`'s own body, bounded by the next top-level declaration in its file. */
 function moveHit() {
-  const a = TEAM.indexOf('export function MoveHit(');
+  const a = SEARCH.indexOf('export function MoveHit(');
   assert.ok(a >= 0, 'MoveHit is gone');
-  const b = TEAM.indexOf('\nfunction ', a + 1);
-  return TEAM.slice(a, b > a ? b : TEAM.length);
+  const b = SEARCH.indexOf('\nexport default function', a + 1);
+  return SEARCH.slice(a, b > a ? b : SEARCH.length);
 }
 
 const HIT = { id: 7, name: 'Fleur Founder', email: 'fleur@fr.example', role: 'founder', is_active: 1, created_at: '2026-09-01 10:00:00' };
@@ -68,7 +73,7 @@ test('D259: Support is drawn on an active branch hit, and not under the view-as 
   const body = moveHit();
   assert.match(body, /const canSupport = !viewAs && Number\(hit\.is_active\) === 1;/);
   assert.match(body, /\{canSupport && \(\s*<button[^>]*data-testid="hq-team-support-toggle"/);
-  assert.match(body, /\{canSupport && supportOpen && \(/, 'the form is not under the same rule as its toggle');
+  assert.match(body, /\{canSupport && panel === 'support' && <SupportSessionAction /, 'the form is not under the same rule as its toggle');
 });
 
 test('D259: exactly one Support control, on the branch search, never on the HQ-held table', () => {
@@ -86,14 +91,16 @@ test('D259: exactly one Support control, on the branch search, never on the HQ-h
 });
 
 test('D259: Begin needs ten trimmed characters, and the reason sent is the reason typed', () => {
-  const body = moveHit();
-  assert.match(body, /disabled=\{supportBusy \|\| supportReason\.trim\(\)\.length < 10\}/,
+  // D5044 — the form is `team/SupportSessionAction.jsx`, on the shared action model.
+  assert.match(SUPPORT, /export const SUPPORT_REASON_MIN = 10;/, 'the floor is not ten');
+  assert.match(SUPPORT, /disabled=\{supportBusy \|\| supportReason\.trim\(\)\.length < SUPPORT_REASON_MIN\}/,
     'Begin is enabled below ten characters');
-  assert.match(body, /await api\.hqSupportSession\(from, hit\.id, supportReason\.trim\(\)\)/);
+  assert.match(SUPPORT, /support\.submit\(supportReason\.trim\(\)\)/, 'the reason sent is not the trimmed reason typed');
+  assert.match(SUPPORT, /await api\.hqSupportSession\(from, hit\.id, reason\)/);
 });
 
 test('D259: the page opens the URL the route built, and never builds one', () => {
-  const body = moveHit();
+  const body = SUPPORT;
   assert.match(body, /window\.open\(res\.open_url, '_blank', 'noopener'\)/,
     'the page does not open the route\'s open_url');
   assert.match(body, /setSupportUrl\(res\.open_url\)/);
@@ -104,19 +111,23 @@ test('D259: the page opens the URL the route built, and never builds one', () =>
 });
 
 test('D259: the operator is told what the person is told, and each refusal is shown in words', () => {
-  const rendered = moveHit();
+  const rendered = SUPPORT;
   // D507 — re-aimed, not loosened. "The person is not told:" was true until
   // D441 made the branch send a security notice at authorisation; the form now
   // says so, and hq_team_h20.test.mjs reads the notice the sentence rests on.
   assert.ok(TEAM_RAW.includes('sends the person a security notice'), 'the form does not say the branch sends the person a notice');
   assert.ok(!TEAM_RAW.includes('The person is not told'), 'the form still says the branch account is not told');
-  assert.match(rendered, /setSupportErr\(supportRefusal\(ex\)\)/);
-  // D262 moved the body into `branchRefusal`, which Unbind shares; the
-  // property is unchanged: the sentence first, the machine code only after.
-  assert.match(TEAM, /function branchRefusal\(ex, fallback\) \{\s*const d = ex\?\.data;\s*if \(d && typeof d\.message === 'string' && d\.message\) return d\.message;/,
+  // D5044 — every HQ Team action reads its refusal through the shared model's sentence-first
+  // helper (`team/governedAction.js`, D262's `branchRefusal` renamed `actionRefusal`), and the
+  // support form draws it through `ActionNotice`. The property is unchanged: the sentence first,
+  // the machine code only after.
+  assert.match(rendered, /useGovernedAction\(async \(reason\) =>/, 'the support form is not on the shared action model');
+  assert.match(rendered, /fallback: 'The support session could not be opened\.'/);
+  assert.match(rendered, /<ActionNotice action=\{support\} prefix="hq-team-support" \/>/, 'a refusal is not drawn');
+  assert.match(GOVERNED, /function actionRefusal\(ex, fallback\) \{\s*const d = ex\?\.data;\s*if \(d && typeof d\.message === 'string' && d\.message\) return d\.message;/,
     'a refusal shows the route\'s machine code instead of its sentence');
-  assert.match(TEAM, /function supportRefusal\(ex\) \{\s*return branchRefusal\(ex, /,
-    'the support form no longer reads the refusal through the sentence-first helper');
+  assert.match(GOVERNED, /actionRefusal\(ex, fallback\)\)/,
+    'the action model no longer reads the refusal through the sentence-first helper');
 });
 
 /** Every .js/.jsx file under frontend/src. */

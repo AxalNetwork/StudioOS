@@ -23,7 +23,7 @@ import {
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
 import { FOOT, PhoneBack } from './boardParts';
-import { aboutHistory, decidedFilterCount, decidedHq, laneGroups, lanesBanner, noteKind } from './lanesDecidedModel';
+import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
 /**
@@ -271,7 +271,10 @@ export function AssignDialog({ items, title, line, inbox, callerId, onClose, onD
   const choices = assignChoices(inbox?.reply, callerId);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
+  // D4814 part 6 (AP-05): "Search reviewers", on names; the chosen one stays chosen while it is filtered out.
+  const [find, setFind] = useState('');
   const list = choices.state === 'ready' ? choices.choices : [];
+  const shown = matchReviewers(list, find);
   const send = async () => {
     if (!pick || busy) return;
     setBusy(true);
@@ -300,9 +303,15 @@ export function AssignDialog({ items, title, line, inbox, callerId, onClose, onD
         {line ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-line">{line}</p> : null}
         {choices.state !== 'ready' ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-unread">{choices.text}</p> : (
           <>
+            <label className="flex flex-col gap-1">
+              <span className="sr-only">Search reviewers</span>
+              <input type="search" value={find} placeholder="Search reviewers" onChange={(e) => setFind(e.target.value)}
+                className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-assign-search" />
+            </label>
+            {!shown.length ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-none">{`No reviewer is called “${find.trim()}”.`}</p> : null}
             <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" data-testid="approvals-assign-list">
               <legend className="sr-only">Reviewer</legend>
-              {list.map((c) => (
+              {shown.map((c) => (
                 <label key={c.id} className={`flex min-h-[44px] items-center gap-2.5 rounded-[8px] border px-3 text-[13px] text-axal-ink dark:text-gray-100 ${pick === c.id ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline dark:border-gray-700'}`} data-testid={`approvals-assign-${c.id}`}>
                   <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
                   <b className="flex-1">{c.name}</b>
@@ -1110,7 +1119,11 @@ function Decided({ decided, superAdmin }) {
                             : kind === 'shown' ? <>{r.note}<div className={SUB}>👁 Shown to them</div></>
                               : <>{r.note}<div className={SUB}>🔒 Internal note</div></>}
                         </td>
-                        <td className={`${TD} text-right`}><DressedDoor lane={r.laneKey} before="Open in " after=" ↗" className={BTN_SM} plain={SUB} testId={`approvals-decided-open-${r.key}`} /></td>
+                        <td className={`${TD} text-right`}>
+                          {/* D4814 part 6: a native board's row opens the item itself; any other lane opens its own page. */}
+                          {decidedItemPath(r) ? <Link to={decidedItemPath(r)} className={BTN_SM} data-testid={`approvals-decided-open-${r.key}`}>Open ↗</Link>
+                            : <DressedDoor lane={r.laneKey} before="Open in " after=" ↗" className={BTN_SM} plain={SUB} testId={`approvals-decided-open-${r.key}`} />}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1255,7 +1268,7 @@ export function ApprovalsPage({ viewer = null }) {
 /** The page inside its rail frame (D774), the frame the page's outermost element. */
 export default function AdminApprovals() {
   return (
-    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} data-testid="admin-board-approvals">
+    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} operations data-testid="admin-board-approvals">
       <ApprovalsPage />
     </AdminBoardFrame>
   );

@@ -16,7 +16,8 @@ import { HOME_PATH, NOT_RECORDED, SECTIONS, afterRaiseView, dayText, money, mont
 
 /* Addresses ------------------------------------------------------------- */
 
-export const FORECAST_PATH = `${HOME_PATH}/runway/forecast`;
+import { FORECAST_PATH, movedTo } from './useOfFundsPaths.js';
+export { FORECAST_PATH, movedTo };
 export const COMPARE_PATH = `${HOME_PATH}/scenarios/compare`;
 export const forecastPath = (search = '') => `${FORECAST_PATH}${tabSearch(search)}`;
 
@@ -30,16 +31,7 @@ export const MOVED = Object.freeze({
  * and hash kept, `?project=` as the tool's `?project_id=`, and `moved` naming
  * the notice.
  */
-export function movedTo(search = '', moved = 'capital-model') {
-  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  if (q.has('project')) {
-    if (!q.has('project_id')) q.set('project_id', q.get('project'));
-    q.delete('project');
-  }
-  if (moved) q.set('moved', moved);
-  const out = q.toString();
-  return { pathname: FORECAST_PATH, search: out ? `?${out}` : '' };
-}
+// movedTo lives in useOfFundsPaths.js (#4574 H4) and is re-exported above.
 
 /** The moved notice's words for this address, or null. */
 export const movedNotice = (search = '') => MOVED[new URLSearchParams(String(search || '').replace(/^\?/, '')).get('moved')] || null;

@@ -10,6 +10,7 @@ import { Lightbox } from '../../../ui';
 import Sheet from '../../../ui/Sheet.jsx';
 import { CLAIM_STATE } from './evidenceModel';
 import { day, providerWord, sharingWord, sourceWord } from './evidenceView';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 export const CARD = 'flex flex-col gap-3 rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900';
 export const H2 = 'm-0 text-[15px] font-bold text-axal-ink dark:text-gray-100';
@@ -91,7 +92,7 @@ export function ChangeDialog({ title, says, confirm = 'Confirm', danger = false,
   const go = async () => {
     setBusy(true); setError('');
     try { await onConfirm(); onClose(); }
-    catch (e) { setError(e?.message || 'Nothing was saved. Try again.'); setBusy(false); }
+    catch (e) { setError(userFacingRaiseError(e, { fallback: 'Nothing was saved. Try again.' })); setBusy(false); }
   };
   return (
     <Lightbox label={title} title={title} onClose={busy ? () => {} : onClose} width={520} phone="sheet" testId={testId}
