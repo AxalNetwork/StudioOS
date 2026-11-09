@@ -809,6 +809,8 @@ export function decidedQueryOf(search) {
   if (/^[1-9]\d*$/.test(p.get('decided_by') || '')) out.decided_by = p.get('decided_by');
   if (DAY.test(p.get('from') || '')) out.from = p.get('from');
   if (DAY.test(p.get('to') || '')) out.to = p.get('to');
+  // D4814: "Include HQ lanes" off. The page drops it for a plain Admin, who never has HQ's lanes.
+  if (p.get('hq') === '0') out.hq = '0';
   return out;
 }
 
@@ -818,12 +820,15 @@ const OUTCOME_TONE = { approved: 'good', declined: 'bad', other: null };
 export function decidedRows(reply) {
   return (Array.isArray(reply?.items) ? reply.items : []).map((r) => ({
     key: `${r.lane}:${r.item_id}:${r.decided_at}`,
+    laneKey: r.lane,
     when: stampText(r.decided_at) || 'Not recorded',
     lane: laneLabelOf(r.lane, r.lane_label),
     who: r.who || 'Not recorded',
     outcome: { word: r.outcome_word || 'Not recorded', tone: OUTCOME_TONE[r.outcome] ?? null },
     by: r.decided_by?.name || 'Not recorded',
     wait: ageText(r.wait_hours) || 'Not recorded',
+    // D4814 (AP-07): a wait the lane did not record is a dash, never 0.
+    waitKnown: r.wait_hours !== null && r.wait_hours !== undefined,
     note: r.note || null,
     shown: !!r.note && !!r.note_shown,
   }));

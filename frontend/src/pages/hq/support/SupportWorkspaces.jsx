@@ -71,7 +71,7 @@ const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-1.5 rounde
  * is the page's own: the Review queue link and Ask, written where the route
  * walk reads literal links.
  */
-export function SupportHeader({ readAt, refreshing = false, onRefresh, sources, actions = null }) {
+export function SupportHeader({ readAt, refreshing = false, onRefresh, sources, actions = null, offline = false }) {
   return (
     <header data-testid="hq-support-header">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -96,7 +96,7 @@ export function SupportHeader({ readAt, refreshing = false, onRefresh, sources, 
             : (readAt ? `Updated ${readAt} UTC` : 'Not read yet')}
         </span>
         {onRefresh && (
-          <button type="button" onClick={onRefresh} disabled={refreshing} className={`${BTN} ml-1 min-h-[32px] px-2.5`} data-testid="hq-support-refresh">
+          <button type="button" onClick={onRefresh} disabled={refreshing || offline} className={`${BTN} ml-1 min-h-[32px] px-2.5`} data-testid="hq-support-refresh">
             <RefreshCw size={12} aria-hidden="true" className={refreshing ? 'animate-spin' : undefined} /> Refresh
           </button>
         )}
@@ -434,12 +434,13 @@ export function HqTicketsSection({ tickets, rows, count, footing, onRetry, limit
 }
 
 /** The subsidiaries, folded to one line that links to Branches. */
-export function SubsidiariesLine({ line }) {
+export function SubsidiariesLine({ line, freshness = null }) {
   return (
     <section aria-labelledby="hq-support-subs-title" className={`${SECTION} flex flex-wrap items-center justify-between gap-2`} data-testid="hq-support-subsidiaries" data-state={line.state}>
       <div className="min-w-0">
         <h2 id="hq-support-subs-title" className="text-[14px] font-extrabold text-axal-ink dark:text-white">Subsidiaries</h2>
         <p className="text-[13px] text-axal-muted dark:text-gray-300" role={line.state === 'loading' ? 'status' : undefined}>{line.text}</p>
+        {freshness && <FreshnessLine freshness={freshness} />}
       </div>
       <Link to={workspaceHref('branches')} className="text-[13px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Support by subsidiary →</Link>
     </section>
@@ -490,7 +491,7 @@ function BranchCard({ card, onRetry, busy }) {
  * Support by subsidiary (canvas SU04a/SU04b). With no subsidiary there is
  * nothing to compare, so neither cards nor matrix are drawn.
  */
-export function BranchesWorkspace({ data, cards, branchState, busy, onRetry, matrix, branchTickets }) {
+export function BranchesWorkspace({ data, cards, branchState, busy, onRetry, matrix, branchTickets, freshness = null }) {
   if (branchState === 'loading') {
     return <section className={SECTION} data-testid="hq-support-branches" data-state="loading"><p className={META} role="status">Asking each subsidiary… HQ’s own queues do not wait for it.</p></section>;
   }
@@ -518,6 +519,7 @@ export function BranchesWorkspace({ data, cards, branchState, busy, onRetry, mat
           <h2 id="hq-support-br-title" className={H2}>Support by subsidiary</h2>
           {unread > 0 && <SupportBadge tone="not_counted">Ticket totals: Not counted while {unread === 1 ? 'a subsidiary is' : `${unread} subsidiaries are`} unavailable</SupportBadge>}
         </div>
+        {freshness && <FreshnessLine freshness={freshness} onRetry={freshness.asking ? undefined : onRetry} />}
         <ul className="mt-3 grid gap-3 md:grid-cols-3">
           {cards.map((c) => <BranchCard key={c.code} card={c} onRetry={onRetry} busy={busy} />)}
         </ul>
@@ -608,3 +610,32 @@ export function DistributionBanner({ distribution }) {
 export const LoadingNote = ({ children }) => (
   <p className={`mt-3 inline-flex items-center gap-2 ${META}`} role="status"><Loader2 size={13} className="animate-spin" aria-hidden="true" /> {children}</p>
 );
+
+// ──────────────────────────────────────────────────────── part 3 ──
+
+/**
+ * D5034 part 3 (canvas SU11 "Stale branch") — subsidiary figures older than
+ * HQ's read say which read they are from, beside them, never mixed in.
+ */
+export function FreshnessLine({ freshness, onRetry }) {
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-amber-900 dark:text-amber-200" role="status" data-testid="hq-support-freshness" data-asking={freshness.asking ? 'yes' : 'no'}>
+      <SupportBadge tone="not_counted">Stale</SupportBadge>
+      <span>{freshness.text}</span>
+      {onRetry && <button type="button" onClick={onRetry} className="font-semibold underline">Retry</button>}
+    </p>
+  );
+}
+
+/**
+ * D5034 part 3 (canvas SU11 "Offline") — the last read stays on screen and
+ * says which it is; nothing is recorded until the connection is back.
+ */
+export function OfflineBanner({ text }) {
+  return (
+    <div role="status" className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-[13.5px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" data-testid="hq-support-offline">
+      <span aria-hidden="true" className="font-extrabold">!</span>
+      <span>{text}</span>
+    </div>
+  );
+}

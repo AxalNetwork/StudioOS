@@ -213,37 +213,60 @@ const FEATURE_FROM = `FROM mvp_features f
 const FEATURE_COLS = `SELECT f.id, f.title, f.added_value, f.effort, f.pain_group_id, f.hypothesis_id, f.description, f.scope,
             pg.title AS pain_theme, h.claim AS hypothesis`;
 /**
- * #4603 part 2 (D4603): Solution design's list keys as SQL, each the exact
- * stored-value mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`).
- * A key that is not one of these, a search, or a sort on a text column reads
- * every feature and pages in memory, as before.
+ * #4603 part 2 (D4603): a module list's keys as SQL. Each key is the exact
+ * stored-value mapping its row's `keys` use; `orders` are its ordinal sorts
+ * (the `ListSpec.orders` it answers); `readOrder` is the read's own ORDER BY,
+ * which breaks ties as `pageBuildRows` breaks them. A key not in `keys`, a
+ * search, or a sort on anything but an ordinal key reads every record and
+ * pages in memory, as before.
  */
-const FEATURE_KEY_SQL: Record<string, string> = {
-  linked: "(CASE WHEN pg.title IS NOT NULL THEN 'yes' ELSE 'no' END)",
-  impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
-  effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
-};
-const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
+type ListSql = { keys: Record<string, string>; orders: Record<string, readonly string[]>; defaultSort: string; readOrder: string };
+type PageSql = { where: string; binds: string[]; order: string; page: number };
 
 /** The SQL that answers this query's page, or null when it must be paged in memory. */
-function featurePageSql(query: Query): { where: string; binds: string[]; order: string; page: number } | null {
+function listPageSql(list: ListSql, query: Query): PageSql | null {
   if ((query.q ?? '').trim()) return null;
   const where: string[] = []; const binds: string[] = [];
   for (const part of (query.filter ?? '').split(',').filter(Boolean)) {
     const at = part.indexOf(':');
     if (at <= 0) continue;
     const key = part.slice(0, at);
-    if (!Object.hasOwn(FEATURE_KEY_SQL, key)) return null;
-    where.push(`COALESCE(${FEATURE_KEY_SQL[key]}, '') = ?`);
+    if (!Object.hasOwn(list.keys, key)) return null;
+    where.push(' AND COALESCE(' + list.keys[key] + ", '') = ?");
     binds.push(part.slice(at + 1).toLocaleLowerCase());
   }
-  const sort = query.sort || 'impact';
+  const sort = query.sort || list.defaultSort;
   const desc = sort.startsWith('-'); const key = desc ? sort.slice(1) : sort;
-  if (!Object.hasOwn(FEATURE_ORDERS, key)) return null;
-  const rank = `(CASE ${FEATURE_KEY_SQL[key]} ${FEATURE_ORDERS[key as keyof typeof FEATURE_ORDERS].map((v, i) => `WHEN '${v}' THEN ${i}`).join(' ')} END)`;
-  // Unknown values last either way; ties in read order (sort_order, then id), as `pageBuildRows` keeps them.
-  return { where: where.map(w => ` AND ${w}`).join(''), binds, order: `(${rank} IS NULL), ${rank} ${desc ? 'DESC' : 'ASC'}, f.sort_order, f.id`, page: pageOf(query.page) };
+  if (!Object.hasOwn(list.orders, key) || !Object.hasOwn(list.keys, key)) return null;
+  // Each value is a fixed key value from `orders`, never the query's.
+  const rank = '(CASE ' + list.keys[key] + ' ' + list.orders[key].map((v, i) => `WHEN '${v}' THEN ${i}`).join(' ') + ' END)';
+  // Unknown values last either way; ties in read order, as `pageBuildRows` keeps them.
+  return { where: where.join(''), binds, order: '(' + rank + ' IS NULL), ' + rank + (desc ? ' DESC, ' : ' ASC, ') + list.readOrder, page: pageOf(query.page) };
 }
+
+/**
+ * One SQL page of a list: its rows, and its total, a `COUNT(*)` with the same
+ * predicates (or `all`, the unfiltered count the reader already holds).
+ * `cols` and `from` are fixed fragments whose one placeholder is the project.
+ */
+async function sqlPage(env: Env, cols: string, from: string, sql: PageSql, projectId: number, all: number) {
+  // Built from fixed fragments and a ListSql's keys only; every value is bound.
+  const total = sql.where ? number((await env.DB.prepare('SELECT COUNT(*) AS n ' + from + sql.where).bind(projectId, ...sql.binds).first<{ n: number }>())?.n) : all;
+  const found = rows(await env.DB.prepare(cols + ' ' + from + sql.where + ' ORDER BY ' + sql.order + ' LIMIT ? OFFSET ?')
+    .bind(projectId, ...sql.binds, PAGE_SIZE, (sql.page - 1) * PAGE_SIZE).all<any>());
+  return { found, paged: { total, page: sql.page, page_size: PAGE_SIZE } };
+}
+
+const FEATURE_ORDERS = { impact: ['high', 'medium', 'low'], effort: ['low', 'medium', 'high'] } as const;
+/** Solution design's list keys, the mapping the row's `keys` use (`LEVEL`, `IMPACT_KEY`, `EFFORT_KEY`). */
+const FEATURE_LIST: ListSql = {
+  keys: {
+    linked: "(CASE WHEN pg.title IS NOT NULL THEN 'yes' ELSE 'no' END)",
+    impact: "(CASE f.added_value WHEN 'High' THEN 'high' WHEN 'Medium' THEN 'medium' WHEN 'Low' THEN 'low' END)",
+    effort: "(CASE f.effort WHEN 'S' THEN 'low' WHEN 'M' THEN 'medium' WHEN 'L' THEN 'high' WHEN 'XL' THEN 'high' END)",
+  },
+  orders: FEATURE_ORDERS, defaultSort: 'impact', readOrder: 'f.sort_order, f.id',
+};
 
 function featureRow(f: any): RecordRow {
   const impact = known(IMPACT_KEY, f.added_value), effort = known(EFFORT_KEY, f.effort);
@@ -291,15 +314,11 @@ async function solution(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   let featureRows: RecordRow[] = [];
   let paged: ModuleRead['paged'];
   if (opts.rows) {
-    const sql = opts.query ? featurePageSql(opts.query) : null;
+    const sql = opts.query ? listPageSql(FEATURE_LIST, opts.query) : null;
     if (sql) {
-      // Built from fixed fragments and FEATURE_KEY_SQL only; every value is bound.
-      const countSql = 'SELECT COUNT(*) AS n ' + FEATURE_FROM + sql.where;
-      const pageSql = `${FEATURE_COLS} ${FEATURE_FROM}${sql.where} ORDER BY ${sql.order} LIMIT ? OFFSET ?`;
-      const total = sql.where ? number((await env.DB.prepare(countSql).bind(p.id, ...sql.binds).first<{ n: number }>())?.n) : featureCount;
-      featureRows = rows(await env.DB.prepare(pageSql)
-        .bind(p.id, ...sql.binds, PAGE_SIZE, (sql.page - 1) * PAGE_SIZE).all<any>()).map(featureRow);
-      paged = { total, page: sql.page, page_size: PAGE_SIZE };
+      const read = await sqlPage(env, FEATURE_COLS, FEATURE_FROM, sql, p.id, featureCount);
+      featureRows = read.found.map(featureRow);
+      paged = read.paged;
     } else featureRows = await solutionFeatureRows(env, p.id);
   }
   const levels = options([['high', 'High'], ['medium', 'Medium'], ['low', 'Low']]);
@@ -334,18 +353,66 @@ async function fromCode(env: Env, projectId: number) {
   }
 }
 
-async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
-  const features = rows(await env.DB.prepare(
-    `SELECT f.id, f.title, f.is_must_have, f.delivery_status, f.done_at, f.updated_at,
-            f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
-       FROM mvp_features f LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+/**
+ * #4603 part 2b (D4603): Prototype / MVP's must-haves. The row's `keys` and
+ * these SQL keys are one mapping (`MUST_KEY`; a hypothesis only when its
+ * claim is read), so the SQL page and `pageBuildRows` agree.
+ */
+const MUST_FROM = `FROM mvp_features f
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
        LEFT JOIN users u ON u.id = f.owner_user_id
-      WHERE f.project_id = ? ORDER BY f.sort_order, f.id`,
-  ).bind(p.id).all<any>());
-  const must = features.filter(f => number(f.is_must_have) === 1);
-  const done = must.filter(f => f.delivery_status === 'Done');
-  const history = new Map<string, number>();
-  for (const f of done.filter(f => f.done_at)) { const month = String(f.done_at).slice(0, 7); history.set(month, (history.get(month) ?? 0) + 1); }
+      WHERE f.project_id = ? AND f.is_must_have = 1`;
+const MUST_COLS = 'SELECT f.id, f.title, f.delivery_status, f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis';
+const MUST_ORDERS = { state: ['blocked', 'in_progress', 'not_started', 'done'] } as const;
+const MUST_LIST: ListSql = {
+  keys: {
+    state: "(CASE f.delivery_status WHEN 'Backlog' THEN 'not_started' WHEN 'In Progress' THEN 'in_progress' WHEN 'Review' THEN 'in_progress' WHEN 'Done' THEN 'done' WHEN 'Blocked' THEN 'blocked' END)",
+    hypothesis: "(CASE WHEN h.claim IS NOT NULL THEN CAST(f.hypothesis_id AS TEXT) ELSE 'none' END)",
+  },
+  orders: MUST_ORDERS, defaultSort: 'state', readOrder: 'f.sort_order, f.id',
+};
+const mustHypothesis = (f: any): string => f.test_hypothesis != null ? String(f.hypothesis_id) : 'none';
+function mustRow(f: any): RecordRow {
+  const state = known(MUST_KEY, f.delivery_status);
+  return record(f.id, { must_have: f.title, tests: f.test_hypothesis, state: state ? MUST_LABEL[state] : f.delivery_status ?? null, owner: f.owner, due: f.due_date },
+    { state, hypothesis: mustHypothesis(f) }, { due_date: f.due_date ?? null });
+}
+/** The Hypothesis filter's options, from each must-have's hypothesis (every one, or one row per distinct hypothesis). */
+function mustHypothesisOptions(list: any[]): Filter['options'] {
+  const tests = new Map(list.filter(f => f.test_hypothesis != null).map(f => [String(f.hypothesis_id), String(f.test_hypothesis)]));
+  return optionsOf(list.map(f => record(f.id ?? 0, {}, { hypothesis: mustHypothesis(f) })), 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id);
+}
+
+/** Every must-have, in read order. The in-memory path, and what part 2b's tests compare the SQL page against. */
+export async function prototypeMustRows(env: Env, projectId: number): Promise<RecordRow[]> {
+  return (await mustHaves(env, projectId)).map(mustRow);
+}
+async function mustHaves(env: Env, projectId: number): Promise<any[]> {
+  // A literal, so the schema guard reads its columns (the paged read is built and is not read by it).
+  return rows(await env.DB.prepare(
+    `SELECT f.id, f.title, f.delivery_status, f.hypothesis_id, f.due_date, u.name AS owner, h.claim AS test_hypothesis
+       FROM mvp_features f
+       LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+       LEFT JOIN users u ON u.id = f.owner_user_id
+      WHERE f.project_id = ? AND f.is_must_have = 1 ORDER BY f.sort_order, f.id`,
+  ).bind(projectId).all<any>());
+}
+
+async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
+  // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads a must-have row.
+  // `missing` is the first must-have not done, in read order: the card's "Complete <title>".
+  const counts = await env.DB.prepare(
+    `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN delivery_status = 'Done' THEN 1 ELSE 0 END), 0) AS done,
+            (SELECT title FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status IS NOT 'Done' ORDER BY sort_order, id LIMIT 1) AS missing
+       FROM mvp_features WHERE project_id = ? AND is_must_have = 1`,
+  ).bind(p.id, p.id).first<{ total: number; done: number; missing: string | null }>();
+  const total = number(counts?.total), doneCount = number(counts?.done), missing = counts?.missing ?? null;
+  // Done must-haves per month of completion: one row per month, not per must-have.
+  const history = new Map(rows(await env.DB.prepare(
+    `SELECT substr(done_at, 1, 7) AS month, COUNT(*) AS n FROM mvp_features
+      WHERE project_id = ? AND is_must_have = 1 AND delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> ''
+      GROUP BY substr(done_at, 1, 7)`,
+  ).bind(p.id).all<{ month: string; n: number }>()).map(r => [String(r.month), number(r.n)]));
   const points = [...history.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   let cumulative = 0;
   const dated: Array<{ date: string; value: number | null; label: string }> = points.map(([month, n]) => ({ date: `${month}-01`, value: (cumulative += n), label: month }));
@@ -353,24 +420,39 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
   if (ship) dated.push({ date: p.mvp_target_date!, value: null, label: 'Ship' });
   dated.sort((a, b) => a.date.localeCompare(b.date));
   const mark = ship ? dated.findIndex(point => point.label === 'Ship') : -1;
-  const series = points.length >= 3 ? [{ kind: 'line', values: dated.map(point => point.value), target: must.length,
+  const series = points.length >= 3 ? [{ kind: 'line', values: dated.map(point => point.value), target: total,
     labels: dated.map((point, at) => ({ at, label: point.label })),
     ...(mark >= 0 ? { mark, mark_label: `Ship ${p.mvp_target_date}` } : {}) }] : [];
-  const state = must.length === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok';
-  const missing = must.find(f => f.delivery_status !== 'Done');
-  const tests = new Map(must.filter(f => f.test_hypothesis != null).map(f => [String(f.hypothesis_id), String(f.test_hypothesis)]));
-  const mustRows = must.map(f => {
-    const state = known(MUST_KEY, f.delivery_status);
-    return record(f.id, { must_have: f.title, tests: f.test_hypothesis, state: state ? MUST_LABEL[state] : f.delivery_status ?? null, owner: f.owner, due: f.due_date },
-      { state, hypothesis: f.test_hypothesis != null ? String(f.hypothesis_id) : 'none' }, { due_date: f.due_date ?? null });
-  });
-  return { card: card('prototype-mvp', state, series, 'Since first completion', state === 'too_little' ? 'Fewer than three completion dates are recorded.' : state === 'empty' ? 'No must-haves yet. The burn-up toward the ship date appears here.' : null, state === 'empty' ? next(p, 'prototype-mvp', 'Add must-have', true) : next(p, 'prototype-mvp', missing ? `Complete ${missing.title}` : null)),
+  const state = total === 0 ? 'empty' : points.length < 3 ? 'too_little' : 'ok';
+  let mustRows: RecordRow[] = [];
+  let hypotheses: Filter['options'] = [];
+  let paged: ModuleRead['paged'];
+  if (opts.rows) {
+    const sql = opts.query ? listPageSql(MUST_LIST, opts.query) : null;
+    if (sql) {
+      const read = await sqlPage(env, MUST_COLS, MUST_FROM, sql, p.id, total);
+      mustRows = read.found.map(mustRow);
+      paged = read.paged;
+      // The filter offers every must-have's hypothesis, not the page's: one row per distinct hypothesis.
+      hypotheses = mustHypothesisOptions(rows(await env.DB.prepare(
+        `SELECT DISTINCT f.hypothesis_id, h.claim AS test_hypothesis
+           FROM mvp_features f LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
+          WHERE f.project_id = ? AND f.is_must_have = 1`,
+      ).bind(p.id).all<any>()));
+    } else {
+      const all = await mustHaves(env, p.id);
+      mustRows = all.map(mustRow);
+      hypotheses = mustHypothesisOptions(all);
+    }
+  }
+  return { card: card('prototype-mvp', state, series, 'Since first completion', state === 'too_little' ? 'Fewer than three completion dates are recorded.' : state === 'empty' ? 'No must-haves yet. The burn-up toward the ship date appears here.' : null, state === 'empty' ? next(p, 'prototype-mvp', 'Add must-have', true) : next(p, 'prototype-mvp', missing != null ? `Complete ${missing}` : null)),
     cols: [['must_have', 'Must-have'], ['tests', 'Tests'], ['state', 'State'], ['owner', 'Owner'], ['due', 'Due']].map(([key, label]) => ({ key, label })),
     rows: mustRows,
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(MUST_LABEL)) },
-      { key: 'hypothesis', label: 'Hypothesis', options: optionsOf(mustRows, 'hypothesis', id => id === 'none' ? 'No hypothesis' : tests.get(id) ?? id) }],
-    sort: { key: 'state', label: 'State' }, orders: { state: ['blocked', 'in_progress', 'not_started', 'done'] } },
-    facts: { done: done.length, total: must.length, target_date: p.mvp_target_date },
+      { key: 'hypothesis', label: 'Hypothesis', options: hypotheses }],
+    sort: { key: 'state', label: 'State' }, orders: { state: [...MUST_ORDERS.state] } },
+    ...(paged ? { paged } : {}),
+    facts: { done: doneCount, total, target_date: p.mvp_target_date },
     // D1083 (#2948): From Lovable, the project's one app link, under From GitHub.
     // D1098 (#2963): From Vercel, the Live strip and each must-have's preview.
     ...(opts.parts ? { parts: {
@@ -482,7 +564,7 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
     { column: i.kanban_status ?? null, theme: i.feedback_theme ?? null, kpi: i.kpi_key ?? null },
     { objective: i.objective, kanban_status: i.kanban_status ?? null, owner_user_id: i.owner_user_id ?? null, target_date: i.target_date ?? null,
       kpi_key: i.kpi_key ?? null, feedback_theme: i.feedback_theme ?? null, feature_id: i.feature_id ?? null }));
-  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : { text: 'Add item', href: `/build/roadmap?project_id=${p.id}` }),
+  return { card: card('product-roadmap', items.length ? 'ok' : 'empty', series, 'All time', items.length ? null : 'No roadmap items yet. Now, Next and Later appear here.', items.length ? next(p, 'product-roadmap', items.find(i => i.kanban_status === 'next') ? 'Move the next planned item into Now' : null) : next(p, 'product-roadmap', 'Add item', true)),
     cols: [['item', 'Item'], ['column', 'Column'], ['moves', 'Moves'], ['owner', 'Owner'], ['date', 'Date']].map(([key, label]) => ({ key, label })),
     rows: itemRows,
     list: { filters: [{ key: 'column', label: 'Column', options: options(Object.entries(COLUMN_LABEL)) }, { key: 'theme', label: 'Theme', options: optionsOf(itemRows, 'theme') }, { key: 'kpi', label: 'KPI', options: optionsOf(itemRows, 'kpi') }],
@@ -599,7 +681,7 @@ async function founding(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = F
   }, { role: h.founder_role ?? null, equity: h.ownership_pct == null ? null : number(h.ownership_pct) },
   { role: h.founder_role ?? null, ownership_pct: h.ownership_pct ?? null }));
   const state = !founderRows.length ? 'empty' : !equityKnown ? 'not_recorded' : equityTotal > 0 || withVesting.length ? 'ok' : 'too_little';
-  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: '/raise/cap-table' } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
+  return { card: card('founding-team', state, series, 'Today', state === 'not_recorded' ? 'One or more founder ownership percentages are not recorded.' : state === 'empty' ? 'No founders yet. The equity split and vesting appear here.' : state === 'too_little' ? 'Ownership percentages sum to zero; no split can be drawn.' : null, state === 'empty' ? { text: 'Add founder', href: `/raise/cap-table?project=${p.id}` } : next(p, 'founding-team', founderRows.find(h => !h.start_date) ? 'Record founder vesting' : null)),
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
