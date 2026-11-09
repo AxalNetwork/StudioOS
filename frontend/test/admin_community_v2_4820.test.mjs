@@ -263,7 +263,7 @@ test('mounted D4820: with nothing waiting, the queue is one line', async () => {
   const n = await mount(half);
   try {
     assert.ok(!n.has('community-queue-clear'), 'a queue that could not be read was called clear');
-    assert.match(n.of('community-card-needs'), /job board could not be read, so only events are listed/);
+    assert.match(n.of('community-card-needs'), /job board could not be read, so only events and experts are listed/);
   } finally { await n.unmount(); }
 });
 
