@@ -268,3 +268,12 @@ export const MOVED = {
   pipeline: 'The investor pipeline is now Capital relationships › Pipeline.',
   match: 'Investor match is now Capital relationships › Match.',
 };
+
+/**
+ * D5079 (#5079) — what Capital relationships says when the pipeline is not
+ * this viewer's to read. It is not an unreadable store and not an empty one:
+ * the platform decided, and says nothing about what is recorded.
+ */
+export const REFUSED_LINE = 'This venture’s capital relationships are not yours to read. Switch company, or ask its founder for access.';
+/** The same distinction for one block, when only that block's read is refused. */
+export const ROUND_REFUSED_LINE = 'This venture’s round is not yours to read. That is not a claim that nobody has committed.';
