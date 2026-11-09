@@ -27,7 +27,7 @@
  * D205 — HQ ANSWERS HERE. `PATCH /api/admin/escalations/:uid` (D112) had no
  * caller, so an escalation sat on HQ's board until its SLA passed and D143's
  * sweep emailed HQ a link to a list with no control on it. Each open
- * escalation now opens a decision panel on `DsrClose`'s shape. What comes back
+ * escalation now opens a decision panel on the shape of the DSR close (now `security/PrivacyActions.jsx`). What comes back
  * is two facts, never one: the decision is recorded at HQ, and the branch did
  * or did not receive it. The second is shown only for this session, because the
  * board keeps the decision and not whether it arrived.
