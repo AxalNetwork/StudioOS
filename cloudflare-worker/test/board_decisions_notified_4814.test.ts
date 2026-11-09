@@ -9,12 +9,12 @@
  * Delivery is made to fail here by a test-only trigger that refuses every
  * inbox insert; `notify` catches that and answers null, which is what a full
  * inbox store or a member who turned every channel off also look like.
- * The database is the full migration chain, as D1043's test builds it.
+ * The database is the baseline plus every migration, built once per run (D4133).
  */
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -24,20 +24,10 @@ import wellbeing from '../src/routes/wellbeing.ts';
 import testers from '../src/routes/admin_product_testers.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { copySchemaTo } from './_schema_once.mjs';
 
 const scratch = mkdtempSync(join(tmpdir(), 'approvals-4814-notified-'));
-const seed = join(scratch, 'chain.sqlite');
-{
-  const read = (p: string) => readFileSync(p, 'utf8');
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
-  db.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-  const dir = 'cloudflare-worker/sql/migrations';
-  for (const name of readdirSync(dir).filter((n) => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > BASELINE_CUTOFF).sort(compareMigrations)) db.exec(read(`${dir}/${name}`));
-  for (const name of readdirSync(dir).filter((n) => /^\d{12}_.*\.sql$/.test(n)).sort()) { try { db.exec(read(`${dir}/${name}`)); } catch { /* applied by the numbered chain */ } }
-  db.prepare('VACUUM INTO ?').run(seed);
-  db.close();
-}
+const seed = copySchemaTo(join(scratch, 'chain.sqlite'));
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
 const SECRET = 'x'.repeat(48);
