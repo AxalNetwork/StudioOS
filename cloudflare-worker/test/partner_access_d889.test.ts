@@ -54,7 +54,7 @@ async function fixture() {
            CREATE TABLE watchlist_items (id INTEGER PRIMARY KEY, owner_user_id INTEGER, converted_deal_id INTEGER, company_id INTEGER);`);
   db.exec(ddl('119'));
   db.exec(ddl('125'));
-  db.exec(file('437'));
+  db.exec(file('437')); db.exec(file('202611091055'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(OWNER, 'founder', 100, 'Owner', 'owner@example.test');
   u.run(ADMIN, 'admin', null, 'Admin', 'admin@example.test');

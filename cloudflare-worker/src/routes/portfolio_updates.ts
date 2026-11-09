@@ -29,6 +29,10 @@ import { PublishRefusal, canPublish } from '../services/publishCore';
 import { createDraft, publishPart } from '../services/publishSources';
 import { isTeamViewer } from '../services/mercury/growFeeds';
 import { isSupportSession } from '../integrations/providers/mercury';
+import {
+  UpdateChanged, correctPublished, ensurePublished, listVersions, reserveDeliveries, runDeliveries,
+  type DeliveryProvider, type DeliveryRow, type LifecycleRow, type Recipient,
+} from '../services/updateLifecycle';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -68,6 +72,7 @@ type UpdateRow = {
   status: string; submitted_at: string | null; created_at: string; updated_at: string;
   metrics_json?: string | null;
   kind?: string;
+  published_version?: number | null;
 };
 
 function isInvestorSide(user: User): boolean {
@@ -113,6 +118,23 @@ async function canShareUpdate(env: Env, user: User, projectId: number, founderId
 }
 
 const shareDenied = { detail: 'You can read this venture but not share its updates.', code: 'share_not_allowed' };
+const changedSinceOpen = (c: any) => c.json({ detail: new UpdateChanged().message, code: 'changed_since_open' }, 409);
+
+/*
+ * D4636: who may change, submit, send or re-ask an EXISTING update. An admin;
+ * otherwise its author, and only while they still hold write authority on the
+ * venture now (`canShareUpdate`, the same check that let them create it). The
+ * check runs on every operation, so a seat removed or downgraded after the
+ * update was written stops the next change, submission or send.
+ * Returns the refusal to answer with, or null when the caller may proceed.
+ */
+async function operateRefusal(c: any, user: User, u: { author_user_id: number; project_id: number }): Promise<Response | null> {
+  if (isAdmin(user)) return null;
+  if (u.author_user_id !== user.id) return c.json({ detail: 'Forbidden' }, 403);
+  const founderId = await projectFounderId(c.env, u.project_id);
+  if (founderId === undefined || !(await canShareUpdate(c.env, user, u.project_id, founderId))) return c.json(shareDenied, 403);
+  return null;
+}
 
 // D1059 (#2929): a report is edited, sent and corrected from Reporting only, where its figures are re-read and frozen.
 const REPORT_ROW = { detail: 'This is a report. Change and send it from Reporting, where its figures are checked and frozen.', code: 'report_row' };
@@ -162,6 +184,8 @@ async function dto(env: Env, u: UpdateRow): Promise<any> {
     project: proj || null,
     period: u.period, title: u.title, body: u.body, kpis, figures,
     status: u.status, submitted_at: u.submitted_at,
+    // D4636: the published version the content is, and when it was first published (never moved by a re-submission).
+    version: u.published_version ?? null, published_at: u.status === 'submitted' ? u.submitted_at : null,
     created_at: u.created_at, updated_at: u.updated_at,
   };
 }
@@ -219,22 +243,24 @@ r.post('/', async (c) => {
     if (!(await canShareUpdate(c.env, user, projectId, founderId))) return c.json(shareDenied, 403);
     const submit = body.status === 'submitted';
     const uid = newUid();
+    const at = nowIso();
+    // Written as a draft; a submitted one is then published as version 1 (D4636), so every publication has its version.
     const ins = await c.env.DB.prepare(
       `INSERT INTO portfolio_updates (uid, project_id, author_user_id, period, title, body, kpis_json, status, submitted_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', NULL, ?, ?)`
     ).bind(
       uid, projectId, user.id,
       body.period ? String(body.period).slice(0, 32) : null,
       title,
       body.body ? String(body.body).slice(0, 20000) : null,
       body.kpis != null ? JSON.stringify(body.kpis) : null,
-      submit ? 'submitted' : 'draft',
-      submit ? nowIso() : null,
-      nowIso(), nowIso(),
+      at, at,
     ).run();
-    const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind((ins as any).meta?.last_row_id).first<UpdateRow>();
+    let u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind((ins as any).meta?.last_row_id).first<UpdateRow>();
     if (submit && u) {
-      c.executionCtx.waitUntil(notifyProjectFollowers(c.env, projectId, u));
+      const pub = await ensurePublished(c.env, u as unknown as LifecycleRow, user.id, at);
+      u = pub.row as unknown as UpdateRow;
+      if (pub.published) c.executionCtx.waitUntil(notifyProjectFollowers(c.env, projectId, u));
     }
     return c.json(await dto(c.env, u!), 201);
   } catch (e) { return mapError(c, e); }
@@ -269,24 +295,49 @@ r.get('/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// PUT /api/portfolio-updates/:uid — author edits own draft (or admin)
+// GET /api/portfolio-updates/:uid/versions — D4636: the published versions, each with who published it, when and why.
+// The same readers as the detail.
+r.get('/:uid/versions', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const u = await loadOwned(c, user);
+    if ((u as any)?._notfound) return c.json({ detail: 'Not found' }, 404);
+    if ((u as any)?._forbidden) return c.json({ detail: 'Forbidden' }, 403);
+    const row = u as UpdateRow;
+    return c.json({ uid: row.uid, version: row.published_version ?? null, items: await listVersions(c.env, row.id) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// PUT /api/portfolio-updates/:uid — the author changes a draft, or corrects a published update as its next version (D4636)
 r.put('/:uid', async (c) => {
   try {
     const user = await requireAuth(c);
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<UpdateRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
     if (u.kind === 'report') return c.json(REPORT_ROW, 409);
-    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const refused = await operateRefusal(c, user, u);
+    if (refused) return refused;
     const body = await c.req.json().catch(() => ({} as any));
-    await c.env.DB.prepare(
-      `UPDATE portfolio_updates SET period=?, title=?, body=?, kpis_json=?, updated_at=? WHERE id=?`
-    ).bind(
-      body.period !== undefined ? (body.period ? String(body.period).slice(0, 32) : null) : u.period,
-      body.title !== undefined ? (body.title ? String(body.title).slice(0, 300) : u.title) : u.title,
-      body.body !== undefined ? (body.body ? String(body.body).slice(0, 20000) : null) : u.body,
-      body.kpis !== undefined ? (body.kpis != null ? JSON.stringify(body.kpis) : null) : u.kpis_json,
-      nowIso(), u.id,
-    ).run();
+    const next = {
+      period: body.period !== undefined ? (body.period ? String(body.period).slice(0, 32) : null) : u.period,
+      title: body.title !== undefined ? (body.title ? String(body.title).slice(0, 300) : u.title) : u.title,
+      body: body.body !== undefined ? (body.body ? String(body.body).slice(0, 20000) : null) : u.body,
+      kpis_json: body.kpis !== undefined ? (body.kpis != null ? JSON.stringify(body.kpis) : null) : u.kpis_json,
+    };
+    if (u.status === 'submitted' || u.published_version != null) {
+      // D4636: a published update is never edited in place. The change is a correction: the next version, with its actor and reason.
+      const reason = typeof body.correction_reason === 'string' && body.correction_reason.trim() ? body.correction_reason.trim() : null;
+      if (reason && reason.length > 280) return c.json({ detail: 'A correction reason is at most 280 characters', field: 'correction_reason' }, 400);
+      const expected = body.expected_version == null ? null : Number(body.expected_version);
+      try { await correctPublished(c.env, u as unknown as LifecycleRow, next, user.id, reason, nowIso(), Number.isInteger(expected) ? expected : null); }
+      catch (e) { if (e instanceof UpdateChanged) return changedSinceOpen(c); throw e; }
+    } else {
+      // A draft changes in place, and only while it is still a draft: a publication that landed first is not overwritten.
+      const res = await c.env.DB.prepare(
+        `UPDATE portfolio_updates SET period=?, title=?, body=?, kpis_json=?, updated_at=? WHERE id=? AND status = 'draft' AND published_version IS NULL`
+      ).bind(next.period, next.title, next.body, next.kpis_json, nowIso(), u.id).run();
+      if (Number((res as any)?.meta?.changes ?? 0) !== 1) return changedSinceOpen(c);
+    }
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind(u.id).first<UpdateRow>();
     return c.json(await dto(c.env, fresh!));
   } catch (e) { return mapError(c, e); }
@@ -299,15 +350,15 @@ r.post('/:uid/submit', async (c) => {
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<UpdateRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
     if (u.kind === 'report') return c.json(REPORT_ROW, 409);
-    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const wasSubmitted = u.status === 'submitted';
-    await c.env.DB.prepare("UPDATE portfolio_updates SET status='submitted', submitted_at=?, updated_at=? WHERE id=?")
-      .bind(nowIso(), nowIso(), u.id).run();
-    const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind(u.id).first<UpdateRow>();
-    if (!wasSubmitted && fresh) {
-      c.executionCtx.waitUntil(notifyProjectFollowers(c.env, fresh.project_id, fresh));
-    }
-    return c.json(await dto(c.env, fresh!));
+    const refused = await operateRefusal(c, user, u);
+    if (refused) return refused;
+    // D4636: submitting publishes version 1 once. Submitting again changes nothing: the original publication and its time stand.
+    let pub;
+    try { pub = await ensurePublished(c.env, u as unknown as LifecycleRow, user.id, nowIso()); }
+    catch (e) { if (e instanceof UpdateChanged) return changedSinceOpen(c); throw e; }
+    const fresh = pub.row as unknown as UpdateRow;
+    if (pub.published) c.executionCtx.waitUntil(notifyProjectFollowers(c.env, fresh.project_id, fresh));
+    return c.json(await dto(c.env, fresh));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -507,8 +558,13 @@ r.put('/:uid/share', async (c) => {
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
     if (u.kind === 'report') return c.json(REPORT_ROW, 409);
-    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const refused = await operateRefusal(c, user, u);
+    if (refused) return refused;
     if (u.sent_at) return c.json({ detail: 'This update was sent and is read-only' }, 409);
+    // D4636: the sheet edits a draft. A published update changes only as a correction.
+    if (u.status === 'submitted' || u.published_version != null) {
+      return c.json({ detail: 'This update is published. Change it as a correction.', code: 'update_published' }, 409);
+    }
     const body = await c.req.json().catch(() => ({} as any));
     const start = body.period_start == null ? u.period_start : String(body.period_start);
     const end = body.period_end == null ? u.period_end : String(body.period_end);
@@ -555,7 +611,8 @@ r.put('/:uid/share', async (c) => {
     }
     await c.env.DB.prepare(
       `UPDATE portfolio_updates SET period_start = ?, period_end = ?, period = ?, metrics_json = ?, highlights_json = ?,
-         lowlights_json = ?, audience_json = ?, network_includes_metrics = ?, updated_at = ? WHERE id = ?`,
+         lowlights_json = ?, audience_json = ?, network_includes_metrics = ?, updated_at = ?
+       WHERE id = ? AND status = 'draft' AND published_version IS NULL AND sent_at IS NULL`,
     ).bind(start, end, start ? start.slice(0, 7) : u.period, JSON.stringify(metrics), JSON.stringify(highlights),
       JSON.stringify(lowlights), JSON.stringify(audience), incl, nowIso(), u.id).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE id = ?').bind(u.id).first<ShareRow>();
@@ -563,8 +620,37 @@ r.put('/:uid/share', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// POST /api/portfolio-updates/:uid/send — the author sends it, once, through
-// the notification path (which mails people by their preferences). A pipeline
+// D4636: a page reads the latest sent version's deliveries (a row from before versions has none and is read as it was).
+/** The notification path as a delivery provider; each notification carries its delivery's uid. */
+function notificationProvider(env: Env, u: ShareRow, projectName: string | null, version: number): DeliveryProvider {
+  return {
+    async send(d: DeliveryRow) {
+      const id = await notify(env, {
+        userId: Number(d.user_id), type: 'followed_entity_news',
+        title: `${projectName ?? 'A company'} shared an update`,
+        body: d.audience === 'network' ? 'Asks for the Axal network' : (u.title || null),
+        link: `/updates/${u.uid}`,
+        payload: { update_uid: u.uid, audience: d.audience, version, delivery_uid: d.delivery_uid },
+        category: 'proactive_nudges',
+      });
+      return id == null ? null : String(id);
+    },
+    async find(d: DeliveryRow) {
+      const row = await env.DB.prepare(
+        `SELECT id FROM notifications_inbox WHERE user_id = ? AND json_valid(payload) AND json_extract(payload, '$.delivery_uid') = ? ORDER BY id LIMIT 1`,
+      ).bind(d.user_id, d.delivery_uid).first<{ id: number }>();
+      return row ? String(row.id) : null;
+    },
+  };
+}
+
+// POST /api/portfolio-updates/:uid/send — the author sends the update through
+// the notification path (which mails people by their preferences). D4636: the
+// send publishes the update if it is still a draft, reserves one delivery per
+// recipient for the published version, and attempts each reservation once.
+// Sending again is the retry: deliveries already made are left alone, a failed
+// one is attempted again, and an ambiguous one is checked against the
+// notification inbox (re-sent only with `resend_ambiguous: true`). A pipeline
 // investor with no Axal account is recorded as not delivered, never as sent.
 r.post('/:uid/send', async (c) => {
   try {
@@ -572,54 +658,39 @@ r.post('/:uid/send', async (c) => {
     const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first<ShareRow>();
     if (!u) return c.json({ detail: 'Not found' }, 404);
     if (u.kind === 'report') return c.json(REPORT_ROW, 409);
-    if (u.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
-    if (u.sent_at) return c.json({ detail: 'This update was already sent' }, 409);
+    const refused = await operateRefusal(c, user, u);
+    if (refused) return refused;
+    const opts = await c.req.json().catch(() => ({} as any));
     const choice = cleanAudience(jload(u.audience_json, {}));
     if (!choice.investors && !choice.team && !choice.network) return c.json({ detail: 'Choose who receives this update', field: 'audience' }, 400);
     const members = await audienceMembers(c.env, u.project_id, u.author_user_id);
     const proj = await c.env.DB.prepare('SELECT uid, name FROM projects WHERE id = ?').bind(u.project_id).first<{ uid: string; name: string }>();
     const seen = new Set<number>();
-    const rows: Array<{ audience: Audience; user_id: number | null; email: string | null; label: string | null }> = [];
+    const rows: Recipient[] = [];
     if (choice.investors) for (const i of members.investors) {
       if (i.user_id != null) { if (seen.has(i.user_id)) continue; seen.add(i.user_id); }
       rows.push({ audience: 'investor', user_id: i.user_id, email: i.email, label: i.label });
     }
     if (choice.team) for (const id of members.team) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'team', user_id: id, email: null, label: null }); } }
     if (choice.network) for (const id of members.network) { if (!seen.has(id)) { seen.add(id); rows.push({ audience: 'network', user_id: id, email: null, label: null }); } }
-    if (rows.length === 0) return c.json({ detail: 'Nobody is in the audience you chose yet', field: 'audience' }, 400);
-    const recorded = await c.env.DB.prepare('SELECT user_id, email, delivered_via FROM update_recipients WHERE update_id = ?').bind(u.id)
-      .all<{user_id:number|null;email:string|null;delivered_via:string|null}>();
-    const identity = (id: number|null, email: string|null) => id == null ? `email:${(email || '').toLowerCase()}` : `user:${id}`;
-    const already = new Set((recorded.results || []).map((x) => identity(x.user_id, x.email)));
-    const sentAt = nowIso();
-    let delivered = (recorded.results || []).filter((x) => x.delivered_via != null).length;
-    for (const rcp of rows) {
-      const key = identity(rcp.user_id, rcp.email);
-      if (already.has(key)) continue;
-      let via: string | null = null; let reason: string | null = null;
-      if (rcp.user_id != null) {
-        const id = await notify(c.env, {
-          userId: rcp.user_id, type: 'followed_entity_news',
-          title: `${proj?.name ?? 'A company'} shared an update`,
-          body: rcp.audience === 'network' ? 'Asks for the Axal network' : (u.title || null),
-          link: `/updates/${u.uid}`,
-          payload: { update_uid: u.uid, audience: rcp.audience },
-          category: 'proactive_nudges',
-        });
-        if (id != null) { via = 'notification'; delivered += 1; }
-        else reason = 'Not delivered: their notification settings or the inbox refused it';
-      } else {
-        reason = 'No Axal account for this email, so it was not sent';
-      }
-      await c.env.DB.prepare(
-        `INSERT INTO update_recipients (update_id, audience, user_id, email, label, delivered_via, not_delivered_reason) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(u.id, rcp.audience, rcp.user_id, rcp.email, rcp.label, via, reason).run();
-      already.add(key);
+    if (rows.length === 0) {
+      // Nobody to reach now: refused before anything is written, unless this version already has deliveries to reconcile.
+      const had = u.published_version == null ? null : await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM update_recipients ur JOIN portfolio_update_versions v ON v.id = ur.version_id WHERE v.update_id = ? AND v.version = ?`,
+      ).bind(u.id, u.published_version).first<{ n: number }>();
+      if (!Number(had?.n ?? 0)) return c.json({ detail: 'Nobody is in the audience you chose yet', field: 'audience' }, 400);
     }
-    await c.env.DB.prepare(
-      `UPDATE portfolio_updates SET status = 'submitted', submitted_at = COALESCE(submitted_at, ?), sent_at = ?, updated_at = ? WHERE id = ?`,
-    ).bind(sentAt, sentAt, sentAt, u.id).run();
-    return c.json({ uid: u.uid, sent_at: sentAt, recipients: already.size, delivered, not_delivered: already.size - delivered });
+    const at = nowIso();
+    let pub;
+    try { pub = await ensurePublished(c.env, u as unknown as LifecycleRow, user.id, at); }
+    catch (e) { if (e instanceof UpdateChanged) return changedSinceOpen(c); throw e; }
+    await reserveDeliveries(c.env, u.id, pub.version, rows, user.id, at);
+    // Publication state: the first send's time stands; delivery progress lives on each delivery row.
+    await c.env.DB.prepare(`UPDATE portfolio_updates SET sent_at = COALESCE(sent_at, ?), updated_at = ? WHERE id = ?`).bind(at, at, u.id).run();
+    const sentAt = (await c.env.DB.prepare('SELECT sent_at FROM portfolio_updates WHERE id = ?').bind(u.id).first<{ sent_at: string }>())?.sent_at ?? at;
+    const summary = await runDeliveries(c.env, pub.version.id, notificationProvider(c.env, { ...u, ...(pub.row as any) }, proj?.name ?? null, pub.version.version),
+      { resendAmbiguous: opts?.resend_ambiguous === true });
+    return c.json({ uid: u.uid, sent_at: sentAt, version: pub.version.version, ...summary });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -649,17 +720,19 @@ r.get('/:uid/page', async (c) => {
       `SELECT r.*, a.uid AS ask_uid FROM update_ask_replies r JOIN update_asks a ON a.id = r.ask_id WHERE a.update_id = ? ORDER BY r.id DESC`,
     ).bind(u.id).all<any>();
     const recipients = await c.env.DB.prepare(
-      `SELECT ur.audience, ur.user_id, ur.delivered_via, ur.not_delivered_reason, ur.opened_at,
+      `SELECT ur.audience, ur.user_id, ur.delivered_via, ur.not_delivered_reason, ur.opened_at, ur.delivery_state,
         COALESCE(ur.label, usr.name) AS label,
         CASE WHEN ur.user_id IS NULL THEN 0 ELSE EXISTS(SELECT 1 FROM update_ask_replies rp
           JOIN update_asks a ON a.id = rp.ask_id WHERE a.update_id = ur.update_id AND rp.replier_user_id = ur.user_id) END AS replied
        FROM update_recipients ur LEFT JOIN users usr ON usr.id = ur.user_id
-       WHERE ur.update_id = ? AND ur.audience <> 'network' ORDER BY ur.id`,
+       WHERE ur.update_id = ? AND ur.audience <> 'network' AND (ur.version_id IS NULL OR ur.version_id = (SELECT MAX(x.version_id) FROM update_recipients x WHERE x.update_id = ur.update_id))
+       ORDER BY ur.id`,
     ).bind(u.id).all<any>();
     const network = await c.env.DB.prepare(`SELECT COUNT(*) AS sent, COUNT(opened_at) AS opened,
       SUM(CASE WHEN user_id IS NOT NULL AND EXISTS(SELECT 1 FROM update_ask_replies rp JOIN update_asks a ON a.id = rp.ask_id
         WHERE a.update_id = update_recipients.update_id AND rp.replier_user_id = update_recipients.user_id) THEN 1 ELSE 0 END) AS replied
-      FROM update_recipients WHERE update_id = ? AND audience = 'network'`).bind(u.id).first<{sent:number;opened:number;replied:number}>();
+      FROM update_recipients WHERE update_id = ? AND audience = 'network'
+        AND (version_id IS NULL OR version_id = (SELECT MAX(x.version_id) FROM update_recipients x WHERE x.update_id = update_recipients.update_id))`).bind(u.id).first<{sent:number;opened:number;replied:number}>();
     const byAsk = new Map<string, any[]>();
     for (const x of replies.results || []) byAsk.set(x.ask_uid, [...(byAsk.get(x.ask_uid) || []), x]);
     const count = (a: Audience) => (recipients.results || []).filter((x: any) => x.audience === a).length;
@@ -753,15 +826,16 @@ r.post('/asks/:askUid/ask-again', async (c) => {
   try {
     const user = await requireAuth(c);
     const ask = await c.env.DB.prepare(
-      `SELECT a.*, u.uid AS update_uid, u.sent_at, u.author_user_id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id WHERE a.uid = ?`,
+      `SELECT a.*, u.uid AS update_uid, u.sent_at, u.author_user_id, u.project_id FROM update_asks a JOIN portfolio_updates u ON u.id = a.update_id WHERE a.uid = ?`,
     ).bind(c.req.param('askUid')).first<any>();
     if (!ask || !ask.sent_at) return c.json({ detail: 'Not found' }, 404);
-    if (ask.author_user_id !== user.id && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const refused = await operateRefusal(c, user, { author_user_id: ask.author_user_id, project_id: ask.project_id });
+    if (refused) return refused;
     const n = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM update_ask_replies WHERE ask_id = ?').bind(ask.id).first<{ n: number }>();
     if (!canAskAgain(ask.sent_at, Number(n?.n ?? 0), ask.asked_again_at)) {
       return c.json({ detail: 'An ask can be asked again once it has had no reply for 14 days' }, 409);
     }
-    const rcps = await c.env.DB.prepare('SELECT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
+    const rcps = await c.env.DB.prepare('SELECT DISTINCT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
     for (const x of rcps.results || []) {
       await notify(c.env, { userId: x.user_id, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
         link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' });
