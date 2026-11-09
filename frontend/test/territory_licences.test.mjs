@@ -160,7 +160,9 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
   // A guard scoped to the file a helper happens to live in cannot see the copy
   // in the next file, which is how six of them accumulated.
-  assert.match(s, /import \{ bpsPercent as pct \} from '(\.\.\/)+lib\/bps'/);
+  // D4819 part 3: the detail's rates are drawn by the Overview's model, beside the page.
+  const overview = readFileSync(resolve(root, 'frontend/src/pages/admin/licenceOverviewModel.js'), 'utf8');
+  assert.match(s + overview, /import \{ bpsPercent as pct \} from '(\.\.\/)+lib\/bps'/);
   assert.ok(
     !/\/ 100\)\.toFixed\(/.test(s),
     'bps → percent is lib/bps.js\'s, not a copy in this page',
