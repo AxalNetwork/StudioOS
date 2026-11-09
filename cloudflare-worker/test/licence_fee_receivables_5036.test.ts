@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 
-import revenue, { quarterFromParam, quarterOf } from '../src/routes/admin_revenue.ts';
+import revenue, { SUMMARY_TEMPORAL } from '../src/routes/admin_revenue.ts';
 import {
   expectedGaps, isOverdue, licenceFeeReceivables, outstandingOf, periodBuckets, receivableBuckets,
 } from '../src/services/licenceFeeReceivables.ts';
@@ -209,20 +209,17 @@ test('an unreadable invoice ledger says so and leaves the run-rate standing', as
   assert.equal(r.body.licence_fees.available, true, 'the run-rate went down with the ledger');
 });
 
-test('the summary takes a period, and refuses a malformed or unstarted one', async () => {
+test('the invoice ledger follows the summary\'s period (D5039\'s ?period=), and says so in `temporal`', async () => {
   const db = freshDb();
   licence(db, 'FR-001');
   invoice(db, 'FR-001', { amount: 400_000, issued: '2026-02-10', due: '2026-03-01' });
   const r = await call(db, '?period=2026-Q1');
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.quarter.key, '2026-Q1');
+  assert.equal(r.body.licence_invoices.period.label, 'Q1 2026');
   assert.equal(r.body.licence_invoices.by_currency[0].invoiced_cents, 400_000, 'the period did not reach the invoice read');
-  assert.equal((await call(db, '?period=2026-Q5')).status, 400);
-  assert.equal((await call(db, '?period=2999-Q1')).status, 400, 'a future quarter is a page of zeros, refused');
-  const now = new Date('2026-09-15T12:00:00Z');
-  assert.deepEqual(quarterFromParam(undefined, now), quarterOf(now));
-  assert.equal(quarterFromParam('2026-Q4', now), null);
-  assert.equal(quarterFromParam('2026-Q3', now)?.start, '2026-07-01');
+  assert.equal(r.body.temporal.licence_invoices, 'period');
+  assert.equal(SUMMARY_TEMPORAL.licence_invoices, 'period');
+  assert.equal((await call(db, '?period=2026-Q5')).status, 400, 'a malformed period is refused, as D5039 refuses it');
 });
 
 test('the pure helpers agree with the route', () => {

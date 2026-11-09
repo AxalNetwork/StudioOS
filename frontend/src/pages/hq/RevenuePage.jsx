@@ -18,23 +18,23 @@
  * point-in-time figures (the run-rate, receivables, promotion codes), live
  * ones (disputes) and rolling ones (refunds) say so with their own label.
  *
- * NO CROSS-CURRENCY TOTAL. The cockpit tiles for Invoiced, Collected,
- * Outstanding and Overdue stay Not recorded until a reconciled revenue ledger
- * exists (the reason is in the Data coverage drawer). The licence-fee invoice
- * ledger is a separate zone (D5036): invoiced, collected, outstanding and
- * overdue for licence invoices, per currency, never summed.
+ * NO CROSS-CURRENCY TOTAL, and no figure without a ledger behind it: Invoiced,
+ * Collected, Outstanding, Overdue and the trend are Not recorded until
+ * invoice-backed licence revenue and the reconciled ledger exist, with the
+ * reason once, in the Data coverage drawer.
  *
- * WRITES, AS TODAY. The statement entry (D453/D458/D514) and the ceiling editor
- * (D228) are today's controls. A refund is reviewed before money moves (D5037,
- * `RefundReviewFlow`). The licence list is still read whole, and only for the
- * ceiling editor's picker.
+ * WRITES, AS TODAY. This slice redesigns no write. The statement entry
+ * (D453/D458/D514), the ceiling editor (D228) and the refund (D224, behind the
+ * step-up) are today's controls, moved unchanged into the drawer and the
+ * sections that own them; the governed flows the canvas draws are the next
+ * slice. The licence list is still read whole, and only for the ceiling
+ * editor's picker; the scoped picker is later work.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 import { licenceLedgerApi } from '../../lib/api/licenceLedger';
 import { reportError } from '../../lib/log';
-import { RailFrame, WorkerRail, Unreadable, Unrecorded } from '../../ui';
-import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
+import { RailFrame, WorkerRail, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import { RevenueHeader, DataCoverageDrawer } from './revenue/RevenueHeader';
 import { ExecutiveSummary, NeedsAttention } from './revenue/ExecutiveSummary';
@@ -42,9 +42,11 @@ import { AiEconomicsSection, RevenueStreams, RevenueTrend } from './revenue/Reve
 import { ReceivablesSection, StatementDrawer } from './revenue/Receivables';
 import { SubsidiariesSection } from './revenue/Subsidiaries';
 import { BillingExceptions } from './revenue/BillingExceptions';
+// D5037: the refund is looked up and reviewed before money moves; the Worker refuses one without a review.
+import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
 import { PromotionsSection } from './revenue/Promotions';
 import {
-  UNAVAILABLE, attentionItems, coverageSources, isReady, money, periodLabel, periodOptions,
+  UNAVAILABLE, attentionItems, coverageSources, isReady, periodLabel, periodOptions,
 } from './revenue/revenueModel.js';
 
 // The parts' exports, from the page as they always were, so callers and tests read one module.
@@ -60,167 +62,6 @@ export {
 export { StatementDrawHeld } from './revenue/Receivables';
 export { ceilingPayload, CEILING_ENFORCEMENT, CeilingEditor } from './revenue/Promotions';
 export { TokenPnl } from './revenue/RevenueStreams';
-
-function Stat({ label, value, note, tone = 'text-axal-ink' }) {
-  return (
-    <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
-      <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
-      <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
-      {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
-    </div>
-  );
-}
-
-/**
- * D5036 — the quarters the page offers: the current one and the `count - 1` before it, newest first, as YYYY-Qn.
- * Never a future quarter: the Worker refuses one, because nothing has been invoiced in it.
- */
-export function recentQuarters(now, count = 8) {
-  const out = [];
-  let y = now.getUTCFullYear();
-  let q = Math.floor(now.getUTCMonth() / 3) + 1;
-  for (let i = 0; i < count; i += 1) {
-    out.push(`${y}-Q${q}`);
-    q -= 1;
-    if (q === 0) { q = 4; y -= 1; }
-  }
-  return out;
-}
-
-/** The reason a billable licence cannot be invoiced, as the page says it. */
-export const CANNOT_INVOICE = Object.freeze({
-  no_annual_fee: 'records no annual fee',
-  no_start_date: 'records no start date, so its licence year cannot be told',
-});
-
-/**
- * D5036 — licence fees as the invoice ledger records them. Pure over `licence_invoices` (null while loading), so a
- * test draws every state. Four concepts, never one: the run-rate is in "By stream"; here are invoiced, collected and
- * outstanding for the invoices issued in the period, the receivable as at today with its overdue part listed, void
- * invoices apart, and the billable years nobody invoiced. One row per currency, never summed across them.
- */
-export function LicenceInvoices({ invoices, onRetry }) {
-  if (!invoices) return <p className="text-[12px] text-axal-faint">Loading the invoice ledger…</p>;
-  if (invoices.available !== true) {
-    return (
-      <div data-testid="hq-revenue-invoices-unreadable">
-        <Unreadable what="The licence-fee invoice ledger" claim="This is not a claim that nothing was invoiced or that nothing is owed." onRetry={onRetry} />
-      </div>
-    );
-  }
-  const th = 'py-1.5 pr-3';
-  const head = 'border-b border-axal-hairline text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint';
-  const gaps = invoices.expected_not_invoiced || [];
-  const cannot = invoices.cannot_invoice || [];
-  const overdue = invoices.overdue || [];
-  return (
-    <div data-testid="hq-revenue-invoices">
-      {invoices.by_currency.length === 0 ? (
-        <p className="text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-revenue-invoices-none">
-          No licence-fee invoice was issued in {invoices.period?.label}. That is a fact of the ledger, not a reading of zero revenue: the run-rate above is what the terms would bring in.
-        </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[12.5px]">
-            <thead>
-              <tr className={head}>
-                <th className={th}>Currency</th>
-                <th className={th}>Invoiced</th>
-                <th className={th}>Collected</th>
-                <th className={th}>Outstanding</th>
-                <th className={th}>Overdue</th>
-                <th className="py-1.5">Void</th>
-              </tr>
-            </thead>
-            <tbody data-testid="hq-revenue-invoices-period">
-              {invoices.by_currency.map((b) => (
-                <tr key={b.currency} className="border-b border-axal-hairline/60">
-                  <td className="py-2 pr-3 font-medium">{b.currency}</td>
-                  <td className="py-2 pr-3 tabular-nums">{money(b.invoiced_cents, b.currency)}<div className="text-[10.5px] text-axal-faint">{b.invoices} {b.invoices === 1 ? 'invoice' : 'invoices'}</div></td>
-                  <td className="py-2 pr-3 tabular-nums">{money(b.collected_cents, b.currency)}</td>
-                  <td className="py-2 pr-3 tabular-nums">{money(b.outstanding_cents, b.currency)}</td>
-                  <td className={`py-2 pr-3 tabular-nums ${b.overdue_invoices ? 'text-red-700 dark:text-red-300' : ''}`}>
-                    {b.overdue_invoices ? `${money(b.overdue_cents, b.currency)} · ${b.overdue_invoices}` : 'None'}
-                  </td>
-                  <td className="py-2 tabular-nums text-axal-faint">{b.void_invoices ? `${b.void_invoices} · ${money(b.void_cents, b.currency)}, in no other figure` : 'None'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4" data-testid="hq-revenue-receivable">
-        {invoices.receivable_by_currency.length === 0
-          ? <Stat label="Receivable today" value="None" note="no open licence-fee invoice, in any period" />
-          : invoices.receivable_by_currency.map((b) => (
-            <Stat
-              key={b.currency}
-              label={`Receivable today · ${b.currency}`}
-              value={money(b.outstanding_cents, b.currency)}
-              tone={b.overdue_invoices ? 'text-red-700 dark:text-red-300' : 'text-axal-ink'}
-              note={`${b.open_invoices} open${b.overdue_invoices ? ` · ${money(b.overdue_cents, b.currency)} overdue on ${b.overdue_invoices}` : ' · none overdue'}`}
-            />
-          ))}
-      </div>
-
-      {overdue.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-red-700 dark:text-red-300">Overdue · {invoices.overdue_total}</div>
-          <table className="mt-1 w-full text-left text-[12px]">
-            <thead>
-              <tr className={head}>
-                <th className={th}>Licence</th>
-                <th className={th}>Invoice</th>
-                <th className={th}>Due</th>
-                <th className="py-1.5">Outstanding</th>
-              </tr>
-            </thead>
-            <tbody data-testid="hq-revenue-invoices-overdue">
-              {overdue.map((o) => (
-                <tr key={o.uid} className="border-b border-axal-hairline/60">
-                  <td className="py-2 pr-3 font-medium">{o.brand_name || o.licence_ref || o.licence_uid}</td>
-                  <td className="py-2 pr-3 text-axal-muted">{o.reference} · {o.period_label}</td>
-                  <td className="py-2 pr-3 tabular-nums">{o.due_at} · {o.days_overdue} {o.days_overdue === 1 ? 'day' : 'days'} late</td>
-                  <td className="py-2 tabular-nums">{money(o.outstanding_cents, o.currency)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {invoices.overdue_total > overdue.length && (
-            <p className="mt-1 text-[10.5px] text-axal-faint">The {overdue.length} longest overdue are listed; the totals above count all {invoices.overdue_total}.</p>
-          )}
-        </div>
-      )}
-
-      {(gaps.length > 0 || cannot.length > 0) && (
-        <div className="mt-3 rounded-xl border border-amber-300 p-2.5 dark:border-amber-500/40" data-testid="hq-revenue-invoice-gaps">
-          <div className="text-[11px] font-extrabold uppercase tracking-[.08em] text-amber-800 dark:text-amber-300">Expected, not invoiced</div>
-          <ul className="mt-1 space-y-0.5 text-[11.5px] leading-relaxed text-axal-muted">
-            {gaps.map((g) => (
-              <li key={`${g.licence_uid}:${g.period_start}`}>
-                {g.brand_name || g.licence_ref} · {g.period_label} · {money(g.amount_cents, g.currency)}
-                {g.gap === 'void_not_reissued' ? ' — its only invoice for this year is void, and a year is invoiced once' : ' — the licence year has started and no invoice is issued'}
-                {g.status === 'suspended' ? ' (suspended, still billable)' : ''}
-              </li>
-            ))}
-            {cannot.map((x) => (
-              <li key={`cannot:${x.licence_uid}`}>{x.brand_name || x.licence_ref} — cannot be invoiced: it {CANNOT_INVOICE[x.reason] || x.reason}.</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[10.5px] leading-relaxed text-axal-faint">
-        <li>{invoices.basis?.invoiced}</li>
-        <li>{invoices.basis?.collected}</li>
-        <li>{invoices.basis?.receivable}</li>
-        <li>{invoices.basis?.void}</li>
-        <li>One row per currency; nothing is added across currencies.</li>
-      </ul>
-    </div>
-  );
-}
 
 export default function RevenuePage() {
   const [period, setPeriod] = useState(null);       // null until the first summary names the current quarter
@@ -325,7 +166,6 @@ export default function RevenuePage() {
   };
 
   const ready = isReady(data);
-  const fees = ready ? data.licence_fees : null;
   const currentPeriod = ready ? data.current_period : null;
   const shownPeriod = period || (ready ? data.quarter.key : null);
   const nowMs = Date.now();
@@ -363,7 +203,7 @@ export default function RevenuePage() {
         : (data === UNAVAILABLE ? 'The revenue summary could not be read, so there is nothing to read back — this is not a claim that no revenue was booked.'
           : 'Loading the revenue summary…')}
       unavailable={[
-        ['Reconciled revenue ledger', 'Licence-fee invoices are in their own zone. A ledger that reconciles every stream is not recorded, so the cockpit tiles stay Not recorded.'],
+        ['Invoiced, collected, outstanding, overdue', 'No ledger reconciles licence invoices and payments yet.'],
         ['Subscription revenue', 'No local charge ledger; Stripe is read per customer.'],
         ['Revenue per subsidiary', 'Branches report quarters to HQ; every stream today arrives unmeasured (D266), so no amount is totalled.'],
         ['Token P&L per subsidiary', 'Spend is not tied to a licence (U1) and almost no model call carries branch metadata (D261).'],
@@ -416,10 +256,6 @@ export default function RevenuePage() {
         />
         <NeedsAttention items={attention} onStatement={setStatementUid} />
         <RevenueStreams summary={data} periodStatements={periodStatements} period={shownPeriod} onWhy={why} />
-        {fees?.available && (
-          <p className="text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-run-rate-label">{fees.label || 'Contracted quarterly run-rate'}, not invoiced or collected</p>
-        )}
-        <LicenceInvoices invoices={ready ? data.licence_invoices : null} onRetry={() => load(period)} />
         <div className="grid min-w-0 gap-4 xl:grid-cols-2">
           <RevenueTrend period={shownPeriod} onWhy={why} />
           <AiEconomicsSection summary={data} period={shownPeriod} onWhy={why} />

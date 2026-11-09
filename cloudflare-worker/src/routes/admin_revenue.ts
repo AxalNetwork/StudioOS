@@ -137,21 +137,6 @@ export function quarterOf(now: Date): { start: string; end: string; label: strin
   };
 }
 
-/** D5036: a period the summary accepts, `YYYY-Qn`. Kept for the invoice read's own check. */
-export const PERIOD_RE = /^(\d{4})-Q([1-4])$/;
-
-/**
- * D5036: the quarter `?period=YYYY-Qn` names, or the current one when none is given. A malformed period, or one that
- * has not begun, is refused (null): nothing has been invoiced in it, and a page of zeros would say otherwise.
- */
-export function quarterFromParam(param: string | undefined | null, now: Date): { start: string; end: string; label: string; key: string } | null {
-  if (param === undefined || param === null || param === '') return quarterOf(now);
-  const m = PERIOD_RE.exec(param);
-  if (!m) return null;
-  const q = quarterOf(new Date(Date.UTC(Number(m[1]), (Number(m[2]) - 1) * 3, 1)));
-  return q.start > now.toISOString().slice(0, 10) ? null : q;
-}
-
 /**
  * D5039 — a requested period, or null when it is not exactly `YYYY-Qn` with a
  * quarter 1 to 4 and a year from 2000 to 2999. Never a fallback: a caller that
@@ -176,6 +161,9 @@ export const SUMMARY_TEMPORAL = Object.freeze({
   usage_coverage: 'period',
   promos: 'as_of_now',
   subscriptions: 'not_recorded',
+  // D5036: invoiced, collected, outstanding and void follow the quarter (by issue date); its receivable and overdue
+  // list are as at today, and say so in their own `basis`.
+  licence_invoices: 'period',
 });
 
 r.get('/summary', async (c) => {
@@ -185,13 +173,12 @@ r.get('/summary', async (c) => {
   const current = quarterOf(readAt);
   const today = readAt.toISOString().slice(0, 10);
   // Present but empty (`?period=`) is refused too: it is a request for a period that names none.
-  // A quarter that has not begun is refused as well (D5036): nothing has been invoiced in it.
   const asked = c.req.query('period');
   let quarter = current;
   if (asked !== undefined) {
     const parsed = quarterFromKey(asked);
-    if (!parsed || parsed.start > today) {
-      return c.json({ error: 'bad_period', message: 'period must be a calendar quarter that has begun, written YYYY-Qn, such as 2026-Q4.' }, 400);
+    if (!parsed) {
+      return c.json({ error: 'bad_period', message: 'period must be a calendar quarter written YYYY-Qn, such as 2026-Q4.' }, 400);
     }
     quarter = parsed;
   }
