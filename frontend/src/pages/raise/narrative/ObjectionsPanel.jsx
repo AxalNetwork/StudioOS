@@ -7,6 +7,7 @@ import {
   ANSWER_FOOT, ANSWERS_UNREADABLE, OBJECTIONS_CAPPED, OBJECTIONS_FROM, OBJECTIONS_NONE, OBJECTIONS_UNREADABLE,
   answerItHref, clearDialog, markDialog, objectionRow, objectionsOf,
 } from './narrativeModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D913 (#2697) — the objections investors raised, counted from Capital
@@ -127,7 +128,7 @@ export function ObjectionsPanel({
       setDialog(null);
       retry();
     } catch (e) {
-      setDialog((d) => ({ ...d, busy: false, error: `Nothing was changed: ${e?.message || 'the write was refused'}.` }));
+      setDialog((d) => ({ ...d, busy: false, error: `Nothing was changed. ${userFacingRaiseError(e, { fallback: 'The write was refused.' })}` }));
     }
   };
   return (

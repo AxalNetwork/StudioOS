@@ -19,6 +19,7 @@ import React, { act } from 'react';
 import { mountForm } from './_form_d695.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { api } from '../src/lib/api.js';
+import { superAdminCandidatesApi } from '../src/lib/api/superAdminCandidates.js';
 import SuperAdminHolders from '../src/pages/hq/SuperAdminHolders.jsx';
 import SuperAdminOnlyNotice from '../src/pages/hq/SuperAdminOnlyNotice.jsx';
 import { clearHandover, leaveHq, peekHandover, rememberHandover } from '../src/pages/hq/handoverNote.js';
@@ -36,7 +37,8 @@ globalThis.sessionStorage = {
 
 function stubApi(grant) {
   api.superAdmins = async () => ({ holders: [{ id: 1, name: 'Holder Hart', email: 'holder@axal.example', is_active: 1 }] });
-  api.hqAdmins = async () => ({ items: [{ user_id: 2, name: 'Sam Successor', email: 'sam@axal.example', is_active: 1 }] });
+  // D5044 — the picker reads its own server-filtered candidates, not HQ Team's supervision read.
+  superAdminCandidatesApi.list = async () => ({ candidates: [{ id: 2, name: 'Sam Successor', email: 'sam@axal.example' }] });
   api.superAdminGrant = grant;
 }
 
@@ -55,7 +57,14 @@ async function mountConsole(extra = {}) {
 
 test('a refused transfer keeps the typed reason and the chosen successor, and says why', async () => {
   const calls = [];
-  stubApi(async (...a) => { calls.push(a); throw new Error('The administrator you named stopped being an active administrator while this request was in flight, so nothing was moved. You still hold the elevation.'); });
+  // A refusal is a server answer, so it carries its status, as `request()` sets it (D5044: an error
+  // with no status is a request whose outcome is unknown, which the next test covers).
+  stubApi(async (...a) => {
+    calls.push(a);
+    const e = new Error('The administrator you named stopped being an active administrator while this request was in flight, so nothing was moved. You still hold the elevation.');
+    e.status = 409;
+    throw e;
+  });
   let told = 0;
   const page = await mountConsole({ onTransferred: async () => { told += 1; } });
   await fill(page);
@@ -97,7 +106,7 @@ test('a confirmed transfer tells the page once, with the successor\'s name, and 
 test('a plain grant (nobody holds it) does not leave HQ', async () => {
   let told = 0;
   api.superAdmins = async () => ({ holders: [] });
-  api.hqAdmins = async () => ({ items: [{ user_id: 2, name: 'Sam Successor', email: 'sam@axal.example', is_active: 1 }] });
+  superAdminCandidatesApi.list = async () => ({ candidates: [{ id: 2, name: 'Sam Successor', email: 'sam@axal.example' }] });
   api.superAdminGrant = async () => ({ ok: true });
   const page = await mountConsole({ onTransferred: async () => { told += 1; } });
   await fill(page);

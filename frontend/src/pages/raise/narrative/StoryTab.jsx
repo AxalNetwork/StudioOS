@@ -19,6 +19,7 @@ import { OBJECTION_OPTION, answerSaveLines, versionHref } from './narrativeModel
 import { ObjectionsPanel } from './ObjectionsPanel';
 import NarrativeCoach from './NarrativeCoach';
 import { FIX_PROPOSAL_NOTE, appendFix, fixParts } from './claimsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D910 (#2694) — NAR2, Story: the sections rail with its dots, reorderable by
@@ -54,7 +55,7 @@ function useNarrative(projectId, version, reload) {
     setState({ status: 'loading', data: null });
     narrativeApi.read(projectId, version)
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, version, reload]);
   return state;
