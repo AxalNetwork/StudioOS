@@ -155,7 +155,8 @@ test('the desk: Corporate Governance sits after Templates at its own path, HQ on
     const link = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contracts-tab-governance');
     assert.ok(link, 'the tab is drawn');
     assert.equal(view.props(link)['aria-current'], 'page');
-    assert.match(view.text(), /Templates.*Corporate Governance.*Forms/s, 'beside the template library');
+    // D4811 part 7: the four workflow tabs, then the Library menu (Forms, Document types).
+    assert.match(view.text(), /Agreements.*Templates.*Corporate Governance.*Closings.*Library/s, 'after Templates, among the four workflow tabs');
     assert.match(view.text(), /Holdings OA/);
   } finally { await view.unmount(); restore(); }
   stub({ list: async () => listing() });

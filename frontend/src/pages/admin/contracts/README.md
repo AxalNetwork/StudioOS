@@ -75,3 +75,5 @@ D4811 (#4811) part 1: one lifecycle vocabulary per object kind, from `frontend/s
 - An agreements row says where it stands ("Sent 12 May 2026 · Awaiting signature"). A missing company link reads "Unlinked recipient"; the only amber flag (`InconsistencyFlag`) is a contradiction: marked signed with no execution evidence.
 
 D4811 (#4811) part 2: `GovernanceAttention.jsx` draws Corporate Governance's attention view: the group header with drillable counts (`?records=<state>`), the ownership chart from the Worker's intercompany links, the entities table, and one entity's facts and expected records (`?entity=<key>`). The states come from the Worker (`cloudflare-worker/src/services/governanceAttention.ts`); their words are in `governanceModel.js`.
+
+D4811 (#4811) part 7: `ContractsNav.jsx` is the desk's tab row: Agreements · Templates · Corporate Governance · Closings, the Agreements category radiogroup (All agreements · NDAs · Partner deals) and the Library disclosure (Forms, Document types). Every old `?tab=` address still opens its view.
