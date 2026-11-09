@@ -38,7 +38,8 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   - `CommunityLightbox.jsx` — the shell they share. It is a `Lightbox` that
     becomes the page below 1024px, and it holds the toolbar, the pager, the
     table or phone list, and each lightbox's own read.
-  - `EventsLightbox.jsx` — CM3, D918's paged list.
+  - `EventsLightbox.jsx` — CM3, D918's paged list; since D4820 part 4 (CM05) a
+    summary strip and Events / Participation / By type tabs from the overview's own read.
   - `JobsLightbox.jsx` — CM4.
   - `CirclesLightbox.jsx` — CM5.
   - `ActivityLightbox.jsx` — CM6, D932's activity read.

@@ -8,10 +8,9 @@ import { AS_ENTERED_TIP, OVERDUE_HOURS, QUEUE_CLEAR, activityEmpty, bookingsEmpt
 import { CARD, Card, DomainActions, EYE, H2, LINK, MONO, OverdueDot, PartState, SUB, TAG, TableToggle, Tile } from './parts';
 import { Link } from 'react-router-dom';
 
-/** The funnel (Registered → Confirmed → Attended), show-up and waitlisted beside it, and events by type. D4820: no zero funnel, and the event types with no event are not listed. */
+/** The funnel (Registered → Confirmed → Attended), show-up and waitlisted beside it. D4820: no zero funnel. Part 4: events by type moved to the Events lightbox's By type tab (`ByTypeParts`). */
 export function FunnelParts({ ev, showUp, weeks, onRetry }) {
   const f = ev.funnel;
-  const bt = ev.byType;
   const wl = ev.waitlisted;
   const empty = funnelEmpty(f);
   return (<>
@@ -51,12 +50,24 @@ export function FunnelParts({ ev, showUp, weeks, onRetry }) {
     {empty && wl.state === 'ready' && wl.value ? (
       <span className={SUB} data-testid="community-waitlisted">{`${wl.value.toLocaleString('en-US')} waitlisted on ${wl.events} upcoming events.`}</span>
     ) : empty && wl.state !== 'ready' ? <PartState part={wl} onRetry={onRetry} /> : null}
+  </>);
+}
+
+/**
+ * D4820 part 4 (CM05) — events by type, published or waiting, starting in the period: the Events
+ * lightbox's By type tab. Moved off the overview. Types with an event are drawn; how many had none
+ * is one line, never twelve zero rows.
+ */
+export function ByTypeParts({ ev, weeks, onRetry }) {
+  const bt = ev.byType;
+  return (<>
     <span className={EYE}>{`Events by type · starting in these ${weeks} weeks`}</span>
     {bt.state !== 'ready' ? <PartState part={bt} onRetry={onRetry} /> : bt.shown.length ? (
       <div role="img" aria-label={`Events by type: ${bt.shown.map((r) => `${r.label} ${r.value}`).join(', ')}.`} data-testid="community-by-type">
         <HBars rows={bt.shown.map((r) => ({ label: r.label, value: r.value }))} />
       </div>
     ) : <span className={SUB}>{`No published or waiting event starts in these ${weeks} weeks.`}</span>}
+    {bt.state === 'ready' && bt.shown.length > 0 && bt.none.length > 0 ? <span className={SUB} data-testid="community-by-type-none">{`${bt.none.length} of the ${bt.shown.length + bt.none.length} types had no event.`}</span> : null}
   </>);
 }
 

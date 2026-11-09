@@ -371,3 +371,54 @@ export function activityPage(answer, page) {
     capped: total > ACTIVITY_CAP ? `Pages stop at ${nf(ACTIVITY_CAP)} rows. Narrow the kind or the dates to reach older ones.` : null,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * D4820 part 4 (#4820) · CM05, the Events lightbox's summary strip and tabs
+ * ------------------------------------------------------------------ */
+
+/** CM05's three tabs. The list is the default; events by type moved here from the overview. */
+export const EVENTS_TABS = [
+  { key: 'list', label: 'Events' },
+  { key: 'participation', label: 'Participation' },
+  { key: 'by-type', label: 'By type' },
+];
+
+/**
+ * CM05's summary strip, from the Community read the overview already holds
+ * (its tiles and `buildEventsFunnel`), so the strip and the overview cannot
+ * disagree. Each item answers alone: a value, `Reading…`, `Unreadable`, or
+ * (Confirmed from an older read) `Not in this read`. Never a zero for a part
+ * that was not read.
+ */
+export function eventsSummary({ ev, fig }) {
+  const fromTile = (t, label) => {
+    if (!t || t.state === 'loading') return { key: t?.key || label, label, state: 'loading' };
+    if (t.state !== 'ready') return { key: t.key, label, state: 'unreadable' };
+    return { key: t.key, label, state: 'ready', value: t.value, sub: t.sub || null };
+  };
+  const f = ev?.funnel;
+  const step = (i, key, label, sub) => {
+    if (!f || f.state === 'loading') return { key, label, state: 'loading' };
+    if (f.state !== 'ready') return { key, label, state: 'unreadable' };
+    const v = f.steps[i].value;
+    return v === null ? { key, label, state: 'unrecorded', note: 'Not in this read' }
+      : { key, label, state: 'ready', value: Number(v).toLocaleString('en-US'), sub };
+  };
+  const ended = f?.state === 'ready' ? `${Number(f.events).toLocaleString('en-US')} ended event${f.events === 1 ? '' : 's'}` : null;
+  const wl = ev?.waitlisted;
+  let waitlisted;
+  if (!wl || wl.state === 'loading') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'loading' };
+  else if (wl.state !== 'ready') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'unreadable' };
+  else waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'ready', value: wl.value.toLocaleString('en-US'), sub: `across ${wl.events.toLocaleString('en-US')} upcoming event${wl.events === 1 ? '' : 's'}` };
+  return [
+    fromTile(fig?.upcoming, 'Upcoming'),
+    fromTile(fig?.registrations, 'Registrations'),
+    step(1, 'confirmed', 'Confirmed', ended),
+    step(2, 'attended', 'Attended', ended),
+    fromTile(fig?.['show-up'], 'Show-up'),
+    waitlisted,
+  ];
+}
+
+/** The By type tab's count: how many of the stored types had an event, or null when the part was not read. */
+export const typesWithEvents = (byType) => (byType?.state === 'ready' ? byType.shown.length : null);

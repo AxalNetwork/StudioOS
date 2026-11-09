@@ -405,9 +405,10 @@ test('mounted CM9: every new block is drawn from the Community read', async () =
     assert.match(m.of('community-activity-sentence'), /Event registrations moved most/);
     assert.match(m.of('community-funnel-confirmed'), /Confirmed\s*64 · 80%/);
     assert.match(m.of('community-waitlisted'), /9.*on 2 upcoming events · not a step/s);
-    // D4820: types with none are no longer listed on the overview ("Show all · 9 types with none" is gone).
+    // D4820: types with none are no longer listed on the overview ("Show all · 9 types with none" is gone),
+    // and since part 4 events by type is the Events lightbox's By type tab, not the overview's.
     assert.ok(!m.has('community-by-type-all'));
-    assert.match(m.of('community-by-type'), /Workshop/);
+    assert.ok(!m.has('community-by-type'), 'events by type is still on the overview');
     assert.match(m.of('community-who-sentence'), /Founders took the largest share/);
     assert.match(m.of('community-checkins'), /10 to 14 founders checked in/);
     assert.match(m.of('community-need-wait-event-9'), /Overdue.*waiting 4 days/s);
