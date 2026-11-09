@@ -12,8 +12,15 @@
  * carry the design: `asked_by_user_id` NULL is the advisor posting unprompted,
  * and a NOT NULL here would make broadcast guidance unstorable; `week_number`
  * NULL is guidance about the whole programme rather than one week.
+ *
+ * D4813 (package 2): migration `202611091920_cohort_guidance_v2.sql` adds
+ * `title`, `is_draft` and `version` to `cohort_guidance` and the append-only
+ * `cohort_guidance_versions`. They are healed here the same way, as literal
+ * statements through `runSchemaBootstrap`, which issues an ALTER only when the
+ * column is missing.
  */
 import type { Env } from '../types';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -59,6 +66,32 @@ export async function ensureCohortGuidanceSchema(env: Env): Promise<void> {
     await env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_cohort_guidance_acks_founder
          ON cohort_guidance_acks (founder_user_id)`,
+    ).run();
+    // Asks the table first (`runSchemaBootstrap`), so an up-to-date database
+    // issues no ALTER (#4568 R2-04).
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE cohort_guidance ADD COLUMN title TEXT',
+      'ALTER TABLE cohort_guidance ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE cohort_guidance ADD COLUMN version INTEGER NOT NULL DEFAULT 1',
+    ]);
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS cohort_guidance_versions (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         guidance_id INTEGER NOT NULL REFERENCES cohort_guidance(id) ON DELETE CASCADE,
+         version INTEGER NOT NULL,
+         action TEXT NOT NULL,
+         title TEXT,
+         body TEXT NOT NULL,
+         week_number INTEGER,
+         is_draft INTEGER NOT NULL DEFAULT 0,
+         actor_user_id INTEGER REFERENCES users(id),
+         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         UNIQUE (guidance_id, version)
+       )`,
+    ).run();
+    await env.DB.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_cohort_guidance_versions_guidance
+         ON cohort_guidance_versions (guidance_id, version)`,
     ).run();
     READY.set(key, true);
   } catch (e) {

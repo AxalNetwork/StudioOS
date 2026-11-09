@@ -16,6 +16,8 @@ export type GuidanceRow = {
   posted_at: string;
   answered_at: string | null;
   retired_at: string | null;
+  /** D4813: 1 while the advisor is still writing it. Absent on rows read before migration 202611091920. */
+  is_draft?: number | boolean | null;
 };
 
 export type GuidanceCounts = {
@@ -25,6 +27,8 @@ export type GuidanceCounts = {
   answered: number;
   /** Advisor-posted guidance — no question, so never open or answered. */
   broadcast: number;
+  /** D4813: the advisor's own unpublished drafts. Never counted as posted. */
+  drafts: number;
   /**
    * Median hours from question to answer, or `null`.
    *
@@ -45,7 +49,10 @@ const hoursBetween = (from: string, to: string): number | null => {
 };
 
 export function guidanceCounts(rows: GuidanceRow[]): GuidanceCounts {
-  const live = rows.filter((r) => !r.retired_at);
+  // D4813: a draft has not been said to anyone, so it is neither posted nor a
+  // question; it is counted on its own.
+  const drafts = rows.filter((r) => !r.retired_at && Boolean(r.is_draft)).length;
+  const live = rows.filter((r) => !r.retired_at && !r.is_draft);
   const questions = live.filter((r) => r.asked_by_user_id != null);
   const answered = questions.filter((r) => r.answer != null && r.answered_at);
   const spans = answered
@@ -62,6 +69,7 @@ export function guidanceCounts(rows: GuidanceRow[]): GuidanceCounts {
     open: questions.length - answered.length,
     answered: answered.length,
     broadcast: live.length - questions.length,
+    drafts,
     medianResponseHours: median,
   };
 }
@@ -80,12 +88,56 @@ export function guidanceCounts(rows: GuidanceRow[]): GuidanceCounts {
  * setting, `overdue` becomes one comparison against this same number.
  */
 export function oldestOpenHours(rows: GuidanceRow[], nowIso: string): number | null {
-  const open = rows.filter((r) => !r.retired_at && r.asked_by_user_id != null && r.answer == null);
+  const open = rows.filter((r) => !r.retired_at && !r.is_draft && r.asked_by_user_id != null && r.answer == null);
   const ages = open
     .map((r) => hoursBetween(r.posted_at, nowIso))
     .filter((h): h is number => h != null && h >= 0);
   if (!ages.length) return null;
   return Math.round(Math.max(...ages) * 10) / 10;
+}
+
+// ---------------------------------------------------------------------------
+// D4813 (#4813, package 2) — guidance status and the week a piece is about.
+
+export type GuidanceStatus = 'published' | 'draft' | 'retired';
+
+/**
+ * Derived, never stored (212's rule): retired when `retired_at` is set, else
+ * draft while `is_draft` is 1, else published.
+ */
+export function guidanceStatus(r: { retired_at: string | null; is_draft?: number | boolean | null }): GuidanceStatus {
+  if (r.retired_at) return 'retired';
+  return r.is_draft ? 'draft' : 'published';
+}
+
+/** The widest week a cohort without recorded week windows may name. */
+export const GUIDANCE_WEEK_FALLBACK_MAX = 52;
+
+export type GuidanceWeek =
+  | { ok: true; week: number | null }
+  | { ok: false; message: string };
+
+/**
+ * THE WEEK IS REFUSED, NEVER QUIETLY DROPPED. The route used to store any week
+ * it could not read as NULL, which is general guidance: an advisor who typed 7
+ * into a four-week cohort published a note to the whole programme without
+ * being told. Now unstated (absent, null or an empty string) is general and
+ * anything else must be a whole number from 1 to `maxWeek`, or the write is
+ * refused with a sentence that says what to do.
+ */
+export function parseGuidanceWeek(raw: unknown, maxWeek: number): GuidanceWeek {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+    return { ok: true, week: null };
+  }
+  const text = typeof raw === 'number' ? String(raw) : typeof raw === 'string' ? raw.trim() : '';
+  const n = /^\d{1,3}$/.test(text) ? Number(text) : NaN;
+  if (!Number.isInteger(n) || n < 1 || n > maxWeek) {
+    return {
+      ok: false,
+      message: `This cohort has ${maxWeek} week${maxWeek === 1 ? '' : 's'}. Choose a week from 1 to ${maxWeek}, or leave it empty for general guidance.`,
+    };
+  }
+  return { ok: true, week: n };
 }
 
 // ---------------------------------------------------------------------------
