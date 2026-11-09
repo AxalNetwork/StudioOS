@@ -300,10 +300,29 @@ async function setCheck(ctx: RecordContext, featureId: number, b: Body): Promise
   ]);
   return { ok: true };
 }
+/**
+ * #5067: past the picker's first `DEPENDENCY_PICK` items, "Waits on"/"Blocks"
+ * take a typed number or exact title instead. Scoped to this project exactly
+ * as `addOkrDependency` scopes a picked id: a title from another venture, or
+ * one this project does not have, resolves to nothing and is refused there.
+ */
+async function resolveRoadmapRef(ctx: RecordContext, raw: unknown): Promise<number | null> {
+  const text = typeof raw === 'string' ? raw.trim() : raw != null ? String(raw) : '';
+  if (!text) return null;
+  if (/^[1-9][0-9]{0,9}$/.test(text)) return Number(text);
+  const match = await ctx.env.DB.prepare(
+    'SELECT id FROM roadmap_okrs WHERE project_id = ? AND lower(objective) = lower(?)',
+  ).bind(ctx.projectId, text).first<{ id: number }>();
+  return match ? Number(match.id) : null;
+}
+const filled = (v: unknown): v is string | number => v != null && v !== '';
 async function addDependency(ctx: RecordContext, itemId: number, b: Body): Promise<ActionResult> {
-  const waits = b.waits_on_id != null && b.waits_on_id !== '', blocks = b.blocks_id != null && b.blocks_id !== '';
+  const waitsRaw = filled(b.waits_on_id) ? b.waits_on_id : filled(b.waits_on_other) ? b.waits_on_other : null;
+  const blocksRaw = filled(b.blocks_id) ? b.blocks_id : filled(b.blocks_on_other) ? b.blocks_on_other : null;
+  const waits = waitsRaw != null, blocks = blocksRaw != null;
   if (waits === blocks) refuse(400, 'Choose one: Waits on or Blocks');
-  const other = idIn(waits ? b.waits_on_id : b.blocks_id, 'item')!;
+  const other = await resolveRoadmapRef(ctx, waits ? waitsRaw : blocksRaw);
+  if (other == null) refuse(400, 'That roadmap item was not found. Check the title or number and try again.');
   // Decision 4: "Waits on X" is an edge from X to this item, through the one edge write.
   const edge = await addOkrDependency(ctx.env, {
     projectId: ctx.projectId, okrId: waits ? other : itemId, blocksOkrId: waits ? itemId : other, note: null, userId: ctx.user.id,
@@ -618,9 +637,21 @@ const prototypeMvp: ModuleSpec = {
   async record(ctx, id): Promise<RecordContent> {
     const f = await featureRow(ctx, id);
     const state = known(MUST_KEY, f.delivery_status);
-    const done = await ctx.env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'",
-    ).bind(f.id, ctx.projectId).first<{ n: number }>();
+    // #5067: a measured zero (no session is done yet) stays 0, never collapsed
+    // into Not recorded; only a genuine read failure is Unreadable, and the two
+    // keep different reasons so they are never shown as the same state.
+    let testsRun: number | null;
+    let testsReason = 'No test session is done yet.';
+    try {
+      const done = await ctx.env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'",
+      ).bind(f.id, ctx.projectId).first<{ n: number }>();
+      const n = Number(done?.n);
+      testsRun = Number.isFinite(n) ? n : null;
+    } catch {
+      testsRun = null;
+      testsReason = 'Unreadable: the test session count could not be read.';
+    }
     const due = dateText(f.due_date);
     const sub = [f.hypothesis != null ? `Tests ${f.hypothesis}` : null, due ? `due ${due}` : null].filter(Boolean).join(' · ').replace(/^d/, 'D');
     return {
@@ -630,7 +661,7 @@ const prototypeMvp: ModuleSpec = {
         fact('Owner', f.owner, 'No owner recorded.'),
         fact('Due', due, 'No due date recorded.'),
         fact('Hypothesis', f.hypothesis, 'Not linked to a hypothesis.'),
-        fact('Tests run', Number(done?.n ?? 0) || null, 'No test session is done yet.'),
+        fact('Tests run', testsRun, testsReason),
       ],
       createdBy: f.created_by ?? null, createdAt: f.created_at ?? null,
     };
@@ -815,12 +846,26 @@ const productRoadmap: ModuleSpec = {
     } },
     { key: 'feedback', title: 'Feedback it answers', async read(ctx, id) {
       // The sender's name and date only: the email is never read.
-      const feedback = rowsOf(await ctx.env.DB.prepare(
-        `SELECT body, from_name, theme, created_at FROM product_feedback
-          WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
-      ).bind(ctx.projectId, String(numericId(id))).all<Any>());
-      return { rows: feedback.map(f => ({ a: `“${f.body}”`, b: [f.from_name || 'Unnamed', dateText(f.created_at)].filter(Boolean).join(' · '),
-        ...(f.theme ? { c: f.theme, tone: 'vio' } : {}) })), empty: 'No feedback answered by this item.' };
+      const ref = String(numericId(id));
+      const [feedbackRes, total] = await Promise.all([
+        ctx.env.DB.prepare(
+          `SELECT body, from_name, theme, created_at FROM product_feedback
+            WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
+        ).bind(ctx.projectId, ref).all<Any>(),
+        ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM product_feedback WHERE project_id = ? AND roadmap_item_ref = ?')
+          .bind(ctx.projectId, ref).first<{ n: number }>(),
+      ]);
+      const feedback = rowsOf(feedbackRes);
+      const rows: Row[] = feedback.map(f => ({ a: `“${f.body}”`, b: [f.from_name || 'Unnamed', dateText(f.created_at)].filter(Boolean).join(' · '),
+        ...(f.theme ? { c: f.theme, tone: 'vio' } : {}) }));
+      // #5067: the LIMIT never drops a record silently. Past it, a trailing row
+      // says so and links to Grow's full, project-scoped feedback list.
+      const totalN = Number(total?.n ?? feedback.length);
+      if (totalN > feedback.length) {
+        rows.push({ a: 'View all feedback', b: `Showing the latest ${feedback.length} of ${totalN}`,
+          href: `/grow/product-improvement?project=${ctx.projectId}` });
+      }
+      return { rows, empty: 'No feedback answered by this item.' };
     } },
     { key: 'github', title: 'GitHub', side: true, async read(ctx, id) {
       const issue = await ctx.env.DB.prepare(
@@ -857,14 +902,25 @@ const productRoadmap: ModuleSpec = {
       'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
     ).bind(itemId, ctx.projectId).first<Any>();
     if (!o) throw new Error('Build roadmap item vanished after its ownership check');
+    const DEPENDENCY_PICK = 200;
     const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT 200')
       .bind(ctx.projectId, itemId).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
+    // #5067: the picker never silently drops an item past DEPENDENCY_PICK. Past
+    // it, Waits on/Blocks each gain a typed fallback (decision 14), resolved by
+    // `addDependency` the same project-scoped way as a picked id.
+    const othersTotal = others.length < DEPENDENCY_PICK ? others.length : Number(
+      (await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ? AND id <> ?')
+        .bind(ctx.projectId, itemId).first<{ n: number }>())?.n ?? others.length);
+    const more = othersTotal > others.length;
     const actions: RecordAction[] = [];
     if (others.length) {
+      const note = more ? `Showing the first ${others.length} of ${othersTotal}. Not listed? Type its exact title or number below.` : undefined;
       actions.push({ key: 'add-dependency', label: 'Add', kind: 'form',
         form: { title: 'Add a dependency', cta: 'Add', sub: 'Choose one: an item this waits on, or one it blocks.', fields: [
-          { key: 'waits_on_id', label: 'Waits on', kind: 'CH', options: others },
-          { key: 'blocks_id', label: 'Blocks', kind: 'CH', options: others },
+          { key: 'waits_on_id', label: 'Waits on', kind: 'CH', options: others, note },
+          ...(more ? [{ key: 'waits_on_other', label: 'Waits on (not listed above)', kind: 'T' as const, placeholder: 'Exact title or item number' }] : []),
+          { key: 'blocks_id', label: 'Blocks', kind: 'CH', options: others, note },
+          ...(more ? [{ key: 'blocks_on_other', label: 'Blocks (not listed above)', kind: 'T' as const, placeholder: 'Exact title or item number' }] : []),
         ] },
         references: body => references(body, [['waits_on_id', 'roadmap_okrs'], ['blocks_id', 'roadmap_okrs']]),
         execute: (c, _id, body) => addDependency(c, itemId, jsonOf(body)) });

@@ -26,6 +26,7 @@ import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { hasRecords } from '../src/services/records/index.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { declarationsFor } from '../../scripts/check-migration-declarations.mjs';
 import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -187,7 +188,9 @@ test('test 11: filters read each row\'s keys, never a hidden cell', async () => 
   const db = seeded();
   const ids = async (slug: string, filter: string) => (await read(db, slug, `&filter=${encodeURIComponent(filter)}`)).body.records.rows.map((r: any) => r.id);
   // In the default sort: Impact, High first.
-  assert.deepEqual(await ids('solution-design', 'linked:no'), [3, 2]);
+  // #5067: feature 2 has a hypothesis (no pain theme) and now counts as linked.
+  assert.deepEqual(await ids('solution-design', 'linked:no'), [3]);
+  assert.deepEqual(await ids('solution-design', 'linked:yes'), [1, 4, 2]);
   assert.deepEqual(await ids('solution-design', 'impact:high'), [1, 4]);
   assert.deepEqual(await ids('solution-design', 'effort:high'), [4, 2], 'an old XL is High');
   assert.deepEqual(await ids('prototype-mvp', 'state:in_progress'), [2], 'an old Review is In progress');
@@ -422,9 +425,10 @@ records.onError((e, c) => c.json({ error: e.message }, 500));
 async function call(db: DatabaseSync, path: string, user = FOUNDER, init: { method?: string; body?: unknown } = {}) {
   const token = await new SignJWT({ user_id: user, role: ROLE[user] })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const r = await records.request(path, { method: init.method ?? 'GET',
+  // A thrown Response is the response, as the Worker's entry point answers it (util/thrownResponse.ts).
+  const r = await withThrownResponses(() => records.request(path, { method: init.method ?? 'GET',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: init.body === undefined ? undefined : JSON.stringify(init.body) },
-  { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any);
+  { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any));
   return { status: r.status, body: await r.json().catch(() => null) as any };
 }
 const one = (db: DatabaseSync, slug: string, id: string | number, user = FOUNDER, project = P) =>
@@ -481,7 +485,8 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
     ['Figma', 'Sync not recorded: Figma’s connector is not built'], ['GitHub', 'issue #7 · synced 12 Oct 2026'],
     ['GitHub', 'issue #8 · Not synced'], ['GitHub', 'pull request #9 · synced 11 Oct 2026']], 'another venture\'s ledger row never reads synced');
   assert.deepEqual(section(must, 'release').rows[0], { a: 'Done', b: '1 of 2' });
-  assert.equal(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run').value, null);
+  // #5067: a measured zero (no session is done yet) stays 0, not Not recorded.
+  assert.equal(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run').value, 0);
   const item = (await one(db, 'product-roadmap', 3)).body;
   assert.deepEqual(section(item, 'dependencies').rows.map((r: any) => [r.a, r.b, r.c]), [
     ['Waits on Pricing page', 'Next', 'Open'], ['Blocks Approval rules v1', 'Later', undefined]]);
@@ -686,5 +691,93 @@ test('test 12 (D5068): Edit split and Incorporation keep the venture that read t
   const harbourLab = await one(db, 'company-creation', 'lab-18-1', OTHER_FOUNDER, P_OTHER);
   assert.deepEqual(section(harbourLab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P_OTHER}` },
     'venture B\'s Incorporation link names venture B even though venture A\'s read came first');
+  db.close();
+});
+
+/** A D1 binding that throws on any statement containing `needle` (as cycle_focus_d692.test.ts's). */
+function failingDB(db: DatabaseSync, needle: string) {
+  const inner = d1Over(db);
+  return {
+    ...inner,
+    prepare(sql: string) {
+      if (!sql.includes(needle)) return inner.prepare(sql);
+      const boom = async () => { throw new Error('injected failure'); };
+      const api: any = { bind: () => api, all: boom, first: boom, run: boom, raw: boom };
+      return api;
+    },
+  };
+}
+
+test('test 13 (#5067): Tests run keeps a measured 0 distinct from both Not recorded and Unreadable', async () => {
+  const db = recorded();
+  // Feature 3 has no session at all: a measured, legitimate zero stays 0.
+  assert.deepEqual(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run'), { label: 'Tests run', value: 0 });
+  // Feature 1 has exactly one done session (seeded by recorded()).
+  assert.equal(factOf((await one(db, 'prototype-mvp', 1)).body, 'Tests run').value, 1);
+  // A genuine read failure stays Unreadable: never 0, and a different reason
+  // than "no session is done yet" so the two states are never the same shape.
+  const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const r = await records.request(`/api/cycles/build/modules/prototype-mvp/records/1?project=${P}`, { headers: { Authorization: `Bearer ${token}` } },
+    { DB: failingDB(db, "FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'"), JWT_SECRET, ENVIRONMENT: 'development' } as any);
+  const body = await r.json() as any;
+  assert.equal(r.status, 200, JSON.stringify(body));
+  const fact = factOf(body, 'Tests run');
+  assert.equal(fact.value, null);
+  assert.match(fact.reason, /^Unreadable:/);
+  // The sessions section still reads: only the one fact's own query failed.
+  assert.equal(section(body, 'sessions').rows.length, 2);
+  db.close();
+});
+
+test('test 14 (#5067): the Feedback it answers section says so past 20, with a complete "View all" path', async () => {
+  const db = recorded();
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status, sort_order) VALUES (5, ${P}, 'Feedback test item', 'now', 5)`);
+  const ins = db.prepare(`INSERT INTO product_feedback (uid, project_id, body, source, roadmap_item_ref) VALUES (?, ${P}, ?, 'customer', '5')`);
+  for (let i = 1; i <= 20; i += 1) ins.run(`fx-${i}`, `Feedback number ${i}`);
+  const at20 = (await one(db, 'product-roadmap', 5)).body;
+  const rows20 = section(at20, 'feedback').rows;
+  assert.equal(rows20.length, 20, 'exactly 20: no overflow row');
+  assert.ok(!rows20.some((row: any) => row.a === 'View all feedback'));
+  ins.run('fx-21', 'Feedback number 21');
+  const at21 = (await one(db, 'product-roadmap', 5)).body;
+  const rows21 = section(at21, 'feedback').rows;
+  assert.equal(rows21.length, 21, '20 feedback rows plus the trailing "View all" row');
+  const overflow = rows21.at(-1);
+  assert.deepEqual(overflow, { a: 'View all feedback', b: 'Showing the latest 20 of 21', href: `/grow/product-improvement?project=${P}` });
+  assert.ok(rows21.slice(0, 20).every((row: any) => row.a !== '“Feedback number 1”'), 'the 20 shown are the latest, not the oldest');
+  db.close();
+});
+
+test('test 15 (#5067): the dependency picker says so past 200, and 201+ is still a reachable choice', async () => {
+  const db = seeded();
+  const addOther = db.prepare(`INSERT INTO roadmap_okrs (project_id, objective, sort_order) VALUES (${P}, ?, ?)`);
+  // seeded() already gives item 3 three others (1, 2, 4); 197 more makes exactly 200.
+  for (let i = 1; i <= 197; i += 1) addOther.run(`Extra item ${i}`, 10 + i);
+  const field = (body: any, key: string) => body.actions.find((a: any) => a.key === 'add-dependency')?.form.fields.find((f: any) => f.key === key);
+  const at200 = (await one(db, 'product-roadmap', 3)).body;
+  assert.equal(field(at200, 'waits_on_id').options.length, 200);
+  assert.equal(field(at200, 'waits_on_id').note, undefined, 'no overflow note at exactly 200');
+  assert.equal(field(at200, 'waits_on_other'), undefined, 'no typed fallback at exactly 200');
+  // One more tips it to 201; sort_order puts it last, so it is genuinely past the 200 shown.
+  addOther.run('Extra item 198', 999);
+  const extraId = (db.prepare(`SELECT id FROM roadmap_okrs WHERE objective = 'Extra item 198'`).get() as any).id;
+  const at201 = (await one(db, 'product-roadmap', 3)).body;
+  const waits201 = field(at201, 'waits_on_id');
+  assert.equal(waits201.options.length, 200, 'the picker never raises the number');
+  assert.match(waits201.note, /Showing the first 200 of 201/);
+  assert.ok(!waits201.options.some((o: any) => o.value === String(extraId)));
+  assert.ok(field(at201, 'waits_on_other'), 'a typed fallback appears once more than 200 exist');
+  // Typing its exact title still links it: the write path was never capped at 200.
+  const picked = await call(db, `/api/cycles/build/modules/product-roadmap/records/3/actions/add-dependency?project=${P}`, FOUNDER,
+    { method: 'POST', body: { waits_on_other: 'Extra item 198' } });
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.deepEqual({ ...db.prepare('SELECT okr_id, blocks_okr_id FROM okr_dependencies WHERE okr_id = ?').get(extraId) }, { okr_id: extraId, blocks_okr_id: 3 });
+  // Project-scoped: another venture's item, typed by its exact title, resolves to nothing.
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective) VALUES (9001, ${P_OTHER}, 'Their item')`);
+  const leak = await call(db, `/api/cycles/build/modules/product-roadmap/records/4/actions/add-dependency?project=${P}`, FOUNDER,
+    { method: 'POST', body: { blocks_on_other: 'Their item' } });
+  assert.equal(leak.status, 400);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM okr_dependencies WHERE blocks_okr_id = 4').get() as any).n, 0);
   db.close();
 });
