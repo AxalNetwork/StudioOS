@@ -11,7 +11,7 @@
  *   3. every module page still answers its integration parts;
  *   4. access is unchanged: another venture's founder is refused both;
  *   5. what is left (recorded, not endorsed): rows still grow with the venture
- *      on the overview and on every module page but Solution design's feature list.
+ *      on the overview and on every module page but Solution design's and Prototype / MVP's lists.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/build_read_amplification_4603.test.ts
@@ -84,7 +84,7 @@ test('5. the remaining limit, recorded: rows still grow with the venture (bounde
   const s = await overview(small), l = await overview(large);
   assert.equal(s.statements, l.statements, 'the statement count does not grow with the venture');
   assert.ok(l.rows > 50 * s.rows / 10, `rows returned grow with the venture: ${s.rows} → ${l.rows}`);
-  // Part 2 bounds Solution design (build_bounded_reads_4603.test.ts); the other modules' lists are still read whole.
+  // Part 2 bounds Solution design and Prototype / MVP (build_bounded_reads_4603, build_prototype_reads_4603); the other modules' lists are still read whole.
   const page = await module(large, 'solution-design');
   assert.equal(page.body.records.rows.length, 25, 'a page shows 25 records');
   assert.ok(page.rows < 100, `Solution design is bounded: ${page.rows} rows returned to the Worker`);
