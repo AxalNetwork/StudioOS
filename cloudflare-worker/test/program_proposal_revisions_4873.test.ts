@@ -142,3 +142,29 @@ test('the backfill records what can be known: an edited send-back has no recorde
   const rev = (uid: string) => (db.prepare('SELECT revision FROM program_proposals WHERE uid = ?').get(uid) as any).revision;
   assert.deepEqual([rev('pp-sent'), rev('pp-edited'), rev('pp-draft')], [1, 1, null]);
 });
+
+test('a send that lands between the read and the decision\'s batch wins: the decision writes nothing, on either revision', async () => {
+  const db = full();
+  const env = envOf(db);
+  const uid = await sentOnce(db);
+  // The reviewer read revision 1. Before the decision's batch runs, the proposal is sent back and sent again as
+  // revision 2 (as a studio's resend would leave it), so the in-batch check is the only one that can see it.
+  const raced = {
+    DB: new Proxy(env.DB, {
+      get(target, k) {
+        if (k !== 'batch') return Reflect.get(target, k);
+        return async (stmts: unknown[]) => {
+          db.prepare("UPDATE program_proposals SET revision = 2 WHERE uid = ?").run(uid);
+          db.prepare(`INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at)
+            SELECT id, 2, json_object('name', name), sent_at FROM program_proposals WHERE uid = ?`).run(uid);
+          return target.batch(stmts as any);
+        };
+      },
+    }),
+  } as any;
+  await assert.rejects(decide(raced, uid, { outcome: 'approve_catalogue', note: 'Yes.', expected_revision: 1 }, SUPER), refused('not_waiting'));
+  const p = db.prepare('SELECT status, decided_at FROM program_proposals WHERE uid = ?').get(uid) as any;
+  assert.deepEqual([p.status, p.decided_at], ['sent', null], 'revision 2 is not decided under revision 1\'s review');
+  assert.deepEqual(revs(db, uid).map((r: any) => r.outcome), [null, null]);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM program_approved_specs').get().n, 0);
+});
