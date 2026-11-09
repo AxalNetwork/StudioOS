@@ -15,10 +15,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
-const APP = read('frontend/src/App.jsx');
+// The route table is App.jsx plus the modules it globs from `frontend/src/routes/` (D528).
+const APP = readRoutesSource();
 
 const { platformModuleRoutes, PLATFORM_MODULE_COUNT } = await import('../src/lib/siteModules.js');
 const { MODULES: CYCLE_MODULES } = await import('../src/pages/cycles/modules.js');
