@@ -42,6 +42,10 @@ const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = raw('frontend/src/pages/hq/SecurityPage.jsx');
 const P = codeOnly(PAGE);
 const API = codeOnly(raw('frontend/src/lib/api.js'));
+// D4803 — the ledger moved into Security v2's Events workspace (SE03).
+const EVENTS = raw('frontend/src/pages/hq/security/EventsWorkspace.jsx');
+const E = codeOnly(EVENTS);
+const SECURITY_V2 = raw('design/incoming/Security v2 Page.dc.html');
 /** Long `*_reason` strings are wrapped across `+`-joined literals. */
 const joined = (src) => src.replace(/'\s*\n\s*\+ '/g, '');
 const ROUTE = joined(raw('cloudflare-worker/src/routes/admin_security.ts'));
@@ -82,27 +86,24 @@ function h23() {
   return (CANVAS.slice(a, b) + CANVAS.slice(fa, fb)).replaceAll('&amp;', '&');
 }
 
-test('the ledger carries the five columns H23 draws, in its order — H23 completes H7', () => {
-  // D200 — RE-AIMED, NOT LOOSENED. This test read its five columns off H7
-  // (`Time · Actor · Tenant · Action · Target and reason`). H23 draws the same
-  // feed as the security_events ledger with five different columns, and says
-  // in its own subtitle that it completes Y2/H7 — so the page follows H23 and
-  // the columns are read off H23. The order is still asserted as a sequence.
-  const board = h23();
-  assert.ok(board.includes('completes Y2/H7'), 'H23 no longer says it completes H7 — the reason it wins here');
-  const columns = ['ts', 'actor', 'branch', 'event', 'outcome'];
-  for (const c of columns) {
-    assert.ok(board.includes(`<span>${c}</span>`), `H23 no longer draws the ${c} column`);
-  }
-  const head = PAGE.slice(PAGE.indexOf('data-testid="hq-gov-feed"'));
-  const ths = [...head.slice(0, head.indexOf('</thead>')).matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
-  assert.deepEqual(ths, columns, 'the ledger head no longer matches H23');
-  // AND THE DISAGREEMENT STAYS DELIBERATE. H7 still draws its older five; D200
-  // records the two canvases disagreeing. If H7 is redrawn to match, this
-  // fails and the note in D200 can be retired — the D129 shape, where the page
-  // said Role while the artboard still said Seat.
-  assert.ok(h7().includes('>Target and reason</span>'),
-    'H7 stopped drawing its old columns — retire the canvas-disagreement note in D200');
+test('the ledger carries the six columns Security v2 draws, in its order — SE03 supersedes H23', () => {
+  // D4803 — RE-AIMED A SECOND TIME, NOT LOOSENED. D200 read the five columns
+  // off H23 (ts · actor · branch · event · outcome, monospace). Security v2's
+  // Events board (SE03a) redraws the same feed with six — Time, Actor, Scope,
+  // Event, Outcome, Source — with the human label over the stored action, so
+  // the raw id H23 made primary is still on every row, beneath it. The order
+  // is still asserted as a sequence, read off the canvas.
+  const columns = ['Time', 'Actor', 'Scope', 'Event', 'Outcome', 'Source'];
+  const se03 = SECURITY_V2.slice(SECURITY_V2.indexOf('const evTable'), SECURITY_V2.indexOf('const evDrawer'));
+  const drawn = [...se03.matchAll(/<th scope="col">([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(drawn, columns, 'SE03 no longer draws these six columns');
+  const head = EVENTS.slice(EVENTS.indexOf('data-testid="hq-gov-feed"'));
+  const ths = [...head.slice(0, head.indexOf('</thead>')).matchAll(/<th scope="col"[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(ths, columns, 'the ledger head no longer matches SE03');
+  // The raw id H23 made primary is beneath every label, never dropped.
+  const table = EVENTS.slice(EVENTS.indexOf('data-testid="hq-gov-feed"'), EVENTS.indexOf('</table>', EVENTS.indexOf('data-testid="hq-gov-feed"')));
+  assert.match(table, /const \{ label, raw \} = eventLabel\(r\);/, 'the row no longer reads its label and stored action');
+  assert.match(table, /font-mono[^"]*">\{raw\}<\/small>/, 'the stored action left the row');
 });
 
 test('the five filters are the artboard\'s five, and the server applies them', () => {
@@ -116,11 +117,12 @@ test('the five filters are the artboard\'s five, and the server applies them', (
   // Server-side, because the feed is a merged page across four stores: a
   // client-side filter would show whichever few of the sixty matched and
   // read as "that is all there is".
-  assert.match(API, /hqGovernance: \(filter\) =>/, 'the api method no longer takes a filter');
-  assert.match(API, /governance\?filter=\$\{encodeURIComponent\(filter \|\| 'all'\)\}/,
+  // D4803 — and the Events workspace's filters and cursor travel the same way.
+  assert.match(API, /hqGovernance: \(filter, params = \{\}\) =>/, 'the api method no longer takes a filter');
+  assert.match(API, /governance\?\$\{new URLSearchParams\(\{ filter: filter \|\| 'all', \.\.\.params \}\)\}/,
     'the filter is no longer sent to the server');
-  assert.match(P, /api\.hqGovernance\(filter\)/, 'the page no longer asks the server for the filtered feed');
-  assert.doesNotMatch(P, /feed\.rows\.filter\(/, 'the page filters the merged page in the browser');
+  assert.match(P, /api\.hqGovernance\(filter, /, 'the page no longer asks the server for the filtered feed');
+  for (const src of [P, E]) assert.doesNotMatch(src, /\b(?:feed\.)?rows\.filter\(/, 'the page filters the merged page in the browser');
   // D200 — THE SIXTH, which no artboard labels: H7 draws five filters and H23
   // draws the ledger without a bar. It is asserted on the route and the page
   // only, and it must name the store it reads — a filter whose `reads` is
@@ -162,8 +164,11 @@ test('the feed is a union of five stores, not the one Y2 read', () => {
   ], 'the set of tables this route reads changed');
   // And the page shows WHICH stores answered, so a silently-dropped store is
   // visible rather than indistinguishable from a quiet week.
-  assert.match(P, /data-testid="hq-gov-sources"/, 'the page no longer says which stores were read');
-  assert.match(P, /src\.available \? `\$\{num\(src\.rows\)\} read` : \(src\.reason \|\| 'unreadable'\)/,
+  assert.match(E, /data-testid="hq-gov-sources"/, 'the page no longer says which stores were read');
+  // D4803 — through the shared SourceAvailability (SEB), which names each store and its reason.
+  assert.match(E, /<SourceAvailability sources=\{sources\}/, 'the workspace stopped drawing its sources');
+  const SA = codeOnly(raw('frontend/src/pages/hq/security/SourceAvailability.jsx'));
+  assert.match(SA, /s\.available \? `\$\{Number\(s\.rows\)\.toLocaleString\(\)\} rows read` : s\.reason \|\| 'did not answer'/,
     'an unreadable store renders the same as one that answered with nothing');
 });
 
@@ -174,8 +179,9 @@ test('no summary tile sits above the feed — H7 forbids exactly that', () => {
   // D200 — the zone is the ledger now, titled for it; H23 restates the rule
   // ("no summary tiles, no chart"), so the property is unchanged.
   assert.ok(h23().includes('no summary tiles, no chart'), 'H23 stopped restating the no-tiles rule');
-  const zone = PAGE.slice(PAGE.indexOf('title="Security events"'));
-  const head = zone.slice(0, zone.indexOf('</Zone>'));
+  // D4803 — the zone is the Events workspace now; SE03 keeps the rule (no tile over the table).
+  const zone = EVENTS.slice(EVENTS.indexOf('data-testid="events-workspace"'));
+  const head = zone.slice(0, zone.indexOf('data-testid="hq-gov-feed"') + 30);
   assert.ok(head.includes('data-testid="hq-gov-feed"'), 'the feed left its zone');
   assert.doesNotMatch(head, /<Stat\b/, 'a summary tile appeared over the audit log');
   assert.doesNotMatch(head, /<StatGrid\b/, 'a summary grid appeared over the audit log');
@@ -190,9 +196,10 @@ test('tenant is filled only where a store can fill it, and never with a dash', (
   assert.match(ROUTE, /tenant_available: false/);
   assert.match(ROUTE, /tenant_reason:[\s\S]{0,400}U1/, 'the blank column does not name why it is blank');
   // The cell: "Not recorded", never an em-dash and never a plausible name.
-  assert.match(P, /\{r\.tenant \|\| <Unrecorded \/>\}/, 'the tenant cell no longer says it is unrecorded');
-  assert.match(P, /data-testid="hq-gov-tenant-reason"/, 'the reason never reaches the screen');
-  const cells = PAGE.slice(PAGE.indexOf('data-testid="hq-gov-feed"'), PAGE.indexOf('</table>', PAGE.indexOf('data-testid="hq-gov-feed"')));
+  // D4803 — the Scope cell: the branch where a store records one, else "Not recorded".
+  assert.match(E, /return row\.tenant\s*\?\s*<span>\{row\.tenant\}<\/span>\s*:[^;]*Not recorded/, 'the scope cell no longer says it is unrecorded');
+  assert.match(E, /data-testid="hq-gov-tenant-reason"/, 'the reason never reaches the screen');
+  const cells = EVENTS.slice(EVENTS.indexOf('data-testid="hq-gov-feed"'), EVENTS.indexOf('</table>', EVENTS.indexOf('data-testid="hq-gov-feed"')));
   assert.doesNotMatch(cells, /—/, 'an em-dash stands in for an absent fact (D56/D68)');
 });
 
@@ -253,7 +260,7 @@ test('the "Return to HQ view" overlay is built, and this page describes it rathe
   assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}has not been built/,
     'the reason still says the overlay is unbuilt');
   assert.doesNotMatch(ROUTE, /tenant_view_reason:[\s\S]{0,600}which is U1/);
-  assert.match(P, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
+  assert.match(E, /\{feed\.tenant_view_reason\}/, 'the page hardcodes the explanation instead of reading it');
 });
 
 
@@ -346,13 +353,17 @@ test('a session open past its limit reads "not closed", not "0m left"', () => {
 });
 
 test('nothing absent on this page falls back to a number', () => {
-  assert.doesNotMatch(P, /\|\|\s*0\b/, 'an absent figure falls back to 0');
-  assert.doesNotMatch(P, /\?\?\s*0\b/, 'an absent figure falls back to 0');
+  for (const src of [P, E]) {
+    assert.doesNotMatch(src, /\|\|\s*0\b/, 'an absent figure falls back to 0');
+    assert.doesNotMatch(src, /\?\?\s*0\b/, 'an absent figure falls back to 0');
+  }
   // An unreadable feed is distinguished from an empty one, in both directions.
-  assert.ok(P.includes('claim="This is not a claim that nobody did anything."'),
+  assert.ok(E.includes('claim="This is not a claim that nobody did anything."'),
     'an unreadable feed does not say what it is not');
-  assert.match(P, /data-testid="hq-gov-empty"/, 'an empty feed renders as nothing at all');
-  assert.match(ROUTE, /const readAudit = filter === 'all' \|\| filter === 'exports';/);
+  assert.match(E, /data-testid="hq-gov-empty"/, 'an empty feed renders as nothing at all');
+  // The empty state is drawn only when no store failed (SE10b against SE10c).
+  assert.match(E, /rows\.length === 0 && failedSources\.length === 0/, 'a failed store reads as a real zero');
+  assert.match(ROUTE, /const readAudit = \(filter === 'all' \|\| filter === 'exports'\) && stores\.admin_audit_log;/);
 });
 
 test('the AI-safety zone renders counters, and each half shows its own state', () => {

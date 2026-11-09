@@ -479,6 +479,9 @@ this to read correctly.
   `OAUTH_CALLBACK_BASE_URL` stays pinned until every redirect URI is
   registered; flipping it early breaks Google sign-in for everyone at once.
 - **A production incident** — `documentation/operations/INCIDENT_RESPONSE.md`.
+- **A red `schema-drift` job after a deploy** — `documentation/operations/SCHEMA_DRIFT.md`:
+  what is checked before a deploy versus found after it, and how the finding
+  is escalated and corrected (#4591).
 - **Gotchas that bite during a deploy** — `documentation/architecture/GOTCHAS.md`.
 
 ---
