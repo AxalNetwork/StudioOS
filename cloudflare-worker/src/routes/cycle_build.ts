@@ -148,13 +148,19 @@ function dueWindow(state: string, due: unknown): string {
   return state === 'overdue' ? 'overdue' : days == null ? 'none' : days < 0 ? 'past' : days <= 30 ? 'next_30' : 'later';
 }
 /**
- * Stored is a proof uploaded under `build-proof/`; Key recorded is a key typed
- * before 461, which opens nothing. A filing that is filed, overdue or due
- * within 30 days with no proof reads Missing.
+ * D5066 (#5066): four explicit proof states, never the ambiguous dash this
+ * replaced. Stored is a proof uploaded under `build-proof/`. Unreadable is a
+ * key typed before 461, which opens nothing — #4600's upload/open
+ * permissions and file validation are unchanged by this: a key outside that
+ * prefix still gets no "Open proof" action (`companyCreation.actions` in
+ * `services/records/build.ts`), it is just named honestly here instead of
+ * "Key recorded". With no key at all: Not expected yet for a filing that is
+ * not yet due or overdue (there is nothing to chase), Missing for one that
+ * is filed, overdue or due within 30 days and still has no proof on record.
  */
 function proofText(key: unknown, state: string): string {
-  if (typeof key === 'string' && key) return key.startsWith('build-proof/') ? 'Stored' : 'Key recorded';
-  return state === 'upcoming' ? '—' : 'Missing';
+  if (typeof key === 'string' && key) return key.startsWith('build-proof/') ? 'Stored' : 'Unreadable';
+  return state === 'upcoming' ? 'Not expected yet' : 'Missing';
 }
 function filingKeys(state: string, due: unknown): RecordRow['keys'] {
   const day = typeof due === 'string' && dateOnly(due.slice(0, 10)) ? due.slice(0, 10) : null;
@@ -661,10 +667,14 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       ORDER BY created_at DESC, id DESC LIMIT 1`,
   ).bind(p.id).first<any>();
   let obligations: any[] = [];
+  // D5066 (#5066): every open obligation reaches the list, not just the
+  // first three — the generic page read below (`pageBuildRows`, D690/#1693)
+  // already pages, filters and sorts every module's `rows`, so a real cap
+  // here only hid rows that pagination already had a place for.
   if (p.entity_id != null) obligations = rows(await env.DB.prepare(
     `SELECT o.id, o.title, o.due_date, o.status, o.proof_file_key, o.kind, e.jurisdiction
        FROM entity_obligations o JOIN entities e ON e.id = o.entity_id
-      WHERE o.entity_id = ? AND o.status = 'open' ORDER BY o.due_date, o.id LIMIT 3`,
+      WHERE o.entity_id = ? AND o.status = 'open' ORDER BY o.due_date, o.id`,
   ).bind(p.entity_id).all<any>());
   const series: ChartSpec[] = [];
   const labSteps = order ? [
@@ -689,7 +699,23 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       return record(`obligation-${o.id}`, { filing: o.title, jurisdiction: o.jurisdiction, due: o.due_date, state: filingText(state, o.due_date), proof: proofText(o.proof_file_key, state) },
         filingKeys(state, o.due_date), { title: o.title, due_date: o.due_date ?? null, status: o.status }); }),
   ];
-  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', steps.find(s => s.state !== 'done')?.title ? `Complete ${steps.find(s => s.state !== 'done')!.title}` : null) : next(p, 'company-creation', 'Add filing', true)),
+  // D5066 (#5066): the next action is the single highest-priority open item
+  // across every actionable source this card combines — a Lab step, a
+  // formation step or an entity obligation — never formation steps alone.
+  // Overdue beats due soon beats any other open item; `combined`'s own
+  // `keys.state`/`keys.due` (decision 8, above) are reused so the priority
+  // here can never disagree with what the Due and State columns already
+  // show. Ties keep `combined`'s own order (Lab, then step, then
+  // obligation), then the earliest due date.
+  const FILING_RANK: Record<string, number> = { overdue: 0, due_soon: 1, upcoming: 2 };
+  const openFilings = combined.filter(r => r.keys!.state !== 'filed');
+  const nextFiling = openFilings.length ? openFilings.slice().sort((a, b) => {
+    const byRank = FILING_RANK[a.keys!.state as string] - FILING_RANK[b.keys!.state as string];
+    if (byRank !== 0) return byRank;
+    const ad = a.keys!.due as string | null, bd = b.keys!.due as string | null;
+    return ad == null && bd == null ? 0 : ad == null ? 1 : bd == null ? -1 : ad.localeCompare(bd);
+  })[0] : null;
+  return { card: card('company-creation', combined.length ? 'ok' : 'empty', series, 'Next filings', combined.length ? null : 'No filings yet. Formation steps and their dates appear here.', combined.length ? next(p, 'company-creation', nextFiling ? `Complete ${nextFiling.cells.filing}` : null) : next(p, 'company-creation', 'Add filing', true)),
     cols: [['filing', 'Filing'], ['jurisdiction', 'Jurisdiction'], ['due', 'Due'], ['state', 'State'], ['proof', 'Proof']].map(([key, label]) => ({ key, label })), rows: combined,
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(FILING_LABEL)) },
       { key: 'due_window', label: 'Due', options: options([['overdue', 'Overdue'], ['next_30', 'Next 30 days'], ['later', 'Later'], ['none', 'No date']]) }],

@@ -1183,7 +1183,15 @@ const companyCreation: ModuleSpec = {
       : due && days != null
         ? `Due ${due} · ${days < 0 ? `${plural(-days, 'day')} overdue` : days === 0 ? 'due today' : `${plural(days, 'day')} left`}`
         : 'No due date recorded';
-    const proof = typeof f.proofKey === 'string' && f.proofKey ? (proofStored(f.proofKey) ? 'Stored' : 'Key recorded') : null;
+    // D5066 (#5066): four explicit proof states, matching the list's own
+    // (cycle_build.ts's `proofText`) — never a null value with a generic
+    // reason for "not due yet" or "no proof on record" (that hid which one
+    // applied). Only a lab- row keeps null: the Lab's own order is this
+    // filing's record, not an uploadable proof, so its reason still explains
+    // that rather than claiming a state that does not apply to it.
+    const proof = f.source === 'lab' ? null
+      : typeof f.proofKey === 'string' && f.proofKey ? (proofStored(f.proofKey) ? 'Stored' : 'Unreadable')
+      : state === 'upcoming' ? 'Not expected yet' : 'Missing';
     return {
       title: f.title, sub,
       pills: [{ text: filingLabel(f, state), tone: FILING_TONE[state] }],
@@ -1191,7 +1199,7 @@ const companyCreation: ModuleSpec = {
         fact('Filing', known(FILING_KIND, f.kind) ?? f.title, 'No filing kind recorded.'),
         fact('Jurisdiction', f.jurisdiction, 'No jurisdiction recorded.'),
         fact('Due', due, 'No due date recorded.'),
-        fact('Proof', proof, f.source === 'lab' && f.done ? 'The Lab keeps this filing’s record.' : 'Not filed yet'),
+        fact('Proof', proof, 'The Lab keeps this filing’s record.'),
       ],
       createdBy: f.createdBy ?? null, createdAt: f.createdAt ?? null,
     };
