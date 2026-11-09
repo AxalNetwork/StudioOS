@@ -392,8 +392,13 @@ export default function PartnerBucketRoutes() {
   const location = useLocation();
   const { user } = useAuth();
   const bucket = bucketForPath('partner', location.pathname);
-  const isRoot = bucket && location.pathname === bucket.prefix;
-  const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
+  // D4822 (#4822): Delivery's root IS its Board, the command centre — not a directory of the five zones. It is
+  // rendered here rather than redirected, so the address the sidebar row opens stays `/delivery` and a link to
+  // `/delivery?engagement=…` keeps its query.
+  const landsOnBoard = bucket?.prefix === '/delivery' && location.pathname === bucket.prefix;
+  const isRoot = bucket && location.pathname === bucket.prefix && !landsOnBoard;
+  const zone = landsOnBoard ? (bucket.zones || []).find((z) => z.slug === 'board') ?? null
+    : isRoot ? null : zoneForPath(bucket, location.pathname);
   const prefix = bucket?.prefix;
   const slug = zone?.slug;
 
@@ -427,7 +432,8 @@ export default function PartnerBucketRoutes() {
 
   const INTRO = {
     '/pipeline': 'Win the work. One firm’s pipeline, from lead to signed retainer.',
-    '/delivery': 'Ship the work. Projects report milestones; embedded seats report hours against a grant the client can revoke.',
+    // D4822: the canvas's one purpose line; the eyebrow and title come from the shell, once.
+    '/delivery': 'Ship the work. Run active client engagements, deliverables, capacity and reporting in one place.',
     '/offers': 'Package what we sell. The storefront lead scoring reads against.',
   };
 
@@ -513,7 +519,7 @@ export default function PartnerBucketRoutes() {
       role="partner"
       title={isRoot ? bucketTitle(bucket) : undefined}
       intro={INTRO[prefix]}
-      activeSlug={isRoot ? null : undefined}
+      activeSlug={landsOnBoard ? 'board' : isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail
           workspace={RAIL.workspace}

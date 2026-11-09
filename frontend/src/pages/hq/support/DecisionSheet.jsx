@@ -154,7 +154,7 @@ export function SheetResult({ record, branchLabel, onResend }) {
  */
 export function DecisionSheetView({
   item, branchLabel, readAt, kindHours, phase = 'decide', outcome = 'answered', reason = '', invalid = null, refusal = null,
-  record = null, copy = null, onChoose, onReason, onSubmit, onClose, onResend, onReread, initialFocus, returnFocusTo,
+  record = null, copy = null, onChoose, onReason, onSubmit, onClose, onResend, onReread, initialFocus, returnFocusTo, offline = false,
 }) {
   const where = branchLabel || item.branch_code;
   const kind = capital(escalationKindLabel(item.kind));
@@ -253,6 +253,11 @@ export function DecisionSheetView({
           {invalid && (
             <p id={errId} role="alert" className="mt-1 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="hq-support-sheet-invalid">✕ {invalid}</p>
           )}
+          {offline && (
+            <p role="status" className="mt-2 text-[13px] font-semibold text-amber-900 dark:text-amber-200" data-testid="hq-support-sheet-offline">
+              You're offline: this decision can't be recorded until you reconnect. What you typed stays here.
+            </p>
+          )}
           {refusal && (
             <p role="alert" className="mt-2 text-[13px] font-semibold text-red-700 dark:text-red-300" data-testid="hq-support-sheet-refused">Refused: {refusal}</p>
           )}
@@ -267,7 +272,7 @@ export function DecisionSheetView({
           <button
             type="submit"
             form={`hq-support-sheet-form-${item.uid}`}
-            disabled={busy}
+            disabled={busy || offline}
             aria-busy={busy || undefined}
             className={PRIMARY}
             data-testid="hq-support-sheet-submit"

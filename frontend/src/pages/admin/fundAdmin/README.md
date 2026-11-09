@@ -13,7 +13,7 @@ an admin's `/funds` and `/funds/performance` forward here.
 
 | `FundOpsRedirect.jsx` | D1160 (FND16): an admin's `/funds` and `/funds/performance` forward here with "Fund Ops is now Fund administration, under Fund admin.", the query and hash kept; it counts each forward under #2301's `ROLE_REDIRECTS`, since the same addresses are an investor's pages. |
 | `Refusal.jsx` | D1160 (FND20): the centred refusals in the canvas's words — a branch admin, a support session, anyone who is not an admin — and `FundAdminBoundary`, the route guard's panel for `/admin/fund-admin`. |
-| `OverviewTab.jsx` | Decision 9's overview, one group per block; a block whose store failed is Unreadable alone. |
+| `OverviewTab.jsx` | D4812 (FA-01): the v2 Overview, attention first — Needs attention, Fund position, Funds, Recent activity, Banking & entities folded — each part in the fund scope, each source Unreadable alone. |
 | `BankingTabs.jsx` | Banking (#1834's `MercuryEntityConnections`, #1775's accounts and paged transactions, the payment-instructions link or sentence) and Reconciliation (#1775's matches, Confirm, Reject with a reason, a manual proposal). |
 | `PerformanceTab.jsx` | D1164 (#3071, FND10–FND12): NAV & performance. For the fund `?fund=` names: the NAV line, the seven tiles (each missing one Not recorded with its reason), the quarterly charts (`QuarterLines`: a quarter with no NAV is a dashed bridge, never a dip to 0) and the positions chart (`PairBars`: a position with no mark is a dashed "No mark" bar, never its cost), each with View as table, and the positions table with Record a mark and Move to another fund (act `fund.valuation`, through `FundActControl`, each an in-page `Lightbox`). For All funds: Funds side by side. Each block reads alone. |
 | `performanceModel.js` | D1164: NAV & performance, pure: `navTiles`, `quarterCharts`, `positionsChart`, `positionRows`, `sideBySide`, `checkMark` (a date not in the future, dollars to cents with 0 allowed, a source of 1 to 500 characters, before the call) and `moveOptions`. |
@@ -35,6 +35,11 @@ an admin's `/funds` and `/funds/performance` forward here.
 | `fundsModel.js` | D1161: Funds' words and checks, pure: `rateText`, `sizeText`, `splitFunds`, `filterFunds`, `checkNewFund`, `checkEconomics`, `providersBody`, `checkFacts`, `lpaCard`, `fundTiles`, `fundIdFrom`. |
 | `useRead.js` | One read's `loading` / `ready` / `unreadable` state. |
 | `parts.jsx` | The drawing parts, from the August canvas "Fund Administration": `Section`, `Panel`, `Line`, `Tiles` and `Table` (which stacks, each cell labelled, below `sm`). |
+| `workspaceModel.js` | D4812: v2's rules, pure — the six workspaces over D1157's addresses, the amber flags, the context-aware primary, Needs attention, Fund position, the Funds rows and the activity rows. |
+| `MoneyFlow.jsx` | D4812 part 2 (FA-03, FA-08): the money-action flow's parts — `FlowSteps`, `Effects`, `NotOffered` (refused or unverified, a sentence), `ConfirmAct` (the named act and, for a Super Admin act, the authenticator code first) and `FlowReceipt`. |
+| `moneyFlowModel.js` | D4812 part 2: the flow's rules, pure — the five steps, `actGate`, `actButton`, `checkCode`, and each act's exact effect (call, receipt, distribution). |
+| `PersonPicker.jsx` | D4812 part 3 (FA-04 B): the reusable person/entity picker — search, each account by name and kind with the Worker's eligibility (an ineligible one says why and cannot be chosen), then a confirmation that names the change and asks the authenticator code. Used for the GP of record and the ledger administrator. |
+| `fundPageModel.js` | D4812 part 3: the fund page's identity line, its six key figures, its local navigation, and the picker's roles, effects and `checkChange`, pure. |
 
 ## Rules
 

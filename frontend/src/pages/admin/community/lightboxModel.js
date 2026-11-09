@@ -338,6 +338,44 @@ export function whenLabel(at) {
   return `${dayLabel(at)} · ${time} UTC`;
 }
 
+/** D4820 part 5 (CM08): a row's kind, as the chips name it. */
+const KIND_WORD = { events: 'Event', jobs: 'Job', circles: 'Circle', wellbeing: 'Wellbeing' };
+
+/** "Today", "Yesterday" or "Mon 9 Nov", in UTC, from the page's clock. */
+export function dayHeading(day, now = Date.now()) {
+  if (!day) return 'Date not recorded';
+  const today = new Date(now).toISOString().slice(0, 10);
+  const yesterday = new Date(now - 86_400_000).toISOString().slice(0, 10);
+  if (day === today) return 'Today';
+  if (day === yesterday) return 'Yesterday';
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+/** The page's rows, grouped by UTC day in their order (the read is newest first); an undated row is its own group, last. */
+export function groupsOf(rows) {
+  const out = [];
+  for (const r of rows) {
+    const last = out.at(-1);
+    if (last && last.day === r.day) last.rows.push(r);
+    else out.push({ day: r.day, rows: [r] });
+  }
+  return out;
+}
+
+/**
+ * D4820 part 5 (CM08): the kind chips' counts, from the read's `by_kind`
+ * (D932, sent only when no kind is chosen). Each count is a whole number or
+ * null (its source could not be read); a missing or odd `by_kind` is null for
+ * every kind, so a chip never shows a count the Worker did not send.
+ */
+export function activityKindCounts(answer) {
+  const b = answer?.by_kind;
+  const ok = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+  const counts = Object.fromEntries(['events', 'jobs', 'circles', 'wellbeing'].map((k) => [k, b && typeof b === 'object' ? ok(b[k]) : null]));
+  const all = Number.isInteger(answer?.total) && answer.total >= 0 && b ? answer.total : null;
+  return { all, ...counts, admin: null };
+}
+
 /**
  * The activity read's answer as a page. A source that failed is named, and
  * its rows and count are absent, never zero. The Worker's paging stops at
@@ -352,6 +390,22 @@ export function activityPage(answer, page) {
   const from = answer.rows.length ? (at - 1) * ROWS + 1 : 0;
   const to = from ? from + answer.rows.length - 1 : 0;
   const failed = (answer.unreadable || []).map((u) => SOURCE_WORD[u?.source] || 'one source');
+  const rows = answer.rows.map((r, i) => {
+    const t = stamp(r.at);
+    const dated = !Number.isNaN(t);
+    return {
+      key: `${at}-${i}`,
+      icon: r.icon || '•',
+      kind: KIND_WORD[r.kind] || null,
+      sentence: String(r.sentence || ''),
+      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
+      when: whenLabel(r.at),
+      lastChange: r.dated_by === 'last_change',
+      day: dated ? new Date(t).toISOString().slice(0, 10) : null,
+      // A registration row counts a whole day (one row per event per day), so it has no time of its own.
+      time: !dated ? NOT_RECORDED : r.count != null ? 'All day' : new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }),
+    };
+  });
   return {
     state: 'ready',
     page: at,
@@ -359,15 +413,61 @@ export function activityPage(answer, page) {
     from,
     to,
     total,
-    rows: answer.rows.map((r, i) => ({
-      key: `${at}-${i}`,
-      icon: r.icon || '•',
-      sentence: String(r.sentence || ''),
-      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
-      when: whenLabel(r.at),
-      lastChange: r.dated_by === 'last_change',
-    })),
+    rows,
+    // D4820 part 5 (CM08): the page's rows grouped by UTC day, newest first, the time first in each row.
+    groups: groupsOf(rows),
     partial: failed.length ? `Could not be read: ${[...new Set(failed)].join(', ')}. Those rows are not here and not in the count, which is not a claim that nothing happened.` : null,
     capped: total > ACTIVITY_CAP ? `Pages stop at ${nf(ACTIVITY_CAP)} rows. Narrow the kind or the dates to reach older ones.` : null,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * D4820 part 4 (#4820) · CM05, the Events lightbox's summary strip and tabs
+ * ------------------------------------------------------------------ */
+
+/** CM05's three tabs. The list is the default; events by type moved here from the overview. */
+export const EVENTS_TABS = [
+  { key: 'list', label: 'Events' },
+  { key: 'participation', label: 'Participation' },
+  { key: 'by-type', label: 'By type' },
+];
+
+/**
+ * CM05's summary strip, from the Community read the overview already holds
+ * (its tiles and `buildEventsFunnel`), so the strip and the overview cannot
+ * disagree. Each item answers alone: a value, `Reading…`, `Unreadable`, or
+ * (Confirmed from an older read) `Not in this read`. Never a zero for a part
+ * that was not read.
+ */
+export function eventsSummary({ ev, fig }) {
+  const fromTile = (t, label) => {
+    if (!t || t.state === 'loading') return { key: t?.key || label, label, state: 'loading' };
+    if (t.state !== 'ready') return { key: t.key, label, state: 'unreadable' };
+    return { key: t.key, label, state: 'ready', value: t.value, sub: t.sub || null };
+  };
+  const f = ev?.funnel;
+  const step = (i, key, label, sub) => {
+    if (!f || f.state === 'loading') return { key, label, state: 'loading' };
+    if (f.state !== 'ready') return { key, label, state: 'unreadable' };
+    const v = f.steps[i].value;
+    return v === null ? { key, label, state: 'unrecorded', note: 'Not in this read' }
+      : { key, label, state: 'ready', value: Number(v).toLocaleString('en-US'), sub };
+  };
+  const ended = f?.state === 'ready' ? `${Number(f.events).toLocaleString('en-US')} ended event${f.events === 1 ? '' : 's'}` : null;
+  const wl = ev?.waitlisted;
+  let waitlisted;
+  if (!wl || wl.state === 'loading') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'loading' };
+  else if (wl.state !== 'ready') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'unreadable' };
+  else waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'ready', value: wl.value.toLocaleString('en-US'), sub: `across ${wl.events.toLocaleString('en-US')} upcoming event${wl.events === 1 ? '' : 's'}` };
+  return [
+    fromTile(fig?.upcoming, 'Upcoming'),
+    fromTile(fig?.registrations, 'Registrations'),
+    step(1, 'confirmed', 'Confirmed', ended),
+    step(2, 'attended', 'Attended', ended),
+    fromTile(fig?.['show-up'], 'Show-up'),
+    waitlisted,
+  ];
+}
+
+/** The By type tab's count: how many of the stored types had an event, or null when the part was not read. */
+export const typesWithEvents = (byType) => (byType?.state === 'ready' ? byType.shown.length : null);

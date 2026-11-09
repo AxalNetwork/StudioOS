@@ -28,6 +28,7 @@ import {
 } from '../src/pages/raise/dataroom/activityModel.js';
 import { PROPOSALS_EMPTY, PROPOSALS_UNREADABLE, areasOf, fileChips, itemView, opensLine, proposalView, proposalsHoldLine, proposalsOf, summaryLine } from '../src/pages/raise/dataroom/checklistModel.js';
 import { previewView, viewAsOptions } from '../src/pages/raise/dataroom/previewModel.js';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -42,6 +43,7 @@ const FAR = '2099-01-01';
 // The founder's room read (routes/data_room.ts GET /:projectUid): it holds names the preview must never show.
 const ROOM = {
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
+  role: 'owner', capabilities: ROOM_CAPS.owner,
   folders: [
     { id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'open' },
     { id: 2, uid: 'f2', name: 'Secret Board Folder', parent_id: null, visibility: 'nda' },

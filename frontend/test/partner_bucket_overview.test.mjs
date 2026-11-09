@@ -78,8 +78,12 @@ test('PartnerBucketRoutes renders an overview grid at each bucket root', () => {
     'the root must render the shared overview with the partner accent');
   assert.match(bucketRoutes, /unbuilt=\{gapsFor\(prefix, bucket\)\}/,
     'every partner zone without a live page must carry its own gap line');
-  assert.match(bucketRoutes, /activeSlug=\{isRoot \? null : undefined\}/,
-    'the root must light no zone pill');
+  // D4822 (#4822): every root lights no zone pill, except Delivery's, whose root IS its Board (the v2 canvas's
+  // first decision) and so lights Board.
+  assert.match(bucketRoutes, /activeSlug=\{landsOnBoard \? 'board' : isRoot \? null : undefined\}/,
+    'the root must light no zone pill (Delivery’s lights Board)');
+  assert.match(bucketRoutes, /const landsOnBoard = bucket\?\.prefix === '\/delivery' && location\.pathname === bucket\.prefix;/,
+    'only Delivery’s root lands on a zone');
   // Was `/title=\{isRoot \? bucket\?\.label : undefined\}/`, which pinned one
   // expression rather than the rule its own message states. The rule is that a
   // root titles itself from the BUCKET and never from a zone or a literal — and

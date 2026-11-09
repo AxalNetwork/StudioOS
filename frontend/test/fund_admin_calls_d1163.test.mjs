@@ -103,6 +103,7 @@ function stubs(over = {}) {
   return {
     calls,
     apis: {
+      auth: { stepUp: rec('stepUp', async () => ({ ok: true })) },
       fundAdmin: {
         access: rec('access', async () => access(false)),
         overview: rec('overview', async () => OVERVIEW()),
@@ -309,18 +310,34 @@ test('FND8: the preview and the issued call show the same figures, and the conso
   assert.ok(m.text(m.by('calls-preview-line-2')).includes('No platform account'));
   assert.equal(m.text(m.by('calls-preview-total')), '$10,000.00');
   assert.ok(m.by('calls-preview-flagged'));
-  await m.click('calls-preview-issue');
+  // D4812 part 2: Review shows the exact effect, Confirm asks for the code, the button names the act and amount.
+  assert.match(m.text(m.by('calls-effects')), /Amount \$10,000\.00/);
+  await m.click('calls-preview-continue');
+  assert.equal(m.text(m.by('calls-confirm-submit')), 'Issue $10,000.00 capital call');
+  await m.submit('calls-confirm-submit');
+  assert.equal(m.text(m.by('calls-confirm-code-error')), 'Enter the 6-digit code from your authenticator app.');
+  assert.ok(!s.calls.some(([n]) => n === 'callIssue'), 'nothing is issued without the code');
+  await m.type('calls-confirm-code', '123456');
+  await m.submit('calls-confirm-submit');
+  const stepAt = s.calls.findIndex(([n]) => n === 'stepUp');
+  const issueAt = s.calls.findIndex(([n]) => n === 'callIssue');
+  assert.deepEqual(s.calls[stepAt], ['stepUp', '123456']);
+  assert.ok(stepAt >= 0 && stepAt < issueAt, 'the step-up runs before the act');
   // Exactly the amount and the date on screen.
-  assert.deepEqual(s.calls.find(([n]) => n === 'callIssue'), ['callIssue', 7, 1000000, 'Follow-on', '2026-12-01']);
-  assert.ok(!m.by('calls-new-dialog'), 'the dialog closes');
+  assert.deepEqual(s.calls[issueAt], ['callIssue', 7, 1000000, 'Follow-on', '2026-12-01']);
+  assert.match(m.text(m.by('calls-receipt-flow')), /Confirmed by the server at \d{2}:\d{2}:\d{2} UTC/);
   assert.equal(m.text(m.by('calls-issued-check')), 'Call 3 is issued, with the figures its preview showed.');
+  await m.click('calls-receipt-flow-done');
+  assert.ok(!m.by('calls-new-dialog'), 'Done closes the dialog');
   await m.unmount();
 
   // A line the Worker wrote differently is named.
   const d = stubs({ access: async () => access(true), issuedLedger: () => LEDGER([CALL3(399999), CALL2(), CALL1()]) });
   const { m: n } = await openCalls(SUPER, d);
   await previewCall(n);
-  await n.click('calls-preview-issue');
+  await n.click('calls-preview-continue');
+  await n.type('calls-confirm-code', '123456');
+  await n.submit('calls-confirm-submit');
   assert.match(n.text(n.by('calls-issued-check')), /figures differ from the preview for LP Two/);
   await n.unmount();
 });
@@ -348,7 +365,17 @@ test('Record receipt opens its dialog, records the amount on the line, and reads
   await m.type('calls-receipt-date', '2026-10-20');
   await m.type('calls-receipt-reference', 'WIRE-1');
   await m.submit('calls-receipt-submit');
+  // D4812 part 2: Review the effect on the line, then the named act; an Admin's act asks for no code.
+  assert.ok(!s.calls.some(([n]) => n === 'receipt'), 'Review writes nothing');
+  assert.match(m.text(m.by('receipt-effects')), /Outstanding on this line \$20,000\.00 → \$19,499\.75/);
+  assert.match(m.text(m.by('receipt-steps-authenticate')), /Authenticate · not required/);
+  await m.click('calls-receipt-continue');
+  assert.ok(!m.by('calls-receipt-confirm-code'));
+  assert.equal(m.text(m.by('calls-receipt-confirm-submit')), 'Record $500.25 receipt');
+  await m.submit('calls-receipt-confirm-submit');
   assert.deepEqual(s.calls.find(([n]) => n === 'receipt'), ['receipt', 7, 11, { amount_cents: 50025, received_on: '2026-10-20', reference: 'WIRE-1' }]);
+  assert.ok(!s.calls.some(([n]) => n === 'stepUp'));
+  await m.click('calls-receipt-done-done');
   assert.ok(!m.by('calls-receipt-dialog'));
   assert.ok(s.calls.filter(([n]) => n === 'ledger').length > reads, 'the ledger is read again');
   await m.unmount();
@@ -410,7 +437,14 @@ test('FND9: where every cent goes, the per-LP preview by name, and Execute with 
   assert.equal(m.text(m.by('distribution-preview-balance')), 'The total equals the sum of its lines.');
   assert.ok(m.by('distribution-execute-foot'));
   await m.click('distribution-execute');
+  assert.ok(!s.calls.some(([n]) => n === 'execute'), 'Execute opens the review; nothing runs');
+  assert.match(m.text(m.by('distribution-effects')), /Proceeds \$1,000\.00/);
+  await m.click('distribution-flow-continue');
+  await m.type('distribution-confirm-code', '654321');
+  assert.equal(m.text(m.by('distribution-confirm-submit')), 'Execute $1,000.00 distribution');
+  await m.submit('distribution-confirm-submit');
   assert.deepEqual(s.calls.find(([n]) => n === 'execute'), ['execute', { fund_id: 7, proceeds_cents: 100000 }]);
+  assert.ok(m.by('distribution-done'));
   await m.unmount();
   const a = await openDist(ADMIN);
   await a.m.type('distribution-proceeds', '1000.00');
