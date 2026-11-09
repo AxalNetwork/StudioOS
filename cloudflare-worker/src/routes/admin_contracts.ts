@@ -30,6 +30,7 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
+import { confirmationFor } from '../services/governanceHighRisk';
 import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
 import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
 import { contractAttention, isAttentionFilter, matchesAttention } from '../services/contractAttention';
@@ -100,11 +101,17 @@ function publicationRefusal(c: AppContext, e: unknown) {
 
 adminContracts.post('/published-templates/:slug/publish', async (c) => {
   const admin = await requireHqAuthoring(c);
-  let input: { version?: unknown };
+  let input: { version?: unknown; reason?: unknown; confirm?: unknown };
   try { input = await c.req.json(); } catch { input = {}; }
   if (!input || !Number.isSafeInteger(input.version)) return c.json({ error: 'Send the version to publish.', code: 'version_required' }, 400);
+  // D4811 part 13 (CT-16 "Activate template"): publishing makes a version approved for use, so it is a
+  // high-risk action: a reason, the typed word PUBLISH, then a recent step-up (after the form checks,
+  // so a mistyped word never asks for a code). The reason is kept in the publication's audit row.
+  const confirmed = confirmationFor('PUBLISH', input);
+  if (!confirmed.ok) return refuse(c, confirmed.refusal.status, { code: confirmed.refusal.code, message: confirmed.refusal.message.replace('saved', 'published') });
+  await requireStepUp(c);
   try {
-    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email));
+    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email), confirmed.reason);
     if (!published) return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
     const { body_md: _body, ...publication } = published;
     return c.json({ ok: true, publication });

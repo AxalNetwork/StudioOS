@@ -64,7 +64,8 @@ export const contractsApi = {
   // D717 (#1782): publish one template at the version the editor saved, withdraw
   // its publication, push the recorded publications to every branch, and the
   // bundled documents not in the catalog.
-  publishOne: (slug, version) => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: JSON.stringify({ version }) }),
+  // D4811 part 13: publishing is high-risk (CT-16): the reason and the typed word PUBLISH go with it, and the Worker asks for a step-up.
+  publishOne: (slug, version, { reason = '', confirm = '' } = {}) => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: JSON.stringify({ version, reason, confirm }) }),
   withdraw: slug => request(`/admin/contracts/published-templates/${encodeURIComponent(slug)}/withdraw`, { method: 'POST', body: JSON.stringify({}) }),
   push: () => request('/admin/contracts/published-templates/push', { method: 'POST', body: JSON.stringify({}) }),
   outside: () => request('/admin/contracts/templates/outside'),
