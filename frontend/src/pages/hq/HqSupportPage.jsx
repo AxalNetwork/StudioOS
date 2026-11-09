@@ -93,6 +93,19 @@ export function useOnline() {
   return online;
 }
 
+/**
+ * D5034 part 4 (canvas SU13) — Eadwyn's Support prompts, first in the Ask
+ * panel. Each fills the composer; Eadwyn drafts and explains, and never
+ * answers, declines, resends or changes policy: the member records every
+ * decision here.
+ */
+export const SUPPORT_PROMPTS = Object.freeze([
+  'Summarize current support workload',
+  'Explain this SLA status',
+  'Draft a response to this escalation',
+  'Explain why data is unavailable',
+]);
+
 /** A read that failed, as the page holds it. Exported so `mergeSupport` is tested with the page's own value. */
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -1808,6 +1821,7 @@ export default function HqSupportPage() {
           stance="Read-only, except answering an escalation and setting the ticket SLA hours"
           note="Escalations, both ticket queues, the mirror strip and the SLA policy are read from HQ's own stores first, without waiting on any branch. Each branch's administrators' tickets, the queues by subsidiary and each branch's SLA version are read from the branches beside them. Recording an answer sends it to the branch. Send again resends the decision already stored."
           steps={railSteps}
+          prompts={SUPPORT_PROMPTS}
           coverage={coverage}
           coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
           unavailable={SUPPORT_UNAVAILABLE}
