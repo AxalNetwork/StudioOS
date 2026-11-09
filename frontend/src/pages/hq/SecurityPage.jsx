@@ -12,6 +12,8 @@ import SourceAvailability from './security/SourceAvailability.jsx';
 import AccessWorkspace from './security/AccessWorkspace.jsx';
 import EventsWorkspace from './security/EventsWorkspace.jsx';
 import { activeCount, feedQuery } from './security/eventsModel.js';
+import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
+import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
@@ -63,6 +65,8 @@ import { tabFromSearch, tabOf } from './security/securityTabs.js';
  * what HQ did, which is not a branch's to show.
  */
 export const UNAVAILABLE = Symbol('unavailable');
+/** Workspaces that say for themselves what could not be read (D4803), so the page banner stays off there. */
+const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety']);
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -1187,20 +1191,22 @@ export function SecurityConsole({
         </Zone>
       </div>
     ),
+    // D4803 slice 2: SE08 leads; the previous zone stays whole behind "How this is measured".
     'ai-safety': (
-      <>
+      <AiSafetyWorkspace block={ready ? data.ai_safety : null} unreadable={data === UNAVAILABLE} onRetry={load}>
         <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
           <AiSafety block={ready ? data.ai_safety : null} />
         </Zone>
-      </>
+      </AiSafetyWorkspace>
     ),
+    // D4803 slice 2: SE09 leads; the previous zone stays whole behind "How this is measured".
     resilience: (
-      <>
+      <ResilienceWorkspace block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} onRetry={load}>
         <Zone title="Backup / DR drill" sub="two facts, each its own state">
           <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
           {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
         </Zone>
-      </>
+      </ResilienceWorkspace>
     ),
   };
 
@@ -1250,7 +1256,7 @@ export function SecurityConsole({
 
         <SecurityTabs current={tab} onSelect={onTab} marks={overviewModel.marks} />
 
-        {data === UNAVAILABLE && tab !== 'overview' && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
+        {data === UNAVAILABLE && !OWN_UNREADABLE.has(tab) && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
         <div className="mt-4 space-y-4" data-testid={`security-ws-${tab}`}>
           {workspaces[tab] || workspaces.overview}

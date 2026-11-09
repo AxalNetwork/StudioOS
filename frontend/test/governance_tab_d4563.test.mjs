@@ -136,7 +136,7 @@ test('the Super Admin is offered the ownership, and an unrecorded entity reads N
   const view = await mountContracts(React.createElement(GovernanceTab), '/admin/contracts/governance', superAdmin);
   try {
     await view.flush();
-    await view.click('Ownership (Super Admin)'); await view.flush();
+    await view.click('🔒 View restricted ownership details'); await view.flush();
     assert.equal(calls.filter(([k]) => k === 'ownership').length, 1, 'read only once it opens');
     const text = view.text();
     assert.match(text, /Member A · Class A units · percent not recorded/);
