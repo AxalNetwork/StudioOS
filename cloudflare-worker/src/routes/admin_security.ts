@@ -83,7 +83,7 @@ import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
 import {
-  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
+  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, dsrOverdue, DSR_CLOCK_RULE, DSR_CLOCK_LABEL,
   dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
 import { ensureAdminAuditLogTable } from './admin';
@@ -447,9 +447,12 @@ r.get('/overview', async (c) => {
       // clock at zero. The arithmetic lives in the service so it can fail a
       // test — it had never had one.
       days_left: dsrDaysLeft(requestedMs, now),
-      // D4675 — the instant the clock runs out, in UTC, so the rule is stated
-      // rather than inferred from a day count.
+      // D4675 — the instant the clock runs out (the end of the due day, UTC),
+      // so the rule is stated rather than inferred from a day count.
       deadline_at: dsrDeadlineIso(requestedMs),
+      // D4675 part 2 (Q2 = B): overdue from that instant. The same fact as
+      // `days_left < 0`, said once so no reader has to derive it.
+      overdue: dsrOverdue(requestedMs, now),
       // null rather than 0 whenever the ledger could not be read — see above.
       prior_requests: ledgerAvailable ? (seen?.prior ?? 0) : null,
       last_outcome: ledgerAvailable ? (seen?.outcome ?? null) : null,
@@ -475,7 +478,9 @@ r.get('/overview', async (c) => {
       ...(dsrRows === null
         ? { reason: 'The open erasure requests could not be read on this database. This is not a claim that none are open.' }
         : {}),
-      clock_days: DSR_CLOCK_DAYS,
+      // D4675 part 2 (Q1 = B): the rule, named. It replaced `clock_days: 30`;
+      // a calendar month has no fixed day count, so none is sent.
+      clock: { rule: DSR_CLOCK_RULE, label: DSR_CLOCK_LABEL },
       kinds: DSR_KINDS,
       rows: dsr,
       // D200 — H23 draws the DSR clocks "by territory · runs against the

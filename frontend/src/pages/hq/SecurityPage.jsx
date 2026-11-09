@@ -968,7 +968,7 @@ export function SecurityConsole({
     // previous zone stays behind "How this is measured", read-only.
     privacy: (
       <PrivacyWorkspace dsr={ready ? data.dsr : null} unreadable={data === UNAVAILABLE} onReread={load}>
-        <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+        <Zone title="Data subject requests" sub={`${(ready && data.dsr?.clock?.label) || 'Statutory clock from receipt'} · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
           {/* D200 — H23 draws the DSR clocks "by territory · runs against the
               holding branch". Every request this database holds is HQ-held
               by construction, so the grouping has one group and the sentence
@@ -992,8 +992,8 @@ export function SecurityConsole({
                 <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
                   <div className="flex items-center justify-between gap-3">
                     <DsrSubject row={d} />
-                    <span title={d.deadline_at ? `The clock runs out ${String(d.deadline_at).slice(0, 16).replace('T', ' ')} UTC: ${data.dsr?.clock_days} × 24 hours from receipt.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
+                    <span title={d.deadline_at ? `Due by the end of ${String(d.deadline_at).slice(0, 10)} UTC: ${(data.dsr?.clock?.label || 'the statutory clock').toLowerCase()}.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : d.days_left === 0 ? 'due today' : `${num(d.days_left)}d left`}
                     </span>
                   </div>
                   {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
