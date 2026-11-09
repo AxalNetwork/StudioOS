@@ -132,9 +132,12 @@ test('5. concurrency is bounded per lane, and over the production table', async 
   let live = 0, most = 0; const gate = deferred<void>();
   const readers: any = Object.fromEntries(KNOWN_KINDS.map((k) => [k, async () => { live++; most = Math.max(most, live); await gate.promise; live--; return []; }]));
   const run = gatherSources(readers, env, 1, FROM, TO, undefined, {}, quiet);
-  for (let i = 0; i < 200 && most === 0; i++) await flush(1);
+  const bound = CALENDAR_LOCAL_CONCURRENCY + CALENDAR_NETWORK_CONCURRENCY;
+  // Wait for the pool to fill (under a loaded test run that takes more than a fixed number of ticks),
+  // then keep flushing so a pool that over-starts would still be seen above the bound.
+  for (let i = 0; i < 2000 && most < bound; i++) await flush(1);
   await flush(20);
-  assert.equal(most, CALENDAR_LOCAL_CONCURRENCY + CALENDAR_NETWORK_CONCURRENCY);
+  assert.equal(most, bound);
   assert.ok(KNOWN_KINDS.length > most, 'the table is wider than the pool, so the bound is real');
   gate.resolve();
   const { sources } = await run;
