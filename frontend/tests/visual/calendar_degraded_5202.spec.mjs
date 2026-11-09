@@ -63,7 +63,8 @@ async function wire(page, manifest, state) {
       if (kind === 'manual') items.push(axalEvent());
     }
     if (only('external_microsoft')) {
-      sources.push({ kind: 'external_microsoft', ok: true, error: null, items: 1, latency_ms: 120, at: new Date().toISOString() });
+      // D5204: Outlook answers, but stopped at its page cap, so the page must call it partly loaded.
+      sources.push({ kind: 'external_microsoft', ok: true, error: null, items: 1, latency_ms: 120, at: new Date().toISOString(), ...(state.outlookTruncated ? { truncated: true } : {}) });
       items.push(providerEvent('external_microsoft', OUTLOOK_TITLE));
     }
     if (only('external_google')) {
@@ -74,7 +75,15 @@ async function wire(page, manifest, state) {
         sources.push({ kind: 'external_google', ok: false, error: 'unreadable', reason: 'http_5xx', items: 0, latency_ms: 9000, at: new Date().toISOString() });
       }
     }
-    return route.fulfill({ status: 200, contentType: 'application/json', json: { items, sources } });
+    const answered = sources.filter((x) => x.ok).length;
+    const truncated = sources.filter((x) => x.truncated).map((x) => x.kind);
+    // D5204: coverage is the server's, derived from what it attempted.
+    const coverage = {
+      attempted: sources.length, answered, failed: sources.length - answered, hidden: 0,
+      complete: answered === sources.length && truncated.length === 0,
+      ...(truncated.length ? { truncated_kinds: truncated } : {}),
+    };
+    return route.fulfill({ status: 200, contentType: 'application/json', json: { items, sources, coverage } });
   });
 
   // Both credentials are good: that is the whole point of the state under test.
@@ -97,7 +106,7 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
 
     test('a failed Google read leaves the calendar standing, is named next to Connected, and retries alone', async ({ page, request }) => {
       const manifest = await manifestOf(request);
-      const state = { googleOk: false, reads: [] };
+      const state = { googleOk: false, outlookTruncated: false, reads: [] };
       await wire(page, manifest, state);
 
       await page.goto('/calendar');
@@ -137,3 +146,25 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
     });
   });
 }
+
+// D5204 (#5204): a source that stopped at its page cap is disclosed as partly loaded. The date arithmetic of
+// all-day events is a pure matter and lives in `frontend/test/calendar_allday_coverage_5204.test.mjs`, which
+// drives the whole zone matrix; this is only the rendered disclosure.
+test.describe('a capped source (desktop)', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('is called partially loaded, in the words the audit asked for', async ({ page, request }) => {
+    const manifest = await manifestOf(request);
+    const state = { googleOk: true, outlookTruncated: true, reads: [] };
+    await wire(page, manifest, state);
+
+    await page.goto('/calendar');
+    const note = page.getByTestId('cal-truncated');
+    await expect(note).toBeVisible({ timeout: 20_000 });
+    await expect(note).toContainText('partially loaded');
+    await expect(note).toContainText('Narrow the date range to see everything');
+    // The rest of the calendar is not called into question by one capped source.
+    await expect(page.getByText(FROM_TITLE).first()).toBeVisible();
+    await expect(page.getByText(OUTLOOK_TITLE).first()).toBeVisible();
+  });
+});

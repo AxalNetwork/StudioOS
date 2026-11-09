@@ -473,6 +473,21 @@ export interface CalendarEvent {
   /** D1206: a scoped projection can never be copied or acted on. */
   read_only?: true;
   /**
+   * D5204 (#5204) — AN ALL-DAY EVENT IS A CALENDAR DATE, NOT AN INSTANT.
+   *
+   * A provider's date-only event ("2026-11-09") used to travel in `start_at` alone, and the page grouped it with
+   * `new Date(...)`, which reads a bare ISO date at UTC midnight. West of UTC that is the evening BEFORE, so a
+   * member in Los Angeles saw an all-day event on the wrong day.
+   *
+   * So an all-day event says so, and carries the provider's own dates as dates: `start_date` inclusive and
+   * `end_date` EXCLUSIVE, exactly as Google states them (a one-day event ends on the next day). The page groups
+   * all-day rows by these and never parses them into an instant. `start_at` and `end_at` keep whatever they held,
+   * so the feed, the .ics file and every existing reader are untouched.
+   */
+  all_day?: boolean;
+  start_date?: string;
+  end_date?: string;
+  /**
    * D1207 — the reader's own words about this row for the person reading it:
    * where they stand (`my_role`, see `services/calendar/items.ts`) and, on a
    * cancelled row, why (`cancel_reason`, null when nothing recorded one). The
