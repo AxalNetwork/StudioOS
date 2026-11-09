@@ -324,6 +324,8 @@ adminHqSkills.get('/:uid', async (c) => {
     reviewers,
     skill: {
       uid: s.uid, ...d, ...areaAndLevel(d, tax.category),
+      // D4537: the skill's identity, shown and never edited (the PATCH keeps it).
+      slug: s.slug,
       status: lifecycleStatus(s.status, open, e.evidence_hash), version: s.current_version || null, draft_hash: e.definition_hash,
       radar: { axes: axesOf(d.tags, tax.category) },
       agents: await pinnedAgents(c.env, s.id), author: await personOf(c.env, s.created_by), updated_by: await personOf(c.env, s.updated_by),
