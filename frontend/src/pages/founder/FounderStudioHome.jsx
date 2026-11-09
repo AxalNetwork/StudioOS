@@ -46,7 +46,9 @@ import { useStudioLayout } from '../studio/useStudioLayout';
 import { cyclesPlaced } from '../studio/studioLayoutModel';
 import './founderStudioHome.css';
 
-export default function FounderStudioHome({ user }) {
+// D4474 (#4474): `embedded` is a block on a multi-licence Studio. Below 1024px the home then leaves out the phone
+// page's sticky bar and gutter (`StudioPhone`), which assume they own the page, and draws the chat above the body.
+export default function FounderStudioHome({ user, embedded = false }) {
   const [searchParams] = useSearchParams();
   const requestedProjectId = searchParams.get('project_id');
   const { pathname, search } = useLocation();
@@ -96,6 +98,9 @@ export default function FounderStudioHome({ user }) {
       {inPhone ? null : chat}
     </FounderStudioBody>
   );
+  if (phone && embedded) {
+    return <div className="space-y-4" data-testid="founder-studio-embedded-phone">{chat}{body(true)}</div>;
+  }
   if (phone) {
     return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)} advisorAvailable={advisorAvailable} after={body(true)}>{chat}</StudioPhone>;
   }
