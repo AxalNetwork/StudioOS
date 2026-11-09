@@ -219,9 +219,12 @@ test('test 11: cells read the canvas\'s words', async () => {
   assert.deepEqual(founders.map((r: any) => [r.id, r.cells.vesting, r.cells.agreement]),
     [['h-1', '4y · cliff 12 Mar 2027', 'Signed'], ['h-2', '3y · no cliff', 'Awaiting'], ['h-3', null, null]]);
   const filings = (await read(db, 'company-creation')).body.records.rows;
+  // D5066 (#5066): four explicit proof states, never the ambiguous dash —
+  // step-3's typed, pre-461 key is Unreadable (it opens nothing); step-4,
+  // not yet due, is Not expected yet rather than Missing.
   assert.deepEqual(filings.map((r: any) => [r.id, r.cells.state, r.cells.proof, r.cells.jurisdiction]), [
-    ['step-1', 'Issued', 'Missing', 'US'], ['step-3', 'Overdue', 'Key recorded', 'DE'], ['obligation-1', 'Due in 5 days', 'Missing', 'DE'],
-    ['step-2', 'Due in 10 days', 'Missing', 'US'], ['step-5', 'Upcoming', 'Stored', 'DE'], ['step-4', 'Upcoming', '—', null],
+    ['step-1', 'Issued', 'Missing', 'US'], ['step-3', 'Overdue', 'Unreadable', 'DE'], ['obligation-1', 'Due in 5 days', 'Missing', 'DE'],
+    ['step-2', 'Due in 10 days', 'Missing', 'US'], ['step-5', 'Upcoming', 'Stored', 'DE'], ['step-4', 'Upcoming', 'Not expected yet', null],
   ]);
   const systems = (await read(db, 'operating-systems')).body.records.rows;
   assert.deepEqual(systems.map((r: any) => [r.id, r.cells.used_by]),
@@ -501,7 +504,11 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
 
 test('test 2: filings read decision 8, and a lab- or obligation- row declares no write', async () => {
   const db = recorded();
-  assert.deepEqual(factOf((await one(db, 'company-creation', 'step-4')).body, 'Proof'), { label: 'Proof', value: null, reason: 'Not filed yet' });
+  // D5066 (#5066): four explicit proof states, never null+reason for "not
+  // due yet" (step-4) or a vague "Key recorded" for a pre-461 typed key that
+  // opens nothing (step-3, Unreadable, matching the list's own word).
+  assert.deepEqual(factOf((await one(db, 'company-creation', 'step-4')).body, 'Proof'), { label: 'Proof', value: 'Not expected yet' });
+  assert.equal(factOf((await one(db, 'company-creation', 'step-3')).body, 'Proof').value, 'Unreadable');
   assert.equal(factOf((await one(db, 'company-creation', 'step-5')).body, 'Proof').value, 'Stored');
   assert.deepEqual(pillText((await one(db, 'company-creation', 'step-1')).body), ['Issued'], 'a done EIN reads Issued');
   db.exec(`UPDATE formation_steps SET state = 'done' WHERE id = 5`);
@@ -779,5 +786,44 @@ test('test 15 (#5067): the dependency picker says so past 200, and 201+ is still
     { method: 'POST', body: { blocks_on_other: 'Their item' } });
   assert.equal(leak.status, 400);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM okr_dependencies WHERE blocks_okr_id = 4').get() as any).n, 0);
+  db.close();
+});
+
+// ── D5066 (#5066): Company creation's next action and obligations list ─────
+
+test('test 16 (D5066): no open obligation silently disappears past the old cap of 3', async () => {
+  const db = recorded();
+  // recorded() already gives entity ENTITY one open obligation (id 1); four more makes five, well past the old LIMIT 3.
+  const ins = db.prepare(`INSERT INTO entity_obligations (id, uid, entity_id, title, due_date, status, kind, cadence) VALUES (?, ?, ${ENTITY}, ?, ?, 'open', 'franchise_tax', 'annual')`);
+  for (let i = 2; i <= 5; i += 1) ins.run(i, `o${i}`, `Obligation ${i}`, day(i));
+  const body = (await read(db, 'company-creation')).body;
+  const obligationIds = body.records.rows.filter((r: any) => String(r.id).startsWith('obligation-')).map((r: any) => r.id);
+  assert.deepEqual(new Set(obligationIds), new Set(['obligation-1', 'obligation-2', 'obligation-3', 'obligation-4', 'obligation-5']));
+  // Every row (3 Lab steps + 5 formation steps + 5 obligations) fits on one page: the list's own total says so, not a silent cap.
+  assert.equal(body.records.total, body.records.rows.length);
+  assert.equal(body.records.total, 13);
+  db.close();
+});
+
+test('test 17 (D5066): the next action is the highest-priority open item across Lab, step and obligation sources', async () => {
+  const db = recorded();
+  // Close every other source so only the Lab's unfinished "Filed with state" step is open.
+  db.exec(`UPDATE formation_steps SET state = 'done' WHERE project_id = ${P}`);
+  db.exec(`UPDATE entity_obligations SET status = 'waived', resolved_on = '${day(0)}' WHERE entity_id = ${ENTITY}`);
+  const onlyLab = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(onlyLab?.text, 'Complete Filed with state', 'an unfinished Lab step produces the next action when nothing else is open');
+
+  // An overdue obligation outranks an unfinished Lab step at once (the mixed case).
+  db.exec(`INSERT INTO entity_obligations (id, uid, entity_id, title, due_date, status, kind, cadence) VALUES
+    (9, 'o9', ${ENTITY}, 'Overdue franchise filing', '${day(-3)}', 'open', 'franchise_tax', 'annual')`);
+  const withOverdue = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(withOverdue?.text, 'Complete Overdue franchise filing', 'the overdue obligation wins over the open Lab step');
+
+  // A due-soon obligation is prioritized ahead of a general open step with no due date at all.
+  db.exec(`UPDATE entity_obligations SET status = 'waived', resolved_on = '${day(0)}' WHERE id = 9`);
+  db.exec(`UPDATE entity_obligations SET status = 'open', resolved_on = NULL WHERE id = 1`); // recorded()'s own obligation, due in 5 days: due soon.
+  db.exec(`UPDATE formation_steps SET state = 'todo', due_date = NULL WHERE id = 4`); // a general open step, no date: upcoming.
+  const dueSoonWins = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(dueSoonWins?.text, 'Complete Franchise tax', 'the due-soon obligation outranks the general open step and the open Lab step alike');
   db.close();
 });
