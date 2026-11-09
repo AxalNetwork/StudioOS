@@ -6,7 +6,7 @@ import { logCycleWriteStatement, type CycleModules } from './cycleActivity';
 import { collectEvidenceSources, candidateKey, EVIDENCE_AREAS, EVIDENCE_RULES, type EvidenceCandidate, type EvidenceArea, type CollectedEvidence } from './raiseEvidenceSources';
 export { EVIDENCE_RULES, EVIDENCE_AREAS, collectEvidenceSources, evidenceDate, evidenceStale, evidenceHash, candidateKey } from './raiseEvidenceSources';
 import { grantFolderScope, investorCommitted, tierAdmits, type FolderScope } from './dataRoomAccess';
-import { hasActivePairwiseNda } from './trust';
+import { hasActiveVentureNda } from './dealAccess';
 import { checkClaims, claimRecord, type ClaimCheck } from './raiseClaims';
 
 /** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
@@ -18,7 +18,7 @@ export async function readableRoomFiles(env: Env, projectId: number): Promise<an
          AND rp.stage = 'committed' AND LOWER(rp.email) = LOWER(u.email)) AS committed,
        EXISTS (SELECT 1 FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
          JOIN projects p ON p.founder_id = owner.founder_id
-         WHERE p.id = g.project_id AND n.party_b_user_id = g.investor_user_id AND n.status = 'active'
+         WHERE p.id = g.project_id AND COALESCE(owner.is_active, 1) = 1 AND n.party_b_user_id = g.investor_user_id AND n.status = 'active'
            AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))) AS nda_signed
      FROM data_room_grants g JOIN users u ON u.id = g.investor_user_id AND u.is_active = 1
      WHERE g.project_id = ? AND g.status = 'active'
@@ -469,11 +469,9 @@ export async function evidenceAudience(env:Env,projectId:number,investorUserId:n
   // No grant opens no folder: an empty scope, so tierAdmits refuses every file.
   return {investorUserId,via,grantId,folders:grantId==null?new Set<number>():await grantFolderScope(env,grantId),committed:await investorCommitted(env,projectId,investorUserId)};
 }
-/** The NDA the room uses: one active pairwise NDA between this venture's founder account and the investor. */
+/** The NDA the room uses. D4631 part 2: the shared rule (services/dealAccess.ts), the same one the data room and the deal read. */
 export async function evidenceNda(env:Env,projectId:number,investorUserId:number):Promise<boolean>{
-  const founders=await env.DB.prepare('SELECT u.id FROM users u JOIN projects p ON p.founder_id=u.founder_id WHERE p.id=? ORDER BY u.id').bind(projectId).all<{id:number}>();
-  for(const f of founders.results||[])if(await hasActivePairwiseNda(env,Number(f.id),investorUserId))return true;
-  return false;
+  return hasActiveVentureNda(env,projectId,investorUserId);
 }
 /** Bank-derived figures (owner question 1) may carry a value after the NDA; never a bank line, a balance or one investor's money. */
 const BANK_FIGURES=new Set(['bank-runway','bank-revenue','mapped-bank-spend','kpi-snapshot']);
@@ -583,7 +581,7 @@ export async function previewEvidence(ctx:RaiseEvidenceContext,nda:boolean){
   const view=await sharedView(ctx.env,ctx.projectId,PREVIEW_AUDIENCE,nda);
   const audience=await evidenceRead(()=>ctx.env.DB.prepare(`SELECT COUNT(DISTINCT g.investor_user_id) AS grants,
       COUNT(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM pairwise_ndas n JOIN users owner ON owner.id=n.party_a_user_id JOIN projects p ON p.founder_id=owner.founder_id
-        WHERE p.id=g.project_id AND n.party_b_user_id=g.investor_user_id AND n.status='active' AND (n.valid_until IS NULL OR datetime(n.valid_until)>datetime('now')))
+        WHERE p.id=g.project_id AND COALESCE(owner.is_active,1)=1 AND n.party_b_user_id=g.investor_user_id AND n.status='active' AND (n.valid_until IS NULL OR datetime(n.valid_until)>datetime('now')))
         THEN g.investor_user_id END) AS ndas
     FROM data_room_grants g JOIN users u ON u.id=g.investor_user_id AND u.is_active=1
     WHERE g.project_id=? AND g.status='active' AND (g.expires_at IS NULL OR datetime(g.expires_at)>datetime('now'))`).bind(ctx.projectId).first<{grants:number;ndas:number}>());

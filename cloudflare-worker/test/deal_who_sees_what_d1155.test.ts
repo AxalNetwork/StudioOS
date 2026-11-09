@@ -315,3 +315,98 @@ test('D4631 · the pass taxonomy is a shared aggregate, but a pass\'s note and w
     assert.ok(!investor.text.includes('Synthetic internal pass note') && !investor.text.includes('Pat Partner'), 'but not the note or who passed');
   } finally { db.close(); }
 });
+
+// ─────────────── D4631 part 2 (#4631): the deal list and the invitation inbox join the matrix
+// (The data room and evidence pack NDA rows are in data_room_grants_2461 and raise_evidence_investor_d1265, and the
+// deck grants in deck_grants_d1587: each on the fixture its router already stands on.)
+
+/** 11 is an advisor with a residual founder id for THIS venture and no founder licence: not its owner. */
+const RESIDUAL = 11;
+Object.assign(ROLE, { [RESIDUAL]: 'advisor' });
+Object.assign(NAMES, { [RESIDUAL]: 'Rex Residual' });
+function listDb() {
+  const db = licensedDb();
+  db.exec(ddl('investor_dealroom_members'));
+  // Migration 597's archived firms: the verified active company (X-Company-Id) is read through it.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/597_company_archive_and_events.sql'), 'utf8'));
+  db.exec(`UPDATE users SET founder_id = 50 WHERE id = ${RESIDUAL}`);
+  // Deal 2 is BOTH_INVEST's own venture's; deal 3 is this venture's second round, which nobody but staff and its
+  // founder has a relationship with.
+  db.exec(`INSERT INTO deals (id, project_id, status, notes, created_at) VALUES
+    (2, 20, 'active', 'Other studio note', '2026-10-07 09:00:00'), (3, 10, 'active', 'Third studio note', '2026-10-08 09:00:00')`);
+  return db;
+}
+async function getWith(db: DatabaseSync, who: number, path: string, headers: Record<string, string> = {}) {
+  const tok = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await app.fetch(new Request(`http://x/api/deals${path}`, { headers: { Authorization: `Bearer ${tok}`, ...headers } }),
+    { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+  const text = await res.text();
+  let body: any = null;
+  try { body = JSON.parse(text); } catch { /* asserted below */ }
+  return { status: res.status, body, text };
+}
+const NOTES = [STUDIO_NOTE, 'Other studio note', 'Third studio note'];
+// The list's `founder_user_id` join repeats a row once per account sharing the venture's founder id (this fixture has
+// three for venture 50). That predates #4631 and is not a disclosure: the rows are identical, so they are read by id.
+const listed = (r: any) => [...new Map(r.body.map((d: any) => [d.id, [d.id, d.can_read ?? null]])).values()].sort((a: any, b: any) => a[0] - b[0]);
+
+test('D4631 · the deal list follows the licences held: a founder who invests reads the marketplace, each row by their own relationship', async () => {
+  const db = listDb();
+  try {
+    const r = await getWith(db, BOTH_INVEST, '');
+    assert.equal(r.status, 200, r.text);
+    // Mutation checked: the list branch back on the primary role (`user.role === 'investor'`) gives this founder-primary
+    // account only its own venture's deal [2], and this fails.
+    // Mutation checked: `can_read` on the investor relationship alone (userReadableDealIds' rule) reads their own venture's deal 2 as unreadable.
+    assert.deepEqual(listed(r), [[1, true], [2, true], [3, false]], 'invited to 1, owner of 2, nothing on 3');
+    for (const note of NOTES) assert.ok(!r.text.includes(note), 'no studio note leaves to a non-staff reader');
+    // Mutation checked: dropping the strip before serializeDeal lets `row_founder_id` out, and this fails.
+    assert.ok(r.body.every((d: any) => !('row_founder_id' in d)), 'the audience key is internal');
+    const mine = await getWith(db, BOTH_INVEST, '?scope=mine');
+    assert.deepEqual(listed(mine), [[1, true]], 'scope=mine is their investor relationships');
+  } finally { db.close(); }
+});
+
+test('D4631 · the same list for each single-licence reader, and a revoked licence narrows it back', async () => {
+  const db = listDb();
+  try {
+    const you = await getWith(db, YOU, '');
+    assert.deepEqual(listed(you), [[1, true], [2, false], [3, false]], 'a primary investor: the marketplace, invited to 1');
+    for (const note of NOTES) assert.ok(!you.text.includes(note));
+    const founder = await getWith(db, FOUNDER, '');
+    assert.deepEqual(listed(founder), [[1, null], [3, null]], 'a primary founder: their own venture\'s deals');
+    for (const note of NOTES) assert.ok(!founder.text.includes(note));
+    // Staff by licence: the whole list, studio notes included, and no investor annotations.
+    const staff = await getWith(db, BOTH_PARTNER, '');
+    assert.deepEqual(listed(staff), [[1, null], [2, null], [3, null]]);
+    for (const note of NOTES) assert.ok(staff.text.includes(note), 'the partner licence reads the studio notes');
+    // Mutation checked: the founder branch without its founder-licence check lists deals 1 and 3 here.
+    assert.deepEqual((await getWith(db, RESIDUAL, '')).body, [], 'a residual founder id without the licence owns nothing');
+    db.exec(`UPDATE account_licences SET revoked_at = '2026-11-08 10:00:00' WHERE user_id = ${BOTH_INVEST}`);
+    assert.deepEqual(listed(await getWith(db, BOTH_INVEST, '')), [[2, null]], 'the investor licence revoked: their own venture only');
+  } finally { db.close(); }
+});
+
+test('D4631 · the invitation inbox is the firm the investor acts for', async () => {
+  const db = listDb();
+  try {
+    // YOU belongs to firms 70 and 71. Deal 1's invitation names no firm; 2 is for 70; 3 for 71.
+    db.exec(`INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('ucl-you-71', ${YOU}, 71)`);
+    db.exec(`INSERT INTO deal_invitations (deal_id, investor_user_id, company_id, status, created_at) VALUES
+      (2, ${YOU}, 70, 'invited', '2026-10-07 10:00:00'), (3, ${YOU}, 71, 'invited', '2026-10-08 10:00:00')`);
+    const inbox = async (headers: Record<string, string> = {}) => {
+      const r = await getWith(db, YOU, '/invitations/mine', headers);
+      assert.equal(r.status, 200, r.text);
+      return r.body.map((i: any) => i.deal_id).sort();
+    };
+    // Mutation checked: the inbox without `(di.company_id = ? OR di.company_id IS NULL)` reads [1, 2, 3] for each firm.
+    assert.deepEqual(await inbox({ 'X-Company-Id': '70' }), [1, 2], 'acting for 70: its invitation and the unattributed one');
+    assert.deepEqual(await inbox({ 'X-Company-Id': '71' }), [1, 3], 'acting for 71');
+    assert.deepEqual(await inbox(), [1, 2, 3], 'no firm chosen: every invitation of their own');
+    assert.deepEqual(await inbox({ 'X-Company-Id': '80' }), [1, 2, 3], 'a firm they do not hold is no firm, never another investor\'s rows');
+    assert.ok(!(await getWith(db, YOU, '/invitations/mine', { 'X-Company-Id': '80' })).text.includes(`"investor_user_id":${OTHER}`));
+    const other = await getWith(db, OTHER, '/invitations/mine', { 'X-Company-Id': '80' });
+    assert.deepEqual(other.body.map((i: any) => i.deal_id), [1], 'another investor reads only their own');
+  } finally { db.close(); }
+});

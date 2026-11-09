@@ -77,7 +77,7 @@ import { refuse } from '../util/refusal';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
-import { activeGrant, ndaActive, logAccess } from './data_room';
+import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
@@ -4747,29 +4747,30 @@ research.get('/diligence', async (c) => {
   ).bind(user.id, user.id).all<any>();
 
   // "Open to you" is what THIS investor may open, not what the founder marked
-  // `open`. An investor holding a live NDA with the founder who granted the
-  // room may open the `nda` files too — the download route already lets them —
+  // `open`. An investor holding a live NDA with the venture's founder
+  // may open the `nda` files too — the download route already lets them —
   // so counting only `visibility = 'open'` told a signed investor that files
-  // were behind an NDA they had already signed. One NDA check per granting
-  // founder, through the data room's own `ndaActive`, never a second copy of
+  // were behind an NDA they had already signed. One NDA check per venture,
+  // through the data room's own `projectNdaActive` (D4631 part 2: the venture's
+  // NDA by the shared rule, whoever granted the room), never a second copy of
   // its predicate here.
-  const ndaByFounder = new Map<number, boolean>();
+  const ndaByProject = new Map<number, boolean>();
   for (const r of rows.results || []) {
-    const founder = Number(r.granted_by_user_id);
-    if (!ndaByFounder.has(founder)) ndaByFounder.set(founder, await ndaActive(c.env, founder, user.id));
+    const pid = Number(r.project_id);
+    if (!ndaByProject.has(pid)) ndaByProject.set(pid, await projectNdaActive(c.env, pid, user.id));
   }
 
   // D691 decision 6 — the counts are what this investor's tier admits.
   const counted = new Map<number, { total: number; open: number }>();
   for (const r of rows.results || []) {
     const pid = Number(r.project_id);
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(pid) === true;
     // D1103 — and only what the grant's folders hold.
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
   const items = (rows.results || []).map((r: any) => {
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(Number(r.project_id)) === true;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
@@ -4810,7 +4811,7 @@ research.get('/diligence', async (c) => {
 // The list above says which rooms are open to you; these two are the room and
 // the document pages behind it (canvases b6a5f992 and 96463a46). They read the
 // data room's own tables and pass through the data room's own gate —
-// `activeGrant`, `ndaActive` and `logAccess` from `data_room.ts` — so there is
+// `activeGrant`, `projectNdaActive` and `logAccess` from `data_room.ts` — so there is
 // one definition of "this investor may see this" in the worker, not two.
 //
 // KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
@@ -4868,7 +4869,7 @@ async function heldRoom(env: Env, userId: number, grantUid: string): Promise<Hel
     `SELECT id, uid, name FROM projects WHERE id = ?`
   ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
   if (!project) return null;
-  return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
+  return { grant, project, nda: await projectNdaActive(env, project.id, userId) };
 }
 
 /**
