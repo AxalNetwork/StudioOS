@@ -412,10 +412,12 @@ function issueStatements(env: Env, row: IntegrationRow, projectId: number, repo:
     if (!localId) return { stmts: [touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, null, null)], created: false };
     return {
       stmts: [
-        // Only the title and a close are GitHub's; the founder's lane is theirs.
+        // Only the title and a close are GitHub's; the founder's lane is theirs. `updated_at`
+        // moves only when one of them does: a re-sync of the same read writes the same row.
         env.DB.prepare(
-          `UPDATE roadmap_okrs SET objective = ?, kanban_status = CASE WHEN ? = 'closed' THEN 'done' ELSE kanban_status END,
-                  updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?`,
+          `UPDATE roadmap_okrs SET objective = ?1, kanban_status = CASE WHEN ?2 = 'closed' THEN 'done' ELSE kanban_status END,
+                  updated_at = CASE WHEN objective IS ?1 AND (?2 <> 'closed' OR kanban_status = 'done') THEN updated_at ELSE CURRENT_TIMESTAMP END
+            WHERE id = ?3 AND project_id = ?4`,
         ).bind(title, String(issue.state), localId, projectId),
         touch.bind(row.id, projectId, 'product_roadmap', 'issue', externalId, 'roadmap_okrs', localId),
         env.DB.prepare(UNLINK_DELETED_ISSUE).bind(row.id, externalId, localId, projectId),
