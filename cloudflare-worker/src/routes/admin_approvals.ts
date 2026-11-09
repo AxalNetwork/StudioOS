@@ -8,8 +8,10 @@
  *   GET  /items/:lane/:id                      D1132: one waiting item, its lane and its history
  *   GET  /history?lane=&item_id=               an item's assignment events
  *   POST /assignments                          { assignee_user_id, items: [{ lane, item_id }] }
- *   GET  /decided?lane=&outcome=&decided_by=&from=&to=&page=
- *                                              D1044: every lane's decided rows, newest first, 25 a page
+ *   GET  /decided?lane=&outcome=&decided_by=&from=&to=&page=&hq=
+ *                                              D1044: every lane's decided rows, newest first, 25 a page.
+ *                                              D4814: `hq=0` leaves HQ's lanes out (a Super Admin's
+ *                                              "Include HQ lanes"); `deciders` lists who can decide.
  *   GET  /decided/weekly                       D1044: arrived and decided per lane, eight weeks, and the tile
  *
  * The branch board's reads and write (D130, D470) without `requireBranchTier`,
@@ -29,7 +31,7 @@ import { refuse } from '../util/refusal';
 import { sourcesFor } from '../services/approvalSources';
 import { inboxSources } from '../services/hqApprovalSources';
 import {
-  INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, inboxItem, readHistoryQuery,
+  INBOX_LANE_CAP, assignFromBody, assignmentHistory, hqInbox, inboxItem, personLabel, readHistoryQuery,
 } from '../services/approvalAssignments';
 import {
   DECIDED_MAX_PAGE, OUTCOMES, decidedLog, decidedWeekly, decisionLanesFor, type Filters, type Outcome,
@@ -112,6 +114,23 @@ function dayStamp(raw: string, plusDays = 0): string | null {
   return new Date(ms + plusDays * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
 }
 
+/**
+ * D4814 (AP-07): who can be filtered on as "Decided by" — every admin account,
+ * active or not, since a past decider may have left. Names only, through
+ * `personLabel`; an unreadable list is null with why, never empty.
+ */
+async function deciders(env: Env): Promise<{ deciders: Array<{ id: number; name: string }> | null; deciders_reason?: string }> {
+  try {
+    const got = await env.DB.prepare(
+      "SELECT id, name, email FROM users WHERE role = 'admin' ORDER BY COALESCE(NULLIF(name, ''), email) COLLATE NOCASE, id LIMIT 500",
+    ).all<{ id: number; name: string | null; email: string | null }>();
+    return { deciders: (got.results || []).map((u) => ({ id: Number(u.id), name: personLabel({ id: Number(u.id), name: u.name, email: u.email }) })) };
+  } catch (e) {
+    console.error('[admin-approvals] could not read deciders', (e as Error).message);
+    return { deciders: null, deciders_reason: 'The admins could not be read, so Decided by cannot be chosen.' };
+  }
+}
+
 r.get('/decided', async (c) => {
   try {
     const admin = await requireAdmin(c);
@@ -124,8 +143,13 @@ r.get('/decided', async (c) => {
     if (!Number.isSafeInteger(page) || page < 1 || page > DECIDED_MAX_PAGE) {
       return bad('bad_page', `page is a whole number from 1 to ${DECIDED_MAX_PAGE}.`);
     }
+    // D4814 (AP-07): "Include HQ lanes" off is `hq=0`. A plain Admin never has
+    // HQ's lanes, so it changes nothing for them.
+    const hq = q('hq');
+    if (hq && hq !== '0' && hq !== '1') return bad('bad_hq', 'hq is 0 or 1.');
+    const scoped = hq === '0' ? visible.filter((l) => l.scope !== 'hq') : visible;
     const lane = q('lane');
-    const lanes = lane ? visible.filter((l) => l.key === lane) : visible;
+    const lanes = lane ? scoped.filter((l) => l.key === lane) : scoped;
     if (lane && !lanes.length) return bad('bad_lane', 'There is no such lane.');
     const outcome = q('outcome');
     if (outcome && !OUTCOMES.includes(outcome as Outcome)) return bad('bad_outcome', 'outcome is approved, declined or other.');
@@ -138,7 +162,7 @@ r.get('/decided', async (c) => {
     if (from && to && from >= to) return bad('bad_date', 'from is on or before to.');
 
     const filters: Filters = { from, to, outcome: (outcome || null) as Outcome | null, decidedBy };
-    return c.json(await decidedLog(c.env, { lanes, filters, page }));
+    return c.json({ ...(await decidedLog(c.env, { lanes, filters, page })), ...(await deciders(c.env)) });
   } catch (e) { return mapError(c, e); }
 });
 

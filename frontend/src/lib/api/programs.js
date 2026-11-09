@@ -12,6 +12,7 @@ import { request } from '../api.js';
 //   publish        POST /admin/programs/:key/playbook/publish  (requireSuperAdmin)
 //                  → the detail; 409 `nothing_to_publish` when the draft is what is published,
 //                  409 `publish_conflict` when another publish landed first.
+//   update         PATCH /admin/programs/:key { member_access }  (requireSuperAdmin, D4873) → { program }
 //   activity       GET  /admin/programs/:key/activity?before=&limit=  (requireAdmin)
 //                  → { program, rows: [{ at, kind, by: 'hq'|'admin', concerns }], next_before,
 //                      not_audited: { recorded: false, reason } | null, scope? }
@@ -38,6 +39,8 @@ const at = (key) => `/admin/programs/${encodeURIComponent(key)}`;
 
 export const programsApi = {
   program: (key) => request(at(key)),
+  // D4873 (#4873, part 4): PATCH /admin/programs/:key (requireSuperAdmin) — the registry row's member access (or null).
+  update: (key, fields) => request(at(key), { method: 'PATCH', body: JSON.stringify(fields || {}) }),
   editSection: (key, section, body) => request(`${at(key)}/playbook/sections/${encodeURIComponent(section)}`, { method: 'PUT', body: JSON.stringify(body || {}) }),
   // D4806: the revision of the draft that was reviewed (`draft.hash`); a draft that changed since is refused.
   publish: (key, expectedHash) => request(`${at(key)}/playbook/publish`, { method: 'POST', body: JSON.stringify({ expected_hash: expectedHash }) }),
