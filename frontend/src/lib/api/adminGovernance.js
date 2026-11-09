@@ -49,10 +49,16 @@ export const adminGovernanceApi = {
   markReviewed: (uid, id, note = '') => request(`${doc(uid)}/related/${Number(id)}/reviewed`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   dismissRelated: (uid) => request(`${doc(uid)}/related/dismiss`, { method: 'POST' }),
   update: (uid, body) => request(doc(uid), { method: 'PATCH', body: JSON.stringify(body) }),
-  uploadVersion: (uid, { file: upload, signed = false, note = '' } = {}) => {
+  // D4811 part 12: a signed copy also sends signed_on, signatory and attest (CT-12 B).
+  uploadVersion: (uid, { file: upload, signed = false, note = '', signed_on = '', signatory = '', attest = false } = {}) => {
     const fd = new FormData();
     fd.append('file', upload);
-    if (signed) fd.append('signed', 'true');
+    if (signed) {
+      fd.append('signed', 'true');
+      fd.append('signed_on', signed_on);
+      fd.append('signatory', signatory);
+      if (attest) fd.append('attest', 'true');
+    }
     if (note) fd.append('note', note);
     return request(`${doc(uid)}/versions`, { method: 'POST', body: fd });
   },
