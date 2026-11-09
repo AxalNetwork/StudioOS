@@ -232,7 +232,7 @@ function enforcementBadge(facts) {
   return <span className={PLAIN} title={facts.enforced.label}><span aria-hidden="true">○</span> Not enforced</span>;
 }
 
-export function PromotionsSection({ summary, ceilings, coverage, period, licenceUid, searchLicences, onSave, onRetry, onWhy, nowMs: nowProp }) {
+export function PromotionsSection({ summary, ceilings, coverage, period, licenceUid, searchLicences, onSave, onRetry, onWhy }) {
   // D5039: the editor, and so the picker's read, mounts only once "Set a ceiling…" is opened.
   const [editing, setEditing] = useState(false);
   const promos = isReady(summary) ? summary.promos : null;
@@ -240,8 +240,7 @@ export function PromotionsSection({ summary, ceilings, coverage, period, licence
   const currentPeriod = ready ? ceilings.current_period : null;
   const rows = ready ? (ceilings.items || []).filter((x) => x.period === period && (!licenceUid || x.licence_uid === licenceUid)) : null;
   const none = licencesWithoutCeiling({ coverage, ceilings, period, licenceUid });
-  // The page reads the clock; a test passes its own so a report's age does not move with the day.
-  const nowMs = nowProp ?? Date.now();
+  const nowMs = Date.now();
   return (
     <Section
       id="revenue-promotions"
