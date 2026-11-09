@@ -52,7 +52,7 @@ function detectMergeFields(body) {
   return Array.from(seen).sort();
 }
 
-export default function AdminTemplates({ onOpenUsage, recordedPublication = false, openSlug = null }) {
+export default function AdminTemplates({ onOpenUsage, recordedPublication = false, openSlug = null, workspaceLink = null }) {
   const { user } = useAuth() || {};
   // D717 (#1854): below `md` the Templates tab is the phone's read-only list.
   const phone = usePhoneWidth(BELOW_MD_QUERY);
@@ -292,6 +292,8 @@ export default function AdminTemplates({ onOpenUsage, recordedPublication = fals
                     <div className="text-[11px] text-gray-500 mt-3">Last used: {fmtDate(t.last_used_at) || 'Never'}</div>
                     <div className="text-[11px] text-gray-500">Last edited: {fmtDate(t.updated_at) || 'Not recorded'} · {t.updated_by != null ? `Admin #${t.updated_by}` : 'Not recorded: imported before editors were recorded.'}</div>
                     <div className="text-[10px] text-gray-400 mt-1 font-mono truncate">{t.slug}</div>
+                    {/* D4811 part 10: the desk draws the door to the template's workspace (a separate page). */}
+                    {workspaceLink && <div className="mt-2" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>{workspaceLink(t.slug)}</div>}
                   </div>
                 ))}
               </div>
