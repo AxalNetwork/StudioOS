@@ -39,7 +39,9 @@ import { ExecutiveSummary, NeedsAttention } from './revenue/ExecutiveSummary';
 import { AiEconomicsSection, RevenueStreams, RevenueTrend } from './revenue/RevenueStreams';
 import { ReceivablesSection, StatementDrawer } from './revenue/Receivables';
 import { SubsidiariesSection } from './revenue/Subsidiaries';
-import { BillingExceptions, RefundForm } from './revenue/BillingExceptions';
+import { BillingExceptions } from './revenue/BillingExceptions';
+// D5037: the refund is looked up and reviewed before money moves; the Worker refuses one without a review.
+import RefundReviewFlow from '../../components/RefundReviewFlow.jsx';
 import { PromotionsSection } from './revenue/Promotions';
 import {
   UNAVAILABLE, attentionItems, coverageSources, isReady, periodLabel, periodOptions,
@@ -274,7 +276,7 @@ export default function RevenuePage() {
           onRetryRefunds={loadRefunds}
           onRetryDisputes={loadDisputes}
           onWhy={why}
-          refundForm={<RefundForm onDone={loadRefunds} />}
+          refundForm={<RefundReviewFlow onDone={loadRefunds} />}
         />
         <PromotionsSection
           summary={data}

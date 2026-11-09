@@ -84,13 +84,10 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   const host = dom.document.createElement('div'); dom.document.body.appendChild(host);
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
-  const step = () => act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
-  // Settle: 40 ticks, then on until a heading is drawn or 10 s pass. A fixed count alone failed on a loaded CI runner
-  // once H4 (#5168) moved modules to on-demand chunks; a page that never draws one still fails, 10 s later.
-  const tick = async (n = 40) => {
-    for (let i = 0; i < n; i += 1) await step();
-    for (const until = Date.now() + 10_000; !select(dom.document, 'h1').length && Date.now() < until;) await step();
-  };
+  const tick = async (n = 40) => { for (let i = 0; i < n; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5)))); };
+  // A lazy route can still be loading after the fixed rounds on a busy runner (its Suspense fallback has no heading),
+  // which read as "no heading" and failed shard frontend-2 on 2026-11-09. Keep going, boundedly, until a heading is drawn.
+  const settle = async () => { await tick(); for (let i = 0; i < 400 && !select(dom.document, 'h1').length; i += 1) await tick(1); };
   const read = () => ({
     path: at?.pathname,
     studio: select(dom.document, STUDIO).length,
@@ -103,10 +100,10 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
       /** A direct load, as a refresh is. */
       async load(route) {
         await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route], key: `${route}:${Math.random()}` }, h(App), h(Landed))); });
-        await tick(); return read();
+        await settle(); return read();
       },
       /** A client-side move, as a click in the shell is. */
-      async go(route) { await act(async () => { navigate(route); }); await tick(); return read(); },
+      async go(route) { await act(async () => { navigate(route); }); await settle(); return read(); },
       read,
     });
   } finally {

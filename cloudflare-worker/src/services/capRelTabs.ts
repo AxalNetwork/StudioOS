@@ -458,3 +458,30 @@ export async function acceptProposal(env: Env, projectId: number, userId: number
   await log(env, projectId, userId, prospect.id, 'eadwyn_proposal_accepted', summary);
   return { ok: true as const, proposal: decided };
 }
+
+/**
+ * D5073: accept several proposals in one request. Each runs `acceptProposal` as a single press does (the proposal
+ * is still open, the prospect is the venture's, the writer's own validation), so one that is no longer open is a
+ * refusal for that proposal alone. The answer has one result per proposal, in the order sent; the rows are
+ * independent, not all-or-nothing. At most `ACCEPT_BATCH_MAX`; a uid sent twice is refused the second time.
+ */
+export const ACCEPT_BATCH_MAX = 50;
+export type AcceptBatchRow = { uid: string; ok: true } | { uid: string; ok: false; code: string; message: string };
+export async function acceptProposals(env: Env, projectId: number, userId: number, uids: unknown) {
+  if (!Array.isArray(uids) || uids.length === 0 || uids.length > ACCEPT_BATCH_MAX) {
+    throw new CapRelTabError(400, 'bad_batch', `Send between 1 and ${ACCEPT_BATCH_MAX} proposals.`);
+  }
+  const seen = new Set<string>(), results: AcceptBatchRow[] = [];
+  for (const raw of uids) {
+    const uid = typeof raw === 'string' ? raw : '';
+    if (!/^[0-9a-f-]{36}$/i.test(uid) || seen.has(uid)) { results.push({ uid, ok: false, code: 'unknown_proposal', message: 'That proposal is no longer open.' }); continue; }
+    seen.add(uid);
+    try { await acceptProposal(env, projectId, userId, uid, null); results.push({ uid, ok: true }); }
+    catch (e) {
+      if (e instanceof CapRelTabError) results.push({ uid, ok: false, code: e.code, message: e.sentence });
+      else results.push({ uid, ok: false, code: 'unavailable', message: 'That proposal could not be accepted just now.' });
+    }
+  }
+  const applied = results.filter((r) => r.ok).length;
+  return { requested: uids.length, applied, failed: uids.length - applied, results };
+}
