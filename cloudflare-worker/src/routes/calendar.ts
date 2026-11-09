@@ -54,6 +54,7 @@ import {
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, FEED_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
+  personalWindowRefusal, PERSONAL_WINDOW_MAX_DAYS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -219,6 +220,12 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
       scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
   }
+  // D5203 (#5203): the member's own read is bounded like the staff scope's.
+  // An empty or reversed window, or one wider than PERSONAL_WINDOW_MAX_DAYS, is
+  // refused rather than read from every source.
+  const windowRefusal = personalWindowRefusal(fromDt.toISOString(), toDt.toISOString());
+  if (windowRefusal === 'invalid_window') return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
+  if (windowRefusal) return refuse(c, 400, { code: 'window_too_wide', message: `A calendar window can span at most ${PERSONAL_WINDOW_MAX_DAYS} days. Narrow the dates.` });
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
   // nothing in the response could say which one. `sources` reports every kind
@@ -315,6 +322,8 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
   if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
+  // D5203 (#5203): an empty or reversed window is refused, never read as an empty file.
+  if (toDt.getTime() <= fromDt.getTime()) return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
   // D1033 — `kinds` narrows the file as it narrows `/events`, so
   // `?kinds=event_ticket,event_hosted` is "my events" alone. A kind the
   // aggregator does not know is refused rather than read as an empty file.
