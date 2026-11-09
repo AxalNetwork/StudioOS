@@ -26,6 +26,18 @@ export const HQ_CONFIG = '../wrangler.toml';
 /** The config a branch's database is declared in, from the repo root. */
 export const branchConfigPath = (code) => `../wrangler.branch.${code}.toml`;
 
+/**
+ * #4591 — a throwaway database the schema rehearsal creates, provisions,
+ * restores into and deletes (`scripts/schema-rehearsal.mjs`). The id names
+ * the run and its side (`<run>-src`, `<run>-dst`). The prefix is fixed so
+ * that no id can resolve to `studioos-db` or a branch's `studioos-<code>`.
+ */
+export const REHEARSAL_ID_RE = /^[a-z0-9]{6,20}-(?:src|dst)$/;
+export const REHEARSAL_DB_PREFIX = 'studioos-rehearsal-';
+
+/** The config a rehearsal database is declared in; the script writes it, at the repo root, gitignored. */
+export const rehearsalConfigPath = (id) => `../wrangler.rehearsal.${id}.toml`;
+
 /** The flag that selects a branch, and the code after it. */
 export function branchFlagValue(argv) {
   const i = argv.indexOf('--branch');
@@ -42,6 +54,26 @@ export function branchFlagValue(argv) {
  */
 export function resolveTarget(argv) {
   const has = (flag) => argv.includes(flag);
+
+  const ri = argv.indexOf('--rehearsal');
+  if (ri !== -1) {
+    const id = argv[ri + 1] ?? '';
+    if (!REHEARSAL_ID_RE.test(id)) {
+      throw new Error(`--rehearsal needs a rehearsal id (${REHEARSAL_ID_RE}); got ${JSON.stringify(id)}`);
+    }
+    if (argv.includes('--branch') || has('--remote') || has('--preview')) {
+      throw new Error('--rehearsal selects its own database; do not combine it with --branch, --remote or --preview.');
+    }
+    return {
+      label: `rehearsal ${id}`,
+      kind: 'rehearsal',
+      rehearsal: id,
+      dbName: `${REHEARSAL_DB_PREFIX}${id}`,
+      config: rehearsalConfigPath(id),
+      // `--local` only for proving the script offline; the workflow runs remote.
+      flags: has('--local') ? ['--local'] : ['--remote'],
+    };
+  }
 
   const branch = branchFlagValue(argv);
   if (branch !== null) {

@@ -10,13 +10,14 @@
 // Super Admin; its count is the proposals sent to HQ, amber, from the queue's
 // own `counts`, and a failed read says so in place of a number.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { programProposalsApi } from '../../../lib/api/programProposals';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { SUB } from './parts';
 import { ProposalsFromStudios } from './ProposalTables';
+import ProposalReviewSheet from './ProposalReviewSheet';
 import { ONLY_HQ, YOURS_UNDER_PROGRAMS, waitingCount } from './proposalsModel';
 import { LINE_SUPER, TITLE } from './programsModel';
 
@@ -56,9 +57,9 @@ export function ProgramsTabs({ waiting }) {
 }
 
 /** PG19b: an Admin at HQ's proposals address. */
-function OnlyHq() {
+function OnlyHq({ testId = 'programs-proposals-only-hq' }) {
   return (
-    <div className="mx-auto mt-24 flex max-w-[520px] flex-col items-center gap-2 px-4 text-center" data-testid="programs-proposals-only-hq">
+    <div className="mx-auto mt-24 flex max-w-[520px] flex-col items-center gap-2 px-4 text-center" data-testid={testId}>
       <span aria-hidden="true" className="text-[28px] text-axal-muted dark:text-gray-400">⊘</span>
       <h1 className="m-0 text-[20px] font-extrabold text-axal-ink dark:text-gray-100">{ONLY_HQ}</h1>
       <p className={`m-0 ${SUB}`}>{YOURS_UNDER_PROGRAMS}</p>
@@ -70,7 +71,11 @@ function OnlyHq() {
 function ProposalsBody() {
   const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
   const waiting = useWaitingProposals(superAdmin);
-  if (!superAdmin) return <OnlyHq />;
+  // D4873 (PG04): `/admin/programs/proposals/:uid` is this list with the review drawer open over it.
+  const { uid } = useParams();
+  const navigate = useNavigate();
+  const [tick, setTick] = useState(0);
+  if (!superAdmin) return <OnlyHq testId={uid ? 'proposal-review-only-hq' : 'programs-proposals-only-hq'} />;
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-24 pt-6 sm:px-6 lg:pb-10" data-testid="programs-proposals">
       <header className="flex min-w-0 flex-col gap-[7px]">
@@ -78,7 +83,11 @@ function ProposalsBody() {
         <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400">{LINE_SUPER}</p>
       </header>
       <ProgramsTabs waiting={waiting} />
-      <ProposalsFromStudios onDecided={waiting.reload} />
+      <ProposalsFromStudios refresh={tick} onDecided={waiting.reload} />
+      {uid ? (
+        <ProposalReviewSheet uid={uid} onClose={() => navigate('/admin/programs/proposals')}
+          onDecided={() => { waiting.reload(); setTick((t) => t + 1); }} />
+      ) : null}
     </div>
   );
 }

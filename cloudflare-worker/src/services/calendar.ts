@@ -436,7 +436,7 @@ export async function fetchMicrosoftUserinfo(accessToken: string): Promise<any> 
 // ===========================================================================
 export interface CalendarEvent {
   id: string;
-  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item' | 'agent_session';
+  kind: 'ic_meeting' | 'founder_checkin' | 'advisor_booking' | 'partner_office_hour' | 'calendly_event' | 'expert_booking' | 'event_ticket' | 'event_hosted' | 'investor_meeting' | 'compliance_due' | 'interview_call' | 'cohort_date' | 'deal_closing' | 'manual' | 'learning' | 'publish_send' | 'content_planned' | 'bot_call' | 'round_close' | 'nda_expiry' | 'workflow_task' | 'mvp_task' | 'contact_task' | 'engagement_milestone' | 'external_google' | 'external_microsoft' | 'work_item' | 'agent_session' | 'grow_campaign' | 'ad_flight' | 'newsletter_send' | 'sequence_step';
   source_id: number;
   source_uid: string;
   title: string;
@@ -932,6 +932,11 @@ const READERS: Readonly<Record<CalendarEvent['kind'], CalendarReader>> = {
   external_microsoft: async (env, userId, from, to) => (await import('./calendar/externalReaders')).microsoftEvents(env, userId, from, to),
   // #3957: the AI agent sessions of the teams the member reads, page only: each live session's slots and the runs it made.
   agent_session: async (env, userId, from, to) => (await (await import('./agents/sessions')).sessionEvents(env, userId, from, to)) as CalendarEvent[],
+  // #5131 (D1486 §e): Grow's campaign plans, ad flights, Beehiiv sends and sequence steps, page only, the venture's readers alone.
+  grow_campaign: async (env, userId, from, to) => (await (await import('./calendar/growDates')).growCampaignEvents(env, userId, from, to)),
+  ad_flight: async (env, userId, from, to) => (await (await import('./calendar/growDates')).adFlightEvents(env, userId, from, to)),
+  newsletter_send: async (env, userId, from, to) => (await (await import('./calendar/growDates')).newsletterSendEvents(env, userId, from, to)),
+  sequence_step: async (env, userId, from, to) => (await (await import('./calendar/growDates')).sequenceStepEvents(env, userId, from, to)),
 };
 
 export const KNOWN_KINDS = Object.keys(READERS) as readonly CalendarEvent['kind'][];
@@ -1023,7 +1028,9 @@ export const PERSONAL_ONLY_KINDS = ['interview_call', 'cohort_date', 'deal_closi
   // D1614 W4 (#3972): a project's work items, on the member's own page only.
   'work_item',
   // #3957: a team's AI agent sessions are read by that team's members, never by a staff scope.
-  'agent_session'] as const;
+  'agent_session',
+  // #5131 (D1486 §e): Grow's dated plans and sends are the venture's readers', never a staff scope's.
+  'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step'] as const;
 export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);

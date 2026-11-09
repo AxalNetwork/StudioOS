@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, getCurrentUser } from '../auth';
 import { effectiveVisibilityFor, visibleToViewer } from '../services/userSettings';
-import { ensureProfileExpansionSchema } from '../services/profileExpansion';
+import { effectiveDisplayName, ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -267,7 +267,9 @@ function safeJsonParse<T>(raw: unknown, fallback: T): T {
 const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
   founder: { name: true, bio: true, headshot: true, socials: false, projects: true, traction: true, background: true },
   investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false, background: true },
-  partner: { name: true, bio: true, headshot: true, socials: false, services: true, background: true },
+  // D4615: `reviews` and `pricing` are switches Settings shows partners; the card does not render either yet, so
+  // they only need the same default here as there, so Settings and the served profile read one value.
+  partner: { name: true, bio: true, headshot: true, socials: false, services: true, background: true, reviews: true, pricing: false },
   admin: { name: true, bio: true, headshot: true, socials: false, background: true },
 };
 
@@ -276,6 +278,9 @@ const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
  * Exported (D414) so the Messages counterparty card applies the SAME rules as
  * this public card rather than a copy of them.
  */
+/** D4615 — every public-profile switch a member may set, across roles. */
+export const PUBLIC_PROFILE_FIELD_KEYS: ReadonlySet<string> = new Set(Object.values(_PROFILE_DEFAULTS).flatMap((d) => Object.keys(d)));
+
 export function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
   const base = { ...(_PROFILE_DEFAULTS[role] || _PROFILE_DEFAULTS.admin) };
   const pp = (safeJsonParse<any>(privacyPrefs, {}) || {}).public_profile || {};
@@ -351,8 +356,8 @@ export async function publicPersonCard(env: Env, handle: string, viewer: PublicV
     handle: row.uid,
     role,
     joined_at: row.created_at || null,
-    name: flags.name ? (row.display_name || row.name || null) : null,
-    display_name: flags.name ? (row.display_name || row.name || null) : null,
+    name: flags.name ? effectiveDisplayName(row) : null,
+    display_name: flags.name ? effectiveDisplayName(row) : null,
     headline: row.headline || null,
     bio: flags.bio ? (row.bio || null) : null,
     headshot_url: flags.headshot && row.headshot_r2_key ? `/api/settings/headshot/${row.uid}` : null,

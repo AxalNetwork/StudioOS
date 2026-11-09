@@ -14,6 +14,10 @@ import React from 'react';
 import { mountForm, textOf } from './_form_d695.mjs';
 import { api } from '../src/lib/api.js';
 import HqTeamTable from '../src/pages/hq/HqTeamTable.jsx';
+import { hqAccountMovesApi } from '../src/lib/api/hqAccountMoves.js';
+
+// D5043 — the table also reads HQ's moves to finish. None here, so that part draws nothing.
+hqAccountMovesApi.open = async () => ({ items: [] });
 import {
   branchCoverageLine, branchStateText, registryUnreadable, wholeTeamEstablished,
 } from '../src/pages/hq/hqTeamBranchModel.js';

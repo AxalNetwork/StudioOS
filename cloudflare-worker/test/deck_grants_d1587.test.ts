@@ -172,3 +172,67 @@ test('What\'s new counts the grant as the deck source, and drops the "unavailabl
   assert.deepEqual(after.body.unavailable, []);
   assert.ok(after.body.changes.some((c: any) => c.type === 'deck'), 'the new grant is a change');
 });
+
+// D4631 part 2 (#4631): the deal audience policy (services/dealAccess.ts) on the deck grants. The founder's routes
+// are the `owner` relationship, whatever else the caller holds; the investors they may grant to are the deal's
+// `investor` audience (an active account holding the investor licence now); the read ends with the licence or the
+// relationship. Combined licences come from migration 202611041822 (D4472).
+function licensed() {
+  const w = world();
+  w.db.exec(readFileSync('cloudflare-worker/sql/migrations/202611041822_account_licences.sql', 'utf8'));
+  // 12: the other venture's founder, who also holds the investor licence and is invited here for Firm A.
+  // 13: an investor who also holds the partner licence (deal staff), not the venture's founder.
+  // 14: an investor invited here whose account is deactivated.
+  w.db.exec(`INSERT INTO users(id,name,email,role,is_active,founder_id) VALUES (12,'Ola Founder-investor','ola@example.test','founder',1,60),
+      (13,'Pia Partner-investor','pia@example.test','investor',1,NULL),(14,'Dee Deactivated','dee@example.test','investor',0,NULL);
+    INSERT INTO user_company_links(uid,user_id,company_id) VALUES('l12',12,11);
+    INSERT INTO deal_invitations(deal_id,investor_user_id,company_id) VALUES(9,12,11),(9,14,22);
+    INSERT INTO account_licences(user_id,licence,source) VALUES(12,'investor','test'),(13,'partner','test'),(5,'partner','test');`);
+  return w;
+}
+
+test('D4631: the founder\'s grant routes follow the owner relationship, not a staff licence', async () => {
+  const w = licensed();
+  // Mutation checked: admitting deal staff (isDealStaff) to the founder's routes lets 13 list and grant, and this fails.
+  assert.equal((await w.call(13, '9/deck-grants')).status, 404, 'a partner licence is not the venture');
+  assert.equal((await w.call(13, '9/deck-grants', 'POST', { deck_id: 70, investor_user_id: 1 })).status, 404);
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM deck_grants').get() as any).n, 0, 'nothing written');
+  // Mutation checked: reading the founder through dealAudience (staff wins) refuses 5, who also holds the partner licence.
+  const own = await w.call(5, '9/deck-grants');
+  assert.equal(own.status, 200, 'the venture\'s founder keeps its routes with a second licence');
+  assert.equal((await w.call(12, '9/deck-grants')).status, 404, 'another venture\'s founder, investor licence or not');
+});
+
+test('D4631: only the deal\'s investor audience can be granted: an active account with the investor licence now', async () => {
+  const w = licensed();
+  const picker = (await w.call(5, '9/deck-grants')).body.investors.map((i: any) => i.user_id).sort((a: number, b: number) => a - b);
+  // Mutation checked: dropping `COALESCE(u.is_active, 1) = 1` from `eligible` lists 14, and this fails.
+  assert.deepEqual(picker, [1, 2, 3, 12], 'the deactivated invitee is not offered');
+  assert.equal((await grant(w, 14)).body.error, 'investor_not_on_deal', 'nor granted');
+  // A founder-primary account holding the investor licence is offered, granted and reads the version.
+  assert.equal((await grant(w, 12)).status, 201);
+  const read = await w.call(12, '9/deck');
+  assert.deepEqual([read.status, read.body.granted], [200, true]);
+  // The licence is revoked: the read ends, the picker drops them, and a new grant is refused.
+  w.db.exec("UPDATE account_licences SET revoked_at = '2026-11-08 10:00:00' WHERE user_id = 12");
+  const after = await w.call(12, '9/deck');
+  assert.equal(after.status, 403, 'no investor licence, no investor read');
+  assert.ok(!after.text.includes('Fixture Robotics'), 'nothing of the deck');
+  // Mutation checked: dropping the licence check in `eligible` keeps 12 offered and grantable here, and this fails.
+  assert.ok(!(await w.call(5, '9/deck-grants')).body.investors.some((i: any) => i.user_id === 12));
+  assert.equal((await grant(w, 12)).body.error, 'investor_not_on_deal');
+});
+
+test('D4631: a changed relationship ends the read: the invitation withdrawn, or moved to another firm', async () => {
+  const w = world();
+  await grant(w, 1);
+  assert.equal((await w.call(1, '9/deck')).body.granted, true);
+  // Mutation checked: the invitation's firm clause dropped from visibleDeal (services/dealNotes.ts) keeps this open.
+  w.db.exec('UPDATE deal_invitations SET company_id = 22 WHERE investor_user_id = 1');
+  const moved = await w.call(1, '9/deck');
+  assert.equal(moved.status, 404, 'the invitation is now for a firm the investor does not act for');
+  w.db.exec('DELETE FROM deal_invitations WHERE investor_user_id = 1');
+  const gone = await w.call(1, '9/deck');
+  assert.equal(gone.status, 404, 'no relationship, no deal');
+  assert.ok(!gone.text.includes('Fixture Robotics'));
+});

@@ -8,6 +8,7 @@ import { AddDialog } from './CapRelPipeline';
 import { DraftDialog } from './CapRelOutreach';
 import { tabHref, TABS } from './capRelModel';
 import { FIT_FILTERS, FIT_WORDS, MATCH_PAGE, MATCH_SORTS, fundSize, matchQuery, pageLine, verifiedLine } from './capRelTabsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1193 (#3127, CRL7) — Match: the fund directory against this venture
@@ -58,7 +59,7 @@ export default function CapRelMatch({ projectId, search = '' }) {
     setRead((r) => ({ status: 'loading', data: r.data, error: '' }));
     Promise.resolve().then(() => capitalRelationshipsApi.match(projectId, matchQuery(f)))
       .then((data) => { if (alive) setRead({ status: 'ready', data, error: '' }); })
-      .catch((e) => { if (alive) setRead({ status: e?.status === 400 ? 'refused' : 'unreadable', data: null, error: e?.message || '' }); });
+      .catch((e) => { if (alive) setRead({ status: e?.status === 400 ? 'refused' : 'unreadable', data: null, error: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, f, n]);
   // A new read (filters, page, retry) is a new list: its order is the read's again.

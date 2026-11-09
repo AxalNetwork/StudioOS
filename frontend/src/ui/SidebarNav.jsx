@@ -338,7 +338,7 @@ export function SettingsScopeBlock({ scope, collapsed, onNavigate }) {
     return (
       <Link to={entry.path} onClick={onNavigate} title={entry.title} aria-label={entry.title} aria-current={active ? 'page' : undefined}
         className={`flex flex-col items-center gap-0.5 px-1 py-2.5 text-[10px] w-full transition-colors ${tone}`}
-        data-testid="settings-entry" data-scope={scope.kind}>
+        data-testid="settings-entry" data-scope={scope.kind} data-tour="settings">
         <SettingsIcon size={18} aria-hidden="true" />
       </Link>
     );
@@ -346,7 +346,7 @@ export function SettingsScopeBlock({ scope, collapsed, onNavigate }) {
   return (
     <Link to={entry.path} onClick={onNavigate} aria-current={active ? 'page' : undefined}
       className={`flex items-center gap-3 px-5 py-2.5 text-sm w-full transition-colors ${tone}`}
-      data-testid="settings-entry" data-scope={scope.kind}>
+      data-testid="settings-entry" data-scope={scope.kind} data-tour="settings">
       <SettingsIcon size={16} aria-hidden="true" />
       <span className="flex min-w-0 flex-col leading-tight">
         <span className="truncate">Settings</span>

@@ -239,7 +239,7 @@ test('a console page draws its header at once, with no "Admin Console" title and
 
 test('HQ · Accounts mounts the Users console alone, not the whole Admin Console', () => {
   const page = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/AccountsPage.jsx'), 'utf8');
-  assert.match(page, /<UsersConsole onImpersonate=\{onImpersonate\} \/>/);
+  assert.match(page, /<UsersConsole onImpersonate=\{onImpersonate\} reloadKey=\{keys\.directory\} onChanged=\{\(\) => invalidate\('directory_change'\)\} \/>/);
   assert.doesNotMatch(page, /<AdminPage\b|<AllAccountsPage\b/);
   assert.doesNotMatch(page, /from '\.\.\/AdminPage'/);
 });

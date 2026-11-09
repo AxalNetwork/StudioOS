@@ -15,6 +15,7 @@ under the shared admin header (D936). `/admin/held/approvals` forwards here with
 | `ExpertBoard.jsx` | Wellbeing experts (APR8) on D1043's review read: five tabs with Declined, the tiles, the credentials column, the expert's drawer, and the Verify (with "I checked their credentials"), Decline, Hide, Restore and Remove verification dialogs. The `/admin/wellbeing` roster's toggles are retired into it. |
 | `boardParts.jsx` | What the boards share: styles, a tile, the failed card, a pager, one read answered alone, and the decision dialog that says what changes, who is told and what is recorded. D1047: `FOOT` (a dialog's or drawer's buttons, full width on a phone) and `PhoneBack` (a drawer's "‹ [lane]" on a phone). |
 | `HeldApprovalsRedirect.jsx` | The old address, forwarded with its query and hash. |
+| `lanesDecidedModel.js` | D4814 (#4814, part 4): pure functions for Lanes as an operations map (group totals, overdue from the inbox's band split, the unread-lane banner) and Decided as an audit trail (Include HQ lanes, note kinds, About this history). |
 | `boardGrammar.js` | D4814 (#4814, part 3): pure functions for the native boards' one grammar — the crumb, the owner read joined on numeric id, the four-cell summary and Co-marketing's lifecycle. |
 
 The rule for adding here: a lane joins `LANES` with its glance key once the
@@ -57,3 +58,15 @@ inbox filtered to the board's lane, joined on each item's numeric id), the
 four-cell summary and Co-marketing's lifecycle. `boardParts.jsx` draws it:
 `BoardStrip`, `OwnerBox`, `useBoardOwners`, and a `DecisionDialog` that states
 what changes, who is told and what is recorded before any field.
+
+D4814 part 5: a decision another admin got to first (`isChanged`) shows "This
+item changed while you were reviewing it… Nothing was recorded by you." and
+View latest; one recorded but not delivered (the Worker's `notified: false`,
+read by `afterDecision`) is an amber line with Check item; an ordinary one
+ends with View in Decided. Items waiting over 30 days are a Stale band, and
+every Approvals page uses the operations rail (collapsed until opened).
+
+D4814 part 6: Decided's Open ↗ opens a product tester or a co-marketing pitch
+(by the Worker's `item_uid`) on its board; the Assign dialog searches
+reviewers; each board drawer shows "2 of 6" with ‹ › in its tab's order
+(`boardStep`, `DrawerStep`).

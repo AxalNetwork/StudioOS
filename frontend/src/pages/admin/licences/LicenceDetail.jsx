@@ -2,6 +2,12 @@
  * #4707 — the HQ licence page's lifecycle: one licence, its actions and tabs. Moved out of `AdminLicences.jsx`
  * unchanged when the page was split by domain; the comments below are the
  * original ones.
+ *
+ * D4819 (#4819), part 3 — the identity header, the Needs HQ strip and the
+ * canvas's six sections (Overview, Terms, Agreement, Access, Operations,
+ * History). Every tab the view had before sits under one section
+ * (`licenceNavModel.js`), drawn as a second row where a section holds more
+ * than one, so nothing that was reachable has gone.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import LicenceTermsSchedule from '../LicenceTermsSchedule';
@@ -10,18 +16,21 @@ import LicenceFeeInvoices from '../LicenceFeeInvoices';
 import LicenceHistory from '../LicenceHistory';
 import { AlertCircle, Check, X, Ban, RotateCw } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { bpsPercent as pct } from '../../../lib/bps';
-import { TOKEN_SPLIT_HQ_LABEL } from '../../../lib/tokenSplit';
 import { reportError } from '../../../lib/log';
 import { useReasonDialog } from '../LicenceReasonDialog';
 import { LICENCE_REASONS } from '../licenceReasonModel';
-import { daysTo } from '../../../lib/notices';
-import { DEFAULT_TAB, stepOfTab, tabKeyMove, tabOfStep, tabsFor } from '../licenceNavModel';
-import { STATUS_TONE, HISTORY_STEP, ADMINS_STEP, NOTICES_STEP, BRAND_STEP, SCHEDULE_STEP, FEE_INVOICES_STEP, n0, fee, Chip, Field } from './licenceShared';
+import {
+  DEFAULT_TAB, LICENCE_SECTIONS_NAV, sectionOfTab, sectionTabs, stepOfTab, tabKeyMove, tabOfStep,
+} from '../licenceNavModel';
+import { overviewFacts } from '../licenceOverviewModel';
+import { HISTORY_STEP, ADMINS_STEP, NOTICES_STEP, BRAND_STEP, SCHEDULE_STEP, FEE_INVOICES_STEP, OVERVIEW_STEP, Field } from './licenceShared';
+import LicenceIdentity from './LicenceIdentity';
+import LicenceOverview, { AttentionStrip, useOverviewReads } from './LicenceOverview';
 import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
 import { SeatEditor } from './CommercialTerms';
 import { CountryPricing } from './CountryPricing';
+import { Exclusivity } from './Exclusivity';
 import TermsWorkspace from './TermsWorkspace';
 import { ContractStep } from './ContractStep';
 import { DeployStep } from './DeployStep';
@@ -54,12 +63,20 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   const [highlight, setHighlight] = useState(null);
   const [grant, setGrant] = useState(null);
 
+  // D4819 part 3 — when the ledger was read, for the Overview's Sources card.
+  const [readAt, setReadAt] = useState(null);
   const load = useCallback(() => {
     api.licence(uid)
-      .then(setD)
+      .then((x) => { setD(x); setReadAt(new Date().toISOString()); })
       .catch((e) => { reportError('licence_load_failed', e); setD(false); });
   }, [uid]);
   useEffect(load, [load]);
+
+  // D4819 part 3 — the reads behind the header's and the Overview's facts,
+  // made once for both. A fact read off the licence itself retries by
+  // re-reading the licence.
+  const { reads, retry: retryRead } = useOverviewReads(d || null);
+  const retry = (key) => (key === 'licence' ? load() : retryRead(key));
 
   const refresh = () => { load(); onChanged?.(); };
 
@@ -84,83 +101,55 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
   if (d === false) return <p className="text-sm text-red-600">Could not load this licence.</p>;
   if (!d) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  const days = daysTo(d.renews_on);
+  const facts = overviewFacts(d, reads);
+  const section = sectionOfTab(tabOfStep(step));
+  const subTabs = sectionTabs(section, d.kind);
+  const sectionLabel = LICENCE_SECTIONS_NAV.find((x) => x.key === section)?.label || 'Overview';
+  const openSection = (key) => {
+    const first = sectionTabs(key, d.kind)[0];
+    if (first) setStep(first.step);
+    return first;
+  };
 
-  return (
-    <div>
-      {reasonDialog}
-      <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{d.brand_name}</h2>
-            <Chip tone={STATUS_TONE[d.status]}>{d.status.replace('_', ' ')}</Chip>
-          </div>
-          <div className="mt-0.5 text-xs text-gray-500">{d.licence_ref} · {d.legal_entity_name}</div>
-          <div className="mt-1 text-[11px] font-medium text-gray-500 dark:text-gray-400" data-testid="licence-kind-pill">
-            {d.kind === 'white_label'
-              ? 'White-label · platform supervised, brand unsupervised'
-              : 'Axal subsidiary · platform supervised'}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {d.status === 'suspended' ? (
-            <button type="button" disabled={busy} onClick={() => act(api.licenceReinstate, d.uid)}
-              className="inline-flex items-center gap-1 rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50">
-              <Check size={12} /> Reinstate
-            </button>
-          ) : d.status === 'active' && (
-            <button type="button" disabled={busy}
-              onClick={async () => {
-                const note = await ask(LICENCE_REASONS.suspendLicence);
-                if (note) act(api.licenceSuspend, d.uid, note);
-              }}
-              className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50">
-              <Ban size={12} /> Suspend
-            </button>
-          )}
-          {d.status !== 'terminated' && (
-            <>
-              <button type="button" disabled={busy} onClick={() => act(api.licenceRenew, d.uid, {})}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">
-                <RotateCw size={12} /> Renew
-              </button>
-              <button type="button" disabled={busy}
-                onClick={async () => {
-                  const note = await ask(LICENCE_REASONS.terminateLicence);
-                  if (note) act(api.licenceTerminate, d.uid, note);
-                }}
-                className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
-                <X size={12} /> Terminate
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {d.status === 'suspended' && (
-        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Suspended{d.status_note ? `: ${d.status_note}` : ''}. It still holds{' '}
-          {d.territories.length === 1 ? 'its country' : `all ${d.territories.length} of its countries`} —
-          releasing them is a termination, not a lapse.
-        </div>
+  const actions = (
+    <div className="flex flex-wrap gap-2">
+      {d.status === 'suspended' ? (
+        <button type="button" disabled={busy} onClick={() => act(api.licenceReinstate, d.uid)}
+          className="inline-flex items-center gap-1 rounded-md border border-green-300 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50">
+          <Check size={12} /> Reinstate
+        </button>
+      ) : d.status === 'active' && (
+        <button type="button" disabled={busy}
+          onClick={async () => {
+            const note = await ask(LICENCE_REASONS.suspendLicence);
+            if (note) act(api.licenceSuspend, d.uid, note);
+          }}
+          className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-50">
+          <Ban size={12} /> Suspend
+        </button>
       )}
+      {d.status !== 'terminated' && (
+        <>
+          <button type="button" disabled={busy} onClick={() => act(api.licenceRenew, d.uid, {})}
+            className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300">
+            <RotateCw size={12} /> Renew
+          </button>
+          <button type="button" disabled={busy}
+            onClick={async () => {
+              const note = await ask(LICENCE_REASONS.terminateLicence);
+              if (note) act(api.licenceTerminate, d.uid, note);
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+            <X size={12} /> Terminate
+          </button>
+        </>
+      )}
+    </div>
+  );
 
-      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} />
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <Field label="Territory" value={d.territories.length ? d.territories.join(' · ') : null} />
-        <Field label="Seats licensed" value={n0(d.seats_licensed)} />
-        <Field label="Annual fee" value={fee(d.annual_fee_cents, d.currency)} />
-        <Field label="Revenue share" value={pct(d.revenue_share_bps)} />
-        <Field label={TOKEN_SPLIT_HQ_LABEL} value={pct(d.token_split_bps)} />
-        <Field
-          label="Renews"
-          value={d.renews_on || null}
-          hint={days === null ? null : days < 0 ? `${Math.abs(days)} days overdue` : `in ${days} days`}
-        />
-      </div>
-
+  // D4819 part 3 — drawn on Operations › Branch and domain, beside the sync figures and the deployment.
+  const domainStrip = (
+    <>
       {/* H31 — THE DOMAIN STRIP, AND THE ONE THING HQ MAY DO TO IT (D197).
           The artboard's own sentence: "There is no Approve, no Add domain, and
           no DNS editor for HQ to complete on a tenant's behalf." So five
@@ -273,6 +262,28 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
           </p>
         )}
       </div>
+    </>
+  );
+
+  return (
+    <div>
+      {reasonDialog}
+      <OutcomeNotice notice={actNotice} testId="licence-action-outcome" onDismiss={() => setActNotice(null)} />
+      <LicenceIdentity licence={d} facts={facts} retry={retry} actions={actions} />
+      <AttentionStrip licence={d} facts={facts} />
+
+      {d.status === 'suspended' && (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Suspended{d.status_note ? `: ${d.status_note}` : ''}. It still holds{' '}
+          {d.territories.length === 1 ? 'its country' : `all ${d.territories.length} of its countries`} —
+          releasing them is a termination, not a lapse.
+        </div>
+      )}
+
+      {/* The unfinished-termination notice stays above the sections: its Resume cannot wait for a tab.
+          The sync figures moved to Operations › Branch and domain, and the old figures grid
+          (territory, seats, fee, shares, renewal) to the header and the Overview's facts. */}
+      <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="termination" />
 
       {d.blockers?.length > 0 && d.status !== 'active' && (
         <div className="mt-4 rounded-lg border border-gray-200 p-3 dark:border-gray-800">
@@ -296,35 +307,68 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
 
       {/* D4707 — a real tablist: arrow keys, Home and End move between tabs,
           the selected one says so, and on a narrow screen the row scrolls
-          sideways instead of wrapping into a second row of half-tabs. */}
+          sideways instead of wrapping into a second row of half-tabs.
+          D4819 part 3 — the first row is the canvas's six sections; a section
+          that holds more than one of the view's tabs draws them as a second
+          tablist under it, with the same keys. Both live in the URL (`?tab=`). */}
       <div
         role="tablist" aria-label="Licence sections" data-testid="licence-tabs"
         className="mt-6 -mx-1 flex gap-1 overflow-x-auto whitespace-nowrap border-b border-gray-200 px-1 [scrollbar-width:thin] dark:border-gray-800"
         onKeyDown={(e) => {
-          const tabs = tabsFor(d.kind);
-          const at = tabs.findIndex((t) => t.step === step);
-          const next = tabKeyMove(e.key, at < 0 ? 0 : at, tabs.length);
+          const at = LICENCE_SECTIONS_NAV.findIndex((x) => x.key === section);
+          const next = tabKeyMove(e.key, at < 0 ? 0 : at, LICENCE_SECTIONS_NAV.length);
           if (next === null) return;
           e.preventDefault();
-          setStep(tabs[next].step);
-          document.getElementById(`licence-tab-${tabs[next].key}`)?.focus();
+          openSection(LICENCE_SECTIONS_NAV[next].key);
+          document.getElementById(`licence-section-${LICENCE_SECTIONS_NAV[next].key}`)?.focus();
         }}
       >
-        {tabsFor(d.kind).map((t) => (
+        {LICENCE_SECTIONS_NAV.map((x) => (
           <button
-            key={t.key} id={`licence-tab-${t.key}`} type="button" role="tab"
-            aria-selected={step === t.step} aria-controls="licence-tabpanel" tabIndex={step === t.step ? 0 : -1}
-            data-testid={t.testId} onClick={() => setStep(t.step)}
-            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
-              step === t.step ? 'border-indigo-600 font-medium text-indigo-700 dark:text-indigo-300' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+            key={x.key} id={`licence-section-${x.key}`} type="button" role="tab"
+            aria-selected={section === x.key} aria-controls="licence-tabpanel" tabIndex={section === x.key ? 0 : -1}
+            data-testid={`licence-section-${x.key}`} onClick={() => openSection(x.key)}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+              section === x.key ? 'border-indigo-600 font-semibold text-indigo-700 dark:text-indigo-300' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
             }`}
           >
-            {t.label}
+            {x.label}
           </button>
         ))}
       </div>
+      {subTabs.length > 1 && (
+        <div
+          role="tablist" aria-label={`${sectionLabel} views`} data-testid="licence-subtabs"
+          className="mt-2 -mx-1 flex gap-1 overflow-x-auto whitespace-nowrap px-1 [scrollbar-width:thin]"
+          onKeyDown={(e) => {
+            const at = subTabs.findIndex((t) => t.step === step);
+            const next = tabKeyMove(e.key, at < 0 ? 0 : at, subTabs.length);
+            if (next === null) return;
+            e.preventDefault();
+            setStep(subTabs[next].step);
+            document.getElementById(`licence-tab-${subTabs[next].key}`)?.focus();
+          }}
+        >
+          {subTabs.map((t) => (
+            <button
+              key={t.key} id={`licence-tab-${t.key}`} type="button" role="tab"
+              aria-selected={step === t.step} aria-controls="licence-tabpanel" tabIndex={step === t.step ? 0 : -1}
+              data-testid={t.testId} onClick={() => setStep(t.step)}
+              className={`shrink-0 rounded-full border px-3 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600 ${
+                step === t.step ? 'border-indigo-300 bg-indigo-50 font-medium text-indigo-700 dark:border-indigo-700 dark:bg-indigo-950 dark:text-indigo-300' : 'border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <div className="min-w-0" role="tabpanel" id="licence-tabpanel" aria-labelledby={`licence-tab-${tabOfStep(step)}`}>
+      <div className="min-w-0" role="tabpanel" id="licence-tabpanel"
+        aria-labelledby={subTabs.length > 1 ? `licence-tab-${tabOfStep(step)}` : `licence-section-${section}`}>
+        {step === OVERVIEW_STEP && (
+          <LicenceOverview licence={d} reads={reads} retry={retry} readAt={readAt} onOpenTab={(key) => onTab?.(key)} />
+        )}
         {step === 1 && (
           <div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -351,13 +395,21 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 2 && (
           <TerritoryEditor licence={d} held={held} onSaved={refresh} onOpenLicence={onOpenLicence} />
         )}
+        {/* D5019 — exclusivity and development commitments, apart from the operating territory above. */}
+        {step === 2 && <Exclusivity licence={d} />}
         {step === 3 && <SeatEditor licence={d} onSaved={refresh} />}
         {/* D4819: the canvas's Terms section: read-only by default, amended in a reviewed session. */}
         {step === 4 && <TermsWorkspace licence={d} onSaved={refresh} onOpenTab={(key) => onTab?.(key)} />}
         {/* D5017 — the country-pricing recommendation, under the core terms it can change. */}
         {step === 4 && <CountryPricing licence={d} onSaved={refresh} />}
         {step === 5 && <ContractStep licence={d} onSaved={refresh} />}
-        {step === 6 && <DeployStep licence={d} />}
+        {step === 6 && (
+          <div>
+            <LicenceSyncStrip sync={d.sync} busy={busy} onResume={() => act(api.licenceTerminate, d.uid)} part="strip" />
+            {domainStrip}
+            <div className="mt-4"><DeployStep licence={d} /></div>
+          </div>
+        )}
         {step === ADMINS_STEP && <AdminsEditor key={grant?.uid || 'admins'} licence={d} prefill={grant}
           onSaved={() => { setGrant(null); refresh(); }} />}
         {step === SCHEDULE_STEP && <LicenceTermsSchedule licence={d} highlight={highlight} onSaved={refresh} />}

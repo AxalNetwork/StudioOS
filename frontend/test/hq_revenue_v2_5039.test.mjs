@@ -267,7 +267,11 @@ test('subsidiaries: reporting health first, Not drawn for a missing statement, s
   assert.ok(t.indexOf('Report') < t.indexOf('Gross reported'), 'reporting health is not first');
 });
 
-test('promotions: badge columns, Remaining only beside a reported Issued, and the compact no-ceiling state', () => {
+test('promotions: badge columns, Remaining only beside a reported Issued, and the compact no-ceiling state', (t) => {
+  // PromotionsSection reads its own clock (Date.now()) for "Stale · n d", and the
+  // fixture is dated from NOW. Freeze the clock there, or the age drifts one day
+  // per day of wall time and the assertion fails on the date alone.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   // Even a Worker reply that carries a remaining figure is not drawn without a reported issued one.
   assert.equal(ceilingFacts(ceiling({ remaining_cents: 1_000_000 }), '2026-Q4').remaining.known, false);
   const coverage = { ...SUMMARY.usage_coverage };
@@ -281,7 +285,10 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   assert.match(fr, /HQ saved ✓ Branch synced ✓ Enforced[^]*?Not reported[^]*?Not recorded[^]*?Missing/);
   assert.doesNotMatch(fr, /€10,000\.00[^]*€10,000\.00/, 'the whole ceiling was drawn as Remaining');
   const dach = text(h.split('data-testid="hq-revenue-ceiling-state-dach-2026-Q4"')[1].split('</tr>')[0]);
-  assert.match(dach, /€2,100\.00 €3,900\.00 Stale · 23 d/);
+  // PromotionsSection reads the real clock, so the fixture's age (23 days before NOW) is counted from now, not from NOW:
+  // a literal "23 d" turned into "24 d" one day after NOW and failed frontend-1 on 2026-11-09.
+  const ageDays = Math.floor((Date.now() - (NOW - 23 * DAY)) / DAY);
+  assert.match(dach, new RegExp(`€2,100\\.00 €3,900\\.00 Stale · ${ageDays} d`));
   const none = text(h.split('data-testid="hq-revenue-no-ceiling-pt"')[1].split('</tr>')[0]);
   assert.match(none, /No ceiling configured · Discounts currently allowed/);
   const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null }));

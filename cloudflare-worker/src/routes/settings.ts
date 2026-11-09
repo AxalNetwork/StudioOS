@@ -22,8 +22,7 @@ import { revokeAllGrants } from '../mcp/grants';
 import { Hono, type Context } from 'hono';
 import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
-import type { Env, UserSessionRow } from '../types';
-import { decodeJwt } from 'jose';
+import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth, hashToken, generateToken, selectJwt, bumpJwtMinIat, jwtMinIatFloor } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
@@ -39,12 +38,15 @@ import {
   getUserSettings,
   upsertUserSettings,
   SettingsValidationError,
+  SettingsConflictError,
+  expectedRevisionOf,
   effectiveVisibility,
   type UserSettingsPatch,
   type UserSettingsRow,
 } from '../services/userSettings';
 import { canWrite } from './_founder_validate_helpers';
 import {
+  effectiveDisplayName,
   ensureProfileExpansionSchema,
   getPersonalProfile,
   updatePersonalProfile,
@@ -58,7 +60,7 @@ import {
 import { hashEmail } from '../util/hashEmail';
 import { requestErasure, cancelErasure, loadOwnDsrOutcome } from '../services/dsrRequests';
 import { MATCHING_MIN_COMPLETION_PCT } from '../services/matchingConsent';
-import { revokeUserSession } from '../services/userSessions';
+import { countOwnActiveSessions, listOwnSessions, revokeUserSession } from '../services/userSessions';
 import {
   LinkedInImportError,
   decodePdfDataUri,
@@ -71,6 +73,8 @@ import {
 } from '../services/linkedinImport';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { PUBLIC_PROFILE_FIELD_KEYS, effectiveFlags } from './public';
+import { effectiveCategoryDefaults, mergeCategoryPatch } from '../services/notificationPolicy';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -225,12 +229,16 @@ const WRONG_TOTP_CODE = {
 
 // --- GET /api/settings ------------------------------------------------------
 
-function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
-  const auth = c.req.header('authorization') || '';
-  if (!auth.startsWith('Bearer ')) return null;
+/**
+ * D4616 (#4616) — the caller's own session id (`jti`), from the token
+ * authentication itself chose: `selectJwt` applies `getCurrentUser`'s rules
+ * (cookie or Bearer, and which wins when both are sent). Reading the Bearer
+ * header alone left a cookie-signed-in browser with no "This device" row.
+ */
+async function currentJtiFromRequest(c: Context<{ Bindings: Env }>): Promise<string | null> {
   try {
-    const payload = decodeJwt(auth.slice(7)) as { jti?: unknown };
-    return typeof payload.jti === 'string' ? payload.jti : null;
+    const picked = await selectJwt(c);
+    return typeof picked?.payload?.jti === 'string' ? picked.payload.jti : null;
   } catch { return null; }
 }
 
@@ -243,10 +251,13 @@ function currentJtiFromRequest(c: Context<{ Bindings: Env }>): string | null {
 // "Could not load your settings: Not found".
 const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
   await ensureSchema(c.env);
+  // D4616 — `display_name` is a profile-expansion column (a no-op in production,
+  // where the migration owns it).
+  await ensureProfileExpansionSchema(c.env);
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
   const rows = await sql`
-    SELECT id, uid, email, name, role, email_verified, kyc_status, access_level,
+    SELECT id, uid, email, name, display_name, role, email_verified, kyc_status, access_level,
            bio, headline, headshot_r2_key, jurisdictions, socials,
            notification_prefs, privacy_prefs, role_prefs,
            deletion_requested_at, last_active_at, created_at,
@@ -308,6 +319,10 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     uid: u.uid,
     email: u.email,
     name: u.name,
+    // D4616 — the identity contract's display name, as stored (null when
+    // unset), and the name other members see, by the public profile's rule.
+    display_name: u.display_name || null,
+    public_name: effectiveDisplayName(u),
     role: u.role,
     email_verified: !!u.email_verified,
     totp_configured: !!u.totp_configured,
@@ -325,6 +340,10 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
     jurisdictions: safeJson<string[]>(u.jurisdictions, []),
     notification_prefs: safeJson(u.notification_prefs, {}),
     privacy_prefs: safeJson(u.privacy_prefs, { public_profile: { name: true, bio: true, headshot: true, socials: false } }),
+    // D4615 — what the public profile actually shows (the role's defaults under the member's own switches, the
+    // rule /api/public serves with), and the revision a public-profile save names.
+    public_profile_effective: effectiveFlags(u.privacy_prefs, String(u.role || '').toLowerCase()),
+    public_profile_revision: publicProfileRevisionOf(u.privacy_prefs),
     role_prefs: safeJson(u.role_prefs, {}),
     deletion_requested_at: u.deletion_requested_at || null,
     dsr_outcome: dsrOutcome,
@@ -337,7 +356,7 @@ const getRootSettings = async (c: Context<{ Bindings: Env }>) => {
       const arr = safeJson<string[]>(u.totp_recovery_codes, []);
       return Array.isArray(arr) ? arr.length : 0;
     })(),
-    current_jti: currentJtiFromRequest(c),
+    current_jti: await currentJtiFromRequest(c),
   });
 };
 settings.get('', getRootSettings);
@@ -387,7 +406,11 @@ const patchRootSettings = async (c: Context<{ Bindings: Env }>) => {
     updates.push({ col: 'notification_prefs', val: j });
   }
   if (body.privacy_prefs !== undefined) {
-    const j = JSON.stringify(body.privacy_prefs || {});
+    // D4615 — this whole-map path stays for older clients, but it moves the public-profile revision on like the
+    // field-level save does, so a tab that read the old revision cannot then overwrite this write unseen.
+    const stored = await c.env.DB.prepare('SELECT privacy_prefs FROM users WHERE id = ?').bind(user.id).first<{ privacy_prefs: string | null }>();
+    const next = { ...(body.privacy_prefs && typeof body.privacy_prefs === 'object' ? body.privacy_prefs : {}), revision: publicProfileRevisionOf(stored?.privacy_prefs) + 1 };
+    const j = JSON.stringify(next);
     if (j.length > 4000) return c.json({ error: 'privacy_prefs too large' }, 400);
     updates.push({ col: 'privacy_prefs', val: j });
   }
@@ -987,28 +1010,15 @@ settings.get('/data-export', async (c) => {
 settings.get('/sessions', async (c) => {
   await ensureSchema(c.env);
   const user = await requireAuth(c);
-  const sql = getSQL(c.env);
-  const rows = await sql`
-    SELECT id, jti, user_agent, ip, created_at, last_seen_at, revoked_at
-    FROM user_sessions
-    WHERE user_id = ${user.id}
-    ORDER BY last_seen_at DESC
-    LIMIT 100
-  ` as unknown as UserSessionRow[];
-  await sql.end();
-  const currentJti = currentJtiFromRequest(c);
-  return c.json({
-    sessions: rows.map((r) => ({
-      id: r.id,
-      jti: r.jti,
-      user_agent: r.user_agent,
-      ip: r.ip,
-      created_at: r.created_at,
-      last_seen_at: r.last_seen_at,
-      revoked_at: r.revoked_at,
-      is_current: !!currentJti && r.jti === currentJti,
-    })),
-  });
+  // D4616 — the shared rule (services/sessionStatus.ts), scoped to the caller:
+  // each row says whether it still opens a door, and `active_count` counts only
+  // those, as /security and HQ do.
+  const currentJti = await currentJtiFromRequest(c);
+  const [sessions, activeCount] = await Promise.all([
+    listOwnSessions(c.env, user.id, currentJti),
+    countOwnActiveSessions(c.env, user.id),
+  ]);
+  return c.json({ sessions, active_count: activeCount });
 });
 
 settings.post('/sessions/:id/revoke', async (c) => {
@@ -1226,6 +1236,7 @@ function pickPrivacy(row: UserSettingsRow) {
     show_in_directory: !!row.show_in_directory,
     discoverable: !!row.discoverable,
     matching_opt_in: !!row.matching_opt_in,
+    revision: Number(row.privacy_revision ?? 0),
   };
 }
 
@@ -1265,16 +1276,31 @@ function pickNotifications(row: UserSettingsRow) {
     digest_frequency: row.digest_frequency,
     notif_categories_email: email,
     notif_categories_inapp: inapp,
+    // D4615 — the switches as delivery reads them (unset is on; a mandatory category is always on) and the
+    // categories whose switch is locked, so Settings draws what `notify()` does.
+    effective_categories: effectiveCategoryDefaults({ email, inapp }),
     quiet_hours_start: row.quiet_hours_start,
     quiet_hours_end: row.quiet_hours_end,
     quiet_hours_tz: row.quiet_hours_tz,
+    revision: Number(row.notifications_revision ?? 0),
   };
 }
 function pickFeatureFlags(row: UserSettingsRow): Record<string, boolean> {
   try { return JSON.parse(row.feature_flags || '{}'); } catch { return {}; }
 }
 
+/** D4615 — the public-profile revision, kept inside `users.privacy_prefs` (users is at D1's column limit). */
+function publicProfileRevisionOf(raw: unknown): number {
+  const v = safeJson<any>(raw, {})?.revision;
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : 0;
+}
+
 function handleSettingsError(c: Context<{ Bindings: Env }>, e: unknown) {
+  if (e instanceof SettingsConflictError) {
+    const current = e.group === 'privacy' ? { ...pickPrivacy(e.current), revision: Number(e.current.privacy_revision ?? 0) } : pickNotifications(e.current);
+    const message = 'These settings changed in another tab or save since you opened them, so nothing was saved. The other change is shown; make yours again if you still want it.';
+    return refuse(c, 409, { code: e.group === 'privacy' ? 'privacy_conflict' : 'notifications_conflict', message, extra: { current } });
+  }
   if (e instanceof SettingsValidationError) {
     // Task #14 — return a field-level error envelope so the
     // /account/notifications form can inline messages next to the
@@ -1865,8 +1891,14 @@ settings.put('/privacy', async (c) => {
     }
     patch.matching_opt_in = body.matching_opt_in;
   }
+  const expected = expectedRevisionOf(body.expected_revision);
+  if (expected === 'invalid') return c.json({ error: 'expected_revision is the revision you read, a whole number.', field: 'expected_revision' }, 400);
   try {
-    const row = await upsertUserSettings(c.env, user.id, patch);
+    // D4615 — only the keys sent change; the privacy revision moves with every write, and a write that names a
+    // revision a newer save has passed changes nothing (409 privacy_conflict with the current choices).
+    const row = Object.keys(patch).length
+      ? await upsertUserSettings(c.env, user.id, patch, { group: 'privacy', expected })
+      : await getUserSettings(c.env, user.id);
     let project = p.project;
     if (project && findable !== undefined) {
       await c.env.DB.prepare('UPDATE projects SET investor_findable = ? WHERE id = ?')
@@ -1875,6 +1907,53 @@ settings.put('/privacy', async (c) => {
     }
     return c.json(withFindable(await privacyResponse(c.env, user.id, row), project));
   } catch (e) { return handleSettingsError(c, e); }
+});
+
+// D4615 — the public-profile switches, field by field. Only the switches a save names change; the save names the
+// revision it read (the `revision` key inside users.privacy_prefs), and one a newer save has passed changes nothing
+// (409 public_profile_conflict, with what is stored now). The answer carries what the public profile will show.
+settings.put('/privacy/public-profile', async (c) => {
+  await ensureSchema(c.env);
+  const user = await requireAuth(c);
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const fields = body?.fields;
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields) || !Object.keys(fields).length) {
+    return c.json({ error: 'Name the switches to change, as { fields: { name: true } }.', field: 'fields' }, 400);
+  }
+  for (const [k, v] of Object.entries(fields as Record<string, unknown>)) {
+    if (!PUBLIC_PROFILE_FIELD_KEYS.has(k)) return c.json({ error: `${k} is not a public-profile field.`, field: k }, 400);
+    if (typeof v !== 'boolean') return c.json({ error: `${k} is true or false.`, field: k }, 400);
+  }
+  const expected = expectedRevisionOf(body?.expected_revision);
+  if (expected === 'invalid') return c.json({ error: 'expected_revision is the revision you read, a whole number.', field: 'expected_revision' }, 400);
+  const row = await c.env.DB.prepare('SELECT privacy_prefs, role FROM users WHERE id = ?').bind(user.id).first<{ privacy_prefs: string | null; role: string | null }>();
+  if (!row) return c.json({ error: 'User not found' }, 404);
+  const role = String(row.role || '').toLowerCase();
+  const stored = safeJson<any>(row.privacy_prefs, {}) || {};
+  const read = publicProfileRevisionOf(row.privacy_prefs);
+  const conflict = () => refuse(c, 409, {
+    code: 'public_profile_conflict',
+    message: 'Your public profile changed in another tab or save since you opened it, so nothing was saved. It now shows the other change; make yours again if you still want it.',
+    extra: { public_profile_effective: effectiveFlags(row.privacy_prefs, role), public_profile_revision: read },
+  });
+  if (expected !== null && expected !== read) return conflict();
+  const next = {
+    ...stored,
+    public_profile: { ...(stored.public_profile && typeof stored.public_profile === 'object' ? stored.public_profile : {}), ...(fields as Record<string, boolean>) },
+    revision: read + 1,
+  };
+  const json = JSON.stringify(next);
+  if (json.length > 4000) return c.json({ error: 'privacy_prefs too large' }, 400);
+  // Compare-and-swap on the revision read, so a save racing this one cannot be overwritten by the merge.
+  const res = await c.env.DB.prepare(
+    "UPDATE users SET privacy_prefs = ? WHERE id = ? AND COALESCE(json_extract(privacy_prefs, '$.revision'), 0) = ?",
+  ).bind(json, user.id, read).run();
+  if (Number(res?.meta?.changes ?? 0) !== 1) return conflict();
+  return c.json({
+    public_profile: next.public_profile,
+    public_profile_effective: effectiveFlags(json, role),
+    public_profile_revision: next.revision,
+  });
 });
 
 // --- Appearance sub-route (theme/density/sidebar_default) -------------------
@@ -1911,13 +1990,28 @@ settings.put('/notifications', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const patch: UserSettingsPatch = {};
   if ('digest_frequency' in body) patch.digest_frequency = body.digest_frequency;
-  if ('notif_categories_email' in body) patch.notif_categories_email = body.notif_categories_email;
-  if ('notif_categories_inapp' in body) patch.notif_categories_inapp = body.notif_categories_inapp;
+  // D4615 — a category map is merged, not replaced: only the categories a save names change (null clears one back
+  // to its default), so two tabs editing different categories both keep their choice. A mandatory category refuses
+  // `false`. The merge reads the stored map; the revision check below is what makes it safe against a racing save.
+  if ('notif_categories_email' in body || 'notif_categories_inapp' in body) {
+    const stored = await getUserSettings(c.env, user.id);
+    const parse = (v: string) => { try { return JSON.parse(v || '{}') || {}; } catch { return {}; } };
+    for (const key of ['notif_categories_email', 'notif_categories_inapp'] as const) {
+      if (!(key in body)) continue;
+      const m = mergeCategoryPatch(parse(stored[key]), body[key]);
+      if (!m.ok) return c.json({ error: m.message, field: key, errors: { [key]: m.message }, category: m.field }, 400);
+      patch[key] = m.value;
+    }
+  }
   if ('quiet_hours_start' in body) patch.quiet_hours_start = body.quiet_hours_start;
   if ('quiet_hours_end' in body) patch.quiet_hours_end = body.quiet_hours_end;
   if ('quiet_hours_tz' in body) patch.quiet_hours_tz = body.quiet_hours_tz;
+  const expected = expectedRevisionOf(body.expected_revision);
+  if (expected === 'invalid') return c.json({ error: 'expected_revision is the revision you read, a whole number.', field: 'expected_revision' }, 400);
   try {
-    const row = await upsertUserSettings(c.env, user.id, patch);
+    const row = Object.keys(patch).length
+      ? await upsertUserSettings(c.env, user.id, patch, { group: 'notifications', expected })
+      : await getUserSettings(c.env, user.id);
     return c.json(pickNotifications(row));
   } catch (e) { return handleSettingsError(c, e); }
 });
@@ -1936,11 +2030,10 @@ settings.get('/security', async (c) => {
   if (rows.length) {
     rows[0].totp_configured = (await hasTotpConfigured(c.env, user.id)) ? 1 : 0;
   }
-  const sessions = await sql`
-    SELECT COUNT(*) AS active FROM user_sessions
-     WHERE user_id = ${user.id} AND revoked_at IS NULL
-  `;
   await sql.end();
+  // D4616 — the same count as the session list's: not revoked, inside its
+  // token's lifetime, and minted after the account's sign-out floor.
+  const activeSessions = await countOwnActiveSessions(c.env, user.id);
   if (!rows.length) return c.json({ error: 'User not found' }, 404);
   const remaining = (() => {
     try { return (JSON.parse(rows[0].totp_recovery_codes || '[]') || []).length; }
@@ -1957,7 +2050,7 @@ settings.get('/security', async (c) => {
     totp_configured: !!rows[0].totp_configured,
     totp_paired_at: totpPairedAt,
     totp_recovery_codes_remaining: remaining,
-    active_sessions: Number(sessions[0]?.active || 0),
+    active_sessions: activeSessions,
     sms_configured: !!smsRow,
     sms_last4: smsRow?.last4 || null,
     sms_country: smsRow?.country || null,

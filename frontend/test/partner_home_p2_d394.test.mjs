@@ -51,7 +51,7 @@ const RETAINERS = {
     { engagement_id: 5, founder_name: 'Nobody', retainer: null },
   ],
 };
-const CAP_NONE = { over_committed_count: null, cap_note: 'No capacity cap is recorded anywhere in this product.', people: [] };
+const CAP_NONE = { over_committed_count: null, cap_note: 'Capacity limits not set. Set available hours to identify over-allocation; until then nobody is marked over-committed.', people: [] };
 const CAP_SET = {
   over_committed_count: 1,
   people: [{ user_id: 9, name: 'Rin', total_hours: 46, cap_hours: 40, cap_source: 'person', over_committed: true },
@@ -76,7 +76,7 @@ test('D394: the five tiles read the three stores, and live means neither closed 
 test('D394: no stated cap is Not recorded with the worker\'s reason, never 0 over', () => {
   const t = homeTiles({ board: BOARD, retainers: { mrr_cents: null, mrr_note: 'No retainer states an amount.', items: [] }, capacity: CAP_NONE });
   assert.equal(tile(t, 'capacity').value, null);
-  assert.match(tile(t, 'capacity').reason, /No capacity cap is recorded/);
+  assert.match(tile(t, 'capacity').reason, /Capacity limits not set/);
   assert.equal(tile(t, 'recurring').value, null);
   assert.match(tile(t, 'recurring').reason, /No retainer states an amount/);
 });

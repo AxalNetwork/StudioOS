@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Card, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import { NothingYet, Unrecorded, ZoneBody, ZoneHeading } from '../expertise/kit';
-import { BatchPicker, FromTheLab, NoBatch, StatedLimit, cohortLabel } from './kit';
+import { FromTheLab, NoBatch, StatedLimit, cohortLabel } from './kit';
+import { CohortLoading, useCohortRead, useCohortWorkspace } from './CohortWorkspace';
 
 /**
  * Cohorts · Calendar — the Lab's dates and your own sessions, on one page.
@@ -60,52 +61,24 @@ export function calendarIcs(items) {
 }
 
 export default function CalendarZone() {
-  const [assignments, setAssignments] = useState({ loading: true, error: '', items: [] });
-  const [cycleId, setCycleId] = useState(null);
-  const [data, setData] = useState({ loading: false, error: '', payload: null });
+  // D4813: the cohort is the workspace's (header selector, `?cohort=`); the
+  // read is keyed by it and a late answer for another cohort is dropped.
+  const ws = useCohortWorkspace();
+  const data = useCohortRead((id) => api.listMyAdvisorCohortCalendar(id), {
+    accept: (payload) => (payload && payload.windows_recorded === false
+      ? 'The Lab has no week windows recorded for this cohort, so its dates cannot be shown. Cycles created before the Lab began recording them have none.'
+      : null),
+    fallbackError: 'This batch’s calendar could not be read.',
+  });
+  const load = data.reload;
   const [view, setView] = useState('all');
 
-  const loadAssignments = useCallback(async () => {
-    setAssignments((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const res = await api.listMyAdvisorCohorts();
-      const items = Array.isArray(res?.items) ? res.items : [];
-      setAssignments({ loading: false, error: '', items });
-      setCycleId(items[0]?.cohort_cycle_id ?? null);
-    } catch (e) {
-      setAssignments({ loading: false, error: e?.message || 'Your cohort assignments could not be read.', items: [] });
-    }
-  }, []);
-  useEffect(() => { loadAssignments(); }, [loadAssignments]);
-
-  const load = useCallback(async () => {
-    if (cycleId == null) return;
-    setData((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const payload = await api.listMyAdvisorCohortCalendar(cycleId);
-      // The Lab's record could not be read. Treating this as an empty calendar
-      // would report a failed read as a batch with nothing due.
-      if (payload && payload.windows_recorded === false) {
-        setData({
-          loading: false,
-          error: 'The Lab has no week windows recorded for this cohort, so its dates cannot be shown. Cycles created before the Lab began recording them have none.',
-          payload: null,
-        });
-        return;
-      }
-      setData({ loading: false, error: '', payload });
-    } catch (e) {
-      setData({ loading: false, error: e?.message || 'This batch’s calendar could not be read.', payload: null });
-    }
-  }, [cycleId]);
-  useEffect(() => { load(); }, [load]);
-
-  const payload = data.payload;
+  const payload = data.data;
   const counts = payload?.counts || null;
   const items = payload?.items || [];
   const shown = items.filter(CAL_VIEWS[view] || CAL_VIEWS.all);
   const clashing = new Set((payload?.collisions || []).flatMap((c) => [c.a, c.b]));
-  const batch = assignments.items.find((a) => a.cohort_cycle_id === cycleId)?.cohort;
+  const batch = ws.current?.cohort;
 
   return (
     <div className="space-y-4">
@@ -114,22 +87,19 @@ export default function CalendarZone() {
         blurb="The batch's dates and your own booked sessions, in one place."
       />
 
-      {assignments.items.length > 1 && (
-        <BatchPicker items={assignments.items} value={cycleId} onChange={setCycleId} />
-      )}
-
       {/* NESTED, the way ThisWeekZone nests: the outer body owns "can I see any
           batch at all", the inner owns "did this batch's calendar read". Each
           states its own `loading` explicitly — `_zoneGuards` requires it, and
           the reason is that an implicit undefined works only by accident of
           ZoneBody checking loading first. */}
       <ZoneBody
-        loading={assignments.loading}
-        error={assignments.error}
-        onRetry={loadAssignments}
-        isEmpty={assignments.items.length === 0}
+        loading={ws.assignments.loading}
+        error={ws.assignments.error}
+        onRetry={ws.reloadAssignments}
+        isEmpty={ws.assignments.items.length === 0}
         empty={<NoBatch />}
       >
+      {data.loading && <CohortLoading what="the calendar" />}
       <ZoneBody
         loading={data.loading}
         error={data.error}

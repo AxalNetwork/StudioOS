@@ -2,6 +2,7 @@
  * D1558 (#3805, deck v2 C10) — the words of "Deck ready to send" and the
  * narrative coach (`NarrativeCoach.jsx`). Pure.
  */
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 export const COACH_OPTION = 'review:narrative-coach';
 export const COACH_LABEL = 'Coach against the deck';
 export const COACH_NOTE = 'Eadwyn reads this version against your current deck and names where the deck tells it less well, with a proposal for each. Nothing is changed.';
@@ -29,5 +30,5 @@ export function droppedLine(dropped) {
 export function coachFailure(e) {
   if (e?.data?.code === 'no_deck') return 'There is no deck to coach against yet. Build one first. Nothing was run.';
   if (e?.data?.code === 'nothing_to_read') return 'This version has no words yet. Write a section first. Nothing was run.';
-  return e?.data?.detail || e?.data?.message || 'The coach could not run. Nothing was charged. Try again.';
+  return userFacingRaiseError(e, { fallback: 'The coach could not run. Nothing was charged. Try again.', scope: 'raise:narrative' });
 }

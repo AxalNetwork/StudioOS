@@ -81,6 +81,38 @@ function visibleFundsScope(user: any, opts: { includeLp: boolean }): { sql: stri
   };
 }
 
+/**
+ * `can_manage` (D371): whether `requireFundGp` would let this caller operate
+ * the fund — the institutional tier, then the same GP-and-active-company
+ * predicate the gate runs. D4636: the family rollup reads the same scope, so
+ * the funds whose figures a caller is shown are exactly the funds they may
+ * operate, and a fund they run under another company is not in either.
+ */
+async function manageScope(c: any, user: any): Promise<{ sql: string; binds: Array<string | number> }> {
+  if (user?.role === 'admin') return fundGpScope(user, null, 'f');
+  if (!userMeetsInvestorTier(user as any, 'institutional')) return NO_ROWS;
+  const companyId = await resolveActiveCompany(c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (companyId !== null) await ensureFundGpColumns(c.env);
+  return fundGpScope(user as any, companyId, 'f');
+}
+
+/**
+ * D4636 — the fund list's projection by relationship. An admin and the
+ * fund's GP of record read the whole row (they run it). A caller who is only
+ * a limited partner reads what names the fund — never its GP's contact
+ * details, service providers, terms or capital figures, which the LP's own
+ * view (`/lp-portal`, the fund page) carries for their position.
+ */
+const LP_LIST_FIELDS = ['id', 'name', 'slug', 'vintage_year', 'status', 'company_id', 'created_at'] as const;
+function fundListRow(f: any, user: any): Record<string, unknown> {
+  const canManage = Number(f.can_manage) === 1;
+  const runsIt = user?.role === 'admin' || (f.gp_user_id != null && Number(f.gp_user_id) === Number(user?.id));
+  if (runsIt) return { ...f, can_manage: canManage, relationship: user?.role === 'admin' ? 'admin' : 'gp' };
+  const out: Record<string, unknown> = {};
+  for (const k of LP_LIST_FIELDS) out[k] = f[k] ?? null;
+  return { ...out, can_manage: false, relationship: 'lp' };
+}
+
 // ---------- vc_funds CRUD ----------
 funds.get('/', async (c) => {
   const user = await requireAuth(c);
@@ -88,7 +120,7 @@ funds.get('/', async (c) => {
   if (user.role === 'admin') {
     const list = await Funds.list(c.env, status);
     // An admin operates every fund through `requireFundGp`'s bypass.
-    return c.json({ ok: true, items: (list.results || []).map((f: any) => ({ ...f, can_manage: true })) });
+    return c.json({ ok: true, items: (list.results || []).map((f: any) => ({ ...f, can_manage: true, relationship: 'admin' })) });
   }
   await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
   const scope = visibleFundsScope(user, { includeLp: true });
@@ -99,19 +131,14 @@ funds.get('/', async (c) => {
   // the fund — the institutional tier, then the same GP-and-active-company
   // predicate the gate runs. The list carries LP-only funds too, and the fund
   // pages used to open `items[0]`, which 404'd whenever that was one of them.
-  const tierOk = userMeetsInvestorTier(user as any, 'institutional');
-  const companyId = tierOk
-    ? await resolveActiveCompany(c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER))
-    : null;
-  if (companyId !== null) await ensureFundGpColumns(c.env);
-  const manage = tierOk ? fundGpScope(user as any, companyId, 'f') : NO_ROWS;
+  const manage = await manageScope(c, user);
   const rows = await c.env.DB.prepare(
     `SELECT f.*, CASE WHEN ${manage.sql} THEN 1 ELSE 0 END AS can_manage
        FROM vc_funds f WHERE ${where.join(' AND ')} ORDER BY f.created_at DESC`,
   ).bind(...manage.binds, ...binds).all();
   return c.json({
     ok: true,
-    items: (rows.results || []).map((f: any) => ({ ...f, can_manage: Number(f.can_manage) === 1 })),
+    items: (rows.results || []).map((f: any) => fundListRow(f, user)),
   });
 });
 
@@ -427,8 +454,11 @@ async function rollUpFunds(env: Env, fundId?: number, scope?: { sql: string; bin
 funds.get('/analytics', async (c) => {
   // D370: the family rollup is the funds the caller runs (all of them, for an
   // admin). An LP's view of a fund is their own position, on /lp-portal.
+  // D4636: "runs" is the operating gate's own scope (`manageScope`), the one
+  // /funds/:id/analytics answers through, so the rollup and the per-fund read
+  // agree on every fund.
   const user = await requireAuth(c);
-  const items = await rollUpFunds(c.env, undefined, visibleFundsScope(user, { includeLp: false }));
+  const items = await rollUpFunds(c.env, undefined, await manageScope(c, user));
   return c.json({
     ok: true,
     items,
@@ -773,6 +803,20 @@ funds.patch('/:id', async (c) => {
   }
   const act = fundPatchAct(gp.fund, body);
   await assertFundAct(c, gp, act);
+  // D4812 follow-up (#4812): a new GP of record is an existing, active
+  // account. Checked after the act's gate, so a caller who may not change the
+  // GP never learns which accounts exist. Null (no GP named) stays allowed,
+  // and any role may be named: a non-admin GP moves the fund to "run by an
+  // outside GP", as before.
+  if (act === 'fund.gp_of_record' && body.gp_user_id !== null) {
+    const next = Number(body.gp_user_id);
+    const named = Number.isSafeInteger(next) && next > 0 && String(body.gp_user_id) === String(next)
+      ? await c.env.DB.prepare(`SELECT 1 AS ok FROM users WHERE id = ? AND is_active = 1`).bind(next).first<{ ok: number }>()
+      : null;
+    if (!named) {
+      return refuse(c, 400, { code: 'gp_account_invalid', message: 'The general partner of record must be an existing, active account.' });
+    }
+  }
   const f = await Funds.update(c.env, id, body);
   // D714 decision 4: the edit wrote no audit row. The changed field names, and
   // for the control fields their old and new values.

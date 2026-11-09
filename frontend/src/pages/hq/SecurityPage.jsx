@@ -12,8 +12,10 @@ import AccessWorkspace from './security/AccessWorkspace.jsx';
 import EventsWorkspace from './security/EventsWorkspace.jsx';
 import { activeCount, feedQuery } from './security/eventsModel.js';
 import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
+import { otherNotRecorded } from './security/resilienceModel.js';
 import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
 import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
+import TrustWorkspace from './security/TrustWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
@@ -66,7 +68,7 @@ import { tabFromSearch, tabOf } from './security/securityTabs.js';
  */
 export const UNAVAILABLE = Symbol('unavailable');
 /** Workspaces that say for themselves what could not be read (D4803), so the page banner stays off there. */
-const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety', 'privacy']);
+const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety', 'privacy', 'trust']);
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -1032,7 +1034,9 @@ export function SecurityConsole({
         </Zone>
       </PrivacyWorkspace>
     ),
+    // D4803 slice 4: SE07 leads; the previous zones stay behind "How this is measured".
     trust: (
+      <TrustWorkspace overview={ready ? data : null} unreadable={data === UNAVAILABLE} onRetry={load}>
       <div className="grid gap-4 md:grid-cols-2">
         <Zone title="Sanctions review" sub="from the store's own runs">
           <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
@@ -1055,6 +1059,7 @@ export function SecurityConsole({
           {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
         </Zone>
       </div>
+      </TrustWorkspace>
     ),
     // D4803 slice 2: SE08 leads; the previous zone stays whole behind "How this is measured".
     'ai-safety': (
@@ -1067,9 +1072,10 @@ export function SecurityConsole({
     // D4803 slice 2: SE09 leads; the previous zone stays whole behind "How this is measured".
     resilience: (
       <ResilienceWorkspace block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} onRetry={load}>
-        <Zone title="Backup / DR drill" sub="two facts, each its own state">
+        <Zone title="Backup / DR drill" sub="the backup heartbeat and the restore drill, each read from its own record">
           <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
-          {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
+          {/* #5046: failover is drawn above as Unsupported, so it is not listed here as "Not recorded". */}
+          {ready && <NotRecordedList items={otherNotRecorded(data.backup_dr)} testid="hq-dr-not-recorded" />}
         </Zone>
       </ResilienceWorkspace>
     ),

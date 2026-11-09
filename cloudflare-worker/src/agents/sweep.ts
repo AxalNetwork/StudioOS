@@ -64,7 +64,12 @@ const READY_CURSOR_KEY = 'agents:sweep:ready-cursor:v1';
 export type SweepDeps = { enqueue: (env: Env, runUid: string) => Promise<void>; runtime: () => Promise<AgentRuntime> };
 
 type ReadyCandidate = AgentRow & { task_id: number; task_created_at: string };
-type SweepStats = { examined: number; eligible: number; refused: number; oldestEligibleAgeSeconds: number | null; cursorReset: boolean };
+/**
+ * `scanned` says whether discovery ran this sweep. A sweep that stops at the halt, the engine
+ * being off or paused, or manual autonomy records `eligible` 0 without having looked, so the
+ * platform capacity read (D4559 part 3) trusts the eligible count and age only from a scan.
+ */
+type SweepStats = { examined: number; eligible: number; refused: number; oldestEligibleAgeSeconds: number | null; cursorReset: boolean; scanned: boolean };
 
 /** A malformed or unavailable cursor is equivalent to cursor loss: start a complete rotation safely at zero. */
 async function readyCursor(env: Env): Promise<number> {
@@ -141,7 +146,7 @@ async function recordSweepMetrics(env: Env, now: Date, out: { resent: number; ad
   ];
   if (stats.oldestEligibleAgeSeconds != null) values.push(['agent_sweep_oldest_eligible_age_seconds', stats.oldestEligibleAgeSeconds]);
   // Low-cardinality labels only: no tenant, task, agent, prompt or output is telemetry.
-  const labels = JSON.stringify({ cadence_minutes: 5, cursor_reset: stats.cursorReset });
+  const labels = JSON.stringify({ cadence_minutes: 5, cursor_reset: stats.cursorReset, scanned: stats.scanned });
   try {
     await env.DB.batch(values.map(([name, value]) => env.DB.prepare(
       'INSERT INTO system_metrics (timestamp, metric_name, value, labels) VALUES (?, ?, ?, ?)',
@@ -195,7 +200,7 @@ export async function sweepStrandedRuns(env: Env, now: Date): Promise<{ repaired
 
 export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>): Promise<{ resent: number; admitted: number; cap_resumed: number }> {
   const out = { resent: 0, admitted: 0, cap_resumed: 0 };
-  const stats: SweepStats = { examined: 0, eligible: 0, refused: 0, oldestEligibleAgeSeconds: null, cursorReset: false };
+  const stats: SweepStats = { examined: 0, eligible: 0, refused: 0, oldestEligibleAgeSeconds: null, cursorReset: false, scanned: false };
   const finish = async () => { await recordSweepMetrics(env, now, out, stats); return out; };
   try { out.cap_resumed = await resumeCapPauses(env, now); } catch { console.warn('[agents] cap_resume_failed'); }
   await sweepStrandedRuns(env, now);
@@ -215,6 +220,7 @@ export async function sweepAgents(env: Env, now: Date, deps?: Partial<SweepDeps>
   const rt = deps?.runtime ? await deps.runtime() : await (await import('./runtime')).agentRuntime(env);
   const discovery = await readyCandidates(env);
   const candidates = discovery.candidates;
+  stats.scanned = true;
   stats.cursorReset = discovery.wrapped;
   stats.eligible = candidates.length;
   const ages = candidates.map((c) => sqlTime(c.task_created_at)).filter((v): v is number => v != null);

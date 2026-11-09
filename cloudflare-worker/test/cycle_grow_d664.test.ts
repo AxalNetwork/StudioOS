@@ -141,7 +141,7 @@ async function fixture() {
   for (const p of ['034', '119', '127', '132', '326']) db.exec(ddl(p));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
-  db.exec(ddl('125')); db.exec(file('437'));
+  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(file('443'));
   db.exec(file('462'));
   db.exec(file('202611041912'));

@@ -607,9 +607,10 @@ test('mounted, Decided (APR10): the log in the store\'s words, "not recorded bef
   try {
     assert.ok(v.seen.includes('/api/admin/approvals/decided?page=1&outcome=approved'));
     assert.match(v.of('approvals-tab-decided'), /Decided\s*357/);
-    assert.match(v.of('approvals-decided-notes'), /Wellbeing experts: decisions were not recorded before 21 Oct 2026\.\s*Explorers ready for a profile: Explorers do not record who decided\./);
-    assert.match(v.of('approvals-decided-kyc:40:2026-10-25 14:00:00'), /25 Oct 2026, 14:00\s*KYC\s*Person D\s*Approved\s*Admin A\s*1 d 9 h\s*Welcome aboard\s*◉ They see this/);
-    assert.equal(v.of('approvals-decided-count'), '1–1 of 357');
+    // D4814 part 4 (AP-07): the history's limits in About this history, after the log; Request · Outcome · Decided by · Wait · Note · Open ↗.
+    assert.match(v.of('approvals-decided-about'), /About this history.*Wellbeing experts: decisions were not recorded before 21 Oct 2026\..*Explorers ready for a profile does not record its decisions: Explorers do not record who decided\./s);
+    assert.match(v.of('approvals-decided-kyc:40:2026-10-25 14:00:00'), /25 Oct 2026, 14:00\s*Person D\s*KYC\s*Approved\s*Admin A\s*1 d 9 h\s*Welcome aboard\s*👁 Shown to them\s*Open in KYC & KYB ↗/);
+    assert.equal(v.of('approvals-decided-count'), '1–1 of 357 · newest first');
     assert.ok(!v.seen.some((p) => p.startsWith('/api/admin/approvals?')), 'Decided reads no inbox');
   } finally { await v.unmount(); }
   const down = await mount('/admin/approvals/decided', h(AdminApprovals), { decided: () => json({ code: 'bad_page', message: 'x' }, 503) });
@@ -639,16 +640,18 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.equal(v.of('approvals-notifies-events'), 'Not read here yet', 'a glance without it is not read here, never "Nobody"');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*20/);
     // D1041: KYB is counted now (the stub's glance answers 0); D1132: so is Product testers.
-    assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0/);
-    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Product testers/);
-    assert.match(v.of('approvals-lane-events'), /Events\s*0\s*—\s*Events › Review/);
+    // D4814 part 4 (AP-06): "N waiting", native boards tagged, Reviewed in with →.
+    assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0 waiting/);
+    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*Approvals board\s*New\s*0 waiting\s*—.*Product testers →/);
+    assert.match(v.of('approvals-lane-events'), /Events\s*0 waiting\s*—.*Events › Review →/);
     assert.match(v.of('approvals-not-a-queue'), /Partner invitations: An open invitation waits on the invitee, not an admin\./);
     assert.ok(!v.has('approvals-hq-lanes'), 'an Admin never sees the HQ group');
+    assert.match(v.of('approvals-hq-locked'), /HQ decides — Super Admin only.*You are signed in as Admin\..*Super Admin/s);
   } finally { await v.unmount(); }
   v = await render('/admin/approvals/lanes', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }));
   try {
     assert.match(v.of('approvals-hq-lanes'), /HQ decides · Tickets could not be read, so no total/);
-    assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4\s*3 d 8 h\s*Commissions/);
+    assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4 waiting\s*oldest 3 d 8 h.*Commissions/);
     assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
     assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
@@ -869,7 +872,10 @@ test('mounted, a tester: an unverified email is refused before sending (APR5r); 
     await v.change('tester-dialog-reason', 'We are full for this quarter.');
     await v.click('tester-dialog-decline-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/1/decline', body: { note: null, reason: 'We are full for this quarter.' } }]);
-    assert.match(v.of('tester-dialog-decline-refused'), /This tester changed while you were looking at it/);
+    // D4814 part 5 (AP-18e): another decision got there first — nothing of yours was written; the latest state is read.
+    assert.match(v.of('tester-dialog-decline-changed'), /This item changed while you were reviewing it\. The latest state has been loaded\. Nothing was recorded by you\.\s*This tester changed while you were looking at it/);
+    assert.equal(v.of('tester-dialog-decline-latest'), 'View latest');
+    assert.ok(!v.has('tester-dialog-decline-send'), 'no second send from a stale dialog');
     assert.ok(!v.has('board-done'), 'a refusal is never shown as done');
   } finally { await v.unmount(); }
 });
@@ -1163,7 +1169,8 @@ test('D1047 (APR15c): a board\'s drawer has "‹ [lane]" back on a phone; dialog
   } finally { await v.unmount(); }
   const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
   assert.match(parts, /export const FOOT = 'flex justify-end gap-2 max-sm:\*:flex-1';/);
-  assert.match(parts, /<div className=\{FOOT\}>\s*<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
+  // D4814 part 5: the footer swaps Cancel/send for Close/View latest after a conflict; both pairs sit in FOOT.
+  assert.match(parts, /<div className=\{FOOT\}>[\s\S]{0,200}<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
   for (const [f, label] of [['TesterBoard', 'Product testers'], ['PitchBoard', 'Co-marketing'], ['ExpertBoard', 'Wellbeing experts']]) {
     const src = read(`frontend/src/pages/admin/approvals/${f}.jsx`);
     assert.ok(src.includes(`<PhoneBack label="${label}" onClose={onClose}`), f);

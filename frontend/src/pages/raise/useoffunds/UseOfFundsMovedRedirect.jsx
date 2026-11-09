@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { fireAnalytics } from '../../../lib/seo';
 import { redirectKey } from '../../../../../cloudflare-worker/src/services/redirectRoutes.ts';
-import { movedTo } from './scenariosForecastModel';
+// #4574 (H4): from the paths file, not the forecast model, so this redirect does not put that model in the shell.
+import { movedTo } from './useOfFundsPaths';
 
 /**
  * D1178 (#3105) — the old financial model's addresses (`/raise/capital/model`,

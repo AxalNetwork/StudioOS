@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { categorySwitches, notificationSaver, privacySaver, publicProfileSaver } from '../lib/settingsSavers';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
@@ -64,6 +65,8 @@ import TotpEnrollment from '../components/TotpEnrollment';
 import { appOrigin } from '../lib/branchHost';
 import { toUtcInstant } from '../lib/notices';
 import { isSuperAdminUser } from '../lib/shellRole';
+import { sessionRowState } from '../lib/sessionRows';
+import { effectiveDisplayName } from '../lib/displayName';
 import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
 
 // D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
@@ -951,7 +954,25 @@ function CorporateEntityCard({ flash }) {
 
 
 function ProfileSection({ data, onSaved, flash, patch }) {
-  const [name, setName] = useState(data.name || '');
+  // D4616 — "Display name" is the identity contract's `display_name`, the name
+  // other members see. The account's full name is a different field, edited
+  // under Account · Profile; it shows here only as what an unset display name
+  // falls back to.
+  const [displayName, setDisplayName] = useState(data.display_name || '');
+  const name = effectiveDisplayName(displayName, data.name) || '';
+  const saveDisplayName = async () => {
+    const next = displayName.trim();
+    if (next === (data.display_name || '')) return;
+    try {
+      const res = await api.updateIdentitySettings({ display_name: next || null });
+      const stored = res?.display_name ?? null;
+      setDisplayName(stored || '');
+      onSaved({ display_name: stored, public_name: effectiveDisplayName(stored, data.name) });
+      flash('Display name saved');
+    } catch (e) {
+      flash(e?.message || 'Your display name was not saved.', 'error');
+    }
+  };
   const [bio, setBio] = useState(data.profile?.bio || '');
   const [headline, setHeadline] = useState(data.profile?.headline || '');
   const [socials, setSocials] = useState(data.profile?.socials || {});
@@ -1008,9 +1029,9 @@ function ProfileSection({ data, onSaved, flash, patch }) {
               className="hidden" onChange={e => onFile(e.target.files?.[0])} />
           </div>
           <div className="flex-1 space-y-3">
-            <Field label="Display name">
-              <input value={name} onChange={e => setName(e.target.value)}
-                onBlur={() => name !== data.name && patch({ name })} className={inputCls} />
+            <Field label="Display name" hint={`How you appear to other members. Left blank, they see your account name${data.name ? ` (${data.name})` : ''}, which you change under Account · Profile.`}>
+              <input value={displayName} onChange={e => setDisplayName(e.target.value)} maxLength={100}
+                onBlur={saveDisplayName} placeholder={data.name || ''} className={inputCls} />
             </Field>
             <Field label="Bio" hint="Up to 2,000 characters. Markdown is not rendered.">
               <textarea value={bio} onChange={e => setBio(e.target.value)} rows={4}
@@ -2833,7 +2854,7 @@ function AuthSection({ data, flash, reload }) {
 
       <RecoveryActivityPanel />
 
-      <Card title="Active sessions" description="Every device with an active session. Revoke one here; Sign out everywhere is in Sessions and alerts above.">
+      <Card title="Active sessions" description="Every device signed in to this account, newest first. Revoke an active one here; a past session says why it ended. Sign out everywhere is in Sessions and alerts above.">
         {sessionsErr && <div className="text-sm text-red-600 mb-3">{sessionsErr}</div>}
         {sessions === null ? (
           <div className="text-sm text-gray-500 dark:text-gray-400">Loading sessions…</div>
@@ -2853,9 +2874,9 @@ function AuthSection({ data, flash, reload }) {
               </thead>
               <tbody>
                 {sessions.map(s => {
-                  const isRevoked = !!s.revoked_at;
+                  const row = sessionRowState(s);
                   return (
-                    <tr key={s.id} className={`border-b border-gray-100 dark:border-gray-800 ${isRevoked ? 'text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                    <tr key={s.id} className={`border-b border-gray-100 dark:border-gray-800 ${row.live ? 'text-gray-800 dark:text-gray-200' : 'text-gray-400'}`}>
                       <td className="px-2 py-2 max-w-xs truncate" title={s.user_agent || ''}>
                         {s.user_agent || 'Unknown device'}
                         {s.is_current && (
@@ -2868,8 +2889,8 @@ function AuthSection({ data, flash, reload }) {
                       <td className="px-2 py-2 text-xs">{s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</td>
                       <td className="px-2 py-2 text-xs">{s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—'}</td>
                       <td className="px-2 py-2 text-right">
-                        {isRevoked ? (
-                          <span className="text-xs text-gray-400">Revoked</span>
+                        {!row.live ? (
+                          <span className="text-xs text-gray-400">{row.label}</span>
                         ) : (
                           <button onClick={() => revokeOne(s)} disabled={sessionBusyId === s.id}
                             className="text-xs text-red-600 hover:text-red-800 disabled:text-gray-400">
@@ -3116,28 +3137,24 @@ const PUBLIC_PROFILE_FIELDS_BY_ROLE = {
 // Defaults must mirror backend `_DEFAULTS` in public_profiles.py so the
 // owner-side toggles reflect what visitors actually see when no
 // override has been saved yet.
-const PUBLIC_PROFILE_DEFAULTS = {
-  founder:  { name: true, bio: true, headshot: true, socials: false, projects: true, traction: true },
-  investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false },
-  partner:  { name: true, bio: true, headshot: true, socials: false, services: true, reviews: true, pricing: false },
-  admin:    { name: true, bio: true, headshot: true, socials: false },
-  advisor:   { name: true, bio: true, headshot: true, socials: false },
-};
+// D4615 — the public-profile defaults are the Worker's (`_PROFILE_DEFAULTS` in routes/public.ts), read here as
+// `public_profile_effective`; the copy that lived here had drifted from the ones the profile is served with.
 
 function PrivacySection({ data, patch, flash }) {
   const role = (data.role || 'founder').toLowerCase();
-  const defaults = PUBLIC_PROFILE_DEFAULTS[role] || PUBLIC_PROFILE_DEFAULTS.admin;
-  const saved = data.privacy_prefs?.public_profile || {};
-  const pp = { ...defaults, ...saved };
   const fieldList = [
     ...PUBLIC_PROFILE_FIELDS_COMMON,
     ...(PUBLIC_PROFILE_FIELDS_BY_ROLE[role] || []),
   ];
   const [copied, setCopied] = useState(false);
+  // D4615 — the switches are drawn from what the public profile actually shows (`public_profile_effective`, the
+  // rule /api/public serves with) and saved one switch at a time, with the revision read. Rapid clicks queue
+  // behind each other instead of each resending a stale copy of the whole map.
+  const [pp, setPp] = useState(() => data.public_profile_effective || {});
+  const saver = useRef(null);
+  if (!saver.current) saver.current = publicProfileSaver(data, setPp, flash);
 
-  const setVisible = (key, value) => {
-    patch({ privacy_prefs: { ...data.privacy_prefs, public_profile: { ...pp, [key]: value } } });
-  };
+  const setVisible = (key, value) => { saver.current.save({ [key]: value }); };
 
   const publicUrl = data.handle
     ? `${window.location.origin}/u/${data.handle}`
@@ -3171,7 +3188,7 @@ function PrivacySection({ data, patch, flash }) {
         <div className="space-y-2">
           {fieldList.map(({ key, label }) => (
             <label key={key} className="flex items-center gap-3 text-sm text-gray-800 dark:text-gray-200">
-              <input type="checkbox" checked={pp[key] !== false}
+              <input type="checkbox" checked={pp[key] === true}
                 onChange={e => setVisible(key, e.target.checked)}
                 className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
               {label}
@@ -3722,11 +3739,12 @@ function listTimezones() {
 
 function DigestQuietHoursCard({ flash }) {
   const [row, setRow] = useState(null);
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   // Task #14 — per-field inline error messages from the worker.
   const [fieldErrors, setFieldErrors] = useState({});
   const tzList = useMemo(() => listTimezones(), []);
+  // D4615 — saves go one at a time with the revision read (see PrivacyCoreCard).
+  const saver = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -3742,45 +3760,28 @@ function DigestQuietHoursCard({ flash }) {
             if (cached?.timezone) next.quiet_hours_tz = cached.timezone;
           } catch { /* noop */ }
         }
-        setRow(next);
+        saver.current = notificationSaver(next, setRow, flash, setFieldErrors);
+        setRow(saver.current.view);
       })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load notification settings'); });
     return () => { cancelled = true; };
   }, []);
 
-  const save = async (delta, fieldHint) => {
-    if (!row) return;
-    const next = { ...row, ...delta };
-    setRow(next);
-    setBusy(true);
+  const save = (delta) => {
     setFieldErrors({});
-    try {
-      const res = await api.updateNotificationSettings(delta);
-      setRow({ ...next, ...res });
-      flash('Saved');
-    } catch (e) {
-      // Task #14 — surface field-level validation errors inline. The
-      // worker returns `{error, field, errors:{[field]:msg}}` for 400s
-      // raised by SettingsValidationError; older toasts only fire when
-      // we can't pin the failure to a known field.
-      const targetField = e?.field || fieldHint || null;
-      if (targetField && e?.status === 400) {
-        setFieldErrors({ [targetField]: e.message || 'Invalid value' });
-      } else {
-        flash(e.message || 'Failed to save', 'error');
-      }
-      try { setRow(await api.getNotificationSettings()); } catch { /* ignore */ }
-    } finally { setBusy(false); }
+    saver.current?.save(delta);
   };
+  const busy = false;
 
   if (err) return <Card title="Digest & quiet hours"><div className="text-sm text-red-600">{err}</div></Card>;
   if (!row) return <Card title="Digest & quiet hours"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;
 
-  const email = row.notif_categories_email || {};
-  const inapp = row.notif_categories_inapp || {};
+  // D4615 — drawn as delivery reads it: the server's effective switches (unset is on, a mandatory category is
+  // always on and locked), under this tab's own unsent choices. A save sends only the one category it changes.
+  const effective = categorySwitches(row);
   const setCategory = (channel, key, value) => {
-    if (channel === 'email') save({ notif_categories_email: { ...email, [key]: value } });
-    else save({ notif_categories_inapp: { ...inapp, [key]: value } });
+    if (channel === 'email') save({ notif_categories_email: { [key]: value } });
+    else save({ notif_categories_inapp: { [key]: value } });
   };
 
   return (
@@ -3815,12 +3816,14 @@ function DigestQuietHoursCard({ flash }) {
                 <tr key={c.key} className="border-b border-gray-100 dark:border-gray-800">
                   <td className="px-2 py-2 text-gray-800 dark:text-gray-200">{c.label}</td>
                   <td className="text-center px-2 py-2">
-                    <input type="checkbox" checked={!!email[c.key]} disabled={busy}
+                    <input type="checkbox" checked={effective.email[c.key]} disabled={busy || effective.locked.has(c.key)}
+                      title={effective.locked.has(c.key) ? 'Always sent' : undefined} aria-label={`${c.label} by email`}
                       onChange={e => setCategory('email', c.key, e.target.checked)}
                       className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
                   </td>
                   <td className="text-center px-2 py-2">
-                    <input type="checkbox" checked={!!inapp[c.key]} disabled={busy}
+                    <input type="checkbox" checked={effective.inapp[c.key]} disabled={busy || effective.locked.has(c.key)}
+                      title={effective.locked.has(c.key) ? 'Always sent' : undefined} aria-label={`${c.label} in-app`}
                       onChange={e => setCategory('inapp', c.key, e.target.checked)}
                       className="w-4 h-4 text-violet-600 border-gray-300 dark:border-gray-600 rounded focus:ring-violet-500" />
                   </td>
@@ -3944,31 +3947,25 @@ function CohortAdvisorAccessCard({ flash }) {
 
 function PrivacyCoreCard({ flash }) {
   const [row, setRow] = useState(null);
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // D4615 — one save in flight, later edits queued behind it with the revision it returns; a delayed response
+  // never replaces a newer choice, and another tab's newer save is adopted and said, never overwritten.
+  const saver = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     api.getPrivacySettings()
-      .then(r => { if (!cancelled) setRow(r); })
+      .then(r => {
+        if (cancelled) return;
+        saver.current = privacySaver(r, setRow, flash);
+        setRow(saver.current.view);
+      })
       .catch(e => { if (!cancelled) setErr(e.message || 'Failed to load privacy settings'); });
     return () => { cancelled = true; };
   }, []);
 
-  const save = async (delta) => {
-    if (!row) return;
-    const next = { ...row, ...delta };
-    setRow(next);
-    setBusy(true);
-    try {
-      const res = await api.updatePrivacySettings(delta);
-      setRow({ ...next, ...res });
-      flash('Saved');
-    } catch (e) {
-      flash(e.message || 'Failed to save', 'error');
-      try { setRow(await api.getPrivacySettings()); } catch { /* ignore */ }
-    } finally { setBusy(false); }
-  };
+  const save = (delta) => { saver.current?.save(delta); };
+  const busy = false;
 
   if (err) return <Card title="Visibility"><div className="text-sm text-red-600">{err}</div></Card>;
   if (!row) return <Card title="Visibility"><div className="text-sm text-gray-500 dark:text-gray-400">Loading…</div></Card>;

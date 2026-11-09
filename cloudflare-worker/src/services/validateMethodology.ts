@@ -1,14 +1,14 @@
 /**
- * D4586 (#4586) — Validate methodology v2, as pure functions. PROPOSED, NOT
- * WIRED: nothing in the product calls this module yet. #4586 requires the
- * methodology to be reviewed before calculation behaviour changes, so this is
- * the executable form of `documentation/architecture/decisions/D4586.md`. The
- * boundary outcomes the document tabulates are this code's outputs and are
- * pinned by `cloudflare-worker/test/validate_methodology_4586.test.ts`.
+ * D4586 (#4586) — Validate methodology v2, as pure functions: the executable
+ * form of `documentation/architecture/decisions/D4586.md`, merged after the
+ * owner's review. The boundary outcomes the document tabulates are this code's
+ * outputs and are pinned by `cloudflare-worker/test/validate_methodology_4586.test.ts`.
  *
- * Methodology v1 is what ships today: `verdictFor` in
- * `routes/_founder_validate_helpers.ts` (claim status) and the link count in
- * `recordDecision` (`services/verdict.ts`, the decision's evidence bar).
+ * WIRED SO FAR (part 2): `decisionEvidenceV2` is the decision's evidence bar in
+ * `recordDecision` (`services/verdict.ts`), which records the methodology
+ * version and the links that did not count. Claim status is still v1
+ * (`verdictFor` in `routes/_founder_validate_helpers.ts`) until its own slice
+ * moves it to `claimStatusV2`.
  *
  * FOUR SEPARATE THINGS, never merged into one number:
  *   coverage     how much evidence there is, in named units (links, sources,

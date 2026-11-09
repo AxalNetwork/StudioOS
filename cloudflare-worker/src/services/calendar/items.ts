@@ -55,6 +55,11 @@ export const FAMILY_OF: Readonly<Record<CalendarEvent['kind'], ItemFamily>> = {
   external_microsoft: 'other',
   // #3957: AI agent sessions sit with the team's tasks.
   agent_session: 'tasks',
+  // #5131 (D1486 §e): Grow's campaign plans, ad flights, newsletter sends and sequence steps.
+  grow_campaign: 'grow',
+  ad_flight: 'grow',
+  newsletter_send: 'grow',
+  sequence_step: 'grow',
 };
 
 /** The kinds `POST /calendar/push/:kind/:source_id` copies to Google or Outlook. */
@@ -118,6 +123,10 @@ const ROLE_BY_KIND: Partial<Record<CalendarEvent['kind'], string>> = {
   agent_session: 'team_agent',
   external_google: 'from_google',
   external_microsoft: 'from_outlook',
+  grow_campaign: 'venture_team',
+  ad_flight: 'venture_team',
+  newsletter_send: 'venture_team',
+  sequence_step: 'venture_team',
 };
 
 export interface CalendarItem extends Omit<CalendarEvent, 'my_role' | 'advisor_uid'> {
@@ -165,6 +174,11 @@ export function hrefOf(ev: CalendarEvent): string | null {
     // D1614 W4: the project's Work board.
     // #4735: the item itself, through WorkPage's `?item=` deep link, when the event names it.
     case 'work_item': return ev.project_id ? `/projects/${ev.project_id}/work${ev.source_uid ? `?item=${encodeURIComponent(ev.source_uid)}` : ''}` : null;
+    // #5131 (D1486 §e): the campaign itself, and the Ads, Newsletter and Prospects tabs.
+    case 'grow_campaign': return typeof ev.url === 'string' && ev.url.startsWith('/grow/distribution/campaigns/') ? ev.url : '/grow/distribution/campaigns';
+    case 'ad_flight': return '/grow/distribution/ads';
+    case 'newsletter_send': return '/grow/distribution/newsletter';
+    case 'sequence_step': return '/grow/distribution/prospects';
     case 'agent_session': return typeof ev.url === 'string' && ev.url.startsWith('/calendar') ? ev.url : '/calendar';
     default: return null;
   }

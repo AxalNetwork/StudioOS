@@ -175,7 +175,7 @@ async function fixture() {
                                   status TEXT, company_id INTEGER, deleted_at TEXT);
            CREATE TABLE pitch_decks (id INTEGER PRIMARY KEY);`);
   db.exec(ddl('125'));
-  db.exec(file('437'));
+  db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(ddl('001')); db.exec(ddl('252')); db.exec(ddl('443')); db.exec(ddl('436'));
   for (const p of ['119', '127', '128', '132']) db.exec(ddl(p));
   db.exec('ALTER TABLE raise_prospects ADD COLUMN amount REAL');
@@ -415,7 +415,13 @@ test('send records each recipient; an investor with no account is not delivered,
   assert.equal(none.delivered_via, null);
   assert.match(none.not_delivered_reason, /No Axal account/);
   assert.equal((await call(db, STRANGER, 'GET', `/${uid}/page`)).status, 403);
-  assert.equal((await call(db, FOUNDER, 'POST', `/${uid}/send`)).status, 409, 'sent once');
+  // D4636: sending again is the retry. It reserves nobody twice and reaches nobody twice.
+  const inbox = () => (db.prepare('SELECT COUNT(*) AS n FROM notifications_inbox').get() as any).n;
+  const before = [inbox(), (db.prepare('SELECT COUNT(*) AS n FROM update_recipients').get() as any).n];
+  const again = await call(db, FOUNDER, 'POST', `/${uid}/send`);
+  assert.equal(again.status, 200, 'a repeated send reconciles');
+  assert.equal(again.body.sent_at, sent.sent_at, 'the first send time stands');
+  assert.deepEqual([inbox(), (db.prepare('SELECT COUNT(*) AS n FROM update_recipients').get() as any).n], before, 'sent once');
   // Opening records the open.
   await call(db, INVESTOR, 'GET', `/${uid}/page`);
   const page = await call(db, FOUNDER, 'GET', `/${uid}/page`);

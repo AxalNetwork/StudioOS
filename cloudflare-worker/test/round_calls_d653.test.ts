@@ -37,6 +37,7 @@ async function fixture(state='sent',migration=readFileSync('cloudflare-worker/sq
   db.exec(readFileSync('cloudflare-worker/sql/migrations/456_round_call_counsel_terms.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/410_safe_issuances.sql','utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/437_share_an_update.sql','utf8'));
+  db.exec(readFileSync('cloudflare-worker/sql/migrations/202611091055_update_versions_deliveries.sql','utf8')); // D4636
   db.exec("INSERT INTO founders(id,name,email) VALUES(1,'Owner','owner@example.test'),(2,'Other','other@example.test')");
   const user=db.prepare('INSERT INTO users(id,name,email,role,founder_id,kyc_status,is_active) VALUES(?,?,?,?,?,?,?)');
   for(const row of [[1,'Owner','owner@example.test','founder',1,'approved',1],[2,'Other','other@example.test','founder',2,'approved',1],
@@ -134,11 +135,13 @@ const checks:Record<string,(m:any)=>Promise<void>>={
     const gone=await m.service.investorPage(f.env,call,f.investor);
     assert.deepEqual([named.company,gone.company,JSON.stringify(named).includes('owner@example.test')],[{name:'Energy'},{name:null},false]);},
   async nda(m){const f=await fixture();const call=await m.service.loadCall(f.env,'call');
-    f.db.exec("INSERT INTO data_room_grants(uid,project_id,investor_user_id,granted_by_user_id) VALUES('grant',1,4,2); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(1,4,'active')");
+    // D4631 part 2: the room opens on the VENTURE's NDA (its founder, user 1, as party A), by the shared rule,
+    // whoever granted the room; an NDA with the granting account (user 2, another venture's founder) is not it.
+    f.db.exec("INSERT INTO data_room_grants(uid,project_id,investor_user_id,granted_by_user_id) VALUES('grant',1,4,2); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(2,4,'active')");
     const blocked=await m.service.investorPage(f.env,call,f.investor);
-    f.db.exec("INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(2,4,'active')");
+    f.db.exec("INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(1,4,'active')");
     const granted=await m.service.investorPage(f.env,call,f.investor);
-    f.db.exec("UPDATE pairwise_ndas SET status='revoked' WHERE party_a_user_id=2");
+    f.db.exec("UPDATE pairwise_ndas SET status='revoked' WHERE party_a_user_id=1");
     const revoked=await m.service.investorPage(f.env,call,f.investor);
     assert.deepEqual([blocked.data_room.path,granted.data_room.path,revoked.data_room.path],[null,'/research/diligence/grant',null]);},
   async invalidation(m){const f=await fixture('draft');const call=await m.service.loadCall(f.env,'call');
@@ -458,7 +461,8 @@ const probes=[
   ['pipeline','service',"...roundCallPipelineStatements(env,{callId:call.id,projectId:call.project_id,investorId:investor.id,name:investor.name,email:investor.email,at,claim,commitmentCents:cents}),",""],
   ['rollback','service',"statements.push(await responseAudit(env,investor,call,action,claim));",""],
   ['closed','service',"read_only:!writableCall(call,today())","read_only:false"],
-  ['nda','service',"active?.granted_by_user_id ?? call.created_by","call.created_by"],
+  // D4631 part 2. Mutation checked: the venture's NDA no longer required (any reader opens the room).
+  ['nda','service',"await projectNdaActive(env,call.project_id,investor.id)","true"],
   ['invalidation','service',"counsel_approved_hash=NULL, counsel_approval_reference=NULL, counsel_approved_by=NULL, counsel_approved_at=NULL, updated_at=?","updated_at=?"],
 ];
 for(const [index,[name,kind,old,replacement]]of probes.entries())test('D653 request mutation/restoration '+index+': '+name,async()=>{
