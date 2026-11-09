@@ -7,6 +7,7 @@ import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { PHONE_ROOT } from './capTableModel';
 import { CARD, INK, MONO, MUTED, EYEBROW, Section, Skeleton, TD, Table } from './CapTableTool';
 import { SUPPORT_REASON, logRows, sharedLine, sharedView, supportProblem } from './capTableAccess';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1026 (#2863) — a cap table read through D1019's levels, for everyone but
@@ -84,7 +85,7 @@ function HqLog() {
   const [state, setState] = useState({ status: 'loading', data: null });
   const load = useCallback(() => {
     setState({ status: 'loading', data: null });
-    capTableAccessApi.hqLog().then((data) => setState({ status: 'ready', data })).catch((e) => setState({ status: 'error', data: null, message: e?.message }));
+    capTableAccessApi.hqLog().then((data) => setState({ status: 'ready', data })).catch((e) => setState({ status: 'error', data: null, message: userFacingRaiseError(e, { fallback: '' }) }));
   }, []);
   useEffect(() => { load(); }, [load]);
   const rows = state.status === 'ready' ? logRows(state.data) : [];
@@ -150,7 +151,7 @@ export function CapTableReadPage() {
     setState({ status: 'loading', data: null }); setSupport(null);
     capTableAccessApi.view(projectId)
       .then((data) => setState({ status: 'ready', data }))
-      .catch((e) => setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: e?.message || '' }));
+      .catch((e) => setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(e, { fallback: '' }) }));
   }, [projectId]);
   useEffect(() => { load(); }, [load]);
   const read = support || state.data;
@@ -195,7 +196,7 @@ export function VentureSharePage() {
     let alive = true;
     capTableAccessApi.shared(token)
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((e) => { if (alive) setState({ status: [403, 410].includes(e?.status) ? 'refused' : 'error', data: null, message: e?.message || '' }); });
+      .catch((e) => { if (alive) setState({ status: [403, 410].includes(e?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [token]);
   return (

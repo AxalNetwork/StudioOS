@@ -10,6 +10,7 @@ import {
 } from './historyModel';
 import { money as moneyOf } from './capTableModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1025 (#2862) — the Cap table's dialogs, each in the page (never a browser
@@ -107,7 +108,7 @@ export function RecordDialog({ projectId, record, mode = 'record', admin = false
       setDraft(out?.draft || null);
       if (!out?.draft) setReading('Eadwyn found nothing to draft in that document.');
     } catch (e) {
-      setReading(e?.message || 'Eadwyn could not read that document. Nothing was drafted.');
+      setReading(userFacingRaiseError(e, { fallback: 'Eadwyn could not read that document. Nothing was drafted.' }));
     }
   };
   if (draft) return <DraftDrawer projectId={projectId} record={record} draft={draft} mode={mode} admin={admin} onClose={() => setDraft(null)} onDone={onDone} />;

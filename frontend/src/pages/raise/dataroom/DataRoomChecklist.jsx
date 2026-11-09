@@ -6,6 +6,7 @@ import { HOME_PATH, TABS, tabHref, tabSearch } from './dataRoomModel';
 import {
   MATCH_NOTE, PROPOSALS_EMPTY, PROPOSALS_NOTE, PROPOSALS_UNREADABLE, READINESS_PATH, READINESS_WAIT, areasOf, proposalsHoldLine, proposalsOf, summaryLine,
 } from './checklistModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1108 (#2988) — Checklist (DR12): the twelve diligence items in their six
@@ -96,13 +97,13 @@ function Proposals({ projectUid, onChanged }) {
       await call(projectUid, uid);
       if (verb !== 'dismiss') onChanged?.();
     } catch (e) {
-      setNotice({ uid, text: e?.message || 'That did not go through. Nothing changed.' });
+      setNotice({ uid, text: userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' }) });
     } finally { setBusy(null); refresh(); }
   };
   const askQuote = async () => {
     setBusy('ask'); setNotice(null);
     try { setQuote((await dataRoomApi.proposalsQuote(projectUid))?.quote || null); }
-    catch (e) { setNotice({ uid: 'ask', text: e?.message || 'Eadwyn cannot be asked right now. Nothing was charged.' }); }
+    catch (e) { setNotice({ uid: 'ask', text: userFacingRaiseError(e, { fallback: 'Eadwyn cannot be asked right now. Nothing was charged.' }) }); }
     finally { setBusy(null); }
   };
   const runAsk = async () => {
@@ -115,7 +116,7 @@ function Proposals({ projectUid, onChanged }) {
     } catch (e) {
       // A changed room needs a new quote: the Worker sends it with the refusal.
       if (e?.status === 402 && e?.data?.quote) setQuote(e.data.quote);
-      setNotice({ uid: 'ask', text: e?.message || 'Eadwyn could not answer. Nothing changed.' });
+      setNotice({ uid: 'ask', text: userFacingRaiseError(e, { fallback: 'Eadwyn could not answer. Nothing changed.' }) });
     } finally { setBusy(null); }
   };
 

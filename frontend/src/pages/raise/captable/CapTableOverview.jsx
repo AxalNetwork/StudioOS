@@ -19,6 +19,7 @@ import {
   OTHER_LINE, OTHER_TITLE, PLANS_PATH, PLAN_LINE, SAVE_BLOCKED, UNREADABLE_LINE,
   asOf, bars, byClass, cartaChip, harbourChip, holderCards, instruments, needsYou, proposalsFromModel, tiles, whoOwns,
 } from './overviewModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1022 (#2859, part 7 of #2432) — Overview's record blocks (CT1, CT1c, CT16,
@@ -429,7 +430,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
       setBusy(false); onDone();
     } catch (e) {
       setBusy(false);
-      setError(`${made} of ${list.length} became proposals; then: ${e?.message || 'the next one was refused'}. What was proposed stays in Needs you.`);
+      setError(`${made} of ${list.length} became proposals; then: ${userFacingRaiseError(e, { fallback: 'the next one was refused' })}. What was proposed stays in Needs you.`);
     }
   };
   const founders = list.filter((b) => b.kind === 'founding').length;
