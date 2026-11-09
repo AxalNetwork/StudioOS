@@ -27,6 +27,7 @@
 import { readLicenceTerms } from './licenceTerms';
 import { programCopy } from './licencePrograms';
 import { dealTypesForPush } from './partnerDealTypes';
+import { slaPolicyForCopy } from './supportSlaPolicy';
 import type { Env } from '../types';
 import { branchByCode } from './branches';
 import { mirrorBranchAction } from './auditMirror';
@@ -208,6 +209,18 @@ export async function assembleLicenceRecordDetailed(
   } catch (e) {
     if (!isMissingTable(e)) unreadable.push('partner_deal_types');
     console.warn('[licencePush] partner deal types unreadable; the copy goes without them', (e as Error).message);
+  }
+  // D5032 (#5032) — HQ's ticket SLA policy (P1/P2/P3 hours) and its version,
+  // so a branch bands its tickets with the hours HQ says are current. Its own
+  // try, like the sections above: a database without the store omits the key
+  // and the branch keeps the hours it has; any other failure makes the push
+  // partial rather than claiming the branch was sent the policy.
+  try {
+    const policy = await slaPolicyForCopy(env);
+    if (policy) record.support_sla_json = JSON.stringify(policy);
+  } catch (e) {
+    if (!isMissingTable(e)) unreadable.push('support_sla');
+    console.warn('[licencePush] support SLA policy unreadable; the copy goes without it', (e as Error).message);
   }
   return { record, unreadable };
 }

@@ -270,11 +270,11 @@ test('every rail row is a [title, detail] pair, and the retired refusal is gone'
 
 // ──────────────────────────────────────────────────────────── the page ──
 
-test('the page makes one read and three writes — the Support route, HQ’s answer, send again and the SLA tiers (D482) — and never falls back to a zero', () => {
-  // Exactly these four. A fifth call — a second read of the board, say — fails here.
+test('the page makes two reads and three writes — the Support route and its HQ-local half (D5031), HQ’s answer, send again and the SLA tiers (D482) — and never falls back to a zero', () => {
+  // Exactly these five. A sixth call — a third read of the board, say — fails here.
   assert.deepEqual(
     [...(CODE.match(/api\.\w+\(/g) || [])].sort(),
-    ['api.escalationAnswer(', 'api.escalationResend(', 'api.hqSupport(', 'api.hqSupportSetSlaTiers('],
+    ['api.escalationAnswer(', 'api.escalationResend(', 'api.hqSupport(', 'api.hqSupportLocal(', 'api.hqSupportSetSlaTiers('],
   );
   assert.doesNotMatch(CODE, /\|\|\s*0\b/, 'a count falls back to zero');
   assert.doesNotMatch(CODE, /from '\.\.\/\.\.\/pages\//, 'the page imports a routed page');

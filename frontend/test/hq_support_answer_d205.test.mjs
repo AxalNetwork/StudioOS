@@ -286,13 +286,17 @@ test('the page wires the panel, keeps the session list, and reloads quietly afte
   assert.ok(fn.includes('setOpenUid(null)'), 'the panel stays open after its decision is recorded');
   assert.ok(fn.includes('fetchSupport(false)'), 'the refresh after a decision blanks the page');
   assert.ok(!fn.includes('load()'), 'the refresh after a decision blanks the page');
-  assert.ok(CODE.includes('if (clear) setData(null);'));
+  // D5031 (#5031) — two reads now, HQ's own desk and the branch hosts; each
+  // blanks only on a retry, never after a decision.
+  assert.ok(CODE.includes('if (clear) setLocal(null);'));
+  assert.ok(CODE.includes('if (clear) setFull(null);'));
 });
 
 test('the rail says the page acts, once, and the old refusal is gone', () => {
   assert.ok(!SUPPORT_UNAVAILABLE.some(([t]) => /Answering an escalation/.test(t)), 'the rail still says no screen answers');
   assert.doesNotMatch(CODE, /nothing calls it/);
-  assert.ok(CODE.includes('stance="Read-only, except answering an escalation"'));
+  // D5032 (#5032) — the page also sets the ticket SLA hours, and says so.
+  assert.ok(CODE.includes('stance="Read-only, except answering an escalation and setting the ticket SLA hours"'));
   assert.match(CODE, /Recording an answer sends it to the branch\. Send again resends the decision already stored\./);
   assert.ok(CODE.includes('api.escalationResend(uid)'), 'Send again does not call the resend route');
   assert.ok(!CODE.includes('escalationResend(uid,') && !CODE.includes('escalationResend(uid, '),
