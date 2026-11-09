@@ -113,10 +113,7 @@ const send = (db: DatabaseSync, uid: string, revision: number) => call(db, 'POST
 const version = (db: DatabaseSync, uid: string) => ({ ...(db.prepare('SELECT * FROM licence_program_agreements WHERE uid = ?').get(uid) as any) });
 const count = (db: DatabaseSync, sql: string, ...a: any[]) => Number((db.prepare(sql).get(...a) as any).n);
 
-// Signed now, not at a fixed instant: the executed event is stamped with the signing time, and the
-// history orders by time, so a fixed instant sorted it before the draft once the clock passed it.
-const today = () => new Date().toISOString().slice(0, 10);
-async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = new Date().toISOString()) {
+async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = '2026-11-09T12:00:00Z') {
   const e = db.prepare('SELECT id FROM esign_envelopes WHERE envelope_uuid = ?').get(uuid) as any;
   db.prepare("UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE envelope_id = ?").run(at, e.id);
   const r = db.prepare('SELECT id FROM esign_recipients WHERE envelope_id = ?').get(e.id) as any;
@@ -144,7 +141,7 @@ const coreAddendum = (program: string) => ({ agreement_kind: 'package_addendum',
 async function branchSees(db: DatabaseSync, program: string) {
   const copy = parseProgramCopy(JSON.stringify(await programCopy({ DB: d1Over(db) } as any, 1)))!;
   const licence = { uid: LIC, licence_ref: 'AXL-001', brand_name: 'Studio North', kind: 'subsidiary', status: 'active', renews_on: '2027-10-31' } as any;
-  return studioPrograms(copy, licence, today()).find((p) => p.program_key === program)!;
+  return studioPrograms(copy, licence, '2026-11-09').find((p) => p.program_key === program)!;
 }
 
 // ═══════════════════════════════════════════════════════════════════ 1, 4, 5, 6
@@ -390,7 +387,7 @@ test('13. no duplicate rows from repeated send, acceptance, grant or gate sync',
   const lic = { id: 1, uid: LIC, licence_ref: 'AXL-001', brand_name: 'Studio North', kind: 'subsidiary', status: 'active', renews_on: '2027-10-31' } as any;
   const env = { DB: d1Over(db) } as any;
   for (let i = 0; i < 2; i++) {
-    const l = await readLicenceLegal(env, lic, today());
+    const l = await readLicenceLegal(env, lic, '2026-11-09');
     await env.DB.batch(gateSyncStatements(env, LIC, l.programs, { actorId: SUPER, at: '2026-11-09T13:00:00Z', reason: 'resync' }));
   }
   assert.equal(gates(), n, 'a repeated gate sync added lines');
