@@ -113,12 +113,7 @@ const send = (db: DatabaseSync, uid: string, revision: number) => call(db, 'POST
 const version = (db: DatabaseSync, uid: string) => ({ ...(db.prepare('SELECT * FROM licence_program_agreements WHERE uid = ?').get(uid) as any) });
 const count = (db: DatabaseSync, sql: string, ...a: any[]) => Number((db.prepare(sql).get(...a) as any).n);
 
-// A minute after the real clock, not a fixed time: the draft and send are stamped
-// by the routes with the real clock, and history is ordered by time. A fixed
-// '2026-11-09T12:00:00Z' put the signature before the draft from noon UTC on
-// 2026-11-09, so the history test failed on every branch after that.
-const afterNow = () => new Date(Date.now() + 60_000).toISOString();
-async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = afterNow()) {
+async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = '2026-11-09T12:00:00Z') {
   const e = db.prepare('SELECT id FROM esign_envelopes WHERE envelope_uuid = ?').get(uuid) as any;
   db.prepare("UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE envelope_id = ?").run(at, e.id);
   const r = db.prepare('SELECT id FROM esign_recipients WHERE envelope_id = ?').get(e.id) as any;
