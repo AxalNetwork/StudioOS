@@ -14,6 +14,8 @@ export default function adminGovernanceRoutes({ guard, hqOnly }) {
   return (
     <>
       <Route path="/admin/contracts/governance" element={guard(['admin'], hqOnly(<HqContractsPage section="governance" />))} />
+      {/* D4811 (#4811) part 5: one governance record's workspace (Overview · Document · Versions · Legal Review · Activity · Related). */}
+      <Route path="/admin/contracts/governance/doc/:uid" element={guard(['admin'], hqOnly(<HqContractsPage section="governance" />))} />
     </>
   );
 }
