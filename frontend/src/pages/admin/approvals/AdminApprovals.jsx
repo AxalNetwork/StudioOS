@@ -1255,7 +1255,7 @@ export function ApprovalsPage({ viewer = null }) {
 /** The page inside its rail frame (D774), the frame the page's outermost element. */
 export default function AdminApprovals() {
   return (
-    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} data-testid="admin-board-approvals">
+    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} operations data-testid="admin-board-approvals">
       <ApprovalsPage />
     </AdminBoardFrame>
   );

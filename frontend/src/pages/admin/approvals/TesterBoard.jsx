@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { AssignDialog, OwnerCell, UrgencyPill } from './AdminApprovals';
-import { DECIDED_HERE, boardCrumb, boardStrip, slaOfBand } from './boardGrammar';
+import { DECIDED_HERE, afterDecision, boardCrumb, boardStrip, slaOfBand } from './boardGrammar';
 import {
   BOARDS, INTAKE_PAUSED, INTAKE_PAUSED_LINE, PROFILES, TESTER_TABS,
   answerPairs, dayText, decisionCopy, doneLine, profileChart, profileWord, reasonReady, tabPath, testerActions, testerHistory, testerRows,
@@ -179,7 +179,7 @@ function TesterTable({ tab, rows, from, own }) {
  * Dialogs A, B and C, and Resume. `kind` is approve, decline, pause-remove, remove or resume.
  * D1204: also the dialogs Product testing's Tester pool opens from its ⋯ menu.
  */
-export function TesterDialog({ kind, tester, onClose, onDone }) {
+export function TesterDialog({ kind, tester, onClose, onDone, onStale }) {
   const name = tester.member?.name || 'This member';
   const [note, setNote] = useState('');
   const [reason, setReason] = useState('');
@@ -192,10 +192,11 @@ export function TesterDialog({ kind, tester, onClose, onDone }) {
   const blocked = !tester.member?.email_verified ? `${name}’s email is not verified, so they cannot be told. Ask them to verify it first.` : null;
   const send = async () => {
     const r = await approvalBoardsApi.decideTester(tester.id, action, { note: note.trim(), reason: needsReason ? reason.trim() : '' });
-    onDone(doneLine(key, name, r || {}));
+    // D4814 (AP-18f): the reply rides along; a board reads `notified` from it.
+    onDone(doneLine(key, name, r || {}), r);
   };
   return (
-    <DecisionDialog copy={{ ...copy, title, changes: kind === 'pause-remove' ? 'From the Active tab. They are told.' : copy.changes }} testId={`tester-dialog-${kind}`} onClose={onClose} onSend={send}
+    <DecisionDialog copy={{ ...copy, title, changes: kind === 'pause-remove' ? 'From the Active tab. They are told.' : copy.changes }} testId={`tester-dialog-${kind}`} onClose={onClose} onSend={send} onStale={onStale}
       ready={!needsReason || reasonReady(key, reason)} blocked={blocked} danger={action === 'decline' || action === 'remove'}>
       {kind === 'pause-remove' ? (
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" data-testid="tester-dialog-choice">
@@ -222,7 +223,11 @@ function TesterDrawer({ id, onClose, onDecided, own }) {
   const [dialog, setDialog] = useState(null);
   const t = read.reply?.tester;
   const ready = read.status === 'ready' && t;
-  const done = (line) => { setDialog(null); read.reload(); onDecided(line); };
+  // D4814 part 5: the dialog keeps the item it opened on while the drawer reads it again
+  // after a conflict, so its "changed while you were reviewing" note stays on screen.
+  const held = useRef(null);
+  if (ready) held.current = t;
+  const done = (line, reply) => { setDialog(null); read.reload(); onDecided(afterDecision(line, reply, t?.member?.name)); };
   return (
     <>
       <Sheet label={ready ? `${t.member?.name || 'Member'}, product tester` : 'Product tester'} eyebrow={ready ? EYEBROW[t.status] : 'Product tester'}
@@ -291,7 +296,7 @@ function TesterDrawer({ id, onClose, onDecided, own }) {
           ) : null}
         </div>
       </Sheet>
-      {dialog && ready ? <TesterDialog kind={dialog} tester={t} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog && held.current ? <TesterDialog kind={dialog} tester={held.current} onClose={() => setDialog(null)} onDone={done} onStale={read.reload} /> : null}
     </>
   );
 }
@@ -331,7 +336,7 @@ export default function TesterBoard({ at }) {
     <div className="flex flex-col gap-5" data-testid="approvals-board-product-testers">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
       {INTAKE_PAUSED ? <p role="note" className={`${CARD} m-0 px-4 py-3 text-[13px] font-semibold text-amber-800 dark:text-amber-200`} data-testid="testers-intake-paused">{INTAKE_PAUSED_LINE}</p> : null}
-      <DoneLine text={done} onDismiss={() => setDone(null)} />
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { all.reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="testers-strip" />
       {all.status === 'error' ? <Failed what="The product testers" onRetry={all.reload} testId="testers-failed" />
         : all.status === 'loading' ? <Skeleton.Text lines={4} />

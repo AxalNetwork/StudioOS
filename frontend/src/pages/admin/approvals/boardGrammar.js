@@ -145,3 +145,31 @@ export const LIFECYCLE_LINE = 'Approving does not publish. Publishing happens fr
 
 /** Wellbeing's register note (AP-13): lookups are by hand. */
 export const REGISTER_NOTE = 'Register lookups aren’t automated. Check the licence against the issuing register before verifying.';
+
+/**
+ * D4814 (#4814, part 5, AP-18e): the refusals that mean another decision got
+ * there first. Each is refused before anything is written (the Worker's
+ * conditional writes), so the dialog can say nothing was recorded by you.
+ */
+export const CHANGED_CODES = new Set(['tester_changed', 'pitch_decided', 'review_changed', 'already_decided']);
+export const isChanged = (e) => Number(e?.status) === 409 && CHANGED_CODES.has(e?.code);
+export const CHANGED_LEAD = 'This item changed while you were reviewing it.';
+export const CHANGED_REST = 'The latest state has been loaded. Nothing was recorded by you.';
+
+/**
+ * D4814 (AP-18d, AP-18f): what a board says after a decision. The Worker
+ * answers `notified: false` when the decision is recorded but the notice did
+ * not go out; then the line says so and asks for a check before any retry.
+ * `notified: null` (nobody was due a notice) or a reply without the field is
+ * the ordinary line.
+ */
+export function afterDecision(line, reply, who) {
+  if (reply && reply.notified === false) {
+    return {
+      warn: true,
+      text: 'The decision was recorded, but the notification could not be delivered.',
+      sub: `Check the item before trying again — ${who || 'they'} may not know yet.`,
+    };
+  }
+  return { warn: false, text: line };
+}

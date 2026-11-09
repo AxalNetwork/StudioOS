@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { approvalBoardsApi } from '../../../lib/api/approvalBoards';
 import { safeExternalUrl } from '../../../lib/url';
 import { AdminPageHeader, HeaderTab, Skeleton } from '../../../ui';
 import { AssignDialog, OwnerCell, UrgencyPill } from './AdminApprovals';
-import { DECIDED_HERE, LIFECYCLE_LINE, boardCrumb, boardStrip, lifecycleSteps, slaOfBand } from './boardGrammar';
+import { DECIDED_HERE, LIFECYCLE_LINE, afterDecision, boardCrumb, boardStrip, lifecycleSteps, slaOfBand } from './boardGrammar';
 import {
   BOARDS, PITCH_TABS, assetWord, dayText, decisionCopy, doneLine, hoursSince, ageText, pitchRows, publishUrlOk, reasonReady, tabPath,
 } from './approvalsModel';
@@ -67,7 +67,7 @@ export function oldestApproved(reply, now = Date.now()) {
   return hrs >= 0 ? ageText(hrs) : null;
 }
 
-function PitchDialog({ kind, pitch, onClose, onDone }) {
+function PitchDialog({ kind, pitch, onClose, onDone, onStale }) {
   const [notes, setNotes] = useState('');
   const [url, setUrl] = useState('');
   const key = `pitch_${kind}`;
@@ -75,12 +75,13 @@ function PitchDialog({ kind, pitch, onClose, onDone }) {
   const copy = decisionCopy(key, { partner });
   const titleOf = pitch.title || 'This pitch';
   const send = async () => {
-    await approvalBoardsApi.decidePitch(pitch.uid, kind, { notes: notes.trim(), publishedUrl: url.trim() });
-    onDone(doneLine(key, titleOf));
+    const r = await approvalBoardsApi.decidePitch(pitch.uid, kind, { notes: notes.trim(), publishedUrl: url.trim() });
+    // D4814 (AP-18f): the board reads `notified` from the reply.
+    onDone(afterDecision(doneLine(key, titleOf), r, partner));
   };
   const ready = kind === 'reject' ? reasonReady('pitch_reject', notes) : kind === 'publish' ? publishUrlOk(url) : true;
   return (
-    <DecisionDialog copy={copy} testId={`pitch-dialog-${kind}`} onClose={onClose} onSend={send} ready={ready} danger={kind === 'reject'}>
+    <DecisionDialog copy={copy} testId={`pitch-dialog-${kind}`} onClose={onClose} onSend={send} onStale={onStale} ready={ready} danger={kind === 'reject'}>
       {kind === 'publish' ? (
         <>
           <DialogField label="Published link · required · an https address" value={url} onChange={setUrl} testId="pitch-dialog-url" placeholder="https://…" rows={1} mono />
@@ -102,6 +103,10 @@ function PitchDrawer({ uid, onClose, onDecided, own }) {
   const [dialog, setDialog] = useState(null);
   const p = read.reply;
   const ready = read.status === 'ready' && p;
+  // D4814 part 5: the dialog keeps the item it opened on while the drawer reads it again
+  // after a conflict, so its "changed while you were reviewing" note stays on screen.
+  const held = useRef(null);
+  if (ready) held.current = p;
   const done = (line) => { setDialog(null); read.reload(); onDecided(line); };
   const decidedWord = p?.decided ? `${p.decided.status === 'rejected' ? 'Declined' : STATE_WORD[p.decided.status] || 'Decided'} by ${p.decided.by?.name || 'an admin'}` : null;
   return (
@@ -165,7 +170,7 @@ function PitchDrawer({ uid, onClose, onDecided, own }) {
           ) : null}
         </div>
       </Sheet>
-      {dialog && ready ? <PitchDialog kind={dialog} pitch={p} onClose={() => setDialog(null)} onDone={done} /> : null}
+      {dialog && held.current ? <PitchDialog kind={dialog} pitch={held.current} onClose={() => setDialog(null)} onDone={done} onStale={read.reload} /> : null}
     </>
   );
 }
@@ -285,7 +290,7 @@ export default function PitchBoard({ at }) {
     <div className="flex flex-col gap-5" data-testid="approvals-board-co-marketing">
       <AdminPageHeader crumb={CRUMB} title={b.title} pills={[NEW_PILL]} line={b.line} scope tabs={tabs} data-testid="approvals-board-header" />
       <Lifecycle at={['proposed', 'approved', 'published'].includes(tab.key) ? tab.key : null} testId="pitches-lifecycle" />
-      <DoneLine text={done} onDismiss={() => setDone(null)} />
+      <DoneLine text={done} onDismiss={() => setDone(null)} onCheck={() => { reload(); setDone(null); }} />
       <BoardStrip cells={strip} testId="pitches-strip" />
       {read.status === 'error' ? <Failed what="These pitches" onRetry={read.reload} testId="pitches-failed" />
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
@@ -303,7 +308,7 @@ export default function PitchBoard({ at }) {
           <Tile label="Sign-ups" sub="from published pitches, 30 days" testId="pitches-tile-signups"><Figure status={pub.status} value={recent ? recent.signup || 0 : null} /></Tile>
         </div>
       </section>
-      {publish ? <PitchDialog kind="publish" pitch={publish} onClose={() => setPublish(null)} onDone={decided} /> : null}
+      {publish ? <PitchDialog kind="publish" pitch={publish} onClose={() => setPublish(null)} onDone={decided} onStale={reload} /> : null}
       {at.item ? <PitchDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} /> : null}
       {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
     </div>
