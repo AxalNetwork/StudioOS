@@ -16,7 +16,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { FundAdminConsoleView } from '../src/pages/admin/fundAdmin/FundAdminConsole.jsx';
-import { FILTER_KEPT, fundFilter } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { fundFilter } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
 import {
   checkMark, dollarsToCents, moveOptions, navTiles, positionRows, positionsChart, quarterCharts, sideBySide,
 } from '../src/pages/admin/fundAdmin/performanceModel.js';
@@ -118,10 +118,10 @@ test('Record a mark is checked before the call: a date not in the future, a valu
   assert.equal(dollarsToCents('$1,000'), 100000);
   assert.deepEqual(moveOptions([{ id: 7, name: 'Fund I' }, { id: 9, name: 'Fund II' }], 7).map((o) => [o.label, o.current, o.id]),
     [['Fund I', true, 7], ['Fund II', false, 9], ['Firm-level (no fund)', false, null]]);
-  // The filter: this tab offers All funds and reads the chosen one, so it does not say the filter is only kept.
+  // The scope: this view offers All funds and reads the chosen one; D4812 dropped the "kept" sentence everywhere.
   const funds = [{ id: 7, name: 'Fund I' }];
-  assert.equal(fundFilter(funds, '?fund=7', 'performance').note, null);
-  assert.equal(fundFilter(funds, '?fund=7', 'lps').note, FILTER_KEPT);
+  assert.equal(fundFilter(funds, '?fund=7', 'performance').pills.find((p) => p.on).id, 7);
+  assert.ok(!('note' in fundFilter(funds, '?fund=7', 'lps')));
   assert.equal(fundFilter(funds, '', 'performance').pills[0].on, true, 'All funds');
 });
 

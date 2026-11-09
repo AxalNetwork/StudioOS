@@ -61,3 +61,9 @@
 .dark .rh-nr{border-color:#4b5563}
 .dark .rh-primary{background:#a78bfa;color:#0b1220}
 @media(max-width:600px){.rh-actions{width:100%}.rh-actions .rh-primary{flex:1;min-height:44px}.rh-pair{grid-template-columns:1fr}.rh-list li{flex-direction:column;align-items:flex-start}.rh-continue-row .rh-primary{width:100%;min-height:44px}}
+/* D3701 part 4 — RS-11 "You're out of AI tokens": amber, the canvas's warning tone. */
+.a7-answer.is-tokens{border-color:#fcd34d;background:#fffbeb;color:#92400e}
+.rh-secondary{display:inline-flex;align-items:center;min-height:36px;margin-top:8px;padding:0 14px;border:1px solid #d6d3df;border-radius:9px;background:#fff;color:#18181b;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer}
+.rh-secondary:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}
+.dark .rh-secondary{background:#111827;border-color:#4b5563;color:#e5e7eb}
+.dark .a7-answer.is-tokens{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.45);color:#fcd34d}

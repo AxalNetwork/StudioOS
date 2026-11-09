@@ -20,6 +20,7 @@ import {
   matrix, ndaOf, ndaUnlocks, noPermission, requestRows, shareEffect, MATRIX_COLUMNS,
 } from '../src/pages/raise/dataroom/accessModel.js';
 import { grantOn } from '../src/pages/raise/dataroom/filesModel.js';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -29,7 +30,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 
 const ROOM = (o = {}) => ({
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
-  role: 'owner',
+  role: 'owner', capabilities: ROOM_CAPS.owner,
   folders: [
     { id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'nda' },
     { id: 2, uid: 'f2', name: 'Bank', parent_id: 1, visibility: 'open' },
@@ -287,7 +288,7 @@ test('Revoke, Change and the NDA each open a dialog that says what they change b
 });
 
 test('DR16: a co-founder reads Access with the owner-only line and no Share, Revoke, Change or NDA', async () => {
-  const v = await mounted(h(DataRoomAccess, { room: ROOM({ role: 'cofounder' }), projectUid: 'p3uid', reload: () => {} }));
+  const v = await mounted(h(DataRoomAccess, { room: ROOM({ role: 'cofounder', capabilities: ROOM_CAPS.cofounder }), projectUid: 'p3uid', reload: () => {} }));
   try {
     assert.match(v.textOf('access-cofounder'), /Only the venture’s owner shares the room/);
     assert.ok(!v.has('access-share') && !v.has('nda-send-g1'));
@@ -320,7 +321,7 @@ test('Requests mounted: accept through the share fields, decline needs a note, d
     assert.deepEqual(writes(v).at(-1).body, { dd_request_id: 61 });
     assert.ok(writes(v).at(-1).url.endsWith('/files/a4'));
   } finally { await v.close(); }
-  const co = await mounted(h(DataRoomRequests, { room: ROOM({ role: 'cofounder' }), projectUid: 'p3uid', reload: () => {} }), { handle: handler({
+  const co = await mounted(h(DataRoomRequests, { room: ROOM({ role: 'cofounder', capabilities: ROOM_CAPS.cofounder }), projectUid: 'p3uid', reload: () => {} }), { handle: handler({
     '/data-room/p3uid/requests': { answer: () => response(REQUESTS({ can_answer: false })) },
   }) });
   try {

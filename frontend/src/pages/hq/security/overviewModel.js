@@ -2,8 +2,8 @@
  * D4800 (#4800, canvas SE01 and SE11a, D4803) — what the Overview workspace
  * says, derived from the two reads the page already makes and nothing else:
  * `GET /api/admin/security/overview` and `GET /api/admin/security/governance`.
- * No figure here is computed from anything those two do not return, and the
- * Worker is unchanged.
+ * No figure here is computed from anything those two do not return. (D4800's
+ * second slice added the names of administrators without MFA to `/overview`.)
  *
  * FOUR PARTS, IN THE CANVAS'S ORDER:
  *   findings  Action required, most severe first. Each finding has its
@@ -22,6 +22,8 @@
  * `at` is when the browser received it — the only freshness the platform
  * has (per-store collection times are not recorded, #4800 question C).
  */
+
+import { eventLabel, outcomeState } from './eventsModel.js';
 
 const fmt = (n) => Number(n).toLocaleString();
 const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
@@ -154,7 +156,9 @@ export function buildOverview({ overview, feed }) {
         state: 'action_required',
         title: 'Administrators without MFA',
         detail: `${fmt(withMfa)} of ${fmt(total)} HQ administrators have a second factor. `
-          + `${fmt(without)} ${without === 1 ? 'account can' : 'accounts can'} still sign in with a password alone.`,
+          + `${fmt(without)} ${without === 1 ? 'account can' : 'accounts can'} still sign in with a password alone.`
+          + namedAdmins(mfa.admins_without_mfa, without),
+        admins: Array.isArray(mfa.admins_without_mfa) ? mfa.admins_without_mfa : null,
         when: readNote(readOv),
         where: 'Access',
         tab: 'access',
@@ -264,6 +268,7 @@ export function buildOverview({ overview, feed }) {
     incomplete,
     clear,
     areas: buildAreas({ ov, fd, overview, feed, readOv, readFeed }),
+    recent: recentEvents(feed),
     sources: {
       state: feed?.state || 'loading',
       read: sources.filter((s) => s.available).length,
@@ -273,6 +278,57 @@ export function buildOverview({ overview, feed }) {
     },
     marks,
   };
+}
+
+/**
+ * D4800 — " Without one: Ada (ada@…), Grace." from the names `/overview`
+ * returns, or nothing when it returned none (an older Worker): the count above
+ * stands on its own and no name is guessed. Says how many more when the list
+ * was capped.
+ */
+export function namedAdmins(list, without) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const words = list.map((a) => {
+    const name = String(a?.name || '').trim();
+    const email = String(a?.email || '').trim();
+    return name && email ? `${name} (${email})` : name || email || `account ${a?.id}`;
+  });
+  const more = isNum(without) && Number(without) > list.length ? ` and ${fmt(Number(without) - list.length)} more` : '';
+  return ` Without one: ${words.join(', ')}${more}.`;
+}
+
+/** D4800 — how many ledger rows the Overview's "Recent security events" shows. */
+export const RECENT_EVENTS = 6;
+
+/**
+ * D4800 (hierarchy item 3, SE01's recent-activity column) — the newest rows of
+ * the ledger read the page already made, in Events' own words (`eventLabel`,
+ * `outcomeState`). Four states, never conflated:
+ *   loading     the read is out;
+ *   unavailable the ledger could not be read — never "no events";
+ *   empty       it was read and holds no row in its window (a measured zero);
+ *   rows        up to RECENT_EVENTS, newest first, with the raw action kept.
+ * When Events has narrowed the read, `filtered` says so: the list is then the
+ * newest matching rows, not the newest rows.
+ */
+export function recentEvents(feed) {
+  if (!feed || feed.state === 'loading') return { state: 'loading', rows: [] };
+  if (feed.state !== 'ready') return { state: 'unavailable', rows: [] };
+  const fd = feed.value || {};
+  const partial = (fd.sources || []).some((s) => !s.available);
+  const filtered = (fd.filter && fd.filter !== 'all') || Object.keys(fd.applied || {}).length > 0;
+  const rows = (fd.rows || []).slice(0, RECENT_EVENTS).map((r, i) => {
+    const { label, raw } = eventLabel(r);
+    const { state, word } = outcomeState(r);
+    return {
+      key: r.key ?? `${r.source}-${r.at}-${i}`,
+      label, raw, state, word,
+      at: stampOf(r.at) || 'No timestamp recorded',
+      actor: r.actor_identity?.label || r.actor || null,
+      source: r.source,
+    };
+  });
+  return { state: rows.length ? 'rows' : 'empty', rows, partial, filtered: !!filtered };
 }
 
 const TAB_LABELS = {
