@@ -6,6 +6,7 @@ zones: one record each, reached from a zone's list.
 | File | What it is |
 | --- | --- |
 | `ResearchOverviewPanel.jsx` | The `/research` overview (Research · Main canvas, D536/D546), read from `GET /api/research/overview`. Not a zone: mounted inside the founder desk, the investor workspace and above the advisor and partner board. Each section is ok, Not recorded or Unreadable on its own; a missing count is never 0. |
+| `researchStates.js` | D3701 (Research v2): the words, tones and glyphs for a document's index state, whether Ask may cite it (read only from the Worker's `in_ask`), a Failed or Unsupported row's reason and next step, and Ask's seven response states. Unknown is Not recorded. |
 | `AskZone.jsx` | Ask over owned documents, with saved/discarded disposition, use notes and owned citation links (D549). |
 | `LibraryZone.jsx` | Owned and read-only client documents; kind/source-year editing and owned collections (D549). |
 | `MarketZone.jsx` | Markets. |
