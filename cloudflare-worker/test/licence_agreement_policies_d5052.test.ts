@@ -11,7 +11,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/licence_agreement_policies_d5052.test.ts
  */
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
@@ -29,6 +29,12 @@ import { requirementFor, programLegalStatus, gateSyncStatements, readLicenceLega
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
+
+// The fixture signs at a fixed 2026-11-09T12:00:00Z (`sign`), and the routes
+// stamp drafts and sends with the clock. Freeze the clock before that
+// signature, or every run after noon UTC on 9 Nov 2026 has a draft newer than
+// its execution and the history-order assertion fails on the date alone.
+mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-11-09T09:00:00Z') });
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef'; // synthetic test fixture
 const SUPER = 1, SIGNER = 3;
@@ -107,7 +113,7 @@ const send = (db: DatabaseSync, uid: string, revision: number) => call(db, 'POST
 const version = (db: DatabaseSync, uid: string) => ({ ...(db.prepare('SELECT * FROM licence_program_agreements WHERE uid = ?').get(uid) as any) });
 const count = (db: DatabaseSync, sql: string, ...a: any[]) => Number((db.prepare(sql).get(...a) as any).n);
 
-async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = new Date().toISOString()) {
+async function sign(db: DatabaseSync, uuid: string, fileSha: string, at = '2026-11-09T12:00:00Z') {
   const e = db.prepare('SELECT id FROM esign_envelopes WHERE envelope_uuid = ?').get(uuid) as any;
   db.prepare("UPDATE esign_recipients SET status = 'signed', signed_at = ? WHERE envelope_id = ?").run(at, e.id);
   const r = db.prepare('SELECT id FROM esign_recipients WHERE envelope_id = ?').get(e.id) as any;

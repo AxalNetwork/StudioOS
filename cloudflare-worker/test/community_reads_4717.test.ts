@@ -327,9 +327,10 @@ const BUDGETS: Record<string, number> = {
   'activity: admins, a year': 10,
   'activity: the last page': 15,
   'activity: a search': 15,
-  'overview: 4 weeks': 22,
-  'overview: 12 weeks': 22,
-  'overview: 52 weeks': 22,
+  // D4820 part 3 (#4820): +2, the wellbeing experts queue's count and its oldest rows (`queue.experts`).
+  'overview: 4 weeks': 24,
+  'overview: 12 weeks': 24,
+  'overview: 52 weeks': 24,
 };
 
 test('each Community read stays within its statement budget', async () => {

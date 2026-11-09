@@ -27,7 +27,7 @@
  * D205 — HQ ANSWERS HERE. `PATCH /api/admin/escalations/:uid` (D112) had no
  * caller, so an escalation sat on HQ's board until its SLA passed and D143's
  * sweep emailed HQ a link to a list with no control on it. Each open
- * escalation now opens a decision panel on `DsrClose`'s shape. What comes back
+ * escalation now opens a decision panel on the shape of the DSR close (now `security/PrivacyActions.jsx`). What comes back
  * is two facts, never one: the decision is recorded at HQ, and the branch did
  * or did not receive it. The second is shown only for this session, because the
  * board keeps the decision and not whether it arrived.
@@ -67,13 +67,31 @@ import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escala
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import {
   workspaceFromSearch, queueOverview, distributionState, workspaceMarks, escalationGroups, kindHoursOf,
-  hqTicketRows, hqTicketCount, branchCards, sourcesText, branchLabelOf,
+  hqTicketRows, hqTicketCount, branchCards, sourcesText, branchLabelOf, branchFreshness, supportRailSteps, offlineText,
 } from './support/supportWorkspaceModel.js';
 import {
   SupportHeader, WorkspaceNav, ActionRequired, AllClear, QueueKindFilter, EscalationQueue, HqTicketsSection,
-  SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DistributionBanner, LoadingNote,
+  SubsidiariesLine, BranchesWorkspace, DeliveryWorkspace, DistributionBanner, LoadingNote, OfflineBanner,
 } from './support/SupportWorkspaces.jsx';
 import { DecisionSheetView, EMPTY_TEXT } from './support/DecisionSheet.jsx';
+
+/**
+ * D5034 part 3 — whether the browser says it is online, following its
+ * `online` and `offline` events. True where there is no `navigator` (a test,
+ * the server), so nothing is held back that should not be.
+ */
+export function useOnline() {
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' || navigator.onLine !== false));
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, []);
+  return online;
+}
 
 /** A read that failed, as the page holds it. Exported so `mergeSupport` is tested with the page's own value. */
 export const UNAVAILABLE = Symbol('unavailable');
@@ -531,7 +549,7 @@ export function sheetFailure(err) {
  * licence page still uses. Either way this is the one place the escalation
  * becomes the rail's record.
  */
-export function EscalationDecision({ item, onRecorded, onReload, variant = 'panel', record = null, onResend, onClose, returnFocusTo, branchLabel, readAt, kindHours }) {
+export function EscalationDecision({ item, onRecorded, onReload, variant = 'panel', record = null, onResend, onClose, returnFocusTo, branchLabel, readAt, kindHours, offline = false }) {
   // D775 (#2101): the escalation being answered is the rail's record while its panel is open.
   useRecordCrumb(escalationTitle(item), 'escalation', item.uid);
   const [outcome, setOutcome] = useState(variant === 'sheet' ? 'answered' : '');
@@ -561,7 +579,8 @@ export function EscalationDecision({ item, onRecorded, onReload, variant = 'pane
   if (variant === 'sheet') {
     const submitSheet = async (e) => {
       e.preventDefault();
-      if (busy) return;
+      // D5034 part 3: offline, nothing is sent; the sheet says so and keeps the text.
+      if (busy || offline) return;
       // Refused here, in words tied to the field: an empty decision is never sent.
       if (!reason.trim()) { setSheet({ phase: 'decide', invalid: EMPTY_TEXT[outcome], refusal: null }); return; }
       setSheet({ phase: 'recording', invalid: null, refusal: null });
@@ -589,6 +608,7 @@ export function EscalationDecision({ item, onRecorded, onReload, variant = 'pane
         onReread={onReload}
         initialFocus={firstOutcome}
         returnFocusTo={returnFocusTo}
+        offline={offline}
       />
     );
   }
@@ -959,10 +979,13 @@ export const WHY_WORD = {
   incomplete: 'Not counted',
 };
 
-const CELLS = [['escalations', 'Escalations'], ['hq_held', 'HQ-held'], ['about_admin', 'About Admin']];
+// D5034 part 3 — the v2 canvas's operator names (SU04a). The keys are the route's, unchanged.
+export const MATRIX_COLUMNS = ['Subsidiary', 'Escalations', 'Customer tickets on HQ', 'Subsidiary admin tickets'];
+const CELLS = [['escalations', MATRIX_COLUMNS[1]], ['hq_held', MATRIX_COLUMNS[2]], ['about_admin', MATRIX_COLUMNS[3]]];
 
 /**
- * Tenant × queue. Every cell is a measured count with the age of its oldest
+ * Queues by subsidiary (H22's tenant × queue; named as the v2 canvas names it
+ * since D5034 part 3). Every cell is a measured count with the age of its oldest
  * item, or a word saying why there is none and a numbered reason under the
  * table — the reasons are shown, not only hovered, because a reason nobody can
  * read on a phone is not a reason.
@@ -971,7 +994,7 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
   let body;
   const notes = [];
   if (failed) {
-    body = <Unreadable what="The tenant × queue matrix" claim="Which tenant each open item belongs to is unknown." onRetry={onRetry} />;
+    body = <Unreadable what="The queues by subsidiary" claim="Which subsidiary each open item belongs to is unknown." onRetry={onRetry} />;
   } else if (!matrix) {
     body = <p className="text-[12px] text-axal-muted">Reading the licence ledger…</p>;
   } else if (!matrix.available) {
@@ -984,11 +1007,12 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
     };
     body = (
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[440px] text-left text-[11.5px]" data-testid="hq-support-matrix">
+        <table className="w-full min-w-[440px] text-left text-[12.5px]" data-testid="hq-support-matrix">
+          <caption className="sr-only">Open items by subsidiary and queue, with the oldest in hours</caption>
           <thead>
             <tr className="text-[9.5px] font-extrabold uppercase tracking-[.08em] text-axal-faint">
-              <th className="py-1.5 pr-3 font-extrabold">Branch</th>
-              {CELLS.map(([, label]) => <th key={label} className="py-1.5 pr-3 font-extrabold">{label}</th>)}
+              <th scope="col" className="py-1.5 pr-3 font-extrabold">{MATRIX_COLUMNS[0]}</th>
+              {CELLS.map(([, label]) => <th key={label} scope="col" className="py-1.5 pr-3 font-extrabold">{label}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -1035,14 +1059,17 @@ export function TenantMatrix({ matrix, failed, onRetry }) {
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-[13.5px] font-extrabold tracking-tight">Tenant × queue</h2>
+        <h2 className="text-[16px] font-extrabold tracking-tight">Queues by subsidiary</h2>
         <span className="text-[10.5px] text-axal-faint">Open items · oldest in hours</span>
       </div>
       <div className="mt-2">{body}</div>
       {notes.length > 0 && (
-        <ol className="mt-3 grid gap-1 text-[10.5px] leading-relaxed text-axal-muted" data-testid="hq-support-matrix-notes">
-          {notes.map((n, i) => <li key={n}><sup>{i + 1}</sup> {n}</li>)}
-        </ol>
+        <details className="mt-3" data-testid="hq-support-matrix-explain">
+          <summary className="cursor-pointer text-[12.5px] font-semibold text-axal-muted dark:text-gray-300">What each cell means</summary>
+          <ol className="mt-2 grid gap-1 text-[12px] leading-relaxed text-axal-muted" data-testid="hq-support-matrix-notes">
+            {notes.map((n, i) => <li key={n}><sup>{i + 1}</sup> {n}</li>)}
+          </ol>
+        </details>
       )}
       {matrix?.available && matrix.omitted_terminated > 0 && (
         <p className="mt-2 text-[10.5px] text-axal-faint" data-testid="hq-support-matrix-omitted">
@@ -1144,7 +1171,7 @@ export function supportCoverage(data) {
   }
   if (data.matrix?.available) {
     const n = data.matrix.rows.filter((r) => r.kind === 'licence').length;
-    out.push(`${plural(n, 'licence', 'licences')} in the tenant × queue matrix`);
+    out.push(`${plural(n, 'licence', 'licences')} in the queues by subsidiary`);
   }
   if (data.sync?.available) {
     out.push(`Mirror, last ${data.sync.window_hours}h: ${data.sync.synced} synced, ${data.sync.failed} failed`);
@@ -1549,9 +1576,11 @@ export function mergeSupport(local, full) {
   const l = isRead(local) ? local : null;
   const f = isRead(full) ? full : null;
   const branchState = f ? 'ready' : (full === UNAVAILABLE ? 'failed' : 'loading');
-  if (!l && !f) return { data: null, branchState };
-  if (!f) return { data: { ...l, branch_tickets: undefined, matrix: undefined }, branchState };
-  if (!l || String(l.read_at || '') <= String(f.read_at || '')) return { data: f, branchState };
+  // D5034 part 3: which read the branch parts come from, so older ones are dated, never mixed in silently.
+  const branchReadAt = f ? (f.read_at || null) : null;
+  if (!l && !f) return { data: null, branchState, branchReadAt };
+  if (!f) return { data: { ...l, branch_tickets: undefined, matrix: undefined }, branchState, branchReadAt };
+  if (!l || String(l.read_at || '') <= String(f.read_at || '')) return { data: f, branchState, branchReadAt };
   const sameVersion = l.sla_policy?.version?.value !== undefined
     && l.sla_policy?.version?.value === f.sla_policy?.version?.value;
   return {
@@ -1569,6 +1598,7 @@ export function mergeSupport(local, full) {
       },
     },
     branchState,
+    branchReadAt,
   };
 }
 
@@ -1661,7 +1691,8 @@ export default function HqSupportPage() {
     setFocusAfter(null);
   }, [open, focusAfter]);
 
-  const { data: ready, branchState } = mergeSupport(local, full);
+  const { data: ready, branchState, branchReadAt } = mergeSupport(local, full);
+  const online = useOnline();
   // The page as a whole failed only when neither read answered.
   const failed = local === UNAVAILABLE && full === UNAVAILABLE;
   const coverage = supportCoverage(ready);
@@ -1673,6 +1704,9 @@ export default function HqSupportPage() {
   const overview = queueOverview(ready, { failed, branchState });
   const distribution = distributionState(ready?.sla_policy, branchState);
   const marks = workspaceMarks(overview, recorded, distribution);
+  // D5034 part 3: subsidiary figures from an earlier read than HQ's are dated, and Eadwyn shows this page's next steps.
+  const freshness = branchFreshness(ready?.read_at, branchReadAt, { asking: branchBusy });
+  const railSteps = supportRailSteps({ overview, recorded, distribution, failed, onRetry: load });
   const tiers = ready?.sla_policy?.tiers?.available ? ready.sla_policy.tiers.items : [];
   const groups = escalationGroups(ready?.escalations, {
     kind: kindFilter, readAt: ready?.read_at, kindHours: kindHoursOf(ready?.sla_policy),
@@ -1693,6 +1727,7 @@ export default function HqSupportPage() {
         branchState={branchState}
         busy={branchBusy}
         onRetry={retryBranches}
+        freshness={freshness}
         matrix={<TenantMatrix matrix={ready?.matrix} failed={branchState === 'failed'} onRetry={retryBranches} />}
         branchTickets={<BranchTicketsSection branchTickets={ready?.branch_tickets} state={branchState} busy={branchBusy} onRetry={retryBranches} />}
       />
@@ -1759,7 +1794,7 @@ export default function HqSupportPage() {
           footing={<FootingLine tickets={ready?.tickets} />}
           onRetry={load}
         />
-        <SubsidiariesLine line={overview.subsidiaries} />
+        <SubsidiariesLine line={overview.subsidiaries} freshness={freshness} />
       </div>
     );
   }
@@ -1771,7 +1806,8 @@ export default function HqSupportPage() {
           workspace="Support"
           role="super_admin"
           stance="Read-only, except answering an escalation and setting the ticket SLA hours"
-          note="Escalations, both ticket queues, the mirror strip and the SLA policy are read from HQ's own stores first, without waiting on any branch. Each branch's administrators' tickets, the tenant × queue matrix and each branch's SLA version are read from the branches beside them. Recording an answer sends it to the branch. Send again resends the decision already stored."
+          note="Escalations, both ticket queues, the mirror strip and the SLA policy are read from HQ's own stores first, without waiting on any branch. Each branch's administrators' tickets, the queues by subsidiary and each branch's SLA version are read from the branches beside them. Recording an answer sends it to the branch. Send again resends the decision already stored."
+          steps={railSteps}
           coverage={coverage}
           coverageNote={coverage.length ? undefined : (failed ? 'The Support read could not be completed.' : 'Loading…')}
           unavailable={SUPPORT_UNAVAILABLE}
@@ -1786,6 +1822,7 @@ export default function HqSupportPage() {
           refreshing={refreshing}
           onRefresh={failed ? load : refresh}
           sources={sourcesText(ready, branchState)}
+          offline={!online}
           actions={(
             <>
               {/* D606 — the Super Admin's review queue, a secondary header action, not part of the task's copy. */}
@@ -1796,6 +1833,7 @@ export default function HqSupportPage() {
             </>
           )}
         />
+        {!online && <OfflineBanner text={offlineText(readAt)} />}
         <WorkspaceNav current={workspace} marks={marks} />
         <div className="mt-4" data-testid="hq-support-workspace" data-workspace={workspace}>{body}</div>
         {open && (
@@ -1812,6 +1850,7 @@ export default function HqSupportPage() {
             branchLabel={branchLabelOf(ready, open.item.branch_code)}
             readAt={ready?.read_at}
             kindHours={kindHoursOf(ready?.sla_policy)}
+            offline={!online}
           />
         )}
       </div>
