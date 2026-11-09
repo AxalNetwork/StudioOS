@@ -272,7 +272,11 @@ test('subsidiaries: reporting health first, Not drawn for a missing statement, s
   assert.ok(t.indexOf('Report') < t.indexOf('Gross reported'), 'reporting health is not first');
 });
 
-test('promotions: badge columns, Remaining only beside a reported Issued, and the compact no-ceiling state', () => {
+test('promotions: badge columns, Remaining only beside a reported Issued, and the compact no-ceiling state', (t) => {
+  // PromotionsSection reads its own clock (Date.now()) for "Stale · n d", and the
+  // fixture is dated from NOW. Freeze the clock there, or the age drifts one day
+  // per day of wall time and the assertion fails on the date alone.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   // Even a Worker reply that carries a remaining figure is not drawn without a reported issued one.
   assert.equal(ceilingFacts(ceiling({ remaining_cents: 1_000_000 }), '2026-Q4').remaining.known, false);
   const coverage = { ...SUMMARY.usage_coverage };
