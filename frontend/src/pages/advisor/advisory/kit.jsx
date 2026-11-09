@@ -278,6 +278,44 @@ export function bookingView(booking) {
 }
 
 /**
+ * D4715 (#4715) — the offer a booking is made on, in the worker's shape
+ * (`offerSnapshot` in routes/advisors.ts): name, length, pricing mode
+ * (`free` | `included` | `price` | `unset`) and price. `offerFromType` builds it
+ * from a session type before booking, so the page shows the same terms the
+ * worker will copy; a booking's own `offer` is the copy the worker took.
+ */
+export function offerFromType(type) {
+  if (!type || typeof type.name !== 'string') return null;
+  const pricing = type.is_free_intro ? 'free' : type.is_included ? 'included'
+    : type.price_cents == null || type.price_cents === '' ? 'unset' : 'price';
+  return {
+    session_type_id: type.id ?? null, name: type.name,
+    duration_minutes: type.duration_minutes ?? null,
+    pricing, price_cents: pricing === 'price' ? Number(type.price_cents) : null,
+    cadence_note: type.cadence_note ?? null,
+  };
+}
+
+/** The offer's price in words: never a general hourly rate. */
+export function offerPrice(offer) {
+  if (!offer) return null;
+  if (offer.pricing === 'free') return 'Free intro';
+  if (offer.pricing === 'included') return 'Included, no separate charge';
+  if (offer.pricing === 'price' && Number.isFinite(Number(offer.price_cents))) {
+    const cents = Number(offer.price_cents);
+    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  }
+  return 'Price not set';
+}
+
+/** "Strategy call · 45 min · $150": the whole offer on one line. */
+export function offerLine(offer) {
+  if (!offer) return null;
+  return [offer.name, offer.duration_minutes != null ? `${offer.duration_minutes} min` : null, offerPrice(offer)]
+    .filter(Boolean).join(' · ');
+}
+
+/**
  * Group advisor bookings by counterparty. The advisor's "clients" are not a
  * table — they are whoever has booked them — so this derivation IS the client
  * list. Keyed on founder_user_id so two people sharing a display name stay

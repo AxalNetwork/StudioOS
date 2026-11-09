@@ -5,11 +5,8 @@ import { RefreshCw, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { trackOnce } from '../lib/funnel';
 import { reportError } from '../lib/log';
-import FounderStudioHome from './founder/FounderStudioHome';
-import InvestorStudioHome from './investor/InvestorStudioHome';
-import AdvisorStudioHome from './advisor/AdvisorStudioHome';
-import PartnerStudioHome from './partner/PartnerStudioHome';
-import AdminStudioHome from './admin/AdminStudioHome';
+// #4622: the homes load lazily, so a view fetches only the home it draws.
+import { FounderStudioHome, InvestorStudioHome, AdvisorStudioHome, PartnerStudioHome, AdminStudioHome } from './StudioHomesLazy';
 // Task #6 (IF) — first-login product tour (the onboarding checklist panel
 // was removed 2026-05-22: signup flow already runs the persona chatbot and
 // the page already surfaces the Personal Advisor, so the checklist
@@ -65,7 +62,15 @@ export default function Dashboard({ activeRole, authUser }) {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  // #4622: a founder on their own Studio draws from the session's user. Nothing on the founder path uses the
+  // broad dashboard payload, so the founder home does not wait for it (and it is not asked for). Anyone else,
+  // an admin previewing or impersonating included, reads it as before.
+  const ownFounder = activeRole === 'founder' && authUser?.role === 'founder';
+  useEffect(() => {
+    if (ownFounder) { setLoading(false); return; }
+    setLoading(true);
+    load();
+  }, [ownFounder]);
 
   // Task #2 — funnel: activation endpoint. trackOnce de-dupes per browser
   // (localStorage) so only the FIRST dashboard render after signup counts.
@@ -109,6 +114,27 @@ export default function Dashboard({ activeRole, authUser }) {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const founderHome = (user) => (
+    <div className="space-y-6">
+      {googleNotice && (
+        <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
+          <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
+          sign you out of Google globally — if you're on a shared device, also sign
+          out of your Google account in this browser. You can manage this anytime
+          under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
+        </InfoStrip>
+      )}
+      <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+      <FounderStudioHome user={user} />
+      {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
+      <MyTasks licence="founder" testId="studio-my-tasks" />
+      <ProductTestingStudio user={authUser || user} />
+    </div>
+  );
+
+  // #4622: the founder's own Studio mounts now, before (and without) the dashboard read.
+  if (ownFounder) return founderHome(authUser);
 
   // The admin profile does not wait on the founder dashboard, and it does not
   // fall through to skills, values and archetype. Eadwyn and the Admin page
@@ -205,23 +231,7 @@ export default function Dashboard({ activeRole, authUser }) {
   const { user, role_view } = data;
 
   if ((activeRole || role_view) === 'founder') {
-    return (
-      <div className="space-y-6">
-        {googleNotice && (
-          <InfoStrip variant="info" inline={false} onDismiss={() => setGoogleNotice(false)}>
-            <strong>You're signed in with Google.</strong> Signing out of Axal VC will not
-            sign you out of Google globally — if you're on a shared device, also sign
-            out of your Google account in this browser. You can manage this anytime
-            under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
-          </InfoStrip>
-        )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
-        <FounderStudioHome user={user} />
-        {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
-        <MyTasks licence="founder" testId="studio-my-tasks" />
-        <ProductTestingStudio user={authUser || user} />
-      </div>
-    );
+    return founderHome(user);
   }
 
   if ((activeRole || role_view) === 'investor') {

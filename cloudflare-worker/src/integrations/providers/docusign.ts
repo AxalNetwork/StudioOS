@@ -659,6 +659,11 @@ async function reconcileEnvelope(env: Env, row: IntegrationRow, dsEnvelopeId: st
         await pushLicenceToBranch(env, signed.licence_id);
       }
     } catch (e) { console.warn('[docusign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
+    // D5049 — a package or program agreement version signed through DocuSign is executed as on the in-house route.
+    try {
+      const { onAgreementEnvelopeCompleted } = await import('../../services/programAgreements');
+      await onAgreementEnvelopeCompleted(env, local.envelope_uuid);
+    } catch (e) { console.warn('[docusign] licence_agreement_sign_failed', (e as Error)?.name || 'error'); }
   } else {
     // For terminal non-completed states (rejected/void), persist the
     // provider-supplied reason on the envelope row so the admin
