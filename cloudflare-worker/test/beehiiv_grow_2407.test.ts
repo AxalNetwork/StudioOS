@@ -39,7 +39,7 @@ import { MODULE_LABELS } from '../src/integrations/moduleLabels.ts';
 import { BEEHIIV_FEEDS } from '../src/integrations/beehiivFeeds.ts';
 import { BEEHIIV_READ_TOOLS } from '../src/services/beehiiv/mcp.ts';
 import { normaliseRate } from '../src/services/beehiiv/reads.ts';
-import { NEWSLETTER_NOT_LINKED, SENTENCES } from '../src/services/beehiiv/grow.ts';
+import { NEWSLETTER_NOT_LINKED, NEWSLETTER_UNREADABLE, SENTENCES } from '../src/services/beehiiv/grow.ts';
 import { ADVISOR, COFOUNDER, FOUNDER, PID, ROLE, growDb } from './_mercury_grow_fixture.ts';
 import { BEEHIIV_ISSUER, BEEHIIV_MCP_URL, PERSON, POST_A, POST_B, POST_C, PUB_A, PUB_A_NAME, beehiivFake } from './_beehiiv_mcp_fake.mjs';
 
@@ -55,7 +55,8 @@ async function world() {
   db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   db.exec(mig('435_connector_companies.sql'));
   db.exec(mig('202611041912_growth_channel_details.sql'));
-  db.exec('CREATE TABLE IF NOT EXISTS publish_sends (id INTEGER PRIMARY KEY)');
+  // D2407 part 3: PUBLISH's own tables, so a synced post can be tied to the send its draft came from.
+  db.exec(mig('642_publish_core.sql'));
   db.exec(mig(MIGRATION));
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (?, ?)').run(COMPANY, FOUNDER);
   const fake = beehiivFake();
@@ -335,7 +336,7 @@ test('11. who: a support session is refused; a teammate deletes but does not syn
   fake.state.status = null;
 });
 
-test('12. the Updates rows carry newsletter: null with its reason until part 3 links a sent update to its post', async () => {
+test('12. an update never drafted to Beehiiv carries newsletter: null with its reason, never 0', async () => {
   const { db, env, fake } = await world();
   db.prepare("INSERT INTO portfolio_updates (uid, project_id, author_user_id, title, status, sent_at) VALUES ('up-1', ?, ?, '[October update]', 'submitted', '2026-10-20 10:00:00')").run(PID, FOUNDER);
   const r = await read(env, fake, 'durable-company-building');
@@ -344,4 +345,57 @@ test('12. the Updates rows carry newsletter: null with its reason until part 3 l
   assert.ok(row, 'the sent update is listed');
   assert.ok(Object.hasOwn(row, 'newsletter') && row.newsletter === null);
   assert.equal(r.body.parts.newsletter_reason, NEWSLETTER_NOT_LINKED);
+});
+
+/** A sent update drafted to Beehiiv through PUBLISH: its draft names the update, its send names the post the draft became. */
+function draftedUpdate(db: any, update: string, post: string, status = 'sent') {
+  const u = db.prepare("INSERT INTO portfolio_updates (uid, project_id, author_user_id, title, status, sent_at) VALUES (?, ?, ?, '[October update]', 'submitted', '2026-10-20 10:00:00') RETURNING id").get(update, PID, FOUNDER);
+  const d = db.prepare("INSERT INTO publish_drafts (uid, project_id, module, source_refs_json, author_user_id, body_json) VALUES (?, ?, 'updates', ?, ?, '{}') RETURNING id")
+    .get(`d-${update}`, PID, JSON.stringify([{ ref: `portfolio_updates:${update}`, store: 'portfolio_updates' }, { ref: `portfolio_updates:${update}#arr`, store: 'portfolio_updates' }]), FOUNDER);
+  db.prepare(`INSERT INTO publish_sends (uid, draft_id, project_id, module, provider_key, destination_label, idempotency_key, envelope_json, envelope_hash, confirmed_by, status, external_post_id)
+    VALUES (?, ?, ?, 'updates', 'beehiiv', ?, ?, '{}', 'h', ?, ?, ?)`).run(`s-${update}`, d.id, PID, PUB_A_NAME, `key-${update}`, FOUNDER, status, post);
+  return u.id;
+}
+
+test('13. D2407 part 3: a sent update drafted to Beehiiv shows its post\'s figures once synced; another venture\'s send never ties', async () => {
+  const { db, env, fake } = await world();
+  draftedUpdate(db, 'up-drafted', POST_A);
+  // Another venture's send naming the same post id is never tied to this venture's post.
+  db.prepare("INSERT INTO projects (id, uid, name) VALUES (999, 'p-other', 'Other')").run();
+  const od = db.prepare("INSERT INTO publish_drafts (uid, project_id, module, source_refs_json, author_user_id, body_json) VALUES ('d-other', 999, 'updates', '[]', ?, '{}') RETURNING id").get(FOUNDER);
+  db.prepare(`INSERT INTO publish_sends (uid, draft_id, project_id, module, provider_key, destination_label, idempotency_key, envelope_json, envelope_hash, confirmed_by, status, external_post_id)
+    VALUES ('s-other', ?, 999, 'updates', 'beehiiv', 'x', 'key-other', '{}', 'h', ?, 'sent', ?)`).run(od.id, FOUNDER, POST_A);
+
+  // Before a sync: nothing is tied, so the row says why.
+  let r = await read(env, fake, 'durable-company-building');
+  assert.equal(r.body.parts.updates.find((u: any) => u.uid === 'up-drafted').newsletter, null);
+  assert.equal(r.body.parts.newsletter_reason, NEWSLETTER_NOT_LINKED);
+
+  assert.equal((await sync(env, fake)).status, 200);
+  const tied = db.prepare('SELECT b.publish_send_id, s.uid FROM beehiiv_post_stats b JOIN publish_sends s ON s.id = b.publish_send_id WHERE b.post_external_id = ?').get(POST_A);
+  assert.equal(tied?.uid, 's-up-drafted', 'the post is tied to this venture\'s send, not the other venture\'s');
+  r = await read(env, fake, 'durable-company-building');
+  const row = r.body.parts.updates.find((u: any) => u.uid === 'up-drafted');
+  assert.deepEqual(row.newsletter, { recipients: 1240, open_rate: 0.51, click_rate: 0.07, as_of: TODAY });
+
+  // A post with no figures stays null field by field, never 0.
+  draftedUpdate(db, 'up-bare', POST_C);
+  db.prepare('UPDATE beehiiv_post_stats SET recipients = NULL, click_rate = NULL WHERE post_external_id = ?').run(POST_C);
+  db.prepare('UPDATE beehiiv_post_stats SET publish_send_id = (SELECT id FROM publish_sends WHERE uid = ?) WHERE post_external_id = ?').run('s-up-bare', POST_C);
+  r = await read(env, fake, 'durable-company-building');
+  const bare = r.body.parts.updates.find((u: any) => u.uid === 'up-bare').newsletter;
+  assert.equal(bare.recipients, null);
+  assert.equal(bare.click_rate, null);
+
+  // A deleted post's figures leave the row; a re-sync never brings them back.
+  const postRow = db.prepare('SELECT id FROM beehiiv_post_stats WHERE post_external_id = ?').get(POST_A);
+  assert.equal((await call(env, fake, FOUNDER, 'DELETE', `/api/cycles/grow/beehiiv/posts/${postRow.id}?project=${PID}`)).status, 200);
+  await sync(env, fake);
+  r = await read(env, fake, 'durable-company-building');
+  assert.equal(r.body.parts.updates.find((u: any) => u.uid === 'up-drafted').newsletter, null);
+
+  // An unreadable store is Unreadable, never "not recorded".
+  db.exec('DROP TABLE publish_drafts');
+  r = await read(env, fake, 'durable-company-building');
+  assert.equal(r.body.parts.newsletter_reason, NEWSLETTER_UNREADABLE);
 });

@@ -351,6 +351,26 @@ export function branchCards(data) {
   });
 }
 
+/**
+ * A subsidiary's name for a branch code (the decision sheet's "Subsidiary"),
+ * from what the reads carry: the branch hosts' lines, then the matrix. The
+ * code itself when neither names it — never a guessed name.
+ */
+export function branchLabelOf(data, code) {
+  if (!code) return null;
+  const line = (data?.branch_tickets?.lines || []).find((l) => l.code === code);
+  if (line?.label) return line.label;
+  const row = data?.matrix?.available ? (data.matrix.rows || []).find((r) => r.branch_code === code) : null;
+  return row?.label || code;
+}
+
+/** The uid of the row after `uid` in the queue's order, for focus after a decision. */
+export function nextUidAfter(groups, uid) {
+  const flat = (groups || []).flatMap((g) => g.rows.map((r) => r.uid));
+  const i = flat.indexOf(uid);
+  return i >= 0 && i + 1 < flat.length ? flat[i + 1] : null;
+}
+
 /** Whether the queues-by-subsidiary matrix compares anything: a licence row beside HQ's. */
 export const matrixCompares = (matrix) => Boolean(matrix?.available) && (matrix.rows || []).some((r) => r.kind === 'licence');
 

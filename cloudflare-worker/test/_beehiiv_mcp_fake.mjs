@@ -5,10 +5,12 @@
  * `tools/list`, `tools/call`) and `auth.beehiiv.com` its OAuth server.
  * Nothing here reaches the network; every other host answers 599.
  *
- * `tools/list` offers the four read tools AND tools Axal VC must never call:
- * a subscriber list, a publish tool, and the draft tool part 3 plans
- * (`create_post_draft`), so a test can prove each is refused before any
- * request. The forbidden names live only here, in the test folder.
+ * `tools/list` offers the four read tools, the draft tool (`create_post_draft`,
+ * part 3: called only with a publish ticket, from the PUBLISH adapter), AND
+ * tools Axal VC must never call: a subscriber list, a publish tool and an
+ * update tool, so a test can prove each is refused before any request. The
+ * names live only here, in the test folder. `forbiddenCalls` counts the draft
+ * tool too: only `beehiiv_publish_2407.test.ts` expects it to be called.
  *
  * The answers mix Beehiiv's two rate shapes on purpose (48.2 and 0.061, 51 and
  * 0.46, a 0.5 whose counts say 0.5%), and carry a subscriber's address, so a
@@ -38,6 +40,8 @@ export const POST_A = 'post_fixture-october';
 export const POST_B = 'post_fixture-hiring';
 export const POST_C = 'post_fixture-tiny';
 export const PERSON = 'reader-fixture@example.test';
+/** The post id the fake gives a draft it creates. */
+export const DRAFT_POST = 'post_fixture-draft';
 
 const readOnly = { readOnlyHint: true };
 
@@ -77,6 +81,7 @@ export function defaultBeehiivData() {
     postStats: {
       [POST_B]: { stats: { email: { recipients: 1198, unique_opens: 551, open_rate: 0.46, unique_clicks: 108, click_rate: 9 } } },
     },
+    draft: { data: { id: DRAFT_POST, status: 'draft', web_url: `https://app.beehiiv.com/posts/${DRAFT_POST}/edit` } },
   };
 }
 
@@ -97,6 +102,8 @@ export function beehiivFake(opts = {}) {
         case 'get_publication_stats': return data.stats[a?.publication_id] ?? { data: { stats: {} } };
         case 'list_posts': return data.posts[a?.publication_id] ?? { data: [] };
         case 'get_post_stats': return data.postStats[a?.post_id] ?? { stats: {} };
+        // D2407 part 3: a draft, with the id and link Beehiiv gives it (UNVERIFIED shape).
+        case DRAFT_TOOL: return data.draft;
         default: return { tool, arguments: a };
       }
     },
