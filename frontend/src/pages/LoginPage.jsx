@@ -580,7 +580,7 @@ export default function LoginPage() {
   const googleLabel = GOOGLE_LABELS[googleStage] || 'Continue with Google';
 
   return (
-    <AuthShell showApplyCard applyLabel="Apply to Axal VC →" backgroundSrc="/auth/login-background.webp">
+    <AuthShell showApplyCard applyLabel="Create an account →" backgroundSrc="/auth/login-background.webp">
       <AuthCard>
         <h1 className="m-0 text-[25px] font-extrabold tracking-tight leading-tight text-[#241f38]">
           Sign in

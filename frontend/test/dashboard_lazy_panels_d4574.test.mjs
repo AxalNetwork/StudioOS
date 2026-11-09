@@ -134,6 +134,9 @@ test('the Studio page still mounts the section under each member home, with the 
   // The route, its guard and its lazy page are untouched.
   const app = read('frontend/src/App.jsx');
   assert.match(app, /const Dashboard = lazy\(\(\) => import\('\.\/pages\/Dashboard'\)\);/);
-  assert.match(app, /<Route path="\/studio" element=\{guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), <Dashboard activeRole=\{effectiveRole\} authUser=\{user\} \/>\)\} \/>/);
+  // D4474 (#4474): a member holding two or more licences gets the block page; every other session keeps Dashboard.
+  assert.match(app, /<Route path="\/studio" element=\{guard\(labRoles\(\['admin', 'founder', 'partner', 'investor', 'advisor'\]\), multiLicence \? <MultiLicenceStudio licences=\{multiLicence\} activeRole=\{effectiveRole\} authUser=\{user\} \/> : <Dashboard activeRole=\{effectiveRole\} authUser=\{user\} \/>\)\} \/>/);
+  // The block page mounts the section once, for the member, under the blocks.
+  assert.equal(read('frontend/src/pages/studio/MultiLicenceStudio.jsx').match(/<ProductTestingStudio user=\{user\} \/>/g)?.length, 1);
   assert.match(read('documentation/architecture/decisions/D4574.md'), /^## D4574 — .+ \(#4574\)$/m);
 });
