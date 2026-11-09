@@ -5,6 +5,8 @@ import { FundActControl } from '../../../lib/fundActs';
 import { parseDollarsToCents } from '../../investor/fundCallsModel';
 import { BTN, INPUT } from '../../account/AccountCenter';
 import { refusalText } from './fundAdminModel';
+import { ConfirmAct, Effects, FlowReceipt, FlowSteps, NotOffered } from './MoneyFlow';
+import { actButton, actGate, distributionEffects } from './moneyFlowModel';
 import { Line, NUM, Note, Panel, TH, Table } from './parts';
 import { useRead } from './useRead';
 import { Busy, Failed, FundFrame, LABEL } from './FundTabs';
@@ -73,6 +75,61 @@ function PerLp({ split }) {
 }
 
 /** Mark paid asks first: it records that this payment was made. */
+/**
+ * D4812 part 2 (FA-03, FA-08): Execute as the money flow. The proceeds and
+ * their split are prepared on the page; this dialog is Review (the exact
+ * effect), Confirm + Authenticate ("Execute $X distribution" after the
+ * authenticator code) and Receipt. An unread act table stops at Review.
+ */
+function ExecuteDialog({ apis, access, fund, split, onClose, onDone }) {
+  const [step, setStep] = useState('review');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const gate = actGate(access, 'distribution.execute');
+  const label = actButton('Execute', split.proceeds_cents, 'distribution');
+  const execute = async () => {
+    setBusy(true); setError('');
+    try {
+      // Exactly the proceeds whose split is on screen.
+      await apis.funds.execute({ fund_id: fund.id, proceeds_cents: split.proceeds_cents });
+      setStep('receipt');
+      await onDone();
+    } catch (e) { setError(refusalText(e, 'The distribution could not be executed.')); } finally { setBusy(false); }
+  };
+  const at = { review: 1, confirm: 3, receipt: 4 }[step];
+  return (
+    <Lightbox label="Execute distribution" title={step === 'receipt' ? 'Distribution executed' : step === 'confirm' ? 'Confirm and authenticate' : `Review · ${fund.name}`}
+      sub="The job writes one line per LP. Nothing is sent from here." testId="distribution-flow" onClose={onClose} width={560}>
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <FlowSteps at={at} skipAuth={false} testId="distribution-steps" />
+        {step === 'review' && <>
+          <Effects rows={distributionEffects({ fund, split })} testId="distribution-effects" />
+          {gate.state !== 'allowed' && <NotOffered gate={gate} testId="distribution-flow-refused" />}
+          <div className="flex justify-end gap-2">
+            <button type="button" className={BTN.ghost} onClick={onClose} data-testid="distribution-flow-back">Back to edit</button>
+            {gate.state === 'allowed' && <button type="button" className={BTN.primary} onClick={() => setStep('confirm')} data-testid="distribution-flow-continue">Continue to confirm</button>}
+          </div>
+        </>}
+        {step === 'confirm' && (
+          <FundActControl access={access} act="distribution.execute" testId="distribution-confirm-refused">
+            <ConfirmAct apis={apis} needsCode testId="distribution-confirm" label={label} busy={busy} error={error} run={execute}
+              consequences={[`${label} on ${fund.name}, by the job's own split.`, `Writes ${split.lines?.length ?? 0} pending LP lines.`, 'Each line is marked paid when the money has gone; nothing is sent from here.']}
+              onBack={() => setStep('review')} />
+          </FundActControl>
+        )}
+        {step === 'receipt' && (
+          <FlowReceipt testId="distribution-done" onDone={onClose} rows={[
+            ['Fund', fund.name],
+            ['Proceeds', money(split.proceeds_cents)],
+            ['Lines', 'Queued: the job writes them, and they appear in Distributions when it runs.'],
+            ['Audit', 'Recorded as distribution.execute'],
+          ]} />
+        )}
+      </div>
+    </Lightbox>
+  );
+}
+
 function MarkPaidDialog({ apis, row, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -173,11 +230,6 @@ export function DistributionsTab({ apis, access, fund, overview }) {
     if (cents == null) { setError('Enter the proceeds in dollars, above zero, with at most two decimals.'); setSplit(null); return; }
     run(async () => setSplit(await apis.fundAdmin.distributionPreview(fund.id, cents)), 'The split could not be previewed.');
   };
-  // Exactly the proceeds whose split is on screen.
-  const execute = () => run(async () => {
-    await apis.funds.execute({ fund_id: fund.id, proceeds_cents: split.proceeds_cents });
-    setSplit(null); setProceeds(''); await list.reload();
-  }, 'The distribution could not be executed.');
   const items = list.data?.items || [];
   const cum = useMemo(() => cumulativeDistributions(items), [items]);
   const cols = [
@@ -211,7 +263,7 @@ export function DistributionsTab({ apis, access, fund, overview }) {
                 <p className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">The job pays these lines. Nothing is sent from here: each line is marked paid when the money has gone.</p>
                 <div className="mt-2.5">
                   <FundActControl access={access} act="distribution.execute" testId="distribution-execute-refused" className="text-[12px] text-axal-muted">
-                    <button type="button" className={`${BTN.primary} w-full`} disabled={busy} onClick={execute} data-testid="distribution-execute">Execute distribution</button>
+                    <button type="button" className={`${BTN.primary} w-full`} disabled={busy} onClick={() => setDialog({ kind: 'execute', split })} data-testid="distribution-execute">{`${actButton('Execute', split.proceeds_cents, 'distribution')}…`}</button>
                     <p className="mt-2 text-[11px] text-axal-muted dark:text-gray-400" data-testid="distribution-execute-foot">{EXECUTE_FOOT}</p>
                   </FundActControl>
                 </div>
@@ -242,6 +294,8 @@ export function DistributionsTab({ apis, access, fund, overview }) {
           </ChartBlock>
         )}
       </div>}
+      {dialog?.kind === 'execute' && <ExecuteDialog apis={apis} access={access} fund={fund} split={dialog.split}
+        onClose={() => setDialog(null)} onDone={async () => { setSplit(null); setProceeds(''); await list.reload(); }} />}
       {dialog?.kind === 'mark' && <MarkPaidDialog apis={apis} row={dialog.row} onClose={() => setDialog(null)} onDone={async () => { setDialog(null); await list.reload(); }} />}
       {dialog?.kind === 'notice' && <DistributionNoticeDialog apis={apis} access={access} row={dialog.row} onClose={() => setDialog(null)} />}
     </FundFrame>

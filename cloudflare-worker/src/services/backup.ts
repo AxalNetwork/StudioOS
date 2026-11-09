@@ -134,7 +134,16 @@ export type RestoreDrill =
       run_id: string | null;
       rpo_met: boolean | null;
       rto_met: boolean | null;
+      /** D4803 — what the drill wrote as its failure reason (FAIL_REASON), one line; null when it wrote none. */
+      reason: string | null;
+      /** The recovery point the drill restored, the migration it ended on and the tables it counted. */
+      recovery_point: string | null;
+      migration: string | null;
+      tables: number | null;
     };
+
+/** D4803 — the longest failure reason the page shows; the drill writes one short line. */
+export const DRILL_REASON_MAX = 300;
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -171,6 +180,7 @@ export type DrillMarkerV1 = {
   schema_version: number; versioned: boolean; at: string; atMs: number; outcome: 'passed' | 'failed';
   exit_code: number; step: string | null; backup_key: string | null; duration_s: number | null;
   source: string | null; run_id: string | null; rpo_met: boolean | null; rto_met: boolean | null;
+  reason: string | null; recovery_point: string | null; migration: string | null; tables: number | null;
 };
 
 /** D4691 — schema 1 of the restore drill's marker. Pure, so a test can hand it any object. */
@@ -199,6 +209,22 @@ export function validateDrillMarker(raw: unknown, now: number = Date.now()): Che
   if (body.duration_s !== undefined && body.duration_s !== null && (int(body.duration_s) === null || (body.duration_s as number) < 0)) {
     return bad('`duration_s` is not a non-negative number');
   }
+  // D4803 — the fields SE09 draws beside the step. Each is optional (older
+  // markers carry none), and each is checked for its kind, never trusted.
+  for (const f of ['reason', 'migration'] as const) {
+    if (body[f] !== undefined && body[f] !== null && typeof body[f] !== 'string') return bad(`\`${f}\` is not text`);
+  }
+  if (body.recovery_point !== undefined && body.recovery_point !== null && Number.isNaN(isoMs(body.recovery_point))) {
+    return bad('`recovery_point` is not an ISO-8601 time with a zone');
+  }
+  if (body.tables !== undefined && body.tables !== null && (int(body.tables) === null || (body.tables as number) < 0)) {
+    return bad('`tables` is not a non-negative number');
+  }
+  // One line, at most DRILL_REASON_MAX characters: a reason is a sentence the
+  // drill wrote, never a log; anything longer is cut and says so.
+  const rawReason = str(body.reason);
+  const oneLine = rawReason ? rawReason.replace(/\s+/g, ' ').trim() : null;
+  const reason = oneLine && oneLine.length > DRILL_REASON_MAX ? `${oneLine.slice(0, DRILL_REASON_MAX - 1)}…` : oneLine || null;
   return {
     ok: true,
     value: {
@@ -215,6 +241,10 @@ export function validateDrillMarker(raw: unknown, now: number = Date.now()): Che
       run_id: body.run_id === null || body.run_id === undefined ? null : String(body.run_id),
       rpo_met: typeof body.rpo_met === 'boolean' ? body.rpo_met : null,
       rto_met: typeof body.rto_met === 'boolean' ? body.rto_met : null,
+      reason,
+      recovery_point: str(body.recovery_point),
+      migration: str(body.migration),
+      tables: int(body.tables),
     },
   };
 }
@@ -274,6 +304,10 @@ export async function readRestoreDrill(env: Env, now: number = Date.now()): Prom
     run_id: m.run_id,
     rpo_met: m.rpo_met,
     rto_met: m.rto_met,
+    reason: m.reason,
+    recovery_point: m.recovery_point,
+    migration: m.migration,
+    tables: m.tables,
   };
 }
 

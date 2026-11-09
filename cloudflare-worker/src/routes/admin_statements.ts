@@ -3,12 +3,16 @@
  *
  *   GET   /api/admin/statements                 the ledger, newest period first
  *   POST  /api/admin/statements/draw            draw one from what was reported
- *   PATCH /api/admin/statements/:uid            HQ enters paid / disputed / status
+ *   PATCH /api/admin/statements/:uid            HQ enters or clears a disputed amount
+ *   POST  /api/admin/statements/:uid/issue      governed: draft -> issued (D5039)
+ *   POST  /api/admin/statements/:uid/payments   governed: record a payment, step-up (D5039)
+ *   POST  /api/admin/statements/:uid/void       governed: withdraw the claim, step-up (D5039)
+ *   GET   /api/admin/licence-picker             uid, name and territory, searched and paged (D5039)
  *   GET   /api/admin/promo-ceilings             what HQ has set, per licence
  *   PUT   /api/admin/promo-ceilings/:uid        set one, and push it to the branch
  *
  * WHY THIS IS NOT IN `admin_revenue.ts`. That endpoint is a READ: one payload
- * for the Revenue page, computed per request, holding nothing. These five are
+ * for the Revenue page, computed per request, holding nothing. These routes are
  * a ledger with writes, an authored figure and a push to another Worker.
  * Folding them in would put `UPDATE ... paid_cents` inside the function whose
  * whole contract is "this reads and stores nothing".
@@ -28,7 +32,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import {
   drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
@@ -37,6 +41,10 @@ import { branchByCode } from '../services/branches';
 import { currencyCode } from '../services/currencies';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { logAdminAction } from '../services/adminAudit';
+import {
+  ACTION_REASON_MAX, ACTION_REASON_MIN, AUDIT_ACTION, IDEMPOTENCY_KEY_RE, PAYMENT_REFERENCE_MAX, STEP_UP_ACTIONS,
+  planStatementAction, requestHash, type StatementActionKind,
+} from '../services/statementActions';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -82,14 +90,11 @@ type StatementRow = {
   paid_cents: number; paid_note: string | null; paid_at: string | null;
   disputed_cents: number; dispute_note: string | null;
   status: string; reports_as_of: string | null; created_at: string; updated_at: string;
+  // Migration 202611090909 (D5039): bumped by every write; the governed actions name it.
+  revision: number; last_action_uid: string | null;
 };
 
 /** Parse `streams_json` back, never throwing a stored row's shape at the page. */
-/** A floor (partly unreported or estimated) must not be filed as a total. */
-function statementComplete(row: Pick<StatementRow, 'unreported_streams' | 'estimated_streams'>) {
-  return row.unreported_streams === 0 && row.estimated_streams === 0;
-}
-
 function withStreams(row: StatementRow) {
   let streams: unknown = [];
   try { streams = JSON.parse(row.streams_json || '[]'); } catch { streams = []; }
@@ -305,7 +310,8 @@ r.post('/statements/draw', async (c) => {
          owed_cents = excluded.owed_cents, currency = excluded.currency,
          streams_json = excluded.streams_json, estimated_streams = excluded.estimated_streams,
          unreported_streams = excluded.unreported_streams, reports_as_of = excluded.reports_as_of,
-         drawn_by_user_id = excluded.drawn_by_user_id, updated_at = excluded.updated_at`,
+         drawn_by_user_id = excluded.drawn_by_user_id, updated_at = excluded.updated_at,
+         revision = subsidiary_statements.revision + 1`,
     ).bind(
       uid, licenceUid, period, drawn.gross_cents, drawn.revenue_share_bps, drawn.owed_cents,
       drawn.currency, JSON.stringify(drawn.streams), drawn.estimated, drawn.unreported,
@@ -330,7 +336,14 @@ r.post('/statements/draw', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-// PATCH /api/admin/statements/:uid  — the HQ-entered half (D.8)
+// PATCH /api/admin/statements/:uid  — the HQ-entered dispute (D.8, D514)
+//
+// D5039 — PAID AND STATUS LEFT THIS ROUTE. Setting a paid total, marking a
+// statement issued or paid, and voiding it are the governed actions below,
+// each with a reason, the revision it read, a client idempotency key and, where
+// money moves, the step-up. Left here, the same changes would be one PATCH
+// away with none of those, so a body carrying `paid_cents` or `status` is
+// refused with the route to use, and nothing in it is written.
 r.patch('/statements/:uid', async (c) => {
   try {
     const admin = await requireSuperAdmin(c);
@@ -340,159 +353,312 @@ r.patch('/statements/:uid', async (c) => {
     if (!row) return c.json({ error: 'not_found' }, 404);
 
     const b = await c.req.json().catch(() => ({} as any));
-
-    // THREE LITERAL STATEMENTS, NOT ONE ASSEMBLED ONE. The first draft built a
-    // `SET` clause by joining an array of column fragments, and
-    // `check-sql-prepare` was right to refuse it: a `${…}` inside
-    // `DB.prepare` lands in the query TEXT, where no binding protects it. The
-    // array only ever held literals written above it — but "provably safe by
-    // reading the function" stops being true the first time somebody pushes a
-    // field name in from the request, and that is a change nobody would think
-    // to re-review. Three statements with no interpolation cannot acquire the
-    // problem.
-    //
-    // AND NOTHING IS WRITTEN UNTIL EVERYTHING VALIDATES. Three statements are
-    // three chances to fail half-way, so each is prepared and held rather than
-    // run, and the whole set goes out in one `batch` — which D1 applies as a
-    // transaction — only once every field the request carries has passed.
-    const writes: D1PreparedStatement[] = [];
-    const now = nowIso();
-    const complete = statementComplete(row);
-    // D514 — every action this PATCH carries gets its own audit row, not only
-    // the first one an `else if` chain happened to reach.
-    const actions: Array<{ action: string; amounts: Record<string, number>; note?: string }> = [];
-
-    let paid = Number(row.paid_cents) || 0;
-    let disputed = Number(row.disputed_cents) || 0;
-    if (b?.paid_cents !== undefined) {
-      const v = typedCents(b.paid_cents);
-      if (v === null) {
-        return c.json({ error: 'bad_amount', message: 'paid_cents must be a whole number of minor units, 0 or more.' }, 400);
-      }
-      paid = v;
+    if (b?.paid_cents !== undefined || b?.status !== undefined) {
+      return c.json({
+        error: 'governed_action_required',
+        message: 'A payment, Mark issued and Void are governed actions now: each says why, names the revision it read '
+          + 'and carries an idempotency key. Use POST /api/admin/statements/:uid/payments, /issue or /void. Nothing was written.',
+      }, 409);
     }
-    if (b?.disputed_cents !== undefined) {
-      const v = typedCents(b.disputed_cents);
-      if (v === null) {
-        return c.json({ error: 'bad_amount', message: 'disputed_cents must be a whole number of minor units, 0 or more.' }, 400);
-      }
-      disputed = v;
-    }
+    if (b?.disputed_cents === undefined) return c.json({ error: 'nothing_to_update' }, 400);
 
-    if (b?.paid_cents !== undefined) {
-      // OVERPAYMENT IS REFUSED RATHER THAN RECORDED. It is almost always a
-      // figure typed into the wrong row.
-      if (paid > row.owed_cents) {
-        return c.json({
-          error: 'over_payment',
-          message: `${paid} minor units is more than the ${row.owed_cents} this statement claims. `
-            + 'Check the row; if the owed figure itself is wrong, note it in a dispute or void the statement and say why.',
-        }, 409);
-      }
-      // A FLOOR SETTLED AS A TOTAL. Recording the full owed figure on an
-      // incomplete statement files a partial trade as invoiced in full.
-      if (row.owed_cents > 0 && paid === row.owed_cents && !complete) {
-        return c.json({
-          error: 'incomplete_statement',
-          message: 'This owed figure is a floor: some streams were not reported or were estimated. '
-            + 'It cannot be marked paid in full; record what was received as a partial total.',
-        }, 409);
-      }
+    const disputed = typedCents(b.disputed_cents);
+    if (disputed === null) {
+      return c.json({ error: 'bad_amount', message: 'disputed_cents must be a whole number of minor units, 0 or more.' }, 400);
     }
-    // D514 — PAID AND DISPUTED TOGETHER NEVER EXCEED OWED. A dispute was
-    // unbounded, and paid was accepted over a standing dispute.
-    if ((b?.paid_cents !== undefined || b?.disputed_cents !== undefined) && paid + disputed > row.owed_cents) {
+    const paid = Number(row.paid_cents) || 0;
+    // D514 — PAID AND DISPUTED TOGETHER NEVER EXCEED OWED.
+    if (paid + disputed > row.owed_cents) {
       return c.json({
         error: 'over_owed',
         message: `Paid (${paid}) and disputed (${disputed}) together would exceed the ${row.owed_cents} minor units this statement claims.`,
       }, 409);
     }
-    if (b?.paid_cents !== undefined) {
-      writes.push(
-        c.env.DB.prepare(
-          `UPDATE subsidiary_statements
-              SET paid_cents = ?, paid_note = ?, paid_by_user_id = ?, paid_at = ?, updated_at = ?
-            WHERE uid = ?`,
-        ).bind(paid, str(b?.paid_note, 300) || null, admin.id, paid > 0 ? now : null, now, uid),
-      );
-      actions.push({ action: 'subsidiary_statement_payment_total', amounts: { paid_cents: paid, owed_cents: row.owed_cents } });
+    const note = str(b?.dispute_note, 500);
+    // A DISPUTE WITHOUT A REASON IS NOT A DISPUTE. Clearing one (0) needs none.
+    if (disputed > 0 && !note) {
+      return c.json({ error: 'dispute_note_required', message: 'A disputed amount must say why.' }, 400);
     }
-    if (b?.disputed_cents !== undefined) {
-      const note = str(b?.dispute_note, 500);
-      // A DISPUTE WITHOUT A REASON IS NOT A DISPUTE. Clearing one (0) needs none.
-      if (disputed > 0 && !note) {
-        return c.json({ error: 'dispute_note_required', message: 'A disputed amount must say why.' }, 400);
-      }
-      writes.push(
-        c.env.DB.prepare(
-          `UPDATE subsidiary_statements
-              SET disputed_cents = ?, dispute_note = ?, updated_at = ?
-            WHERE uid = ?`,
-        ).bind(disputed, disputed > 0 ? note : null, now, uid),
-      );
-      actions.push(disputed > 0
-        ? { action: 'subsidiary_statement_dispute', amounts: { disputed_cents: disputed }, note }
-        : { action: 'subsidiary_statement_dispute_cleared', amounts: { disputed_cents: 0 } });
-    }
-    if (b?.status !== undefined) {
-      const next = str(b.status, 20);
-      if (!['draft', 'issued', 'paid', 'void'].includes(next)) {
-        return c.json({ error: 'bad_status' }, 400);
-      }
-      let note: string | undefined;
-      if (next === 'void') {
-        note = str(b?.void_note, 500);
-        if (note.length < 10) {
-          return c.json({
-            error: 'void_note_required',
-            message: 'Voiding a statement must say why — at least ten characters.',
-          }, 400);
-        }
-      }
-      // D514 — A FLOOR IS NOT ISSUED. Issuing locks the period, and every
-      // statement today is drawn over unreported or estimated streams, so one
-      // click used to send a floor out as if it were the claim.
-      if ((next === 'paid' || next === 'issued') && !complete) {
-        return c.json({
-          error: 'incomplete_statement',
-          message: next === 'issued'
-            ? 'This owed figure is a floor: some streams were not reported or were estimated. '
-              + 'It cannot be marked as issued until every stream is reported in full.'
-            : 'This owed figure is a floor: some streams were not reported or were estimated. '
-              + 'It cannot be marked paid in full.',
-        }, 409);
-      }
-      writes.push(
-        c.env.DB.prepare(
-          `UPDATE subsidiary_statements SET status = ?, updated_at = ? WHERE uid = ?`,
-        ).bind(next, now, uid),
-      );
-      const statusAction: Record<string, string> = {
-        void: 'subsidiary_statement_void', paid: 'subsidiary_statement_paid',
-        issued: 'subsidiary_statement_issued', draft: 'subsidiary_statement_draft',
-      };
-      actions.push({ action: statusAction[next], amounts: { owed_cents: row.owed_cents }, ...(note ? { note } : {}) });
-    }
-    if (!writes.length) return c.json({ error: 'nothing_to_update' }, 400);
+    await c.env.DB.prepare(
+      `UPDATE subsidiary_statements
+          SET disputed_cents = ?, dispute_note = ?, revision = revision + 1, updated_at = ?
+        WHERE uid = ?`,
+    ).bind(disputed, disputed > 0 ? note : null, nowIso(), uid).run();
 
-    await c.env.DB.batch(writes);
-
-    for (const a of actions) {
-      await logAdminAction(c.env, admin.id, admin.email, a.action, {
-        statement_uid: uid,
-        uid,
-        licence_uid: row.licence_uid,
-        period: row.period,
-        from_status: row.status,
-        currency: row.currency,
-        amounts: a.amounts,
-        ...(a.note ? { note: a.note } : {}),
-      });
-    }
+    await logAdminAction(c.env, admin.id, admin.email, disputed > 0 ? 'subsidiary_statement_dispute' : 'subsidiary_statement_dispute_cleared', {
+      statement_uid: uid,
+      uid,
+      licence_uid: row.licence_uid,
+      period: row.period,
+      from_status: row.status,
+      currency: row.currency,
+      amounts: { disputed_cents: disputed },
+      ...(disputed > 0 ? { note } : {}),
+    });
 
     const after = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?')
       .bind(uid).first<StatementRow>();
     return c.json(withStreams(after!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D5039 — the governed actions: Mark issued, Record a payment, Void    *
+ * ------------------------------------------------------------------ */
+
+/**
+ * One governed action, start to finish. The order is the contract:
+ *
+ *   1. THE GATE. Super Admin; Record a payment and Void also take the write
+ *      bar (a TOTP session and a recent step-up), the gate the refund uses
+ *      (D224), because they change what HQ is owed.
+ *   2. THE REQUEST. A reason of ACTION_REASON_MIN characters or more, the
+ *      revision the client read, and its idempotency key. A payment also
+ *      carries its amount, in the statement's own minor units.
+ *   3. A RETRY IS A REPLAY. The same key from the same admin returns the
+ *      stored reply (`replayed: true`), before any status or revision check,
+ *      because by then the row has moved on exactly as the first try moved it.
+ *      The same key with a different request is refused.
+ *   4. THE RULES (`planStatementAction`) and the revision: a stale read is 409
+ *      `changed_since_open` with the row as it now stands.
+ *   5. ONE BATCH. The statement update is guarded by the revision and stamps
+ *      the action's uid; the action row is inserted only if that stamp is
+ *      there. Both land or neither does.
+ *   6. THE AUDIT ROW, then the reply.
+ */
+async function governedAction(c: any, kind: StatementActionKind) {
+  const admin = STEP_UP_ACTIONS.has(kind) ? await requireSuperAdminWriteBar(c) : await requireSuperAdmin(c);
+  const uid = str(c.req.param('uid'), 80);
+  const row = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?')
+    .bind(uid).first() as StatementRow | null;
+  if (!row) return c.json({ error: 'not_found' }, 404);
+
+  const b = await c.req.json().catch(() => ({} as any));
+  const reason = str(b?.reason, ACTION_REASON_MAX);
+  if (reason.length < ACTION_REASON_MIN) {
+    return c.json({
+      error: 'reason_required',
+      message: `Say why, in at least ${ACTION_REASON_MIN} characters: it is what an auditor reads. Nothing was written.`,
+    }, 400);
+  }
+  const expected = b?.expected_revision;
+  if (typeof expected !== 'number' || !Number.isSafeInteger(expected) || expected < 0) {
+    return c.json({
+      error: 'revision_required',
+      message: 'expected_revision is required: the revision you read, as a whole number, zero or more.',
+    }, 400);
+  }
+  const key = typeof b?.idempotency_key === 'string' ? b.idempotency_key.trim() : '';
+  if (!IDEMPOTENCY_KEY_RE.test(key)) {
+    return c.json({
+      error: 'idempotency_key_required',
+      message: 'idempotency_key is required: 8 to 200 letters, digits or . _ : -, minted once per action and sent again on a retry.',
+    }, 400);
+  }
+  let amount: number | null = null;
+  let reference: string | null = null;
+  if (kind === 'record_payment') {
+    amount = typedCents(b?.amount_cents);
+    if (amount === null || amount === 0) {
+      return c.json({ error: 'bad_amount', message: 'amount_cents must be a whole number of minor units above 0.' }, 400);
+    }
+    reference = str(b?.reference, PAYMENT_REFERENCE_MAX) || null;
+  }
+
+  const hash = await requestHash({ kind, uid, expected, amount, reason, reference });
+  const prior = await c.env.DB.prepare(
+    'SELECT request_hash, response_json FROM subsidiary_statement_actions WHERE actor_user_id = ? AND idempotency_key = ?',
+  ).bind(admin.id, key).first() as { request_hash: string; response_json: string } | null;
+  if (prior) {
+    if (prior.request_hash !== hash) {
+      return c.json({
+        error: 'idempotency_key_reused',
+        message: 'This idempotency key was already used for a different action. Prepare the action again; nothing was written.',
+      }, 409);
+    }
+    return c.json({ ...JSON.parse(prior.response_json), replayed: true });
+  }
+
+  const changed = async () => {
+    const now = await c.env.DB.prepare('SELECT * FROM subsidiary_statements WHERE uid = ?').bind(uid).first() as StatementRow | null;
+    return c.json({
+      error: 'changed_since_open',
+      message: 'This statement changed after you opened it. Review it as it stands now; nothing was written.',
+      current_revision: now ? Number(now.revision ?? 0) : null,
+      current: now ? withStreams(now) : null,
+    }, 409);
+  };
+  if (Number(row.revision ?? 0) !== expected) return changed();
+
+  const plan = planStatementAction(kind, row, amount);
+  if (!plan.ok) return c.json({ error: plan.error, message: plan.message, status: row.status }, plan.status);
+
+  const actionUid = newUid();
+  const now = nowIso();
+  const toRevision = expected + 1;
+  const isPayment = kind === 'record_payment';
+  const response = {
+    outcome: 'applied',
+    action: kind,
+    statement_uid: uid,
+    settled: plan.settled,
+    before: { ...plan.before, revision: expected },
+    after: { ...plan.after, revision: toRevision },
+    receipt: {
+      action_uid: actionUid,
+      at: now,
+      reason,
+      currency: row.currency,
+      ...(isPayment ? { amount_cents: amount, reference } : {}),
+    },
+    replayed: false,
+  };
+
+  let results: any[];
+  try {
+    results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE subsidiary_statements
+            SET status = ?, paid_cents = ?,
+                paid_note = CASE WHEN ? = 1 THEN COALESCE(?, paid_note) ELSE paid_note END,
+                paid_by_user_id = CASE WHEN ? = 1 THEN ? ELSE paid_by_user_id END,
+                paid_at = CASE WHEN ? = 1 THEN ? ELSE paid_at END,
+                revision = revision + 1, last_action_uid = ?, updated_at = ?
+          WHERE uid = ? AND revision = ?`,
+      ).bind(
+        plan.to_status, plan.paid_cents,
+        isPayment ? 1 : 0, reference,
+        isPayment ? 1 : 0, admin.id,
+        isPayment ? 1 : 0, now,
+        actionUid, now, uid, expected,
+      ),
+      c.env.DB.prepare(
+        `INSERT INTO subsidiary_statement_actions
+           (uid, statement_uid, action, actor_user_id, idempotency_key, request_hash, reason, amount_cents, reference,
+            currency, from_status, to_status, from_revision, to_revision, response_json, created_at)
+         SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+          WHERE EXISTS (SELECT 1 FROM subsidiary_statements WHERE uid = ? AND last_action_uid = ?)`,
+      ).bind(
+        actionUid, uid, kind, admin.id, key, hash, reason, amount, reference,
+        row.currency, row.status, plan.to_status, expected, toRevision, JSON.stringify(response), now,
+        uid, actionUid,
+      ),
+    ]);
+  } catch (e) {
+    // The same key raced itself: the other request's batch holds the key and
+    // this one rolled back. Its stored reply is this request's answer.
+    if (/UNIQUE/i.test(String((e as Error)?.message ?? e))) {
+      const won = await c.env.DB.prepare(
+        'SELECT request_hash, response_json FROM subsidiary_statement_actions WHERE actor_user_id = ? AND idempotency_key = ?',
+      ).bind(admin.id, key).first() as { request_hash: string; response_json: string } | null;
+      if (won && won.request_hash === hash) return c.json({ ...JSON.parse(won.response_json), replayed: true });
+    }
+    throw e;
+  }
+  if (!Number(results?.[0]?.meta?.changes)) return changed();
+
+  await logAdminAction(c.env, admin.id, admin.email, AUDIT_ACTION[kind], {
+    statement_uid: uid,
+    uid,
+    action_uid: actionUid,
+    licence_uid: row.licence_uid,
+    period: row.period,
+    from_status: row.status,
+    to_status: plan.to_status,
+    from_revision: expected,
+    to_revision: toRevision,
+    currency: row.currency,
+    amounts: isPayment
+      ? { amount_cents: amount, paid_before_cents: plan.before.paid_cents, paid_after_cents: plan.after.paid_cents, owed_cents: row.owed_cents }
+      : { owed_cents: row.owed_cents },
+    note: reason,
+    ...(reference ? { reference } : {}),
+  });
+
+  return c.json(response);
+}
+
+// POST /api/admin/statements/:uid/issue     { reason, expected_revision, idempotency_key }
+r.post('/statements/:uid/issue', async (c) => {
+  try { return await governedAction(c, 'issue'); } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/admin/statements/:uid/payments  { amount_cents, reference?, reason, expected_revision, idempotency_key }
+r.post('/statements/:uid/payments', async (c) => {
+  try { return await governedAction(c, 'record_payment'); } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/admin/statements/:uid/void      { reason, expected_revision, idempotency_key }
+r.post('/statements/:uid/void', async (c) => {
+  try { return await governedAction(c, 'void'); } catch (e) { return mapError(c, e); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D5039 — the scoped licence picker                                   *
+ * ------------------------------------------------------------------ */
+
+export const PICKER_PAGE_DEFAULT = 20;
+export const PICKER_PAGE_MAX = 50;
+
+const pickerCursor = (name: string, id: number) =>
+  btoa(JSON.stringify([name, id])).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function readPickerCursor(raw: string): [string, number] | null {
+  try {
+    const pad = raw.replace(/-/g, '+').replace(/_/g, '/');
+    const v = JSON.parse(atob(pad + '='.repeat((4 - (pad.length % 4)) % 4)));
+    return Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && Number.isSafeInteger(v[1]) ? [v[0], v[1]] : null;
+  } catch { return null; }
+}
+
+// GET /api/admin/licence-picker?q=&cursor=&limit=
+//
+// WHAT A PICKER NEEDS, AND NOTHING ELSE. The ceiling editor used to page the
+// whole ledger (every column of every licence, up to forty pages) to fill one
+// <select>. This answers a page of { uid, name, territory } ordered by name,
+// searched by name, reference, legal entity or an exact country code, and is
+// asked only when the picker opens.
+r.get('/licence-picker', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const q = str(c.req.query('q'), 80);
+    const rawLimit = Math.floor(Number(c.req.query('limit')));
+    const limit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.min(PICKER_PAGE_MAX, rawLimit) : PICKER_PAGE_DEFAULT;
+    const rawCursor = str(c.req.query('cursor'), 400);
+    const after = rawCursor ? readPickerCursor(rawCursor) : null;
+    if (rawCursor && !after) {
+      return c.json({ error: 'bad_cursor', message: 'The cursor is not one this picker issued. Start from the first page.' }, 400);
+    }
+    const like = q ? `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%` : '';
+    const rows = await c.env.DB.prepare(
+      `SELECT * FROM (
+         SELECT tl.id, tl.uid,
+                COALESCE(NULLIF(TRIM(tl.brand_name), ''), tl.licence_ref) AS name,
+                (SELECT GROUP_CONCAT(lt.country_code, ',') FROM
+                   (SELECT country_code FROM licence_territories WHERE licence_id = tl.id ORDER BY country_code) lt) AS territory
+           FROM territory_licences tl
+          WHERE (? = ''
+                 OR tl.licence_ref LIKE ? ESCAPE '\\'
+                 OR tl.brand_name LIKE ? ESCAPE '\\'
+                 OR tl.legal_entity_name LIKE ? ESCAPE '\\'
+                 OR EXISTS (SELECT 1 FROM licence_territories x WHERE x.licence_id = tl.id AND x.country_code = ?))
+       )
+       WHERE (? IS NULL OR name > ? OR (name = ? AND id > ?))
+       ORDER BY name, id
+       LIMIT ?`,
+    ).bind(
+      q, like, like, like, q.toUpperCase(),
+      after ? after[0] : null, after ? after[0] : null, after ? after[0] : null, after ? after[1] : null,
+      limit + 1,
+    ).all<{ id: number; uid: string; name: string; territory: string | null }>();
+    const got = rows.results || [];
+    const more = got.length > limit;
+    const page = more ? got.slice(0, limit) : got;
+    const last = page[page.length - 1];
+    return c.json({
+      items: page.map((x) => ({ uid: x.uid, name: x.name, territory: x.territory ? String(x.territory).split(',') : [] })),
+      next_cursor: more && last ? pickerCursor(String(last.name), Number(last.id)) : null,
+      limit,
+    });
   } catch (e) { return mapError(c, e); }
 });
 

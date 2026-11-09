@@ -74,7 +74,7 @@ import {
 } from '../services/securityIdentity';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
-import { loadGuardrailCounters } from '../services/aiRouter';
+import { loadGuardrailCounters, loadRecentGuardVerdicts } from '../services/aiRouter';
 import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
@@ -84,7 +84,7 @@ import { branchBindings } from '../services/branches';
 import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
-  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE,
+  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
 import { ensureAdminAuditLogTable } from './admin';
 
@@ -92,6 +92,8 @@ const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
 const MIN_REASON = 8;
+/** D4800 — at most this many administrators are named in the MFA finding; the count is exact regardless. */
+const ADMIN_MFA_GAP_LIMIT = 50;
 
 
 type Absent = { available: false; reason: string };
@@ -176,7 +178,12 @@ async function aiSafetyBlock(env: Env) {
   // D481 — the token anomalies carry their own availability, their own table
   // and their own window (24 hours against the seven days before), stated in
   // their own `how`; they answer whatever the rollup below does.
-  const always = { token_anomalies: await loadTokenAnomalies(env), not_counted: AI_SAFETY_NOT_COUNTED };
+  const always = {
+    token_anomalies: await loadTokenAnomalies(env),
+    // D4803 — SE08's "Recent guard verdicts", its own read with its own availability.
+    recent_verdicts: await loadRecentGuardVerdicts(env, AI_SAFETY_WINDOW_DAYS),
+    not_counted: AI_SAFETY_NOT_COUNTED,
+  };
   // D4691 — `available` is earned, not asserted: a rollup that threw is the
   // whole block unreadable, with its reason, never a block of zeros.
   let counters: Awaited<ReturnType<typeof loadGuardrailCounters>>;
@@ -365,7 +372,23 @@ r.get('/overview', async (c) => {
          FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
     ).first<{ total: number; with_mfa: number }>();
     if (!row) throw new Error('no row');
-    return { admins_total: Number(row.total) || 0, admins_with_mfa: Number(row.with_mfa) || 0 };
+    // D4800 — which administrators the gap is, so the finding can name them
+    // (open question A's recommended A2). Same predicate as the count, read in
+    // the same part: if the names cannot be read, the whole part is unreadable
+    // rather than a count beside an empty list.
+    const gap = await env.DB.prepare(
+      `SELECT id, name, email
+         FROM users
+        WHERE LOWER(role) = 'admin' AND is_active = 1
+          AND NOT (tfa_methods IS NOT NULL AND tfa_methods <> '[]')
+        ORDER BY id
+        LIMIT ?`,
+    ).bind(ADMIN_MFA_GAP_LIMIT).all<{ id: number; name: string | null; email: string | null }>();
+    return {
+      admins_total: Number(row.total) || 0,
+      admins_with_mfa: Number(row.with_mfa) || 0,
+      admins_without_mfa: (gap.results || []).map((a) => ({ id: Number(a.id), name: a.name ?? null, email: a.email ?? null })),
+    };
   });
 
   // D4691 — `kyc` keeps its shape (status → count) when read; an unreadable
@@ -464,6 +487,9 @@ r.get('/overview', async (c) => {
       branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
+      // D4803 (SE06) — the requests closed in the last 90 days, with who closed
+      // them; its own read and its own unreadable state.
+      recent: await loadRecentDsrClosures(env),
     },
     // D200 — the ledger H23 draws: rows today and refused sign-ins in 24h,
     // with the retention, the kinds, and what it deliberately does not count.
@@ -483,6 +509,9 @@ r.get('/overview', async (c) => {
     // its own key; never one green light inferred from the other.
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
+      // D4803 — SE09's KV snapshots card: the worker cron's own heartbeat,
+      // read with the same validation. KV has no restore drill.
+      kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
       not_recorded: DR_NOT_RECORDED,
     },

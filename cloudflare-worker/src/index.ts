@@ -932,6 +932,11 @@ const COOL_OFF_ROUTES = [
   // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
   // route, so D710's entity reads under `/api/admin/mercury` stay open.
   '/api/admin/mercury/safe-basis-repair',
+  // D5039 — recording a payment against a subsidiary statement and voiding one
+  // change what HQ is owed: the money class, behind the step-up. The exact
+  // routes, so the statement ledger and the dispute entry stay open.
+  '/api/admin/statements/:uid/payments',
+  '/api/admin/statements/:uid/void',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
