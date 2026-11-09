@@ -249,6 +249,9 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   const [saved, setSaved] = useState(null);
   const [rowNote, setRowNote] = useState(null);
   const [directoryBusy, setDirectoryBusy] = useState(null);
+  // D4613: the in-flight latch, as a ref so a second click in the same frame
+  // (before `directoryBusy` re-renders) is refused too.
+  const directoryInFlight = useRef(false);
   const [directoryNote, setDirectoryNote] = useState(null);
   const [directoryTotal, setDirectoryTotal] = useState(null);
   // Rows an Add created, by normalized name → uid: the POST's own answer, so
@@ -312,17 +315,20 @@ export default function FundsZone({ zoneActions, zoneFilters, role = 'founder' }
   // named as the directory names it. The directory's facts stay in the directory.
   // The row the POST returns is kept: it is the dossier the drawer now opens.
   const addDirectoryFund = async (fund) => {
-    if (!fund || listState !== 'ok' || researchedNames.has(normalizeFundName(fund.name)) || directoryBusy) return;
+    if (!fund || listState !== 'ok' || researchedNames.has(normalizeFundName(fund.name)) || directoryBusy || directoryInFlight.current) return;
+    directoryInFlight.current = true;
     setDirectoryBusy(fund.uid);
     setDirectoryNote(null);
     try {
-      const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null });
+      // D4613: the directory uid makes a repeat of this add idempotent on the Worker.
+      const row = await api.research.fundCreate({ name: fund.name, source_url: fund.website || null, catalogue_uid: fund.uid });
       if (row?.uid) setCreated((rows) => ({ ...rows, [normalizeFundName(fund.name)]: row.uid }));
-      setDirectoryNote({ uid: fund.uid, ok: true, text: `${fund.name} added to My funds.` });
+      setDirectoryNote({ uid: fund.uid, ok: true, text: row?.existing ? `${fund.name} is already on My funds.` : `${fund.name} added to My funds.` });
       await load();
     } catch (e) {
       setDirectoryNote({ uid: fund.uid, ok: false, text: e?.detail || e?.message || 'That did not save.' });
     } finally {
+      directoryInFlight.current = false;
       setDirectoryBusy(null);
     }
   };

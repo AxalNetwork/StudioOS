@@ -21,7 +21,7 @@ const textOf = (n) => (!n ? '' : n.nodeType === 3 ? n.textContent || '' : n.chil
 const ANSWERED = {
   uid: 'a', question: 'Which rules?', reason: 'answered', answer: 'C5 in Germany [1].', cost_usd: 0.004,
   citations: [
-    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: true },
+    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: true, cited: true },
     { n: 2, title: 'Removed memo', document_uid: 'd-gone', chunk: 3, page: null },
   ],
 };
