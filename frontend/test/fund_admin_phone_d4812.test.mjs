@@ -66,7 +66,8 @@ async function mount(url, lp = LP) {
   };
 }
 
-const tall = (cls, px) => new RegExp(`(^|\\s)(max-sm:)?min-h-\\[${px}px\\]`).test(String(cls || ''));
+const TALL = { 44: /(^|\s)(max-sm:)?min-h-\[44px\]/, 48: /(^|\s)(max-sm:)?min-h-\[48px\]/ };
+const tall = (cls, px) => TALL[px].test(String(cls || ''));
 
 test('A: Needs attention is records, each action a 44px target on a phone', async () => {
   const v = await mount('/admin/fund-admin');
