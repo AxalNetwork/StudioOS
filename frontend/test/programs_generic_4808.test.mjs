@@ -41,7 +41,7 @@ const FIELDS = {
   template_keys: ['operator-agreement'], hq_receives: 'A quarterly report.', tools: { events: true, perks: false },
 };
 const DETAIL = {
-  program: { key: 'operator-fellowship', group: 'Network and referrals', name: 'Operator Fellowship', purpose: 'Operators embedded in a venture.', who: 'Founders, operating partners', join_method: 'By application', status: 'proposed', position: 11, updated_at: '2026-11-07T10:00:00Z', studio_only: null },
+  program: { key: 'operator-fellowship', group: 'Network and referrals', name: 'Operator Fellowship', purpose: 'Operators embedded in a venture.', who: 'Founders, operating partners', join_method: 'By application', status: 'proposed', position: 11, updated_at: '2026-11-07T10:00:00Z', studio_only: null, member_access: 'not_open', modules: [] },
   playbook: { published: false, version: null, published_at: null, sections: [] },
   draft: { sections: [{ key: 'purpose', position: 1, title: 'Purpose', body: 'Operators embedded in a venture.', computed: false, template_keys: [] }], edited_at: '2026-11-07T10:00:00Z', differs: true },
   grant: { state: 'granted_to', granted_count: 0 }, grantable: false,
@@ -90,6 +90,9 @@ async function mounted(url, element, handle, user) {
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
   return {
     requests, at, text: () => text(container), textOf: (id) => text(byId(id)), has: (id) => Boolean(byId(id)), props: (id) => props(byId(id)),
+    // D4873 (part 4): Settings is a form.
+    async change(id, value) { await act(async () => { props(byId(id)).onChange({ target: { value } }); }); await flush(); },
+    async click(id) { await act(async () => { await props(byId(id)).onClick({ preventDefault() {} }); }); await flush(); },
     async close() { await act(async () => rootNode.unmount()); globalThis.fetch = previous.fetch; globalThis.matchMedia = previous.matchMedia; localStorage.removeItem?.('user'); restore(); },
   };
 }
@@ -130,8 +133,9 @@ test('a custom program: create → open → edit → publish → revisit resolve
     assert.match(view.textOf('programs-header'), /Operator Fellowship/);
     assert.match(view.textOf('programs-generic-meta-purpose'), /Operators embedded in a venture\./);
     assert.match(view.textOf('programs-generic-meta-status'), /Proposed/);
-    assert.match(view.textOf('programs-generic-availability'), /Granted to 0 studios/);
-    assert.match(view.textOf('programs-generic-availability'), /not switched on to be offered to studios/);
+    // D4873 (part 4): the registry's modules: none, so the core sections carry the program alone.
+    assert.match(view.textOf('programs-generic-modules'), /None yet\. This program works with the core sections alone\./);
+    assert.match(view.textOf('programs-header-dimensions-access'), /Not open to members yet/, 'member access is the registry\'s field');
     // Declared capabilities, none of them operating.
     assert.match(view.textOf('programs-generic-cap-events'), /Events · Not operational yet/);
     assert.match(view.textOf('programs-generic-screens'), /No operating screen exists for this program yet/);
@@ -144,8 +148,10 @@ test('a custom program: create → open → edit → publish → revisit resolve
     assert.ok(!view.has('programs-generic-spec-purpose-marker'), 'purpose operates');
     assert.match(view.textOf('programs-generic-spec-foot'), /Nothing enforces it yet/);
     assert.ok(view.has('programs-generic-approved-link'));
-    // The three tabs are the same shell for any program.
-    for (const t of ['overview', 'how', 'activity']) assert.ok(view.has(`programs-tab-${t}`), t);
+    // D4873 (part 4, PG03): the six core sections, the same shell for any program.
+    for (const t of ['overview', 'how', 'availability', 'participation', 'activity', 'settings']) assert.ok(view.has(`programs-tab-${t}`), t);
+    assert.equal(view.textOf('programs-tab-how'), 'Playbook');
+    assert.equal(view.textOf('programs-tab-activity'), 'History');
     assert.ok(view.requests.some((r) => r.url === '/api/admin/programs/operator-fellowship'));
   } finally { await view.close(); }
 
@@ -154,6 +160,12 @@ test('a custom program: create → open → edit → publish → revisit resolve
     assert.ok(how.has('programs-generic-how'), 'How it runs is the playbook editor');
     assert.match(how.text(), /Purpose/);
   } finally { await how.close(); }
+
+  const availability = await mounted('/admin/programs/operator-fellowship/availability', h(Table), worker(SUPER), SUPER);
+  try {
+    assert.match(availability.textOf('programs-generic-availability'), /Granted to 0 studios/);
+    assert.match(availability.textOf('programs-generic-availability'), /not switched on to be offered to studios/);
+  } finally { await availability.close(); }
 
   const activity = await mounted('/admin/programs/operator-fellowship/activity', h(Table), worker(SUPER), SUPER);
   try {
@@ -200,4 +212,55 @@ test('the catalogue keeps a registry key the nine do not include, with an Open d
   const read = { status: 'ready', data: { programs: { available: true, rows: [{ key: 'operator-fellowship', group: 'Network and referrals', name: 'Operator Fellowship', purpose: 'Operators.', who: null, join_method: null, status: 'proposed', figures: {} }] } } };
   const { cards } = catalogueCards(read);
   assert.deepEqual(cards.map((c) => [c.key, c.name, c.status]), [['operator-fellowship', 'Operator Fellowship', 'Proposed']]);
+});
+
+/* ------------------------------------------------------------------ *
+ * D4873 (#4873, part 4, PG03): the shell's core sections, modules and Settings
+ * ------------------------------------------------------------------ */
+
+test('D4873: the shell\'s addresses, and modules from the registry, each with the screen that runs it or none', async () => {
+  const { moduleRows, programHref: href, NO_MODULES } = await import('../src/pages/admin/programs/genericProgramModel.js');
+  for (const [tab, suffix] of [['availability', '/availability'], ['participation', '/participation'], ['settings', '/settings']]) {
+    assert.equal(href('climate', tab), `/admin/programs/climate${suffix}`);
+    assert.equal(genericTabFrom(`/admin/programs/climate${suffix}`), tab);
+    assert.equal(genericKeyFrom(`/admin/programs/climate${suffix}`), 'climate');
+  }
+  assert.deepEqual(moduleRows('perks', { modules: ['perk_queue'] }), { state: 'ready', rows: [{ key: 'perk_queue', label: 'Perk queue', path: '/admin/programs/perks/queue' }] });
+  assert.deepEqual(moduleRows('climate', { modules: ['offers'] }).rows, [{ key: 'offers', label: 'Offers', path: null }], 'a module with no screen here is not a door');
+  assert.deepEqual(moduleRows('climate', { modules: [] }), { state: 'ready', rows: [] });
+  assert.equal(moduleRows('climate', { extras: { available: false } }).state, 'unreadable', 'an unread module list is not none');
+  assert.equal(moduleRows('climate', { key: 'climate' }).state, 'pending');
+  assert.match(NO_MODULES, /core sections alone/);
+});
+
+test('D4873: Participation says it is not recorded, never 0; Settings lets HQ set member access, and an Admin reads it', async () => {
+  const part = await mounted('/admin/programs/operator-fellowship/participation', h(Table), worker(SUPER), SUPER);
+  try {
+    assert.match(part.textOf('programs-generic-participation'), /Not recorded.*not the same as nobody/s);
+    assert.doesNotMatch(part.textOf('programs-generic-participation'), /\b0\b/);
+  } finally { await part.close(); }
+
+  const writes = [];
+  const write = (path, method, options) => {
+    writes.push({ path, method, body: JSON.parse(options.body) });
+    return response({ program: { ...DETAIL.program, member_access: 'apply' } });
+  };
+  const hq = await mounted('/admin/programs/operator-fellowship/settings', h(Table), worker(SUPER, { write }), SUPER);
+  try {
+    assert.equal(hq.props('programs-generic-access').value, 'not_open');
+    assert.equal(hq.props('programs-generic-access-save').disabled, true, 'nothing to save until it changes');
+    await hq.change('programs-generic-access', 'apply');
+    await hq.click('programs-generic-access-save');
+    assert.deepEqual(writes, [{ path: '/api/admin/programs/operator-fellowship', method: 'PATCH', body: { member_access: 'apply' } }]);
+    assert.match(hq.textOf('programs-generic-access-done'), /Member access is now “Apply”\./);
+    await hq.change('programs-generic-access', '');
+    await hq.click('programs-generic-access-save');
+    assert.deepEqual(writes[1].body, { member_access: null }, '"Not recorded" clears it, never a guess');
+  } finally { await hq.close(); }
+
+  const admin = await mounted('/admin/programs/operator-fellowship/settings', h(Table), worker(ADMIN), ADMIN);
+  try {
+    assert.ok(!admin.has('programs-generic-access'), 'only HQ sets it');
+    assert.equal(admin.textOf('programs-generic-access-value'), 'Not open to members yet');
+  } finally { await admin.close(); }
 });

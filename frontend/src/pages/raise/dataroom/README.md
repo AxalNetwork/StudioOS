@@ -73,3 +73,5 @@ Files and `?mode=access` to Access.
   The support answer is drawn read only: no upload, share, NDA or download.
   Nothing is kept across a reload. The founder's Activity carries the reads
   (`../SupportReadsCard.jsx`).
+
+D5074 (#5074): every tab reads its venture from `useVenture()` (`frontend/src/pages/cycles/VentureContext.jsx`), never from the query or the projects list, and draws each control from the room read's `capabilities` through `roomCan` in `dataRoomModel.js`, never from `role`.

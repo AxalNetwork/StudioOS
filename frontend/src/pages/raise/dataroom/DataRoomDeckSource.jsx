@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import DataRoomDialog from './DataRoomDialog.jsx';
+import { roomCan } from './dataRoomModel.js';
 
 export const extractionLabel = (state, reason) => reason === 'owner_confirmation_required' ? 'Owner confirmation needed' : ({ queued: 'Queued for extraction', done: 'Document · Sourced', no_values: 'No supported values found', unreadable: 'Extraction unreadable — try again' }[state] || 'Not used in decks');
 
@@ -14,7 +15,8 @@ export default function DataRoomDeckSource({ file, room, projectUid, onChanged }
   }, [room?.deck_sources_available, file?.deck_source, file?.extraction?.state, onChanged]);
   if (!room?.deck_sources_available) return null;
   const enabled = !!file.deck_source;
-  const owner = room.role === 'owner';
+  // D5074: the Worker's capability for this caller (`roomCan`), the rule `PUT …/deck-source` enforces.
+  const owner = roomCan(room, 'deck_source');
   const change = async () => {
     try {
       await dataRoomApi.setDeckSource(projectUid, file.uid, { enabled: ask.enabled, ...(ask.quote ? { confirm_quote: ask.quote.confirm_quote } : {}) });
