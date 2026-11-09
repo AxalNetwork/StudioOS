@@ -301,7 +301,7 @@ async function setCheck(ctx: RecordContext, featureId: number, b: Body): Promise
   return { ok: true };
 }
 /**
- * #5067: past the picker's first `DEPENDENCY_PICK` items, "Waits on"/"Blocks"
+ * #5067: past the picker's first `ROADMAP_DEPENDENCY_CHOICES` items, "Waits on"/"Blocks"
  * take a typed number or exact title instead. Scoped to this project exactly
  * as `addOkrDependency` scopes a picked id: a title from another venture, or
  * one this project does not have, resolves to nothing and is refused there.
@@ -629,6 +629,17 @@ function ledgerLabel(ref: string): string | null {
   return m ? `${m[1] === 'issue' ? 'issue' : 'pull request'} #${m[2]}` : null;
 }
 
+/**
+ * #4603 part 2b (D4603) names the roadmap record page's two list ceilings, at
+ * the values they have always had. Past either ceiling the page says how many
+ * remain (#5067): a trailing "View all feedback" row, and a typed title or
+ * number on the dependency picker.
+ */
+/** The newest feedback rows "Feedback it answers" lists. */
+export const ROADMAP_FEEDBACK_SHOWN = 20;
+/** The other roadmap items the Add a dependency picker offers, in board order. */
+export const ROADMAP_DEPENDENCY_CHOICES = 200;
+
 const prototypeMvp: ModuleSpec = {
   read: 'read', write: 'write', store: 'mvp_must_haves',
   // Decision 15: a feature and its must-have show one history.
@@ -850,8 +861,8 @@ const productRoadmap: ModuleSpec = {
       const [feedbackRes, total] = await Promise.all([
         ctx.env.DB.prepare(
           `SELECT body, from_name, theme, created_at FROM product_feedback
-            WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
-        ).bind(ctx.projectId, ref).all<Any>(),
+            WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+        ).bind(ctx.projectId, ref, ROADMAP_FEEDBACK_SHOWN).all<Any>(),
         ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM product_feedback WHERE project_id = ? AND roadmap_item_ref = ?')
           .bind(ctx.projectId, ref).first<{ n: number }>(),
       ]);
@@ -902,13 +913,12 @@ const productRoadmap: ModuleSpec = {
       'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
     ).bind(itemId, ctx.projectId).first<Any>();
     if (!o) throw new Error('Build roadmap item vanished after its ownership check');
-    const DEPENDENCY_PICK = 200;
-    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT 200')
-      .bind(ctx.projectId, itemId).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
-    // #5067: the picker never silently drops an item past DEPENDENCY_PICK. Past
+    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT ?')
+      .bind(ctx.projectId, itemId, ROADMAP_DEPENDENCY_CHOICES).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
+    // #5067: the picker never silently drops an item past ROADMAP_DEPENDENCY_CHOICES. Past
     // it, Waits on/Blocks each gain a typed fallback (decision 14), resolved by
     // `addDependency` the same project-scoped way as a picked id.
-    const othersTotal = others.length < DEPENDENCY_PICK ? others.length : Number(
+    const othersTotal = others.length < ROADMAP_DEPENDENCY_CHOICES ? others.length : Number(
       (await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ? AND id <> ?')
         .bind(ctx.projectId, itemId).first<{ n: number }>())?.n ?? others.length);
     const more = othersTotal > others.length;

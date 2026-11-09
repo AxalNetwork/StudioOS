@@ -233,12 +233,17 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
     : !features
       ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain or hypothesis', value: null, href: href('solution-design') }
       : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain or hypothesis', 'features linked to a pain or hypothesis'), value: '', href: href('solution-design') };
-  const due = (company?.rows ?? [])
-    .filter((r) => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string')
-    .map((r) => String(r.keys!.due)).sort()[0];
+  // #4603 part 2b: Company creation's count and next open filing come from its facts when the read gives them (the overview reads no record rows).
+  const filed = num(Number(company?.facts?.filings));
+  const filings = filed ? Number(company!.facts!.filings) : (company?.rows ?? []).length;
+  const due = filed
+    ? (typeof company!.facts!.next_filing_due === 'string' ? company!.facts!.next_filing_due : undefined)
+    : (company?.rows ?? [])
+      .filter((r) => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string')
+      .map((r) => String(r.keys!.due)).sort()[0];
   const companyRow: IndexRow = company?.card.state === 'unreadable'
     ? { key: 'company-creation', title: 'Company creation', detail: 'Next filing', value: UNREADABLE, href: href('company-creation') }
-    : !(company?.rows ?? []).length
+    : !filings
       ? { key: 'company-creation', title: 'Company creation', detail: 'Next filing', value: null, href: href('company-creation') }
       : { key: 'company-creation', title: 'Company creation', detail: due && dayMonth(due) ? `Next filing ${dayMonth(due)}` : 'Next filing', value: '', href: href('company-creation') };
   return [

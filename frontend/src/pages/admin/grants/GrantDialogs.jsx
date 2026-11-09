@@ -1,4 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { PriceBlock } from './ProgramPricing';
+import { buildPricing } from './programPricingModel';
 import { programGrantsApi } from '../../../lib/api/programGrants.js';
 import { reportError } from '../../../lib/log';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
@@ -104,7 +106,7 @@ function TermInput({ k, value, onChange, testId }) {
  * marked Default or Changed against the defaults, with Reset to default.
  * D1317: one grant's terms, so it opens as the shared Sheet (600 → 640px).
  */
-export function GrantLightbox({ mode, licence, defaults, grant, startTerms, request, onClose, onDone }) {
+export function GrantLightbox({ mode, licence, defaults, grant, startTerms, request, price = null, onClose, onDone }) {
   const keys = useMemo(() => termKeysFor(defaults), [defaults]);
   const base = useMemo(() => {
     const d = defaults?.terms || {};
@@ -117,6 +119,10 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
   const [step, setStep] = useState('edit');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState('');
+  // D5018: the price. A new grant starts on the recommended price when there is one; a change keeps the fee in the terms.
+  const [priceMode, setPriceMode] = useState(() => (mode !== 'change' && price?.recommendation?.available ? 'recommended' : 'terms'));
+  const [priceForm, setPriceForm] = useState({});
+  const [priceErr, setPriceErr] = useState('');
   const lock = useRef(false);
   const frozen = licence?.status === 'suspended' ? FROZEN_LINE : null;
   const studio = licence?.brand_name || licence?.licence_ref || 'This studio';
@@ -126,14 +132,19 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
   const payload = useMemo(() => termsPayload(keys, form, start), [keys, form, start]);
   const current = useMemo(() => ({ ...base, ...Object.fromEntries(keys.map((k) => [k, k in payload ? payload[k] : base[k]])) }), [base, keys, payload]);
   const differ = changedKeys(current, defaults?.terms || {});
-  const ready = !frozen && reason.trim().length >= REASON_MIN && (mode !== 'change' || Object.keys(payload).length > 0 || note !== (grant?.note || ''));
+  const ready = !frozen && reason.trim().length >= REASON_MIN && (mode !== 'change' || Object.keys(payload).length > 0 || note !== (grant?.note || '') || priceMode !== 'terms');
   const title = mode === 'change' ? `Change ${name} for ${studio}` : `Grant ${name} to ${studio}`;
   const close = () => { if (!lock.current) onClose(); };
   const save = async () => {
     if (lock.current || !ready) return;
     lock.current = true; setBusy(true); setRefusal('');
     try {
-      const body = { terms: mode === 'change' ? payload : Object.fromEntries(keys.map((k) => [k, current[k]])), note: note.trim() || null, reason: reason.trim() };
+      const priced = buildPricing({ mode: priceMode, rec: price?.recommendation, form: priceForm, snapshotUid: price?.snapshot_uid });
+      if (!priced.ok) { setPriceErr(priced.error); setStep('edit'); return; }
+      setPriceErr('');
+      const terms = mode === 'change' ? { ...payload } : Object.fromEntries(keys.map((k) => [k, current[k]]));
+      if (priced.dropFee) delete terms.fee_cents;
+      const body = { terms, note: note.trim() || null, reason: reason.trim(), ...(priced.pricing ? { pricing: priced.pricing } : {}) };
       const out = mode === 'change'
         ? await programGrantsApi.changeTerms(licence.uid, defaults.program_key, body)
         : await programGrantsApi.grant(licence.uid, defaults.program_key, body);
@@ -201,6 +212,7 @@ export function GrantLightbox({ mode, licence, defaults, grant, startTerms, requ
           <p className="m-0 rounded-[10px] border border-axal-hairline px-3 py-2.5 text-[13px] leading-[1.5] text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid="grant-sentence">
             {liveSentence({ studio, program: name, terms: current, licence })}
           </p>
+          <PriceBlock price={price} mode={priceMode} setMode={setPriceMode} form={priceForm} setForm={setPriceForm} error={priceErr} />
           <Reason value={reason} onChange={setReason} label="Reason for HQ’s record · required · at least 10 characters" testId="grant-reason" />
           <label className="flex flex-col gap-1">
             <span className={EYE}>Note to the studio · optional · the studio reads it</span>

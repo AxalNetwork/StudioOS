@@ -242,7 +242,11 @@ test('D4534: a company skill\'s publish and retirement are in the admin audit; a
   const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme audit skill', roles: ['cfo'] }))).body.skill.uid;
   assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
   assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${co}`, { status: 'retired' })).status, 200);
-  const rows = audit().filter((r) => r.action.startsWith('company_skill_'));
+  // D4533 (F1): the draft's creation is the first row, under the company's own action name.
+  const created = audit().filter((r) => r.action.startsWith('company_skill_draft_'));
+  assert.deepEqual(created.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_draft_created']]);
+  assert.equal(JSON.parse(created[0].filters_json).company_id, 1);
+  const rows = audit().filter((r) => r.action.startsWith('company_skill_') && !r.action.startsWith('company_skill_draft_'));
   assert.deepEqual(rows.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_published'], [EDITOR, 'company_skill_retired']]);
   assert.equal(JSON.parse(rows[0].filters_json).skill_uid, co);
   assert.equal(JSON.parse(rows[0].filters_json).company_id, 1);

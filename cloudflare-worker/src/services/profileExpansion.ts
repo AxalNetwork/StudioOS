@@ -787,6 +787,20 @@ export function computeCompletionPct(personal: PersonalProfileRead, corporate: C
 // --- Schema bootstrap (idempotent runtime migration) ------------------------
 
 const MIGRATED = new WeakMap<object, boolean>();
+/**
+ * D4616 (#4616) — the name other members see: the profile's display name when
+ * one is set, else the account name. The public profile (`routes/public.ts`),
+ * article bylines (`COALESCE(u.display_name, u.name)`, which agrees because a
+ * blank display name is stored as NULL by `trimOrNull`) and the Settings
+ * preview (`public_name` on GET /api/settings) all read this one rule.
+ */
+export function effectiveDisplayName(row: { display_name?: unknown; name?: unknown } | null | undefined): string | null {
+  const own = typeof row?.display_name === 'string' ? row.display_name.trim() : '';
+  if (own) return own;
+  const account = typeof row?.name === 'string' ? row.name.trim() : '';
+  return account || null;
+}
+
 export async function ensureProfileExpansionSchema(env: Env): Promise<void> {
   if (MIGRATED.get(bindingKey(env))) return;
   // Production migrations own this users-adjacent schema. Do not run a series

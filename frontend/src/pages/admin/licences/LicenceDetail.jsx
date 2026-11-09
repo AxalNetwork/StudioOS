@@ -30,6 +30,7 @@ import { AdminsEditor } from './AdminsEditor';
 import { BrandKitEditor } from './BrandKitEditor';
 import { SeatEditor } from './CommercialTerms';
 import { CountryPricing } from './CountryPricing';
+import { Exclusivity } from './Exclusivity';
 import TermsWorkspace from './TermsWorkspace';
 import { ContractStep } from './ContractStep';
 import { DeployStep } from './DeployStep';
@@ -394,6 +395,8 @@ export function Detail({ uid, held, onChanged, onOpenLicence, tab = DEFAULT_TAB,
         {step === 2 && (
           <TerritoryEditor licence={d} held={held} onSaved={refresh} onOpenLicence={onOpenLicence} />
         )}
+        {/* D5019 — exclusivity and development commitments, apart from the operating territory above. */}
+        {step === 2 && <Exclusivity licence={d} />}
         {step === 3 && <SeatEditor licence={d} onSaved={refresh} />}
         {/* D4819: the canvas's Terms section: read-only by default, amended in a reviewed session. */}
         {step === 4 && <TermsWorkspace licence={d} onSaved={refresh} onOpenTab={(key) => onTab?.(key)} />}

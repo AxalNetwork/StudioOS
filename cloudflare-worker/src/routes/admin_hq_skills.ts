@@ -31,6 +31,12 @@
  *   GET  /evals/published/campaigns/:uid         D4668: a campaign's progress → { campaign }
  *   POST /evals/published/campaigns/:uid/cancel  D4668: final; what it ran stays → { campaign }; 409 campaign_complete
  *   POST /:uid/retire                { replacement_uid, reason }  → { pinned_agents }
+ *   POST /:uid/restore               D4533 step 5: { from_version, reason, discard_draft? }  vK's definition becomes the draft,
+ *                                    to be reviewed, evaluated and published as the NEXT version; nothing published or pinned
+ *                                    moves → { from_version, current_version, next_version, definition_hash, discarded, freshness }
+ *                                    400 reason_required, version_unknown, checkDraft codes · 409 retired, already_restored, draft_has_changes
+ *   GET  /:uid/pins                  D4533 step 5: each version's live agents, and each agent's pinned version and whether an
+ *                                    update is available, before a team re-pins (`PUT /api/teams/agents/:uid/skills`)
  *   POST /bulk                       { action: publish | retire | evals, uids, reason, replacement_uid?, models? }
  *                                    each item done or refused on its own: { results: [{ uid, ok, code?, message? }] }
  *
@@ -56,8 +62,9 @@ import { logAdminAction } from '../services/adminAudit';
 import { notify } from '../services/notify';
 import { newUid } from './_t13t14t15_helpers';
 import { agentModels } from './team_agents';
-import { axesOf, skillByUid, taxonomyMaps, versionOf, type SkillRow, type VersionRow } from '../services/agents/skillLinks';
+import { axesOf, skillByUid, taxonomyMaps, versionOf, type SkillRow } from '../services/agents/skillLinks';
 import { draftParts, draftPartsOf, publishDraft } from '../services/agents/skillPublish';
+import { pinsOf, restoreDraft, versionParts } from '../services/agents/skillRecovery';
 import { pinTokenMap } from '../services/agents/runCost';
 import {
   CASES_MAX, PASS_BAR, checkCase, diffParts, draftHash, evalSummary, lifecycleStatus, meetsBar, openReview, pinnedAgents, runCase,
@@ -71,7 +78,7 @@ import { RADAR_AXES } from '../services/skillsTaxonomySchema';
 import { campaignProgress, cancelCampaign, continueCampaign, evaluatePublished, startCampaign } from '../services/agents/skillEval';
 import { compareResults, type ResultRow } from '../services/agents/skillEvalCompare';
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
-import type { OutputKind, Tag } from '../services/agents/skills';
+import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
@@ -113,11 +120,6 @@ async function audit(env: Env, admin: User, action: string, s: Pick<SkillRow, 'u
   await logAdminAction(env, admin.id, admin.email, action, { skill_uid: s.uid, skill_name: s.name, reason, before, after, ...extra });
 }
 
-const versionParts = (v: VersionRow): DraftParts => ({
-  name: v.name, purpose: v.purpose, steps: parse(v.steps_json, []), tools: parse(v.allowed_tools_json, []), output_kind: v.output_kind as OutputKind,
-  tags: parse(v.taxonomy_json, []), roles: parse(v.roles_json, []),
-});
-
 function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
   const axis = p.tags.map((t) => RADAR_AXES.find((a) => a.slug === category.get(t.slug))).find(Boolean);
   const level = p.tags.reduce<string | null>((best, t) => (best == null || LEVELS.indexOf(t.level) > LEVELS.indexOf(best) ? t.level : best), null);
@@ -147,6 +149,17 @@ async function versionEvidence(env: Env, json: string | null) {
     bar: m.bar, results: m.results,
     review: m.review ? { reviewer: await personOf(env, m.review.reviewer_id), requested_by: await personOf(env, m.review.requested_by), decided_at: m.review.decided_at } : null,
   };
+}
+
+/**
+ * D4533 step 5: the versions whose `agent_skill_published` audit row is there. The row is written after the publish
+ * batch, best-effort, so a version can exist without it (a partly completed publish). A version missing here reads
+ * `publish_audited: false`, a signal #4536 can read; null when the audit log could not be read, never "audited".
+ */
+async function auditedVersions(env: Env, uid: string): Promise<Set<number> | null> {
+  return env.DB.prepare(`SELECT DISTINCT CAST(json_extract(filters_json, '$.after.version') AS INTEGER) AS version FROM admin_audit_log
+      WHERE action = 'agent_skill_published' AND json_extract(filters_json, '$.skill_uid') = ?`).bind(uid)
+    .all<{ version: number }>().then((r) => new Set((r.results ?? []).map((x) => Number(x.version)))).catch(() => null);
 }
 
 // ── The library ─────────────────────────────────────────────────────────────
@@ -302,6 +315,7 @@ adminHqSkills.get('/:uid', async (c) => {
       FROM agent_skill_retirements r JOIN agent_skills s ON s.id = r.replacement_skill_id WHERE r.skill_id = ?`).bind(s.id)
     .first<{ reason: string; pinned_agents: number; retired_at: string; retired_by: number; replacement_uid: string; replacement_name: string }>();
   const tax = await taxonomyMaps(c.env);
+  const audited = await auditedVersions(c.env, s.uid);
   // #4739: who can be asked to review this draft: another active Super Admin, never its author. Null when the read failed, never "none".
   const reviewers = await c.env.DB.prepare(`SELECT u.uid, u.name FROM super_admins sa JOIN users u ON u.id = sa.user_id
       WHERE LOWER(u.role) = 'admin' AND u.is_active = 1 AND u.id != ? AND u.id != ? ORDER BY u.name, u.id`)
@@ -321,6 +335,7 @@ adminHqSkills.get('/:uid', async (c) => {
     freshness,
     versions: await Promise.all(versions.map(async (v) => ({
       version: v.version, published_at: v.published_at, by: await personOf(c.env, v.published_by), evidence: await versionEvidence(c.env, v.evidence_json),
+      publish_audited: audited ? audited.has(v.version) : null,
     }))),
     retired: retired ? {
       reason: retired.reason, pinned_agents: retired.pinned_agents, at: retired.retired_at, by: await personOf(c.env, retired.retired_by),
@@ -657,6 +672,28 @@ adminHqSkills.post('/:uid/retire', async (c) => {
   const r = await retire(c.env, admin, s, b.replacement_uid, reason);
   if (!r.ok) return say(c, r.status, r.code, r.message, r.extra);
   return c.json({ status: 'retired', pinned_agents: r.pinned_agents, replacement: r.replacement });
+});
+
+// ── Recovery (D4533 step 5) ─────────────────────────────────────────────────
+
+adminHqSkills.post('/:uid/restore', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const s = await hqSkill(c.env, c.req.param('uid'));
+  if (!s) return noSkill(c);
+  const b = await body(c);
+  const reason = reasonOf(b.reason);
+  if (!reason) return refuseReason(c);
+  const r = await restoreDraft(c.env, s, admin, b.from_version, reason, b.discard_draft === true);
+  if (!r.ok) return say(c, r.status, r.code, r.message, r.extra);
+  const { ok: _ok, ...out } = r;
+  return c.json(out);
+});
+
+adminHqSkills.get('/:uid/pins', async (c) => {
+  await requireSuperAdmin(c);
+  const s = await hqSkill(c.env, c.req.param('uid'));
+  if (!s) return noSkill(c);
+  return c.json(await pinsOf(c.env, s));
 });
 
 // ── Bulk ────────────────────────────────────────────────────────────────────
