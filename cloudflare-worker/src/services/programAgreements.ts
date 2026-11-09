@@ -312,3 +312,18 @@ export function programLegalState(grant: Record<string, any> | null, rows: Agree
       && (o.grantInForce ?? (o.licenceActive ?? true)) && (!required || !!executed),
   };
 }
+
+/**
+ * D5049 (#5049): an envelope completed, on the in-house signing route or the DocuSign poller. The package or
+ * program agreement version that names it is executed (superseding the executed version of its slot, in the
+ * same batch), or, if it was voided or superseded meanwhile, records that it was signed and stays as it is.
+ * A program schedule is left to `onProgramScheduleEnvelopeCompleted`, which writes it in the grant's batch.
+ * Null when no version names the envelope. Idempotent: every statement is guarded on the state it changes.
+ */
+export async function onAgreementEnvelopeCompleted(env: Env, envelopeUuid: string, signedAt: string = new Date().toISOString()) {
+  const before = await agreementForEnvelope(env, envelopeUuid);
+  if (!before || before.agreement_kind === 'program_schedule') return null;
+  await env.DB.batch(agreementSignedStatements(env, envelopeUuid, signedAt));
+  const after = await agreementForEnvelope(env, envelopeUuid);
+  return { uid: before.uid, licence_uid: before.licence_uid, status: after?.status ?? before.status, executed: before.status !== 'executed' && after?.status === 'executed' };
+}

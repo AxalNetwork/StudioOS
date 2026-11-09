@@ -316,8 +316,9 @@ test('the consent chip the canvas draws is not drawn here, and the page says why
   // AND THE ABSENCE IS STATED RATHER THAN LEFT AS A MISSING ELEMENT: the AI band
   // becomes the five-piece account, and the zone's limits repeat it.
   for (const claim of [
-    /Consent-gated at the source|consent-gated/,
-    /Five pieces/,
+    // #4715 (D4715): the absence is stated in product words, not as the design file's and the schema's history.
+    /Not available for advisory sessions yet/,
+    /Axal does not record advisory sessions/,
     /There is no consent-gated session summary/,
   ]) {
     assert.match(PAGE, claim);

@@ -540,6 +540,30 @@ export function rawRequestHeaders(method = 'GET') {
   return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
 }
 
+/**
+ * #4622: ONE IN-FLIGHT READ PER IDENTITY AND CONTEXT.
+ *
+ * Several parts of one Studio page ask for the same advisor progress and queue
+ * (the founder home, its interview wrapper, the profile card, the chat). Each
+ * made its own request. Callers that ask while an identical read is still in
+ * flight now share it; once it settles nothing is kept, so a later call reads
+ * again (a retry, or a read after the member answered a question, is never
+ * served a stale copy), and a failure is never remembered. The key carries the
+ * identity the request is sent with (token, impersonation header, company), so
+ * a different member, or the same one in another company, never shares a read.
+ */
+const _sharedReads = new Map();
+export function sharedRead(name, run) {
+  let identity = '';
+  try { identity = JSON.stringify([getAuthHeaders(), getActiveCompanyHeader()]); } catch { identity = ''; }
+  const key = `${name}|${identity}`;
+  const pending = _sharedReads.get(key);
+  if (pending) return pending;
+  const read = run().finally(() => { if (_sharedReads.get(key) === read) _sharedReads.delete(key); });
+  _sharedReads.set(key, read);
+  return read;
+}
+
 export async function request(path, options = {}) {
   // Armed per attempt, never per call: the step-up retry below re-enters
   // `request()` after a modal the user may sit on for a minute, and that wait
@@ -1309,7 +1333,7 @@ export const api = {
       }),
     skip: (conversation_id, question_id) =>
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
-    progress: () => request('/advisor/progress'),
+    progress: () => sharedRead('advisor:progress', () => request('/advisor/progress')),
     // Task #2 (AR) — pinned next-question fetch + canonical manifest.
     // D765: a press ("drill in"), so a POST: only a press may let the model rank.
     nextQuestion: (focus) =>
@@ -1318,7 +1342,7 @@ export const api = {
     // progress widget. Mirrors /turn output but never registers an
     // "asked" timestamp so the widget can re-poll freely.
     queue: (focus) =>
-      request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+      sharedRead(`advisor:queue:${focus || ''}`, () => request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`)),
     manifest: () => request('/advisor/manifest'),
     // Task #5 (AV) — Find & deep-link tool registry.
     tools: () => request('/advisor/tools'),
@@ -3565,6 +3589,10 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  // D5031 (#5031) — the HQ-local half alone (escalations, HQ's ticket queues,
+  // the mirror strip, the SLA policy): it never waits on a branch, so the page
+  // draws HQ's desk while the branch hosts are still answering `hqSupport`.
+  hqSupportLocal: () => request('/admin/hq-support/local'),
   hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
@@ -4327,6 +4355,8 @@ export const api = {
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // #4715 (D4715): signing, renewals, endings and corrections to signed terms, oldest first.
+  listMyAdvisorEngagementEvents: (id) => request(`/advisors/me/engagements/${id}/events`),
   // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
   advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
     request(`/advisors/me/engagements/${id}/advance`, {

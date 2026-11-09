@@ -139,6 +139,8 @@ function freshDb() {
   db.exec(migration('238_advisor_engagements'));
   // D4695: the renewal history the lane verbs write beside the row.
   db.exec(migration('202611071547_advisor_engagement_events'));
+  // #4715: a correction to signed terms is recorded beside the events.
+  db.exec(migration('202611082054_advisor_engagement_corrections'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -457,6 +459,8 @@ test('PATCH edits the description and cannot touch the three columns the rate re
     // The three the verbs own. A merge-PATCH that accepted them would let a
     // caller assert a renewal that never happened.
     lane: 'ended', cycles: 99, outcome: 'renewed',
+    // #4715: the row is signed, so a change to its terms is a recorded correction.
+    correction_reason: 'Synthetic: the signed scope was typed wrong',
   });
   assert.equal(r.status, 200);
   assert.equal(r.body.client_name, 'Meridian Labs Inc');

@@ -28,6 +28,8 @@ const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, 
 // founder's /studio leads with the canvas's "Do these next", read from the
 // same lifecycle checklist.
 const HOME = read('../src/pages/founder/FounderStudioHome.jsx');
+// #4622: the page's reads moved to their own module, so each can be committed as it settles.
+const READS = read('../src/pages/founder/founderStudioReads.js');
 const BODY = read('../src/pages/founder/FounderStudioBody.jsx');
 const MODEL = read('../src/pages/founder/founderStudioModel.js');
 const EXPLORING = read('../src/pages/ExploringDashboard.jsx');
@@ -45,7 +47,8 @@ test('the founder Studio does not link at the Operations console or a dead Comma
 });
 
 test('the Venture progress strip uses the lifecycle checklist', () => {
-  assert.match(code(HOME), /api\.getLifecycle\(/);
+  assert.match(code(HOME), /startFounderStudioReads\(/, 'the page reads through the founder reads module');
+  assert.match(code(READS), /client\.getLifecycle\(/);
   assert.match(code(MODEL), /const items = Array\.isArray\(lifecycle\?\.checklist\) \? lifecycle\.checklist/);
 });
 
