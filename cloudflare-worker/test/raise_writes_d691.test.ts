@@ -62,6 +62,7 @@ function fixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('202611091000_readiness_input_hash.sql')); // D5071
   db.exec(sqlOf('463_raise_record_stores.sql'));
   // D1020: vesting rows carry their venture (migration 574's column).
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER');
@@ -791,6 +792,7 @@ function cycleFixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('202611091000_readiness_input_hash.sql')); // D5071
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('606_use_of_funds_scenarios.sql'));
@@ -926,24 +928,29 @@ test('8: re-score takes a subset and keeps earlier scores; an empty body scores 
   assert.equal(logs(db, "action = 'readiness_rescored'").length, 8, 'one row per item scored');
 });
 
-test('8: since: last skips an item whose stores did not change, and re-scores one whose store has a newer row or a different finding', async () => {
+test('8: since: last skips an item whose inputs did not change, and re-scores one whose inputs (its hash) or finding did (D5071)', async () => {
   const db = cycleFixture();
   const last = async () => (await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { since: 'last' })).body;
   assert.deepEqual((await last()).items, ['deck', 'use_of_funds', 'cap_table', 'traction', 'data_room', 'narrative'], 'an unscored item is scored');
-  // Nothing changed: only the two checks that read projects fields, which keep no write time, run again.
-  assert.deepEqual((await last()).items, ['use_of_funds', 'traction']);
-  // A deck saved after the newest score re-scores the deck (its score is still 10); the data room did not change.
-  db.exec(`UPDATE readiness_scores SET scored_at = '2026-01-01 00:00:00'`);
-  db.exec(`UPDATE pitch_decks SET created_at = '2025-12-01 00:00:00'`);
-  db.exec(`INSERT INTO pitch_decks (project_id, version, slides, created_at) VALUES (${C_P}, 2, '[]', '2026-02-01 00:00:00')`);
-  assert.deepEqual((await last()).items, ['deck', 'use_of_funds', 'traction']);
-  // A deleted deck leaves no newer row, but the check now finds something else, so it is re-scored.
-  db.exec(`UPDATE readiness_scores SET scored_at = '2026-03-01 00:00:00'`);
+  // Nothing changed: the hash of every check's inputs is the one stored, so nothing runs again (the two
+  // `projects`-field checks used to re-score every time, because their store keeps no write time).
+  assert.deepEqual((await last()).items, []);
+  assert.ok((db.prepare("SELECT COUNT(*) AS n FROM readiness_scores WHERE source = 'computed' AND input_hash IS NOT NULL").get() as any).n >= 5, 'the hash is stored with the score');
+  // A typed projects field changes use of funds' inputs, though no table has a newer row.
+  db.exec(`UPDATE projects SET funding_needed = 123456 WHERE id = ${C_P}`);
+  assert.deepEqual((await last()).items, ['use_of_funds']);
+  // A deck saved after the newest score changes the deck's inputs.
+  db.exec(`INSERT INTO pitch_decks (project_id, version, slides, created_at) VALUES (${C_P}, 2, '[{"title":"Cover"}]', '2026-02-01 00:00:00')`);
+  assert.deepEqual((await last()).items, ['deck']);
+  // A deleted deck leaves no newer row, but the hash of what the check reads changed.
   db.exec(`DELETE FROM pitch_decks WHERE project_id = ${C_P}`);
-  const r = await last();
-  assert.deepEqual(r.items, ['deck', 'use_of_funds', 'traction']);
+  assert.deepEqual((await last()).items, ['deck']);
+  // A score with no stored hash (older than the column) cannot be shown current: it is re-scored once.
+  db.exec(`UPDATE readiness_scores SET input_hash = NULL`);
+  assert.deepEqual((await last()).items.sort(), ['cap_table', 'data_room', 'deck', 'narrative', 'traction', 'use_of_funds'].sort());
   // A subset is still a subset.
-  assert.deepEqual((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['data_room', 'traction'], since: 'last' })).body.items, ['traction']);
+  db.exec(`UPDATE projects SET funding_needed = 1 WHERE id = ${C_P}`);
+  assert.deepEqual((await cyc(db, C_FOUNDER, 'POST', q('/readiness/rescore'), { items: ['data_room', 'use_of_funds'], since: 'last' })).body.items, ['use_of_funds']);
 });
 
 test('9: New version stores its fields, starts from live, a version or blank, and Edit runs the check again', async () => {
