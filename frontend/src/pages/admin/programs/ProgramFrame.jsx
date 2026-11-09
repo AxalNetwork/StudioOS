@@ -53,7 +53,8 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
             <StatusPill status={status || card.status} testId="programs-header-status" />
             <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} badge={grantBadge} testId="programs-header-grant" />
           </div>
-          <ProgramDimensions dims={programDimensions({ ...card, status: status || card.status }, { superAdmin, grantBadge })} testId="programs-header-dimensions" />
+          {/* D4873 (part 4): with the page's own detail read, member access and the grant are the registry's, not the constant's. */}
+          <ProgramDimensions dims={programDimensions({ ...card, status: status || card.status, ...(detailRow(detail) ? { row: detailRow(detail) } : {}) }, { superAdmin, grantBadge })} testId="programs-header-dimensions" />
           {page.line
             ? <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400" data-testid="programs-header-line">{page.line}</p>
             : <Unread word={NOT_RECORDED} reason={page.lineReason} testId="programs-header-line" />}
@@ -86,6 +87,10 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
  * Until it answers, or if the read fails, the held mode's constant stands:
  * a failed page read is not a grant state.
  */
+/** D4873: the registry row a page's detail read answered, with its grant beside it; null while it reads or failed. */
+const detailRow = (detail) => (detail?.read?.status === 'ready' && detail.read.data?.program
+  ? { ...detail.read.data.program, grant: detail.read.data.grant } : null);
+
 function useGrantBadge(program, detail = null) {
   const [badge, setBadge] = useState(null);
   const shared = Boolean(detail);
