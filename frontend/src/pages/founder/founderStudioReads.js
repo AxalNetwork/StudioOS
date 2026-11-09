@@ -19,10 +19,17 @@
  *
  * The returned promise settles when everything has; callers that have moved on
  * (a project change, a retry, an unmount) drop what they are handed.
+ *
+ * D4619 (#4619): a supplied `project_id` that is not among the member's
+ * projects is never swapped for another venture. The venture read settles as
+ * `unavailableProject(id)` (a failed read that says so, so every dependent zone
+ * stays Unreadable rather than showing another venture's figures), and the
+ * lifecycle and scores are not requested. The first project is chosen only
+ * when no ID was supplied.
  */
 import { api, spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
-import { failedRead } from './founderStudioModel';
+import { failedRead, unavailableProject } from './founderStudioModel';
 
 const array = (value, key) => (Array.isArray(value) ? value : Array.isArray(value?.[key]) ? value[key] : []);
 
@@ -52,7 +59,14 @@ export function startFounderStudioReads({ requestedProjectId, onRead, client = a
       return;
     }
     const list = array(projects, 'projects');
-    const project = list.find((p) => Number(p?.id) === Number(requestedProjectId)) || list.find((p) => p?.id) || null;
+    const requested = requestedProjectId === null || requestedProjectId === undefined ? '' : String(requestedProjectId).trim();
+    const named = (p) => p?.id !== null && p?.id !== undefined && Number.isFinite(Number(requested)) && Number(p.id) === Number(requested);
+    const project = requested ? (list.find(named) || null) : (list.find((p) => p?.id) || null);
+    if (requested && !project) {
+      const unavailable = unavailableProject(requested);
+      onRead('project', unavailable); onRead('lifecycle', unavailable); onRead('scores', unavailable);
+      return;
+    }
     onRead('project', project);
     if (!project) { onRead('lifecycle', null); onRead('scores', null); return; }
     await Promise.all([

@@ -79,7 +79,7 @@ test('a refused Save draft keeps the words, announces it, and the retry saves; r
   const view = await mountZone(Zone, '/delivery/status-reports');
   try {
     await view.settle();
-    await view.press('Compose one');
+    await view.press('Draft status report'); // D4822: the canvas's action
     await view.type('Engagement', '1');
     await view.press('Compose from the record');
     await view.settle();
@@ -110,7 +110,7 @@ test('marking one report sent does not unmount or reset the open composer, and r
   const view = await mountZone(Zone, '/delivery/status-reports');
   try {
     await view.settle();
-    await view.press('Compose a report');
+    await view.press('Draft status report'); // D4822: the canvas's action
     await view.type('Engagement', '2');
     await view.press('Compose from the record');
     await view.settle();

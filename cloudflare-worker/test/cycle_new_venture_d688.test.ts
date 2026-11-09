@@ -224,7 +224,7 @@ async function growFixture() {
   for (const number of ['034', '119', '127', '132', '326']) db.exec(ddl(number));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
-  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('443'));
+  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055')); db.exec(file('443'));
   db.exec("INSERT INTO users(id, role, founder_id, name, email) VALUES (1, 'founder', 10, 'Test Founder', 'founder@example.test')");
   db.exec("INSERT INTO projects(id, uid, name, founder_id, company_id) VALUES (7, 'venture7', 'Sample Venture', 10, 70)");
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;

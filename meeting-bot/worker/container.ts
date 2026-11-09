@@ -1,22 +1,28 @@
 /** D886 B8: private container host. B1 alone owns consent, billing and status. */
 import type { Env } from '../../cloudflare-worker/src/types';
 import { runtimeHeaders, runtimeKey, runtimeOrigin, runtimeUid, type RuntimeStart } from '../../cloudflare-worker/src/services/meetingBotRuntime';
+import { HOST_COMMAND_MS, HOST_READY_MS, logRuntimeStage, runtimeVersion, type MeetingBotRuntimeStage, type RuntimeErrorCode } from '../../cloudflare-worker/src/services/meetingBotStartup';
 
 interface Lease { uid: string; deadline: number; funded: number; fingerprint: string; started: boolean; stopped: boolean; stopAt?:number }
 const reply = (status: number, code: string) => Response.json({code},{status});
 const integer = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
 const pause = () => new Promise(resolve=>setTimeout(resolve,100));
+/** D5153: a startup failure stops at a named boundary; the site Worker persists the code and stage, never a reason in words. */
+type Stopped = { code: RuntimeErrorCode; stage: MeetingBotRuntimeStage };
 /** #3708: a diagnostic's container lives at most this long. */
 export const DIAGNOSE_MS = 8 * 60_000;
 export class MeetingBotContainer implements DurableObject {
   private readonly state: DurableObjectState;
   private readonly env: Env;
+  /** D5153: set when this instance's container process ends, from `monitor()`; a boot that exits is not a cold start. */
+  private exited = false;
   constructor(state: DurableObjectState, env: Env) { this.state=state; this.env=env; }
   async fetch(request: Request): Promise<Response> {
     const result = await this.state.blockConcurrencyWhile(async(): Promise<Response | (() => Promise<Response>)>=>{
       try {
         const container=this.state.container;
-        if (!container) return reply(503,'container_unavailable');
+        // D5153: an older site Worker reads `container_unavailable`; a current one reads the code and stage too.
+        if (!container) return Response.json({ok:false,code:'container_unavailable',stage:'container_starting',runtime_version:null},{status:503});
         const path=new URL(request.url).pathname;
         // #3708: the deployed commit answers the owner's diagnostic (`--var` in meeting-bot-deploy.yml).
         if (request.method==='GET' && path==='/health') return Response.json({running:container.running,version:/^[a-f0-9]{7,40}$/.test(this.env.MEETING_BOT_VERSION ?? '') ? this.env.MEETING_BOT_VERSION : null});
@@ -97,33 +103,51 @@ export class MeetingBotContainer implements DurableObject {
           return lease.started && container.running ? reply(200,'already_started') : reply(409,'runtime_lost');
         }
         if (container.running) return reply(409,'runtime_busy');
+        // D5153: from here every answer is a startup fact: {ok, code, stage, runtime_version}.
+        const version=runtimeVersion(this.env.MEETING_BOT_VERSION),began=Date.now();
+        const mark=(stage: MeetingBotRuntimeStage, error: RuntimeErrorCode | null=null) => logRuntimeStage({run_uid:body.uid,platform:body.platform,
+          stage,runtime_version:version,elapsed_ms:Date.now()-began,result:error?'fail':'ok',error_code:error});
+        const failed=(f: Stopped) => { mark(f.stage,f.code); return Response.json({ok:false,code:f.code,stage:f.stage,runtime_version:version},{status:503}); };
+        mark('container_binding_resolved');
         const image=container.images.runtime;
-        if (!image) return reply(503,'image_unavailable');
+        if (!image) return failed({code:'image_unavailable',stage:'image_resolved'});
+        mark('image_resolved');
         const key=await runtimeKey(this.env.MEETING_BOT_SECRET ?? '',body.uid),origin=runtimeOrigin(this.env);
         lease={uid:body.uid,deadline:body.deadline_at,funded:body.budget_deadline_at,fingerprint,started:false,stopped:false};
         await this.state.storage.put('lease',lease);
-        try {
-          await this.boot(image,key,origin,lease);
-          // Boot/HTTP waits must run outside the critical section so Stop can
-          // persist its tombstone immediately, even while the process is cold.
-          return async () => {
-            try {
-              await this.command('/start',input,20_000);
-              return await this.state.blockConcurrencyWhile(async () => {
-                const current=await this.state.storage.get<Lease>('lease');
-                if (!current || current.stopped) return reply(409,'run_stopped');
-                current.started=true;await this.state.storage.put('lease',current);
-                return reply(202,'started');
-              });
-            } catch {
-              await this.state.blockConcurrencyWhile(async()=>{
-                const current=await this.state.storage.get<Lease>('lease');
-                if (current && !current.stopped) await this.destroy(current);
-              });
-              return reply(503,'runtime_unavailable');
-            }
+        try { await this.boot(image,key,origin,lease); }
+        catch { await this.destroy(lease); return failed({code:'container_start_failed',stage:'container_starting'}); }
+        mark('container_starting');
+        // Boot/HTTP waits must run outside the critical section so Stop can
+        // persist its tombstone immediately, even while the process is cold.
+        return async () => {
+          const abandon=async (f: Stopped) => {
+            const stopped=await this.state.blockConcurrencyWhile(async()=>{
+              const current=await this.state.storage.get<Lease>('lease');
+              if (current && !current.stopped) { await this.destroy(current); return false; }
+              return true;
+            });
+            // A Stop that landed during startup is the member's, not a startup failure.
+            return stopped ? reply(409,'run_stopped') : failed(f);
           };
-        } catch { await this.destroy(lease); return reply(503,'runtime_unavailable'); }
+          const unready=await this.ready(version);
+          if (unready) return abandon(unready);
+          mark('runtime_health_ready');
+          try { await this.command('/start',input,HOST_COMMAND_MS); }
+          catch (e) {
+            const message=e instanceof Error ? e.message : '';
+            return abandon(message==='command_refused' ? {code:'runtime_refused',stage:'runtime_command_accepted'}
+              : this.exited ? {code:'runtime_process_exited',stage:'runtime_command_accepted'}
+              : {code:'runtime_command_timeout',stage:'runtime_command_accepted'});
+          }
+          return await this.state.blockConcurrencyWhile(async () => {
+            const current=await this.state.storage.get<Lease>('lease');
+            if (!current || current.stopped) return reply(409,'run_stopped');
+            current.started=true;await this.state.storage.put('lease',current);
+            mark('runtime_command_accepted');
+            return Response.json({ok:true,code:'started',stage:'runtime_command_accepted',runtime_version:version,start_ms:Date.now()-began},{status:202});
+          });
+        };
       } catch { return reply(503,'runtime_unavailable'); }
     });
     return typeof result === 'function' ? result() : result;
@@ -131,9 +155,43 @@ export class MeetingBotContainer implements DurableObject {
   /** The run's and the diagnostic's one way to start the image: its own key, its callback origin, egress on. */
   private async boot(image: string, key: string, origin: string, lease: Lease) {
     this.state.container!.start({image,instance:'standard-2',enableInternet:true,
-      env:{MEETING_BOT_SECRET:key,MEETING_BOT_CALLBACK_ORIGIN:origin,PORT:'8080'}});
-    this.state.waitUntil(this.state.container!.monitor().catch(()=>{}));
+      // D5153: the runtime echoes its build on /healthz, so a host/image mismatch is caught before the command.
+      env:{MEETING_BOT_SECRET:key,MEETING_BOT_CALLBACK_ORIGIN:origin,PORT:'8080',...(runtimeVersion(this.env.MEETING_BOT_VERSION) ? {MEETING_BOT_VERSION:this.env.MEETING_BOT_VERSION!} : {})}});
+    this.exited=false;
+    this.state.waitUntil(this.state.container!.monitor().then(()=>{ this.exited=true; },()=>{ this.exited=true; }));
     await this.arm(lease);
+  }
+  /**
+   * D5153: before the signed command, the runtime must answer `/healthz` with
+   * `ready: true` and, when it reports one, the host's own version. Never sends
+   * the meeting link. Port silence until the budget ends is `runtime_no_answer`;
+   * a process that ended is `runtime_process_exited`; an answer that is not
+   * ready (or a different build) is `runtime_health_failed`.
+   */
+  private async ready(expected: string | null): Promise<Stopped | null> {
+    const port=this.state.container!.getTcpPort(8080),until=Date.now()+HOST_READY_MS;
+    let answered=false;
+    do {
+      if ((await this.state.storage.get<Lease>('lease'))?.stopped) return {code:'runtime_refused',stage:'runtime_port_waiting'};
+      if (this.exited) return {code:'runtime_process_exited',stage:'runtime_port_waiting'};
+      try {
+        const response=await port.fetch(new Request('http://runtime.internal/healthz',{method:'GET',
+          signal:AbortSignal.timeout(Math.max(1,Math.min(1500,until-Date.now())))}));
+        answered=true;
+        const health=await response.json().catch(()=>null) as {ready?:unknown;version?:unknown}|null;
+        if (response.ok && health?.ready===true) {
+          const reported=runtimeVersion(health.version);
+          // An older image reports no version; only a reported different build fails.
+          return expected && reported && reported!==expected ? {code:'runtime_health_failed',stage:'runtime_health_ready'} : null;
+        }
+        // `ready: false` is the runtime's own final answer (an unpublished notice), not a cold start.
+        if (response.ok && health?.ready===false) return {code:'runtime_health_failed',stage:'runtime_health_ready'};
+      } catch { /* cold: the port is not open yet */ }
+      if (Date.now()>=until) break;
+      await pause();
+    } while (Date.now()<until);
+    if (this.exited) return {code:'runtime_process_exited',stage:'runtime_port_waiting'};
+    return answered ? {code:'runtime_health_failed',stage:'runtime_health_ready'} : {code:'runtime_no_answer',stage:'runtime_port_waiting'};
   }
   private async command(path: string, body: {uid:string}, timeout: number) {
     const port=this.state.container!.getTcpPort(8080),raw=JSON.stringify(body);

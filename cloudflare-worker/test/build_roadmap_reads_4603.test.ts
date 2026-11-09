@@ -226,10 +226,13 @@ test('6. #5067\'s two record-page ceilings are unchanged, each one named constan
       return await r.json() as any;
     };
     const one = await record(1), two = await record(2);
-    const feedback = (b: any) => [...b.main, ...b.side].find((s: any) => s.key === 'feedback').rows.map((r: any) => r.a);
-    // 21 rows: the newest 20 (21 down to 2); 20 rows: all 20.
-    assert.deepEqual(feedback(one), Array.from({ length: 20 }, (_, i) => `“Synthetic note ${21 - i}”`));
-    assert.equal(feedback(two).length, 20);
+    const feedbackRows = (b: any) => [...b.main, ...b.side].find((s: any) => s.key === 'feedback').rows;
+    const quoted = (b: any) => feedbackRows(b).filter((r: any) => r.a !== 'View all feedback').map((r: any) => r.a);
+    // 21 notes: the newest 20 (21 down to 2), then the view-all row; 20 notes: all 20, and no view-all row.
+    assert.deepEqual(quoted(one), Array.from({ length: 20 }, (_, i) => `“Synthetic note ${21 - i}”`));
+    assert.equal(feedbackRows(one).at(-1).a, 'View all feedback');
+    assert.equal(quoted(two).length, 20);
+    assert.ok(!feedbackRows(two).some((r: any) => r.a === 'View all feedback'));
     const choices = (b: any) => b.actions.find((a: any) => a.key === 'add-dependency').form.fields.find((f: any) => f.key === 'waits_on_id').options;
     // 201 others: the first 200 in board order (items 2–201); item 202 is not offered.
     assert.equal(choices(one).length, 200);

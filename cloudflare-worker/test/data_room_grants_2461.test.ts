@@ -169,3 +169,41 @@ test('2461: nonowners cannot grant or read founder grant attribution', async () 
   assert.equal((await call(db,id,'GET','/p-room')).status,404,String(id));
  }
 });
+
+// D4631 part 2 (#4631): the data room reads the venture's NDA by the shared rule in services/dealAccess.ts, the one
+// the deal's documents and sections read. Only an `active` NDA in its term, with an active account of THIS venture's
+// founder as party A, opens an `nda` file; every other status, a lapsed term, an unreadable date, a deactivated
+// founder account or another venture's founder does not. The listing, a download and the founder's grant row agree.
+async function opensNda(db: any, who: number) {
+  const download = (await call(db, who, 'POST', '/shared/p-room/files/f-nda/download')).status;
+  const listed = (await call(db, who, 'GET', '/shared/p-room')).body.files.some((f: any) => f.uid === 'f-nda');
+  const row = (await call(db, FOUNDER, 'GET', '/p-room')).body.grants.find((g: any) => g.investor_email === 'sig@example.com');
+  return [download, listed, row.nda_signed];
+}
+test('D4631: only an active NDA in its term with this venture\'s active founder opens an nda file; listing, download and the grant row agree', async () => {
+  const db = freshDb();
+  assert.deepEqual(await opensNda(db, SIGNED), [200, true, true], 'the fixture\'s active NDA opens it');
+  // Mutation checked: the shared rule without `n.status = 'active'` lets the four statuses below through, and this fails.
+  for (const status of ['pending', 'partially_signed', 'expired', 'revoked']) {
+    db.prepare('UPDATE pairwise_ndas SET status = ?, valid_until = NULL WHERE party_a_user_id = ? AND party_b_user_id = ?').run(status, FOUNDER, SIGNED);
+    assert.deepEqual(await opensNda(db, SIGNED), [403, false, false], status);
+  }
+  db.prepare("UPDATE pairwise_ndas SET status = 'active', valid_until = '2099-01-01' WHERE party_b_user_id = ?").run(SIGNED);
+  assert.deepEqual(await opensNda(db, SIGNED), [200, true, true], 'active, inside its term');
+  db.prepare("UPDATE pairwise_ndas SET valid_until = 'not a date' WHERE party_b_user_id = ?").run(SIGNED);
+  assert.deepEqual(await opensNda(db, SIGNED), [403, false, false], 'a term that cannot be read is not in force');
+  db.prepare('UPDATE pairwise_ndas SET valid_until = NULL WHERE party_b_user_id = ?').run(SIGNED);
+  // Mutation checked: the shared rule without `COALESCE(owner.is_active, 1) = 1` keeps this open, and this fails.
+  db.prepare('UPDATE users SET is_active = 0 WHERE id = ?').run(FOUNDER);
+  const closed = (await call(db, SIGNED, 'POST', '/shared/p-room/files/f-nda/download')).status;
+  db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(FOUNDER);
+  assert.equal(closed, 403, 'party A is no longer an active account of the venture');
+  // Another venture's founder is not this venture's party A.
+  db.prepare('DELETE FROM pairwise_ndas').run();
+  db.prepare("INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status) VALUES (?, ?, 'active')").run(RIVAL, SIGNED);
+  assert.deepEqual(await opensNda(db, SIGNED), [403, false, false], 'a rival founder\'s NDA');
+  // A second active account of the same venture's founder is the venture's party A, as the deal's documents read it.
+  db.prepare("INSERT INTO users (id, role, founder_id, name, email) VALUES (9, 'founder', 100, 'Cofounder', 'co@example.com')").run();
+  db.prepare("INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status) VALUES (9, ?, 'active')").run(SIGNED);
+  assert.deepEqual(await opensNda(db, SIGNED), [200, true, true], 'the venture\'s other founder account');
+});

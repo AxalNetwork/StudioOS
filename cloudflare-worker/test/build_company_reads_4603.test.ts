@@ -53,9 +53,9 @@ test('1. the facts are what the rows give, and the overview index says the earli
     const want = earliestOpen(rows);
     assert.ok(want && want > day(-400), `the earliest open filing is ${want}`);
     assert.equal(body.facts.next_filing_due, want);
-    // The three Lab steps and three of the four open obligations are listed; the filed obligation is not.
+    // The three Lab steps and all four open obligations are listed (D5066 lifted the obligations cap); the filed obligation is not.
     assert.equal(rows.filter((r) => String(r.id).startsWith('lab-')).length, 3);
-    assert.equal(rows.filter((r) => String(r.id).startsWith('obligation-')).length, 3);
+    assert.equal(rows.filter((r) => String(r.id).startsWith('obligation-')).length, 4);
     const o = await overview(h);
     assert.equal(indexRow(o.body).detail, `Next filing ${dayMonth(want)}`);
     assert.equal(indexRow(o.body).value, '');

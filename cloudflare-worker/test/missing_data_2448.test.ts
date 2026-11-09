@@ -121,11 +121,13 @@ test('2448: migration 558 preserves rows, defaults, indexes and deleted ID high-
  loadSchema(db);
  db.exec("INSERT INTO users(id,name,email,role) VALUES(1,'Synthetic','migration@example.test','admin'); INSERT INTO projects(id,name) VALUES(1,'Synthetic'); INSERT INTO readiness_items(id,project_id,item_key,label) VALUES(1,1,'narrative','Narrative'); INSERT INTO readiness_scores(id,item_id,project_id,score,evidence,source,scored_by,scored_at,missing) VALUES(41,1,1,0,'stated','computed',1,'2026-09-02','Synthetic reason'),(900,1,1,10,'measured','manual',1,'2026-09-03',NULL); DELETE FROM readiness_scores WHERE id=900;");
  if(empty) db.exec('DELETE FROM readiness_scores');
- const before=db.prepare('SELECT * FROM readiness_scores').all();
- const columns=db.prepare('PRAGMA table_info(readiness_scores)').all() as any[];
+ // D5071 added input_hash after 558; this test replays 558 over the final table, which rebuilds without it, so it is set aside.
+ const noHash=(r:any)=>{const {input_hash:_h,...rest}=r;return rest;};
+ const before=db.prepare('SELECT * FROM readiness_scores').all().map(noHash);
+ const columns=(db.prepare('PRAGMA table_info(readiness_scores)').all() as any[]).filter(c=>c.name!=='input_hash');
  const indexes=db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all();
  db.exec(readFileSync(new URL('../sql/migrations/558_readiness_scores_nullable_score.sql',import.meta.url),'utf8'));
- assert.deepEqual(db.prepare('SELECT * FROM readiness_scores').all(),before);
+ assert.deepEqual(db.prepare('SELECT * FROM readiness_scores').all().map(noHash),before);
  assert.deepEqual(db.prepare('PRAGMA table_info(readiness_scores)').all().map(c=>({...c})),columns.map(c=>({...c,notnull:['score','evidence'].includes(c.name)?0:c.notnull})));
  assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all(),indexes);
  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,missing) VALUES(1,1,NULL,NULL,'Not enough recorded')");
