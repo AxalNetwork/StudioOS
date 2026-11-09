@@ -7,10 +7,10 @@ import { Hono } from 'hono';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, nowIso } from './_t13t14t15_helpers';
 import { pushLicenceToBranch } from '../services/licencePush';
-import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_KEYS, parseExpectedRevision, readLicenceTerms, termsDiff, validateCoreTermsBody, validateTermsBody, type LicenceTermsRecord } from '../services/licenceTerms';
+import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_KEYS, coreTermsChangedBy, parseExpectedRevision, readLicenceTerms, scheduleChangedBy, termsDiff, validateCoreTermsBody, validateTermsBody, type LicenceTermsRecord } from '../services/licenceTerms';
 import { SEAT_TYPES, ISO2, intOrNull, byUid, logEvent, pushOutcome, seatsOf, countriesOf, type LicenceRow } from '../services/licenceLedgerCore';
 import type { Env } from '../types';
-import type { LicenceSeatsResult, LicenceTermsResult, LicenceTerritoriesResult } from '../services/licenceContracts';
+import type { LicenceSeatsResult, LicenceTermsConflict, LicenceTermsResult, LicenceTerritoriesResult } from '../services/licenceContracts';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -159,23 +159,28 @@ r.patch('/:uid/terms', async (c) => {
       merged.starts_on, merged.renews_on, nowIso(), licence.id, rev.value).run();
     if (Number(res?.meta?.changes ?? 0) !== 1) {
       const now = await byUid(c.env, licence.uid);
+      const currentRevision = now ? Number((now as any).terms_revision ?? 0) : null;
       return c.json({
         error: 'terms_conflict',
         message: 'These terms changed since you opened them, so nothing was saved. Reload them and apply your change again.',
-        current_revision: now ? Number((now as any).terms_revision ?? 0) : null,
+        current_revision: currentRevision,
         current: now ? coreOf(now) : null,
-      }, 409);
+        // D4819: who made the write that holds the revision, when its event says so.
+        ...(await coreTermsChangedBy(c.env, licence.id, currentRevision)),
+      } satisfies LicenceTermsConflict, 409);
     }
     const beforeTerms = coreOf(licence);
     const after = (await byUid(c.env, licence.uid)) ?? licence;
     const terms = coreOf(after);
     const changed = Object.fromEntries(keys.map((k) => [k, { before: beforeTerms[k], after: terms[k] }]));
+    const termsRevision = Number((after as any).terms_revision ?? 0);
     // D272 — this changes what the branch's copy holds, so it pushes like
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
-    await logEvent(c.env, licence.id, 'terms_changed', admin.id, { reason, changed }, reason,
+    // D4819: the event names the revision it produced, so a later stale write's 409 can say who took it.
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id, { reason, changed, terms_revision: termsRevision }, reason,
       { before: beforeTerms, after: terms }, pushOutcome(pushed));
-    return c.json({ ok: true, ...terms, terms_revision: Number((after as any).terms_revision ?? 0), changed, pushed } satisfies LicenceTermsResult);
+    return c.json({ ok: true, ...terms, terms_revision: termsRevision, changed, pushed } satisfies LicenceTermsResult);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -269,12 +274,14 @@ r.put('/:uid/terms', async (c) => {
     // THE REVISION THE CALLER READ MUST BE THE ONE STORED (D4694). A licence
     // with no schedule row is revision 0. This is the early, cheap refusal; the
     // write below names the revision again and is the one that decides.
-    const conflict = (now: LicenceTermsRecord | null) => c.json({
+    const conflict = async (now: LicenceTermsRecord | null) => c.json({
       error: 'terms_conflict',
       message: 'This licence\'s terms changed since you opened them, so nothing was saved. Reload them and apply your change again.',
       current_revision: now?.revision ?? 0,
       current: now ? { terms: now.terms, sections: now.sections } : null,
-    }, 409);
+      // D4819: the row's last writer and time, written in the statement that set its revision.
+      ...(now ? await scheduleChangedBy(c.env, licence.uid) : { changed_by: null, changed_at: null }),
+    } satisfies LicenceTermsConflict, 409);
     if ((before?.revision ?? 0) !== rev.value) return conflict(before);
     const after: LicenceTermsRecord = {
       terms: { ...(before?.terms ?? {}), ...v.terms },

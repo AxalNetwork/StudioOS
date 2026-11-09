@@ -43,11 +43,13 @@ import {
   LEDGER_VIEWS, PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, noteIsStale,
   payoutWhen, periodWindow, quarterKey, quarterOf, sharePct, viewLabels,
 } from '../src/pages/advisor/practice/earningsLedger.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/EarningsZone.jsx');
 const P = codeOnly(PAGE);
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 const MONEY = read('cloudflare-worker/src/services/advisorMoney.ts');
 const API = read('frontend/src/lib/api.js');
 const D4 = read('design/canvases/backlog/Detail Layer Canvas II.dc.html');

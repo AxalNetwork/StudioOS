@@ -13,10 +13,11 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CEILING_ENFORCEMENT, CeilingEditor, ceilingFacts } from '../src/pages/hq/RevenuePage.jsx';
 import { codeOnly } from './_codeOnly.mjs';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const root = new URL('../../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
-const PAGE = codeOnly(read('frontend/src/pages/hq/RevenuePage.jsx'));
+const PAGE = codeOnly(revenuePageSource());
 const NOW = '2026-Q4';
 const row = (o = {}) => ({
   licence_uid: 'lic_fr', period: NOW, ceiling_cents: 500000, currency: 'EUR', issued_cents: null, issued_available: false,
@@ -100,7 +101,8 @@ test('the list shows these facts and works no remaining out of the ceiling itsel
   assert.match(PAGE, /facts\.pushed\.label/);
   assert.match(PAGE, /facts\.enforced\.label/);
   assert.match(PAGE, /facts\.issued\.known \?/);
-  assert.match(PAGE, /facts\.remaining\.known \? money\(x\.remaining_cents, x\.currency\) : <Unrecorded \/>/);
+  // D5039: the absent figures are drawn with the cockpit's value states (a word and a shape), not the bare italic.
+  assert.match(PAGE, /facts\.remaining\.known \? money\(x\.remaining_cents, x\.currency\) : <StateMark state="not_recorded" \/>/);
   assert.doesNotMatch(PAGE, /ceiling_cents\s*-\s*[\w.]*issued/, 'a remaining must come from the worker, only when an issued figure exists');
   assert.doesNotMatch(PAGE, /issued_cents\s*\?\?\s*0|issued_cents\s*\|\|\s*0/, 'an absent issued figure is never coerced to zero');
 });

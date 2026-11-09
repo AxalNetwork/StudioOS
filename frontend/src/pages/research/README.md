@@ -6,6 +6,9 @@ zones: one record each, reached from a zone's list.
 | File | What it is |
 | --- | --- |
 | `ResearchOverviewPanel.jsx` | The `/research` overview (Research · Main canvas, D536/D546), read from `GET /api/research/overview`. Not a zone: mounted inside the founder desk, the investor workspace and above the advisor and partner board. Each section is ok, Not recorded or Unreadable on its own; a missing count is never 0. |
+| `ResearchHome.jsx` | D3701 RS-01: the Overview cards under the founder desk's question. Continue where you left off (the newest Ask exchange), Recent research projects and Saved briefs (Not recorded, because no store exists), Recently added evidence (the library with both states) and Tracking (the fund list). Each card reads, fails and retries on its own. |
+| `researchHome.js` | The readings `ResearchHome.jsx` draws: loading, unreadable, not recorded or ok per card, the three examples, and dates that read Not recorded rather than today. |
+| `researchStates.js` | D3701 (Research v2): the words, tones and glyphs for a document's index state, whether Ask may cite it (read only from the Worker's `in_ask`), a Failed or Unsupported row's reason and next step, and Ask's seven response states. Unknown is Not recorded. |
 | `AskZone.jsx` | Ask over owned documents, with saved/discarded disposition, use notes and owned citation links (D549). |
 | `LibraryZone.jsx` | Owned and read-only client documents; kind/source-year editing and owned collections (D549). |
 | `MarketZone.jsx` | Markets. |

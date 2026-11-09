@@ -2606,3 +2606,12 @@ Five more board sets from the owner's Claude Design canvas "Axal VC – platform
 - **`Cohorts v2 Page.dc.html`**, **`Cohorts v2 · Boards.dc.html`**: boards CH01 to CH19 (D4813).
 
 None is built yet. Companies, people, clients and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Company settings, Skill library and Portfolio v2 (#4966, #4956, #4817)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them:
+- **`Company Settings v2 Page.dc.html`**, **`Company Settings v2 · Boards.dc.html`**: boards CS-00 to CS-16, drawn 2026-11-08 (D4966).
+- **`Skill Library v2 Page.dc.html`**, **`Skill Library v2 · Boards.dc.html`**: boards SK-01 to SK-16 and specs SK-A to SK-D, drawn 2026-11-08 (D4956). It extends `Agents Skills v2` (D4116) rather than replacing it.
+- **`Portfolio v2 Page.dc.html`**, **`Portfolio v2 · Boards.dc.html`**: boards PF-01 to PF-12, drawn 2026-11-07 (D4817). The shell follows #3704: Portfolio opens from the Account menu.
+
+None is built yet. Companies, people, skills and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.

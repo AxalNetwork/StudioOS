@@ -31,7 +31,8 @@ export function useWaitingProposals(enabled) {
     if (!enabled) return undefined;
     let live = true;
     programProposalsApi.queue({ status: 'sent' }).then(
-      (d) => { if (live) setRead({ state: 'ready', count: waitingCount(d) }); },
+      // D4873: the rows too, for the overview's oldest age and latest studio.
+      (d) => { if (live) setRead({ state: 'ready', count: waitingCount(d), rows: Array.isArray(d?.rows) ? d.rows : [], total: Number(d?.total) }); },
       () => { if (live) setRead({ state: 'unreadable', count: null }); },
     );
     return () => { live = false; };

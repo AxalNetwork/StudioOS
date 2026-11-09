@@ -12,7 +12,13 @@ import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
 import { railPressHeaders } from '../../lib/railPage.js';
-import { RETRIEVAL_UNAVAILABLE, isAnswerable } from './askOutcome.js';
+import { RETRIEVAL_UNAVAILABLE } from './askOutcome.js';
+import {
+  ASK_STATES, CITATION_AVAILABILITY, HISTORY_TABS, answerWithCitations, answerabilityOf, askStateOf,
+  citationAvailability, indexStateOf,
+} from './researchStates.js';
+
+const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -142,6 +148,17 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const [thread, setThread] = useState({ loading: true, error: '', payload: null });
   const [pricing, setPricing] = useState(null);
   const [savingUid, setSavingUid] = useState('');
+  const [copiedUid, setCopiedUid] = useState('');
+  // D3701 RS-07: the answer and its numbered sources, as recorded. Nothing is
+  // sent anywhere; a browser without clipboard access says so.
+  const copyAnswer = async (t) => {
+    try {
+      await navigator.clipboard.writeText(answerWithCitations(t));
+      setCopiedUid(t.uid);
+    } catch {
+      setError('This browser did not allow copying. Select the answer and copy it instead.');
+    }
+  };
 
   const loadLib = useCallback(async () => {
     setLib((c) => ({ ...c, loading: true, error: '' }));
@@ -232,6 +249,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const payload = lib.payload;
   const indexed = payload?.indexed ?? 0;
   const items = Array.isArray(payload?.items) ? payload.items : [];
+  // D3701 RS-07C: only a library read that succeeded can show that a cited
+  // document is gone. Null while it loads or when it failed.
+  const libraryUids = useMemo(() => (payload ? new Set(items.map((d) => d.uid)) : null), [payload, items]);
 
   const all = useMemo(() => thread.payload?.items || [], [thread.payload]);
   const visible = useMemo(() => (NARROW[view] ? all.filter(NARROW[view]) : all), [all, view]);
@@ -247,32 +267,27 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const ready = Boolean(payload && thread.payload);
   const ctx = { indexed, docs: items.length, totals, rows: all };
 
-  const libRows = items.map((d) => ({
-    key: d.uid,
-    rowClass: isAnswerable(d.index_state) ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
-    cells: [
-      { text: d.title || '', nr: !d.title },
-      { text: d.kind || '', nr: !d.kind },
-      // `Added`, not the artboard's own column name for this slot. It means
-      // when the file arrived here, which is what `created_at` holds — the same
-      // relabel `LibraryZone` made for the same reason.
-      { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
-      d.index_state === 'indexed'
-        ? { pill: 'Indexed', pillTone: 'ok' }
-        : d.index_state === 'partial'
-          ? { pill: 'Partly indexed', pillTone: 'warn' }
-          : { pill: d.index_state || 'Not indexed', pillTone: 'warn' },
-      // The question this zone exists to answer, per row. `index_state`, not
-      // `chunk_count`: a document that indexed once and later failed a re-index
-      // keeps its old count, and the failure path updates the state and leaves
-      // the number alone.
-      d.index_state === 'indexed'
-        ? { text: 'Answerable in Ask' }
-        : d.index_state === 'partial'
-          ? { text: d.index_note || 'Answerable in Ask from the passages that were indexed' }
-          : { text: 'Not answerable until indexed' },
-    ],
-  }));
+  const libRows = items.map((d) => {
+    const ix = indexStateOf(d);
+    const an = answerabilityOf(d);
+    return {
+      key: d.uid,
+      cells: [
+        { text: d.title || '', nr: !d.title },
+        { text: d.kind || '', nr: !d.kind },
+        // `Added`, not the artboard's own column name for this slot. It means
+        // when the file arrived here, which is what `created_at` holds — the same
+        // relabel `LibraryZone` made for the same reason.
+        { text: String(d.created_at || '').slice(0, 10), nr: !d.created_at },
+        { pill: mark(ix), pillTone: ix.tone },
+        // The question this zone exists to answer, per row. `in_ask` and
+        // `index_state`, never `chunk_count`: a document that indexed once and
+        // later failed a re-index keeps its old count, and the failure path
+        // updates the state and leaves the number alone (D3701, `answerabilityOf`).
+        { pill: mark(an), pillTone: an.tone, sub: an.why },
+      ],
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -285,8 +300,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         />
       )}
       <ZoneHeading
-        title="Ask your library"
-        blurb="Answers drawn only from documents you have added, with the passage each answer used."
+        title="Ask Eadwyn"
+        blurb="Ask questions grounded in your research evidence. Eadwyn answers only from documents you have added, with the passage each answer used."
         action={payload ? (
           <Pill tone={indexed > 0 ? 'ok' : 'warn'}>
             {indexed} document{indexed === 1 ? '' : 's'} answerable
@@ -340,7 +355,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       >
         <Card className="p-4">
           <form onSubmit={ask}>
+            <label htmlFor="ask-question" className="mb-1.5 block text-[12.5px] font-bold text-axal-ink dark:text-gray-100">What do you want to know?</label>
             <textarea
+              id="ask-question"
               rows={3}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -372,6 +389,20 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             citations under it and its own charge on the right — which is the
             artboard's layout and, more to the point, the only layout in which a
             reader can see that the unanswered question cost nothing. */}
+        {/* D3701 RS-07: the history tabs. They set the same view the toolbar's
+            chips set, so the two cannot disagree. */}
+        <div role="tablist" aria-label="History" className="flex flex-wrap gap-1.5" data-testid="ask-history-tabs">
+          {HISTORY_TABS.map((tab) => (
+            <button key={tab.view} type="button" role="tab" aria-selected={view === tab.view}
+              data-testid={`ask-tab-${tab.view}`} onClick={() => setView(tab.view)}
+              className={`min-h-[32px] rounded-[8px] border px-3 text-[12px] font-bold ${view === tab.view
+                ? 'border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200'
+                : 'border-axal-hairline text-gray-700 dark:border-gray-700 dark:text-gray-300'}`}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {thread.error ? (
           <Card className="border-dashed p-4">
             <Eyebrow>Session</Eyebrow>
@@ -390,11 +421,25 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         ) : null}
 
         <div className="grid gap-2.5">
-          {visible.map((t) => (
-            <Card
-              key={t.uid}
-              className={`p-3.5 ${t.reason === 'answered' ? '' : 'bg-amber-50/40 dark:bg-amber-950/20'}`}
-            >
+          {visible.map((t) => {
+            // D3701 RS-07C: each exchange names its own response state; none is
+            // folded into another. Tinting every non-answer amber said they were
+            // all one kind of warning, and amber is the canvas's Insufficient
+            // evidence colour, a state the Worker does not record.
+            const st = ASK_STATES[askStateOf(t, { libraryUids })];
+            return (
+            <Card key={t.uid} className="p-3.5" data-testid={`ask-exchange-${t.uid}`}>
+              {st ? (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Pill tone={st.tone} className="!text-[10px]" data-testid={`ask-state-${t.uid}`}>{mark(st)}</Pill>
+                  {st.action === 'library' ? (
+                    <Link to="/research/library" className="text-[11px] font-bold text-violet-700 underline dark:text-violet-300">{st.actionLabel}</Link>
+                  ) : null}
+                  {askStateOf(t, { libraryUids }) === 'source_unavailable' ? (
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400">{st.body}</span>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-baseline gap-2.5">
                 <Eyebrow className="!text-[9px] text-axal-amber-deep dark:text-amber-300">Asked</Eyebrow>
                 <span className="min-w-0 flex-1 text-[12.5px] font-bold tracking-tight text-axal-ink dark:text-gray-100">
@@ -414,18 +459,43 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               </p>
 
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                {(t.citations || []).map((ct, i) => (
-                  <Pill key={`${ct.title}-${ct.chunk}-${i}`} tone="cite" className="!text-[9.5px]">
-                    {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{ct.n ? `[${ct.n}] ` : ''}{ct.title}</Link> : <>{ct.n ? `[${ct.n}] ` : ''}{ct.title}</>}
-                    {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
-                  </Pill>
-                ))}
+                {(t.citations || []).length ? (
+                  // D3701 RS-07: Sources used, each with its exact passage and
+                  // whether its document is still in the library.
+                  <div className="w-full" data-testid={`ask-sources-${t.uid}`}>
+                    <Eyebrow className="!text-[9px]">Sources used · {(t.citations || []).length}</Eyebrow>
+                    <ol className="mt-1.5 space-y-1.5">
+                      {(t.citations || []).map((ct, i) => {
+                        const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
+                        return (
+                          <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Pill tone="cite" className="!text-[9.5px]">
+                                {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{`[${ct.n || i + 1}] `}{ct.title}</Link> : <>{`[${ct.n || i + 1}] `}{ct.title}</>}
+                                {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
+                              </Pill>
+                              {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
+                              {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
+                            </div>
+                            {ct.passage ? (
+                              <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
+                                {ct.passage}{ct.passage_truncated ? '…' : ''}
+                              </blockquote>
+                            ) : (
+                              <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                ) : null}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
-                {t.reason === 'retrieval_unavailable' ? (
+                {st?.action === 'retry' ? (
                   <button type="button" data-testid={`button-ask-retry-${t.uid}`} disabled={busy}
                     onClick={() => setQuestion(t.question)}
                     className="whitespace-nowrap rounded-[6px] border border-gray-200 px-2 py-0.5 text-[10px] font-bold text-gray-700 hover:border-gray-300 disabled:opacity-60 dark:border-gray-700 dark:text-gray-300">
-                    Ask again
+                    {t.reason === 'retrieval_unavailable' ? 'Ask again' : st.actionLabel}
                   </button>
                 ) : null}
                 <button
@@ -436,6 +506,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                 >
                   {t.saved ? 'Kept' : 'Keep'}
                 </button>
+                {t.reason === 'answered' ? (
+                  <button type="button" data-testid={`button-ask-copy-${t.uid}`}
+                    onClick={() => copyAnswer(t)}
+                    className="whitespace-nowrap text-[10px] font-bold text-violet-700 underline dark:text-violet-300">
+                    {copiedUid === t.uid ? 'Copied' : 'Copy with citations'}
+                  </button>
+                ) : null}
               </div>
 
               <AnswerDisposition item={t} busy={savingUid === t.uid} onUpdate={(changes) => updateAnswer(t, changes)} />
@@ -453,12 +530,21 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                 </p>
               ) : null}
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {/* THE ARTBOARD'S INSTRUMENT CARD. Every column is a field
             `api.research.documents()` already returns and this page has already
             fetched for its empty state — nothing new is called to draw it. */}
+        {/* D3701 RS-07: Evidence scope, collapsed. What Ask can reach is a
+            detail a reader opens, not the page's subject. */}
+        <details className="rounded-[12px] border border-axal-hairline p-3 dark:border-gray-700" data-testid="ask-evidence-scope">
+          <summary className="cursor-pointer">
+            <span className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Evidence scope</span>
+            <span className="block text-[11.5px] text-gray-600 dark:text-gray-400">Ask only uses documents in your Library that you’re allowed to use.</span>
+          </summary>
+          <div className="mt-3">
         {items.length > 0 && (
           <Instrument
             testid="ask-reach"
@@ -470,6 +556,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             note={`Ask reaches exactly the ${indexed} indexed ${indexed === 1 ? 'row' : 'rows'}. A document added but not yet indexed answers nothing, however relevant it looks on the shelf — which is why a question about it comes back empty rather than reaching for it.`}
           />
         )}
+          </div>
+        </details>
 
         <ZoneDraft
           surface="research/ask"

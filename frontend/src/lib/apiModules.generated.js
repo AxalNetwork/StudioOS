@@ -185,6 +185,7 @@ export * from './api/learningPlan.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceFeeInvoices.js';
 export * from './api/licenceLedger.js';
+export * from './api/licencePricing.js';
 export * from './api/licencePrograms.js';
 export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';

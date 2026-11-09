@@ -158,7 +158,11 @@ r.post('/:uid/renew', async (c) => {
       ? c.json({ error: 'bad_transition', message: 'This licence can no longer be renewed.' }, 409)
       : c.json(staleBody(moved.current), 409);
     const pushed = await pushLicenceToBranch(c.env, licence.id);
-    await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next }, null,
+    // D4819: the `terms_revision` this renewal produced, so a terms form it made stale can say who moved it.
+    // The CAS above held `revision`, which every terms write bumps too, so the read row's terms_revision is
+    // the one this statement incremented.
+    const termsRevision = Number((licence as any).terms_revision ?? 0) + 1;
+    await logEvent(c.env, licence.id, 'renewed', admin.id, { renews_on: next, terms_revision: termsRevision }, null,
       { before: { renews_on: licence.renews_on ?? null }, after: { renews_on: next } }, pushOutcome(pushed));
     return c.json({ ok: true, renews_on: next, pushed } satisfies LicenceRenewResult);
   } catch (e) { return mapError(c, e); }

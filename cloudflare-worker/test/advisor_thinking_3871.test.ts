@@ -8,7 +8,9 @@ import advisors from '../src/routes/advisors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
 const SECRET = 'fixture'.repeat(12);
-const routeUrl = new URL('../src/routes/advisors.ts', import.meta.url);
+// #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_cohorts.ts,
+// so the mutation rebuilds that module and the full router stays the baseline.
+const routeUrl = new URL('../src/routes/advisors_cohorts.ts', import.meta.url);
 async function fixture(t: any) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   t.after(() => db.close());

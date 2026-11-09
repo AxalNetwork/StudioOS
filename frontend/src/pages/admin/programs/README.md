@@ -58,6 +58,10 @@ page in a child component inside it:
   proposal's review before Decide. The queue's Review leads here; Decide opens
   from it.
 - `genericProgramModel.js` — D4808: both pages' words and rows. Pure.
+- `overviewModel.js` — D4873 (#4873, part 2): the catalogue's operating console.
+  Pure. The four headline cards (they reconcile with the queues; an unread
+  queue makes a headline "N+" and Incomplete), Needs attention, Eadwyn's next
+  steps, and the rows grouped by category.
 
 The pieces they draw with:
 

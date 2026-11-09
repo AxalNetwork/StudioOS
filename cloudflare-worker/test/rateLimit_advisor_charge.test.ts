@@ -121,9 +121,14 @@ test('the route the bucket names is the route that exists', () => {
   // The pattern and the handler are written in different files, so a rename of
   // either leaves a bucket that matches nothing — a limiter that is present,
   // green, and protecting a path no request takes.
-  const routes = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_money.ts,
+  // which advisors.ts mounts at '/'.
+  const routes = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors_money.ts'), 'utf8');
   assert.match(routes, /advisors\.post\('\/bookings\/:id\/pay'/,
     'the charge route was renamed or removed and this bucket now caps nothing');
+  const core = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
+  assert.ok(core.includes("advisors.route('/', advisorMoneyRoutes)"),
+    'advisors.ts no longer mounts the money routes, so the charge route is unreachable');
   const index = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/index.ts'), 'utf8');
   for (const mount of ['/api/advisors', '/api/mentors']) {
     assert.ok(

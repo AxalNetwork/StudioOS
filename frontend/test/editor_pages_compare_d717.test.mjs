@@ -190,10 +190,10 @@ test('pdf.js: only PdfPages names it, never statically, and no text, annotation 
 
 test('pdf.js: pinned exactly in package.json and the lock, and the installed legacy bundles hold no eval path', () => {
   const pkg = JSON.parse(src('package.json'));
-  assert.equal(pkg.dependencies['pdfjs-dist'], '6.4.299');
+  assert.equal(pkg.dependencies['pdfjs-dist'], '6.5.438');
   const lock = JSON.parse(src('package-lock.json'));
-  assert.equal(lock.packages['node_modules/pdfjs-dist'].version, '6.4.299');
-  assert.equal(lock.packages[''].dependencies['pdfjs-dist'], '6.4.299');
+  assert.equal(lock.packages['node_modules/pdfjs-dist'].version, '6.5.438');
+  assert.equal(lock.packages[''].dependencies['pdfjs-dist'], '6.5.438');
   for (const file of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
     const code = src(`node_modules/pdfjs-dist/legacy/build/${file}`);
     assert.ok(!code.includes('new Function('), `${file}: new Function`);

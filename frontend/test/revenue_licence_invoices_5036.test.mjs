@@ -93,5 +93,5 @@ test('the run-rate is labelled as one beside its figure, and the column is not "
 test('the period picker offers the current quarter and those before it, never a future one', () => {
   assert.deepEqual(recentQuarters(new Date('2026-02-10T00:00:00Z'), 4), ['2026-Q1', '2025-Q4', '2025-Q3', '2025-Q2']);
   assert.deepEqual(recentQuarters(new Date('2026-12-31T23:00:00Z'), 2), ['2026-Q4', '2026-Q3']);
-  assert.match(PAGE, /api\.hqRevenue\(period \|\| undefined\)/, 'the picked period does not reach the summary read');
+  assert.match(PAGE, /api\.hqRevenue\((?:period|p) \|\| undefined\)/, 'the picked period does not reach the summary read');
 });
