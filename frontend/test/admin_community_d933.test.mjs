@@ -50,6 +50,8 @@ function overview(over = {}) {
         { event_id: 9, title: 'Pricing Clinic', waiting_since: at(-100), from_created: false, waiting_hours: 100, overdue: true },
       ] },
       jobs: { available: true, pending: 2, overdue: 0, wait_not_recorded: 1, oldest_submitted_at: at(-30), oldest_wait_hours: 30, review: [] },
+      // D4820 part 3: no expert waits here, so this file's totals stay the events' and jobs'.
+      experts: { available: true, pending: 0, overdue: 0, oldest_wait_hours: null, rows: [] },
       overdue_hours: 72,
     },
     events: {
@@ -161,7 +163,7 @@ test('each period tile answers alone: loading, a block that failed, and the whol
 
 test('Waiting on you gains the oldest wait, and the amber dot past 72 hours', () => {
   const t = tile(buildTiles(READS()), 'waiting');
-  assert.equal(t.sub, '2 events · 2 jobs · oldest 4 days', 'the oldest of both queues, 100 hours, whole days');
+  assert.equal(t.sub, '2 events · 2 jobs · 0 experts · oldest 4 days', 'the oldest of the queues, 100 hours, whole days');
   assert.equal(t.overdue, true);
   assert.match(t.note, /1 jobs were submitted before waits were recorded, so they are not dated or marked overdue/);
   const calm = oldestWait(ok(overview({ queue: {
@@ -275,7 +277,12 @@ test('wellbeing: under seven founders the band is withheld with the canvas\'s se
   assert.equal(one.experts.state, 'unreadable');
   assert.equal(one.bookings.state, 'ready');
   assert.equal(buildWellbeing({ overview: bad }).checkins.state, 'unreadable');
-  assert.equal(buildConsoles(READS()).wellbeing.text, '3 to verify');
+  // D4820 part 3: Manage Community's Wellbeing figure is the experts Approvals would list (the queue's own count),
+  // not every unverified profile: the 3 unverified here include none that is 70% complete and waiting.
+  assert.equal(buildConsoles(READS()).wellbeing.text, '0 to verify');
+  const two = { available: true, pending: 2, overdue: 0, oldest_wait_hours: 5, rows: [] };
+  assert.equal(buildConsoles(READS(overview({ queue: { experts: two } }))).wellbeing.text, '2 to verify');
+  assert.equal(buildConsoles(READS(overview({ queue: { experts: gone('The wellbeing experts queue') } }))).wellbeing.state, 'unreadable');
 });
 
 // ---------------------------------------------------------------- Needs a decision
@@ -389,7 +396,7 @@ test('mounted CM9: every new block is drawn from the Community read', async () =
   const m = await mount(`${COMMUNITY_PATH}?weeks=4`);
   try {
     assert.ok(m.seen.includes('/api/admin/community/overview?weeks=4'));
-    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs · oldest 4 days/s);
+    assert.match(m.of('community-tile-waiting'), /4.*2 events · 2 jobs · 0 experts · oldest 4 days/s);
     assert.ok(m.has('community-tile-waiting-overdue'), 'no amber dot past 72 hours');
     assert.match(m.props('community-tile-waiting-overdue')['aria-label'], /more than 72 hours/);
     // D4820: show-up is drawn in Events and the experts in Wellbeing, not in the KPI row.

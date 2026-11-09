@@ -19,22 +19,20 @@ import { expertsOf } from './wellbeing.js';
 export function buildTiles(reads) {
   const tiles = [];
 
-  // Waiting on you — the two review queues, added (#4717: the Community read's own counts).
+  // Waiting on you — the review queues, added (#4717: the Community read's own counts; D4820 part 3: the experts to verify too).
   const wait = { key: 'waiting', label: 'Waiting on you' };
   const q = queueCounts(reads);
   if (q.loading) tiles.push({ ...wait, state: 'loading' });
   else {
-    const ev = { count: q.events };
-    const jb = { count: q.jobs };
-    if (ev.count === null || jb.count === null) {
-      tiles.push({ ...wait, state: 'unreadable', reason: 'The events or jobs queue could not be read, so there is no total.' });
+    if (q.events === null || q.jobs === null || q.experts === null) {
+      tiles.push({ ...wait, state: 'unreadable', reason: 'The events, jobs or wellbeing experts queue could not be read, so there is no total.' });
     } else {
       const age = oldestWait(reads.overview);
       tiles.push({
         ...wait,
         state: 'ready',
-        value: nf(ev.count + jb.count),
-        sub: `${nf(ev.count)} events · ${nf(jb.count)} jobs${age.text ? ` · oldest ${age.text}` : ''}`,
+        value: nf(q.events + q.jobs + q.experts),
+        sub: `${nf(q.events)} events · ${nf(q.jobs)} jobs · ${nf(q.experts)} experts${age.text ? ` · oldest ${age.text}` : ''}`,
         overdue: age.overdue,
         note: age.note,
       });
@@ -104,9 +102,9 @@ export function buildTiles(reads) {
 /** Manage Community's figures (CM1 row 8, D4820 CM01): one per console that has a queue or drafts. */
 export function buildConsoles(reads) {
   const q = queueCounts(reads);
-  const lane = (key) => {
+  const lane = (key, verb = 'to review') => {
     if (q.loading) return { state: 'loading' };
-    return q[key] === null ? { state: 'unreadable' } : { state: 'ready', text: `${nf(q[key])} to review` };
+    return q[key] === null ? { state: 'unreadable' } : { state: 'ready', text: `${nf(q[key])} ${verb}` };
   };
   const ci = circlesOf(reads);
   return {
@@ -117,10 +115,8 @@ export function buildConsoles(reads) {
       const ro = rosterOf(reads);
       return ro.state === 'ready' ? { state: 'ready', text: `${nf(ro.active)} active` } : { state: ro.state === 'loading' ? 'loading' : 'unreadable' };
     })(),
-    wellbeing: (() => {
-      const ex = expertsOf(reads.overview);
-      return ex.state === 'ready' ? { state: 'ready', text: `${nf(ex.unverified)} to verify` } : { state: ex.state === 'loading' ? 'loading' : 'unreadable' };
-    })(),
+    // D4820 part 3: the experts Approvals would list, the same number as Waiting on you's, not every unverified profile.
+    wellbeing: lane('experts', 'to verify'),
   };
 }
 

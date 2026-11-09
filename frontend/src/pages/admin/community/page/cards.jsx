@@ -218,7 +218,9 @@ export function AttentionCard({ needs, onRetry }) {
       </span>}>
       {() => (<>
       <span className={SUB} data-testid="community-needs-line">{`${needs.total} waiting · ${needs.overdue ? 'overdue first' : 'oldest first'}. Overdue is more than ${OVERDUE_HOURS} hours.`}</span>
-      {needs.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400">{needs.partial}</span> : null}
+      {/* D4820 CM02c: the kinds behind the total; a kind that could not be read is left out, and the partial line says so. */}
+      {needs.byKind ? <span className={`${SUB} ${MONO}`} data-testid="community-needs-kinds">{[['events', 'events'], ['jobs', 'jobs'], ['experts', 'experts']].filter(([k]) => needs.byKind[k] !== null).map(([k, w]) => `${needs.byKind[k]} ${w}`).join(' · ')}</span> : null}
+      {needs.partial ? <span className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="community-needs-partial">{needs.partial}</span> : null}
       {needs.rows?.length ? (
         <ul className="m-0 flex list-none flex-col gap-2.5 p-0" data-testid="community-needs">
           {needs.rows.map((r) => (
@@ -226,9 +228,12 @@ export function AttentionCard({ needs, onRetry }) {
               <span className="flex min-w-0 items-center gap-2">
                 <span className="whitespace-nowrap rounded-full border border-axal-hairline px-2 text-[11px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">{r.kind}</span>
                 <span className="min-w-0">
+                  {/* Each kind's literal Approvals address, so the reachability walk finds it. D4820 part 3: an expert opens its wellbeing_experts item. */}
                   {r.kind === 'Event'
                     ? <Link to={`/admin/approvals/items/events-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>
-                    : <Link to={`/admin/approvals/items/jobs-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>}
+                    : r.kind === 'Expert'
+                      ? <Link to={`/admin/approvals/items/wellbeing_experts-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>
+                      : <Link to={`/admin/approvals/items/jobs-${encodeURIComponent(r.ref)}`} className={`${LINK} text-[13px] text-axal-ink dark:text-gray-100`} data-testid={`community-need-open-${r.id}`}>{r.title}</Link>}
                   {r.sub ? <span className={`${SUB} block`}>{r.sub}</span> : null}
                   <span className={`${SUB} ${MONO} flex items-center gap-1.5`} data-testid={`community-need-wait-${r.id}`}>
                     {r.overdue ? <><OverdueDot /><span className="font-bold text-axal-ink dark:text-gray-100">Overdue</span><span aria-hidden="true">·</span></> : null}
