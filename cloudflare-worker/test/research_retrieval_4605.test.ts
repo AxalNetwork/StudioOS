@@ -234,3 +234,36 @@ test('D3701: an empty passage is null, a short one is whole, a long one is cut a
   // Mutation checked: no slice → the whole text is stored.
   assert.deepEqual([long.passage.length, long.passage_truncated], [CITATION_PASSAGE_CHARS, true]);
 });
+
+// D3701 part 4 (RS-11): a run the router refuses before it runs is answered
+// in the shared refusal's words (402 for a budget stop) and stored as nothing.
+test('D3701: a refused run is 402 in the budget\'s words, not model_unavailable, and nothing is stored', async () => {
+  const f = fixture();
+  // Retrieval's embedding is a system call (userId 0, `services/vectorize.ts`),
+  // so it is not charged to the member. The switch turns on once it has run:
+  // the budget is gone by the time the answer is to be written.
+  let retrieved = false;
+  const run = f.env.AI.run;
+  f.env.AI.run = async (m: string, i: any, o: any) => { if (m.includes('bge')) retrieved = true; return run(m, i, o); };
+  f.env.AI_SPEND = { get: async (key: string) => (retrieved && key.startsWith('ai_killswitch:') ? '1' : null), put: async () => {} };
+  const r = await ask(f);
+  // Mutation checked: the `refused` branch removed → 200 with reason model_unavailable.
+  assert.equal(r.status, 402, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'kill_switch');
+  assert.match(r.body.message, /Add tokens/);
+  assert.ok(typeof r.body.message === 'string' && r.body.message.length > 0);
+  assert.deepEqual(stored(f), [], 'a run that never started is not an answer');
+  assert.equal(f.prompts.length, 0, 'the model was never called');
+});
+
+test('D3701: a model that runs and fails is still model_unavailable, with its passages', async () => {
+  const f = fixture();
+  const run = f.env.AI.run;
+  f.env.AI.run = async (m: string, i: any, o: any) => { if (m.includes('bge') || m.includes('guard')) return run(m, i, o); throw new Error('model down'); };
+  const old = console.error; console.error = () => {};
+  let r;
+  try { r = await ask(f); } finally { console.error = old; }
+  assert.equal(r.status, 200);
+  assert.equal(r.body.reason, 'model_unavailable');
+  assert.deepEqual(stored(f), ['model_unavailable']);
+});

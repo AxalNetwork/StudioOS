@@ -412,7 +412,8 @@ test('/admin/licences/:uid/:section opens today\'s detail view; the section defa
   assert.equal(deepLinkTarget('a', 'fee-invoices'), '/admin/licences?licence=a&tab=fee-invoices', 'an existing tab key opens itself');
   assert.equal(deepLinkTarget('a', 'nonsense'), '/admin/licences?licence=a');
   assert.equal(deepLinkTarget('a b', 'history'), '/admin/licences?licence=a+b&tab=history');
-  assert.equal(tabForSection('OVERVIEW', null), 'entity');
+  // Part 3: the Overview is a tab of its own now.
+  assert.equal(tabForSection('OVERVIEW', null), 'overview');
   const v = await mount('/admin/licences/b/history', worker({ items: POPULATED, summary: POP_SUMMARY }));
   try {
     assert.equal(v.at.path, '/admin/licences?licence=b&tab=history');

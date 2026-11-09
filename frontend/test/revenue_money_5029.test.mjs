@@ -7,12 +7,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ceilingPayload, money, refundAmountShape, statementDisputePayload, statementPaidPayload, floorsInCurrency, UNRECORDED_CURRENCY,
+  ceilingPayload, money, refundAmountShape, statementDisputePayload, floorsInCurrency, UNRECORDED_CURRENCY,
 } from '../src/pages/hq/RevenuePage.jsx';
+import { paymentPreview } from '../src/pages/hq/revenue/statementActionModel.js';
 import { LICENCE_TERM_FIELDS, buildSave, displayValue, fromInput, initialForm, toInput } from '../src/lib/licenceTermsForm.js';
 import { money as licenceMoney } from '../src/lib/licencePage.js';
 
 const root = new URL('../../', import.meta.url);
+// D5039 part 2: a payment is the governed Record a payment, an amount added to what was paid.
+const issued = (currency, owedCents) => ({ status: 'issued', owed_cents: owedCents, paid_cents: 0, disputed_cents: 0, currency, unreported_streams: 0, estimated_streams: 0 });
+const pay = (amountText, currency, owedCents = 10_000_000) => paymentPreview({ statement: issued(currency, owedCents), amountText, reason: 'Received by SEPA transfer' });
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
 const plain = (s) => String(s).replace(/ /g, ' ');
 
@@ -34,12 +38,12 @@ test('display: a missing or unknown currency is named with the stored count, nev
   }
 });
 
-test('statement paid: the amount is parsed in the statement\'s currency, exactly', () => {
-  const paid = (amountText, currency, owedCents = 10_000_000) => statementPaidPayload({ amountText, note: 'wire', owedCents, currency });
-  assert.equal(paid('19.99', 'EUR').body.paid_cents, 1999, '19.99 * 100 is 1998.9999999999998 as a float');
-  assert.equal(paid('1234', 'JPY').body.paid_cents, 1234, 'JPY input is not multiplied by 100');
-  assert.equal(paid('1.005', 'KWD').body.paid_cents, 1005);
-  assert.equal(paid('0', 'EUR').body.paid_cents, 0, 'zero is allowed when nothing arrived');
+test('statement payment: the amount is parsed in the statement\'s currency, exactly', () => {
+  const paid = pay;
+  assert.equal(paid('19.99', 'EUR').body.amount_cents, 1999, '19.99 * 100 is 1998.9999999999998 as a float');
+  assert.equal(paid('1234', 'JPY').body.amount_cents, 1234, 'JPY input is not multiplied by 100');
+  assert.equal(paid('1.005', 'KWD').body.amount_cents, 1005);
+  assert.ok(paid('0', 'EUR').error, 'a payment of nothing is not a payment');
   assert.match(paid('10.005', 'EUR').error, /2 decimal places/);
   assert.match(paid('10.5', 'JPY').error, /no minor unit/);
   assert.match(paid('1.0005', 'KWD').error, /3 decimal places/);
@@ -48,14 +52,12 @@ test('statement paid: the amount is parsed in the statement\'s currency, exactly
   assert.ok(paid('', 'EUR').error);
 });
 
-test('statement paid: no usable currency is refused, and overpayment names the owed amount in that currency', () => {
+test('statement payment: no usable currency is refused, and overpayment names what is open in that currency', () => {
   for (const currency of [undefined, null, '', 'XYZ']) {
-    assert.match(statementPaidPayload({ amountText: '10', note: 'x', owedCents: 5000, currency }).error, /no recorded currency/);
+    assert.match(pay('10', currency, 5000).error, /no currency StudioOS can price in/);
   }
-  const over = statementPaidPayload({ amountText: '51', note: 'wire', owedCents: 5000, currency: 'EUR' });
-  assert.match(plain(over.error), /more than the €50\.00 this statement claims/);
-  const overYen = statementPaidPayload({ amountText: '5001', note: 'wire', owedCents: 5000, currency: 'JPY' });
-  assert.match(plain(overYen.error), /more than the ¥5,000 this statement claims/);
+  assert.match(plain(pay('51', 'EUR', 5000).error), /more than the €50\.00 still open on this statement/);
+  assert.match(plain(pay('5001', 'JPY', 5000).error), /more than the ¥5,000 still open on this statement/);
 });
 
 test('statement dispute: zero clears, positive needs a reason, and the amount follows the currency', () => {

@@ -118,9 +118,13 @@ function sent(db: DatabaseSync, uid: string, licence: string | null, name: strin
   db.prepare(`INSERT INTO program_proposals (uid, created_by_user_id, licence_uid, status, name, purpose, who_json, grp, join_method, cycle, seats,
       rewards_json, template_keys, tools_json, sent_at) VALUES (?, ?, ?, 'sent', ?, 'A purpose.', '["Founders"]', 'Access', 'By invitation', 'rolling', 20,
       '["None"]', '[]', '{}', '2026-10-16T09:00:00.000Z')`).run(uid, LIS, licence, name);
+  // D4873: sent once, so revision 1, with that send's row.
+  db.prepare('UPDATE program_proposals SET revision = 1 WHERE uid = ?').run(uid);
+  db.prepare(`INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at)
+    SELECT id, 1, json_object('name', name), sent_at FROM program_proposals WHERE uid = ?`).run(uid);
 }
 const approve = (db: DatabaseSync, uid: string, outcome = 'approve_studio') =>
-  call(db, SUPER, 'POST', `/api/admin/programs/proposals/${uid}/decision`, { outcome });
+  call(db, SUPER, 'POST', `/api/admin/programs/proposals/${uid}/decision`, { outcome, expected_revision: 1 });
 
 function grantRow(db: DatabaseSync, licenceId: number, key: string, state: string) {
   db.prepare(`INSERT INTO program_grants (uid, licence_id, program_key, state, requires_signed_schedule, set_by_user_id, set_at)
