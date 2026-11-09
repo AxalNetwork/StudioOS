@@ -47,6 +47,8 @@ export const contractsApi = {
   search: ({ q, historical = false } = {}) => request(`/admin/contracts/search?${query({ q, historical: historical ? 'true' : '' })}`),
   recipients: params => request(`/admin/contracts/recipients?${query(params)}`),
   deals: params => request(`/admin/contracts/deal-options?${query(params)}`),
+  // D4811 part 11: the Link recipient repair (POST /:uid/link { deal_id }): an unlinked documents row or envelope takes a deal's company.
+  link: (uid, dealId) => request(`/admin/contracts/${encodeURIComponent(uid)}/link`, { method: 'POST', body: JSON.stringify({ deal_id: dealId }) }),
   published: () => request('/admin/contracts/published-templates'),
   publish: () => request('/admin/contracts/published-templates/publish', { method: 'POST', body: JSON.stringify({}) }),
   providers: () => request('/admin/contracts/envelope-providers'),

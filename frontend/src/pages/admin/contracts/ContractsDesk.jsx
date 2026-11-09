@@ -18,6 +18,8 @@ import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 import ContractSearch from './ContractSearch';
 import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, tabClass } from './ContractsNav';
 import MetricStrip from './MetricStrip';
+import AttentionQueues from './AttentionQueues';
+import LinkRecipient from './LinkRecipient';
 import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
@@ -38,6 +40,7 @@ export default function ContractsDesk({ section = null }) {
   const primary = primaryOf(tab, { governance });
   const allowed = tabs.some(([id]) => id === tab) && (superAdmin || tab !== 'document-types');
   const [selected, setSelected] = useState(null);
+  const [linking, setLinking] = useState(null);
   const [revision, setRevision] = useState(0);
   const stats = useRead(() => contractsApi.stats(), [revision]);
   const filters = Object.fromEntries(filterKeys.filter(key => params.has(key)).map(key => [key, params.get(key)]));
@@ -69,6 +72,8 @@ export default function ContractsDesk({ section = null }) {
     {params.get('moved') === 'legal' && <p role="status">{CONTRACTS_MOVED_NOTICE}</p>}
     <ContractSearch onOpen={openResult} />
     <ReadState read={stats} what="Contract counts"><MetricStrip stats={stats.data} onDrill={drill} /></ReadState>
+    {/* D4811 part 11: the short queues under the strip (CT-01): stalled, data repair (with its repair), legal review. */}
+    {!governance && allowed && primary === 'agreements' && <AttentionQueues hq={hqDesk} revision={revision} onOpen={setSelected} onLink={setLinking} onDrill={drill} />}
     {/* D4811 part 7: four workflow tabs; NDAs and Partner deals are Agreements categories; Forms and Document types are under Library. */}
     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
       <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto">
@@ -81,11 +86,12 @@ export default function ContractsDesk({ section = null }) {
       <LibraryMenu items={LIBRARY_ITEMS.filter(([k]) => superAdmin || k !== 'document-types')} current={!governance && isLibrary(tab) ? tab : null} onTab={(id) => navigate(id)} />
     </div>
     {!governance && allowed && primaryOf(tab) === 'agreements' && <AgreementCategories tab={tab} onTab={(id) => navigate(id)} />}
-    {governance ? (hqDesk ? <GovernanceTab workspaceLink={(uid) => <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} revision={revision} />
+    {governance ? (hqDesk ? <GovernanceTab workspaceLink={(uid) => <Link to={`/admin/contracts/governance/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} /> : <p>Corporate Governance is HQ's alone.</p>) : !allowed ? <p>That Contracts tab is not available to this account.</p> : tab === 'agreements' ? <AgreementList filters={filters} onFilters={next => navigate('agreements', next)} onOpen={setSelected} onLink={setLinking} revision={revision} />
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
         : tab === 'templates' ? <AdminTemplates recordedPublication openSlug={params.get('open') || null} onOpenUsage={slug => navigate('agreements', { template: slug })} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
     <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/programs/spinout-lab/formation" className="underline">Open its Formation tab.</Link></p>
+    {linking && <LinkRecipient row={linking} onClose={() => setLinking(null)} onLinked={() => setRevision(n => n + 1)} />}
     {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)} />}
     {params.has('new') && <EnvelopeWizard onClose={() => { const next = new URLSearchParams(params); next.delete('new'); setParams(next); }} onTemplates={() => navigate('templates')} onSent={() => setRevision(n => n + 1)} />}
   </div></RailFrame>;
