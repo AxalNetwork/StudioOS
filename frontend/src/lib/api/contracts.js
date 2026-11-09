@@ -48,6 +48,16 @@ export const contractsApi = {
   recipients: params => request(`/admin/contracts/recipients?${query(params)}`),
   deals: params => request(`/admin/contracts/deal-options?${query(params)}`),
   // D4811 part 11: the Link recipient repair (POST /:uid/link { deal_id }): an unlinked documents row or envelope takes a deal's company.
+  // D4811 part 18: execution evidence attached to a legacy agreement marked signed (multipart: the signed PDF and its facts).
+  evidence: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/evidence`),
+  attachEvidence: (uid, { file, signed_on = '', signatory = '', attest = false } = {}) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('signed_on', signed_on);
+    fd.append('signatory', signatory);
+    if (attest) fd.append('attest', 'true');
+    return request(`/admin/contracts/${encodeURIComponent(uid)}/evidence`, { method: 'POST', body: fd });
+  },
   // D4811 part 17: the cross-border record (CT-15): seven checks; open ones stop a resend.
   crossBorder: uid => request(`/admin/contracts/${encodeURIComponent(uid)}/cross-border`),
   saveCrossBorder: (uid, body) => request(`/admin/contracts/${encodeURIComponent(uid)}/cross-border`, { method: 'PUT', body: JSON.stringify(body) }),

@@ -32,6 +32,7 @@ import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 import { checksOf, recordOf, sendRefusal } from '../services/crossBorder';
+import { signedCopyOf, sniffDocument } from '../services/governance';
 import { confirmationFor } from '../services/governanceHighRisk';
 import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
 import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
@@ -606,9 +607,18 @@ async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<U
     }
   }
 
+  // D4811 part 18: an externally signed copy attached to a legacy agreement is its execution evidence.
+  const evidence = new Map<string, { r2_key: string; file_sha256: string }>();
+  try {
+    const ev: any[] = await sql.unsafe('SELECT agreement_uid, r2_key, file_sha256 FROM agreement_evidence', []);
+    for (const r of ev) evidence.set(String(r.agreement_uid), { r2_key: r.r2_key, file_sha256: r.file_sha256 });
+  } catch { /* the table is not migrated here yet: no evidence attached */ }
+
   return docs.map(d => {
     const p = d.project_id ? projectMap.get(d.project_id) : null;
-    return decorateDocType(enrichDocRow(d, p?.name || null, p?.founder_email || null));
+    const ev = evidence.get(String(d.uid));
+    const row = ev ? { ...d, file_key: ev.r2_key, file_sha256: ev.file_sha256 } : d;
+    return decorateDocType(enrichDocRow(row, p?.name || null, p?.founder_email || null));
   });
 }
 
@@ -1699,6 +1709,52 @@ adminContracts.post('/:uid/resend', async (c) => {
   } finally {
     await sql.end();
   }
+});
+
+// D4811 (#4811) part 18 — attach execution evidence to a legacy agreement
+// marked signed with none (CT-02 "Attach execution evidence", CT-12 B): the
+// externally signed copy (PDF, at most 25 MB), the date it was signed, the
+// signatory and the uploader's attestation. Written once; a store whose row
+// carries its own evidence (an envelope) is refused, as is an agreement that
+// is not marked signed or already has evidence.
+adminContracts.get('/:uid/evidence', async (c) => {
+  await requireAdmin(c);
+  const row = await c.env.DB.prepare('SELECT agreement_uid, file_sha256, file_bytes, signed_on, signatory, attested_by, attached_at FROM agreement_evidence WHERE agreement_uid = ?')
+    .bind(c.req.param('uid')).first<any>().catch(() => null);
+  return c.json({ evidence: row ?? null });
+});
+
+adminContracts.post('/:uid/evidence', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref: ContractRowRef = null;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was attached.' });
+  if (ref.source !== 'documents') return refuse(c, 409, { code: 'evidence_not_supported', message: 'This agreement carries its own signing record; there is no copy to attach here. Nothing was attached.' });
+  if (String(ref.row.status).toLowerCase() !== 'signed') return refuse(c, 409, { code: 'not_marked_signed', message: 'Only an agreement marked signed takes execution evidence. Nothing was attached.' });
+  const prior = await c.env.DB.prepare('SELECT 1 AS ok FROM agreement_evidence WHERE agreement_uid = ?').bind(uid).first();
+  if (prior) return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. It is written once. Nothing was attached.' });
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'File storage is not available here. Nothing was attached.' });
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get('file');
+  if (!file || typeof file === 'string') return refuse(c, 422, { code: 'file_required', message: 'Choose the signed PDF. Nothing was attached.' });
+  const bytes = new Uint8Array(await (file as File).arrayBuffer());
+  if (!bytes.length || bytes.length > 25 * 1024 * 1024) return refuse(c, 413, { code: 'file_size', message: 'The signed copy must be a PDF of at most 25 MB. Nothing was attached.' });
+  if (sniffDocument(bytes) !== 'application/pdf') return refuse(c, 415, { code: 'pdf_required', message: 'Upload the signed copy as a PDF. Nothing was attached.' });
+  const copy = signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, new Date().toISOString().slice(0, 10));
+  if (!copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message.replace('uploaded', 'attached') });
+  const sha = await sha256HexBytes(bytes);
+  const key = `contracts/evidence/${uid}.pdf`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { agreement_uid: uid } });
+  try {
+    await c.env.DB.prepare('INSERT INTO agreement_evidence (agreement_uid, r2_key, file_sha256, file_bytes, signed_on, signatory, attested_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(uid, key, sha, bytes.length, copy.signed_on, copy.signatory, Number(admin.id)).run();
+  } catch {
+    return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. Nothing was attached.' });
+  }
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_evidence_attached', { uid, sha256: sha, bytes: bytes.length, signed_on: copy.signed_on });
+  return c.json({ evidence: { agreement_uid: uid, file_sha256: sha, file_bytes: bytes.length, signed_on: copy.signed_on, signatory: copy.signatory, attested_by: Number(admin.id) } }, 201);
 });
 
 // D4811 (#4811) part 17 — the cross-border record (board CT-15): seven checks
