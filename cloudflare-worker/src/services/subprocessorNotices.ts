@@ -43,7 +43,7 @@ export function baseUrl(env: Env): string {
   return stripTrailingSlashes(String(env.PUBLIC_BASE_URL || env.APP_URL || 'https://axal.vc'));
 }
 
-const mailReady = (env: Env) => {
+export const mailReady = (env: Env) => {
   const e = env as any;
   return !!(e.GMAIL_CLIENT_ID && e.GMAIL_CLIENT_SECRET && e.GMAIL_REFRESH_TOKEN);
 };
@@ -205,4 +205,78 @@ export async function sendSubprocessorNotices(env: Env, opts: { limit?: number; 
     if (ok) sent++; else failed++;
   }
   return { sent, failed, unconfigured: false };
+}
+
+/** D4803 (SE07): how many notices the Trust workspace lists, newest start first. */
+export const NOTICE_SUMMARY_LIMIT = 20;
+/** D4803: a notice stays on the list this many days after its subprocessor started. */
+export const NOTICE_SUMMARY_DAYS = 90;
+
+export type NoticeDelivery = {
+  uid: string;
+  name: string;
+  starts_at: string;
+  /** Whether the subprocessor's start day has come; after it, nothing more is sent. */
+  started: boolean;
+  /** Claimed and not yet answered by the mail provider. */
+  sending: number;
+  /** Accepted by the mail provider. Whether it reached an inbox is not recorded. */
+  sent: number;
+  /** Refused by the provider or no address; retried after an hour while not started. */
+  failed: number;
+  /** Confirmed subscribers with no attempt yet: queued while not started, never sent once it has. */
+  not_sent: number;
+};
+export type NoticeDeliveries =
+  | { available: true; mail_configured: boolean; rows: NoticeDelivery[] }
+  | { available: false; reason: string };
+
+/**
+ * D4803 — PER-NOTICE DELIVERY, from the rows the sweep already writes.
+ *
+ * The canvas drew this as Not instrumented, but `sendSubprocessorNotices`
+ * claims one `subprocessor_notice_deliveries` row per subscriber and notice
+ * before it sends, and records `sent` or `failed` after. So each notice's
+ * counts are real: sending, sent (accepted by the provider — an inbox is not
+ * recorded), failed, and confirmed subscribers not attempted yet. Without
+ * mail credentials the sweep sends nothing, and `mail_configured` says so,
+ * so "0 sent" is never read as delivery working.
+ */
+export async function noticeDeliveries(env: Env, now = Date.now()): Promise<NoticeDeliveries> {
+  const day = today(now);
+  const since = new Date(now - NOTICE_SUMMARY_DAYS * 86_400_000).toISOString().slice(0, 10);
+  try {
+    const rows = (await env.DB.prepare(
+      `SELECT s.uid, s.name, s.starts_at,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sending' THEN 1 ELSE 0 END), 0) AS sending,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sent' THEN 1 ELSE 0 END), 0) AS sent,
+              COALESCE(SUM(CASE WHEN d.outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+              (SELECT COUNT(*) FROM subprocessor_subscribers u
+                WHERE u.status = 'confirmed'
+                  AND NOT EXISTS (SELECT 1 FROM subprocessor_notice_deliveries x
+                                   WHERE x.subprocessor_id = s.id AND x.subscriber_id = u.id)) AS not_sent
+         FROM trust_subprocessors s
+         LEFT JOIN subprocessor_notice_deliveries d ON d.subprocessor_id = s.id
+        WHERE s.state = 'published' AND s.starts_at IS NOT NULL AND s.starts_at >= ?
+        GROUP BY s.id
+        ORDER BY s.starts_at DESC, s.id DESC
+        LIMIT ?`,
+    ).bind(since, NOTICE_SUMMARY_LIMIT).all<{ uid: string; name: string; starts_at: string; sending: number; sent: number; failed: number; not_sent: number }>()).results || [];
+    return {
+      available: true,
+      mail_configured: mailReady(env),
+      rows: rows.map((r) => ({
+        uid: r.uid,
+        name: r.name,
+        starts_at: r.starts_at,
+        started: String(r.starts_at) <= day,
+        sending: Number(r.sending) || 0,
+        sent: Number(r.sent) || 0,
+        failed: Number(r.failed) || 0,
+        not_sent: Number(r.not_sent) || 0,
+      })),
+    };
+  } catch {
+    return { available: false, reason: 'The notice deliveries could not be read on this database. This is not a claim that none were sent.' };
+  }
 }
