@@ -36,6 +36,8 @@ an admin's `/funds` and `/funds/performance` forward here.
 | `useRead.js` | One read's `loading` / `ready` / `unreadable` state. |
 | `parts.jsx` | The drawing parts, from the August canvas "Fund Administration": `Section`, `Panel`, `Line`, `Tiles` and `Table` (which stacks, each cell labelled, below `sm`). |
 | `workspaceModel.js` | D4812: v2's rules, pure — the six workspaces over D1157's addresses, the amber flags, the context-aware primary, Needs attention, Fund position, the Funds rows and the activity rows. |
+| `MoneyFlow.jsx` | D4812 part 2 (FA-03, FA-08): the money-action flow's parts — `FlowSteps`, `Effects`, `NotOffered` (refused or unverified, a sentence), `ConfirmAct` (the named act and, for a Super Admin act, the authenticator code first) and `FlowReceipt`. |
+| `moneyFlowModel.js` | D4812 part 2: the flow's rules, pure — the five steps, `actGate`, `actButton`, `checkCode`, and each act's exact effect (call, receipt, distribution). |
 
 ## Rules
 

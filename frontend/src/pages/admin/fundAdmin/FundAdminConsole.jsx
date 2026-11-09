@@ -52,6 +52,8 @@ import { fundIdFrom } from './fundsModel';
  */
 export const DEFAULT_APIS = {
   fundAdmin: fundAdminApi,
+  // D4812 part 2: a Super Admin money act asks for the authenticator code in its flow (BLOCK-AUTH-03's step-up).
+  auth: { stepUp: (code) => api.stepUp(code) },
   mercury: adminMercuryApi,
   fees: fundFeesApi,
   reporting: fundReportingApi,

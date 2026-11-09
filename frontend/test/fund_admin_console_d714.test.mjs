@@ -101,6 +101,7 @@ function stubs(over = {}) {
   return {
     calls,
     apis: {
+      auth: { stepUp: rec('stepUp', async () => ({ ok: true })) },
       fundAdmin: {
         access: rec('access', async () => access(false)),
         overview: rec('overview', async () => OVERVIEW()),
@@ -286,18 +287,25 @@ test('the Super Admin holds every control, and none of the sentences', async () 
   assert.ok(seen.has('match-confirm-m-prop'));
 });
 
-test('a failed access read keeps every control, and says so; the Worker still decides', async () => {
+test('a failed access read keeps every control, and says so; a money act stops at its review (D4812 FA-05d)', async () => {
   const s = stubs({ access: async () => { throw Object.assign(new Error('down'), { status: 500 }); } });
   const { m } = await open(ADMIN, 'distributions', s);
   assert.ok(m.by('fund-admin-access-unreadable'));
   assert.ok(m.by('distribution-execute'));
+  await m.click('distribution-execute');
+  assert.match(m.text(m.by('distribution-flow-refused-unverified')), /Permissions could not be verified\. Financial actions are temporarily unavailable\./);
+  assert.ok(!m.by('distribution-flow-continue'), 'no way on to Confirm while permissions are unknown');
   await m.unmount();
 });
 
 test('the gated acts call what they name, with the previewed figures', async () => {
   const { m, s } = await open(SUPER, 'distributions');
   await m.click('distribution-execute');
+  await m.click('distribution-flow-continue');
+  await m.type('distribution-confirm-code', '123456');
+  await m.submit(m.form('distribution-confirm-submit'));
   assert.deepEqual(s.calls.find((c) => c[0] === 'execute'), ['execute', { fund_id: 7, proceeds_cents: 100000 }]);
+  await m.click('distribution-done-done');
   await m.click('distribution-mark-paid-91');
   assert.ok(!s.calls.some((c) => c[0] === 'markPaid'), 'Mark paid opens its dialog first');
   await m.click('distribution-mark-confirm');
