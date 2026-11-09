@@ -35,15 +35,18 @@ export function AgreementContextCell({ agreement }) {
 /**
  * D4811 (board CT02): a row says what state it is in. A missing signature date
  * on an unsigned agreement is expected and not flagged; a missing company link
- * reads "Unlinked recipient" (no link flow exists yet, so no repair action);
- * the one amber warning is a contradiction.
+ * reads "Unlinked recipient", with a quiet dashed Link repair where the page
+ * passes `onLink` (part 11; only stores that can carry a company); the one
+ * amber warning is a contradiction.
  */
-export function AgreementCells({ row }) {
+export function AgreementCells({ row, onLink = null }) {
   const m = agreementRowSemantics(row);
   return <>
     <td className="p-3">{m.company.unlinked
-      ? <span data-testid="agreement-unlinked" className="text-axal-muted">{m.company.label}</span>
-      : m.company.name}<p><Recorded value={row.recipient_name || row.recipient_email} reason="No recipient in this store." /></p></td>
+      ? <span className="flex flex-wrap items-center gap-1"><span data-testid="agreement-unlinked" className="text-axal-muted">{m.company.label}</span>
+        {onLink && <button type="button" data-testid={`agreement-link-${row.uid}`} onClick={() => onLink(row)} aria-label={`Link the recipient of ${row.title} to a company`}
+          className="min-h-[44px] rounded border border-dashed border-violet-400 px-1.5 text-[11px] font-semibold text-violet-700 dark:text-violet-300 md:min-h-0">⚭ Link</button>}</span>
+      : m.company.none ? <span className="text-axal-muted">{m.company.label}</span> : m.company.name}<p><Recorded value={row.recipient_name || row.recipient_email} reason="No recipient in this store." /></p></td>
     <td className="p-3"><div data-testid="agreement-state-line">{m.line}</div>
       {m.sentMissing && <Missing reason="No send event." />}
       {m.days != null && <div className="font-mono text-axal-muted">{m.days} days to sign</div>}</td>
@@ -55,7 +58,7 @@ export function AgreementCells({ row }) {
   </>;
 }
 
-export default function AgreementList({ filters, onFilters, onOpen, revision }) {
+export default function AgreementList({ filters, onFilters, onOpen, revision, onLink = null }) {
   const offset = Number(filters.offset || 0);
   const read = useRead(() => contractsApi.agreements({ ...filters, limit: 25, offset }), [JSON.stringify(filters), revision]);
   const set = (key, value) => onFilters({ ...filters, [key]: value, offset: 0 });
@@ -82,7 +85,7 @@ export default function AgreementList({ filters, onFilters, onOpen, revision }) 
         <td className="p-3">{['licence_agreement', 'licence_contract'].includes(row.source)
           ? <span className="font-semibold">{row.title}</span>
           : <button type="button" className="text-left font-semibold underline decoration-transparent hover:decoration-current" onClick={() => onOpen(row.uid)}>{row.title}</button>}<p className="text-axal-muted">{row.doc_type_label || row.doc_type}</p><span className="font-mono text-[10px] text-axal-faint">{row.source}</span><AgreementContextCell agreement={row.agreement} /></td>
-        <AgreementCells row={row} />
+        <AgreementCells row={row} onLink={onLink} />
       </tr>)}</tbody></table></div>}
       <Pagination data={read.data} offset={offset} onPage={value => onFilters({ ...filters, offset: value })} />
     </>}</ReadState>

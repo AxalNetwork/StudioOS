@@ -226,6 +226,15 @@ test('The mirror numbers each line, draws a token as its own chip, and adds a ro
 });
 function view_has(e, n, attr) { const p = e.view.props(n); return !!p && attr in p; }
 
+// D4811 part 13: publishing asks for a reason and the typed word PUBLISH (CT-16).
+async function fillPublish(view, reason = 'Counsel approved this text on 2026-11-09.', word = 'PUBLISH') {
+  const { act } = await import('react');
+  const area = view.nodes().find((n) => n.tagName === 'TEXTAREA' && String(view.props(n)?.placeholder || '').startsWith('What approves'));
+  const typed = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.autoComplete === 'off' && view.props(n)?.id?.endsWith('-word'));
+  await act(async () => { view.props(area).onChange({ target: { value: reason } }); });
+  await act(async () => { view.props(typed).onChange({ target: { value: word } }); });
+}
+
 test('Save then Publish: disabled while unsaved, asks first, publishes once at the saved version, then reads Published v[N]', async () => {
   const publication = { slug: 'd717_test_agreement', version: 4, published_at: '2026-10-18 12:00:00', published_by: 2 };
   const e = await open('agree', { contract: { publishOne: async () => ({ ok: true, publication }) } });
@@ -241,10 +250,13 @@ test('Save then Publish: disabled while unsaved, asks first, publishes once at t
     assert.match(e.text(), /Templates › Test Agreement · v4(?! draft)/);
     await e.click('Publish v4');
     assert.match(e.text(), /Publish v4 of Test Agreement/);
-    assert.match(e.text(), /Documents issued from now use this text\. Documents already issued do not change\./);
-    assert.equal(of(e.calls, 'publishOne').length, 0);
+    assert.match(e.text(), /v4 of “Test Agreement” becomes Approved for use\. New envelopes and generated documents use this text; 3 documents issued earlier keep the text they were issued with\./);
+    assert.equal(e.view.props(e.byTestId('template-publish-confirm')).disabled, true, 'D4811 part 13: no reason or word yet');
     await e.clickId('template-publish-confirm'); await e.view.flush();
-    assert.deepEqual(of(e.calls, 'publishOne').map(([, a]) => a), [['d717_test_agreement', 4]]);
+    assert.equal(of(e.calls, 'publishOne').length, 0, 'a press without the reason and word sends nothing');
+    await fillPublish(e.view);
+    await e.clickId('template-publish-confirm'); await e.view.flush();
+    assert.deepEqual(of(e.calls, 'publishOne').map(([, a]) => a), [['d717_test_agreement', 4, { reason: 'Counsel approved this text on 2026-11-09.', confirm: 'PUBLISH' }]]);
     const done = e.textOf(e.byTestId('template-publish-done'));
     assert.match(done, /^Published v4/);
     assert.match(done, /Oct 18, 2026 · Test Admin\. The card now reads Published v4\./);
@@ -257,7 +269,7 @@ test('Save then Publish: disabled while unsaved, asks first, publishes once at t
 test('Publish names the recorded admin id when someone else published', async () => {
   const e = await open('agree', { contract: { publishOne: async () => ({ ok: true, publication: { version: 3, published_at: '2026-10-18 12:00:00', published_by: 77 } }) } });
   try {
-    await e.click('Publish v3'); await e.clickId('template-publish-confirm'); await e.view.flush();
+    await e.click('Publish v3'); await fillPublish(e.view); await e.clickId('template-publish-confirm'); await e.view.flush();
     assert.match(e.textOf(e.byTestId('template-publish-done')), / · Admin #77\./);
   } finally { await e.view.unmount(); restore(); }
 });
@@ -266,7 +278,7 @@ test('A refusal prints the Worker\'s sentence and no result', async () => {
   for (const [code, message] of [['published_version_changed', 'This template changed since it was opened. Open it again to publish the saved version.'], ['template_has_no_body', 'A stub has no body to publish.']]) {
     const e = await open('agree', { contract: { publishOne: async () => { throw Object.assign(new Error(message), { code, status: 409 }); } } });
     try {
-      await e.click('Publish v3'); await e.clickId('template-publish-confirm'); await e.view.flush();
+      await e.click('Publish v3'); await fillPublish(e.view); await e.clickId('template-publish-confirm'); await e.view.flush();
       assert.equal(e.textOf(e.byTestId('template-publish-refusal')), message);
       assert.equal(e.byTestId('template-publish-done'), undefined);
       assert.doesNotMatch(e.text(), /The card now reads/);
