@@ -4,6 +4,7 @@
  * `/api/admin/ai-agents/skills`. Super Admin only.
  *
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
+ *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
@@ -74,6 +75,8 @@ import type { OutputKind, Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+
+const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
 type C = Context<{ Bindings: Env }>;
 const adminHqSkills = new Hono<{ Bindings: Env }>();
@@ -215,6 +218,8 @@ adminHqSkills.get('/', async (c) => {
     if (row.status === 'draft' && notEvaluated > 0) draftsUnevaluated++;
     return {
       uid: row.uid, name: draft.name, ...areaAndLevel(draft, tax.category),
+      // D4537: what the catalogue filters on, from the same draft read: the slug, its roles and its tools.
+      slug: row.slug, roles: draft.roles.map((key) => ({ key, label: ROLE_LABEL.get(key) ?? key })), tools: draft.tools,
       status: lifecycleStatus(row.status, row.open_evidence ? { evidence_hash: row.open_evidence } : null, evidence),
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
