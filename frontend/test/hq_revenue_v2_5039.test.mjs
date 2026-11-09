@@ -13,7 +13,7 @@
  *   - each explanation lives once, in the Data coverage drawer;
  *   - readable type, no window.confirm.
  */
-import test, { mock } from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -40,11 +40,6 @@ const html = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null
 const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 const NOW = Date.UTC(2026, 10, 8, 14, 30);
 const DAY = 86_400_000;
-// The fixtures are dated from NOW, and PromotionsSection reads the clock to age
-// a branch's report. Freeze the clock at NOW, or every run after 14:30 UTC on
-// 9 Nov 2026 reads the DACH report as 24 days old and the 23-day line fails on
-// the date alone.
-mock.timers.enable({ apis: ['Date'], now: NOW });
 
 const SUMMARY = {
   quarter: { key: '2026-Q4', label: 'Q4 2026', start: '2026-10-01', end: '2027-01-01' },
