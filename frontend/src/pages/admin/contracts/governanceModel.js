@@ -61,6 +61,29 @@ export function dayLabel(value) {
   return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/**
+ * D4811 part 12 (board CT-12 B): who signed a signed copy and when, as one line,
+ * or that it was not recorded (a copy uploaded before the fields existed).
+ * Null for a version that is not a signed copy.
+ */
+export function signedCopyLine(v) {
+  if (!v?.signed) return null;
+  const on = dayLabel(v.signed_on);
+  if (!on || !v.signatory) return 'Signature date and signatory not recorded';
+  return `Signed ${on} by ${v.signatory}${v.attested ? ' · attested complete' : ''}`;
+}
+
+/** What a signed upload still lacks before it is sent (the Worker checks it again), or null. */
+export function signedCopyProblem(upload, today = new Date().toISOString().slice(0, 10)) {
+  if (!upload?.signed) return null;
+  if (!dayLabel(upload.signed_on)) return 'Give the date the copy was signed.';
+  if (upload.signed_on > today) return 'The signature date is after today.';
+  const who = String(upload.signatory || '').trim();
+  if (who.length < 2 || who.length > 200) return 'Name who signed it, with their capacity.';
+  if (!upload.attest) return 'Confirm this is the complete, fully signed copy.';
+  return null;
+}
+
 export const ACCEPT = '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 /** A file the page will send, or the reason it will not. The Worker sniffs the bytes again. */
