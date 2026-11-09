@@ -246,7 +246,26 @@ async function landPost(env: Env, x: SyncCtx, p: PostLanding, counts: BeehiivCou
     id = Number(row!.id);
   }
   await env.DB.prepare(LEDGER_LINK).bind(x.integrationId, x.projectId, 'distribution', 'beehiiv_post', externalId, 'beehiiv_post_stats', id).run();
+  await linkPublishSend(env, x.projectId, p.id, id);
   counts.posts += 1;
+}
+
+/**
+ * D2407 part 3: a synced post that began as a draft Axal VC created is tied
+ * to that PUBLISH send (`publish_send_id`), once, by the post id Beehiiv gave
+ * the draft. The tie is what lets a sent update show its newsletter figures.
+ * A failed tie leaves the post landed and untied; it is tried again next sync.
+ */
+async function linkPublishSend(env: Env, projectId: number, postId: string, rowId: number): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `UPDATE beehiiv_post_stats SET publish_send_id = (
+          SELECT s.id FROM publish_sends s WHERE s.provider_key = 'beehiiv' AND s.project_id = ? AND s.external_post_id = ? ORDER BY s.id DESC LIMIT 1)
+        WHERE id = ? AND project_id = ? AND publish_send_id IS NULL`,
+    ).bind(projectId, postId, rowId, projectId).run();
+  } catch (e) {
+    console.warn('[beehiiv] publish link failed', (e as Error)?.name);
+  }
 }
 
 /**
@@ -419,8 +438,44 @@ export async function deleteBeehiivRow(env: Env, store: Store, projectId: number
 // ═════════════════════════════════════════════════════════════ Updates rows
 
 /**
- * Why a sent update's `newsletter` is null. Part 3 links the `publish_sends`
- * row of an update's Beehiiv draft to the post it became
- * (`beehiiv_post_stats.publish_send_id`); until then no update has one.
+ * Why a sent update's `newsletter` is null: it was not drafted to Beehiiv
+ * from Axal VC, or its post has not been synced since it was sent from
+ * Beehiiv, or the founder deleted that post's figures.
  */
-export const NEWSLETTER_NOT_LINKED = 'Not recorded: a sent update is linked to its Beehiiv post once Beehiiv drafts are built.';
+export const NEWSLETTER_NOT_LINKED = 'Not recorded: this update was not drafted to Beehiiv from Axal VC, or its post has not been synced since you sent it from Beehiiv.';
+export const NEWSLETTER_UNREADABLE = 'Unreadable: the newsletter figures could not be read.';
+
+export interface UpdateNewsletter { recipients: number | null; open_rate: number | null; click_rate: number | null; as_of: string | null }
+
+/**
+ * D2407 part 3: each sent update's newsletter figures, by the update's uid.
+ * An update's Beehiiv draft is a PUBLISH draft from the `updates` module whose
+ * source refs name `portfolio_updates:<uid>`; its send's post, once synced,
+ * carries the figures. The newest synced post wins. A figure Beehiiv did not
+ * give stays null, never 0. Null when the read fails.
+ */
+export async function newsletterByUpdate(env: Env, projectId: number): Promise<Map<string, UpdateNewsletter> | null> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT b.recipients, b.open_rate, b.click_rate, b.as_of, d.source_refs_json
+         FROM beehiiv_post_stats b
+         JOIN publish_sends s ON s.id = b.publish_send_id AND s.provider_key = 'beehiiv' AND s.project_id = b.project_id
+         JOIN publish_drafts d ON d.id = s.draft_id AND d.module = 'updates'
+        WHERE b.project_id = ?
+        ORDER BY b.as_of DESC, b.id DESC LIMIT 100`,
+    ).bind(projectId).all<{ recipients: number | null; open_rate: number | null; click_rate: number | null; as_of: string | null; source_refs_json: string }>();
+    const out = new Map<string, UpdateNewsletter>();
+    for (const r of rows.results || []) {
+      let refs: unknown = [];
+      try { refs = JSON.parse(r.source_refs_json || '[]'); } catch { refs = []; }
+      for (const ref of Array.isArray(refs) ? refs : []) {
+        const m = typeof ref?.ref === 'string' ? /^portfolio_updates:([^#]+)$/.exec(ref.ref) : null;
+        if (m && !out.has(m[1])) out.set(m[1], { recipients: r.recipients ?? null, open_rate: r.open_rate ?? null, click_rate: r.click_rate ?? null, as_of: r.as_of ?? null });
+      }
+    }
+    return out;
+  } catch (e) {
+    console.warn('[beehiiv] newsletter figures unreadable', (e as Error)?.name);
+    return null;
+  }
+}
