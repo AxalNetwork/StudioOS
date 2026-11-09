@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
+// (Counts of a failed half are null — the #3871 rule, re-aimed in advisor_thinking_3871.test.ts.)
 import advisors from '../src/routes/advisors.ts';
 import {
   activeOrUpcoming, collapseSessions, collisionDetails, type CalendarItem,
@@ -278,6 +279,7 @@ test('D4813 p3: a failed windows read is partial, not a 500', async () => {
   const r = await call(db, `/me/cohort/${CYCLE}/calendar`, /FROM week_windows/);
   assert.equal(r.status, 200);
   assert.equal(r.body.sources.lab_dates, 'error');
+  assert.equal(r.body.counts.cohort_obligations, null, 'an unread half is unknown, never an undercount');
   assert.equal(r.body.partial, true);
   assert.equal(sessionsOf(r.body.items).length, 1);
   assert.ok(!r.body.events.some((e: any) => e.kind === 'cohort'), 'no week date is invented');
@@ -288,6 +290,7 @@ test('D4813 p3: a failed sessions read is partial — the Lab dates are still re
   const r = await call(db, `/me/cohort/${CYCLE}/calendar`, /FROM advisor_bookings/);
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.sources, { lab_dates: 'ok', sessions: 'error' });
+  assert.equal(r.body.counts.collisions, null, 'conflicts are unknown when sessions were not read');
   assert.equal(r.body.partial, true);
   assert.ok(r.body.items.some((e: any) => e.type === 'deadline'));
   assert.equal(sessionsOf(r.body.events).length, 0);

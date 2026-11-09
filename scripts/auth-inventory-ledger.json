@@ -2294,6 +2294,34 @@
       "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"
+    },
+    "POST /api/advisors/me/guidance/:uid/publish": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "verified",
+      "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+      "note": "Only the advisor who wrote the row (advisor_user_id = caller, else 404 naming nothing) publishes it, and only while their cohort assignment is active (requireOwnCohort, else 403); another advisor on the same cohort and every founder are refused and the row is unchanged."
+    },
+    "GET /api/advisors/me/guidance/:uid/history": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "verified",
+      "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+      "note": "Only the advisor who wrote the row (advisor_user_id = caller) reads its versions; another advisor on the same cohort gets 404 naming nothing, and a founder (no advisor licence) gets 403."
+    },
+    "POST /api/mentors/me/guidance/:uid/publish": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "verified",
+      "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+      "note": "Only the advisor who wrote the row (advisor_user_id = caller, else 404 naming nothing) publishes it, and only while their cohort assignment is active (requireOwnCohort, else 403); another advisor on the same cohort and every founder are refused and the row is unchanged."
+    },
+    "GET /api/mentors/me/guidance/:uid/history": {
+      "review": "record_without_ownership_check",
+      "kind": "unclassified",
+      "state": "verified",
+      "test": "cloudflare-worker/test/advisor_guidance_v2_d4813.test.ts",
+      "note": "Only the advisor who wrote the row (advisor_user_id = caller) reads its versions; another advisor on the same cohort gets 404 naming nothing, and a founder (no advisor licence) gets 403."
     }
   }
 }

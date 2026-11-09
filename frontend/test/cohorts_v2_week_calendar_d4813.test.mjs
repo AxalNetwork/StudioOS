@@ -118,6 +118,7 @@ test('D4813 p3: your actions are kept apart from the founders’, and no session
   const guidance = { counts: { open: 1 }, items: [
     { uid: 'q1', kind: 'question', body: 'How deep should the interview log go?', answer: null, posted_at: at(-20) },
     { uid: 'b1', kind: 'broadcast', body: 'Week 2 is about the problem statement', posted_at: at(-40) },
+    { uid: 'd1', kind: 'broadcast', body: 'Unpublished draft', posted_at: at(-1), is_draft: true },
   ] };
   const sessions = [{ kind: 'client', ref: 'slot:7', title: 'Pricing review', starts_at: at(20), ends_at: at(21) }];
   const acts = advisorActions({ guidance, sessions, cycleId: 12, now: NOW });

@@ -23,7 +23,6 @@ import partnerDeliveryBoard from './partnerDelivery.js';
 import partnerOffersBoard from './partnerOffers.js';
 import advisorPracticeBoard from './advisorPractice.js';
 import advisorExpertiseBoard from './advisorExpertise.js';
-import investorDealsBoard from './investorDeals.js';
 import networkBoard from './network.js';
 import researchBoard from './research.js';
 
@@ -31,7 +30,8 @@ const BOARDS = {
   'partner:/pipeline': partnerPipelineBoard,
   'partner:/delivery': partnerDeliveryBoard,
   'partner:/offers':   partnerOffersBoard,
-  'investor:/deals':   investorDealsBoard,
+  // D4815 (#4815): `investor:/deals` retired. `/deals` is My Deal Flow, whose
+  // "Other deal activity" line links each zone; nothing rendered this board.
   'advisor:/practice':  advisorPracticeBoard,
   'advisor:/expertise': advisorExpertiseBoard,
   // Both shared roots, both licences. One factory each: the role decides only

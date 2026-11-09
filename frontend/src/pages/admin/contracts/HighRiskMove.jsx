@@ -3,6 +3,7 @@ import Lightbox from '../../../ui/Lightbox';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import { button, input } from './parts';
+import { signedCopyLine } from './governanceModel';
 
 /**
  * D4811 (#4811) part 6 — the high-risk governance moves (boards CT-12, CT-16;
@@ -39,9 +40,11 @@ export function scopeProblem(to, { evidence, reason }, versions = [], document =
 }
 
 /** The three-row explanation block (Approvals v2), in this move's words. */
-export function reviewRows(to, document, evidence) {
+export function reviewRows(to, document, evidence, versions = []) {
+  // D4811 part 12: the chosen signed copy names who signed it and when (CT-12 B).
+  const copy = evidence?.kind === 'version' ? signedCopyLine(versions.find((v) => v.version === evidence.version)) : null;
   const changes = to === 'executed'
-    ? `“${document.title}” becomes Executed, with ${evidence?.kind === 'version' ? `v${evidence.version} (signed copy)` : `envelope #${document.envelope_id}`} as the version in force. An executed record takes no new version; to revise it, it is archived and restored as a draft.`
+    ? `“${document.title}” becomes Executed, with ${evidence?.kind === 'version' ? `v${evidence.version} (signed copy${copy ? `; ${copy}` : ''})` : `envelope #${document.envelope_id}`} as the version in force. An executed record takes no new version; to revise it, it is archived and restored as a draft.`
     : `“${document.title}” becomes Archived. It stops counting as this entity's record. It can be restored as a draft later; its versions are kept.`;
   return [
     ['What changes', changes],
@@ -92,6 +95,7 @@ export default function HighRiskMove({ to, document: d, versions = [], onClose, 
             <span>Signed copy uploaded to this record
               {evidence?.kind === 'version' && <select aria-label="Version" className={`${input} mt-1`} value={evidence.version ?? ''} onChange={(e) => setEvidence({ kind: 'version', version: Number(e.target.value) })}>
                 {versions.map((v) => <option key={v.version} value={v.version}>v{v.version}{v.signed ? ' · signed copy' : ' · not a signed copy'}</option>)}</select>}
+              {evidence?.kind === 'version' && signedCopyLine(versions.find((v) => v.version === evidence.version)) && <span className="mt-1 block text-axal-muted" data-testid="evidence-signed-copy">{signedCopyLine(versions.find((v) => v.version === evidence.version))}</span>}
               {!versions.length && <span className="block text-axal-muted">No file has been uploaded.</span>}</span></label>
           <label className="flex min-h-[44px] items-start gap-2"><input type="radio" name={`${ids}-ev`} checked={evidence?.kind === 'envelope'}
             onChange={() => setEvidence({ kind: 'envelope' })} disabled={d.envelope_id == null} />
@@ -106,7 +110,7 @@ export default function HighRiskMove({ to, document: d, versions = [], onClose, 
       </>}
 
       {step === 'review' && <>
-        <dl className="space-y-2">{reviewRows(to, d, evidence).map(([k, v]) => <div key={k}><dt className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{k}</dt><dd>{v}</dd></div>)}</dl>
+        <dl className="space-y-2">{reviewRows(to, d, evidence, versions).map(([k, v]) => <div key={k}><dt className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{k}</dt><dd>{v}</dd></div>)}</dl>
         <p className="text-axal-muted">Reason: {reason.trim()}</p>
         <label htmlFor={`${ids}-word`} className="block font-semibold">Type {word} to confirm</label>
         <input id={`${ids}-word`} className={input} autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />

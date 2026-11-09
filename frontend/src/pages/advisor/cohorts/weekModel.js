@@ -187,7 +187,8 @@ export function advisorActions({ guidance, sessions, cycleId, now = Date.now() }
 export function recentGuidance(guidance, limit = 3) {
   if (!guidance) return null;
   return (guidance.items || [])
-    .filter((g) => g.kind !== 'question' && !g.retired_at)
+    // A draft is not posted (package 2): it is not recent guidance.
+    .filter((g) => g.kind !== 'question' && !g.retired_at && !g.is_draft)
     .sort((a, b) => ms(b.posted_at) - ms(a.posted_at))
     .slice(0, limit);
 }

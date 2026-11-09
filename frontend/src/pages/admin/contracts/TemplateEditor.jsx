@@ -584,7 +584,7 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
 
       {dialog && (
         <PublishDialog mode={dialog} slug={slug} title={saved?.title || slug}
-          version={dialog === 'withdraw' ? publishedVersion : V}
+          version={dialog === 'withdraw' ? publishedVersion : V} usageCount={row?.usage_count}
           onDone={published} onClose={() => setDialog(null)} />
       )}
     </div>

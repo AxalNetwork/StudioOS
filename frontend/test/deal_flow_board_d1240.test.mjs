@@ -198,7 +198,7 @@ function harness({ phone = false } = {}) {
 function Root() {
   const l = useLocation();
   const { view, scope } = viewOf(l.search);
-  return h(React.Fragment, null, h(DealFlow, { view, scope, more: h('div', { 'data-testid': 'today-board' }) }), h('span', { 'data-testid': 'probe' }, `${l.pathname}${l.search}`));
+  return h(React.Fragment, null, h(DealFlow, { view, scope }), h('span', { 'data-testid': 'probe' }, `${l.pathname}${l.search}`));
 }
 const page = (url) => h(MemoryRouter, { key: url, initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element: h(Root) })));
 
@@ -274,10 +274,11 @@ test('mounted board (DLS1): stages with counts and asks, cards with bands, fit a
     await t.change('dealflow-tick-1', true, 'checked');
     await t.change('dealflow-tick-2', true, 'checked');
     assert.equal(t.props(t.byId('dealflow-compare')).href, '/deals/compare?ids=1,2');
-    // D4815 (DX1): the zones are one line linking to their routes; the rooms and tasks sit collapsed under it.
+    // D4815 (DX1): the zones and the deal rooms are one line linking to their routes; nothing sits under it.
     assert.equal(t.props(t.byId('other-activity-screening')).href, '/deals/screening');
     assert.match(t.text(t.byId('other-activity-screening')), /Screening\s*2/);
-    assert.ok(t.byId('today-board'), 'the rooms and tasks are kept under the line');
+    assert.equal(t.props(t.byId('other-activity-rooms')).href, '/deals/rooms');
+    assert.equal(t.byId('dealflow-more'), undefined, 'the rooms and tasks are back under the line');
   } finally { s.restore(); await t.close(); }
 });
 

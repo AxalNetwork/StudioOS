@@ -283,7 +283,7 @@ export default function ThisWeekZone() {
                           {recent.map((g) => (
                             <li key={g.uid} className="text-[12px]">
                               <span className="text-axal-faint">{`${dayTitle(dayKey(g.posted_at)) || 'Date not recorded'} · `}</span>
-                              {String(g.body || '').trim().slice(0, 90)}
+                              {String(g.title || g.body || '').trim().slice(0, 90)}
                             </li>
                           ))}
                         </ul>

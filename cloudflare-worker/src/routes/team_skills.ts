@@ -14,7 +14,10 @@
  *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`) on every
  *                                        required model (D4533: 409 `evaluation_incomplete`); a refusal carries
  *                                        the release decision as `freshness`, and so does the reply
- *                                        `{ skill, freshness }` (null for a company skill)
+ *                                        `{ skill, freshness }` (null for a company skill). D4533 (B1): the body may
+ *                                        carry `release_note` (text, up to 2000 characters; 400
+ *                                        `release_note_invalid` | `release_note_too_long`), kept on the version row;
+ *                                        GET /skills/:uid answers it as `versions[].release_note` (null: none written)
  *
  * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
@@ -69,7 +72,7 @@ import {
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
-import { publishDraft } from '../services/agents/skillPublish';
+import { publishDraft, releaseNoteOf } from '../services/agents/skillPublish';
 import { draftHash } from '../services/agents/skillLifecycle';
 import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
@@ -282,8 +285,8 @@ router.get('/skills/:uid', async (c) => {
   const company = s.company_id != null ? await c.env.DB.prepare('SELECT uid, company_name FROM company_profiles WHERE id = ?').bind(s.company_id).first<{ uid: string; company_name: string }>() : null;
   const card = await cardOf(c.env, s, user, tax, company?.company_name ?? '');
   const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
-  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null }>(c.env,
-    `SELECT v.version, v.published_at, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
+  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null; release_note: string | null }>(c.env,
+    `SELECT v.version, v.published_at, v.release_note, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
       WHERE v.skill_id = ? ORDER BY v.version DESC`, s.id);
   // The agents using it that the caller can see, grouped by company, with projects under each.
   const links = await all<AgentRow & { pinned: number }>(c.env,
@@ -309,7 +312,7 @@ router.get('/skills/:uid', async (c) => {
   }
   return c.json({
     skill: { ...card, skill_md: current?.skill_md ?? null },
-    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null })),
+    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null, release_note: v.release_note ?? null })),
     agents: [...groups.values()],
   });
 });
@@ -432,7 +435,10 @@ router.post('/skills/:uid/publish', async (c) => {
   // D4160: one publish for this route and HQ's bulk publish. An HQ skill needs a
   // second admin's approval and its golden cases at the bar. A company skill's
   // new version clears HQ's open flag or suspension in the same batch (D4161).
-  const done = await publishDraft(c.env, s, user);
+  // D4533 (B1): an optional release note, kept on the version row. A bad one refuses before anything is written.
+  const note = releaseNoteOf((await c.req.json().catch(() => null))?.release_note);
+  if (!note.ok) return say(c, note.status, note.code, note.message);
+  const done = await publishDraft(c.env, s, user, null, note.note);
   if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
   // D4533: an HQ publish answers the decision it was let through on (`freshness`), and null for a company skill.
