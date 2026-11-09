@@ -275,7 +275,7 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   // A ceiling set for another quarter is not this quarter's.
   const withQ3 = { ...CEILINGS, items: [...CEILINGS.items, ceiling({ licence_uid: 'pt', period: '2026-Q3' })] };
   assert.deepEqual(licencesWithoutCeiling({ coverage, ceilings: withQ3, period: '2026-Q4' }).map((l) => l.licence_uid), ['pt']);
-  const h = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q4', licences: null }));
+  const h = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q4', licences: null, nowMs: NOW }));
   for (const col of ['Ceiling', 'HQ', 'Branch', 'Enforcement', 'Issued', 'Remaining', 'Reporting']) assert.match(h, new RegExp(`>${col}</th>`));
   const fr = text(h.split('data-testid="hq-revenue-ceiling-state-fr-2026-Q4"')[1].split('</tr>')[0]);
   assert.match(fr, /HQ saved ✓ Branch synced ✓ Enforced[^]*?Not reported[^]*?Not recorded[^]*?Missing/);
@@ -284,7 +284,7 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   assert.match(dach, /€2,100\.00 €3,900\.00 Stale · 23 d/);
   const none = text(h.split('data-testid="hq-revenue-no-ceiling-pt"')[1].split('</tr>')[0]);
   assert.match(none, /No ceiling configured · Discounts currently allowed/);
-  const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null }));
+  const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null, nowMs: NOW }));
   assert.doesNotMatch(text(past), /Discounts currently allowed/, 'a past quarter says nothing about checkout now');
 });
 
@@ -310,7 +310,7 @@ test('coverage: every source once, counted, and each explanation lives only in t
     html(React.createElement(RevenueStreams, { summary: SUMMARY, periodStatements: PERIOD_STATEMENTS, period: '2026-Q4' })),
     html(React.createElement(RevenueTrend, { period: '2026-Q4' })),
     html(React.createElement(ReceivablesSection, { statements: STATEMENTS, onOpen() {} })),
-    html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage: SUMMARY.usage_coverage, period: '2026-Q4', licences: null })),
+    html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage: SUMMARY.usage_coverage, period: '2026-Q4', licences: null, nowMs: NOW })),
   ].map(text).join(' ');
   const drawer = text(html(React.createElement(DataCoverageDrawer, { sources, period: 'Q4 2026', readAt: SUMMARY.read_at, onClose() {}, onReload() {} })));
   for (const s of sources) {
