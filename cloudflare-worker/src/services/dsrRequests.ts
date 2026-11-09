@@ -484,3 +484,72 @@ export async function loadOwnDsrOutcome(env: Env, userId: number): Promise<DsrOw
     };
   }
 }
+
+/** D4803 (SE06): how far back the Privacy workspace lists closed requests. */
+export const DSR_RECENT_DAYS = 90;
+/** D4803: the most closed requests one read returns; `truncated` says when there were more. */
+export const DSR_RECENT_LIMIT = 100;
+
+export type DsrRecentRow = {
+  id: number;
+  user_id: number;
+  /** null when the subject's account row is gone (the ledger row outlived it). */
+  email: string | null;
+  name: string | null;
+  requested_at: string;
+  outcome: string;
+  closed_at: string | null;
+  /** null for `withdrawn` (the subject's own act) and when the operator's row is gone. */
+  closed_by: string | null;
+  close_reason: string | null;
+};
+export type DsrRecent =
+  | { available: true; window_days: number; rows: DsrRecentRow[]; truncated: boolean }
+  | { available: false; reason: string };
+
+/**
+ * D4803 — THE REQUESTS CLOSED IN THE LAST `days` DAYS, newest first: the DSR
+ * history SE06 lists beside the open ones ("Closed in last 90 days · 2 closed
+ * by HQ · 1 withdrawn"). It reads `dsr_requests` alone, so `users`'s open flag
+ * stays the one source of "open". Unreadable is its own state, never an empty
+ * history: a page that drew "none closed" from a missing table would be making
+ * a claim about statutory acts that nobody checked.
+ */
+export async function loadRecentDsrClosures(env: Env, days: number = DSR_RECENT_DAYS, nowMs: number = Date.now()): Promise<DsrRecent> {
+  const since = new Date(nowMs - days * DSR_DAY_MS).toISOString();
+  try {
+    const res = await env.DB.prepare(
+      `SELECT d.id, d.user_id, u.email AS email, u.name AS name, d.requested_at, d.outcome, d.closed_at,
+              op.email AS closed_by, d.close_reason
+         FROM dsr_requests d
+         LEFT JOIN users u ON u.id = d.user_id
+         LEFT JOIN users op ON op.id = d.closed_by_user_id
+        WHERE d.outcome IS NOT NULL AND d.closed_at IS NOT NULL
+          AND datetime(d.closed_at) >= datetime(?)
+        ORDER BY datetime(d.closed_at) DESC, d.id DESC
+        LIMIT ?`,
+    ).bind(since, DSR_RECENT_LIMIT + 1).all<DsrRecentRow>();
+    const all = res.results || [];
+    return {
+      available: true,
+      window_days: days,
+      truncated: all.length > DSR_RECENT_LIMIT,
+      rows: all.slice(0, DSR_RECENT_LIMIT).map((r) => ({
+        id: Number(r.id),
+        user_id: Number(r.user_id),
+        email: r.email ?? null,
+        name: r.name ?? null,
+        requested_at: r.requested_at,
+        outcome: r.outcome,
+        closed_at: r.closed_at ?? null,
+        closed_by: r.outcome === 'withdrawn' ? null : (r.closed_by ?? null),
+        close_reason: r.close_reason ?? null,
+      })),
+    };
+  } catch {
+    return {
+      available: false,
+      reason: 'The closed requests could not be read on this database, so the history is unknown. This is not a claim that none were closed.',
+    };
+  }
+}

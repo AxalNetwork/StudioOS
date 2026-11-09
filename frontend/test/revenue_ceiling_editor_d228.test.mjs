@@ -6,7 +6,9 @@
  * the payload it sends (integer minor units, never a blank sent as 0), the
  * sentence that says checkout does not enforce a ceiling, the editor's
  * licence-list states, its wiring on the page, and the Platform sentence that
- * stopped being true.
+ * stopped being true. D5039 part 2: the licence list is the scoped picker
+ * (`LicencePicker`, `GET /api/admin/licence-picker`), read when the editor
+ * opens, instead of the whole ledger read with the page.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,8 +18,9 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  CeilingEditor, ceilingPayload, CEILING_ENFORCEMENT, UNAVAILABLE,
+  CeilingEditor, ceilingPayload, CEILING_ENFORCEMENT,
 } from '../src/pages/hq/RevenuePage.jsx';
+import { LicencePickerView } from '../src/pages/hq/revenue/Promotions.jsx';
 import { revenuePageSource } from './_revenuePage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -30,9 +33,12 @@ const render = (props) => renderToStaticMarkup(
 );
 
 const LICENCES = [
-  { uid: 'lic_fr', licence_ref: 'AXL-FR', brand_name: 'Axal VC France', currency: 'EUR', status: 'active' },
-  { uid: 'lic_no', licence_ref: 'AXL-NO', brand_name: null, currency: 'NOK', status: 'suspended' },
+  { uid: 'lic_fr', name: 'Axal VC France', territory: ['BE', 'FR'] },
+  { uid: 'lic_no', name: 'AXL-NO', territory: [] },
 ];
+const picker = (read, q = '') => renderToStaticMarkup(React.createElement(LicencePickerView, {
+  q, onQ: () => {}, read, value: '', onChange: () => {}, onMore: () => {}, onRetry: () => {},
+}));
 
 test('the payload is integer minor units, and zero is a ceiling', () => {
   assert.deepEqual(
@@ -65,40 +71,42 @@ test('no licence, a bad period or a bad currency is refused before any call', ()
 });
 
 test('the editor states, in every state, the enforcement D4855 built (see revenue_ceiling_enforcement_5028)', () => {
-  for (const licences of [LICENCES, [], null, UNAVAILABLE]) {
-    const t = text(render({ licences }));
+  for (const searchLicences of [async () => ({ items: LICENCES }), undefined]) {
+    const t = text(render({ searchLicences }));
     for (const line of CEILING_ENFORCEMENT) assert.ok(t.includes(text(line).trim()), `missing: ${line.slice(0, 50)}`);
     assert.doesNotMatch(t, /Nothing at checkout checks a code against it/);
   }
 });
 
-test('with licences, the form offers each one; empty and unreadable say so instead', () => {
-  const h = render({ licences: LICENCES });
-  assert.match(h, /<form/);
+test('the picker offers each licence with its territory; loading, unreadable, no match and none say so', () => {
+  const h = picker({ status: 'ready', items: LICENCES, next: 'c1' });
   assert.match(text(h), /Axal VC France/);
-  assert.match(text(h), /AXL-NO · suspended/);
-  assert.match(h, /value="2026-Q3"/, 'the current period is not the default');
+  assert.match(text(h), /BE · FR/);
+  assert.match(text(h), /AXL-NO No territory recorded/);
+  assert.match(h, /type="radio"/);
+  assert.match(text(h), /Show more/, 'a next page is offered while the Worker has one');
+  assert.doesNotMatch(text(picker({ status: 'ready', items: LICENCES, next: null })), /Show more/);
 
-  const empty = render({ licences: [] });
-  assert.doesNotMatch(empty, /<form/);
-  assert.match(text(empty), /No territory licence exists yet/);
-
-  const bad = render({ licences: UNAVAILABLE });
-  assert.doesNotMatch(bad, /<form/);
+  assert.match(text(picker({ status: 'ready', items: [], next: null })), /No territory licence exists yet/);
+  assert.match(text(picker({ status: 'ready', items: [], next: null }, 'zz')), /No licence matches “zz”/);
+  const bad = picker({ status: 'unavailable', items: [], next: null });
   assert.match(text(bad), /The licence list could not be read\./);
+  assert.doesNotMatch(bad, /type="radio"/);
+  assert.match(text(picker({ status: 'loading', items: [], next: null })), /Loading the licences/);
 
-  const loading = render({ licences: null });
-  assert.doesNotMatch(loading, /<form/);
-  assert.match(text(loading), /Loading the licences/);
+  const form = render({ searchLicences: async () => ({ items: LICENCES }) });
+  assert.match(form, /value="2026-Q3"/, 'the current period is not the default');
+  assert.match(text(form), /Loading the licences/, 'the picker reads when the editor mounts, not with the page');
 });
 
 test('the page mounts the editor, saves through promoCeilingSet, and re-reads the ceilings', () => {
   assert.match(PAGE, /<CeilingEditor\b/);
   assert.match(PAGE, /api\.promoCeilingSet\(uid, body\)/);
   assert.match(PAGE, /const r = await api\.promoCeilingSet\(uid, body\);\s*loadCeilings\(\);/);
-  // #4700: the ledger is paged; Revenue follows every page, and a cut run is unreadable.
-  assert.match(PAGE, /licenceLedgerApi\.all\(\)\.then\(\(r\) => setLicences\(r\?\.complete \? r\.items : UNAVAILABLE\)/);
-  assert.match(PAGE, /setLicences\(UNAVAILABLE\)/);
+  // D5039: the whole ledger is no longer read for the picker; the scoped picker is read when the editor opens.
+  assert.doesNotMatch(PAGE, /licenceLedgerApi/);
+  assert.match(PAGE, /searchLicences=\{adminStatementActionsApi\.licencePicker\}/);
+  assert.match(PAGE, /\{editing && <CeilingEditor searchLicences=\{searchLicences\}/);
   assert.match(API, /promoCeilingSet: \(licenceUid, data\) =>\s*request\(`\/admin\/promo-ceilings\/\$\{encodeURIComponent\(licenceUid\)\}`/);
 });
 

@@ -29,6 +29,7 @@
 import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
+import { effectiveChannels } from './notificationPolicy';
 import { bindingKey } from '../util/schemaBootstrap';
 import { renderWeeklyDigest } from './email/canvasTransactional';
 
@@ -55,16 +56,6 @@ export const CRITICAL_CATEGORIES: ReadonlySet<string> = new Set([
   'security',
   'billing',
   'contract_sign_request',
-]);
-
-/** Event types whose email column SettingsPage.jsx renders locked
- *  (checked, disabled) — the only ones `resolveChannels` may force email
- *  back on over a stored opt-out. Distinct from CRITICAL_CATEGORIES, which
- *  also covers uncategorised legacy callers for quiet-hours/digest timing
- *  but was never meant to override those callers' own opt-outs. */
-const LOCKED_EMAIL_TYPES: ReadonlySet<string> = new Set([
-  'capital_call_issued',
-  'agreement_ready_to_sign',
 ]);
 
 export interface NotifyArgs {
@@ -156,25 +147,8 @@ async function loadPrefs(env: Env, userId: number): Promise<Record<string, any>>
   }
 }
 
-function resolveChannels(
-  prefs: Record<string, any>, type: string, requested: NotifyChannel[], forceEmail: boolean,
-): NotifyChannel[] {
-  // Honor per-event, per-channel opt-outs from /account/notifications.
-  // All three channels (in_app/email/slack) are user-toggleable and
-  // default-on; an explicit `false` in prefs[type][ch] suppresses that
-  // channel for that event type — EXCEPT email on a locked event type,
-  // which SettingsPage.jsx already renders locked (checked, disabled) and
-  // which this function must actually honour, not just the UI. A `false`
-  // saved before the lock existed (or written around it) no longer wins.
-  const ev = (prefs && typeof prefs === 'object' ? (prefs[type] || {}) : {}) as Record<string, any>;
-  const out: NotifyChannel[] = [];
-  for (const ch of requested) {
-    if (ch === 'email' && forceEmail) { out.push(ch); continue; }
-    const enabled = ev[ch];
-    if (enabled === undefined || enabled === true) out.push(ch);
-  }
-  return out;
-}
+// D4615: per-event and per-category opt-outs and the locked email types are one rule now, in
+// `services/notificationPolicy.ts` (`effectiveChannels`), which Settings reports as well.
 
 /**
  * Task #1 (Slack, 2026-05-10) — Block Kit renderer for the 5 spec'd
@@ -286,42 +260,27 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     const channels: NotifyChannel[] = (args.channels && args.channels.length > 0) ? args.channels : ['in_app'];
     const prefs = await loadPrefs(env, args.userId);
 
-    // Task #14 — categorisation drives quiet-hours + digest routing.
-    // Uncategorised calls are treated as critical so we never silently
-    // suppress a notification a caller didn't opt into the new pipeline.
-    // Computed before `resolveChannels` now — a Codex review on D333 found
-    // that a critical category's email was still being filtered out by a
-    // stored `prefs[type].email === false` from before SettingsPage.jsx
-    // locked `capital_call_issued`/`agreement_ready_to_sign`'s email column:
-    // the UI rendered the toggle checked-and-disabled, but a user who had
-    // already saved `false` kept missing the "cannot be turned off" email
-    // regardless, because `resolveChannels` ran first and dropped the
-    // whole branch before `isCritical` ever got a say. `resolveChannels`
-    // now takes `isCritical` and puts `email` back for a critical category
-    // even over a stored opt-out — `in_app`/`slack` stay opt-outable, since
-    // the lock in Settings is on the email column only.
+    // Task #14 — categorisation drives quiet-hours + digest routing (WHEN). Uncategorised calls are treated as
+    // critical for timing, so a caller that never opted into the pipeline is not delayed. Which channels go out at
+    // all (WHETHER) is D4615's `effectiveChannels`: the locked email types (D333) are always emailed, and an event
+    // or category opt-out suppresses a channel — an uncategorised caller's own event opt-out still works.
     const isCritical = !args.category || CRITICAL_CATEGORIES.has(args.category);
-    // P1 (Codex, D333): `isCritical` also covers every uncategorised legacy
-    // caller (capital.ts's capital_call_paid, tickets.ts's ticket_update) —
-    // that's correct for quiet-hours/digest bypass timing (Task #14's
-    // original "uncategorised behaves as before" rule), but forcing email
-    // back over a stored opt-out must stay scoped to the two event types
-    // SettingsPage.jsx actually renders locked. Otherwise an uncategorised
-    // caller's opt-out silently stops working the moment this ran.
-    const forceEmail = LOCKED_EMAIL_TYPES.has(args.type);
-    const resolved = resolveChannels(prefs, args.type, channels, forceEmail);
-    if (resolved.length === 0) return null;
-
-    // T20 — Quiet hours: if the user is currently inside their configured
-    // quiet window, suppress real-time push (DO broadcast) and email/slack
-    // dispatch — but STILL write the inbox row so the bell catches up when
-    // they return. Failures here must never block the underlying notify.
+    // D4615 — the member's settings are read first: the category switches decide WHETHER (with the event switches,
+    // in `effectiveChannels`, the one rule Settings also reports), and quiet hours and the digest decide WHEN.
+    // A settings read that fails leaves the category switches at their default (on) and quiet hours off, so a
+    // lookup failure never silently drops a message; it never blocks the notify either.
     let quiet = false;
     let settings: Awaited<ReturnType<typeof getUserSettings>> | null = null;
     try {
       settings = await getUserSettings(env, args.userId);
       quiet = isInQuietHours(settings);
-    } catch (e) { console.warn('[notify] quiet-hours lookup failed', e); }
+    } catch (e) { console.warn('[notify] settings lookup failed', e); }
+    const parse = (s: unknown) => { try { const v = JSON.parse(String(s || '{}')); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+    const resolved = effectiveChannels({
+      type: args.type, category: args.category ?? null, requested: channels, eventPrefs: prefs,
+      categories: settings ? { email: parse(settings.notif_categories_email), inapp: parse(settings.notif_categories_inapp) } : null,
+    }).channels as NotifyChannel[];
+    if (resolved.length === 0) return null;
     const digest = settings?.digest_frequency || 'off';
 
     let rowId: number | null = null;
@@ -463,10 +422,9 @@ export async function notify(env: Env, args: NotifyArgs): Promise<number | null>
     // Task #1 (Slack, 2026-05-10) — load the per-user incoming-webhook
     // URL from the integrations table (legacy global env.SLACK_WEBHOOK_URL
     // fallback removed — broadcasting every user's notifications to one
-    // shared channel was a privacy footgun). Per-event opt-out is already
-    // applied above by `resolveChannels` against `users.notification_prefs`
-    // (the same matrix the Settings → Notifications UI writes to), so this
-    // block only needs to honour quiet-hours and dispatch.
+    // shared channel was a privacy footgun). The opt-outs are already
+    // applied above by `effectiveChannels` (D4615), so this block only needs
+    // to honour quiet-hours and dispatch.
     if (resolved.includes('slack')) {
       const skipSlack = quiet && !isCritical;
       if (!skipSlack) {

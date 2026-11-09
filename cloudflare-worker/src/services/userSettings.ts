@@ -9,6 +9,7 @@
  * avoids a circular import between routes/settings and services/notify.
  */
 import type { Env } from '../types';
+import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -49,6 +50,9 @@ export interface UserSettingsRow {
   feature_flags: string;
   // Task #15 — JSON array of pageKey strings the user has dismissed.
   dismissed_explainers: string;
+  /** D4615 — write counters for the privacy and notification groups; 0 before the first save. */
+  privacy_revision?: number;
+  notifications_revision?: number;
   updated_at: string;
 }
 
@@ -74,6 +78,8 @@ const DEFAULT_ROW = {
   sidebar_default: 'expanded' as SidebarDefault,
   feature_flags: '{}',
   dismissed_explainers: '[]',
+  privacy_revision: 0,
+  notifications_revision: 0,
 };
 
 const MIGRATED = new WeakMap<object, boolean>();
@@ -105,6 +111,8 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         feature_flags TEXT DEFAULT '{}',
         dismissed_explainers TEXT NOT NULL DEFAULT '[]',
         validate_working_lang TEXT,
+        privacy_revision INTEGER NOT NULL DEFAULT 0,
+        notifications_revision INTEGER NOT NULL DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
     ).run();
@@ -141,6 +149,8 @@ export async function ensureUserSettings(env: Env): Promise<void> {
         `ALTER TABLE user_settings ADD COLUMN visibility_chosen_at TEXT`,
       ).run();
     } catch {}
+    // D4615 — the revision counters come from migration 202611090835 (on an existing table) and from the CREATE
+    // above (on a fresh one); no blind runtime ADD COLUMN (check-runtime-ddl).
     MIGRATED.set(bindingKey(env), true);
   } catch (e) {
     console.error('[user_settings] migration failed', e);
@@ -443,7 +453,42 @@ function buildUpdates(patch: UserSettingsPatch): Array<[string, unknown]> {
  * SettingsValidationError on bad input (caller maps to HTTP status) and
  * a plain Error('profile_slug already in use') on UNIQUE conflict.
  */
-export async function upsertUserSettings(env: Env, userId: number, patch: UserSettingsPatch): Promise<UserSettingsRow> {
+/** D4615 — a save that read revision `expected` lost to a newer one; nothing was written. */
+export class SettingsConflictError extends Error {
+  readonly current: UserSettingsRow;
+  readonly group: SettingsGroup;
+  constructor(group: SettingsGroup, current: UserSettingsRow) {
+    super('These settings changed since you opened them, so nothing was saved.');
+    this.group = group;
+    this.current = current;
+  }
+}
+
+/** D4615 — the preference groups that carry a revision. */
+export type SettingsGroup = 'privacy' | 'notifications';
+
+/** The revision a body names, or null when it names none (a legacy client: the write is still field-level). */
+export function expectedRevisionOf(raw: unknown): number | null | 'invalid' {
+  if (raw === undefined || raw === null) return null;
+  return typeof raw === 'number' && Number.isSafeInteger(raw) && raw >= 0 ? raw : 'invalid';
+}
+
+// Written out, never assembled: the bump for each group, with and without the revision the writer read.
+const BUMP: Record<SettingsGroup, { any: string; expected: string }> = {
+  privacy: {
+    any: 'UPDATE user_settings SET privacy_revision = privacy_revision + 1 WHERE user_id = ?',
+    expected: 'UPDATE user_settings SET privacy_revision = privacy_revision + 1 WHERE user_id = ? AND privacy_revision = ?',
+  },
+  notifications: {
+    any: 'UPDATE user_settings SET notifications_revision = notifications_revision + 1 WHERE user_id = ?',
+    expected: 'UPDATE user_settings SET notifications_revision = notifications_revision + 1 WHERE user_id = ? AND notifications_revision = ?',
+  },
+};
+
+export async function upsertUserSettings(
+  env: Env, userId: number, patch: UserSettingsPatch,
+  guard: { group: SettingsGroup; expected: number | null } | null = null,
+): Promise<UserSettingsRow> {
   await ensureUserSettings(env);
   const updates = buildUpdates(patch);
   if (updates.length === 0) return getUserSettings(env, userId);
@@ -468,10 +513,20 @@ export async function upsertUserSettings(env: Env, userId: number, patch: UserSe
 
   const setSql = updates.map(([col]) => `${col} = ?`).join(', ');
   const params = updates.map(([, v]) => v);
-  await env.DB.prepare(
+  const write = env.DB.prepare(
     `UPDATE user_settings SET ${setSql}, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
-  ).bind(...params, userId).run();
-
+  ).bind(...params, userId);
+  if (!guard) {
+    await write.run();
+    return getUserSettings(env, userId);
+  }
+  // D4615 — the group's revision moves by one with every write to it. When the writer named the revision it read,
+  // the bump is the deciding statement: a stale revision changes no row, the guard fails, and the batch rolls back.
+  const bump = guard.expected === null
+    ? env.DB.prepare(BUMP[guard.group].any).bind(userId)
+    : env.DB.prepare(BUMP[guard.group].expected).bind(userId, guard.expected);
+  const run = await runDecision(env, [bump, decisionGuard(env), write, clearGuard(env)]);
+  if (run.lost) throw new SettingsConflictError(guard.group, await getUserSettings(env, userId));
   return getUserSettings(env, userId);
 }
 

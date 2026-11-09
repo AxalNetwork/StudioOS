@@ -8,7 +8,7 @@ import {
   GATES, OWNER_ONLY, answersOf, endCopy, folderChoices, gateCopy, gateWord, linkRows, makeCurrentCopy, moveCopy, removeCopy, renameCopy,
   versionRows, whoCanOpen,
 } from './filesModel.js';
-import { day } from './dataRoomModel.js';
+import { day, roomCan } from './dataRoomModel.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import DataRoomDeckSource from './DataRoomDeckSource.jsx';
 
@@ -62,7 +62,10 @@ function Failed({ what, onRetry, testId }) {
 
 export default function DataRoomFile({ fileId, room, projectUid, projectId, onClose, onChanged }) {
   const file = (room?.files || []).find((f) => String(f.id) === String(fileId));
-  const owner = room?.role !== 'cofounder';
+  // D5074: each control is the Worker's capability for this caller (`roomCan`), never the role.
+  const can = (k) => roomCan(room, k);
+  const canGate = can('set_gate');
+  const canDelete = can('delete');
   const [versions, retryVersions] = useRead(() => (file ? dataRoomApi.versions(projectUid, file.uid) : null), [projectUid, file?.uid]);
   const [record, retryRecord] = useRead(() => cyclesApi.record('raise', projectId, 'data-room', fileId), [projectId, fileId]);
   const [ask, setAsk] = useState(null);
@@ -150,11 +153,12 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
           {file.visibility === 'nda' ? <Pill>NDA</Pill> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={BTN} onClick={() => download(null)} data-testid="dataroom-file-download">Download</button>
+          {can('download') ? <button type="button" className={BTN} onClick={() => download(null)} data-testid="dataroom-file-download">Download</button> : null}
+          {/* Replace is the Raise record's action (`cycle_records.ts`), whose own rules answer it. */}
           <button type="button" className={BTN} onClick={() => setAsk({ kind: 'replace', picked: null })} data-testid="dataroom-file-replace-open">Replace</button>
-          <button type="button" className={BTN} onClick={() => setAsk({ kind: 'move', target: folder?.uid || '' })} data-testid="dataroom-file-move-open">Move</button>
-          <button type="button" className={BTN} onClick={() => setAsk({ kind: 'rename', name: file.name })} data-testid="dataroom-file-rename-open">Rename</button>
-          <button type="button" className={`${BTN} text-red-700 dark:text-red-300`} disabled={!owner} title={owner ? undefined : OWNER_ONLY} onClick={() => setAsk({ kind: 'remove' })} data-testid="dataroom-file-remove-open">Remove</button>
+          {can('edit') ? <button type="button" className={BTN} onClick={() => setAsk({ kind: 'move', target: folder?.uid || '' })} data-testid="dataroom-file-move-open">Move</button> : null}
+          {can('edit') ? <button type="button" className={BTN} onClick={() => setAsk({ kind: 'rename', name: file.name })} data-testid="dataroom-file-rename-open">Rename</button> : null}
+          <button type="button" className={`${BTN} text-red-700 dark:text-red-300`} disabled={!canDelete} title={canDelete ? undefined : OWNER_ONLY} onClick={() => setAsk({ kind: 'remove' })} data-testid="dataroom-file-remove-open">Remove</button>
         </div>
         <p className={`m-0 text-[12px] ${MUTED}`}>Download makes your own copy. It is not an investor event.</p>
         {link?.url ? <p className="m-0 text-[12.5px]" data-testid="dataroom-file-link">Your link to {link.label} is ready. <a className="font-semibold text-axal-violet underline" href={link.url}>Open it</a>; it works once, for two minutes.</p> : null}
@@ -174,8 +178,8 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
 
         <section className={SEC} data-testid="dataroom-file-gate">
           <h3 className={EYE}>Gate</h3>
-          {!owner ? <p className={`m-0 text-[12px] ${MUTED}`}>{OWNER_ONLY}</p> : null}
-          <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" disabled={!owner}><legend className="sr-only">Who it is for</legend>
+          {!canGate ? <p className={`m-0 text-[12px] ${MUTED}`}>{OWNER_ONLY}</p> : null}
+          <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0" disabled={!canGate}><legend className="sr-only">Who it is for</legend>
             {GATES.map((g) => (
               <label key={g.key} className="flex items-start gap-2">
                 <input type="radio" name="dataroom-file-tier" checked={(file.access_tier || 'invited') === g.key} onChange={() => setAsk({ kind: 'gate', tier: g.key })} data-testid={`dataroom-file-tier-${g.key}`} />
@@ -206,8 +210,8 @@ export default function DataRoomFile({ fileId, room, projectUid, projectId, onCl
               <span><span className={`${MONO} font-bold`}>v{v.version}</span> {v.when} · {v.who} <span className={`${MONO} text-[11.5px] ${MUTED}`}>{v.size}</span></span>
               <span className="flex items-center gap-1.5">
                 {v.current ? <Pill tone="v">✓ Current</Pill> : null}
-                <button type="button" className={BTN} onClick={() => download(v.current ? null : v.version)} data-testid={`dataroom-file-version-download-${v.version}`}>Download</button>
-                {!v.current ? <button type="button" className={BTN} onClick={() => setAsk({ kind: 'current', version: v.version })} data-testid={`dataroom-file-version-current-${v.version}`}>Make current</button> : null}
+                {can('download') ? <button type="button" className={BTN} onClick={() => download(v.current ? null : v.version)} data-testid={`dataroom-file-version-download-${v.version}`}>Download</button> : null}
+                {!v.current && can('make_current') ? <button type="button" className={BTN} onClick={() => setAsk({ kind: 'current', version: v.version })} data-testid={`dataroom-file-version-current-${v.version}`}>Make current</button> : null}
               </span>
             </div>
           ))}

@@ -118,9 +118,11 @@ test('a channel is ON unless the stored value is exactly false, as notify.ts del
   assert.equal(channelOn({ deal_assigned: { email: false } }, 'deal_assigned', 'email'), false);
   assert.equal(channelOn({ deal_assigned: { email: true } }, 'deal_assigned', 'email'), true);
   assert.equal(channelOn({ deal_assigned: { email: false } }, 'deal_assigned', 'in_app'), true, 'one channel off leaves the others on');
-  // The Worker's rule this mirrors.
-  const notify = read('cloudflare-worker/src/services/notify.ts');
-  assert.match(notify, /if \(enabled === undefined \|\| enabled === true\) out\.push\(ch\);/);
+  // The Worker's rule this mirrors (D4615: one rule, in notificationPolicy.ts, which notify.ts applies).
+  const policy = read('cloudflare-worker/src/services/notificationPolicy.ts');
+  assert.match(policy, /const off = \(v: unknown\) => v === false;/);
+  assert.match(policy, /if \(off\(ev\[ch\]\)\) \{ suppressed\.push/);
+  assert.match(read('cloudflare-worker/src/services/notify.ts'), /effectiveChannels\(\{/);
 });
 
 test('a push device is named from its stored user agent, and only from that', () => {
