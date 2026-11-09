@@ -303,7 +303,8 @@ test('step 5 instantiates from a named template version and never blanks a field
 });
 
 test('step 6 renders the credential reason and disables the button rather than letting it 409', () => {
-  assert.match(PAGE, /\{step === 6 && <DeployStep/);
+  // D4819 part 3: step 6 is Operations › Branch and domain; the deploy step still mounts on it, under the sync and domain strips.
+  assert.match(PAGE, /\{step === 6 && \([\s\S]{0,400}<DeployStep licence=\{d\} \/>/);
   assert.match(PAGE, /data-testid="licence-deploy-step"/);
   assert.match(PAGE, /data-testid="deploy-credential-reason"/);
   // Disabled ON the server-supplied flag, not on a guess about the token: the

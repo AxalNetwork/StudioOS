@@ -39,6 +39,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import CreateStartupForm from '../src/components/CreateStartupForm.jsx';
 import { codeOnlyJsx } from './_codeOnly.mjs';
+import { VENTURE_PARAM, ventureRef } from '../src/pages/cycles/ventureQuery.js';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 // `codeOnlyJsx`, not `codeOnly`: every deletion below left a `{/* … */}` in the
@@ -78,10 +79,13 @@ const FROM_URL = [
 test('every page that lost a picker can still be pointed at a startup', () => {
   for (const rel of FROM_URL) {
     const src = code(`frontend/src/${rel}`);
-    assert.match(src, /\bget\(['"]project_id['"]\)/,
+    // D5074 (#5074): CycleRoute reads the param through the shared venture helper, held below.
+    assert.match(src, rel === 'pages/cycles/CycleRoute.jsx' ? /\bventureRef\(searchParams\)/ : /\bget\(['"]project_id['"]\)/,
       `${rel} lost its startup picker in #181, so \`?project_id=\` is now the ONLY way to `
       + 'aim it at a startup — it must still read the param');
   }
+  assert.equal(VENTURE_PARAM, 'project_id');
+  assert.equal(ventureRef('?project_id=7')?.id, 7, 'the shared helper reads `?project_id=`');
 
 });
 
