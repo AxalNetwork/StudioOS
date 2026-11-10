@@ -29,7 +29,7 @@ import { telegramTokenConfigured } from './telegramClient';
 import { xClientConfigured } from './xClient';
 import { MANAGED_PROVIDERS, keyStateOf, readProviderKeyLastSet, readProviderKeyStatus } from './providerOauthKeys';
 import { githubMirrorTarget } from './githubSync';
-import { readRecentSyncAttempts, readTicketSync } from './supportQueues';
+import { readRecentSyncAttempts, readTicketSync, SYNC_LAG_UNREADABLE } from './supportQueues';
 import { getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary, CATALOG_SYNC_CAPABILITY } from './catalog';
 import { promoState, readProductIds } from './promos';
 
@@ -565,10 +565,22 @@ export function blockReadMeta(key: keyof PlatformSummaryReaders, value: unknown,
   const base = { read_at: readAt, source };
   switch (key) {
     case 'github_sync': {
-      const parts = [obj(b?.window), obj(b?.recent)];
+      const window = obj(b?.window);
+      const recent = obj(b?.recent);
+      const parts = [window, recent];
       const up = parts.filter(answered);
       const down = parts.find((p) => !answered(p));
-      return readMeta({ ...base, answered: up.length > 0, complete: up.length === parts.length, reason: reasonOf(down ?? null) });
+      // The window's counts and its create-to-mirror lag are separate reads. The
+      // counts can answer while ticket_sync_events does not; keep those counts,
+      // but do not call the composite complete when its lag is unreadable.
+      const lag = obj(window?.lag);
+      const lagUnreadable = answered(window) && str(lag?.reason) === SYNC_LAG_UNREADABLE;
+      return readMeta({
+        ...base,
+        answered: up.length > 0,
+        complete: up.length === parts.length && !lagUnreadable,
+        reason: reasonOf(down ?? null) ?? (lagUnreadable ? SYNC_LAG_UNREADABLE : null),
+      });
     }
     case 'payments_catalog': {
       const catalog = obj(b?.catalog);
