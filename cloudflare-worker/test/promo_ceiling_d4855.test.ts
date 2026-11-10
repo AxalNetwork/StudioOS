@@ -195,6 +195,46 @@ test('D4855: the reservation is one conditional write — five racing reservatio
   assert.ok(total <= 1000);
 });
 
+test('D5368: a code with one use left gives exactly one racing checkout a hold, with or without a licence ceiling', async () => {
+  for (const ceiling of [100000, null]) {
+    const d = database(ceiling);
+    insertPromo(d, 'LAST', { off: 100, max: 1 });
+    const e = env(d);
+    const [a, b] = await Promise.all([
+      reservePromo(e, { ...ask('LAST'), reference: 'cap-a' }),
+      reservePromo(e, { ...ask('LAST'), reference: 'cap-b' }),
+    ]);
+    assert.equal([a, b].filter((r) => r.ok).length, 1, `one winner with ceiling ${ceiling}`);
+    assert.equal(([a, b].find((r) => !r.ok) as any)?.reason, 'usage_limit_reached');
+    assert.equal(rows(d).filter((r) => r.state === 'reserved').length, 1);
+    const winner = (a.ok ? a : b) as any;
+    const reference = String(winner.reservation.ref).replace(/#\d+$/, '');
+    const retry = await reservePromo(e, { ...ask('LAST'), reference });
+    assert.equal(retry.ok, true, 'the winning checkout can retry after the cap is full');
+    assert.equal((retry as any).reservation.reused, true);
+    assert.equal(rows(d).length, 1);
+  }
+});
+
+test('D5368: subscription, paid à la carte, and free unlock paths share the atomic code cap', async () => {
+  const cases = [
+    { code: 'SUBLAST', promo: { percent: 10, max: 1 }, path: '/api/payments/intent', price: 'price_growth_m' },
+    { code: 'ONELAST', promo: { off: 600, max: 1 }, path: '/api/payments/alacarte/intent', price: 'price_report' },
+    { code: 'FREELAST', promo: { percent: 100, max: 1 }, path: '/api/payments/alacarte/intent', price: 'price_other' },
+  ];
+  for (const c of cases) {
+    const d = database(100000);
+    insertPromo(d, c.code, c.promo);
+    const [a, b] = await Promise.all([
+      post(d, c.path, ADA, { price_id: c.price, promo_code: c.code, nonce: `${c.code}-a` }),
+      post(d, c.path, BEA, { price_id: c.price, promo_code: c.code, nonce: `${c.code}-b` }),
+    ]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 400], c.code);
+    assert.equal((a.status === 400 ? a : b).body.reason, 'usage_limit_reached');
+    assert.equal(rows(d).filter((r) => r.state === 'reserved' || r.state === 'committed').length, 1);
+  }
+});
+
 test('D4855: even when every racer passed the read check on a stale figure, the write refuses the one that does not fit', async () => {
   const d = database(1000);
   insertPromo(d, 'SIX', { off: 600 });
