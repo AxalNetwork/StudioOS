@@ -223,6 +223,36 @@ jobs:
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
           exit 1
 
+
+  # -------------------------------------------------------------------------
+  # D5398 (#5398): when a PR's suite fails, say whether its red parts are its
+  # own or inherited from a red main, so one repair goes to main and nobody
+  # ports it, merges main or re-runs for it. Its own job, not a required check
+  # and not part of the gate: it labels the failure and never changes it. It
+  # reads this run's jobs, main's latest CI run and the red-main alert, and
+  # cannot fail (continue-on-error; the script exits 0).
+  # -------------------------------------------------------------------------
+  classify:
+    name: why CI failed (D5398)
+    needs: suite
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: scripts
+      - name: Is this failure the PR's own, or main's?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: node scripts/ci-classify.mjs
+
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
   # (frontend/tests/visual/). The fake AI binding, the contract schemas and

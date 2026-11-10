@@ -5,6 +5,7 @@ import { useToast } from '../../../components/useToast';
 import ToastMessage from '../../../components/ToastMessage';
 import RefundReviewFlow from '../../../components/RefundReviewFlow.jsx';
 import { ConsoleUnreadable } from './shared';
+import { plainStripeAmount } from '../../../lib/money';
 
 /**
  * D648 (#1448) — the Billing console (refunds and disputes).
@@ -97,7 +98,8 @@ export function BillingPanel() {
     }
   };
 
-  const fmtMoney = (cents, cur = 'usd') => `${(Number(cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${String(cur).toUpperCase()}`;
+  // D5373: Stripe's amount at its currency's own decimals, with the code beside it.
+  const fmtMoney = (cents, cur = 'usd') => `${plainStripeAmount(Number(cents || 0), cur)} ${String(cur).toUpperCase()}`;
   const fmtDate = (unixSec) => unixSec ? new Date(unixSec * 1000).toLocaleDateString() : '—';
 
   return (

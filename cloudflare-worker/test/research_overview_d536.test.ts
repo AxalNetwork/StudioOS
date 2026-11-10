@@ -619,3 +619,81 @@ test('EDGAR\'s store unreadable: the overview says Unreadable, never the signal 
   assert.equal(pub.value, null);
   assert.equal(pub.reason, 'Unreadable');
 });
+
+// ---------------------------------------------------------------------------
+// D5318 H7 (#5318): one read per directory, the same figures.
+// ---------------------------------------------------------------------------
+
+/** A D1 over `db` that records the SQL of every statement it runs. */
+function countingDB(db: InstanceType<typeof DatabaseSync>) {
+  const real: any = d1Over(db);
+  const ran: string[] = [];
+  const wrap = (stmt: any, sql: string): any => ({
+    bind: (...a: any[]) => wrap(stmt.bind(...a), sql),
+    first: (...a: any[]) => { ran.push(sql); return stmt.first(...a); },
+    all: (...a: any[]) => { ran.push(sql); return stmt.all(...a); },
+    run: (...a: any[]) => { ran.push(sql); return stmt.run(...a); },
+  });
+  return { DB: { ...real, prepare: (sql: string) => wrap(real.prepare(sql), sql) }, ran };
+}
+
+test('H7: the fund directory, the company directory and the signals are each read once', async () => {
+  // Mutation checked: readMoney given its own readFundAggregates → 2 fund reads and this fails.
+  // (The window count replaced by the page length fails the signals test's `?top=1` count above.)
+  const db = seeded();
+  const { DB, ran } = countingDB(db);
+  const { status, body } = await get(db, { DB });
+  assert.equal(status, 200);
+  const reading = (re: RegExp) => ran.filter((s) => re.test(s)).length;
+  assert.equal(reading(/research_fund_directory/), 1, 'the served-funds dedupe runs once');
+  assert.equal(reading(/NOT EXISTS/), 1);
+  assert.equal(reading(/research_company_directory/), 1);
+  assert.equal(reading(/FROM signals\b/), 1);
+  // The shared reads still fill both the totals and their sections.
+  assert.equal(body.totals.funds.value, 3);
+  assert.equal(body.money.total_funds, 3);
+  assert.equal(body.totals.companies.value, 4);
+  assert.equal(body.competition.total_companies, 4);
+  assert.equal(body.signals.active_count, 2);
+});
+
+test('H7: a size on a band edge goes to the upper band; a zero or missing size is missing, never banded', async () => {
+  // Mutation checked: `<` turned to `<=` in the band CASE → 25M lands in the first band and this fails.
+  const db = fixture();
+  const sizes = [1, 25_000_000_00 - 1, 25_000_000_00, 100_000_000_00, 250_000_000_00, 1_000_000_000_00, 0, null];
+  sizes.forEach((s, i) => fund(db, `e${i}`, 'Germany', s, 2020, 'Fintech'));
+  const m = (await get(db)).body.money;
+  assert.deepEqual(m.size_bands.map((b: any) => [b.band, b.funds]), [
+    [SIZE_BANDS[0].band, 2], [SIZE_BANDS[1].band, 1], [SIZE_BANDS[2].band, 1], [SIZE_BANDS[3].band, 1], [SIZE_BANDS[4].band, 1],
+  ]);
+  assert.equal(m.missing.size, 2);
+  assert.equal(m.missing.hq, 0);
+  assert.equal(m.missing.vintage, 0);
+});
+
+test('H7: ties rank as before: fund lists by name, sector labels and countries case-blind', async () => {
+  const db = fixture();
+  company(db, 'r1', 'spain', 'robotics');
+  company(db, 'b1', 'Austria', 'Biotech');
+  company(db, 'b2', 'Austria', 'biotech');
+  company(db, 'z1', 'Belgium', 'Zoology');
+  fund(db, 'l1', 'Germany', null, null, null, 'B list');
+  fund(db, 'l2', 'Germany', null, null, null, 'A list');
+  const { totals, competition } = (await get(db, { query: '?top=2' })).body;
+  assert.deepEqual(totals.fund_sources.names, [{ name: 'A list', funds: 1 }, { name: 'B list', funds: 1 }]);
+  assert.deepEqual(competition.by_sector.map((x: any) => [x.label.toLowerCase(), x.companies]), [['biotech', 2], ['robotics', 1]]);
+  assert.deepEqual(competition.by_country.map((x: any) => [x.country, x.companies]), [['Austria', 2], ['Belgium', 1]]);
+  assert.deepEqual(competition.other_sectors, { labels: 1, companies: 1 });
+});
+
+test('H7: an unreadable company directory says so on its totals and in competition, and nowhere else', async () => {
+  const db = seeded();
+  db.exec('DROP TABLE research_company_directory');
+  const { status, body } = await get(db);
+  assert.equal(status, 200);
+  assert.equal(body.totals.status, 'ok');
+  for (const k of ['companies', 'countries', 'sectors']) assert.equal(body.totals[k].reason, 'Unreadable', k);
+  assert.equal(body.totals.funds.value, 3);
+  assert.deepEqual(body.competition, { status: 'unreadable', reason: 'Unreadable' });
+  for (const k of ['money', 'signals']) assert.equal(body[k].status, 'ok', k);
+});

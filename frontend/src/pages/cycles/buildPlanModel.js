@@ -137,6 +137,55 @@ export function landsIn(item) {
   }
 }
 
+/**
+ * D4602 (#4602, Build audit 3/4) — WHERE AN ACCEPTED ITEM'S "Open" GOES.
+ *
+ * An accepted item records the row it landed in (`landed_table`, `landed_id`,
+ * written by `buildPlanAccept.ts`'s `LANDED`). Open used to go to the module
+ * and leave the founder to find the row, although the plan had its id all
+ * along.
+ *
+ * It can only go to the row where the module's own record route reads that
+ * table. The routes are `/build/:slug/:id` (`App.jsx`), answered by
+ * `services/records/build.ts`, and this table is READ FROM THAT FILE, one
+ * entry per `record()` reader it actually has:
+ *
+ *   · `solution-design/:id` and `prototype-mvp/:id` both read `featureRow`,
+ *     so an `mvp_features` row is addressable under either module;
+ *   · `product-roadmap/:id` reads `roadmapRow`, so `roadmap_okrs` is;
+ *   · `company-creation/:id` reads `filingOf`, whose ids are TYPED — a
+ *     formation step is `step-<id>`, as `recordHref('company-creation',
+ *     `step-${id}`, …)` writes it in that same file. The prefix is the
+ *     convention, not a guess.
+ *
+ * TWO TABLES HAVE NO RECORD READER, so they keep the module link: a risk
+ * (`venture_risks`, which Solution design lists but has no record page for)
+ * and a prototype test (`hypothesis_experiments`). A wrong id would open
+ * another row's record, which is worse than the module.
+ */
+export const LANDED_RECORD = {
+  mvp_features: { modules: ['solution-design', 'prototype-mvp'], id: (id) => id },
+  roadmap_okrs: { modules: ['product-roadmap'], id: (id) => id },
+  formation_steps: { modules: ['company-creation'], id: (id) => `step-${id}` },
+};
+
+/** A landed id is a positive integer, or it never reaches a URL. */
+const landedId = (v) => (/^[1-9]\d{0,17}$/.test(String(v ?? '').trim()) ? String(v).trim() : null);
+
+/**
+ * The item's own landed record, or the module it landed in. `search` carries
+ * the venture, so Open keeps it either way.
+ */
+export function landedHref(item, module, search = '') {
+  const where = LANDED_RECORD[String(item?.landed_table ?? '')];
+  const id = landedId(item?.landed_id);
+  if (where && id && where.modules.includes(module)) return `/build/${module}/${where.id(id)}${search}`;
+  return `/build/${module}${search}`;
+}
+
+/** Whether Open reaches the row itself, which is what its label then says. */
+export const opensRecord = (item, module) => landedHref(item, module) !== `/build/${module}`;
+
 const EVIDENCE_KIND = {
   pain_group: 'Problem discovery', hypothesis: 'Hypothesis', experiment: 'Experiment', signal: 'Demand',
   finding: 'Customer research', feature: 'Feature', commitment: 'Your commitment', decision: 'Verdict',

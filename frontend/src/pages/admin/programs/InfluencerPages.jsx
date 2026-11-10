@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { actionGhost, actionPrimary } from '../../../ui';
 import { adminInfluencersApi } from '../../../lib/api/adminInfluencers';
+import { parseMinor, toMajorString } from '../../../lib/money.js';
 import {
   BlockFailed, Card, Chip, DIALOG_BODY, DialogButtons, FIELD_LABEL, Field, INPUT, LINK, Pill, SUB, Skeleton, TD, TH,
 } from './parts';
@@ -399,6 +400,9 @@ export function LinkOfferDialog({ influencers, onClose, onLinked }) {
   const [budget, setBudget] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [featured, setFeatured] = useState(false);
+  // D5373: the budget is typed in the offer's own currency, at that currency's decimals.
+  const budgetParsed = parseMinor(budget, currency.trim().toUpperCase());
+  const budgetMinor = budgetParsed.ok ? budgetParsed.minor : 0;
   const extra = (
     <>
       <label className="flex flex-col gap-1"><span className={FIELD_LABEL}>Influencer</span>
@@ -416,9 +420,9 @@ export function LinkOfferDialog({ influencers, onClose, onLinked }) {
   );
   return (
     <ReasonDialog title="Link an offer" sub="The code keeps its own rules from Promo codes; the offer adds its owner and a budget." action="Link" extra={extra} onClose={onClose} testId="influencers-link"
-      check={() => (Math.round(Number(budget) * 100) > 0 ? null : 'Give the budget as an amount above 0.')}
+      check={() => (budgetMinor > 0 ? null : 'Give the budget as an amount above 0, with no more decimals than the currency has.')}
       onSubmit={async (reason) => {
-        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: Math.round(Number(budget) * 100), currency, featured, reason });
+        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: budgetMinor, currency: currency.trim().toUpperCase(), featured, reason });
         onLinked();
         return 'Linked. It applies at checkout for the members this influencer brings.';
       }} />
@@ -477,7 +481,7 @@ export function SettingsTab({ superAdmin }) {
 export function DefaultsDialog({ t, onClose, onSaved }) {
   const [rate, setRate] = useState(t.percentage_bps == null ? '' : String(t.percentage_bps / 100));
   const [invoices, setInvoices] = useState(t.duration_invoices == null ? '' : String(t.duration_invoices));
-  const [budget, setBudget] = useState(t.offer_budget_cents == null ? '' : String(t.offer_budget_cents / 100));
+  const [budget, setBudget] = useState(t.offer_budget_cents == null ? '' : toMajorString(t.offer_budget_cents, String(t.currency || 'USD').toUpperCase()) ?? String(t.offer_budget_cents));
   const [currency, setCurrency] = useState(t.currency || 'USD');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);

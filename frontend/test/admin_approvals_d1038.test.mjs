@@ -655,7 +655,10 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
     assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
-    assert.match(v.of('approvals-hq-proposals'), /not built yet/);
+    // D5302: Program proposals opens HQ's queue (D964), which decides it; never "not built yet".
+    assert.match(v.of('approvals-hq-proposals'), /Programs › Proposals/);
+    assert.doesNotMatch(v.of('approvals-hq-proposals'), /not built yet/);
+    assert.ok(v.hrefs().includes('/admin/programs/proposals'));
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
     assert.match(v.of('approvals-hq-grants'), /Licences › Program access by licence › Requests/);
     assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);

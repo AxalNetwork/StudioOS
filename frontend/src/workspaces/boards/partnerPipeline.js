@@ -43,11 +43,11 @@ export default function partnerPipelineBoard(role, api) {
   return {
     sources: {
       leads: () => api.listPartnerLeads(),
-      // One fetch feeding two sections. `/quotes/analytics` answers the
-      // proposals header AND the whole analytics section, so asking for it
-      // twice would be two round trips for one answer.
-      quotes: () => Promise.all([api.myQuotes(), api.quotesAnalytics()])
-        .then(([mine, stats]) => ({ ...stats, items: mine?.items || [] })),
+      // These are deliberately separate reads. A proposal list remains useful
+      // while analytics is unavailable, and each section's retry must re-read
+      // only the endpoint that failed (#5362).
+      proposals: () => api.myQuotes(),
+      analytics: () => api.quotesAnalytics(),
       negotiations: () => api.listPartnerNegotiations(),
       retainers: () => api.listPartnerRetainers(),
     },
@@ -82,20 +82,17 @@ export default function partnerPipelineBoard(role, api) {
         anchor: 'pl-proposals',
         title: 'Proposal desk',
         span: 'half',
-        source: 'quotes',
+        source: 'proposals',
         cols: '1.5fr .9fr 1fr',
         columns: ['Value', 'State', 'Decided'],
         empty: 'No quote has been sent from this firm yet.',
         summary: (d) => summary(
-          count(d?.pipeline?.pending, 'open', 'open'),
-          d?.pipeline?.win_rate_pct === null || d?.pipeline?.win_rate_pct === undefined
-            ? null
-            : `${Math.round(d.pipeline.win_rate_pct)}% win rate`,
+          count((d?.items || []).filter((quote) => quote.status === 'pending').length, 'open', 'open'),
         ),
         rows: (d) => top(d?.items).map((q) => [
           usd(q.price), title(q.status), day(q.decided_at),
         ]),
-        footnote: (d) => d?.pipeline?.win_rate_basis || null,
+        footnote: () => 'Quotes sent by this firm. Win rate and decision-cycle measures are read independently in Pipeline analytics.',
       },
       {
         slug: 'negotiations',
@@ -149,7 +146,7 @@ export default function partnerPipelineBoard(role, api) {
         anchor: 'pl-analytics',
         title: 'Pipeline analytics',
         span: 'full',
-        source: 'quotes',
+        source: 'analytics',
         cols: '1.4fr .9fr .9fr .9fr 1fr',
         columns: ['Shape', 'Quotes', 'Win rate', 'Cycle', 'Won'],
         empty: 'No quote has been decided yet, so there is nothing to break down.',

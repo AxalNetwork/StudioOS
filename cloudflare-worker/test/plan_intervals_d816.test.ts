@@ -214,7 +214,7 @@ test('D816: the public plans read gives each plan its two prices and saving, omi
   try {
     const r = await call(f, 'GET', '/api/public/plans-and-packs', null);
     assert.equal(r.status, 200, r.text);
-    assert.equal(r.headers.get('cache-control'), 'public, max-age=300, s-maxage=300');
+    assert.equal(r.headers.get('cache-control'), 'public, max-age=60, s-maxage=60, stale-while-revalidate=60');
     const by = Object.fromEntries(r.body.plans.filter((p: any) => !p.free).map((p: any) => [p.plan_name, p]));
     assert.deepEqual(by['Advisor Pro'].monthly, { unit_amount: 2000, currency: 'usd', allowance_microusd: 5_000_000 });
     assert.deepEqual(by['Advisor Pro'].yearly, { unit_amount: 20400, currency: 'usd', allowance_microusd: 4_250_000 }, '25% of $204 ÷ 12');

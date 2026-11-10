@@ -76,11 +76,12 @@ test('messages: one per transition, recovery for every kind, nothing for a clean
   assert.match(futureClockMessage({ days: 7, failures: { names: ['a'], more: 2 } }), /3 test\(s\) fail with the clock 7 days ahead[\s\S]*• a[\s\S]*2 more/);
 });
 
+// The Date-only mode, with no libfaketime, also when this suite itself runs under the nightly libfaketime job.
 test('future-clock.mjs moves Date.now() and new Date() ahead, and leaves new Date(x) alone', () => {
   const code = 'const a=Date.now();const b=new Date().getTime();const c=new Date(0).getTime();console.log(JSON.stringify({a,b,c,real:performance.timeOrigin+performance.now()}))';
   const loader = resolve(root, 'scripts/future-clock.mjs');
   const run = (days) => {
-    const r = spawnSync(process.execPath, [`--import=${loader}`, '-e', code], { env: { ...process.env, FUTURE_CLOCK_DAYS: days }, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [`--import=${loader}`, '-e', code], { env: { ...process.env, FUTURE_CLOCK_DAYS: days, LD_PRELOAD: '', FAKETIME: '' }, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     return JSON.parse(r.stdout);
   };
