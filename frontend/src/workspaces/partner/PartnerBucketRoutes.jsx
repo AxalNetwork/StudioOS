@@ -10,6 +10,7 @@ import { partnerZoneFilters } from '../partnerZoneFilters';
 import NoStoreYet from '../NoStoreYet';
 import BucketBoard from '../BucketBoard';
 import { boardFor } from '../boards';
+import OfferReadiness from './OfferReadiness';
 import { api } from '../../lib/api';
 import { rowRequests } from '../../lib/serviceMeasures.js';
 
@@ -416,6 +417,8 @@ export default function PartnerBucketRoutes() {
     }
     if (isRoot) {
       const board = boardFor('partner', prefix, api);
+      // D4841: the Offers root is its readiness view, over the same board.
+      if (board?.overview === 'readiness') return <OfferReadiness bucket={bucket} board={board} />;
       return board ? (
         <BucketBoard bucket={bucket} role="partner" board={board} />
       ) : (
@@ -445,7 +448,8 @@ export default function PartnerBucketRoutes() {
     '/pipeline': 'From first-fit opportunity to recurring engagement.',
     // D4822: the canvas's one purpose line; the eyebrow and title come from the shell, once.
     '/delivery': 'Ship the work. Run active client engagements, deliverables, capacity and reporting in one place.',
-    '/offers': 'Package what we sell. The storefront lead scoring reads against.',
+    // D4841: the Offers V2 canvas's purpose line (OF-01).
+    '/offers': 'Package what your firm sells, prove it works, and tell Axal which opportunities fit.',
   };
 
   /**
