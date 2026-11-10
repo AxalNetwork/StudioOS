@@ -32,7 +32,7 @@ export const BUDGETS: Record<string, [number, number, number, number]> = {
   'decks.by_project': [200, 4, 2, 4],
   'data_room.shared': [200, 4, 2, 1],
   'research.overview': [200, 4, 2, 21],
-  'funds.list': [200, 4, 2, 2],
+  'funds.list': [200, 4, 2, 1], // H8 (D5318): 2 → 1, the list no longer claims LP rows
   'projects.read.other_tenant': [403, 4, 2, 2],
 };
 
