@@ -243,7 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
       options: --user 1001
     env:
       PW_CHROMIUM_PATH: /ms-playwright/chromium-1194/chrome-linux/chrome
