@@ -277,8 +277,10 @@ test('P1: every managed key is listed, and a measured absence reads unset', asyn
   assert.equal(k.db_readable, true);
   assert.deepEqual(k.counts, { env: 0, db: 0, unset: MANAGED_PROVIDERS.length, unreadable: 0 });
   for (const item of k.items) {
-    // Four fields, and only four: no client id preview, no updated_by.
-    assert.deepEqual(Object.keys(item).sort(), ['last_set_at', 'last_set_basis', 'provider_key', 'state']);
+    // Six fields, and only six: no client id preview, no updated_by. D5304 added expiry and last use, both null here.
+    assert.deepEqual(Object.keys(item).sort(), ['expires_at', 'last_set_at', 'last_set_basis', 'last_used_at', 'provider_key', 'state']);
+    assert.equal(item.expires_at, null);
+    assert.equal(item.last_used_at, null);
     assert.equal(item.state, 'unset');
     assert.equal(item.last_set_at, null);
     assert.equal(item.last_set_basis, null);

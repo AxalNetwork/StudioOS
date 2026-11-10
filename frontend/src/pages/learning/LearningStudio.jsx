@@ -9,6 +9,7 @@ import StudioCourseBuilder from './StudioCourseBuilder';
 import { StudioAssessment, useStudioAssessments } from './LearningAssessments';
 import { withAssessmentRows } from './assessmentModel';
 import WebinarStudio, { WebinarStudioList } from './WebinarStudio';
+import CurriculumCoverage from './CurriculumCoverage';
 import {
   LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard,
 } from './LearningStates';
@@ -281,6 +282,8 @@ export default function LearningStudio({ sub }) {
           onCopyToStream={onCopyToStream}
         />
         {!editor && <WebinarStudioList />}
+        {/* D4650 (#4650, part 4): the catalogue's coverage of the four journeys. */}
+        {!editor && <CurriculumCoverage />}
       </div>
     </RailFrame>
   );

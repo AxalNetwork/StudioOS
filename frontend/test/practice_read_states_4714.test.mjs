@@ -107,7 +107,7 @@ const earningsWorld = (broken) => {
       : c.path === '/api/advisors/me/payouts' ? 'payouts'
         : c.path.startsWith('/api/advisors/me/period-notes/') && c.method === 'GET' ? 'note' : null;
     if (key && state.broken.has(key)) return fail();
-    if (c.path === '/api/advisors/me/ledger') return json({ currency: 'USD', clients: [], totals: { gross_cents: 0, cut_cents: 0, net_cents: 0, sessions: 0, priced_sessions: 0, unpriced_sessions: 0 }, states: { collected: { net_cents: 0, sessions: 0 }, billed: { gross_cents: 0, sessions: 0 }, written_off: { gross_cents: 0, sessions: 0 }, refunds_owed: { amount_cents: 0 }, refunded: { amount_cents: 0 }, paid_out_cents: 0, void_sessions: 0 }, recorded_payouts: { available: true, paid_cents: 0, payouts: 0 }, concentration: null, take_rate: { bps: 1500, source: 'setting', updated_at: null }, equity_clients: 0, settlement: 'none' });
+    if (c.path === '/api/advisors/me/ledger') return json({ currency: 'USD', clients: [], totals: { gross_cents: 0, cut_cents: 0, net_cents: 0, sessions: 0, priced_sessions: 0, unpriced_sessions: 0 }, states: { collected: { net_cents: 0, sessions: 0 }, billed: { gross_cents: 0, sessions: 0 }, written_off: { gross_cents: 0, sessions: 0 }, refunds_owed: { amount_cents: 0 }, refunded: { amount_cents: 0 }, paid_out_cents: 0, void_sessions: 0 }, recorded_payouts: { available: true, paid_cents: 0, payouts: 0 }, concentration: null, take_rate: { bps: 1500, source: 'setting', updated_at: null }, equity_clients: 0, settlement: 'none', lines: { read: true, listed: 0, total: 0, complete: true, unfrozen: 0, items: [], other: null } });
     if (c.path === '/api/advisors/me/earnings') return json({ currency: 'USD', billed_cents: 0, collected_cents: 0, outstanding_cents: 0, written_off_cents: 0, unpriced_count: 0, by_state: [], settlement: 'none', take_rate: { bps: 1500 } });
     if (key === 'account') return json({ state: 'pending', settlement: 'none' });
     if (key === 'payouts') return json({ items: [] });
@@ -122,13 +122,15 @@ test('mounted Earnings: an unread account, history or note says so and offers no
   const m = await mount(EarningsZone, w.handle);
   try {
     assert.ok(m.byTestId('payout-unreadable'), 'the account says it could not be read');
-    assert.doesNotMatch(m.text(), /Yours/, 'no payout state is claimed as yours');
+    // #4834 (D4834): no state pill is drawn as the reader's over an unread account.
+    assert.equal(m.byTestId('payout-state'), undefined, 'no payout state is claimed as yours');
     assert.equal(m.byTestId('button-connect-payout'), undefined, 'no Connect over an account it never read');
     assert.ok(m.byTestId('payouts-unreadable'));
-    assert.doesNotMatch(m.text(), /No payout has been recorded/, 'an unread history is not "none"');
+    assert.match(m.text(), /Payout information could not be read\./);
+    assert.doesNotMatch(m.text(), /No payouts recorded/, 'an unread history is not "none"');
     assert.ok(m.byTestId('note-unreadable'));
-    assert.equal(m.byTestId('input-aiband-d4'), undefined, 'nothing to type over a note it never read');
-    assert.equal(m.buttonWith(/^Accept$/), undefined, 'and nothing to file over it');
+    assert.equal(m.byTestId('input-period-note'), undefined, 'nothing to type over a note it never read');
+    assert.equal(m.buttonWith(/^Save note$/), undefined, 'and nothing to file over it');
     assert.equal(m.buttonWith(/^Draft it$/), undefined);
 
     w.state.broken.clear();
@@ -136,9 +138,9 @@ test('mounted Earnings: an unread account, history or note says so and offers no
     assert.equal(m.byTestId('payout-unreadable'), undefined);
     assert.equal(m.byTestId('payouts-unreadable'), undefined);
     assert.equal(m.byTestId('note-unreadable'), undefined);
-    assert.match(m.text(), /Yours/);
+    assert.ok(m.byTestId('payout-state'));
     assert.ok(m.byTestId('button-connect-payout'));
-    assert.match(m.text(), /No payout has been recorded/);
+    assert.match(m.text(), /No payouts recorded/);
     assert.match(m.text(), /A filed note\./, 'the note it can now read is the one on file');
   } finally { await m.close(); }
 });

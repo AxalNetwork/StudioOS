@@ -99,6 +99,9 @@ test('2. at 1,000 holders the overview reads the founders and no cap-table recor
   assert.deepEqual(m.body.records.rows.map((x: any) => x.cells.founder), ['Synthetic holder 1', 'Synthetic holder 2', 'Synthetic holder 3']);
   assert.ok(Object.hasOwn(m.body.facts, 'option_pool_pct') && Object.hasOwn(m.body.facts, 'option_pool_source'), 'the module page still answers the option pool');
   assert.ok(m.log.some((s) => CAP_TABLE.test(s.sql)), 'and reads the cap table for it');
+  // #4603 part 3: only what the pool needs: no holder kinds (one row per holder), and the model only as the fallback.
+  // Mutation checked: the option pool through the full read → the holder kinds are read.
+  assert.deepEqual(m.log.filter((s) => /^SELECT id, kind FROM cap_table_holders/.test(s.sql)).map((s) => s.sql), [], 'no holder kinds');
   assert.deepEqual(m.body.card, o.body.cards[3]);
 });
 

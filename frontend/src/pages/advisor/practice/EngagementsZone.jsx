@@ -3,7 +3,7 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
   BOARD_LANES, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
@@ -110,7 +110,7 @@ export default function EngagementsZone() {
     } catch (error) {
       setState({
         loading: false,
-        error: error?.message || 'The engagement record could not be read.',
+        error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'),
         items: [], totals: null,
       });
     }

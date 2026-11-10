@@ -1,5 +1,7 @@
 /**
  * Practice · Earnings — canvas **D4**, `/practice/earnings`, tagged LEDGER.
+ * Since #4834 (D4834) the page is built to Practice v2 PX-07; the layout
+ * checks below read that canvas, and the period and payout-day checks stand.
  *
  * D4 IS NOT IN THE PRACTICE CANVAS, and that is the first thing to know about
  * testing it. `Advisor Detail · Practice.dc.html` draws PR5 as a POINTER —
@@ -276,46 +278,50 @@ test('a note with no stamped figures is not reported as current', () => {
 
 // ── The page against the artboard ──────────────────────────────────────────
 
-test('the four stat tiles and the six table columns are the artboard’s', () => {
-  const drawn = [...DATA.matchAll(/label:'([^']+)', value/g)].map((m) => m[1]);
-  assert.deepEqual(drawn, ['Q3 gross', 'Platform cut', 'You received', 'Concentration']);
-  // The first is relabelled because the window moves — the page's tile reads
-  // "Q3 2026 gross" from the chip a reader chose, not from the fixture.
-  assert.match(P, /\$\{window_\.label\} gross/);
-  for (const label of ['You received', 'Concentration']) {
-    assert.ok(P.includes(`label="${label}"`), `no tile labelled ${label}`);
-  }
-  assert.ok(P.includes('label="Platform rate"'),
-    'the cut tile names a RATE, because no money has been taken under it');
+// #4834 (D4834): Practice v2 (PX-07) replaced D4's tiles, by-client table,
+// payout cards and AI band. The page is checked against the v2 builder now;
+// the window, payout-day and stale-note checks above are unchanged.
+const V2 = read('design/incoming/Practice v2 Page.dc.html');
+const PX07 = V2.slice(V2.indexOf('/* ---------- PX07 earnings ---------- */'), V2.indexOf('/* ---------- PX08 states ---------- */'));
+const LEDGER_MODULE = read('frontend/src/pages/advisor/practice/earningsLedger.js');
 
-  for (const th of ['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive']) {
-    assert.ok(ART.includes(`<span class="th">${th}</span>`), `the canvas no longer draws ${th}`);
-  }
-  assert.match(P, /\['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive'\]/);
+test('the cards are Practice v2’s, in its order, and none is called received', () => {
+  const drawn = [...PX07.matchAll(/\[\['Recorded billed'[\s\S]*?\]\]\.map/g)][0]?.[0] || '';
+  const labels = [...drawn.matchAll(/\['([^']+)', '\$/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ['Recorded billed', 'Recorded collected', 'Outstanding', 'Platform fees', 'Paid out']);
+  const order = labels.map((l) => LEDGER_MODULE.indexOf(`label: '${l}'`));
+  assert.ok(order.every((i) => i > 0), 'every canvas card has a label in earningsCards');
+  assert.deepEqual([...order].sort((x, y) => x - y), order, 'in the canvas’s order');
+  assert.doesNotMatch(P, /You received|You receive\b/);
+  assert.doesNotMatch(codeOnly(LEDGER_MODULE).slice(LEDGER_MODULE.indexOf('#4834 (D4834) — Practice v2 Earnings')), /label: '[^']*[Rr]eceiv/);
 });
 
-test('the two cards and the AI band the artboard draws are all present', () => {
-  for (const [title, sub] of [
-    ['Payout account', 'All three states · gates charging'],
-    ['Payout history', 'Audit trail · only here'],
-  ]) {
-    assert.ok(ART.includes(`<span class="zt">${title}</span>`), `the canvas no longer draws ${title}`);
-    assert.ok(ART.includes(`<span class="zs">${sub}</span>`), `the canvas no longer draws "${sub}"`);
-    assert.ok(P.includes(`>${title}</h3>`), `the page is missing the ${title} card`);
-    assert.ok(P.includes(`>${sub}</span>`), `the page is missing the "${sub}" sub-label`);
-  }
-  assert.match(ART, /Proposal · quarter narrated/);
-  assert.match(P, /Proposal · \{window_\.label\} narrated/);
-  for (const verb of ['Accept', 'Edit', 'Discard']) {
-    assert.ok(ART.includes(`>${verb}<`), `the canvas no longer draws ${verb}`);
-    assert.ok(P.includes(`>\n                  ${verb}\n`) || P.includes(`>${verb}<`)
-      || new RegExp(`\\b${verb}\\b`).test(P), `the page is missing ${verb}`);
-  }
+test('the ledger columns are the canvas’s, named as the issue names them', () => {
+  const head = PX07.slice(PX07.indexOf('<thead>'), PX07.indexOf('</thead>'));
+  const canvas = [...head.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(canvas, ['Client', 'Session / engagement', 'Price', 'Billing', 'Collected', 'Rate', 'Fee', 'Net']);
+  const page = [...P.slice(P.indexOf('const COLUMNS = ['), P.indexOf('];', P.indexOf('const COLUMNS = ['))).matchAll(/\['\w+', '([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(page, ['Client', 'Session / engagement', 'Price', 'Billing state', 'Recorded collected', 'Platform rate', 'Platform fee', 'Net', 'Date']);
+  assert.match(PX07, /rates are fixed when a record is priced/);
+  assert.match(P, /rates are fixed when a record is priced/);
 });
 
-test('all three payout states are drawn, with the artboard’s own gate sentences', () => {
-  // The artboard's sub-label is "All three states", so the page shows what
-  // the other two would mean rather than only the reader's own.
+test('the note and the three payout parts the canvas separates are all present', () => {
+  assert.match(PX07, /<h2>Note for November 2026<\/h2>/);
+  assert.match(P, /`Note for \$\{window_\.label\}`/);
+  for (const part of ['Payout setup', 'Payout history']) {
+    assert.ok(PX07.includes(part), `the canvas no longer draws ${part}`);
+    assert.ok(P.includes(`>${part}</h4>`), `the page is missing ${part}`);
+  }
+  // The recorded balance is its own part, and nothing records one.
+  assert.ok(P.includes('>Recorded balance</h4>'));
+  assert.match(P, /Axal holds no balance on your behalf/);
+});
+
+test('the page holds all three payout gate sentences, the Worker’s own', () => {
+  // D4 drew all three; Practice v2 draws the reader's own (#4834). The page
+  // keeps the three sentences so whichever state the Worker answers is said
+  // in the artboard's words.
   for (const gate of [
     'Paid sessions bookable and chargeable.',
     'Bookable, held uncharged until verification clears.',
@@ -411,7 +417,7 @@ test('nothing on this page claims a client was charged', () => {
   }
   // And the positive: the page renders the claim from `settlement` rather
   // than from a sentence written once.
-  assert.match(P, /d\.settlement === 'none'/);
+  assert.match(P, /L\.settlement === 'none'/);
   assert.match(P, /nothing has been charged under it/);
   // The mirror, so the ban cannot be satisfied by removing the subject: the
   // page must still be able to say what happens when settlement is ON.
@@ -420,9 +426,10 @@ test('nothing on this page claims a client was charged', () => {
 
 test('the absences this page must state are stated', () => {
   // Every one of these is a place a plausible number would fit (D56/D68).
-  assert.match(P, /Not recorded/);                       // concentration
-  assert.match(P, /unpriced_sessions/);                  // per row and in total
-  assert.match(P, /this row understates them/);
+  assert.match(P, /<Unrecorded \/>/);                    // an absent price, fee or net
+  assert.match(P, /unpriced_sessions/);                  // in the total
+  assert.match(P, /Not collected/);                      // billed is not collected
+  assert.match(P, /priced before rates were stamped/);   // a line with no rate of its own
   assert.match(P, /No margin here, only revenue/);       // the stated limit
   assert.match(P, /a rate that could not be read/);      // an absent take rate
   // And no `?? 0` over a money field, which is how an absence becomes a
