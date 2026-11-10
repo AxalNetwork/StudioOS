@@ -1,15 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card } from '../../../ui';
+import { Card, Lightbox, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass, money,
+  SaveNote, StatedLimit, Unrecorded, ZoneHeading, buttonClass, ghostButtonClass, inputClass, money,
 } from '../expertise/kit';
 import {
-  PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsDirty, noteIsStale,
-  payoutWhen, periodWindow, stateTiles,
+  BILLING_STATE, PAYOUT_STATE_LABEL, PAYOUT_TONE, customWindow, draftFitsPeriod, earningsCards,
+  latestOnly, lineWhen, noAdvisorProfile, noteIsDirty, noteIsStale, payoutWhen, periodWindow, ratePct,
 } from './earningsLedger';
+import SourceState from './SourceState';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
@@ -18,113 +18,60 @@ import { formatCost } from '../../../ui/assistCost';
 import { useRailOption } from '../../../ui/railCrumbs';
 
 /**
- * Practice · Earnings — canvas **D4**, `/practice/earnings`, tagged LEDGER.
+ * Practice · Earnings — #4834 (D4834), built to Practice v2 PX-07 (ledger and
+ * unsaved-note guard), PX-08 (per-source states) and PX-10 (phone), D4874.
+ * `/practice/earnings`, tagged LEDGER. It replaced D4's quarter and by-client
+ * layout (`design/canvases/backlog/Detail Layer Canvas II.dc.html`).
  *
- * D4 IS NOT IN THE PRACTICE CANVAS. `Advisor Detail · Practice.dc.html` marks
- * PR5 "drawn in full as D4", and D4 lives in
- * `design/canvases/backlog/Detail Layer Canvas II.dc.html`. That file stays in
- * `backlog/` by decision: it is read for intent, not promoted.
+ * "RECORDED", NEVER "YOU RECEIVED". The store holds what the advisor billed and
+ * what they marked collected; money reaching them is a payout row. So the cards
+ * are Recorded billed, Recorded collected, Outstanding and Platform fees, each
+ * with the line it is built from, and "Paid out" is a card only over paid
+ * payout rows (`earningsCards` in `earningsLedger.js`). No figure here is
+ * labelled received, and none is computed: every cent arrives from the Worker.
  *
- * WHAT THE PAGE IS FOR, in its own words: *"The compressed zone answers 'did I
- * get paid'. The detail page answers the three questions it cannot: which
- * clients actually carry the practice, what the platform took across a
- * quarter, and why last month looks wrong."*
+ * THE LEDGER IS THE RECORDS. One row per booking in the window, with the rate
+ * and fee stamped on that record when it was priced (frozen facts: a later rate
+ * or a billing-state change moves neither, #4679). A record with no stored
+ * rate says so; nothing is filled in from today's rate.
  *
- * EVERY FIGURE IS A SUM OF ROWS AN ADVISOR ENTERED, and every division of one
- * happens in the worker. Nothing here is a forecast, a run-rate or an
- * estimate, and the page performs no money arithmetic: gross, cut and net
- * arrive already reconciling in integer cents, because a rounding choice made
- * in a component is one nobody can audit (`services/advisorMoney.ts`).
+ * ONE PERIOD AT A TIME, AND ONLY ITS OWN. Every read takes a ticket
+ * (`latestOnly`) and an older period's answer is dropped, not drawn under the
+ * newer heading. The note is filed only against the period it was written for
+ * (`draftFitsPeriod`), and unsaved note text is resolved in a dialog (Save ·
+ * Discard · Stay) before the period changes.
  *
- * THE CUT IS RECORDED AND NOTHING IS CHARGED, and the page must say both. The
- * take rate lands in migration 241 as an admin-configurable setting; the
- * advisory Stripe Connect leg is behind a flag that ships off. So every money
- * response carries `settlement`, this page renders what it says, and no
- * surface here may read as a receipt while it says `'none'`. D75.
+ * ONE FAILING SOURCE NEVER BLANKS THE PAGE. The ledger, the note, the payout
+ * setup and the payout history each draw their own `SourceState`.
  *
- * `unpriced_sessions` IS REPORTED, NOT HIDDEN, and it is the one that matters
- * most. A total that quietly ignored the sessions nobody priced would be a
- * smaller number presented as a complete one — the most plausible way a money
- * page lies. It is surfaced per client as well as in the total, so a reader
- * can see WHICH row understates itself.
- *
- * THE BY-STATE TABLE STAYS. D4 does not draw it and the artboard's omission is
- * not an instruction to delete a working feature: billed / collected / written
- * off is the advisor's own bookkeeping over migration 205's columns, and it
- * answers a question the by-client table does not — whether the money arrived.
- *
- * THE AI BAND'S COST IS MEASURED, NEVER MODELLED (D16). D4 draws "≈ $0.0041"
- * before the run; the honest version of that is the caller's own observed
- * average for this task, and an explicit absence before their first run. A
- * modelled number would be a price quoted from a guess.
+ * Included pricing is not stored (D4874, backend required), so no card or line
+ * shows it.
  */
 
-const ROW = {
-  billed: ['Billed', 'warn', 'Priced and owed to you. Nothing has been collected yet.'],
-  collected: ['Collected', 'ok', 'You have been paid.'],
-  written_off: ['Written off', 'danger', 'You decided not to pursue it.'],
-  unpriced: ['Unpriced', 'neutral', 'Sessions with no amount recorded. Not counted in any total above.'],
+const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600';
+const primaryBtn = `${buttonClass} ${FOCUS} min-h-[44px] lg:min-h-0`;
+const ghostBtn = `${ghostButtonClass} ${FOCUS} min-h-[44px] lg:min-h-0`;
+
+/**
+ * The payout account's three states and the gate each implies (the Worker's
+ * `PAYOUT_GATE`). Only the advisor's own state is drawn, with its sentence.
+ */
+const PAYOUT_STATES = {
+  verified: ['Verified', 'ok', 'Paid sessions bookable and chargeable.'],
+  pending: ['Pending', 'warn', 'Bookable, held uncharged until verification clears.'],
+  blocked: ['Blocked', 'danger', 'Paid slots hidden from your profile. Free intro calls still bookable.'],
 };
 
 /**
- * D4's three payout states, each with the gate it implies — the artboard's own
- * sentences, and the same three the worker holds in `PAYOUT_GATE`. Drawn as a
- * SET rather than as the current one alone, because the artboard's own
- * sub-label is "All three states · gates charging": an advisor deciding
- * whether to verify needs to see what the other two would mean.
- */
-const PAYOUT_STATES = [
-  ['verified', 'Verified', 'ok', 'Paid sessions bookable and chargeable.'],
-  ['pending', 'Pending', 'warn', 'Bookable, held uncharged until verification clears.'],
-  ['blocked', 'Blocked', 'danger', 'Paid slots hidden from your profile. Free intro calls still bookable.'],
-];
-
-/**
- * The take rate as a reader sees it, from the basis points the worker sends.
- *
- * DIVIDED HERE AND NOWHERE ELSE, and it is the one piece of money arithmetic
- * this page does — because it is a display conversion, not a calculation: 1500
- * bps IS 15%, exactly, at every value. Every cent figure is computed server
- * side for the opposite reason.
- *
- * An absent rate renders as an absence rather than as 0% — "the platform
- * charges nothing" is a claim, and a missing response field is not evidence
- * for it (D56/D68).
+ * The take rate as a reader sees it, from basis points. The one piece of money
+ * arithmetic on this page, and a display conversion: 1500 bps IS 15%. An
+ * absent rate is an absence, never 0%.
  */
 function takeRatePct(rate) {
   const bps = rate?.bps;
   if (bps == null || !Number.isFinite(Number(bps))) return 'a rate that could not be read';
   const pct = Number(bps) / 100;
   return `${Number.isInteger(pct) ? pct : pct.toFixed(2)}%`;
-}
-
-function Stat({ label, value, note, tone }) {
-  return (
-    <Card padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{label}</div>
-      <div className={`mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums ${
-        tone === 'warn' ? 'text-amber-700 dark:text-amber-400'
-          : tone === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
-        {value}
-      </div>
-      <div className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{note}</div>
-    </Card>
-  );
-}
-
-function Figure({ label, cents, hint, strong = false }) {
-  return (
-    <Card variant={strong ? 'accent' : 'plain'} padding="md">
-      <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
-      <div className={`mt-1 tabular-nums font-extrabold ${strong ? 'text-[22px]' : 'text-[18px]'}`}>
-        {/* A roll-up over zero rows is a real zero — the advisor has recorded
-            nothing collected. That is different from Sessions, where a NULL
-            price means "not answered"; here the sum is a fact. */}
-        {money(cents) ?? <Unrecorded />}
-      </div>
-      {hint && <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{hint}</p>}
-    </Card>
-  );
 }
 
 /**
@@ -140,22 +87,64 @@ export function periodNoteSource(text, modelText, priorSource) {
   return 'advisor';
 }
 
+/** A line's billing state: a word and a shape, never colour alone. */
+function BillingPill({ state }) {
+  const s = BILLING_STATE[state] || { label: state || 'Not recorded', tone: 'neutral', mark: '○' };
+  return (
+    <Pill tone={s.tone}>
+      <span aria-hidden="true" className="mr-1">{s.mark}</span>{s.label}
+    </Pill>
+  );
+}
+
+/** The cells of one ledger record, shared by the table row and the phone card. */
+function lineCells(line) {
+  const when = lineWhen(line);
+  const rate = ratePct(line.take_rate_bps);
+  return {
+    client: line.client_name || <Unrecorded>Client not recorded</Unrecorded>,
+    session: line.topic || <Unrecorded>Session not named</Unrecorded>,
+    price: money(line.amount_cents) ?? <Unrecorded />,
+    billing: <BillingPill state={line.billing_state} />,
+    collected: line.collected_cents != null
+      ? money(line.collected_cents)
+      : <Unrecorded>{line.billing_state === 'unpriced' ? 'Not recorded' : 'Not collected'}</Unrecorded>,
+    rate: rate ?? <Unrecorded>{line.amount_cents == null ? 'Not recorded' : 'Not recorded · priced before rates were stamped'}</Unrecorded>,
+    fee: money(line.platform_fee_cents) ?? <Unrecorded />,
+    net: money(line.net_cents) ?? <Unrecorded />,
+    date: when.text ?? <Unrecorded>No date</Unrecorded>,
+  };
+}
+
+const COLUMNS = [
+  ['client', 'Client'], ['session', 'Session / engagement'], ['price', 'Price', true],
+  ['billing', 'Billing state'], ['collected', 'Recorded collected', true], ['rate', 'Platform rate', true],
+  ['fee', 'Platform fee', true], ['net', 'Net', true], ['date', 'Date'],
+];
+
+function clockOf(iso) {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return null;
+  try { return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } catch { return null; }
+}
+
 export default function EarningsZone() {
-  const [view, setView] = useState('this_quarter');
-  const [state, setState] = useState({ loading: true, error: '', data: null });
-  const [ledger, setLedger] = useState({ loading: true, error: '', data: null });
+  const [view, setView] = useState('this_month');
+  const [custom, setCustom] = useState({ from: '', until: '' });
+  const [ledger, setLedger] = useState({ loading: true, error: '', data: null, unavailable: false });
   const [payout, setPayout] = useState(null);
   const [payouts, setPayouts] = useState([]);
   const [note, setNote] = useState(null);
   // #4714 (D4714): whether each secondary read answered. A failed read is
   // never drawn as "none": no account, no payouts or no note on file.
   const [restRead, setRestRead] = useState({ payout: true, payouts: true, note: true });
+  const [restLoading, setRestLoading] = useState(true);
   const [draft, setDraft] = useState('');
   const [drafting, setDrafting] = useState(false);
   // D773 (#2099): while the band drafts, the run is the Earnings board's
   // `draft:period-narrative` (lib/railOptions/advisor.js).
   useRailOption(drafting ? 'draft:period-narrative' : null, 'Draft it');
-  // The model's last text for this window, so Accept can say who wrote what is filed.
+  // The model's last text for this window, so Save can say who wrote what is filed.
   const [modelText, setModelText] = useState(null);
   // #4679 — tickets so only the latest read/draft for the CURRENT period writes,
   // and the period each piece of note text belongs to.
@@ -169,85 +158,63 @@ export default function EarningsZone() {
   const [exportNote, setExportNote] = useState(null);
   const [connecting, setConnecting] = useState(false);
   const [connectNote, setConnectNote] = useState(null);
+  // #4834: the period the reader asked for while the note had unsaved text.
+  const [pendingView, setPendingView] = useState(null);
+  const stayRef = useRef(null);
+  const noteId = useId();
 
   // The window is derived ONCE per view change and reused by the ledger read,
-  // the note key and the chip label, so the three cannot name different
-  // quarters. `earningsLedger.js`'s header says which half is a calendar
-  // label and which is a UTC instant.
-  // EVERY CHIP KEY IS NAMED HERE, in the page that mounts the chip row —
-  // `'this_quarter'`, `'last_quarter'`, `'ytd'`, `'all'`. A key resolved one
-  // import away lets a chip be declared live over a page that cannot serve
-  // it; `profile_zone_filters.test.mjs` enforces the rule, and it caught this
-  // page passing `view` straight through to `periodWindow` without ever
-  // mentioning two of the four. PR4b's Sessions had the identical fault on
-  // its first draft, reading its window from `VIEW_DAYS[forView]`.
+  // the note key and the heading, so the three cannot name different periods.
+  // EVERY CHIP KEY IS NAMED HERE, in the page that mounts the chip row
+  // (`profile_zone_filters.test.mjs`): 'this_month', 'last_month', 'quarter',
+  // 'year', 'custom'.
   const window_ = useMemo(() => {
     const now = new Date();
-    if (view === 'last_quarter') return periodWindow('last_quarter', now);
-    if (view === 'ytd') return periodWindow('ytd', now);
-    if (view === 'all') return periodWindow('all', now);
-    return periodWindow('this_quarter', now);
-  }, [view]);
-
-  // EACH CHIP KEY IS NAMED HERE, in the page that mounts the chip row. A key
-  // resolved one import away lets a chip be declared live over a page that
-  // cannot serve it, and `profile_zone_filters.test.mjs` enforces the rule —
-  // it caught exactly that on PR4b's first draft.
-  //
-  // The two quarter chips are a DYNAMIC group because their labels are not
-  // fixed: D4's fixture reads "Q3 2026 · Q2 2026", which are the right two
-  // chips and the wrong two literals — hard-coded, the page names one quarter
-  // for ever. The other two are static because "Year to date" and "All time"
-  // are true whatever the date.
-  const quarterChips = useMemo(() => ([
-    { key: 'this_quarter', label: periodWindow('this_quarter', new Date()).label },
-    { key: 'last_quarter', label: periodWindow('last_quarter', new Date()).label },
-  ]), []);
+    if (view === 'custom') {
+      return customWindow(custom.from, custom.until)
+        || { key: null, label: 'Custom range', from: null, until: null, unchosen: true };
+    }
+    if (view === 'last_month') return periodWindow('last_month', now);
+    if (view === 'quarter') return periodWindow('quarter', now);
+    if (view === 'year') return periodWindow('year', now);
+    return periodWindow('this_month', now);
+  }, [view, custom.from, custom.until]);
 
   const { spend } = useAiSpend({ enabled: true });
-
-  const load = useCallback(async () => {
-    setState((c) => ({ ...c, loading: true, error: '' }));
-    try {
-      const data = await api.getMyAdvisorEarnings();
-      setState({ loading: false, error: '', data });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your earnings could not be read.', data: null });
-    }
-  }, []);
 
   const loadLedger = useCallback(async (w) => {
     const t = ledgerTicket.current.begin();
     // The previous window's figures are cleared, not kept under the new
     // heading while the read is in flight.
-    setLedger({ loading: true, error: '', data: null });
+    setLedger({ loading: true, error: '', data: null, unavailable: false });
     try {
       const data = await api.getMyAdvisorLedger({ from: w.from, until: w.until });
       if (!ledgerTicket.current.isCurrent(t)) return;
-      setLedger({ loading: false, error: '', data });
+      setLedger({ loading: false, error: '', data, unavailable: false });
     } catch (e) {
       if (!ledgerTicket.current.isCurrent(t)) return;
-      setLedger({ loading: false, error: e?.message || 'This window could not be read.', data: null });
+      setLedger({ loading: false, error: e?.message || 'This period could not be read.', data: null, unavailable: noAdvisorProfile(e) });
     }
   }, []);
 
   const loadRest = useCallback(async (w) => {
-    // TOLERATED, NOT REQUIRED. The ledger is the page; the payout cards beside
-    // it are configuration and history. A reader whose payout account fails to
-    // load should still see what they earned, and each card says its own
-    // absence rather than taking the page down.
+    // TOLERATED, NOT REQUIRED. Each of the three says its own absence rather
+    // than taking the page down.
     const t = restTicket.current.begin();
+    setRestLoading(true);
     const FAILED = Symbol('failed');
     const [acct, hist, n] = await Promise.all([
       api.getMyAdvisorPayoutAccount().catch(() => FAILED),
       api.listMyAdvisorPayouts().catch(() => FAILED),
-      api.getMyAdvisorPeriodNote(w.key).catch(() => FAILED),
+      // A custom range has no note key, so nothing is read for it.
+      w.key ? api.getMyAdvisorPeriodNote(w.key).catch(() => FAILED) : Promise.resolve(null),
     ]);
     if (!restTicket.current.isCurrent(t)) return;
+    setRestLoading(false);
     setRestRead({ payout: acct !== FAILED, payouts: hist !== FAILED, note: n !== FAILED });
     setPayout(acct === FAILED ? null : acct);
     setPayouts(hist !== FAILED && Array.isArray(hist?.items) ? hist.items : []);
-    if (n === FAILED) {
+    if (n === FAILED || !w.key) {
       setNote(null); setDraft(''); setDraftKey(null); setModelText(null); setEditing(false);
       return;
     }
@@ -258,7 +225,6 @@ export default function EarningsZone() {
     setEditing(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
   useEffect(() => {
     // A new period invalidates any model draft still in flight for the old one,
     // and the text on screen no longer belongs to the period shown.
@@ -267,25 +233,30 @@ export default function EarningsZone() {
     // #4713: the old period's note leaves the screen at once, not when the new
     // one lands, so it is never read (or filed) under the new period's label.
     setNote(null); setDraft(''); setModelText(null); setEditing(false);
+    if (window_.unchosen) {
+      // No range yet: nothing is read, and nothing older stays on screen.
+      ledgerTicket.current.cancel(); restTicket.current.cancel();
+      setLedger({ loading: false, error: '', data: null, unavailable: false });
+      loadRest(window_);
+      return;
+    }
     loadLedger(window_); loadRest(window_);
   }, [loadLedger, loadRest, window_]);
 
-  // #4713: typed or drafted text that is not filed is resolved before the
-  // period changes; declining keeps the period and the text.
+  const dirty = noteIsDirty(note, draft);
+
+  // #4713 / #4834: typed or drafted text that is not filed is resolved before
+  // the period changes, in the canvas's dialog (PX-07 B): Save · Discard · Stay.
   const changeView = (next) => {
     if (next === view) return;
-    if (noteIsDirty(note, draft)
-      && !window.confirm('This period\'s note is not filed. Switch period and discard it?')) return;
+    if (dirty) { setPendingView(next); return; }
     setView(next);
   };
 
-  const d = state.data;
   const L = ledger.data;
   const totals = L?.totals;
-  const tiles = stateTiles(L);
-
-  const nothingRecorded = d
-    && !d.billed_cents && !d.collected_cents && !d.written_off_cents && !d.unpriced_count;
+  const cards = earningsCards(L);
+  const lines = L?.lines;
 
   // MEASURED, NEVER MODELLED (D16). The caller's own average for this task, or
   // nothing. A modelled estimate would quote a price from a guess.
@@ -301,45 +272,45 @@ export default function EarningsZone() {
   // ── The two ops ──────────────────────────────────────────────────────────
 
   const exportCsv = useCallback(() => {
-    // Built from rows already on screen, so nothing leaves the browser and no
-    // endpoint is needed. An UNPRICED session exports as an empty cell, never
-    // as 0 — the CSV must not assert a price the advisor never set.
-    const rows = L?.clients || [];
+    // Built from the records on screen, so nothing leaves the browser and no
+    // endpoint is needed. An absent figure exports as an empty cell, never as
+    // 0 — the CSV must not assert a price, rate or fee nobody recorded.
+    const rows = lines?.items || [];
     const cell = (v) => (v == null ? '' : `"${String(v).replace(/"/g, '""')}"`);
     const cents = (v) => (v == null ? '' : (Number(v) / 100).toFixed(2));
-    const lines = [
-      ['Client', 'Sessions', 'Unpriced sessions', 'Retainer', 'Gross', 'Platform cut', 'You receive'].join(','),
+    const out = [
+      ['Client', 'Session', 'Date', 'Price', 'Billing state', 'Recorded collected', 'Platform rate', 'Platform fee', 'Net'].join(','),
       ...rows.map((r) => [
-        cell(r.client_name), r.sessions, r.unpriced_sessions,
-        cents(r.retainer_cents), cents(r.gross_cents), cents(r.cut_cents), cents(r.net_cents),
+        cell(r.client_name), cell(r.topic), cell(r.session_at || r.created_at),
+        cents(r.amount_cents), cell(r.billing_state), cents(r.collected_cents),
+        cell(ratePct(r.take_rate_bps)), cents(r.platform_fee_cents), cents(r.net_cents),
       ].join(',')),
-      // #4702: clients past the listing cap are one summed row, so the rows above
-      // plus this one equal the Total, and the file never silently drops anyone.
-      ...(L?.clients_other ? [[
-        cell(`${L.clients_other.clients} more clients`), L.clients_other.sessions, L.clients_other.unpriced_sessions, '',
-        cents(L.clients_other.gross_cents), cents(L.clients_other.cut_cents), cents(L.clients_other.net_cents),
+      // #4702: records past the cap are one summed row, so the file's records
+      // plus this row equal the Total and nobody is silently dropped.
+      ...(lines?.other ? [[
+        cell(`${lines.other.records} older records, summed`), '', '', cents(lines.other.gross_cents), '', '', '',
+        cents(lines.other.fee_cents), cents(lines.other.net_cents),
       ].join(',')] : []),
-      ['Total', totals?.sessions ?? '', totals?.unpriced_sessions ?? '', '',
-        cents(totals?.gross_cents), cents(totals?.cut_cents), cents(totals?.net_cents)].join(','),
+      ['Total recorded', '', '', cents(totals?.gross_cents), '', '', '', cents(totals?.cut_cents), cents(totals?.net_cents)].join(','),
+      ['Unpriced sessions', '', '', totals?.unpriced_sessions ?? '', '', '', '', '', ''].join(','),
     ];
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([out.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `axal-earnings-${window_.key}.csv`;
+    a.href = url; a.download = `axal-earnings-${window_.key || 'custom'}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-  }, [L, totals, window_]);
+  }, [lines, totals, window_]);
 
   const downloadTaxSummary = useCallback(async () => {
     setExportNote(null);
     try {
       // FETCHED, NOT DERIVED FROM THE TABLE ON SCREEN. A tax year and the
-      // reader's chosen window are different spans, and computing one from
-      // the other is how a summary comes to cover the wrong months.
-      const year = Number(window_.key.slice(0, 4)) || new Date().getFullYear();
+      // reader's chosen window are different spans.
+      const year = Number(String(window_.key || window_.from || '').slice(0, 4)) || new Date().getFullYear();
       const s = await api.getMyAdvisorTaxSummary(year);
       const cents = (v) => (v == null ? '' : (Number(v) / 100).toFixed(2));
-      const lines = [
+      const out = [
         ['Field', 'Value'].join(','),
         ['Year', s.year].join(','),
         ['Currency', s.currency].join(','),
@@ -350,13 +321,12 @@ export default function EarningsZone() {
         ['Priced sessions', s.priced_sessions].join(','),
         ['Sessions with no price recorded', s.unpriced_sessions].join(','),
         ['Clients', s.clients].join(','),
-        // THE DISCLAIMER TRAVELS WITH THE FILE. It is in the payload for
-        // exactly this reason: a number exported without it is a number
-        // somebody may take for a tax document.
+        // THE DISCLAIMER TRAVELS WITH THE FILE: a number exported without it
+        // is a number somebody may take for a tax document.
         ['Basis', `"${s.basis}"`].join(','),
         ['Note', `"${String(s.document?.note || '').replace(/"/g, '""')}"`].join(','),
       ];
-      const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const blob = new Blob([out.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = `axal-${s.year}-summary.csv`;
@@ -369,35 +339,29 @@ export default function EarningsZone() {
   }, [window_]);
 
   const opsHandlers = {
-    exportCsv: { onClick: exportCsv, disabled: !(L?.clients || []).length,
-      title: !(L?.clients || []).length ? 'nothing in this window to export' : undefined },
+    exportCsv: { onClick: exportCsv, disabled: !(lines?.items || []).length,
+      title: !(lines?.items || []).length ? 'nothing in this period to export' : undefined },
     taxSummary: { onClick: downloadTaxSummary },
   };
 
-  // ── The AI band ──────────────────────────────────────────────────────────
+  // ── The note and its Eadwyn draft ────────────────────────────────────────
 
   const narrate = useCallback(async () => {
     const t = draftTicket.current.begin();
     const forKey = window_.key;
     setDrafting(true); setSaveNote(null);
     try {
-      // COVERAGE LINES, NOT ROWS. The same rule the rail follows: these are
-      // the page's own summary of itself, they carry no personal data, and
-      // sending the records behind them would put a client's name in a prompt
-      // to satisfy a feature nobody asked for that of. The top client is named
-      // only as a share, never with their figures.
+      // COVERAGE LINES, NOT ROWS: the page's own summary of itself, with no
+      // client's name in it. Nothing here calls any figure "received".
+      const st = L?.states;
       const coverage = [
-        `${window_.label} gross ${money(totals?.gross_cents) ?? 'not recorded'}`,
-        `platform cut ${money(totals?.cut_cents) ?? 'not recorded'} at ${takeRatePct(L?.take_rate)}`,
-        `received (collected, net of the cut) ${money(tiles?.received_cents) ?? 'not recorded'}`,
-        `billed and not yet paid ${money(tiles?.unpaid_cents) ?? 'not recorded'}`,
-        `written off ${money(tiles?.written_off_cents) ?? 'not recorded'}`,
-        `${totals?.priced_sessions ?? 0} priced sessions, ${totals?.unpriced_sessions ?? 0} with no price recorded, across all ${totals?.sessions ?? 0} counted bookings in the window`,
-        'the retainer column is contract value per cycle, not revenue earned in the window',
-        L?.concentration
-          ? `top client is ${L.concentration.pct}% of gross`
-          : 'no concentration figure — nothing priced in this window',
-        `${(L?.clients || []).length} clients in the table`,
+        `${window_.label} recorded billed ${money(totals?.gross_cents) ?? 'not recorded'}`,
+        `platform fees ${money(totals?.cut_cents) ?? 'not recorded'}, each at its own record's rate (today's rate is ${takeRatePct(L?.take_rate)})`,
+        `recorded collected ${money(st?.collected?.gross_cents) ?? 'not recorded'}`,
+        `outstanding, billed and not marked collected ${money(st?.billed?.gross_cents) ?? 'not recorded'}`,
+        `written off ${money(st?.written_off?.gross_cents) ?? 'not recorded'}`,
+        `${totals?.priced_sessions ?? 'an unknown number of'} priced sessions, ${totals?.unpriced_sessions ?? 'an unknown number'} with no price recorded`,
+        'money reaching the advisor is recorded only as a paid payout, never inferred from collected',
       ];
       const res = await api.aiWorkspaceExplain({ workspace: 'Practice', zone: 'Earnings', coverage });
       const text = String(res?.text || res?.answer || '').trim();
@@ -410,32 +374,33 @@ export default function EarningsZone() {
       if (!draftTicket.current.isCurrent(t)) return;
       setSaveNote({ ok: false, text: e?.message || 'Nothing was drafted.' });
     } finally { if (draftTicket.current.isCurrent(t)) setDrafting(false); }
-  }, [L, totals, tiles, window_]);
+  }, [L, totals, window_]);
 
+  /** Files the note for the period on screen. Resolves true when it was saved. */
   const accept = useCallback(async () => {
     // The text must belong to the period on screen; otherwise nothing is sent.
     if (!draftFitsPeriod(draftKey, window_.key)) {
-      setSaveNote({ ok: false, text: 'This text was written for another period, so it was not filed. Draft it again.' });
-      return;
+      setSaveNote({ ok: false, text: 'This text was written for another period, so it was not saved.' });
+      return false;
     }
     setBusy(true); setSaveNote(null);
     try {
+      // `source`: 'edited' when the advisor changed a draft, 'ai' when they
+      // kept it as written, 'advisor' when no draft was involved (242).
       const res = await api.saveMyAdvisorPeriodNote(window_.key, {
         body: draft,
-        // 'edited' when the advisor changed a draft, 'ai' when they accepted
-        // it as written, 'advisor' when no draft was involved. Over-crediting
-        // the model and hiding it are both wrong, so the distinction is stored
-        // (migration 242).
         source: periodNoteSource(draft, modelText, note?.source),
         period_key: window_.key,
         figures: totals ? {
           gross_cents: totals.gross_cents, cut_cents: totals.cut_cents, net_cents: totals.net_cents,
         } : null,
       });
-      setNote(res.note); setEditing(false);
-      setSaveNote({ ok: true, text: `Filed against ${window_.label}.` });
+      setNote(res.note); setDraft(res.note?.body ?? draft); setEditing(false);
+      setSaveNote({ ok: true, text: `Note saved for ${window_.label}.` });
+      return true;
     } catch (e) {
-      setSaveNote({ ok: false, text: e?.message || 'That note was not filed.' });
+      setSaveNote({ ok: false, text: e?.message || 'The note was not saved.' });
+      return false;
     } finally { setBusy(false); }
   }, [draft, draftKey, modelText, note, totals, window_]);
 
@@ -444,18 +409,30 @@ export default function EarningsZone() {
     try {
       await api.deleteMyAdvisorPeriodNote(window_.key);
       setNote(null); setDraft(''); setModelText(null); setEditing(false);
-      setSaveNote({ ok: true, text: 'Discarded.' });
+      setSaveNote({ ok: true, text: `Note deleted for ${window_.label}.` });
     } catch (e) {
-      setSaveNote({ ok: false, text: e?.message || 'Nothing was discarded.' });
+      setSaveNote({ ok: false, text: e?.message || 'The note was not deleted.' });
     } finally { setBusy(false); }
   }, [window_]);
 
-  // ── Connect (PR5b) ───────────────────────────────────────────────────────
+  // The unsaved-changes dialog's three answers.
+  const stay = () => setPendingView(null);
+  const discardAndSwitch = () => {
+    const next = pendingView;
+    setPendingView(null); setDraft(note?.body || ''); setEditing(false);
+    setView(next);
+  };
+  const saveAndSwitch = async () => {
+    const next = pendingView;
+    if (await accept()) { setPendingView(null); setView(next); }
+  };
+  const pendingLabel = pendingView === 'custom'
+    ? 'a custom range'
+    : pendingView ? periodWindow(pendingView, new Date()).label : '';
+
+  // ── Payout setup (PR5b) ──────────────────────────────────────────────────
   // NEITHER CONTROL MOVES MONEY. Connecting returns a URL the advisor visits
-  // and refreshing reads a status back, so both work while advisory charging
-  // is off — which is how an account gets verified before the flag flips. The
-  // card says that in as many words rather than letting a verify button imply
-  // a charge is imminent.
+  // and checking reads a status back; both work while advisory charging is off.
   const connect = useCallback(async () => {
     setConnecting(true); setConnectNote(null);
     try {
@@ -474,487 +451,432 @@ export default function EarningsZone() {
       const res = await api.refreshMyAdvisorPayoutAccount();
       const fresh = await api.getMyAdvisorPayoutAccount().catch(() => null);
       if (fresh) setPayout(fresh);
-      // A FAILED REFRESH IS REPORTED AS A FAILED REFRESH, not as a state. The
-      // card keeps the last state it had and this line says the reading is
-      // old — "we could not ask" is not "blocked".
+      // A FAILED REFRESH IS REPORTED AS A FAILED REFRESH, not as a state.
       setConnectNote(res?.refreshed
         ? { ok: true, text: `Checked with the provider — ${res.state}.` }
-        : { ok: false, text: 'The provider could not be reached, so the state above is the last one recorded.' });
+        : { ok: false, text: 'The provider could not be reached, so the state shown is the last one recorded.' });
     } catch (e) {
       setConnectNote({ ok: false, text: e?.message || 'Nothing was checked.' });
     } finally { setConnecting(false); }
   }, []);
 
-  const empty = (
-    <NothingYet
-      title="Nothing recorded yet"
-      body="Once you price a session under Sessions, it appears here. This page only ever sums amounts you entered yourself."
-      action={<Link to="/practice/sessions" className="text-[12px] text-emerald-700 underline">Price your sessions →</Link>}
-    />
-  );
+  // ── No advisor profile: nothing here is anyone's ─────────────────────────
+  if (ledger.unavailable) {
+    return (
+      <section className="rounded-[12px] border border-dashed border-axal-hairline p-5 dark:border-gray-700" data-testid="earnings-unavailable" aria-labelledby={`${noteId}-unavail`}>
+        <h2 id={`${noteId}-unavail`} className="text-sm font-extrabold tracking-tight">Earnings unavailable</h2>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-axal-muted dark:text-gray-400">No advisor profile is attached to this account.</p>
+        <details className="mt-3 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400">
+          <summary className={`cursor-pointer font-semibold text-emerald-700 dark:text-emerald-300 ${FOCUS}`}>Learn why</summary>
+          <p className="mt-2 max-w-xl">
+            Earnings are the sessions, prices and payouts recorded against one advisor&rsquo;s profile.
+            This account has none, so there is nothing of its own to total, and no figure is shown
+            rather than a zero. An admin previewing the Advisor role sees this; impersonating a
+            specific advisor opens theirs.
+          </p>
+        </details>
+      </section>
+    );
+  }
 
-  // #4714: an unread account has no state of its own, so no card is "Yours".
-  const currentState = restRead.payout ? (payout?.state || 'pending') : null;
+  const acctState = restRead.payout ? (payout?.state || 'pending') : null;
+  const [acctLabel, acctTone, acctGate] = PAYOUT_STATES[acctState] || [];
+  const lastPaid = payouts.find((p) => p.state === 'paid');
+  const nextScheduled = payouts.find((p) => p.state === 'scheduled');
 
   return (
     <div className="space-y-4">
       <ZoneHeading
-        title="What the practice has earned"
-        blurb="Revenue by client and by type, the platform rate recorded against each priced session, and the payout account state that decides whether any of it could be charged."
-        action={d?.unpriced_count > 0 ? <Pill tone="warn">{d.unpriced_count} unpriced</Pill> : null}
+        title="Earnings"
+        blurb="A ledger of what you billed and what you recorded as collected."
+        action={totals?.unpriced_sessions > 0 ? <Pill tone="warn">{totals.unpriced_sessions} unpriced</Pill> : null}
       />
 
       <ZoneToolbar
         role="advisor"
-        filters={advisorZoneFilters('practice/earnings', {
-          value: view,
-          onChange: changeView,
-          dynamic: { quarters: quarterChips },
-        })}
+        filters={advisorZoneFilters('practice/earnings', { value: view, onChange: changeView })}
         actions={advisorZoneActions('practice/earnings', { handlers: opsHandlers })}
       />
 
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        {view === 'custom' ? (
+          <div className="flex flex-wrap items-end gap-3" data-testid="earnings-custom-range">
+            <label className="block text-[12px]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">From</span>
+              <input type="date" className={`${inputClass} min-h-[44px] lg:min-h-0`} value={custom.from}
+                onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))} data-testid="input-earnings-from" />
+            </label>
+            <label className="block text-[12px]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">To</span>
+              <input type="date" className={`${inputClass} min-h-[44px] lg:min-h-0`} value={custom.until}
+                onChange={(e) => setCustom((c) => ({ ...c, until: e.target.value }))} data-testid="input-earnings-until" />
+            </label>
+          </div>
+        ) : <span />}
+        <span className="font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" aria-live="polite" data-testid="earnings-period">
+          {window_.label}
+        </span>
+      </div>
+
       <SaveNote note={exportNote} />
 
-      <ZoneBody loading={ledger.loading} error={ledger.error} onRetry={() => loadLedger(window_)}
-        isEmpty={!ledger.loading && !ledger.error && !(L?.clients || []).length}
-        empty={empty}>
-        {L && (
-          <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Stat label={`${window_.label} gross`}
-                value={money(totals?.gross_cents) ?? <Unrecorded />}
-                note="sessions and retainers you priced" />
-              <Stat label="Platform rate" tone="warn"
-                value={money(totals?.cut_cents) ?? <Unrecorded />}
-                note={`${takeRatePct(L.take_rate)} of gross, recorded per line`} />
-              <Stat label="You received" tone="ok"
-                value={money(tiles?.received_cents) ?? <Unrecorded />}
-                note={`collected, net of the cut — ${tiles?.received_sessions ?? 0} session${tiles?.received_sessions === 1 ? '' : 's'}`} />
-              {/* A SHARE OF NOTHING IS NOT NOUGHT PER CENT. 0% reads as "well
-                  spread", which is the opposite of what an empty window
-                  means, so the worker answers null and the tile says so. */}
-              <Stat label="Concentration"
-                value={L.concentration ? `${L.concentration.pct}%` : <Unrecorded>Not recorded</Unrecorded>}
-                note={L.concentration
-                  ? `${L.concentration.client_name || 'one client'} alone`
-                  : 'nothing priced in this window to concentrate'} />
-            </div>
-
-            {/* #4679 — WHERE THE PRICED MONEY STANDS. Only "Received" above is
-                money in hand; these are the other states a priced session can
-                be in, each from the worker's own per-state totals. */}
-            {tiles && (
-              <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="earnings-states">
-                <Stat label="Billed, not yet paid"
-                  value={money(tiles.unpaid_cents) ?? <Unrecorded />}
-                  note={`${tiles.unpaid_sessions} session${tiles.unpaid_sessions === 1 ? '' : 's'} awaiting payment`} />
-                <Stat label="Written off"
-                  value={money(tiles.written_off_cents) ?? <Unrecorded />}
-                  note={`${tiles.written_off_sessions} session${tiles.written_off_sessions === 1 ? '' : 's'} you closed unpaid`} />
-                <Stat label="Owed back"
-                  value={money(tiles.refunds_owed_cents) ?? <Unrecorded />}
-                  note={`collected on a cancelled or missed session; already refunded ${money(tiles.refunded_cents) ?? 'not recorded'}`} />
-                <Stat label="Paid out"
-                  value={money(tiles.paid_out_cents) ?? <Unrecorded />}
-                  note={tiles.void_sessions
-                    ? `${tiles.void_sessions} cancelled or missed session${tiles.void_sessions === 1 ? '' : 's'} left out`
-                    : 'sent to your payout account in this window'} />
-              </div>
-            )}
-
-            <Card padding="md" className="mt-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-[13px] font-extrabold tracking-tight">By client · {window_.label}</h3>
-                <span className="text-[10.5px] text-axal-faint">
-                  Only here · the compressed zone shows one month, unsplit
-                </span>
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full min-w-[620px] text-[12px]">
-                  <thead>
-                    <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                      {['Client', 'Sessions', 'Retainer', 'Gross', 'Cut', 'You receive'].map((h, i) => (
-                        <th key={h} className={`px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint ${i ? 'text-right' : ''}`}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(L.clients || []).map((r) => (
-                      <tr key={r.client_user_id ?? r.client_name ?? 'none'}
-                        data-testid={`ledger-d4-${r.client_user_id ?? 'x'}`}
-                        className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
-                        <td className="px-2 py-2.5">
-                          <div className="font-bold">
-                            {r.client_name || <Unrecorded>Client not recorded</Unrecorded>}
-                          </div>
-                          {r.unpriced_sessions > 0 && (
-                            <div className="mt-0.5 text-[10.5px] text-amber-700 dark:text-amber-400">
-                              {r.unpriced_sessions} session{r.unpriced_sessions === 1 ? '' : 's'} with no price —
-                              this row understates them
-                            </div>
-                          )}
-                          {r.engagement_shape === 'equity' && (
-                            <div className="mt-0.5 text-[10.5px] text-axal-faint">
-                              Paid in equity — real compensation a cash ledger cannot hold
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-2 py-2.5 text-right tabular-nums">{r.sessions}</td>
-                        {/* NULL IS AN ABSENCE, NOT A ZERO. An engagement with
-                            no retainer recorded has not agreed a retainer of
-                            nothing (migration 238). */}
-                        <td className="px-2 py-2.5 text-right tabular-nums">
-                          {money(r.retainer_cents) ?? <Unrecorded>—</Unrecorded>}
-                        </td>
-                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(r.gross_cents)}</td>
-                        <td className="px-2 py-2.5 text-right tabular-nums text-amber-700 dark:text-amber-400">
-                          {r.cut_cents ? `−${money(r.cut_cents)}` : money(r.cut_cents)}
-                        </td>
-                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(r.net_cents)}</td>
-                      </tr>
-                    ))}
-                    {L.clients_other && (
-                      <tr data-testid="ledger-d4-other" className="border-b border-axal-hairline/60 dark:border-gray-800">
-                        <td className="px-2 py-2.5 text-axal-muted">
-                          {L.clients_other.clients} more client{L.clients_other.clients === 1 ? '' : 's'}, summed
-                        </td>
-                        <td className="px-2 py-2.5 text-right tabular-nums">{L.clients_other.sessions}</td>
-                        <td className="px-2 py-2.5" />
-                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(L.clients_other.gross_cents)}</td>
-                        <td className="px-2 py-2.5 text-right tabular-nums text-amber-700 dark:text-amber-400">
-                          {L.clients_other.cut_cents ? `−${money(L.clients_other.cut_cents)}` : money(L.clients_other.cut_cents)}
-                        </td>
-                        <td className="px-2 py-2.5 text-right font-bold tabular-nums">{money(L.clients_other.net_cents)}</td>
-                      </tr>
-                    )}
-                    <tr className="border-t-2 border-axal-hairline dark:border-gray-700" data-testid="ledger-d4-total">
-                      <td className="px-2 py-2.5 text-[12.5px] font-extrabold">{window_.label} total</td>
-                      <td className="px-2 py-2.5 text-right font-extrabold tabular-nums">{totals?.sessions}</td>
-                      <td className="px-2 py-2.5" />
-                      <td className="px-2 py-2.5 text-right font-extrabold tabular-nums">{money(totals?.gross_cents)}</td>
-                      <td className="px-2 py-2.5 text-right font-extrabold tabular-nums text-amber-700 dark:text-amber-400">
-                        {totals?.cut_cents ? `−${money(totals.cut_cents)}` : money(totals?.cut_cents)}
-                      </td>
-                      <td className="px-2 py-2.5 text-right font-extrabold tabular-nums">{money(totals?.net_cents)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-                {cutNote({
-                  cutLabel: money(totals?.cut_cents),
-                  concentration: L.concentration,
-                  equityClients: L.equity_clients || 0,
-                })}
-              </p>
-              {/* #4702: WHAT THE FIGURES COVER, from the response and not assumed.
-                  The totals are database sums over EVERY booking in the window;
-                  the client list is capped, and a capped list says so. */}
-              <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint" data-testid="ledger-completeness">
-                Totals cover all {L.completeness?.sessions ?? totals?.sessions ?? 0} booking{(L.completeness?.sessions ?? totals?.sessions) === 1 ? '' : 's'} created in this window.
-                {L.completeness && L.completeness.clients?.complete === false
-                  && ` ${L.completeness.clients.listed} of ${L.completeness.clients.total} clients are listed; the rest are summed in one row.`}
-                {L.completeness?.engagements?.read === false && ' Your contracts could not be read, so the Retainer column is empty.'}
-                {L.completeness?.engagements?.read && L.completeness.engagements.complete === false && ' Only the first 500 contracts are in the Retainer column.'}
-              </p>
-              <p className="mt-1 text-[11.5px] leading-relaxed text-axal-faint" data-testid="ledger-retainer-basis">
-                Retainer is the contract&rsquo;s value per cycle, for contracts in effect during this window. It is
-                not revenue earned in the window: that is the priced sessions in the other columns.
-              </p>
-              {totals?.unpriced_sessions > 0 && (
-                <p className="mt-2 text-[11.5px] leading-relaxed text-amber-800 dark:text-amber-300">
-                  {totals.unpriced_sessions} session{totals.unpriced_sessions === 1 ? '' : 's'} in this
-                  window carr{totals.unpriced_sessions === 1 ? 'ies' : 'y'} no amount. They are in none
-                  of the figures above, and this line exists so that absence is visible rather than
-                  silently shrinking the numbers.{' '}
-                  <Link to="/practice/sessions" className="text-emerald-700 underline">Price them →</Link>
-                </p>
-              )}
-            </Card>
-          </>
-        )}
-      </ZoneBody>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card padding="md">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">Payout account</h3>
-            <span className="text-[10.5px] text-axal-faint">All three states · gates charging</span>
-          </div>
-          <div className="mt-3 grid gap-2">
-            {PAYOUT_STATES.map(([key, label, tone, gate]) => (
-              <div key={key} data-testid={`payout-d4-${key}`}
-                className={`rounded-[10px] border p-3 ${
-                  key === currentState
-                    ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900/60 dark:bg-emerald-950/20'
-                    : 'border-axal-hairline dark:border-gray-700'}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Pill tone={tone}>{label}</Pill>
-                  {key === currentState && <Pill tone="ok">Yours</Pill>}
+      {/* ── Cards and ledger: one source, one state ───────────────────────── */}
+      {window_.unchosen ? (
+        <SourceState kind="empty" title="Choose a range." testid="earnings-range-unchosen">
+          Pick the first and last day; both are included. Nothing is read until the range is complete.
+        </SourceState>
+      ) : ledger.loading ? (
+        <SourceState kind="loading" source="Earnings" testid="earnings-loading" />
+      ) : ledger.error ? (
+        <SourceState kind="unreadable" source={`Earnings for ${window_.label}`} onRetry={() => loadLedger(window_)} testid="earnings-unreadable">
+          No figure is shown rather than a zero.
+        </SourceState>
+      ) : L && (
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="earnings-cards">
+            {cards.map((c) => (
+              <Card key={c.key} padding="md" data-testid={`earnings-card-${c.key}`}>
+                <div className="text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">{c.label}</div>
+                <div className="mt-1.5 text-[22px] font-extrabold leading-none tracking-tight tabular-nums">
+                  {c.unread
+                    ? <span className="text-[13px] font-bold text-red-700 dark:text-red-300">Could not be read</span>
+                    : (money(c.cents) ?? <Unrecorded />)}
                 </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{gate}</p>
-              </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint dark:text-gray-400">{c.basis}</p>
+              </Card>
             ))}
           </div>
-          {payout?.blocked_reason && (
-            <p className="mt-2 text-[11px] leading-relaxed text-red-700 dark:text-red-400">
-              {payout?.blocked_reason}
-            </p>
-          )}
-          {!restRead.payout && (
-            <div className="mt-3" role="alert" data-testid="payout-unreadable">
-              <Unreadable onRetry={() => loadRest(window_)}>Your payout account could not be read.</Unreadable>
-            </div>
-          )}
-          {restRead.payout && <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button type="button" className={payout?.started ? ghostButtonClass : buttonClass}
-              onClick={connect} disabled={connecting} data-testid="button-connect-payout">
-              {connecting ? 'Working…' : payout?.started ? 'Continue setup' : 'Connect a payout account'}
-            </button>
-            {payout?.started && (
-              <button type="button" className={ghostButtonClass}
-                onClick={refreshAccount} disabled={connecting}>
-                Check with the provider
-              </button>
-            )}
-          </div>}
-          <SaveNote note={connectNote} />
 
-          {/* NOT YET ASKED IS NOT REFUSED, and the two look identical in the
-              card above. `last_checked_at` is what separates them. */}
-          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-            {!restRead.payout
-              ? 'Your payout account could not be read, so the state above is not yours — reload to try again.'
-              : payout?.started
-                ? (payout?.last_checked_at
-                  ? `Last checked against ${payout?.provider}.`
-                  : 'Never checked against the provider, so this is the last state recorded rather than the current one.')
-                : 'No payout account has been started.'}
-            {' '}
-            {/* SAID BESIDE THE BUTTON THAT ASKS FOR IT. An advisor pressed to
-                verify a payout account will reasonably assume it is about to
-                be used; while `settlement` is 'none' it is not, and a verify
-                flow that let that assumption stand would be the page
-                implying a charge the platform cannot make. */}
-            {payout?.settlement === 'none'
-              ? 'Connecting an account does not start any charging — nothing is taken through Axal today.'
-              : `Payments are running in ${payout?.settlement} mode.`}
-          </p>
-        </Card>
-
-        <Card padding="md">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-[13px] font-extrabold tracking-tight">Payout history</h3>
-            <span className="text-[10.5px] text-axal-faint">Audit trail · only here</span>
-          </div>
-          {!restRead.payouts ? (
-            <div className="mt-3" role="alert" data-testid="payouts-unreadable">
-              <Unreadable onRetry={() => loadRest(window_)}>Your payout history could not be read, so this is not a claim that none was made.</Unreadable>
-            </div>
-          ) : payouts.length === 0 ? (
-            <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint">
-              No payout has been recorded. Nothing settles through Axal today, so this is the honest
-              state rather than an empty list waiting to fill.
-            </p>
-          ) : (
-            <ul className="mt-3 grid gap-2">
-              {payouts.map((p) => {
-                const when = payoutWhen(p);
-                return (
-                  <li key={p.uid} data-testid={`payoutrow-d4-${p.uid}`}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-[9px] border border-axal-hairline p-2.5 dark:border-gray-700">
-                    <span className="text-[11px] tabular-nums text-axal-faint">
-                      {when.text ?? <Unrecorded>No date</Unrecorded>}
-                      {when.kind === 'scheduled' && ' · expected'}
-                    </span>
-                    <span className="text-[12px] font-bold tabular-nums">{money(p.amount_cents)}</span>
-                    <Pill tone={PAYOUT_TONE[p.state] || 'neutral'}>
-                      {PAYOUT_STATE_LABEL[p.state] || p.state}
-                    </Pill>
-                    {p.failure_reason && (
-                      <span className="w-full text-[10.5px] text-red-700 dark:text-red-400">{p.failure_reason}</span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          {/* ── The AI band ───────────────────────────────────────────────
-              D4 draws it here, inside this card, and its contract is the D1
-              one: the cost is shown BEFORE it runs, and Accept / Edit /
-              Discard are all real. */}
-          <div className="mt-3 rounded-[11px] border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/20"
-            data-testid="aiband-d4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Pill tone="ok">Proposal · {window_.label} narrated</Pill>
-              <span className="ml-auto text-[10.5px] tabular-nums text-emerald-800 dark:text-emerald-300">
-                {observedRun
-                  ? `≈ ${formatCost(observedRun.cost)} · your average over ${observedRun.calls} run${observedRun.calls === 1 ? '' : 's'}`
-                  : 'No runs of this yet, so there is no average to quote'}
-              </span>
-            </div>
-            {!restRead.note ? (
-              <div className="mt-2" role="alert" data-testid="note-unreadable">
-                <Unreadable onRetry={() => loadRest(window_)}>This period's note could not be read, so nothing is drafted or filed over it until it is.</Unreadable>
-              </div>
-            ) : note && !editing ? (
-              <>
-                <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed">{note?.body}</p>
-                <p className="mt-1.5 text-[10.5px] text-axal-faint">
-                  {note?.source === 'ai' ? 'Drafted by Eadwyn, accepted as written.'
-                    : note?.source === 'edited' ? 'Drafted by Eadwyn, edited by you.'
-                      : 'Written by you.'}
-                  {/* WHETHER IT STILL DESCRIBES THE TABLE. Migration 242
-                      stamps the figures the note was written against so the
-                      page can say, rather than showing two numbers and no
-                      reason. `null` is "no stamped figures", which is not
-                      "still current" — so nothing is claimed. */}
-                  {stale === true && ' The figures have moved since this was written.'}
-                  {stale === false && ' Still matches the figures above.'}
-                </p>
-              </>
+          <Card padding="md" className="mt-3">
+            {!lines?.read ? (
+              <SourceState kind="unreadable" source="The ledger records" onRetry={() => loadLedger(window_)} testid="ledger-lines-unreadable">
+                The totals above were read; the records behind them were not.
+              </SourceState>
+            ) : !lines.items?.length ? (
+              <SourceState kind="empty" title="No sessions in this period." testid="ledger-empty">
+                Once you price a session under <Link to="/practice/sessions" className={`text-emerald-700 underline dark:text-emerald-300 ${FOCUS}`}>Sessions</Link>, it appears here.
+              </SourceState>
             ) : (
+              <>
+                {/* Desktop: a table. Under 768px the same records as stacked cards. */}
+                <div className="hidden overflow-x-auto md:block" data-testid="ledger-table">
+                  <table className="w-full min-w-[860px] text-[12px]">
+                    <caption className="pb-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                      Ledger · showing {lines.listed} of {lines.total ?? lines.listed} · rates are fixed when a record is priced
+                    </caption>
+                    <thead>
+                      <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
+                        {COLUMNS.map(([k, h, num]) => (
+                          <th key={k} scope="col" className={`px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint ${num ? 'text-right' : ''}`}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.items.map((line) => {
+                        const c = lineCells(line);
+                        return (
+                          <tr key={line.id} data-testid={`ledger-line-${line.id}`} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
+                            {COLUMNS.map(([k, , num]) => (
+                              <td key={k} className={`px-2 py-2.5 ${num ? 'whitespace-nowrap text-right tabular-nums' : ''} ${k === 'date' ? 'whitespace-nowrap' : ''} ${k === 'client' ? 'font-bold' : ''}`}>{c[k]}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                      {lines.other && (
+                        <tr data-testid="ledger-line-other" className="border-t border-axal-hairline dark:border-gray-700">
+                          <td className="px-2 py-2.5 text-axal-muted dark:text-gray-400" colSpan={2}>
+                            {lines.other.records} older record{lines.other.records === 1 ? '' : 's'}, summed
+                          </td>
+                          <td className="px-2 py-2.5 text-right tabular-nums">{money(lines.other.gross_cents)}</td>
+                          <td className="px-2 py-2.5" colSpan={3} />
+                          <td className="px-2 py-2.5 text-right tabular-nums">{money(lines.other.fee_cents)}</td>
+                          <td className="px-2 py-2.5 text-right tabular-nums">{money(lines.other.net_cents)}</td>
+                          <td className="px-2 py-2.5" />
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="md:hidden" data-testid="ledger-records">
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                    Ledger · showing {lines.listed} of {lines.total ?? lines.listed} · rates are fixed when a record is priced
+                  </p>
+                  <ul className="mt-2 grid gap-2">
+                    {lines.items.map((line) => {
+                      const c = lineCells(line);
+                      return (
+                        <li key={line.id} data-testid={`ledger-record-${line.id}`} className="rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="font-bold">{c.client}</div>
+                              <div className="text-[12px] text-axal-muted dark:text-gray-400">{c.session} · {c.date}</div>
+                            </div>
+                            {c.billing}
+                          </div>
+                          <dl className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-[12px]">
+                            {COLUMNS.filter(([k]) => ['price', 'collected', 'rate', 'fee', 'net'].includes(k)).map(([k, h]) => (
+                              <React.Fragment key={k}>
+                                <dt className="text-axal-faint dark:text-gray-400">{h}</dt>
+                                <dd className="text-right tabular-nums">{c[k]}</dd>
+                              </React.Fragment>
+                            ))}
+                          </dl>
+                        </li>
+                      );
+                    })}
+                    {lines.other && (
+                      <li data-testid="ledger-record-other" className="rounded-[10px] border border-dashed border-axal-hairline p-3 text-[12px] dark:border-gray-700">
+                        {lines.other.records} older record{lines.other.records === 1 ? '' : 's'}, summed: {money(lines.other.gross_cents)} priced, {money(lines.other.fee_cents)} in fees, {money(lines.other.net_cents)} net.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            <div className="mt-3 space-y-1.5 text-[11.5px] leading-relaxed text-axal-faint dark:text-gray-400" data-testid="ledger-notes">
+              {lines?.read && lines.complete === false && (
+                <p>The newest {lines.listed} of {lines.total} records are listed and the rest are summed in one row; the cards count all {lines.total}.</p>
+              )}
+              {lines?.unfrozen > 0 && (
+                <p>
+                  {lines.unfrozen} record{lines.unfrozen === 1 ? ' was' : 's were'} priced before rates were stamped
+                  on each record, so {lines.unfrozen === 1 ? 'it has' : 'they have'} no rate or fee of {lines.unfrozen === 1 ? 'its' : 'their'} own here.
+                </p>
+              )}
+              <p>
+                A record&rsquo;s rate and fee are fixed when it is priced. Marking it billed, collected or
+                written off changes neither, and a price changes only when you reprice it on Sessions.
+              </p>
+              <p data-testid="ledger-retainer-basis">
+                Engagement retainers are contract values per cycle, not billed records, so they are not lines in
+                this ledger.
+              </p>
+              {/* RENDERED FROM THE RESPONSE (D75): the rate is recorded and
+                  `settlement` says whether anything moved under it. */}
+              <p>
+                Amounts are in {L.currency || 'USD'} and are your own record. Axal does not invoice your
+                clients and holds no money on your behalf.{' '}
+                {L.settlement === 'none' ? (
+                  <>
+                    A platform rate of {takeRatePct(L.take_rate)} applies to newly priced records,
+                    and <strong>nothing has been charged under it</strong> — no payment is taken through
+                    Axal today.
+                  </>
+                ) : (
+                  <>Payments are running in <strong>{L.settlement}</strong> mode.</>
+                )}
+              </p>
+            </div>
+          </Card>
+        </>
+      )}
+
+      {/* ── Note and payouts, each its own source ─────────────────────────── */}
+      <div className="grid gap-3 lg:grid-cols-12">
+        <Card padding="md" className="lg:col-span-7" data-testid="earnings-note">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-[13px] font-extrabold tracking-tight" id={`${noteId}-h`}>
+              {window_.key ? `Note for ${window_.label}` : 'Note'}
+            </h3>
+            {note?.updated_at && !dirty && clockOf(note.updated_at) && (
+              <span className="font-mono text-[10.5px] text-axal-faint">Saved {clockOf(note.updated_at)}</span>
+            )}
+          </div>
+          {!window_.key ? (
+            <p className="mt-2 text-[12px] leading-relaxed">
+              <SourceState kind="not_recorded" testid="note-custom">
+                a note is kept for a month, quarter or year, not for a custom range
+              </SourceState>
+            </p>
+          ) : restLoading ? (
+            <div className="mt-2"><SourceState kind="loading" source="This period's note" /></div>
+          ) : !restRead.note ? (
+            <div className="mt-2">
+              <SourceState kind="unreadable" source="This period's note" onRetry={() => loadRest(window_)} testid="note-unreadable">
+                Nothing is drafted or saved over it until it is read.
+              </SourceState>
+            </div>
+          ) : note && !editing ? (
+            <>
+              <p className="mt-2 whitespace-pre-wrap text-[12.5px] leading-relaxed">{note?.body}</p>
+              <p className="mt-1.5 text-[10.5px] text-axal-faint">
+                {note?.source === 'ai' ? 'Drafted by Eadwyn, kept as written.'
+                  : note?.source === 'edited' ? 'Drafted by Eadwyn, edited by you.'
+                    : 'Written by you.'}
+                {stale === true && ' The figures have moved since this was written.'}
+                {stale === false && ' Still matches the figures above.'}
+              </p>
+            </>
+          ) : (
+            <label className="mt-2 block" htmlFor={`${noteId}-ta`}>
+              <span className="sr-only">Note for {window_.label}</span>
               <textarea
-                className={`${inputClass} mt-2 min-h-[96px] w-full`}
+                id={`${noteId}-ta`}
+                className={`${inputClass} min-h-[96px]`}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Draft a short read of this window, or write your own."
-                data-testid="input-aiband-d4" />
-            )}
-            {restRead.note && <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button type="button" className={ghostButtonClass} onClick={narrate} disabled={drafting || busy}>
-                {drafting ? 'Drafting…' : note ? 'Draft again' : 'Draft it'}
-              </button>
+                placeholder="What happened this period, in your words."
+                data-testid="input-period-note" />
+            </label>
+          )}
+          {window_.key && !restLoading && restRead.note && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {(editing || !note) && (
-                <button type="button" className={buttonClass} onClick={accept}
-                  disabled={busy || !draft.trim()}>
-                  {busy ? 'Filing…' : 'Accept'}
+                <button type="button" className={primaryBtn} onClick={accept} disabled={busy || !draft.trim()}>
+                  {busy ? 'Saving…' : 'Save note'}
                 </button>
               )}
               {note && !editing && (
-                <button type="button" className={ghostButtonClass} onClick={() => setEditing(true)}>
-                  Edit
-                </button>
+                <button type="button" className={ghostBtn} onClick={() => setEditing(true)}>Edit</button>
               )}
-              {(note || draft) && (
-                <button type="button" className={ghostButtonClass} onClick={discard} disabled={busy}>
-                  Discard
-                </button>
+              <button type="button" className={ghostBtn} onClick={narrate} disabled={drafting || busy}
+                aria-describedby={`${noteId}-cost`}>
+                {drafting ? 'Drafting…' : 'Draft it'}
+              </button>
+              {note && (
+                <button type="button" className={ghostBtn} onClick={discard} disabled={busy}>Delete note</button>
               )}
-            </div>}
-            <SaveNote note={saveNote} />
-            <p className="mt-2 text-[10.5px] leading-relaxed text-axal-faint">
-              The draft is written from the figures above as summary lines — counts and totals this
-              page already shows — and never from the rows behind them, so no client's name reaches
-              the model.
+            </div>
+          )}
+          <SaveNote note={saveNote} testid="earnings-note-status" />
+          {window_.key && (
+            <p className="mt-2 text-[10.5px] leading-relaxed text-axal-faint" id={`${noteId}-cost`}>
+              Draft it asks Eadwyn for a first version from the figures above as summary lines, never the
+              records behind them, so no client&rsquo;s name reaches the model. Nothing is saved until you
+              save it.{' '}
+              {observedRun
+                ? `≈ ${formatCost(observedRun.cost)} · your average over ${observedRun.calls} run${observedRun.calls === 1 ? '' : 's'}.`
+                : 'No runs of this yet, so there is no average to quote.'}
             </p>
-          </div>
+          )}
+        </Card>
+
+        <Card padding="md" className="lg:col-span-5" data-testid="earnings-payouts">
+          <h3 className="text-[13px] font-extrabold tracking-tight">Payouts</h3>
+
+          <section className="mt-3" aria-labelledby={`${noteId}-setup`}>
+            <h4 id={`${noteId}-setup`} className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Payout setup</h4>
+            {restLoading ? (
+              <div className="mt-1.5"><SourceState kind="loading" source="Payout setup" /></div>
+            ) : !restRead.payout ? (
+              <div className="mt-1.5">
+                <SourceState kind="unreadable" source="Payout setup" onRetry={() => loadRest(window_)} testid="payout-unreadable" />
+              </div>
+            ) : (
+              <>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2" data-testid="payout-state">
+                  <Pill tone={acctTone}>{acctLabel}</Pill>
+                  <span className="text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">{acctGate}</span>
+                </div>
+                {payout?.blocked_reason && (
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-red-700 dark:text-red-400">{payout.blocked_reason}</p>
+                )}
+                <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
+                  {payout?.started
+                    ? (payout?.last_checked_at
+                      ? `Last checked against ${payout?.provider}.`
+                      : 'Never checked against the provider, so this is the last state recorded rather than the current one.')
+                    : 'No payout account has been started.'}{' '}
+                  {payout?.settlement === 'none'
+                    ? 'Connecting an account does not start any charging — nothing is taken through Axal today.'
+                    : `Payments are running in ${payout?.settlement} mode.`}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" className={payout?.started ? ghostBtn : primaryBtn}
+                    onClick={connect} disabled={connecting} data-testid="button-connect-payout">
+                    {connecting ? 'Working…' : payout?.started ? 'Continue setup' : 'Connect a payout account'}
+                  </button>
+                  {payout?.started && (
+                    <button type="button" className={ghostBtn} onClick={refreshAccount} disabled={connecting}>
+                      Check with the provider
+                    </button>
+                  )}
+                </div>
+                <SaveNote note={connectNote} />
+              </>
+            )}
+          </section>
+
+          <section className="mt-4" aria-labelledby={`${noteId}-bal`}>
+            <h4 id={`${noteId}-bal`} className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Recorded balance</h4>
+            <p className="mt-1.5 text-[12px]">
+              <SourceState kind="not_recorded" testid="payout-balance">
+                Axal holds no balance on your behalf, so there is none to show
+              </SourceState>
+            </p>
+          </section>
+
+          <section className="mt-4" aria-labelledby={`${noteId}-hist`}>
+            <h4 id={`${noteId}-hist`} className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Payout history</h4>
+            {restLoading ? (
+              <div className="mt-1.5"><SourceState kind="loading" source="Payout information" /></div>
+            ) : !restRead.payouts ? (
+              <div className="mt-1.5">
+                <SourceState kind="unreadable" source="Payout information" onRetry={() => loadRest(window_)} testid="payouts-unreadable" />
+              </div>
+            ) : payouts.length === 0 ? (
+              <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="payouts-none">
+                No payouts recorded. Nothing settles through Axal today.
+              </p>
+            ) : (
+              <>
+                <dl className="mt-1.5 grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1 text-[12px]">
+                  <dt className="text-axal-faint">Last payout</dt>
+                  <dd>{lastPaid ? `${money(lastPaid.amount_cents) ?? 'Amount not recorded'} · paid ${payoutWhen(lastPaid).text ?? 'on a date not recorded'}` : 'None paid yet'}</dd>
+                  <dt className="text-axal-faint">Next</dt>
+                  <dd>{nextScheduled ? `Scheduled ${payoutWhen(nextScheduled).text ?? '— date not recorded'}` : 'None scheduled'}</dd>
+                </dl>
+                <ul className="mt-2 grid gap-1.5">
+                  {payouts.slice(0, 6).map((p) => {
+                    const when = payoutWhen(p);
+                    return (
+                      <li key={p.uid} data-testid={`payoutrow-${p.uid}`}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-[9px] border border-axal-hairline p-2 dark:border-gray-700">
+                        <span className="text-[11px] tabular-nums text-axal-faint">
+                          {when.text ?? <Unrecorded>No date</Unrecorded>}{when.kind === 'scheduled' && ' · expected'}
+                        </span>
+                        <span className="text-[12px] font-bold tabular-nums">{money(p.amount_cents) ?? <Unrecorded />}</span>
+                        <Pill tone={PAYOUT_TONE[p.state] || 'neutral'}>{PAYOUT_STATE_LABEL[p.state] || p.state}</Pill>
+                        {p.failure_reason && <span className="w-full text-[10.5px] text-red-700 dark:text-red-400">{p.failure_reason}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
         </Card>
       </div>
 
-      {/* ── What happened to the money, the advisor's own record ───────────
-          D4 does not draw this and the omission is not an instruction to
-          delete it: billed / collected / written off is migration 205's own
-          bookkeeping, it has exactly one writer in the product, and it answers
-          a question the by-client table above does not — whether the money
-          arrived. */}
-      <ZoneBody loading={state.loading} error={state.error} onRetry={load}
-        isEmpty={Boolean(nothingRecorded)} empty={empty}>
-        {d && (
-          <Card padding="md">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[13px] font-extrabold tracking-tight">Whether it arrived</h3>
-              <span className="text-[10.5px] text-axal-faint">Your own bookkeeping · all time</span>
-            </div>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Figure strong label="Collected" cents={d.collected_cents}
-                hint="Money you have actually been paid." />
-              <Figure label="Outstanding" cents={d.outstanding_cents}
-                hint="Priced and billed, not yet collected." />
-              <Figure label="Written off" cents={d.written_off_cents}
-                hint="Priced, then decided against pursuing." />
-            </div>
-
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-[12.5px]">
-                <thead>
-                  <tr className="border-b border-axal-hairline text-left dark:border-gray-700">
-                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">State</th>
-                    <th className="px-2 py-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Sessions</th>
-                    <th className="px-2 py-2 text-right text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(d.by_state || []).map((row) => {
-                    const [label, tone, hint] = ROW[row.state] || [row.state, 'neutral', ''];
-                    return (
-                      <tr key={row.state} className="border-b border-axal-hairline/60 last:border-0 dark:border-gray-800">
-                        <td className="px-2 py-2.5">
-                          <Pill tone={tone}>{label}</Pill>
-                          <div className="mt-1 text-[11px] text-axal-faint">{hint}</div>
-                        </td>
-                        <td className="px-2 py-2.5 tabular-nums">{row.bookings}</td>
-                        <td className="px-2 py-2.5 text-right font-semibold tabular-nums">
-                          {/* An unpriced row's total is meaningless by
-                              definition — the sessions in it have no amount. */}
-                          {row.state === 'unpriced' ? <Unrecorded>—</Unrecorded> : money(row.total_cents)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* RENDERED FROM THE RESPONSE, NOT WRITTEN ONCE. The clause this
-                replaces denied the platform cut outright, which migration 241
-                made false: a take rate is recorded and stamped on every line
-                as it is priced. What is still true is that no money has moved
-                under it, and `settlement` is what says so — so the page states
-                the rate AND the absence of any charge, and stops claiming
-                either one on its own.
-
-                The denial is not quoted here on purpose: the guard in
-                `advisor_bucket_overview.test.mjs` bans that exact phrase, and
-                `codeOnly` spares an INDENTED block comment by design — a `/*`
-                inside a className must not be allowed to open one. A comment
-                explaining a ban must therefore not reproduce the banned
-                string. D75. */}
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-              Amounts are in {d.currency || 'USD'} and are your own record. Axal does not invoice
-              your clients and holds no money on your behalf.{' '}
-              {d.settlement === 'none' ? (
-                <>
-                  A platform rate of {takeRatePct(d.take_rate)} is recorded against each priced
-                  session, and <strong>nothing has been charged under it</strong> — no payment is
-                  taken through Axal today, so the figures above are what you recorded, not what
-                  was collected.
-                </>
-              ) : (
-                <>
-                  Payments are running in <strong>{d.settlement}</strong> mode and a platform rate
-                  of {takeRatePct(d.take_rate)} applies to each priced session.
-                </>
-              )}
-            </p>
-          </Card>
-        )}
-      </ZoneBody>
-
-      {/* Stated rather than left as an absence a reader has to notice: the
-          per-client shares this page computes are of GROSS, and D4 draws no
-          margin, no cost base and no time-per-client, because nothing records
-          any of the three. */}
       <StatedLimit title="No margin here, only revenue">
-        Every figure on this page is an amount you recorded against a session, divided by the
-        recorded platform rate. Nothing records what a session cost you to deliver — preparation,
-        travel, the hours behind a retainer — so "You receive" is revenue less the platform rate
-        and not profit, and the page does not offer a margin it cannot compute.
+        Every figure on this page is an amount you recorded against a session, less the platform fee
+        recorded with it. Nothing records what a session cost you to deliver, so &ldquo;Net&rdquo; is
+        price less the platform fee and not profit, and the page does not offer a margin it cannot
+        compute.
       </StatedLimit>
+
+      {pendingView && (
+        <Lightbox label="You have unsaved changes" title="You have unsaved changes" onClose={stay} width={560}
+          phone="sheet" testId="earnings-unsaved" initialFocus={stayRef}
+          footer={(
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" ref={stayRef} className={ghostBtn} onClick={stay} data-testid="unsaved-stay">Stay</button>
+              <button type="button" className={ghostBtn} onClick={discardAndSwitch} data-testid="unsaved-discard">Discard</button>
+              <button type="button" className={primaryBtn} onClick={saveAndSwitch} disabled={busy} data-testid="unsaved-save">
+                {busy ? 'Saving…' : 'Save note'}
+              </button>
+            </div>
+          )}>
+          <div className="px-5 py-4">
+            <p className="text-[13px] leading-relaxed">
+              Your note for <b>{window_.label}</b> hasn&rsquo;t been saved. Switching to {pendingLabel} will
+              not carry it over.
+            </p>
+            <SaveNote note={saveNote && !saveNote.ok ? saveNote : null} />
+          </div>
+        </Lightbox>
+      )}
     </div>
   );
 }

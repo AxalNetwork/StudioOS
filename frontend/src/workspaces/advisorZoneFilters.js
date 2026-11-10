@@ -325,24 +325,19 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Unpaid held', key: 'unpaid_held' },
   ],
 
-  // D4 (`design/canvases/backlog/Detail Layer Canvas II.dc.html`), which is
-  // what PR5 in the Practice canvas points at: "drawn in full as D4".
-  //
-  // THE FIRST TWO ARE A DYNAMIC GROUP, and that is the whole reason this entry
-  // is not four static chips. D4's fixture draws "Q3 2026" and "Q2 2026",
-  // which are the right two CHIPS and the wrong two LABELS: written down, the
-  // page names one quarter for ever and is wrong from January. The page
-  // supplies today's two quarters, exactly as `grow/customers` supplies its
-  // own sources.
+  // #4834 (D4834): THE PRACTICE V2 CANVAS'S PERIOD SELECTOR (`Practice v2
+  // Page.dc.html`, PX-07), which replaced D4's `Q3 2026 · Q2 2026 · Year to
+  // date · All time`. Five static chips: each asks the Worker for a different
+  // window, so a label is the period's kind and the page shows the period's own
+  // name beside the row ("November 2026", "Q4 2026"). `Quarter` is the current
+  // calendar quarter and `Year` the current calendar year. `Custom` opens two
+  // day fields; a custom range has no note key, so it carries no note.
   'practice/earnings': [
-    {
-      canvas: ['Q3 2026', 'Q2 2026'],
-      dynamic: 'quarters',
-      label: 'One chip per quarter',
-      unbuilt: 'the two quarter chips are named from the reader’s own calendar, so a page that supplies none draws none',
-    },
-    { canvas: 'Year to date', key: 'ytd' },
-    { canvas: 'All time', key: 'all' },
+    { canvas: 'This month', key: 'this_month' },
+    { canvas: 'Last month', key: 'last_month' },
+    { canvas: 'Quarter', key: 'quarter' },
+    { canvas: 'Year', key: 'year' },
+    { canvas: 'Custom', key: 'custom' },
   ],
 
   'research/library': [
