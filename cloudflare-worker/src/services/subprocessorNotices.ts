@@ -29,7 +29,7 @@ import { constantTimeEqual } from '../rpc/secret';
 import { CONFIRM_TTL_MS, EMAIL_PACE_MS, isSuppressed, newConfirmToken, confirmTokenHash, normalizeEmail } from './newsletter';
 import { sendRawEmail } from './email/gmail';
 import { stripTrailingSlashes } from '../util/url';
-import { today } from './trustContent';
+import { NOTICE_DAYS, today } from './trustContent';
 import * as mail from '../templates/email/trust';
 
 const TABLE = 'subprocessor_subscribers';
@@ -157,14 +157,43 @@ export async function subscriberCounts(env: Env) {
   return out;
 }
 
+/** D4683: a `sending` claim older than this was interrupted before its outcome was recorded. */
+export const SEND_LEASE_MS = 15 * 60 * 1000;
+/** D4683: a failed send is retried after this long. */
+export const RETRY_AFTER_MS = 60 * 60 * 1000;
+/** D4683: sends attempted per subscriber and notice before the sweep stops and the notice needs attention. */
+export const MAX_ATTEMPTS = 6;
+
+/** SQLite's `datetime()` text for an instant, so every stamp the sweep compares is written the same way. */
+const sqlAt = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+
 /**
  * Emails confirmed subscribers about subprocessors that are published and
  * have not started yet, at most `limit` emails per call. Counts only.
+ *
+ * D4683 — EVERY DELIVERY ENDS IN A RECORDED OUTCOME, OR IS RECOVERED.
+ *   · A delivery is CLAIMED before it is sent (one row per subscriber and
+ *     notice), so two sweeps never send it twice at once.
+ *   · A claim still `sending` after `SEND_LEASE_MS` was interrupted (the
+ *     isolate died between the send and the write). Whether the email left is
+ *     unknown; the sweep re-claims it, counts it in `interrupted`, and sends
+ *     again, because a notice of a new subprocessor delivered twice is better
+ *     than one never delivered. The Trust workspace says a resend may have
+ *     reached an inbox twice.
+ *   · A failed send is retried after `RETRY_AFTER_MS`, up to `MAX_ATTEMPTS`
+ *     sends in all; after that it is left failed and the notice needs
+ *     attention instead of retrying for ever.
+ *   · Nothing is sent once the subprocessor has started.
+ * Every re-claim is one conditional UPDATE, so of two sweeps reaching the same
+ * row only one goes on.
  */
 export async function sendSubprocessorNotices(env: Env, opts: { limit?: number; now?: number } = {}) {
   const now = opts.now ?? Date.now();
-  if (!mailReady(env)) return { sent: 0, failed: 0, unconfigured: true };
+  if (!mailReady(env)) return { sent: 0, failed: 0, recovered: 0, unconfigured: true };
   const limit = Math.max(1, Math.min(200, opts.limit ?? NOTICE_BATCH));
+  const nowSql = sqlAt(now);
+  const retryBefore = sqlAt(now - RETRY_AFTER_MS);
+  const leaseBefore = sqlAt(now - SEND_LEASE_MS);
   const due = (await env.DB.prepare(
     `SELECT s.id AS sid, s.name, s.purpose, s.data_seen, s.location, s.starts_at,
             u.id AS subid, u.uid, u.email_enc, u.token_version, d.outcome
@@ -172,24 +201,36 @@ export async function sendSubprocessorNotices(env: Env, opts: { limit?: number; 
        JOIN subprocessor_subscribers u ON u.status = 'confirmed'
        LEFT JOIN subprocessor_notice_deliveries d ON d.subprocessor_id = s.id AND d.subscriber_id = u.id
       WHERE s.state = 'published' AND s.starts_at > ?
-        AND (d.subprocessor_id IS NULL OR (d.outcome = 'failed' AND d.attempted_at < datetime(?, '-1 hour')))
+        AND (d.subprocessor_id IS NULL
+          OR (d.outcome = 'failed' AND d.attempted_at < ? AND d.attempts < ?)
+          OR (d.outcome = 'sending' AND d.attempted_at < ? AND d.attempts < ?))
       ORDER BY s.id, u.id LIMIT ?`,
-  ).bind(today(now), new Date(now).toISOString().slice(0, 19).replace('T', ' '), limit).all<{
+  ).bind(today(now), retryBefore, MAX_ATTEMPTS, leaseBefore, MAX_ATTEMPTS, limit).all<{
     sid: number; name: string; purpose: string; data_seen: string; location: string; starts_at: string;
     subid: number; uid: string; email_enc: string; token_version: number; outcome: string | null;
   }>()).results || [];
-  let sent = 0, failed = 0;
+  let sent = 0, failed = 0, recovered = 0;
   const list = `${baseUrl(env)}/trust/subprocessors`;
   for (const r of due) {
-    const claim = r.outcome === 'failed'
-      ? await env.DB.prepare(
-        `UPDATE subprocessor_notice_deliveries SET outcome = 'sending', attempted_at = datetime('now')
-          WHERE subprocessor_id = ? AND subscriber_id = ? AND outcome = 'failed'`,
-      ).bind(r.sid, r.subid).run()
-      : await env.DB.prepare(
-        `INSERT OR IGNORE INTO subprocessor_notice_deliveries (subprocessor_id, subscriber_id, outcome) VALUES (?, ?, 'sending')`,
-      ).bind(r.sid, r.subid).run();
+    let claim;
+    if (r.outcome === 'failed') {
+      claim = await env.DB.prepare(
+        `UPDATE subprocessor_notice_deliveries SET outcome = 'sending', attempted_at = ?, attempts = attempts + 1
+          WHERE subprocessor_id = ? AND subscriber_id = ? AND outcome = 'failed' AND attempted_at < ? AND attempts < ?`,
+      ).bind(nowSql, r.sid, r.subid, retryBefore, MAX_ATTEMPTS).run();
+    } else if (r.outcome === 'sending') {
+      claim = await env.DB.prepare(
+        `UPDATE subprocessor_notice_deliveries SET attempted_at = ?, attempts = attempts + 1, interrupted = interrupted + 1
+          WHERE subprocessor_id = ? AND subscriber_id = ? AND outcome = 'sending' AND attempted_at < ? AND attempts < ?`,
+      ).bind(nowSql, r.sid, r.subid, leaseBefore, MAX_ATTEMPTS).run();
+    } else {
+      claim = await env.DB.prepare(
+        `INSERT OR IGNORE INTO subprocessor_notice_deliveries (subprocessor_id, subscriber_id, outcome, attempted_at, attempts)
+         VALUES (?, ?, 'sending', ?, 1)`,
+      ).bind(r.sid, r.subid, nowSql).run();
+    }
     if (Number((claim as any)?.meta?.changes ?? 0) !== 1) continue;
+    if (r.outcome === 'sending') recovered++;
     const email = await decryptColumn(env, TABLE, 'email', r.uid, r.email_enc);
     let ok = false;
     if (email) {
@@ -197,14 +238,16 @@ export async function sendSubprocessorNotices(env: Env, opts: { limit?: number; 
       ok = await send(env, email, mail.subprocessorNotice({
         name: r.name, purpose: r.purpose, data: r.data_seen, location: r.location, starts_on: r.starts_at,
         list_url: list, unsubscribe_url: unsubscribeUrl,
-      }), unsubscribeUrl);
+      }), unsubscribeUrl).catch(() => false);
     }
+    const doneAt = sqlAt(opts.now ?? Date.now());
     await env.DB.prepare(
-      `UPDATE subprocessor_notice_deliveries SET outcome = ?, attempted_at = datetime('now') WHERE subprocessor_id = ? AND subscriber_id = ?`,
-    ).bind(ok ? 'sent' : 'failed', r.sid, r.subid).run();
+      `UPDATE subprocessor_notice_deliveries SET outcome = ?, attempted_at = ?, sent_at = CASE WHEN ? = 'sent' THEN ? ELSE sent_at END
+        WHERE subprocessor_id = ? AND subscriber_id = ? AND outcome = 'sending'`,
+    ).bind(ok ? 'sent' : 'failed', doneAt, ok ? 'sent' : 'failed', doneAt, r.sid, r.subid).run();
     if (ok) sent++; else failed++;
   }
-  return { sent, failed, unconfigured: false };
+  return { sent, failed, recovered, unconfigured: false };
 }
 
 /** D4803 (SE07): how many notices the Trust workspace lists, newest start first. */
@@ -216,41 +259,70 @@ export type NoticeDelivery = {
   uid: string;
   name: string;
   starts_at: string;
+  /** D4683: the public change-log entry that published this subprocessor, and whether that entry is on the log. */
+  change_uid: string | null;
+  published_at: string | null;
+  in_change_log: boolean;
+  /** D4683: the date the notice was owed by — `NOTICE_DAYS` before the start. A send after it was late. */
+  notice_due_by: string;
   /** Whether the subprocessor's start day has come; after it, nothing more is sent. */
   started: boolean;
-  /** Claimed and not yet answered by the mail provider. */
+  /** Claimed and not yet answered by the mail provider, within the sweep's lease. */
   sending: number;
+  /** D4683: claimed and never answered: the send was interrupted, so whether it left is unknown. The sweep resends it. */
+  unknown: number;
   /** Accepted by the mail provider. Whether it reached an inbox is not recorded. */
   sent: number;
-  /** Refused by the provider or no address; retried after an hour while not started. */
+  /** D4683: of `sent`, accepted after `notice_due_by`. */
+  late: number;
+  /** D4683: of `sent`, deliveries that were interrupted at least once, so a subscriber may have the notice twice. */
+  resent_after_interruption: number;
+  /** Refused by the provider or no address; retried after an hour while not started and under the attempt limit. */
   failed: number;
+  /** D4683: of `failed`, those that reached the attempt limit and will not be retried. */
+  exhausted: number;
   /** Confirmed subscribers with no attempt yet: queued while not started, never sent once it has. */
   not_sent: number;
+  /**
+   * D4683: the notice as one word.
+   *   delivered        every attempt was accepted
+   *   in_progress      not started, still being sent, nothing stuck
+   *   needs_attention  not started, and something is stuck: an interrupted send, the attempt limit, or the
+   *                    notice date passed with deliveries still owed
+   *   missed           started with deliveries never accepted: those subscribers were not told in time
+   */
+  state: 'delivered' | 'in_progress' | 'needs_attention' | 'missed';
 };
 export type NoticeDeliveries =
   | { available: true; mail_configured: boolean; rows: NoticeDelivery[] }
   | { available: false; reason: string };
 
+const addDaysTo = (ymd: string, days: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
 /**
- * D4803 — PER-NOTICE DELIVERY, from the rows the sweep already writes.
- *
- * The canvas drew this as Not instrumented, but `sendSubprocessorNotices`
- * claims one `subprocessor_notice_deliveries` row per subscriber and notice
- * before it sends, and records `sent` or `failed` after. So each notice's
- * counts are real: sending, sent (accepted by the provider — an inbox is not
- * recorded), failed, and confirmed subscribers not attempted yet. Without
- * mail credentials the sweep sends nothing, and `mail_configured` says so,
- * so "0 sent" is never read as delivery working.
+ * D4803 — PER-NOTICE DELIVERY, from the rows the sweep already writes. D4683
+ * adds what an operator needs to act on: the interrupted sends whose outcome
+ * is unknown, the ones that hit the attempt limit, the sends that went out
+ * after the notice date, the change-log entry each notice belongs to, and one
+ * state per notice that never reads as delivered while a subscriber is owed.
+ * Without mail credentials the sweep sends nothing, and `mail_configured`
+ * says so, so "0 sent" is never read as delivery working.
  */
 export async function noticeDeliveries(env: Env, now = Date.now()): Promise<NoticeDeliveries> {
   const day = today(now);
   const since = new Date(now - NOTICE_SUMMARY_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const leaseBefore = sqlAt(now - SEND_LEASE_MS);
   try {
     const rows = (await env.DB.prepare(
-      `SELECT s.uid, s.name, s.starts_at,
-              COALESCE(SUM(CASE WHEN d.outcome = 'sending' THEN 1 ELSE 0 END), 0) AS sending,
+      `SELECT s.uid, s.name, s.starts_at, s.change_uid, s.published_at,
+              (SELECT COUNT(*) FROM trust_content_changes c WHERE c.uid = s.change_uid) AS logged,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sending' AND d.attempted_at >= ? THEN 1 ELSE 0 END), 0) AS sending,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sending' AND d.attempted_at < ? THEN 1 ELSE 0 END), 0) AS unknown,
               COALESCE(SUM(CASE WHEN d.outcome = 'sent' THEN 1 ELSE 0 END), 0) AS sent,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sent' AND d.sent_at IS NOT NULL AND substr(d.sent_at, 1, 10) > date(s.starts_at, ?) THEN 1 ELSE 0 END), 0) AS late,
+              COALESCE(SUM(CASE WHEN d.outcome = 'sent' AND d.interrupted > 0 THEN 1 ELSE 0 END), 0) AS resent,
               COALESCE(SUM(CASE WHEN d.outcome = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+              COALESCE(SUM(CASE WHEN d.outcome = 'failed' AND d.attempts >= ? THEN 1 ELSE 0 END), 0) AS exhausted,
               (SELECT COUNT(*) FROM subprocessor_subscribers u
                 WHERE u.status = 'confirmed'
                   AND NOT EXISTS (SELECT 1 FROM subprocessor_notice_deliveries x
@@ -261,20 +333,40 @@ export async function noticeDeliveries(env: Env, now = Date.now()): Promise<Noti
         GROUP BY s.id
         ORDER BY s.starts_at DESC, s.id DESC
         LIMIT ?`,
-    ).bind(since, NOTICE_SUMMARY_LIMIT).all<{ uid: string; name: string; starts_at: string; sending: number; sent: number; failed: number; not_sent: number }>()).results || [];
+    ).bind(leaseBefore, leaseBefore, `-${NOTICE_DAYS} days`, MAX_ATTEMPTS, since, NOTICE_SUMMARY_LIMIT).all<{
+      uid: string; name: string; starts_at: string; change_uid: string | null; published_at: string | null; logged: number;
+      sending: number; unknown: number; sent: number; late: number; resent: number; failed: number; exhausted: number; not_sent: number;
+    }>()).results || [];
     return {
       available: true,
       mail_configured: mailReady(env),
-      rows: rows.map((r) => ({
-        uid: r.uid,
-        name: r.name,
-        starts_at: r.starts_at,
-        started: String(r.starts_at) <= day,
-        sending: Number(r.sending) || 0,
-        sent: Number(r.sent) || 0,
-        failed: Number(r.failed) || 0,
-        not_sent: Number(r.not_sent) || 0,
-      })),
+      rows: rows.map((r) => {
+        const n = (v: unknown) => Number(v) || 0;
+        const started = String(r.starts_at) <= day;
+        const dueBy = addDaysTo(String(r.starts_at).slice(0, 10), -NOTICE_DAYS);
+        const owed = n(r.sending) + n(r.unknown) + n(r.failed) + n(r.not_sent);
+        const stuck = n(r.unknown) > 0 || n(r.exhausted) > 0 || (owed > 0 && day > dueBy);
+        const state: NoticeDelivery['state'] = owed === 0 ? 'delivered' : started ? 'missed' : stuck ? 'needs_attention' : 'in_progress';
+        return {
+          uid: r.uid,
+          name: r.name,
+          starts_at: r.starts_at,
+          change_uid: r.change_uid ?? null,
+          published_at: r.published_at ?? null,
+          in_change_log: n(r.logged) > 0,
+          notice_due_by: dueBy,
+          started,
+          sending: n(r.sending),
+          unknown: n(r.unknown),
+          sent: n(r.sent),
+          late: n(r.late),
+          resent_after_interruption: n(r.resent),
+          failed: n(r.failed),
+          exhausted: n(r.exhausted),
+          not_sent: n(r.not_sent),
+          state,
+        };
+      }),
     };
   } catch {
     return { available: false, reason: 'The notice deliveries could not be read on this database. This is not a claim that none were sent.' };
