@@ -64,8 +64,6 @@ function seeded(): DatabaseSync {
   return db;
 }
 
-/** When set, the D1 binding every request gets (test 1's barrier); else node:sqlite as is. */
-let bindingFor: ((db: DatabaseSync) => any) | null = null;
 async function call(app: any, db: DatabaseSync, who: number, path: string, init: { method?: string; body?: unknown } = {}) {
   const tok = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
@@ -73,7 +71,7 @@ async function call(app: any, db: DatabaseSync, who: number, path: string, init:
     method: init.method || 'GET',
     headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  }, { JWT_SECRET, ENVIRONMENT: 'development', DB: bindingFor ? bindingFor(db) : d1Over(db) } as any).catch((e: unknown) => {
+  }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any).catch((e: unknown) => {
     if (e instanceof Response) return e;
     throw e;
   });
