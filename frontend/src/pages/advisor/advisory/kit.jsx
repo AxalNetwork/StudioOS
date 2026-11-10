@@ -224,7 +224,42 @@ export function slotView(slot) {
     // #4715: anyone but the slot's advisor, or a founder with a confirmed
     // booking on it, is told only whether a link exists.
     hasMeetingLink: Boolean(s.has_meeting_link ?? (s.meeting_url || s.location_uri)),
+    // #4692: the booking's own verdict on this hour, as `GET /:uid/slots`
+    // answers it. Absent (an older response, or the dev backend) reads as no
+    // verdict, never as a refusal.
+    unavailableCode: s.unavailable_code ?? null,
+    paidCapReached: Boolean(s.paid_cap_reached),
   };
+}
+
+/**
+ * #4692: WHY a published hour cannot be booked, in the founder's words.
+ *
+ * `GET /api/advisors/:uid/slots` answers the booking's own availability rules
+ * for every slot it lists (D4692, #4695): `unavailable_code` is what
+ * `POST /slots/:id/book` would refuse for any session type — minimum notice, a
+ * blackout, or the buffer around a session the advisor already holds — and
+ * `paid_cap_reached` says the slot's week has reached the advisor's weekly paid
+ * cap, which stops a paid session only.
+ *
+ * Nothing read those two fields, so the list went on offering hours the
+ * booking was certain to refuse and the founder met the refusal at the click.
+ * The hour stays listed either way: a time the founder can see and cannot take
+ * is worth more than a gap, as long as it says why.
+ *
+ * `offer` is the chosen session type as `offerFromType` reads it. With none
+ * chosen the paid cap is not yet this hour's answer, so it is not given as one.
+ * An unrecognised code returns null rather than a guess.
+ */
+export function slotUnavailableReason(slot, offer = null) {
+  const v = slotView(slot);
+  if (v.unavailableCode === 'min_notice') return 'Too soon — this advisor asks for more notice than this hour leaves.';
+  if (v.unavailableCode === 'blackout') return 'The advisor does not hold sessions at this hour.';
+  if (v.unavailableCode === 'buffer') return 'Too close to another session this advisor already holds.';
+  if (v.paidCapReached && offer?.pricing === 'price') {
+    return 'This advisor has taken all the paid sessions they accept in that week.';
+  }
+  return null;
 }
 
 /** A slot a founder can actually book: published, not cancelled, not full. */
