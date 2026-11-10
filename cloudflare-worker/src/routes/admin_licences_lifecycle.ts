@@ -284,6 +284,12 @@ export async function deprovisionLicenceAdmins(
       await env.DB.batch([
         env.DB.prepare("UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ?").bind(a.user_id),
         env.DB.prepare('DELETE FROM licence_admins WHERE licence_id = ? AND user_id = ?').bind(licenceId, a.user_id),
+        env.DB.prepare(
+          `INSERT INTO licence_termination_reseeds
+             (licence_id, user_id, state, attempts, created_at, updated_at)
+           VALUES (?, ?, 'pending', 0, ?, ?)
+           ON CONFLICT(licence_id, user_id) DO NOTHING`,
+        ).bind(licenceId, a.user_id, nowIso(), nowIso()),
         // `role_changed` / `your_role_changed`, not a new action name: both are
         // already in admin_security.ts's audit allowlist and ActivityPage's
         // label map, and a distinct action would be invisible in every reader.
@@ -306,16 +312,50 @@ export async function deprovisionLicenceAdmins(
       out.skipped.push({ user_id: a.user_id, reason: `Could not be deprovisioned: ${(e as Error).message}` });
       continue;
     }
-    // Best-effort from here: the role is already revoked, and this failing
-    // leaves the account holding no power it should not have. It is idempotent
-    // (`pruneStaleForRole`), so a resumed termination does not repeat it only
-    // because the binding it was found through is gone — recorded in D4686.
-    try {
-      const { seedObligations } = await import('../services/trust');
-      await seedObligations(env, a.user_id, 'exploring', { pruneStaleForRole: true });
-    } catch (e) { console.error('[licence/terminate] trust re-seed failed', (e as Error).message); }
   }
   return out;
+}
+
+type TrustReseedRun = { ok: boolean; tried: number; completed: number; failed: number };
+
+/** Complete the durable per-account trust work left by administrator demotion. */
+async function completeTerminationTrustReseeds(env: Env, licenceId: number): Promise<TrustReseedRun> {
+  const rows = await env.DB.prepare(
+    `SELECT user_id FROM licence_termination_reseeds
+      WHERE licence_id = ? AND state <> 'done' ORDER BY user_id`,
+  ).bind(licenceId).all<{ user_id: number }>();
+  let completed = 0;
+  let failed = 0;
+  for (const row of rows.results || []) {
+    const at = nowIso();
+    await env.DB.prepare(
+      `UPDATE licence_termination_reseeds
+          SET attempts = attempts + 1, last_attempt_at = ?, updated_at = ?
+        WHERE licence_id = ? AND user_id = ? AND state <> 'done'`,
+    ).bind(at, at, licenceId, row.user_id).run();
+    try {
+      const { seedObligations } = await import('../services/trust');
+      await seedObligations(env, Number(row.user_id), 'exploring', {
+        pruneStaleForRole: true,
+        failOnError: true,
+      });
+      await env.DB.prepare(
+        `UPDATE licence_termination_reseeds
+            SET state = 'done', failure_code = NULL, completed_at = ?, updated_at = ?
+          WHERE licence_id = ? AND user_id = ?`,
+      ).bind(at, at, licenceId, row.user_id).run();
+      completed += 1;
+    } catch (e) {
+      console.error('[licence/terminate] trust re-seed failed', (e as Error).message);
+      await env.DB.prepare(
+        `UPDATE licence_termination_reseeds
+            SET state = 'failed', failure_code = 'trust_reseed_failed', updated_at = ?
+          WHERE licence_id = ? AND user_id = ?`,
+      ).bind(at, licenceId, row.user_id).run();
+      failed += 1;
+    }
+  }
+  return { ok: failed === 0, tried: (rows.results || []).length, completed, failed };
 }
 
 /**
@@ -516,8 +556,18 @@ export async function runTerminationConsequences(
     // manual act, so it does not hold the operation open for ever.
     if (st.admins !== 'done' && st.notify === 'done') {
       const res = await deprovisionLicenceAdmins(env, licence.id, actor, note);
-      out.admins_deprovisioned = res;
-      if (res.ok) st.admins = 'done'; else { st.admins = 'failed'; fail('admins', 'admins_not_deprovisioned'); }
+      let trust: TrustReseedRun;
+      try { trust = await completeTerminationTrustReseeds(env, licence.id); }
+      catch (e) {
+        console.error('[licence/terminate] trust re-seed ledger unreadable', (e as Error).message);
+        trust = { ok: false, tried: 0, completed: 0, failed: 1 };
+      }
+      out.admins_deprovisioned = { ...res, trust_reseed: trust };
+      if (res.ok && trust.ok) st.admins = 'done';
+      else {
+        st.admins = 'failed';
+        fail('admins', res.ok ? 'trust_reseed_failed' : 'admins_not_deprovisioned');
+      }
       await persistTermination(env, licence.id, st, failure);
     }
 
@@ -612,28 +662,84 @@ async function resumeTermination(
       message: `${refusal} Every consequence of the termination has already completed, so there is nothing to resume.`,
     }, 409);
   }
-  const now = nowIso();
-  const until = new Date(Date.now() + TERMINATION_LEASE_MS).toISOString();
-  const claim = await env.DB.prepare(
-    `UPDATE licence_termination_ops
-        SET lease_until = ?, attempts = attempts + 1, updated_at = ?
-      WHERE licence_id = ? AND status = 'incomplete' AND (lease_until IS NULL OR lease_until < ?)`,
-  ).bind(until, now, licence.id, now).run();
-  if (Number(claim?.meta?.changes ?? 0) !== 1) {
+  const fresh = await claimTermination(env, licence.id, new Date());
+  if (!fresh) {
     return c.json({
       error: 'operation_in_progress',
       message: 'This termination is being completed by another request. Wait a moment and read the licence again.',
     }, 409);
   }
-  const fresh = await env.DB.prepare('SELECT * FROM licence_termination_ops WHERE licence_id = ?')
-    .bind(licence.id).first<TerminationOps>();
-  if (!fresh) return c.json({ error: 'bad_transition', message: refusal }, 409);
   let result: TerminationRun;
   try { result = await runTerminationConsequences(env, licence, fresh, actor); }
   catch (e) { return interruptedTermination(c, e); }
   let released: string[] = [];
   try { released = JSON.parse(fresh.released_json || '[]'); } catch { released = []; }
   return c.json({ ok: true, status: 'terminated', resumed: true, released, ...result, pushed: result.pushed } satisfies LicenceTerminateResult);
+}
+
+async function claimTermination(env: Env, licenceId: number, at: Date): Promise<TerminationOps | null> {
+  const now = at.toISOString();
+  const until = new Date(at.getTime() + TERMINATION_LEASE_MS).toISOString();
+  const claim = await env.DB.prepare(
+    `UPDATE licence_termination_ops
+        SET lease_until = ?, attempts = attempts + 1, updated_at = ?
+      WHERE licence_id = ? AND status = 'incomplete' AND (lease_until IS NULL OR lease_until < ?)`,
+  ).bind(until, now, licenceId, now).run();
+  if (Number(claim?.meta?.changes ?? 0) !== 1) return null;
+  return env.DB.prepare('SELECT * FROM licence_termination_ops WHERE licence_id = ?')
+    .bind(licenceId).first<TerminationOps>();
+}
+
+export type TerminationResumeSweep =
+  | { available: true; tried: number; complete: number; incomplete: number; skipped: number }
+  | { available: false; reason: string };
+
+/** Scheduled counterpart of the manual resume route, using the same lease. */
+export async function resumeIncompleteLicenceTerminations(
+  env: Env, at: Date = new Date(), cap = 20,
+): Promise<TerminationResumeSweep> {
+  let ids: number[];
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT licence_id FROM licence_termination_ops
+        WHERE status = 'incomplete' AND (lease_until IS NULL OR lease_until < ?)
+        ORDER BY updated_at, licence_id LIMIT ?`,
+    ).bind(at.toISOString(), cap).all<{ licence_id: number }>();
+    ids = (rows.results || []).map((row) => Number(row.licence_id));
+  } catch (e) {
+    return { available: false, reason: `The termination ledger could not be read: ${(e as Error).message}` };
+  }
+  let tried = 0; let complete = 0; let incomplete = 0; let skipped = 0;
+  for (const licenceId of ids) {
+    const ops = await claimTermination(env, licenceId, at);
+    if (!ops) { skipped += 1; continue; }
+    const licence = await env.DB.prepare('SELECT * FROM territory_licences WHERE id = ?')
+      .bind(licenceId).first<LicenceRow>();
+    let actor = ops.actor_user_id == null ? null : await env.DB.prepare(
+      'SELECT id, name, email FROM users WHERE id = ?',
+    ).bind(ops.actor_user_id).first<{ id: number; name: string | null; email: string }>();
+    if (!actor) actor = await env.DB.prepare(
+      `SELECT u.id, u.name, u.email FROM users u JOIN super_admins s ON s.user_id = u.id
+        WHERE u.is_active = 1 ORDER BY u.id LIMIT 1`,
+    ).first<{ id: number; name: string | null; email: string }>();
+    if (!licence || !actor) {
+      await env.DB.prepare(
+        `UPDATE licence_termination_ops SET lease_until = NULL, failure_step = 'admins',
+          failure_code = 'actor_unavailable', updated_at = ? WHERE licence_id = ?`,
+      ).bind(at.toISOString(), licenceId).run();
+      incomplete += 1;
+      continue;
+    }
+    tried += 1;
+    try {
+      const result = await runTerminationConsequences(env, licence, ops, actor);
+      if (result.operation.status === 'complete') complete += 1; else incomplete += 1;
+    } catch (e) {
+      console.error('[licence/terminate] scheduled resume interrupted', (e as Error).message);
+      incomplete += 1;
+    }
+  }
+  return { available: true, tried, complete, incomplete, skipped };
 }
 
 r.post('/:uid/terminate', async (c) => {
