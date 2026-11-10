@@ -11,6 +11,7 @@ import { boardFor } from '../boards';
 import { api } from '../../lib/api';
 import { ADVISOR_COPY } from '../noStoreCopy';
 import { CohortSectionNav, CohortWorkspaceProvider } from '../../pages/advisor/cohorts/CohortWorkspace';
+import { COHORT_PROMPTS } from '../../pages/advisor/cohorts/cohortModel';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -423,6 +424,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
           note={RAIL.note}
           coverage={coverage}
           unavailable={RAIL.unavailable}
+          // D4813 package 4: Eadwyn's advisor prompts on every Cohorts section.
+          // They fill the Ask composer and send nothing (`promptOptions`).
+          prompts={cohorts ? COHORT_PROMPTS : undefined}
         />
       )}
     >

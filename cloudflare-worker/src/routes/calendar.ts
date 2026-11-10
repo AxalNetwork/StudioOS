@@ -253,6 +253,34 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
+  /**
+   * D5204 (#5204) — COVERAGE IS THE SERVER'S. The page built "26 of 28 sources answered" from its own
+   * `KINDS.length`, a constant in the frontend. That denominator counted sources the member had hidden, sources
+   * their role never had, providers they have not connected, and anything a later registry adds that the page
+   * has not been rebuilt for — so the sentence could be wrong in four ways at once, and a new source changed it
+   * only after a frontend edit.
+   *
+   * It is derived here, from the set actually attempted:
+   *   attempted  the sources this read asked for (hidden ones are not asked, and are counted in `hidden`)
+   *   answered   of those, the ones that answered
+   *   failed     of those, the ones that did not
+   *   hidden     how many the member has hidden, so the page can say the read was deliberately narrower
+   *   complete   every attempted source answered and none stopped at its page cap
+   *   truncated_kinds  the sources that answered in part
+   * A provider with no connection is in none of them: it was never a source (`NoSource`), and it is not a
+   * failure. `attempted` is `answered + failed` by construction.
+   */
+  const truncatedKinds = sources.filter((s) => s.truncated).map((s) => s.kind);
+  const answeredCount = sources.filter((s) => s.ok).length;
+  const failedCount = sources.filter((s) => !s.ok).length;
+  const coverage = {
+    attempted: sources.length,
+    answered: answeredCount,
+    failed: failedCount,
+    hidden: hidden.length,
+    complete: failedCount === 0 && truncatedKinds.length === 0,
+    ...(truncatedKinds.length ? { truncated_kinds: truncatedKinds } : {}),
+  };
   return c.json({
     items,
     from: fromDt.toISOString(),
@@ -261,6 +289,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     // D1484: each source's family, module and label from the registry, so the legend names what it read.
     sources: sources.map((s) => { const src = SOURCES[s.kind]; return src ? { ...s, family: src.family, module: src.module, label: src.label } : s; }),
     hidden,
+    coverage,
   });
 }));
 
