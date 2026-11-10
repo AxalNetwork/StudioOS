@@ -33,6 +33,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 
 export const SLUG = 'cap-table';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -82,11 +83,26 @@ export const HOLDER_ID = /^h-[1-9]\d*$/;
  */
 export const isCapTableTab = (slug, id) => slug === SLUG && (TAB_WORDS.has(String(id ?? '')) || HOLDER_ID.test(String(id ?? '')));
 
-/** The query a tab keeps: the venture only. */
+/**
+ * D5074 slice 2 (#5074): who the viewer is on this cap table, from the record read's `capabilities` alone
+ * (`services/capTableCapabilities.ts`, the map every record write refuses from). Nothing here reads the account's
+ * role, its plan or the grants read: a control is drawn when the Worker's map allows it.
+ *   - `can(key)`: true only for a `true` in the map (no map, an unknown key or any other value allows nothing);
+ *   - `role`: 'owner' records, 'cofounder' proposes, 'reader' does neither (an ordinary admin is a reader who
+ *     corrects, with `admin` true and a reason the founder reads);
+ *   - `plan`: the Studio plan; a write is drawn only with it, and the plan's gate only without it.
+ */
+export function recordStanding(record) {
+  const caps = record?.status === 'ready' && record.data && typeof record.data.capabilities === 'object' ? record.data.capabilities : null;
+  const can = (key) => caps?.[key] === true;
+  const admin = can('correct') && can('admin_reason_required');
+  const role = admin ? 'reader' : can('record') ? 'owner' : can('propose') ? 'cofounder' : 'reader';
+  return { known: !!caps, can, plan: can('plan'), role, admin, writes: (can('record') || can('propose')) && can('plan') };
+}
+
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
 }
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;

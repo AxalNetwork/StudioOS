@@ -4,11 +4,10 @@ import { api } from '../../../lib/api';
 import { capTableHolderApi } from '../../../lib/api/capTableHolder';
 import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { hasTier } from '../../../sidebarConfig';
 import { Lightbox, Unreadable } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { Tag } from './CapTableTag';
-import { HOME_PATH, PHONE_HOLDERS, harbour, tabSearch } from './capTableModel';
+import { HOME_PATH, PHONE_HOLDERS, harbour, recordStanding, tabSearch } from './capTableModel';
 import HolderDrawer from './HolderDrawer';
 import ProposalDrawer from './ProposalDrawer';
 import { AskForAccess } from './InvestorCapTablePanel';
@@ -491,26 +490,25 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
     );
   }
   if (!projectId) return <Reading />;
-  // The owner records; a co-founder proposes; anyone else who reads (an advisor, an admin) reads only.
-  const role = grants.status === 'ready' ? (grants.data?.can_change ? 'owner' : 'cofounder') : 'reader';
-  const plan = hasTier(user, 'studio');
+  // D5074: the owner records; a co-founder proposes; anyone else who reads (an advisor, an admin) reads only. Each
+  // is the record read's capability map, the one every record write refuses from; nothing here infers it.
+  const standing = recordStanding(record);
+  const { role, plan, admin } = standing;
   const need = record.status === 'ready' ? needsYou(record.data) : null;
   const closeDrawer = () => navigate(`${HOME_PATH}${tabSearch(search)}`);
-  // An admin (not viewing as someone else) corrects; the owner records; a co-founder proposes.
-  const admin = String(user?.role || '').toLowerCase() === 'admin';
   const onRecord = () => navigate(`${HOME_PATH}/new${tabSearch(search)}`);
-  const writes = (role === 'owner' || role === 'cofounder') && plan;
+  const writes = standing.writes;
   const recordMode = role === 'cofounder' ? 'propose' : 'record';
   const done = () => { setVoiding(null); setCorrecting(null); retry(); };
   const leave = () => { closeDrawer(); retry(); };
 
   const holderDrawer = holderId != null ? (
     <HolderDrawer projectId={projectId} holderId={holderId} record={record} grants={grants} role={role} onClose={closeDrawer} page={phone}
-      onVoid={role === 'owner' || admin ? setVoiding : null} onCorrect={admin ? setCorrecting : null} />
+      onVoid={standing.can('record') && plan ? setVoiding : null} onCorrect={standing.can('correct') && plan ? setCorrecting : null} />
   ) : null;
   const rowDialogs = (
     <>
-      {voiding ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin && role !== 'owner'} onClose={() => setVoiding(null)} onDone={done} /> : null}
+      {voiding ? <VoidDialog projectId={projectId} record={record.data} row={voiding} admin={admin} onClose={() => setVoiding(null)} onDone={done} /> : null}
       {correcting ? <CorrectDialog projectId={projectId} record={record.data} row={correcting} onClose={() => setCorrecting(null)} onDone={done} /> : null}
     </>
   );
@@ -522,7 +520,9 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   else if (record.status === 'refused') {
     // D5079 (#5079): an admin's read-only support path exists, so the refusal
     // names its door instead of leaving them with nothing to do. The door is
-    // the reason-gated read; it grants nothing by itself.
+    // the reason-gated read; it grants nothing by itself. D5074: a refused read carries no capability map, so this
+    // one link reads the account: it only opens a door the Worker gates (the reasoned support read), never a write.
+    const admin = String(user?.role || '').toLowerCase() === 'admin';
     body = (
       <Center mark="⊘" title={OTHER_TITLE} line={OTHER_LINE} testId="captable-other-company">
         <Link className={GHOST} to={HOME_PATH}>Switch company</Link>
@@ -575,10 +575,10 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
           this viewer may not read. */}
       {refused ? null : <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} />}
       {body}
-      {open?.kind === 'record' && record.status === 'ready' && (writes || admin) ? (
-        <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin && role !== 'owner'} onClose={closeDrawer} onDone={leave} />
+      {open?.kind === 'record' && record.status === 'ready' && writes ? (
+        <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin} onClose={closeDrawer} onDone={leave} />
       ) : null}
-      {open?.kind === 'record' && record.status === 'ready' && !(writes || admin) ? (
+      {open?.kind === 'record' && record.status === 'ready' && !writes ? (
         <Lightbox label="Record an issuance" title="Record an issuance" onClose={closeDrawer} testId="captable-record-closed" phone="sheet">
           <p className={`m-0 text-[13px] ${INK}`}>{plan ? 'Only the owner records, and a co-founder proposes. You can read this cap table.' : PLAN_LINE}</p>
         </Lightbox>
