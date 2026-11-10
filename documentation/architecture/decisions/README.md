@@ -69,6 +69,7 @@ and citations by number keep working.
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
 | `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
+| `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
 | `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
