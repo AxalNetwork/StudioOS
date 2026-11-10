@@ -101,6 +101,8 @@ export function CohortWorkspaceProvider({ preview = false, children }) {
     const next = new URLSearchParams(params);
     next.set(COHORT_PARAM, String(id));
     next.delete('founder');
+    // D4813 package 4: an open founder detail belongs to the cohort just left.
+    next.delete('detail');
     setNotice(null);
     setParams(next);
   }, [params, setParams]);
@@ -212,6 +214,10 @@ const STATE_EXTRA = {
   draft: { label: 'Draft', glyph: '✎', tone: 'info' },
   retired: { label: 'Retired', glyph: '⦸', tone: 'neutral' },
   answered: { label: 'Answered', glyph: '✓', tone: 'ok' },
+  // D4813 package 4: a week's live status in the founder detail.
+  passed: { label: 'Passed', glyph: '✓', tone: 'ok' },
+  in_progress: { label: 'In progress', glyph: '◷', tone: 'info' },
+  not_open: { label: 'Not open', glyph: '·', tone: 'neutral' },
 };
 
 const TONE_CLASS = {

@@ -54,6 +54,19 @@ import { requireAuth, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { investorActiveCompany } from './_investorProjectScope';
 import { supportBookIds } from '../services/profileWriteGates';
+import { pageFacts, pageWindow } from '../services/listPage';
+
+/** #4647: one page of the ledger. The totals beside it are over the whole scope, never over this. */
+const SUPPORT_PAGE = 400;
+/** The states an entry can be filtered to, so an outstanding promise stays reachable at any depth. */
+const STATES = ['promised', 'delivered', 'withdrawn'] as const;
+
+/** One project's figures over the WHOLE authorized population, read by its own GROUP BY. */
+type AggRow = {
+  project_id: number; project_uid: string | null; project_name: string | null;
+  entries: number; delivered: number; withdrawn: number; promised: number;
+  hours: number; entries_without_hours: number;
+};
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -137,16 +150,29 @@ r.get('/', async (c) => {
     if (empty) {
       return c.json({
         entries: [], companies: [], untouched: [],
+        page: { offset: 0, limit: SUPPORT_PAGE, total: 0, next_offset: null },
+        page_state: 'recorded', filter: { state: null },
+        totals_basis: 'all_entries_in_scope',
         totals: {
-          delivered: 0, promised: 0, withdrawn: 0,
+          delivered: 0, promised: 0, withdrawn: 0, entries: 0,
           hours_recorded: 0, entries_without_hours: 0,
           companies_in_book: 0, companies_supported: 0,
         },
+        totals_reason: null,
       });
     }
     const csv = ids == null ? null : ids.join(',');
+    // #4647 (D4647): the ledger is a PAGE, and every total is read over the
+    // whole authorized population instead of over that page. See the GROUP BY
+    // below. `state=` narrows the page so an outstanding promise stays
+    // reachable however deep the history is — bound as `? IS NULL OR s.state = ?`,
+    // the shape the scope predicate beside it already uses, so no fragment
+    // reaches the query text (`check-sql-prepare`).
+    const win = pageWindow({ limit: c.req.query('limit'), offset: c.req.query('offset') }, SUPPORT_PAGE);
+    const stateFilter = STATES.includes(String(c.req.query('state') || '') as any)
+      ? String(c.req.query('state')) : null;
 
-    const [entries, book] = await Promise.all([
+    const [entries, book, agg] = await Promise.all([
       c.env.DB.prepare(
         `SELECT s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
                 s.promised_at, s.delivered_at, s.withdrawn_at, s.summary, s.outcome,
@@ -158,9 +184,11 @@ r.get('/', async (c) => {
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
-          ORDER BY s.created_at DESC
-          LIMIT 400`,
-      ).bind(csv, csv).all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
+            AND (? IS NULL OR s.state = ?)
+          ORDER BY s.created_at DESC, s.id DESC
+          LIMIT ? OFFSET ?`,
+      ).bind(csv, csv, stateFilter, stateFilter, win.limit, win.offset)
+        .all<SupportRow>().catch(() => ({ results: [] as SupportRow[] })),
       // The book itself, so "no support at all" is an anti-join over two stored
       // sets rather than an inference from the ledger's silence.
       c.env.DB.prepare(
@@ -169,10 +197,38 @@ r.get('/', async (c) => {
            LEFT JOIN projects pr ON pr.id = pp.project_id AND pr.deleted_at IS NULL
           WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(pp.project_id AS TEXT) || ',') > 0)`,
       ).bind(csv, csv).all<{ project_id: number; project_uid: string | null; project_name: string | null }>(),
+      // #4647: THE LEDGER'S FIGURES, over the whole authorized population.
+      //
+      // Every total here used to be accumulated from the 400 rows the page
+      // returned — `delivered`, `promised`, `withdrawn`, `hours_recorded`,
+      // `entries_without_hours`, `companies_supported` and every per-company
+      // count. Past 400 entries each of them described the newest 400 while
+      // reading as the ledger's own totals, and the entries beyond them could
+      // not be reached at all. They are read by their own GROUP BY now, which
+      // also means the per-company counts do not move when the reader turns a
+      // page. The `state` filter is NOT applied here: a page of outstanding
+      // promises must not change what the ledger says it holds.
+      c.env.DB.prepare(
+        `SELECT s.project_id, p.uid AS project_uid, p.name AS project_name,
+                COUNT(*) AS entries,
+                SUM(CASE WHEN s.state = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+                SUM(CASE WHEN s.state = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
+                SUM(CASE WHEN s.state NOT IN ('delivered','withdrawn') THEN 1 ELSE 0 END) AS promised,
+                COALESCE(SUM(CASE WHEN s.hours IS NULL THEN 0 ELSE s.hours END), 0) AS hours,
+                SUM(CASE WHEN s.hours IS NULL THEN 1 ELSE 0 END) AS entries_without_hours
+           FROM portfolio_support_entries s
+           LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+          WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(s.project_id AS TEXT) || ',') > 0)
+          GROUP BY s.project_id`,
+      ).bind(csv, csv).all<AggRow>().catch(() => ({ results: null })),
     ]);
 
     const rows = entries.results || [];
     const bookRows = book.results || [];
+    // #4647: a failed aggregate read is not zero. `agg.results` is null only
+    // when the read itself failed, and the figures then say Unreadable rather
+    // than claiming an empty ledger.
+    const aggRows = agg.results as AggRow[] | null;
 
     const byProject = new Map<number, {
       project_id: number; project_uid: string | null; name: string;
@@ -194,18 +250,25 @@ r.get('/', async (c) => {
 
     let hoursRecorded = 0;
     let withoutHours = 0;
+    let entriesTotal = 0;
     const counts = { delivered: 0, promised: 0, withdrawn: 0 } as Record<string, number>;
-    for (const s of rows) {
-      const x = bump(Number(s.project_id), s.project_uid ?? null, s.project_name ?? null);
-      x.entries += 1;
-      if (s.state === 'delivered') { x.delivered += 1; counts.delivered += 1; }
-      else if (s.state === 'withdrawn') { x.withdrawn += 1; counts.withdrawn += 1; }
-      else { x.promised += 1; counts.promised += 1; }
+    for (const a of aggRows || []) {
+      const x = bump(Number(a.project_id), a.project_uid ?? null, a.project_name ?? null);
+      x.entries = Number(a.entries) || 0;
+      x.delivered = Number(a.delivered) || 0;
+      x.withdrawn = Number(a.withdrawn) || 0;
+      x.promised = Number(a.promised) || 0;
       // An entry with no hours is COUNTED, never summed as zero: the reader is
       // told how much of the total is unmeasured rather than shown a total that
       // silently understates it.
-      if (s.hours == null) { x.entries_without_hours += 1; withoutHours += 1; }
-      else { x.hours += Number(s.hours); hoursRecorded += Number(s.hours); }
+      x.hours = Math.round((Number(a.hours) || 0) * 100) / 100;
+      x.entries_without_hours = Number(a.entries_without_hours) || 0;
+      entriesTotal += x.entries;
+      counts.delivered += x.delivered;
+      counts.withdrawn += x.withdrawn;
+      counts.promised += x.promised;
+      hoursRecorded += Number(a.hours) || 0;
+      withoutHours += x.entries_without_hours;
     }
 
     const companies = [...byProject.values()].sort((a, b) => b.entries - a.entries || a.name.localeCompare(b.name));
@@ -217,17 +280,30 @@ r.get('/', async (c) => {
     const untouched = companies.filter((x) => x.entries === 0 && inBook.has(x.project_id))
       .map((x) => ({ project_id: x.project_id, project_uid: x.project_uid, name: x.name }));
 
+    // #4647: the figures are Unreadable, not zero, when their own read failed.
+    const unreadable = aggRows == null;
     return c.json({
       entries: rows,
+      // The page the `entries` above are, and where the next one starts. The
+      // ordering ends in `s.id`, which is unique, so a row cannot repeat or
+      // fall between two pages as `created_at DESC` alone allowed.
+      page: pageFacts(win, unreadable ? win.offset + rows.length : entriesTotal, rows.length),
+      page_state: unreadable ? 'unreadable' : 'recorded',
+      filter: { state: stateFilter },
       companies,
       untouched,
-      totals: {
+      // What these figures are over, said rather than assumed: every entry in
+      // the caller's authorized population, whatever the page or filter shows.
+      totals_basis: 'all_entries_in_scope',
+      totals: unreadable ? null : {
         ...counts,
+        entries: entriesTotal,
         hours_recorded: Math.round(hoursRecorded * 100) / 100,
         entries_without_hours: withoutHours,
         companies_in_book: inBook.size,
         companies_supported: companies.filter((x) => x.entries > 0 && inBook.has(x.project_id)).length,
       },
+      totals_reason: unreadable ? 'Unreadable — the support ledger\'s figures could not be read' : null,
     });
   } catch (e) { return mapError(c, e); }
 });
