@@ -63,7 +63,7 @@ import {
 } from '../auth';
 import {
   listActiveSessions, countActiveSessions, listLiveImpersonations, countSupportSessions, revokeUserSession, endImpersonation,
-  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
+  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT, SESSION_LIST_LIMIT,
 } from '../services/userSessions';
 import {
   SESSION_STATUS_DEFINITIONS, supportSessionStatus, supportSessionLimitMinutes, parseStoredTs,
@@ -1228,7 +1228,9 @@ r.get('/governance', async (c) => {
   rows.sort((a, b) => {
     const av = Number.isNaN(a.ts) ? -Infinity : a.ts;
     const bv = Number.isNaN(b.ts) ? -Infinity : b.ts;
-    return bv - av;
+    // D4699 — rows at the same instant (several stores, or one store in one second) fall back to
+    // their key, so the same rows come back in the same order on every read and every page.
+    return bv - av || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0);
   });
   // More is held when any store filled its own page, OR when the stores
   // together returned more than one page (two stores of forty each): the rows
@@ -1434,9 +1436,19 @@ r.get('/sessions', async (c) => {
 
   // UNREADABLE IS A 503, NOT AN EMPTY LIST. "Nobody is signed in" is the one
   // answer a security desk must never give by accident.
+  // D4699 — `before_id` continues the list strictly below that session id (the last row's). Out of
+  // shape is refused with its field, never read as the first page.
+  const rawBefore = c.req.query('before_id');
+  let beforeId: number | null = null;
+  if (rawBefore !== undefined && rawBefore !== '') {
+    if (!/^[1-9][0-9]{0,15}$/.test(rawBefore)) {
+      return c.json({ error: 'The cursor is not a session id.', code: 'invalid_filter', field: 'before_id' }, 400);
+    }
+    beforeId = Number(rawBefore);
+  }
   let list: Awaited<ReturnType<typeof listActiveSessions>>;
   try {
-    list = await listActiveSessions(c.env, currentJti);
+    list = await listActiveSessions(c.env, currentJti, SESSION_LIST_LIMIT, beforeId);
   } catch {
     return c.json({
       error: 'Unreadable — the user_sessions table could not be read on this database. This is not a claim '
@@ -1470,6 +1482,8 @@ r.get('/sessions', async (c) => {
     token_hours: SESSION_TOKEN_HOURS,
     total: list.total,
     rows: list.rows,
+    // D4699 — Load more: the next page is `?before_id=<cursor.before_id>`; null when this is the last.
+    cursor: list.next_before_id ? { before_id: list.next_before_id } : null,
     impersonations,
     expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
     // D4669 — every act on this list reaches this deployment only.

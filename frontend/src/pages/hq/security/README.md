@@ -35,10 +35,7 @@ slices 1 to 4); the zones each one replaced stay whole inside it, behind
 | `EventsWorkspace.jsx` | D4803. The Events workspace (SE03, SE11b): the filter bar (search, date range, actor, outcome, source, branch disabled with why), the six quick categories, sources with Retry, the day-grouped table (phone cards from the same rows), Load older on the server's cursor, the event drawer (`EventDrawer`, read-only, raw row behind a disclosure) and "How this is measured". Every filter is the server's. |
 | `SourceAvailability.jsx` | "n of n sources read" from the ledger's `sources[]`, with a failed source named and Retry beside the count, and the store names and implementation notes behind Source details. |
 
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs` and `frontend/test/security_trust_4803.test.mjs`; the zones that stay
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs` and `frontend/test/security_privacy_4803.test.mjs`; the zones that stay
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs` and `frontend/test/security_resilience_ai_4803.test.mjs`; the zones that stay
-Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/security_overview_recent_4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs` and `frontend/test/security_privacy_4803.test.mjs`; the zones that stay
+Tested by `frontend/test/hq_security_v2_d4800.test.mjs`, `frontend/test/security_overview_recent_4800.test.mjs`, `frontend/test/hq_security_access_d4801.test.mjs`, `frontend/test/security_events_4803.test.mjs`, `frontend/test/security_resilience_ai_4803.test.mjs`, `frontend/test/security_privacy_4803.test.mjs`, `frontend/test/security_trust_4803.test.mjs` and `frontend/test/security_ledger_races_4699.test.mjs`; the zones that stay
 in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 `hq_governance_h7.test.mjs`).
 
@@ -50,4 +47,6 @@ in `../SecurityPage.jsx` keep their own tests (`hq_security*.test.mjs`,
 - **Every destructive act is an `ActionDialog`.** Scope (exact reach, whether you are affected, its own reason) → Review → Result, and Result only from the server's answer. Use `accessModel.js`'s `RESULTS` words; never a page-level reason field, never `window.confirm`.
 - **No figure the Worker does not return.** Where the canvas needs one that no read has, draw Not instrumented or Unavailable and say so in the decision file.
 - **No request from these files.** The reads stay in `../SecurityPage.jsx`, so moving between workspaces never re-reads; the writes leave by its `runSessionAct`, passed down as `onAct`.
+- **Only the newest answer lands (D4699).** `../SecurityPage.jsx` numbers each read (overview, sessions, ledger); a slower, older answer is dropped. Load older (events) and Load older sessions append only to the list they were asked for.
+- **Lists continue on the server's cursor (D4699).** The ledger's `cursor.before`, the sessions' `cursor.before_id`; never a client-side slice of a page.
 - Light and dark: every colour class carries its `dark:` pair.

@@ -3622,7 +3622,9 @@ export const api = {
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.
-  hqSecuritySessions: () => request('/admin/security/sessions'),
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
   hqRevokeSession: (sessionId, reason) =>
     request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
