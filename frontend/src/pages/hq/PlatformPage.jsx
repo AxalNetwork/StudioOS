@@ -67,6 +67,7 @@ import PlatformOverview, { VersionContext } from './PlatformOverview';
 import { channelState, keyLevel, webhookHealth, KEY_LEVEL } from './platformOverviewModel';
 import { platformBuildApi } from '../../lib/api/platformBuild.js';
 import { GUIDE_PREFIX } from '../../lib/integrationKeys';
+import { plainStripeAmount } from '../../lib/money';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -968,7 +969,7 @@ export function promoTerms(p) {
   const off = p.percent_off != null
     ? `${p.percent_off}% off`
     : p.amount_off != null
-      ? `${(p.amount_off / 100).toFixed(2)} ${String(p.currency || '').toUpperCase()} off`
+      ? `${plainStripeAmount(p.amount_off, String(p.currency || '').toUpperCase())} ${String(p.currency || '').toUpperCase()} off`
       : 'no discount recorded';
   const how = p.duration === 'forever' ? 'every payment'
     : p.duration === 'repeating' ? 'repeating, for months Stripe keeps'

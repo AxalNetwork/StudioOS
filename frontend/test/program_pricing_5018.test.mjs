@@ -35,8 +35,8 @@ test('a line reads base → country-adjusted → accepted; no base is Not record
   assert.equal(p.adjusted, NOT_RECORDED);
   assert.equal(p.accepted, NOT_RECORDED);
   assert.notEqual(money(0, 'EUR'), NOT_RECORDED, 'zero is a figure, distinct from not recorded');
-  assert.equal(centsOf('12000.5'), 1_200_050);
-  assert.ok(Number.isNaN(centsOf('12,000')));
+  assert.equal(centsOf('12000.5', 'EUR'), 1_200_050);
+  assert.ok(Number.isNaN(centsOf('12,000', 'EUR')));
 });
 
 test('the grant write sends pricing only when a price is chosen, and never a fee twice', () => {
@@ -46,7 +46,7 @@ test('the grant write sends pricing only when a price is chosen, and never a fee
     { ok: true, pricing: { licence_snapshot_uid: 'snap-1234', effective_from: '2027-01-01' }, dropFee: true });
   assert.equal(buildPricing({ mode: 'recommended', rec: PERKS.recommendation, form: {} }).ok, false);
   assert.equal(buildPricing({ mode: 'override', rec: REC, form: { fee: '15000' } }).ok, false, 'an override says why');
-  const ov = buildPricing({ mode: 'override', rec: REC, form: { fee: '15000', override_reason: 'Pilot discount' } });
+  const ov = buildPricing({ mode: 'override', rec: REC, form: { fee: '15000', override_reason: 'Pilot discount' }, currency: 'EUR' });
   assert.deepEqual(ov.pricing, { accepted_annual_fee_cents: 1_500_000, override_reason: 'Pilot discount' });
   assert.equal(buildPricing({ mode: 'override', rec: REC, form: { fee: '1', override_reason: 'x y z', effective_from: '2027-02-01', effective_to: '2027-01-01' } }).ok, false);
   const dialogs = readFileSync(new URL('../src/pages/admin/grants/GrantDialogs.jsx', import.meta.url), 'utf8');
