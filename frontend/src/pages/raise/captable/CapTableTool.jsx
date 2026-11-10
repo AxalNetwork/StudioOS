@@ -22,7 +22,7 @@ import {
   HOME_NOTE, HOME_PATH, LINE, MOVED_NOTICES, PHONE_ROOT, SLUG, TABS, TITLE,
   tabHref, tabSearch,
 } from './capTableModel';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import './capTable.css';
 
 /**
@@ -83,17 +83,24 @@ export function CapTableMovedNotice() {
  * (D1022) the record's blocks: the tool bar, Needs you, Who owns and the side
  * column. The module page's own Holders list and Planned round card follow, Modelled.
  */
-export function CapTableHomeNav({ search = '', projectId = null }) {
+export function CapTableHomeNav({ search = '', projectId = null, onRefused = null }) {
   // D1028 (CT23a): below 1024px every control here is a 44px target (`capTable.css`).
   const phone = usePhoneWidth();
+  // D5079 (#5079): the note names the Holders list and the Planned round card
+  // "below". Under a refusal neither is drawn, so the note would promise
+  // blocks that are not there; it goes with them.
+  const [refused, setRefused] = useState(false);
+  const report = useCallback((refusal) => { setRefused(!!refusal?.refused); onRefused?.(refusal); }, [onRefused]);
   return (
     <div className={`flex flex-col gap-3${phone ? ` ${PHONE_ROOT}` : ''}`} data-testid="captable-home">
       <CapTableMovedNotice />
       <CapTableTabBar active="overview" search={search} />
-      <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
-        <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
-      </p>
-      <CapTableOverview projectId={projectId} search={search} />
+      {refused ? null : (
+        <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
+          <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
+        </p>
+      )}
+      <CapTableOverview projectId={projectId} search={search} onRefused={report} />
     </div>
   );
 }
@@ -111,7 +118,7 @@ export function useRead(load, projectId, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(projectId))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
+      .catch((error) => { if (alive) setState({ status: raiseReadState(error, 'error'), data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, projectId, reload]);
   return state;

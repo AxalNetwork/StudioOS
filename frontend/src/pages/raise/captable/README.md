@@ -58,6 +58,17 @@ scenario and the compare page, `/raise/cap-table/scenarios/<uid>` and
   its figure would be, a refusal is never "none", and a value nobody recorded
   reads "Not recorded", never `$0` or `0%`. No canvas sample (`[Acme
   Robotics]`, `[$500,000]`) reaches a page.
+- **A refused record read ends the page's data** (D5079, #5079). The record
+  read is this tool's authoritative read, and the module page around it is
+  gated differently: an admin passes the module gate and not
+  `canReadProject`, so the page used to draw "Cap table · at a glance", an
+  empty Holders table, Eadwyn's bands and Evidence underneath the refusal.
+  `CapTableOverview` reports the refusal through `onRefused`, CycleRoute
+  turns it into the page's `refused` status, and nothing of the record is
+  drawn: not the card, not the records, not the tool bar, not Record an
+  issuance, and not the Home note that promises them. Only the tab row and
+  the refusal stay, and an admin is offered the reason-gated door at
+  `/cap-tables/:projectId`.
 - **Money in its own unit.** The model is whole dollars; SAFE issuances are the
   currency's smallest unit with their currency code; discounts and rates are
   fractions.
