@@ -98,7 +98,7 @@ function stubProviders() {
     if (tgMethod === 'getChat') {
       return json({ ok: true, result: { id: -100123, type: 'channel', username: 'axalhq' } });
     }
-    if (u.hostname === 'api.twitter.com' && u.pathname === '/2/tweets') {
+    if (u.hostname === 'api.x.com' && u.pathname === '/2/tweets') {
       sends.push('x'); n += 1;
       return json({ data: { id: `t${n}`, text: 'x' } });
     }
