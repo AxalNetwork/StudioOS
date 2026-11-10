@@ -4,11 +4,12 @@
  * owner's review. The boundary outcomes the document tabulates are this code's
  * outputs and are pinned by `cloudflare-worker/test/validate_methodology_4586.test.ts`.
  *
- * WIRED SO FAR (part 2): `decisionEvidenceV2` is the decision's evidence bar in
- * `recordDecision` (`services/verdict.ts`), which records the methodology
- * version and the links that did not count. Claim status is still v1
- * (`verdictFor` in `routes/_founder_validate_helpers.ts`) until its own slice
- * moves it to `claimStatusV2`.
+ * WIRED: `decisionEvidenceV2` is the decision's evidence bar in
+ * `recordDecision` (`services/verdict.ts`, part 2), which records the
+ * methodology version and the links that did not count. `claimStatusV2` is the
+ * claim status (part 3): `verdictFor` in `routes/_founder_validate_helpers.ts`
+ * reads it, and the verdict history records the version each row was observed
+ * under (`services/verdictHistory.ts`).
  *
  * FOUR SEPARATE THINGS, never merged into one number:
  *   coverage     how much evidence there is, in named units (links, sources,
@@ -114,6 +115,17 @@ export type DecisionEvidence = {
 const norm = (v: string | null | undefined) => (typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '');
 
 /**
+ * Distinct recorded values (an interviewee name, an organization), trimmed and
+ * case- and space-folded. `null` when any one is missing: breadth that is not
+ * recorded on every interview is unknown, never a smaller number. No interviews is 0.
+ */
+export function distinctRecorded(values: Array<string | null | undefined>): number | null {
+  if (!values.length) return 0;
+  const folded = values.map(norm);
+  return folded.some((v) => !v) ? null : new Set(folded).size;
+}
+
+/**
  * Which of the founder's checked evidence counts toward a decision's bar.
  *
  *   - A hypothesis-level decision counts only evidence linked to that
@@ -149,11 +161,8 @@ export function decisionEvidenceV2(
   const kept = [...counted.values()];
   const withDirection = (d: EvidenceRow['direction']) => [...directions.values()].filter((set) => set.has(d)).length;
   const ivIds = kept.filter((r) => r.kind === 'interview').map((r) => r.ref_id);
-  const distinct = (pick: (p: { name: string | null; company: string | null }) => string | null) => {
-    if (!ivIds.length) return 0;
-    const vals = ivIds.map((id) => norm(pick(people.get(id) ?? { name: null, company: null })));
-    return vals.some((v) => !v) ? null : new Set(vals).size;
-  };
+  const distinct = (pick: (p: { name: string | null; company: string | null }) => string | null) =>
+    distinctRecorded(ivIds.map((id) => pick(people.get(id) ?? { name: null, company: null })));
   return {
     methodology_version: METHODOLOGY_VERSION,
     links: rows.length,

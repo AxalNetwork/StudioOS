@@ -15,7 +15,9 @@ except the provider renders a body only.
 | `cohortModel.js` | Pure decisions: selection and fallback, `guardedRead` (a late response for another cohort is dropped), founder states, the progress grid, attention items, the agenda, guidance activity and the summary figures | — |
 | `OverviewZone.jsx` | `/cohorts`, board C1: needs your attention, cohort progress, next 7 days, recorded activity; the C18 preview | founders, guidance, calendar |
 | `FoundersZone.jsx` | `/cohorts/founders`, boards C2, C3 and C13: state board, semantic table, phone cards | founders, guidance |
-| `GuidanceZone.jsx` | `/cohorts/guidance`: post, answer and retire guidance | guidance |
+| `GuidanceZone.jsx` | `/cohorts/guidance`, boards C5 and C14: the feed with New guidance always available, the five filters (`?filter=`), and Edit, Publish, Retire, Restore, Answer and History per item | guidance, and its publish and history routes |
+| `GuidanceComposer.jsx` | Board C6 (full screen at 390px, C14): title, cohort, optional week, body, preview, Save draft and Publish, with every save state announced and a version conflict offered as compare | guidance writes |
+| `guidanceModel.js` | Pure decisions for guidance: status, filters, titles, the week rule the Worker enforces, unsaved text kept per cohort, and `guardedWrite` (a write that answers after the cohort changed is dropped) | — |
 | `ThisWeekZone.jsx` | `/cohorts/this-week`: the batch's week from the Lab | the shared week record |
 | `CalendarZone.jsx` | `/cohorts/calendar`: Lab dates and booked sessions, the next 14 days | calendar |
 | `OutcomesZone.jsx` | `/cohorts/outcomes`: programme outcomes, company-level and anonymous | the public Spin-Out Lab endpoints |

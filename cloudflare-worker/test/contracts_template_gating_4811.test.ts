@@ -31,7 +31,7 @@ const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'super_admins', 'activity_logs', 'legal_templates', 'legal_template_versions', 'esign_envelopes',
+  for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'legal_templates', 'legal_template_versions', 'esign_envelopes',
     'esign_recipients', 'esign_audit_events', 'deals']) {
     db.exec(tableFromBaseline(baseline, t));
   }
@@ -39,6 +39,9 @@ function fixture() {
   db.exec(readFileSync('cloudflare-worker/sql/migrations/479_template_kind_party.sql', 'utf8'));
   const user = db.prepare('INSERT INTO users(id,role,name,email,is_active) VALUES(?,?,?,?,?)');
   user.run(1, 'admin', 'HQ owner', 'hq@example.test', 1);
+  // D4811 part 13: publishing one template needs a recent step-up; this session's TOTP sign-in is one.
+  db.exec('INSERT INTO super_admins (user_id) VALUES (1)'); // D4811 part 15: publishing is the Super Admin's.
+  db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (1, 'sess', 'totp', ?)").run(new Date().toISOString().replace('T', ' ').slice(0, 19));
   db.exec(`INSERT INTO legal_templates(slug,title,category,body_md,version,doc_kind,axal_party) VALUES
     ('d4811_ready','Ready Agreement','gp','Ready body for {{recipient_name}}',2,'agreement','holdings'),
     ('${RESTRICTED}','Restricted Agreement','gp','Restricted body',4,'agreement','holdings')`);
@@ -56,8 +59,12 @@ app.route('/contracts', contracts);
 app.onError((err, c) => c.json({ error: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
 async function call(db: DatabaseSync, path: string, body: unknown = {}, extraEnv: Record<string, unknown> = {}, method = 'POST') {
   const headers: Record<string, string> = { 'Content-Type': 'application/json',
-    Authorization: `Bearer ${await new SignJWT({ user_id: 1, role: 'admin' }).setProtectedHeader({ alg: 'HS256' })
+    Authorization: `Bearer ${await new SignJWT({ user_id: 1, role: 'admin', jti: 'sess' }).setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET))}` };
+  // D4811 part 13: a single publish carries the high-risk confirmation unless a case sends its own.
+  if (/^\/published-templates\/[^/]+\/publish$/.test(path) && path !== '/published-templates/publish' && body && typeof body === 'object' && !('reason' in (body as any))) {
+    body = { ...(body as any), reason: 'Counsel approved this text; synthetic test.', confirm: 'PUBLISH' };
+  }
   const res = await app.request(`/contracts${path}`, { method, headers, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) },
     { JWT_SECRET: SECRET, ENVIRONMENT: 'development', DB: d1Over(db), ...extraEnv });
   return { status: res.status, body: await res.json() as any };
