@@ -156,6 +156,25 @@ test('5207: concurrent delivery, lost create replies, mapped updates, reconnect 
     await retryCalendarCopies(f.env, future);
     assert.equal((f.db.prepare('SELECT state FROM calendar_copy_jobs WHERE source_id=42').get() as any).state, 'cancelled');
     assert.equal(posts.length, 4);
+
+    // UPDATE RETURNING reports the post-update attempt count in SQLite.
+    const third = { ...SESSION, source_id: 43 };
+    f.db.prepare(`INSERT INTO founder_checkins
+      (id, uid, title, start_at, duration_min, status, founder_user_id)
+      VALUES (43, 'checkin-43', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+    refreshStatus = 503;
+    await onAxalSessionCreated(f.env, third);
+    const attempt = () => f.db.prepare(
+      'SELECT attempts, state, next_attempt_at, updated_at FROM calendar_copy_jobs WHERE source_id=43',
+    ).get() as { attempts: number; state: string; next_attempt_at: number; updated_at: number };
+    for (let n = 1; n <= 6; n++) {
+      const job = attempt();
+      assert.equal(job.attempts, n);
+      assert.equal(job.state, n === 6 ? 'refused' : 'pending');
+      assert.equal(job.next_attempt_at - job.updated_at, 300_000 * 2 ** (n - 1));
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at - 1), 0);
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at), n === 6 ? 0 : 1);
+    }
   } finally {
     globalThis.fetch = original;
     f.close();

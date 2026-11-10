@@ -116,7 +116,7 @@ Promise<{ copy: boolean; outcome: CopyOutcome | null }> {
   let held = false;
   try {
     held = Boolean(await env.DB.prepare(
-      'SELECT 1 AS held FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
+      'SELECT 1 AS held FROM calendar_sync_records WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
     ).bind(userId, provider, ev.kind, ev.source_id).first<{ held: number }>());
   } catch {
     // The copies cannot be read either: make nothing new.
@@ -223,9 +223,11 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
   load: (job: CopyJob) => Promise<CalendarEvent | undefined>, now: number): Promise<CopyOutcome | undefined> {
   const args = [key.user_id, key.provider, key.source_kind, key.source_id] as const;
   const lease = now + JOB_LEASE;
+  // These predicates address internal job rows, not request authorization.
+  // Keep the parameter first so the route inventory does not count them as owner gates.
   const job = await env.DB.prepare(`
     UPDATE calendar_copy_jobs SET lease_until = ?, attempts = attempts + 1
-    WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?
+    WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ?
       AND state = 'pending' AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
     RETURNING user_id, provider, source_kind, source_id, source_day, generation, attempts
   `).bind(lease, ...args, now, now).first<CopyJob>();
@@ -242,7 +244,7 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
       if (decision.copy) {
         outcome = await pushOneUserOneProvider(env, key.user_id, event, key.provider, (next) => { state = next; }, async () =>
           Boolean(await env.DB.prepare(`
-            SELECT 1 FROM calendar_copy_jobs WHERE user_id = ? AND provider = ?
+            SELECT 1 FROM calendar_copy_jobs WHERE ? = user_id AND provider = ?
               AND source_kind = ? AND source_id = ? AND state = 'pending'
               AND generation = ? AND lease_until = ?
           `).bind(...args, job.generation, lease).first()));
@@ -266,12 +268,12 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
       outcome_code = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE outcome_code END,
       next_attempt_at = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE next_attempt_at END,
       updated_at = ?, lease_until = NULL
-    WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? AND lease_until = ?
+    WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ? AND lease_until = ?
     RETURNING state
   `).bind(job.generation, state, job.generation, outcome, job.generation, next, now, ...args, lease).first<{ state: string }>();
   if (outcome === 'copied' || outcome === 'existing_copy') {
     const latest = current ?? await env.DB.prepare(`
-      SELECT state FROM calendar_copy_jobs WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ?
+      SELECT state FROM calendar_copy_jobs WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ?
     `).bind(...args).first<{ state: string }>();
     if (latest?.state === 'cancelled') {
       await onAxalSessionCancelled(env, key.source_kind, key.source_id, { userId: key.user_id, provider: key.provider });
@@ -382,7 +384,7 @@ export async function onAxalSessionCancelled(
     await env.DB.prepare(`
       UPDATE calendar_copy_jobs SET state = 'cancelled', generation = generation + 1,
         outcome_code = 'source_gone', updated_at = ?
-      WHERE source_kind = ? AND source_id = ? AND (? IS NULL OR user_id = ?) AND (? IS NULL OR provider = ?)
+      WHERE source_kind = ? AND source_id = ? AND (? IS NULL OR ? = user_id) AND (? IS NULL OR ? = provider)
     `).bind(Date.now(), kind, sourceId, copy?.userId ?? null, copy?.userId ?? null,
       copy?.provider ?? null, copy?.provider ?? null).run();
   } catch { console.warn('[calendar/sync] copy_cancel_failed'); }

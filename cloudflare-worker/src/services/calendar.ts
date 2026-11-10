@@ -1577,12 +1577,13 @@ export async function pushEventToGoogle(
   if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
   const payload = JSON.stringify(googlePayload(ev));
+  const patchEvent = (googleEventId: string) => fetchWithTimeout(
+    `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
+    { method: 'PATCH', headers, body: payload },
+  );
   try {
     if (googleEventId) {
-      const r = await fetchWithTimeout(
-        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`,
-        { method: 'PATCH', headers, body: payload },
-      );
+      const r = await patchEvent(googleEventId);
       if (r.status === 404) {
         // Remote was deleted — fall through to a fresh insert.
       } else if (!r.ok) {
@@ -1598,10 +1599,7 @@ export async function pushEventToGoogle(
       { method: 'POST', headers, body: createKey ? JSON.stringify({ ...googlePayload(ev), id: createKey }) : payload },
     );
     if (r.status === 409 && createKey) {
-      const saved = await fetchWithTimeout(
-        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${createKey}`,
-        { method: 'PATCH', headers, body: payload },
-      );
+      const saved = await patchEvent(createKey);
       if (saved.ok) return createKey;
       refused?.(saved.status);
       return null;
