@@ -111,6 +111,42 @@ export function userFacingRaiseError(error, context = {}) {
   return fallback || RAISE_ERROR_COPY.unavailable;
 }
 
+/**
+ * D5079 (#5079) — what a failed authoritative read is, in one place.
+ *
+ * `refused` and `unreadable` are not the same answer and must never be drawn
+ * as each other, or as a measured zero. A refusal is authoritative: the
+ * platform decided not to show this, and it knows nothing about whether
+ * anything is recorded. An unreadable read is a failure: the store may hold
+ * plenty. Six Raise tools each carried their own copy of
+ * `[403, 404].includes(error?.status)`, and one of them (Capital
+ * relationships) had no refused state at all, so a refusal there claimed the
+ * read had failed.
+ *
+ * 403 and 404 are both refusals on these surfaces: a venture outside the
+ * caller's scope answers 404 so that its existence is not confirmed, which
+ * is a decision about access and not a missing store.
+ */
+export const RAISE_REFUSED_STATUSES = Object.freeze([403, 404]);
+export function raiseReadState(error, failed = 'unreadable') {
+  return RAISE_REFUSED_STATUSES.includes(Number(error?.status)) ? 'refused' : failed;
+}
+/**
+ * What the page says where the tool's figures, records and summaries would
+ * have been. The tool has already given its own refusal above; this says why
+ * nothing follows it, and says plainly that it is not a claim about what is
+ * recorded. `what` names the tool as it reads mid-sentence, e.g. "this cap table".
+ */
+export const refusedNoData = (what) =>
+  `Nothing of ${what} is drawn here, because the read was refused. That is not a claim that nothing is recorded.`;
+
+/**
+ * The refusal a Raise tool hands up to the page around it, so that page can
+ * stop drawing authoritative data for the tool. `null` means the tool's
+ * authoritative read was not refused.
+ */
+export const raiseToolRefusal = (refused, what) => (refused ? { refused: true, message: refusedNoData(what) } : null);
+
 /** Validation sentences a 400 carries (`errors: [..]`), kept only when each is a sentence. */
 export function raiseValidationErrors(error) {
   const list = error?.data?.errors || error?.data?.detail?.errors;

@@ -1,10 +1,9 @@
-import { heldLicences } from '../services/accountLicences';
 /**
  * PipelineRoom — one Durable Object instance per pipeline `deal_id`.
  *
  * Fans out real-time pipeline events (stage advance, score snapshot, AI
- * recommendation) to every connected admin/partner WebSocket viewer of
- * that deal.
+ * recommendation) to the connected viewers who may still receive them: D4676
+ * decides that per socket at every event (services/pipelineRoomAudience.ts).
  *
  * Hibernatable WebSockets (state.acceptWebSocket) keep idle connections
  * off the billing clock — the runtime evicts the JS instance and revives
@@ -13,6 +12,7 @@ import { heldLicences } from '../services/accountLicences';
  */
 import type { Env } from '../types';
 import { bumpActiveWS } from '../services/realtime';
+import { socketDelivery, newAudienceCache, type SocketSession } from '../services/pipelineRoomAudience';
 
 const HEARTBEAT_MS = 25_000;
 const HEARTBEAT_ALARM_KEY = 'pipeline_room_alarm';
@@ -69,7 +69,11 @@ export class PipelineRoom implements DurableObject {
       // Tag so we can route per-user logic later if needed.
       const userId = request.headers.get('x-auth-user-id') || 'unknown';
       const role = request.headers.get('x-auth-role') || 'unknown';
-      server.serializeAttachment({ userId, role, connectedAt: Date.now() });
+      // D4676: the token facts the room re-checks the session against at every
+      // event (`services/pipelineRoomAudience.ts`). Identifiers only.
+      let session: SocketSession | null = null;
+      try { session = JSON.parse(request.headers.get('x-auth-session') || 'null'); } catch { session = null; }
+      server.serializeAttachment({ userId, role, connectedAt: Date.now(), session });
 
       // Send a hello frame immediately so the client confirms the round-trip
       // worked. After this the socket is silent until events arrive.
@@ -99,39 +103,25 @@ export class PipelineRoom implements DurableObject {
   }
 
   private async broadcast(event: unknown) {
-    // Server-side authorization for two distinct event classes:
-    //   1. Personal `{type:"notification", user_id, ...}` frames published
-    //      by services/notify.ts go ONLY to the recipient's sockets.
-    //   2. Aggregate board events (vote_updated, stage_change,
-    //      project_created, gate_review_created, etc.) carry cross-deal
-    //      metadata and go ONLY to privileged roles (admin/partner/
-    //      investor). The `overview` channel is open to founders for the
-    //      bell, but they must not see board-wide pipeline activity.
-    let targetUserId: string | null = null;
-    let isNotification = false;
-    if (event && typeof event === 'object') {
-      const e = event as Record<string, unknown>;
-      if (e.type === 'notification' && e.user_id !== undefined && e.user_id !== null) {
-        targetUserId = String(e.user_id);
-        isNotification = true;
-      }
-    }
+    // D4676: each socket's answer is decided NOW, not at connect
+    // (`services/pipelineRoomAudience.ts`): its session must still stand, a
+    // notification goes to its recipient, a vote tally to the roles that
+    // always had it, and every other event only to an account that may read
+    // the deal it names. A socket whose session no longer stands is closed.
     const payload = JSON.stringify(event);
-    const PRIVILEGED = new Set(['admin', 'partner', 'investor']);
+    const cache = newAudienceCache();
     for (const ws of this.state.getWebSockets()) {
-      const att = (ws.deserializeAttachment?.() as { userId?: string; role?: string } | null) || null;
-      if (isNotification) {
-        if (!att || String(att.userId) !== targetUserId) continue;
-      } else {
-        if (!att) continue;
-        if (!PRIVILEGED.has(String(att.role || ''))) {
-          try {
-            const user = await this._env.DB.prepare('SELECT id, role, is_active FROM users WHERE id = ?')
-              .bind(Number(att.userId)).first<{ id: number; role: string; is_active: number }>();
-            if (!user || !user.is_active || !(await heldLicences(this._env.DB, user)).some(licence => licence === 'partner' || licence === 'investor')) continue;
-          } catch (error) { console.warn('[pipeline-room] licences unreadable', error); continue; }
-        }
+      const att = (ws.deserializeAttachment?.() as Record<string, unknown> | null) || null;
+      let answer: 'send' | 'skip' | 'close';
+      try { answer = await socketDelivery(this._env, att, event, cache); } catch (error) {
+        console.warn('[pipeline-room] audience unreadable; nothing sent to this socket', error);
+        answer = 'skip';
       }
+      if (answer === 'close') {
+        try { ws.close(4401, 'Session ended'); } catch { /* already closing */ }
+        continue;
+      }
+      if (answer !== 'send') continue;
       try {
         ws.send(payload);
       } catch {

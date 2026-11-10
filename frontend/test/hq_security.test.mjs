@@ -173,9 +173,11 @@ test('the deletion clock is statutory, computed server-side, and unknown when un
   // `cloudflare-worker/test/dsr_close_d168.test.ts`, which is the only place
   // it can actually fail.
   const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
-  assert.match(SERVICE, /export const DSR_CLOCK_DAYS = 30;/,
-    'the statutory clock is no longer 30 days, or no longer defined in the service');
-  assert.doesNotMatch(ROUTE, /const DSR_CLOCK_DAYS\s*=/,
+  // D4675 part 2 (owner's decision, 2026-11-10): one calendar month from
+  // receipt, to the end of that UTC day. The rule is named once in the service.
+  assert.match(SERVICE, /export const DSR_CLOCK_RULE = 'calendar_month' as const;/,
+    'the statutory clock is no longer one calendar month, or no longer defined in the service');
+  assert.doesNotMatch(ROUTE, /const DSR_CLOCK_(RULE|DAYS)\s*=/,
     'the route declares its own copy of the clock — two copies, and one of them will drift');
   assert.match(ROUTE, /days_left: dsrDaysLeft\(/,
     'the route computes days_left inline again, where no test can reach it');

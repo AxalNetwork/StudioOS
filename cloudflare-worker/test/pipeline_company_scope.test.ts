@@ -6,9 +6,11 @@
  * so a founder who switched company in the sidebar still saw every project
  * they owned — the switcher visibly did nothing on that surface.
  *
- * Only the founder branch narrows. The admin branch is an oversight view of
- * every project; the partner/investor branch is a marketplace of non-rejected
- * deals. Both are intentionally left whole.
+ * Only the founder's own ventures narrow by company. The admin branch is an
+ * oversight view of every project. D4676 (#4676) removed the third branch,
+ * which returned every project to any other account: the list is now the
+ * Pipeline read set (`services/pipelineAccess.ts`), pinned in
+ * `pipeline_access_d4676.test.ts`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { d1Over } from './_d1_sqlite.mjs';
 import {
   closeDsrRequest, requestErasure, cancelErasure, loadOpenDsrRequestIds,
-  dsrDaysLeft, dsrDeadlineIso, dsrStampMs, DSR_CLOCK_DAYS, DSR_CLOSE_KEY_RE,
+  dsrDaysLeft, dsrDeadlineIso, dsrDeadlineMs, dsrOverdue, dsrStampMs, DSR_CLOCK_RULE, DSR_CLOSE_KEY_RE,
 } from '../src/services/dsrRequests';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -307,7 +307,7 @@ test('the stored stamp is read as UTC, whatever zone the process runs in', () =>
     for (const tz of ['UTC', 'America/New_York', 'Europe/London', 'Australia/Sydney']) {
       process.env.TZ = tz;
       assert.equal(at('2026-03-08 06:30:00'), Date.UTC(2026, 2, 8, 6, 30, 0), `read in local time under ${tz}`);
-      assert.equal(dsrDeadlineIso(at('2026-03-08 06:30:00')), '2026-04-07T06:30:00.000Z', tz);
+      assert.equal(dsrDeadlineIso(at('2026-03-08 06:30:00')), '2026-04-08T23:59:59.999Z', tz);
     }
   } finally {
     if (saved === undefined) delete process.env.TZ; else process.env.TZ = saved;
@@ -316,38 +316,60 @@ test('the stored stamp is read as UTC, whatever zone the process runs in', () =>
   assert.equal(dsrDeadlineIso(NaN), null, 'an unknown receipt has no deadline, not one at the epoch');
 });
 
-test('the deadline is receipt + 30 × 24h across month ends, leap days, daylight saving and the year end', () => {
-  assert.equal(DSR_CLOCK_DAYS, 30);
+test('the deadline is one calendar month from receipt, to the end of that UTC day', () => {
+  // D4675 part 2, the owner's decision on #4675 (Q1 = B). Until then it was
+  // 30 spans of 24 hours; every row below changed with it.
+  assert.equal(DSR_CLOCK_RULE, 'calendar_month');
   const cases: Array<[string, string, string]> = [
-    ['2026-01-31 10:00:00', '2026-03-02T10:00:00.000Z', 'over a 28-day February'],
-    ['2028-01-31 10:00:00', '2028-03-01T10:00:00.000Z', 'over a 29-day February'],
-    ['2028-01-30 23:59:59', '2028-02-29T23:59:59.000Z', 'landing on a leap day'],
-    ['2028-02-29 00:00:00', '2028-03-30T00:00:00.000Z', 'from a leap day'],
-    ['2026-03-01 12:00:00', '2026-03-31T12:00:00.000Z', 'inside a 31-day month'],
-    ['2026-03-07 02:30:00', '2026-04-06T02:30:00.000Z', 'over the US spring change (8 March)'],
-    ['2026-03-20 01:30:00', '2026-04-19T01:30:00.000Z', 'over the EU spring change (29 March)'],
-    ['2026-10-20 00:30:00', '2026-11-19T00:30:00.000Z', 'over the EU (25 Oct) and US (1 Nov) autumn changes'],
-    ['2026-12-15 18:00:00', '2027-01-14T18:00:00.000Z', 'over the year end'],
+    ['2026-01-15 00:00:00', '2026-02-15T23:59:59.999Z', 'the same day next month'],
+    ['2026-01-31 10:00:00', '2026-02-28T23:59:59.999Z', 'a 28-day February has no 31st: its last day'],
+    ['2028-01-31 10:00:00', '2028-02-29T23:59:59.999Z', 'a leap February: the 29th'],
+    ['2028-01-30 23:59:59', '2028-02-29T23:59:59.999Z', 'the 30th clamps to the 29th too'],
+    ['2028-02-29 00:00:00', '2028-03-29T23:59:59.999Z', 'from a leap day'],
+    ['2026-03-01 12:00:00', '2026-04-01T23:59:59.999Z', 'March has 31 days: this one runs past 30 × 24h'],
+    ['2026-03-31 08:00:00', '2026-04-30T23:59:59.999Z', 'April has no 31st'],
+    ['2026-08-31 08:00:00', '2026-09-30T23:59:59.999Z', 'September has no 31st'],
+    ['2026-03-07 02:30:00', '2026-04-07T23:59:59.999Z', 'the US spring change (8 March) moves nothing in UTC'],
+    ['2026-10-20 00:30:00', '2026-11-20T23:59:59.999Z', 'nor do the EU and US autumn changes'],
+    ['2026-12-15 18:00:00', '2027-01-15T23:59:59.999Z', 'over the year end'],
+    ['2026-12-31 23:59:59', '2027-01-31T23:59:59.999Z', 'the last second of the year'],
+    ['2027-11-30 00:00:01', '2027-12-30T23:59:59.999Z', 'into December'],
   ];
   for (const [received, deadline, why] of cases) assert.equal(dsrDeadlineIso(at(received)), deadline, why);
 });
 
-test('days left counts whole 24h spans from receipt; the deadline instant reads 0, and so does the day after it', () => {
+test('never later than a calendar month, never shorter than 28 days, always the end of a UTC day', () => {
+  // A sweep over two years of receipts, every 7 hours, so every day of every
+  // month and both leap and common Februaries are crossed.
   const day = 86400000;
-  const r = at('2026-01-31 10:00:00');
+  for (let t = Date.UTC(2027, 0, 1); t < Date.UTC(2029, 0, 1); t += 7 * 3600000) {
+    const end = dsrDeadlineMs(t)!;
+    const r = new Date(t);
+    const sameDateNextMonth = Date.UTC(r.getUTCFullYear(), r.getUTCMonth() + 1, r.getUTCDate() + 1) - 1;
+    assert.ok(end <= sameDateNextMonth, `past a calendar month for ${r.toISOString()}`);
+    assert.ok(end - t >= 28 * day, `shorter than 28 days for ${r.toISOString()}`);
+    assert.equal(new Date(end).toISOString().slice(11), '23:59:59.999Z', `not the end of a UTC day for ${r.toISOString()}`);
+    assert.ok(new Date(end).getUTCMonth() === (r.getUTCMonth() + 1) % 12, `due in the wrong month for ${r.toISOString()}`);
+  }
+});
+
+test('overdue from the deadline instant: the due day reads 0, the next instant is overdue', () => {
+  // Q2 = B. Before part 2 the count read 0 for the WHOLE DAY AFTER the
+  // deadline ("0d left" while it had run out); that window is gone.
+  const r = at('2026-01-31 10:00:00'); // due by the end of 28 February
   const deadline = Date.parse(String(dsrDeadlineIso(r)));
-  assert.equal(dsrDaysLeft(r, r), 30);
-  assert.equal(dsrDaysLeft(r, deadline - 1), 1, 'one millisecond before the deadline');
-  assert.equal(dsrDaysLeft(r, deadline), 0, 'the deadline instant');
-  // CURRENT BEHAVIOUR, PINNED, AND ASKED ON #4675: for the 24 hours after the
-  // deadline the count still reads 0 — "0d left" while it has run out. The
-  // first negative value is one full day after the deadline.
-  assert.equal(dsrDaysLeft(r, deadline + day - 1), 0);
-  assert.equal(dsrDaysLeft(r, deadline + day), -1);
-  // The same at a leap day and over a daylight-saving change: no hour is lost or gained.
-  const leap = at('2028-02-28 12:00:00');
-  assert.equal(dsrDaysLeft(leap, at('2028-03-01 12:00:00')), 28, 'the leap day was not counted');
-  const dst = at('2026-03-28 12:00:00');
-  assert.equal(dsrDaysLeft(dst, at('2026-03-29 12:00:00')), 29, 'a daylight-saving change moved the UTC clock');
-  assert.equal(dsrDaysLeft(dst, at('2026-03-29 11:59:59')), 30);
+  assert.equal(dsrDaysLeft(r, r), 28);
+  assert.equal(dsrDaysLeft(r, Date.parse('2026-02-27T23:59:59.999Z')), 1, 'the day before the due day');
+  assert.equal(dsrDaysLeft(r, Date.parse('2026-02-28T00:00:00.000Z')), 0, 'the due day: due today');
+  assert.equal(dsrDaysLeft(r, deadline), 0, 'the deadline instant itself is still the due day');
+  assert.equal(dsrOverdue(r, deadline), false, 'not overdue AT the deadline');
+  assert.equal(dsrDaysLeft(r, deadline + 1), -1, 'one millisecond after: overdue, no grace day');
+  assert.equal(dsrOverdue(r, deadline + 1), true);
+  assert.equal(dsrOverdue(NaN, deadline), null, 'an unknown receipt is not on time and not overdue');
+
+  // The two readings are one fact: a reader that tests `days_left < 0` and one
+  // that reads `overdue` can never disagree, at any instant.
+  for (let now = r; now < r + 62 * 86400000; now += 3 * 3600000 + 17) {
+    assert.equal(dsrDaysLeft(r, now)! < 0, dsrOverdue(r, now), new Date(now).toISOString());
+  }
 });

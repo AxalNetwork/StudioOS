@@ -29,6 +29,23 @@
  * that makes `investor_introductions` useless as a ledger: a status column
  * written once and never updated, so every row reads outstanding forever.
  *
+ * AN AMENDMENT IS GUARDED, ATTRIBUTED AND RECORDED (D4642, #4642). `PATCH
+ * /:uid` used to be an unconditional UPDATE: two members who both opened the
+ * same entry both saved, and the second silently overwrote the first, with
+ * nothing to say who had amended it or what the first member had written. It
+ * now follows the same shape D4636 gave a company update:
+ *
+ *   · the caller may name the record it believes it is editing (`project_uid`),
+ *     and a mismatch is refused rather than applied to whatever that uid is;
+ *   · the write is conditional on `expected_revision`, so the loser of a race
+ *     is refused with `changed_since_open` and handed the row as it now stands,
+ *     which preserves the newer accepted work;
+ *   · `revision` is bumped, `updated_by` records who, and an append-only row in
+ *     `portfolio_support_entry_events` records the transition and the fields
+ *     that changed, readable at `GET /:uid/history`;
+ *   · every refusal names the entry and its company, so the page can say which
+ *     record it is talking about.
+ *
  * Mounted at /api/portfolio-support.
  */
 import { Hono } from 'hono';
@@ -49,8 +66,25 @@ type SupportRow = {
   promised_at: string | null; delivered_at: string | null; withdrawn_at: string | null;
   summary: string; outcome: string | null;
   recorded_by: number | null; created_at: string; updated_at: string;
+  /** D4642: bumped by every amendment; the compare-and-swap key. */
+  revision?: number | null;
+  /** D4642: who made the latest amendment. NULL until one is recorded. */
+  updated_by?: number | null;
   project_uid?: string | null; project_name?: string | null;
 };
+
+/**
+ * D4642: the revision a client must send back to amend an entry. A row written
+ * before the migration reads 1, which is what its first read reports, so a
+ * client that round-trips the value it was given always matches.
+ */
+const revisionOf = (row: SupportRow): number => {
+  const n = Number(row.revision);
+  return Number.isSafeInteger(n) && n >= 1 ? n : 1;
+};
+
+/** The amendable fields, and how to read each one off a PATCH body. */
+const AMENDABLE = ['hours', 'outcome', 'summary', 'delivered_at'] as const;
 
 /** YYYY-MM-DD or null. A malformed date is dropped rather than stored. */
 function isoDate(v: unknown): string | null {
@@ -117,6 +151,9 @@ r.get('/', async (c) => {
         `SELECT s.uid, s.fund_id, s.project_id, s.kind, s.state, s.hours,
                 s.promised_at, s.delivered_at, s.withdrawn_at, s.summary, s.outcome,
                 s.recorded_by, s.created_at, s.updated_at,
+                -- D4642: the revision a client sends back to amend the row, and
+                -- who last amended it. A row from before the migration reads 1.
+                s.revision, s.updated_by,
                 p.uid AS project_uid, p.name AS project_name
            FROM portfolio_support_entries s
            LEFT JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
@@ -283,44 +320,204 @@ r.patch('/:uid', async (c) => {
     }
 
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    // D4642: the record the caller believes it is editing. Optional, because an
+    // older client does not send it; when it IS sent and does not match, the
+    // amendment is refused rather than applied to whatever that uid resolves
+    // to. A stale list in one tab must not edit another company's entry.
+    const meantFor = body.project_uid === undefined ? null : String(body.project_uid);
+    const company = await c.env.DB.prepare(
+      'SELECT uid, name FROM projects WHERE id = ?',
+    ).bind(existing.project_id).first<{ uid: string | null; name: string | null }>();
+    const names = { entry_uid: existing.uid, project_uid: company?.uid ?? null, project_name: company?.name ?? null };
+    if (meantFor !== null && meantFor !== (company?.uid ?? null)) {
+      return c.json({
+        code: 'record_mismatch',
+        detail: 'That entry belongs to a different company. Reload the ledger and try again.',
+        ...names,
+      }, 409);
+    }
+
     const asked = body.state === undefined ? null : String(body.state);
     if (asked !== null && !SUPPORT_STATES.has(asked)) {
       return c.json({ detail: 'state must be promised, delivered or withdrawn' }, 400);
     }
+
+    // D4642: the compare-and-swap key. A client that read revision N sends it
+    // back; if the row has moved on, the amendment is refused and the caller is
+    // handed the row as it now stands, so the newer accepted work survives and
+    // the member can re-apply their edit to it.
+    //
+    // This is checked BEFORE the terminal-state rule on purpose. When a
+    // colleague has just delivered the entry, both refusals are true, but
+    // "someone else changed this since you opened it, here is their work" is
+    // the one that explains why the state is now terminal; answering
+    // `state_is_terminal` would describe the symptom and hide the cause.
+    const current = revisionOf(existing);
+    const expected = body.expected_revision === undefined ? null : Number(body.expected_revision);
+    if (expected !== null && (!Number.isSafeInteger(expected) || expected < 1)) {
+      return c.json({ detail: 'expected_revision must be a positive integer' }, 400);
+    }
+    if (expected !== null && expected !== current) {
+      const fresh = await c.env.DB.prepare(
+        'SELECT * FROM portfolio_support_entries WHERE uid = ?',
+      ).bind(existing.uid).first<SupportRow>();
+      return c.json({
+        code: 'changed_since_open',
+        detail: 'Someone else changed this entry since you opened it. Its current state is shown; apply your change again if it still applies.',
+        ...names,
+        expected_revision: expected,
+        revision: current,
+        item: fresh,
+      }, 409);
+    }
+
     // Delivered and withdrawn are terminal. Re-opening one would let a kept
     // promise be quietly un-kept, which is the audit this ledger exists to
-    // survive.
+    // survive. D4642: the refusal now names the record, so a page showing many
+    // entries can say which one it is talking about, and says what a member
+    // CAN still do, because amending a terminal entry is allowed.
     if (asked !== null && asked !== existing.state && existing.state !== 'promised') {
-      return c.json({ detail: `an entry already ${existing.state} cannot change state` }, 409);
+      return c.json({
+        code: 'state_is_terminal',
+        detail: `This entry is already ${existing.state}, so its state cannot change. Its hours, outcome and description can still be amended.`,
+        ...names,
+        state: existing.state,
+      }, 409);
     }
 
     const state = asked ?? existing.state;
     const now = nowIso();
     const day = now.slice(0, 10);
+    // D4642: only the TRANSITION stamps its own date. An entry that is already
+    // delivered with no recorded date keeps none unless a date is supplied:
+    // back-stamping today onto an amendment would claim a delivery date the
+    // store never had, on a delivery that happened at some other time.
+    const moving = asked !== null && asked !== existing.state;
     const deliveredAt = state === 'delivered'
-      ? (existing.delivered_at || isoDate(body.delivered_at) || day)
+      ? (existing.delivered_at || isoDate(body.delivered_at) || (moving ? day : null))
       : existing.delivered_at;
     const withdrawnAt = state === 'withdrawn'
-      ? (existing.withdrawn_at || day)
+      ? (existing.withdrawn_at || (moving ? day : null))
       : existing.withdrawn_at;
+    const hours = body.hours === undefined ? existing.hours : hoursOrNull(body.hours);
+    const outcome = body.outcome === undefined
+      ? existing.outcome
+      : (typeof body.outcome === 'string' ? body.outcome.slice(0, 2000) : null);
+    // An empty summary keeps the stored one: migration 237 makes it NOT NULL
+    // because an entry with no description is a count, not a ledger line.
+    const summary = typeof body.summary === 'string' && body.summary.trim()
+      ? body.summary.trim().slice(0, 2000)
+      : existing.summary;
 
-    await c.env.DB.prepare(
-      `UPDATE portfolio_support_entries
-          SET state = ?, hours = ?, outcome = ?, summary = ?,
-              delivered_at = ?, withdrawn_at = ?, updated_at = ?
-        WHERE uid = ?`,
-    ).bind(
-      state,
-      body.hours === undefined ? existing.hours : hoursOrNull(body.hours),
-      body.outcome === undefined ? existing.outcome : (typeof body.outcome === 'string' ? body.outcome.slice(0, 2000) : null),
-      typeof body.summary === 'string' && body.summary.trim() ? body.summary.trim().slice(0, 2000) : existing.summary,
-      deliveredAt, withdrawnAt, now, existing.uid,
-    ).run();
+    // What this amendment changed, for the history row. A field the caller did
+    // not send, or sent unchanged, is not recorded as a change.
+    const changed = AMENDABLE.filter((field) => {
+      if (body[field] === undefined && !(field === 'delivered_at' && deliveredAt !== existing.delivered_at)) return false;
+      if (field === 'hours') return hours !== existing.hours;
+      if (field === 'outcome') return outcome !== existing.outcome;
+      if (field === 'summary') return summary !== existing.summary;
+      return deliveredAt !== existing.delivered_at;
+    });
+    const moved = state !== existing.state;
+    if (!moved && changed.length === 0) {
+      // Nothing to apply. Answering 200 with the row keeps a double-click or a
+      // replayed request from bumping the revision and writing a history row
+      // that records no change.
+      return c.json({ item: existing, revision: current, unchanged: true });
+    }
+
+    const nextRevision = current + 1;
+    const results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE portfolio_support_entries
+            SET state = ?, hours = ?, outcome = ?, summary = ?,
+                delivered_at = ?, withdrawn_at = ?, updated_at = ?,
+                revision = ?, updated_by = ?
+          WHERE uid = ? AND revision = ?`,
+      ).bind(state, hours, outcome, summary, deliveredAt, withdrawnAt, now,
+        nextRevision, user.id, existing.uid, current),
+      // The history row is written by the same batch, from the row the UPDATE
+      // just wrote: its SELECT matches on the revision the UPDATE produced AND
+      // on this request's own `updated_at` and `updated_by`, so it cannot fire
+      // off another writer's amendment. Matching the revision alone was not
+      // enough — a writer that lands between the read and the UPDATE bumps the
+      // row to that same revision, the conditional UPDATE above is then refused,
+      // and a predicate of `revision = nextRevision` would still have found
+      // their row and recorded this request's rejected change as history.
+      // (entry_id, revision) is unique on top of that, so the history can never
+      // hold two amendments for one revision.
+      c.env.DB.prepare(
+        `INSERT INTO portfolio_support_entry_events
+           (uid, entry_id, revision, action, from_state, to_state, changed_json, actor_user_id, created_at)
+         SELECT ?, id, ?, ?, ?, ?, ?, ?, ? FROM portfolio_support_entries
+          WHERE uid = ? AND revision = ? AND updated_at = ? AND updated_by = ?`,
+      ).bind(newUid(), nextRevision, moved ? state : 'amended',
+        moved ? existing.state : null, moved ? state : null,
+        JSON.stringify(changed), user.id, now, existing.uid, nextRevision, now, user.id),
+    ]);
+    if (results.some((result) => !result.success)) throw new Error('Support amendment batch failed');
+    // The guard did not match: another writer landed between the read and the
+    // UPDATE. Same answer as a stale `expected_revision`, read back from D1
+    // rather than inferred from the statement having run.
+    if (results[0].meta.changes !== 1) {
+      const fresh = await c.env.DB.prepare(
+        'SELECT * FROM portfolio_support_entries WHERE uid = ?',
+      ).bind(existing.uid).first<SupportRow>();
+      return c.json({
+        code: 'changed_since_open',
+        detail: 'Someone else changed this entry while this change was being saved. Its current state is shown; apply your change again if it still applies.',
+        ...names,
+        expected_revision: current,
+        revision: fresh ? revisionOf(fresh) : current,
+        item: fresh,
+      }, 409);
+    }
 
     const row = await c.env.DB.prepare(
       'SELECT * FROM portfolio_support_entries WHERE uid = ?',
     ).bind(existing.uid).first<SupportRow>();
-    return c.json({ item: row });
+    return c.json({ item: row, revision: row ? revisionOf(row) : nextRevision, ...names });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * GET /api/portfolio-support/:uid/history — the entry's amendments, oldest
+ * first (D4642). Scoped exactly like the read and the amendment: an entry
+ * outside the caller's book is Not found, not an empty history.
+ */
+r.get('/:uid/history', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
+    const { ids, empty } = await scopeFor(c, user);
+    const existing = await c.env.DB.prepare(
+      'SELECT id, uid, project_id, state, revision FROM portfolio_support_entries WHERE uid = ?',
+    ).bind(c.req.param('uid')).first<SupportRow & { id: number }>();
+    if (!existing) return c.json({ detail: 'Not found' }, 404);
+    if (empty || (ids != null && !ids.includes(Number(existing.project_id)))) {
+      return c.json({ detail: 'Not found' }, 404);
+    }
+    const events = await c.env.DB.prepare(
+      `SELECT e.uid, e.revision, e.action, e.from_state, e.to_state, e.changed_json,
+              e.actor_user_id, u.name AS actor_name, e.created_at
+         FROM portfolio_support_entry_events e
+         LEFT JOIN users u ON u.id = e.actor_user_id
+        WHERE e.entry_id = ? ORDER BY e.revision`,
+    ).bind(existing.id).all<any>();
+    return c.json({
+      entry_uid: existing.uid,
+      revision: revisionOf(existing),
+      items: (events.results || []).map((row) => ({
+        uid: row.uid,
+        revision: Number(row.revision),
+        action: row.action,
+        from_state: row.from_state ?? null,
+        to_state: row.to_state ?? null,
+        changed: ((): string[] => { try { return JSON.parse(row.changed_json) || []; } catch { return []; } })(),
+        actor: { id: Number(row.actor_user_id), name: row.actor_name ?? null },
+        created_at: row.created_at,
+      })),
+    });
   } catch (e) { return mapError(c, e); }
 });
 

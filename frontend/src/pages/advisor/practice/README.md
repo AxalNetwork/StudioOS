@@ -16,6 +16,7 @@ its `ZONE` map.
 | `SessionsZone.jsx` | PR4 · Sessions | `/practice/sessions` | FEED | availability rules, session types, booking links (migration 240) + `advisor_bookings` amounts (205). Its emerald header primary "Block a date range" opens the page's own Block form (D1424, replacing D1596's three prompts). A Block card accepted in the Ask panel lands in the same form, filled from the address (`?block=<uid>&from=&until=`, #4737, `../../../ui/sessionsBlockHandoff.js`); the proposal is decided only after Block writes |
 | `SessionActions.jsx` | PR4 · Sessions | `/practice/sessions` | CONTROLS | Publish a slot and close a confirmed session (held, no-show, cancel); no store of its own (D4687) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
+| `DeliverableSheet.jsx` | Practice v2 PX-06 B–D · Delivery detail | `/practice/delivery` | SHEET + DIALOGS | One work product's detail sheet (latest version, immutable history with each version's own recipient and receipts), Add version and the send confirmation; no store of its own (D4833) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
 ZONES OF THEIR OWN (D571).** `design/incoming/Ops Page.dc.html` draws

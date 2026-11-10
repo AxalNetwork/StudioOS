@@ -33,7 +33,8 @@ import { escalationSlaBand } from './hqOps';
 // ONE COMPARISON FOR BOTH DIRECTIONS (D120). See `secret.ts`'s header for why
 // the digest and the refusals are shared rather than written twice.
 import { sha256Hex, verifySecret } from './secret';
-import { createJWT, loadSuperAdminFlag } from '../auth';
+import { createJWT, loadSuperAdminFlag, jwtMinIatFloor } from '../auth';
+import { revokeAllGrants } from '../mcp/grants';
 import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
@@ -2130,6 +2131,165 @@ export async function unbindAdmin(
   }
 
   return { unbound, skipped, branch, as_of: nowIso() };
+}
+
+/**
+ * D4669 part 2 (#4669, the owner's option B, 2026-11-10) — HQ signs accounts
+ * out ON THIS BRANCH, on request.
+ *
+ * WHY THIS EXISTS. HQ's emergency sign-outs write HQ's own database. A branch
+ * is its own Worker over its own D1, with its own accounts and sessions, so
+ * until this every HQ answer listed each bound branch as `not_reached`. Option
+ * B: HQ may reach a branch when the operator asks it to, and each branch says
+ * what it did.
+ *
+ * THE SAME PRIMITIVE THE BRANCH'S OWN ADMIN USES. A sign-out raises the
+ * account's `jwt_min_iat`, which every request re-reads, so every token issued
+ * before it is refused from its next request — including any support session
+ * opened as that account, which is held to the same floor (D4669 part 1).
+ * Nothing here mints, reads or forwards a token.
+ *
+ * ONE BATCH: the write and its audit row. The audit row is inserted only
+ * `WHERE changes() > 0` for one account, and always for the whole branch (an
+ * act that found no active account is still an act HQ took), and it carries
+ * the count the UPDATE changed. A batch is all-or-nothing on D1, so a sign-out
+ * without its record, or a record of a sign-out that did not happen, cannot
+ * exist.
+ *
+ * A RETRY IS THE SAME ACT. HQ sends one `op_key` per operator request and
+ * resends it when a branch did not answer in time. A key already on record is
+ * answered with that record (`replayed: true`) and writes nothing: the first
+ * attempt may well have landed, and HQ could not tell.
+ *
+ * WHAT THE BRANCH CHECKS, as `unbindAdmin` does: the caller is HQ
+ * (`authenticateHq`, first), the reason is at least ten characters, the
+ * operator is named, the key is well formed, and the target is an account
+ * here. TOTP, step-up and elevation are HQ's to check before the binding is
+ * touched, and nothing here pretends otherwise.
+ *
+ * Every refusal is thrown BEFORE the batch, so a thrown `rpc:` error always
+ * means nothing changed on this branch. HQ relies on that to report `failed`
+ * rather than `unreachable`.
+ */
+export const EMERGENCY_REASON_MIN = SUPPORT_REASON_MIN;
+export const EMERGENCY_OP_KEY_RE = /^op_[0-9a-f]{32}$/;
+export const EMERGENCY_SIGN_OUT_ACTION = 'hq_emergency_sign_out';
+
+export type EmergencySignOutTarget =
+  | { kind: 'all' }
+  | { kind: 'account'; user_id?: number | null; email?: string | null };
+
+export type EmergencySignOutRequest = {
+  hq_actor_name: string;
+  reason: string;
+  op_key: string;
+  target: EmergencySignOutTarget;
+};
+
+export type EmergencySignOutResult = BranchAnswer<{
+  /** Accounts whose sessions this act ended. 0 when no matching active account was found. */
+  affected: number;
+  /** True when the key was already on record: the answer is that record, and nothing was written now. */
+  replayed: boolean;
+  /** Why `affected` is 0, when it is: `no_account` (no account holds the target here). */
+  note: 'no_account' | null;
+  /** The floor written, in seconds; null on a replay or when nothing was written. */
+  revoked_at: number | null;
+}>;
+
+const opTag = (key: string) => `[op:${key}]`;
+
+export async function emergencySignOut(
+  env: Env, secret: string, req: EmergencySignOutRequest,
+): Promise<EmergencySignOutResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const reason = String(req?.reason ?? '').trim().slice(0, 300);
+  if (reason.length < EMERGENCY_REASON_MIN) {
+    throw new Error(`rpc: a sign-out from HQ needs a reason of at least ${EMERGENCY_REASON_MIN} characters, recorded here.`);
+  }
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: a sign-out from HQ needs the name of the HQ operator doing it');
+  const key = String(req?.op_key ?? '');
+  if (!EMERGENCY_OP_KEY_RE.test(key)) throw new Error('rpc: a sign-out from HQ needs its operation key, so a retry is recognised');
+  const target = req?.target;
+  if (!target || (target.kind !== 'all' && target.kind !== 'account')) {
+    throw new Error('rpc: a sign-out from HQ names its target: every account, or one account');
+  }
+
+  // A key already on record: answer it, write nothing. The count is read back
+  // from the row the first attempt wrote, so a replay reports what happened.
+  const prior = await env.DB.prepare(
+    'SELECT details, user_id FROM activity_logs WHERE action = ? AND instr(details, ?) > 0 ORDER BY id LIMIT 1',
+  ).bind(EMERGENCY_SIGN_OUT_ACTION, opTag(key)).first<{ details: string; user_id: number | null }>();
+  if (prior) {
+    const m = /affected=(\d+)/.exec(String(prior.details));
+    const affected = m ? Number(m[1]) : 0;
+    return {
+      affected, replayed: true, note: affected === 0 && target.kind === 'account' ? 'no_account' : null,
+      revoked_at: null, branch, as_of: nowIso(),
+    };
+  }
+
+  const floor = jwtMinIatFloor();
+  const actorTag = `hq:${actor}`.slice(0, 200);
+  const tail = ` by ${actor}: ${reason} ${opTag(key)}`;
+
+  if (target.kind === 'all') {
+    const out = await env.DB.batch([
+      env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE is_active = 1').bind(floor),
+      env.DB.prepare(
+        "INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, 'Every account on ' || ? || ' signed out from HQ, affected=' || changes() || ?, ?, NULL",
+      ).bind(EMERGENCY_SIGN_OUT_ACTION, branch, tail, actorTag),
+    ]);
+    const affected = Number(out?.[0]?.meta?.changes ?? 0);
+    return { affected, replayed: false, note: null, revoked_at: floor, branch, as_of: nowIso() };
+  }
+
+  // One account, named by this branch's own id or by email. HQ's ids mean
+  // nothing here: a person's account on a branch is a different row in a
+  // different database, so an email is how HQ names the same person across
+  // branches, and an id is how it names an account it found on this one.
+  type Row = { id: number; email: string | null };
+  let row: Row | null = null;
+  if (target.user_id !== undefined && target.user_id !== null) {
+    const id = Number(target.user_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('rpc: a sign-out from HQ names an account by a positive id');
+    row = await env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first<Row>();
+    if (!row) throw new Error(`rpc: ${branch} holds no account with id ${id}`);
+  } else {
+    const email = String(target.email ?? '').trim().toLowerCase().slice(0, 320);
+    if (!email || !email.includes('@')) throw new Error('rpc: a sign-out from HQ names an account by its id here or its email');
+    row = await env.DB.prepare('SELECT id, email FROM users WHERE lower(email) = ?').bind(email).first<Row>();
+  }
+
+  if (!row) {
+    // No account holds that email here: nothing to sign out, and the branch
+    // says so as a fact rather than an error. The act is still recorded, so a
+    // retry of it is recognised and HQ's record and the branch's agree.
+    await env.DB.prepare(
+      'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, NULL)',
+    ).bind(EMERGENCY_SIGN_OUT_ACTION, `No account on ${branch} matched the sign-out from HQ, affected=0${tail}`, actorTag).run();
+    return { affected: 0, replayed: false, note: 'no_account', revoked_at: null, branch, as_of: nowIso() };
+  }
+
+  const out = await env.DB.batch([
+    env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(floor, row.id),
+    env.DB.prepare(
+      "INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, 'Signed out of every session on ' || ? || ' from HQ, affected=' || changes() || ?, ?, ?",
+    ).bind(EMERGENCY_SIGN_OUT_ACTION, branch, tail, actorTag, row.id),
+    // Addressed to the person, as `unbindAdmin`'s second row is. The account
+    // was read a moment ago and the UPDATE is by id, so it always lands.
+    env.DB.prepare(
+      'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
+    ).bind('your_sessions_ended', `HQ signed you out of every session on this branch. Reason: ${reason}`, actorTag, row.id),
+  ]);
+  const affected = Number(out?.[0]?.meta?.changes ?? 0);
+  // D666: an AI assistant's grant ends with the account's sessions. Each tool
+  // call also refuses a grant older than the floor, so this is belt and braces
+  // and its failure leaves no working connection behind.
+  try { await revokeAllGrants(env, row.id); } catch (e) { console.warn('[rpc:emergencySignOut] grant revoke failed; the floor still refuses them', (e as Error).message); }
+  return { affected, replayed: false, note: null, revoked_at: floor, branch, as_of: nowIso() };
 }
 
 export type InviteRequest = {
