@@ -4,7 +4,7 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass, money,
+  buttonClass, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
   PAYOUT_STATE_LABEL, PAYOUT_TONE, cutNote, draftFitsPeriod, latestOnly, noteIsDirty, noteIsStale,
@@ -212,7 +212,7 @@ export default function EarningsZone() {
       const data = await api.getMyAdvisorEarnings();
       setState({ loading: false, error: '', data });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your earnings could not be read.', data: null });
+      setState({ loading: false, error: zoneError(e, e?.message || 'Your earnings could not be read.', 'practice'), data: null });
     }
   }, []);
 
@@ -227,7 +227,7 @@ export default function EarningsZone() {
       setLedger({ loading: false, error: '', data });
     } catch (e) {
       if (!ledgerTicket.current.isCurrent(t)) return;
-      setLedger({ loading: false, error: e?.message || 'This window could not be read.', data: null });
+      setLedger({ loading: false, error: zoneError(e, e?.message || 'This window could not be read.', 'practice'), data: null });
     }
   }, []);
 
