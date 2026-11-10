@@ -33,6 +33,7 @@ function fixture({ stepUp = true } = {}) {
   db.exec(readFileSync('cloudflare-worker/sql/migrations/434_contract_template_publications.sql', 'utf8'));
   db.exec(readFileSync('cloudflare-worker/sql/migrations/479_template_kind_party.sql', 'utf8'));
   db.prepare("INSERT INTO users(id,role,name,email,is_active) VALUES(1,'admin','HQ owner','hq@example.test',1)").run();
+  db.exec('INSERT INTO super_admins (user_id) VALUES (1)'); // D4811 part 15: publishing is the Super Admin's.
   db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (1, 'sess', 'totp', ?)")
     .run(stepUp ? new Date().toISOString().replace('T', ' ').slice(0, 19) : '2020-01-01 00:00:00');
   db.exec("INSERT INTO legal_templates(slug,title,category,body_md,version,doc_kind,axal_party) VALUES ('hr_alpha','Alpha Agreement','gp','Alpha body',3,'agreement','holdings')");
@@ -80,5 +81,15 @@ test('a session with no recent step-up is asked for one, after the form checks, 
   const r = await publish(db, { version: 3, reason: REASON, confirm: 'PUBLISH' });
   assert.equal(r.status, 403);
   assert.equal(r.body.error, 'step_up_required');
+  assert.equal(published(db), 0);
+});
+
+test('D4811 part 15: an admin who is not the Super Admin is refused before anything is checked or published', async () => {
+  const db = fixture();
+  db.exec('DELETE FROM super_admins');
+  const r = await publish(db, { version: 3, reason: REASON, confirm: 'PUBLISH' });
+  assert.equal(r.status, 403);
+  assert.equal(r.body.error, 'super_admin_only');
+  assert.match(r.body.message, /Only the Super Admin publishes a template\. Nothing was published\./);
   assert.equal(published(db), 0);
 });

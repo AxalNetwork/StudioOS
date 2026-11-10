@@ -13,7 +13,7 @@ import { ReadState, card, useRead } from './parts';
  * records). Each shows its first three and opens the whole list. A queue that
  * could not be read says so, and never reads as empty.
  */
-export default function AttentionQueues({ hq, revision, onOpen, onLink, onDrill }) {
+export default function AttentionQueues({ hq, revision, onOpen, onLink, onEvidence = null, onDrill }) {
   const stalled = useRead(() => contractsApi.agreements({ status: 'awaiting_signature', sort: 'sent_at', direction: 'asc', limit: QUEUE_ROWS }), [revision]);
   const repairs = useRead(() => contractsApi.agreements({ attention: 'repair', limit: QUEUE_ROWS }), [revision]);
   const templates = useRead(() => contractsApi.templates(), [revision]);
@@ -31,7 +31,7 @@ export default function AttentionQueues({ hq, revision, onOpen, onLink, onDrill 
       meta={repairs.data ? String(repairs.data.total) : null}
       empty="No agreement needs a repair." foot="All repairs" onFoot={() => onDrill({ kind: 'filter', filters: { attention: 'repair' } })}>
       {repairs.data?.items.map((r) => { const fix = repairOf(r); return <Row key={r.uid} title={r.title} sub={fix?.kind === 'evidence' ? <InconsistencyFlag text={fix.problem} /> : fix?.problem} onTitle={() => onOpen(r.uid)}>
-        {fix && <button type="button" data-testid={`repair-${fix.action.kind}-${r.uid}`} onClick={() => (fix.action.kind === 'link' ? onLink(r) : onOpen(r.uid))}
+        {fix && <button type="button" data-testid={`repair-${fix.action.kind}-${r.uid}`} onClick={() => (fix.action.kind === 'link' ? onLink(r) : fix.action.kind === 'attach' && onEvidence ? onEvidence(r) : onOpen(r.uid))}
           className="min-h-[44px] rounded-lg border border-dashed border-violet-400 px-2 text-[11px] font-semibold text-violet-700 dark:text-violet-300 md:min-h-0 md:py-1">{fix.action.label}</button>}
       </Row>; })}
     </Queue>

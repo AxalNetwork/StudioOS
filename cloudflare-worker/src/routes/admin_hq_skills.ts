@@ -307,8 +307,8 @@ adminHqSkills.get('/:uid', async (c) => {
   const e = freshness.evidence;
   const open = await openReview(c.env, s.id);
   const history = (await c.env.DB.prepare('SELECT * FROM agent_skill_reviews WHERE skill_id = ? ORDER BY id DESC LIMIT 20').bind(s.id).all<ReviewRow>()).results ?? [];
-  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by, evidence_json FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
-    .bind(s.id).all<{ version: number; published_at: string; published_by: number; evidence_json: string | null }>()).results ?? [];
+  const versions = (await c.env.DB.prepare('SELECT version, published_at, published_by, evidence_json, release_note FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC')
+    .bind(s.id).all<{ version: number; published_at: string; published_by: number; evidence_json: string | null; release_note: string | null }>()).results ?? [];
   const cases = (await c.env.DB.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
     .bind(s.id).all<{ uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
   const retired = await c.env.DB.prepare(`SELECT r.reason, r.pinned_agents, r.retired_at, r.retired_by, s.uid AS replacement_uid, s.name AS replacement_name
@@ -338,6 +338,8 @@ adminHqSkills.get('/:uid', async (c) => {
     versions: await Promise.all(versions.map(async (v) => ({
       version: v.version, published_at: v.published_at, by: await personOf(c.env, v.published_by), evidence: await versionEvidence(c.env, v.evidence_json),
       publish_audited: audited ? audited.has(v.version) : null,
+      // D4533 (B1): the publisher's note, or null ("Not recorded") for a version published without one or before 202611092030.
+      release_note: v.release_note ?? null,
     }))),
     retired: retired ? {
       reason: retired.reason, pinned_agents: retired.pinned_agents, at: retired.retired_at, by: await personOf(c.env, retired.retired_by),

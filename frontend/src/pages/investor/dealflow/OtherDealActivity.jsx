@@ -2,7 +2,8 @@
  * D4815 (#4815), canvas DX1 — "Other deal activity": one compact line under
  * Deal flow with a count per zone, each linking to the zone's own route. It
  * replaces the zone mini-boards that stacked under the flow. The counts and
- * their sources are `otherActivityModel.js`'s.
+ * their sources are `otherActivityModel.js`'s. Every entry is a link to a
+ * route, Deal rooms included (`/deals/rooms`, the second slice).
  *
  * `surviving`: the personal flow above could not be read. The line then
  * carries a heading saying the rest is still available, so nothing below is
@@ -47,7 +48,7 @@ function Figure({ item }) {
   return <span className="text-[12px] text-axal-muted dark:text-gray-400" aria-hidden="true">…</span>;
 }
 
-export function OtherDealActivityLine({ reads, surviving = false, onRooms, onRetry }) {
+export function OtherDealActivityLine({ reads, surviving = false, onRetry }) {
   const items = otherActivityItems(reads);
   const anyUnreadable = items.some((i) => i.state === 'unreadable');
   return (
@@ -56,16 +57,15 @@ export function OtherDealActivityLine({ reads, surviving = false, onRooms, onRet
       {surviving && <h2 className="m-0 text-[13.5px] font-bold" data-testid="other-activity-surviving">{OTHER_ACTIVITY_SURVIVING}</h2>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {!surviving && <b className="text-[13.5px]">{OTHER_ACTIVITY_TITLE}</b>}
-        {items.map((item) => (item.key === 'rooms' && onRooms
-          ? <button key={item.key} type="button" className={LINK} onClick={onRooms} aria-label={otherActivityLabel(item)} data-testid={`other-activity-${item.key}`}>{item.label} <Figure item={item} /> <span aria-hidden="true">→</span></button>
-          : <Link key={item.key} to={item.href} className={LINK} aria-label={otherActivityLabel(item)} data-testid={`other-activity-${item.key}`}>{item.label} <Figure item={item} /> <span aria-hidden="true">→</span></Link>))}
+        {items.map((item) => (
+          <Link key={item.key} to={item.href} className={LINK} aria-label={otherActivityLabel(item)} data-testid={`other-activity-${item.key}`}>{item.label} <Figure item={item} /> <span aria-hidden="true">→</span></Link>))}
         {anyUnreadable && onRetry && <button type="button" className="text-[12.5px] font-semibold underline" onClick={onRetry} data-testid="other-activity-retry">Try again</button>}
       </div>
     </section>
   );
 }
 
-export default function OtherDealActivity({ surviving = false, onRooms }) {
+export default function OtherDealActivity({ surviving = false }) {
   const [reads, retry] = useActivityReads();
-  return <OtherDealActivityLine reads={reads} surviving={surviving} onRooms={onRooms} onRetry={retry} />;
+  return <OtherDealActivityLine reads={reads} surviving={surviving} onRetry={retry} />;
 }

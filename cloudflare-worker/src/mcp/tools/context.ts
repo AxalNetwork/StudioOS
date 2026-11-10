@@ -33,7 +33,8 @@ async function allRows(env: Env, projectId: number, slug: 'problem-discovery' | 
   return out;
 }
 
-const OPEN = new Set(['untested', 'testing', 'inconclusive']);
+// D4586: a contested claim is still an open question.
+const OPEN = new Set(['untested', 'testing', 'contested', 'inconclusive']);
 
 export async function validateContext(env: Env, projectId: number) {
   const [themes, segments, claims, counts] = await Promise.all([

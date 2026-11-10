@@ -42,12 +42,14 @@ export function stalledItem(row, now = Date.now()) {
 /**
  * The repair a row needs, or null. A contradiction (marked signed with no
  * execution evidence) comes first; then an unlinked recipient in a store that
- * can be linked. `action.kind` is 'link' (the Link dialog) or 'open' (the
- * record's panel: no route attaches evidence to an agreement yet).
+ * can be linked. `action.kind` is 'link' (the Link dialog), 'attach' (the
+ * Attach evidence dialog, a legacy agreement: part 18) or 'open' (the panel).
  */
 export function repairOf(row) {
   if (row?.status === 'signed' && !hasExecutionEvidence(row)) {
-    return { kind: 'evidence', problem: 'Marked signed · no execution evidence', action: { kind: 'open', label: 'Open the record' } };
+    // D4811 part 18: a legacy agreement takes an attached signed copy; another store keeps its own signing record.
+    const attach = row?.source === 'documents';
+    return { kind: 'evidence', problem: 'Marked signed · no execution evidence', action: attach ? { kind: 'attach', label: 'Attach evidence' } : { kind: 'open', label: 'Open the record' } };
   }
   if (canLinkCompany(row) && row?.status !== 'void' && row?.status !== 'draft' && !row?.project_name) {
     return { kind: 'unlinked', problem: 'Recipient not linked to a company', action: { kind: 'link', label: '⚭ Link recipient' } };

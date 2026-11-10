@@ -1,8 +1,8 @@
 /**
  * D4586 (#4586) — Validate methodology v2, proposed. These pin the outcomes the
  * decision record tabulates, side by side with what v1 (`verdictFor`, the
- * shipped rule) gives today, so a reviewer reads each deliberate change as a
- * test rather than as prose. Part 2 wires v2 into the decision bar only; claim status is still v1.
+ * rule shipped until part 3, kept as `verdictForV1` for the history) gives, so a reviewer reads each deliberate
+ * change as a test rather than as prose. Part 2 wired v2 into the decision bar; part 3 into claim status (`verdictFor`).
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/validate_methodology_4586.test.ts
  */
@@ -12,11 +12,14 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { claimStatusV2, decisionEvidenceV2, sourceKey, METHODOLOGY_VERSION, type EvidenceRow } from '../src/services/validateMethodology.ts';
-import { verdictFor } from '../src/routes/_founder_validate_helpers.ts';
+import { verdictFor, verdictForV1 } from '../src/routes/_founder_validate_helpers.ts';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
-const V1_NAME: Record<string, string> = { validated: 'supported', invalidated: 'contradicted', unproven: 'insufficient' };
-const v1 = (s: number, c: number, u = 0) => { const v = verdictFor({ supporting: s, contradicting: c, fitUnrecorded: u }); return v === null ? 'unknown' : V1_NAME[v]; };
+const V_NAME: Record<string, string> = { validated: 'supported', contested: 'contested', invalidated: 'contradicted', unproven: 'insufficient' };
+const named = (v: string | null) => (v === null ? 'unknown' : V_NAME[v]);
+const v1 = (s: number, c: number, u = 0) => named(verdictForV1({ supporting: s, contradicting: c, fitUnrecorded: u }));
+/** The shipped claim status, in v2's words. */
+const shipped = (s: number, c: number, u = 0) => named(verdictFor({ supporting: s, contradicting: c, fitUnrecorded: u }));
 const v2 = (s: number, c: number, u = 0) => claimStatusV2({ supporting: s, contradicting: c, fitUnrecorded: u });
 
 // The table in D4586.md, row for row: [supporting, contradicting, unrecorded fit, v1, v2].
@@ -44,6 +47,8 @@ test('claim status: every row of the D4586 table, v1 as shipped and v2 as propos
   for (const [s, c, u, want1, want2] of TABLE) {
     assert.equal(v1(s, c, u), want1, `v1 ${s}/${c} unknown ${u}`);
     assert.equal(v2(s, c, u), want2, `v2 ${s}/${c} unknown ${u}`);
+    // Part 3: the shipped claim status IS v2, row for row.
+    assert.equal(shipped(s, c, u), want2, `shipped ${s}/${c} unknown ${u}`);
   }
 });
 
@@ -122,13 +127,13 @@ test('a source linked in both directions counts once and appears on both sides',
   assert.deepEqual([r.counted, r.counted_supporting, r.counted_contradicting], [1, 1, 1]);
 });
 
-test('part 2 wires v2 into the decision bar; claim status is still v1 until its own slice', () => {
-  // D4586 part 2: `recordDecision` counts with `decisionEvidenceV2`
-  // (validate_decision_methodology_4586.test.ts covers it on the shipped path). The claim
-  // status (`verdictFor`, read by these two files) moves to `claimStatusV2` in the next slice,
-  // with the verdict history's methodology version; this assertion goes with that slice.
+test('part 3: claim status reads claimStatusV2 on both shipped paths', () => {
+  // The decision bar (part 2) and the claim status (part 3) both read this module. The board
+  // (`founder_validate.ts`) and the cycle read (`cycleValidate.ts`) take the status from `verdictFor`.
   assert.match(readFileSync(join(ROOT, 'cloudflare-worker/src/services/verdict.ts'), 'utf8'), /from '\.\/validateMethodology'/);
+  const helpers = readFileSync(join(ROOT, 'cloudflare-worker/src/routes/_founder_validate_helpers.ts'), 'utf8');
+  assert.match(helpers, /import \{ claimStatusV2[^}]*\} from '\.\.\/services\/validateMethodology'/);
   for (const f of ['cloudflare-worker/src/services/cycleValidate.ts', 'cloudflare-worker/src/routes/founder_validate.ts']) {
-    assert.doesNotMatch(readFileSync(join(ROOT, f), 'utf8'), /validateMethodology/, `${f} reads claim status under v2 before its slice`);
+    assert.match(readFileSync(join(ROOT, f), 'utf8'), /verdictFor\(/, `${f} no longer reads the claim status from verdictFor`);
   }
 });

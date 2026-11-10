@@ -37,7 +37,7 @@ refusal and no view, open or audit row written; another founder or an admin cann
 cancel and reschedule; check-in cancel and reschedule; manual-row edit and delete; push to the caller's calendar) through
 the real Worker on the migrated schema, as every account that is not a party, an attendee in the wrong role, a disabled
 party and no credentials: refused, nothing of the record named, and no row, copy mapping or audit row changed and no
-call made to the calendar provider.
+call made to the calendar provider. A non-party gets the same status and body as for a missing id on every one of them.
 
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,

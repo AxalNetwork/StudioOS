@@ -227,7 +227,7 @@ test('D1207: either person on a check-in, or an admin, reschedules it, and the c
     f.db.prepare('INSERT INTO google_oauth_tokens (user_id,refresh_token) VALUES (2,?)').run(await encryptString(f.env, 'synthetic-refresh'));
     f.db.prepare("INSERT INTO calendar_sync_records (user_id,provider,source_kind,source_id,external_event_id,last_synced_at) VALUES (2,'google','founder_checkin',50,'copy-of-50',?)").run(at(-1));
     const next = at(50);
-    assert.equal((await f.request('/founder-checkins/50', 10, 'PATCH', { start_at: next })).status, 403);
+    assert.equal((await f.request('/founder-checkins/50', 10, 'PATCH', { start_at: next })).status, 404, 'a stranger is answered as for a missing id (#4570)');
     assert.equal((await f.request('/founder-checkins/51', 2, 'PATCH', { start_at: next })).status, 409);
     const moved = await f.request('/founder-checkins/50', 9, 'PATCH', { start_at: next, duration_min: 999 });
     assert.equal(moved.status, 200);
