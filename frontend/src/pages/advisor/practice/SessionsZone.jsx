@@ -7,7 +7,7 @@ import { BLOCK_QUERY_KEYS, BLOCK_WHOLE_DAYS, parseBlockQuery } from '../../../ui
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
   KIND_LABEL, KIND_TONE, VIEW_DAYS, blackoutLabel, bookedNote, groupByDay,
@@ -159,7 +159,7 @@ export default function SessionsZone() {
       const res = await api.listMyAdvisorSlots({ days, from: windowFrom(forView, days) });
       setSlots({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [], truncated: res?.truncated === true });
     } catch (e) {
-      setSlots({ loading: false, error: e?.message || 'Your calendar could not be read.', items: [] });
+      setSlots({ loading: false, error: zoneError(e, e?.message || 'Your calendar could not be read.', 'practice'), items: [] });
     }
   }, []);
 
@@ -192,7 +192,7 @@ export default function SessionsZone() {
         items: (Array.isArray(res?.items) ? res.items : []).map(bookingView),
       });
     } catch (e) {
-      setBookings({ loading: false, error: e?.message || 'Your sessions could not be read.', items: [] });
+      setBookings({ loading: false, error: zoneError(e, e?.message || 'Your sessions could not be read.', 'practice'), items: [] });
     }
   }, []);
 

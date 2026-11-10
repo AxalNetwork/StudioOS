@@ -6,6 +6,7 @@ import { Unreadable } from '../../../ui';
 import { ProRataPanel } from '../RoundClosesPanel';
 import { Dialog, Footer, useWrite } from './CapRelPipeline';
 import { CLOSING, amountText, centsText, tabHref } from './capRelModel';
+import { COMMITMENT_FILTERS, useTabFilters } from './capRelUrlFilters';
 import { CLOSE_STATES, EXEMPTION_HELP, EXEMPTION_NOT_RECORDED, ROUND_EXEMPTIONS, commitmentBar, commitmentRows, exemptionNote, roundBody, sourceGaps } from './capRelTabsModel';
 
 /**
@@ -174,16 +175,19 @@ function Bar({ read }) {
   );
 }
 
-function Every({ read }) {
-  const [f, setF] = useState({ q: '', status: '' });
+/** D5377: the search and status are the address's (`COMMITMENT_FILTERS`); typing replaces the entry, a status pushes one. */
+function Every({ read, f, setF }) {
+  const [typed, setTyped] = useState(f.q);
+  // Back, Forward or a venture switch moves the address: the box follows it, unless it already says the same.
+  useEffect(() => { setTyped((t) => (t.trim() === f.q ? t : f.q)); }, [f.q]);
   const rows = useMemo(() => commitmentRows(read, f), [read, f]);
   const statuses = Object.entries(read.words?.status || {});
   return (
     <section className={`${CARD} flex min-w-0 flex-col`} data-testid="caprel-commit-every">
       <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
         <h3 className={`${H3} mr-auto`}>Every commitment</h3>
-        <input className={`${FIELD} w-44`} placeholder="Search investors" aria-label="Search investors" value={f.q} onChange={(e) => setF((x) => ({ ...x, q: e.target.value }))} data-testid="caprel-commit-search" />
-        <select className={`${FIELD} w-auto`} aria-label="Status" value={f.status} onChange={(e) => setF((x) => ({ ...x, status: e.target.value }))} data-testid="caprel-commit-status">
+        <input className={`${FIELD} w-44`} placeholder="Search investors" aria-label="Search investors" value={typed} onChange={(e) => { setTyped(e.target.value); setF({ q: e.target.value }, { replace: true }); }} data-testid="caprel-commit-search" />
+        <select className={`${FIELD} w-auto`} aria-label="Status" value={f.status} onChange={(e) => setF({ status: e.target.value })} data-testid="caprel-commit-status">
           <option value="">Any status</option>{statuses.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
@@ -266,6 +270,7 @@ function Mercury({ read }) {
 
 export default function CapRelCommitments({ projectId, search = '' }) {
   const read = useRead(() => capitalRelationshipsApi.commitments(projectId), [projectId]);
+  const [filters, setFilters] = useTabFilters(COMMITMENT_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
   const [err, setErr] = useState('');
   const gaps = read.data ? sourceGaps(read.data).filter((g) => g.key !== 'mercury') : [];
@@ -282,7 +287,7 @@ export default function CapRelCommitments({ projectId, search = '' }) {
         <>
           <Bar read={read.data} />
           {gaps.map((g) => <p key={g.key} className={`m-0 text-[12.5px] ${g.state === 'unreadable' ? 'text-red-700 dark:text-red-300' : MUTED}`} data-testid="caprel-commit-gap">{g.reason}</p>)}
-          <Every read={read.data} />
+          <Every read={read.data} f={filters} setF={setFilters} />
         </>
       ) : null}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
