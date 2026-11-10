@@ -161,7 +161,8 @@ test('D900: a run that returned nothing says so in the dialog and stays open', a
   try {
     await m.press(m.by('pitch-review-run'));
     await m.press(m.by('pitch-review-confirm'));
-    assert.match(m.text(m.by('pitch-review-failed')), /nothing was saved/);
+    // D5070 (#5376): a 502's own text is never shown; the review's fallback is.
+    assert.match(m.text(m.by('pitch-review-failed')), /Nothing was saved/);
     assert.ok(m.by('pitch-review-dialog'), 'the dialog stays open');
     assert.equal(m.calls.filter((c) => c[0] === 'deckReviews').length, 1);
   } finally { await m.unmount(); }

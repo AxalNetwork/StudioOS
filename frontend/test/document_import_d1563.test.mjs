@@ -85,7 +85,8 @@ test('2. the adapter: importDocument goes through its client; a refusal carries 
     deckImportsApi.importDocument = async () => { throw Object.assign(new Error('That document could not be read. Paste its text instead; nothing was changed.'), { status: 422 }); };
     const refused = await adapter.importDocument(7, { file: { name: 'scan.pdf' } });
     assert.equal(refused.available, false);
-    assert.match(refused.reason, /could not be read/);
+    // D5070 (#5376): a code-less 422 reads as the approved invalid-input sentence, not the raw text.
+    assert.equal(refused.reason, 'Check what you entered. Nothing was saved.');
   } finally { Object.assign(deckImportsApi, ORIGINAL); }
 });
 
