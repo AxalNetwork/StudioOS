@@ -31,7 +31,7 @@ export const BUDGETS: Record<string, [number, number, number, number]> = {
   search: [200, 4, 2, 0],
   'decks.by_project': [200, 4, 2, 4],
   'data_room.shared': [200, 4, 2, 1],
-  'research.overview': [200, 4, 2, 21],
+  'research.overview': [200, 4, 2, 11],
   'funds.list': [200, 4, 2, 2],
   'projects.read.other_tenant': [403, 4, 2, 2],
 };

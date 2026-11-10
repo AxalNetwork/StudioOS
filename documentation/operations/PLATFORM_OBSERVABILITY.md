@@ -285,9 +285,54 @@ Steps:
 2. Check the token's scope (owner item 1 above).
 3. Use Retry on the Health zone. The incident clears on the first good read.
 
+### 7.5 The meeting bot is not starting
+
+Read from each run's startup facts on `meeting_bots` (D5153), the latest
+`BOT_START_READ` runs that reached a start outcome in the last seven days
+(`services/meetingBotHealth.ts`, D5370). Two incidents, kept apart (D4857):
+
+- **`meeting_bot:start_failed`, a failed check.** The host or runtime answered
+  with a startup code. **medium** when the latest start failed; **high** when
+  `BOT_START_FAILURE_STREAK` starts failed in a row, or the code is one of the
+  readiness preflight's (`runtime_no_answer`, `runtime_process_exited`,
+  `runtime_health_failed`).
+- **`meeting_bot:unreported`, a report that never arrived.** The run failed
+  with `runtime_unavailable` or `heartbeat_timeout`, no startup code was
+  recorded and the runtime never called back. Same severities.
+
+A start that works clears both. Without the table, or before migration
+`202611090953`, the signal is unknown, never healthy. With `MEETING_BOT` off,
+or on a branch, it is listed as not detected.
+
+Steps:
+
+1. Open **Platform › Meeting bots**. The recent failed runs list each run's
+   stage, startup code and next step.
+2. Follow that row's next step (`RUNTIME_ACTION` in
+   `services/meetingBotStartup.ts`). A preflight code usually means the image
+   or its version is wrong: redeploy the meeting-bot Worker.
+3. Run the staged diagnostic against a meeting you host. A stage that reads
+   Not recorded is a report that never arrived, not a failed check.
+
+### 7.6 A branch is unhealthy or unchecked
+
+Summary reads never ask a branch (D110). This reads the last check that
+Deployments stored on `licence_deployments` (D452) for each branch in a live
+state (`worker_live`, `hostname_active`, `linked`):
+
+- **medium:** the branch answered its last check, and said it was not ok;
+- **low:** no check in `BRANCH_CHECK_STALE_HOURS`, or never. Deployments
+  stores only an answer, so a branch that is down looks like one nobody
+  checked. A low note does not lower the state.
+
+Steps:
+
+1. Open the **Deployments** zone of Platform. Opening it asks every branch
+   and stores each answer, which clears a stale note.
+2. A branch that still does not answer: read its row's live state and HQ's
+   own actions against it (D163), then its Worker's logs.
+
 **Not detected here:**
 
-- **Branch Worker and database health.** Deployments reads it and shows it per
-  branch, because it asks every branch and must not hold up the summary
-  (D110).
-- **The meeting bot.** It is not deployed yet (D886).
+- **The meeting bot's staged diagnostics.** A diagnostic is a check the owner
+  starts, kept per run in R2 with no index. Its stages show on Meeting bots.
