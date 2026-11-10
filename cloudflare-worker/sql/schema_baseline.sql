@@ -1438,7 +1438,6 @@ CREATE TABLE deal_stage_events (
   -- overwritten by the very update that creates this row.
   days_in_from  INTEGER,
   actor_user_id INTEGER REFERENCES users(id),
-  source        TEXT CHECK (source IS NULL OR source IN ('hubspot','salesforce','affinity')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
