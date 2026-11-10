@@ -239,9 +239,17 @@ async function holderKindsOf(env: Env, projectId: number): Promise<Map<number, s
   return new Map(rows.map((r) => [Number(r.id), String(r.kind)]));
 }
 
+/**
+ * #4603 part 3 (D4603): what a reader may leave out. Each holder's register
+ * kind (one row per holder) and the closes behind close-origin rows are
+ * labels: neither changes a count, a balance or an instrument's terms.
+ */
+export type RecordReadOpts = { holderKinds?: boolean; closeUids?: boolean };
+
 /** GET /record/:projectId — the record by holder and by class, outstanding, fully diluted, the instruments and the proposals. */
-export async function readRecord(env: Env, projectId: number) {
-  const [classes, rows, currency, kinds] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId), holderKindsOf(env, projectId)]);
+export async function readRecord(env: Env, projectId: number, opts: RecordReadOpts = {}) {
+  const [classes, rows, currency, kinds] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId),
+    opts.holderKinds === false ? new Map<number, string>() : holderKindsOf(env, projectId)]);
   const byId = new Map(classes.map((c) => [c.id, c]));
   const related = new Map(rows.map((r) => [r.id, r.uid]));
   const isPool = (cls: number) => byId.get(cls)?.kind === 'option_pool';
@@ -304,7 +312,7 @@ export async function readRecord(env: Env, projectId: number) {
   }
 
   const out = rows.map((r) => issuanceOut(r, byId, related));
-  await withCloseUids(env, projectId, out);
+  if (opts.closeUids !== false) await withCloseUids(env, projectId, out);
   return {
     project_id: projectId,
     currency: { code: currency.code, source: currency.set ? 'set' : 'default' },
