@@ -18,6 +18,12 @@
  *   toMajorString(minor, code)       the exact major-unit text of an amount, for an edit box ("1234.56")
  *   toMinorSafe(v)                   v as a safe non-negative integer of minor units, or null
  *   formatMicro(micro, code, opts)   an amount in millionths of a unit (micro-USD) as exact localized money, or null
+ *   formatMinorOrCount(minor, code)  formatMinor, or the stored count with the currency named when it is unusable (D5373)
+ *   majorToMinor(major, code)        a legacy float of MAJOR units to minor units at the currency's exponent (rounded once)
+ *   suffixAmount(minor, code)        "1,200 USD" / "12,000 JPY": the amount at the currency's decimals, then the code
+ *   codeAmount(minor, code)          "EUR 12,000" / "KWD 12.345": the code, then the amount at the currency's decimals
+ *   plainAmount(minor, code)         the grouped number alone at the currency's decimals ("20.00"), for text that adds the code
+ *   fromStripeUnits / toStripeUnits / formatStripeAmount / plainStripeAmount / parseStripeAmount   Stripe's own count (ISK, UGX hundredths; three-decimal steps of ten)
  *
  * `reason` is one of: 'currency' | 'empty' | 'format' | 'negative' | 'decimals' | 'range'.
  */
@@ -170,18 +176,147 @@ export function formatMicro(micro, code, { locale } = {}) {
 }
 
 /**
- * D332 (pre-existing; kept as it was, and not part of D5029's scope)
- *
- * D332 — a shared cents-and-currency formatter, so a page cannot print a
- * bare `$` in front of a price whose stored currency is something else.
- * `PublicEventsPage.jsx`'s event cards always printed `$`, regardless of
- * the event's own `currency` column; `PublicEventDetailPage.jsx` already had
- * this exact formatter declared locally, un-exported. Consolidated here
- * rather than duplicated a second time.
+ * D5373 — `formatMinor`, or, when the currency is not one we can price in, the stored count of minor units with the
+ * currency named: "123,456 minor units (currency "XYZ" is not one we can price in)". For a surface that must show
+ * SOMETHING for a stored amount, never a figure read in a guessed currency. Null only when `minor` is not a finite
+ * number at all (the caller says "Not recorded"). `locale` and `trimWhole` pass through to `formatMinor`.
  */
+export function formatMinorOrCount(minor, code, { locale, trimWhole = false } = {}) {
+  const n = typeof minor === 'string' && minor.trim() !== '' ? Number(minor) : minor;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+  const shown = formatMinor(n, code, { locale, trimWhole });
+  if (shown !== null) return shown;
+  const named = typeof code === 'string' && code.trim() !== '' ? `"${code}" is not one we can price in` : 'not recorded';
+  return `${n.toLocaleString(locale)} minor units (currency ${named})`;
+}
+
+/**
+ * D5373 — an amount as a plain grouped number at the currency's own decimals, no sign or symbol: "20.00", "2,500",
+ * "1.235". For a surface that writes the code beside it ("20.00 USD"). Null for an unusable amount or currency.
+ */
+export function plainAmount(minor, code, { locale = 'en-US', trimWhole = false } = {}) {
+  const exp = exponentOf(code);
+  const n = typeof minor === 'string' && minor.trim() !== '' ? Number(minor) : minor;
+  if (exp === null || typeof n !== 'number' || !Number.isSafeInteger(n)) return null;
+  const nf = new Intl.NumberFormat(locale, { minimumFractionDigits: trimWhole && n % 10 ** exp === 0 ? 0 : exp, maximumFractionDigits: exp });
+  try { return nf.format(decimalText(n, exp)); } catch { return nf.format(n / 10 ** exp); }
+}
+
+/**
+ * D5373 — "1,200 USD", "12,000 JPY", "1.250 KWD": the amount at the currency's own decimals, then the code. For
+ * sentences that write the code after the figure (invoice lines, notices, log lines). A missing or unlisted code names
+ * the stored count instead of printing a figure in a guessed currency. Null for a non-number.
+ */
+export function suffixAmount(minor, code, { locale = 'en-US', trimWhole = false } = {}) {
+  const c = typeof code === 'string' ? code.trim().toUpperCase() : code;
+  const plain = plainAmount(minor, c, { locale, trimWhole });
+  if (plain !== null) return `${plain} ${c}`;
+  return formatMinorOrCount(minor, c, { locale });
+}
+
+/**
+ * D5373 — a legacy REAL column holds an amount in MAJOR units (dollars, a float); this is its integer count of minor
+ * units, rounded once, at the currency's own exponent. For a surface that must show a legacy dollar column through
+ * `formatMinor`. Null for a currency that is not listed or a value that is not a finite number.
+ */
+export function majorToMinor(major, code) {
+  const exp = exponentOf(typeof code === 'string' ? code.trim().toUpperCase() : code);
+  const v = typeof major === 'string' && major.trim() !== '' ? Number(major) : major;
+  if (exp === null || typeof v !== 'number' || !Number.isFinite(v)) return null;
+  const n = Math.round(v * 10 ** exp);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/**
+ * D5373 — "EUR 12,000", "JPY 12,000", "KWD 12.345": the code, then the amount at the currency's own decimals (a whole
+ * amount drops them unless `trimWhole` is false). For the licence pages that write the code, not a symbol. A missing or
+ * unlisted code names the stored count instead of printing a figure in a guessed currency. Null for a non-number.
+ */
+export function codeAmount(minor, code, { locale = 'en-US', trimWhole = true } = {}) {
+  const c = typeof code === 'string' ? code.trim().toUpperCase() : code;
+  const plain = plainAmount(minor, c, { locale, trimWhole });
+  if (plain !== null) return `${c} ${plain}`;
+  return formatMinorOrCount(minor, c, { locale });
+}
+
+/**
+ * D5373 — Stripe's own units. Stripe counts ISK and UGX in hundredths although ISO 4217 gives them no decimals
+ * (D5029), and takes a three-decimal currency in thousandths but only in steps of ten. Everything else is the
+ * currency's own minor unit. `fromStripeUnits` / `toStripeUnits` move between Stripe's count and the currency's own
+ * minor unit; both return null for a currency that is not listed or an amount that cannot be exact.
+ */
+export const STRIPE_HUNDREDTHS = Object.freeze(['ISK', 'UGX']);
+
+export function fromStripeUnits(unit, code) {
+  const c = currencyCode(typeof code === 'string' ? code.toUpperCase() : code);
+  const n = typeof unit === 'string' && unit.trim() !== '' ? Number(unit) : unit;
+  if (!c || typeof n !== 'number' || !Number.isSafeInteger(n)) return null;
+  if (STRIPE_HUNDREDTHS.includes(c)) return n % 100 === 0 ? n / 100 : null;
+  return n;
+}
+
+export function toStripeUnits(minor, code) {
+  const c = currencyCode(typeof code === 'string' ? code.toUpperCase() : code);
+  if (!c || typeof minor !== 'number' || !Number.isSafeInteger(minor)) return null;
+  const units = STRIPE_HUNDREDTHS.includes(c) ? minor * 100 : minor;
+  if (!Number.isSafeInteger(units)) return null;
+  if (exponentOf(c) === 3 && units % 10 !== 0) return null;
+  return units;
+}
+
+/**
+ * A Stripe amount as the grouped number alone at its currency's decimals ("20.00", "2,500", "12.340"), for text that
+ * writes the code beside it; the count named when the currency is not a listed one.
+ */
+export function plainStripeAmount(unit, currency, opts = {}) {
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : currency;
+  const minor = fromStripeUnits(unit, code);
+  const plain = minor === null ? null : plainAmount(minor, code, opts);
+  return plain ?? stripeCount(unit, code, opts);
+}
+
+/** A Stripe count that cannot be shown as an amount: ISK or UGX not in whole hundredths, or a currency that is not listed. */
+function stripeCount(unit, code, opts) {
+  if (currencyCode(code) && Number.isFinite(Number(unit))) return `${Number(unit).toLocaleString(opts.locale)} Stripe units (not a whole amount of ${code})`;
+  return formatMinorOrCount(unit, code, opts) ?? String(unit);
+}
+
+/** A Stripe amount (price `unit_amount`, charge `amount`) as localized money in its currency, or the count named. */
+export function formatStripeAmount(unit, currency, opts = {}) {
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : currency;
+  const minor = fromStripeUnits(unit, code);
+  if (minor !== null) return formatMinor(minor, code, opts);
+  return stripeCount(unit, code, opts);
+}
+
+/** Major-unit text to Stripe units for a currency, with Stripe's own rules: ISK and UGX in hundredths; a three-decimal currency in steps of ten. */
+export function parseStripeAmount(text, currency) {
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : currency;
+  const parsed = parseMinor(text, code);
+  if (!parsed.ok) return parsed;
+  const units = toStripeUnits(parsed.minor, code);
+  if (units === null) {
+    return exponentOf(code) === 3
+      ? refuse('decimals', `Stripe takes ${code} in steps of 0.01: the last decimal place must be 0.`)
+      : refuse('range', 'That amount is larger than can be recorded exactly.');
+  }
+  return { ok: true, minor: parsed.minor, units, exponent: parsed.exponent };
+}
+
+/**
+ * D332 + D5373 — a shared cents-and-currency formatter, so a page cannot print a bare `$` in front of a price whose
+ * stored currency is something else. An event ticket carries its own `currency` (a code, stored lower case), and the
+ * price is shown at THAT currency's decimals: a 2,500 JPY ticket is ¥2,500, not ¥25. `events.currency` is NOT NULL
+ * DEFAULT 'usd', so a payload that names none is the column's default (USD); a code that is not a listed currency is
+ * named beside the stored count, never read as dollars. `eventCurrency` is that rule alone, for the event surfaces that
+ * lay out their own price text.
+ */
+export function eventCurrency(currency) {
+  return currency === null || currency === undefined || String(currency).trim() === '' ? 'USD' : String(currency).trim().toUpperCase();
+}
+
 export function formatEventPrice(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(amt);
-  } catch { return `$${amt.toFixed(2)}`; }
+  const n = Number(cents);
+  const code = eventCurrency(currency);
+  return String(formatMinorOrCount(Number.isFinite(n) ? n : 0, code));
 }

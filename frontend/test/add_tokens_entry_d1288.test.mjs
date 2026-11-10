@@ -110,6 +110,14 @@ test('"Back to [page]" names the page the member came from, or says where they w
   assert.equal(fromOfPath('/somewhere'), 'where you were');
 });
 
+// The sheet is React.lazy (lazySheet): one tick is enough for its import on an idle machine, not under a loaded CI
+// runner, where the test saw the "opening" fallback instead (D5398). So wait, bounded, until no lazy sheet is opening.
+async function sheetLoaded(container, ms = 5000) {
+  for (const end = Date.now() + ms; byId(container, 'lazy-sheet-opening') && Date.now() < end;) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)); });
+  }
+}
+
 async function mountHost(user = { id: 1 }) {
   const restore = installDocument();
   const restoreBudget = stubBudget();
@@ -125,8 +133,8 @@ async function mountHost(user = { id: 1 }) {
   await act(async () => root.render(h(MemoryRouter, null, h(AddTokensHost, { user }))));
   return {
     container, on,
-    async ask(detail) { await act(async () => { on.window.get(ADD_TOKENS_EVENT)({ detail }); await new Promise((r) => setTimeout(r, 0)); }); },
-    async click(e) { await act(async () => { on.document.get('click')(e); await new Promise((r) => setTimeout(r, 0)); }); },
+    async ask(detail) { await act(async () => { on.window.get(ADD_TOKENS_EVENT)({ detail }); await new Promise((r) => setTimeout(r, 0)); }); await sheetLoaded(container); },
+    async click(e) { await act(async () => { on.document.get('click')(e); await new Promise((r) => setTimeout(r, 0)); }); await sheetLoaded(container); },
     async done() {
       await act(async () => root.unmount());
       Object.assign(window, { addEventListener: prev.wa, removeEventListener: prev.wr, location: prev.loc });

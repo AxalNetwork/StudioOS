@@ -50,6 +50,8 @@ export const learningApi = {
   startExam: (uid) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts`, { method: 'POST' }),
   // answers: { [questionUid]: [optionIndex, …] }
   submitExam: (uid, attemptUid, answers) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts/${encodeURIComponent(attemptUid)}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  // D5356 part 2: save an open attempt's choices on the server ({ answers, revision }); 409 stale_revision carries the saved copy.
+  saveExamAnswers: (uid, attemptUid, answers, revision) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts/${encodeURIComponent(attemptUid)}/answers`, { method: 'PUT', body: JSON.stringify({ answers, revision }) }),
   examAttempts: (uid) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts`),
   // Read-only review of learners' work, for whoever may review it (D559).
   reviewSubmissions: (exerciseUid) => request(`/learning/review/exercises/${encodeURIComponent(exerciseUid)}/submissions`),

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, CheckCircle2, CircleDot, Clock3, Filter, Layers3, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -89,12 +89,34 @@ export default function FounderBuildBoard() {
   // lanes. Read together, because lanes from one call and cards from another shows a
   // card in a lane it has been moved out of.
   const [board, setBoard] = useState(null);
+  const [boardRead, setBoardRead] = useState('idle');
+  const boardAttempt = useRef(0);
   const [selection, setSelection] = useState([]);
   const [dialog, setDialog] = useState(null);   // 'lanes' | 'bulk'
   const [opError, setOpError] = useState('');
   // `Mine` compares the card's `assigned_to` — an INTEGER user id — against the
   // reader's own. No store was needed for this and none is added.
   const { user: me } = useAuth();
+
+  const readBoardLanes = useCallback(async (projectId, { clear = false } = {}) => {
+    const attempt = boardAttempt.current + 1;
+    boardAttempt.current = attempt;
+    if (clear) setBoard(null);
+    setBoardRead('loading');
+    try {
+      const next = await api.getBoardLanes(projectId);
+      if (boardAttempt.current !== attempt) return null;
+      setBoard(next);
+      setBoardRead('ready');
+      return next;
+    } catch {
+      if (boardAttempt.current !== attempt) return null;
+      // Keep the last good lanes and cards on refresh. An unavailable read is
+      // not evidence that the project has no lanes (#5362).
+      setBoardRead('error');
+      return null;
+    }
+  }, []);
 
   const load = async () => {
     setStatus('loading');
@@ -113,9 +135,7 @@ export default function FounderBuildBoard() {
         return;
       }
       if (String(chosen.id) !== requestedId) setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(chosen.id)); return next; }, { replace: true });
-      // The lane read is soft: without it the board is what it was — cards with no
-      // lane — rather than broken.
-      api.getBoardLanes(chosen.id).then(setBoard).catch(() => setBoard(null));
+      void readBoardLanes(chosen.id, { clear: true });
       try {
         const result = await api.pipelineDealDetail(chosen.id);
         setDetail(result);
@@ -150,12 +170,12 @@ export default function FounderBuildBoard() {
     if (!selectedId) return;
     setSelection([]);
     const [fresh, detailAgain] = await Promise.all([
-      api.getBoardLanes(selectedId).catch(() => null),
+      readBoardLanes(selectedId),
       api.pipelineDealDetail(selectedId).catch(() => null),
     ]);
     if (fresh) setBoard(fresh);
     if (detailAgain) setDetail(detailAgain);
-  }, [selectedId]);
+  }, [selectedId, readBoardLanes]);
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === selectedId) || detail?.project, [projects, selectedId, detail]);
   /**
@@ -244,6 +264,7 @@ export default function FounderBuildBoard() {
           </header>
 
           {status === 'error' && <div className="fb-alert" role="alert" data-testid="status-board-error"><AlertCircle size={16} /><span>{error}</span><button type="button" onClick={load} data-testid="button-retry-board"><RefreshCw size={13} /> Retry</button></div>}
+          {status === 'ready' && boardRead === 'error' && <div className="fb-alert" role="alert" data-testid="status-board-lanes-error"><AlertCircle size={16} /><span>Lanes could not be read. The rest of the board is still available.</span><button type="button" onClick={() => readBoardLanes(selectedId)} data-testid="button-retry-board-lanes"><RefreshCw size={13} /> Retry lanes</button></div>}
           {opError && <div className="fb-alert" role="alert" data-testid="status-board-op-error"><AlertCircle size={16} /><span>{opError}</span></div>}
           {status === 'loading' && <BoardSkeleton />}
           {status === 'empty' && <EmptyBoard />}

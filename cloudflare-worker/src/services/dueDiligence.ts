@@ -278,6 +278,8 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
       try {
         const { searchOrganizations } = await import('../integrations/providers/crunchbase');
         const hits = await searchOrganizations(apiKey, subject, 1);
+        // D5304: the managed key answered; stamp its last use (hourly at most, never throws).
+        await (await import('./providerOauthKeys')).markProviderKeyUsed(env, 'crunchbase');
         const top = hits[0];
         if (!top) {
           return {

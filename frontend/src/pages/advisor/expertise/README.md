@@ -21,6 +21,7 @@ The modules they share:
 | `kit.jsx` | The pieces every zone draws: `ZoneBody` (loading, unreadable, empty, populated, in that order, so a failed read is never an empty store), `Unrecorded`, `NothingYet`, `StatedLimit`, `MoreRows`, `StaleNote`, the form fields and `money`. `SaveNote` is a live region mounted empty, and a `Field`'s hint describes its control (D4711). |
 | `pages.js` | `usePagedList` (D4689): reads a list a page at a time, appends `next_offset` on "Show more", merges rows by key, and draws "Showing N of total" only while rows remain. A failed next page keeps the rows already read. After a write a zone calls `refresh()`, not `load()`: it re-reads in place, as many rows as are shown, and the newest read wins (D4711). |
 | `expertiseModel.js` | What Services, Proof and Thinking say about themselves, pure (D4681): service states and edits, proof deletion lines, and each article's real state, audience and next step. |
+| `licenceRefusal.js` | The 403 `advisor_licence_required` read the same way on every Expertise and Practice zone (#5363): `zoneError` turns it into the surface's licence sentence, and `ZoneBody` shows that sentence with no Try again. |
 
 **EVERY FIGURE IS THE WHOLE LIST (D4689).** The list routes answer one page and,
 beside it, `counts` over the whole list (Visibility: `requests`). Tiles and
