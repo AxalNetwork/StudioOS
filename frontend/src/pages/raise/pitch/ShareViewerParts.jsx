@@ -7,6 +7,7 @@ import {
 } from './shareModel';
 import { VOICE_LABEL, sharedVoice } from './voiceModel';
 import { ndaFailure } from './pitchSafeErrors.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D902 (#2681) — the parts of the investor's viewer (PD20, PD22) that a link's
