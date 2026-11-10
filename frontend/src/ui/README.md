@@ -5,6 +5,7 @@ write a bordered white box with a title, it already exists here.
 
 | File | What it is |
 | --- | --- |
+| `OfferPages.jsx` | Previous and Next controls for server-paginated Offers collections. |
 | `Card.jsx` | The standard panel. |
 | `Pill.jsx` | Status and tag chips. |
 | `Stat.jsx` | A labelled figure. |

@@ -7,8 +7,8 @@ import { request } from '../api.js';
 export const memberCreditsApi = {
   // D957 / OD8 A: aggregate holdings and separate negative balances.
   summary: () => request('/perks/admin/credits/summary'),
-  // { member: { id, name, email, role }, balance, ledger: [...], truncated }
-  read: (userId) => request(`/perks/admin/credits/${encodeURIComponent(userId)}`),
+  // { member: { id, name, email, role }, balance, ledger: [...], page, has_more }
+  read: (userId, page = 1) => request(`/perks/admin/credits/${encodeURIComponent(userId)}?page=${encodeURIComponent(page)}`),
   // { user_id, delta, reason, note, source_ref } → { ok, ledger_id, delta, balance, notified }
   adjust: (body) => request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(body) }),
 };
