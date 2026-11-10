@@ -75,7 +75,12 @@ export function consentState(item) {
   const consents = Array.isArray(item?.consents) ? item.consents : [];
   if (item?.is_published) return 'published';
   if (consents.some((k) => k.withdrawn_at)) return 'withdrawn';
-  if (consents.some((k) => !k.consent_given && !k.withdrawn_at)) return 'awaiting';
+  // D4672: awaiting is an OPEN ask about the claim as it reads now. An ask the
+  // firm edited the claim under, or whose link lapsed, is not awaiting anything.
+  if (consents.some((k) => k.state === 'requested')) return 'awaiting';
+  // Asked, but every ask was about an older revision or has expired: no chip of
+  // its own (it falls under `All`), and never "Nobody asked", which it was not.
+  if (consents.some((k) => k.state === 'superseded' || k.state === 'expired')) return 'ask_again';
   return 'not_asked';
 }
 
@@ -83,11 +88,26 @@ const CONSENT_LABEL = {
   published: 'Published',
   awaiting: 'Awaiting consent',
   withdrawn: 'Withdrawn',
+  ask_again: 'Ask again',
   not_asked: 'Nobody asked',
 };
 const CONSENT_TONE = {
-  published: 'ok', awaiting: 'warn', withdrawn: 'danger', not_asked: 'neutral',
+  published: 'ok', awaiting: 'warn', withdrawn: 'danger', ask_again: 'warn', not_asked: 'neutral',
 };
+
+/**
+ * D4672: one consent row's state in words, from the Worker's `state`. Every
+ * state a request can be in reads differently: requested, confirmed, declined,
+ * withdrawn and superseded are different facts about different evidence.
+ */
+export const CONSENT_ROW_PILL = Object.freeze({
+  requested: { tone: 'warn', label: 'Requested' },
+  confirmed: { tone: 'ok', label: 'Confirmed' },
+  declined: { tone: 'neutral', label: 'Declined' },
+  withdrawn: { tone: 'danger', label: 'Withdrawn' },
+  superseded: { tone: 'neutral', label: 'Superseded' },
+  expired: { tone: 'neutral', label: 'Expired' },
+});
 
 /** The strip tile, in the anatomy the artboards share. */
 function ProofTile({ label, value, note }) {
@@ -101,7 +121,8 @@ function ProofTile({ label, value, note }) {
 }
 
 function ConsentRow({ consent, onWithdraw, busy }) {
-  const live = consent.consent_given && !consent.withdrawn_at;
+  const live = consent.state === 'confirmed';
+  const pill = CONSENT_ROW_PILL[consent.state] || { tone: 'neutral', label: 'Not recorded' };
   return (
     <div className="border-t border-axal-hairline py-2 first:border-t-0">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -109,9 +130,8 @@ function ConsentRow({ consent, onWithdraw, busy }) {
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
             <span className="font-semibold">{consent.consenter_name}</span>
             {consent.consenter_role && <span className="text-axal-faint">{consent.consenter_role}</span>}
-            {live && <Pill tone="ok">Agreed</Pill>}
-            {consent.withdrawn_at && <Pill tone="neutral">Withdrawn</Pill>}
-            {!live && !consent.withdrawn_at && <Pill tone="warn">Not answered</Pill>}
+            <Pill tone={pill.tone}>{pill.label}</Pill>
+            {consent.revision != null && <span className="text-axal-faint">about version {consent.revision}</span>}
           </div>
           {consent.consent_text && (
             /* The exact words agreed to, quoted. Consent to "a case study" and
@@ -124,8 +144,23 @@ function ConsentRow({ consent, onWithdraw, busy }) {
           <div className="mt-0.5 text-[11px] text-axal-faint">
             {consent.requested_at && <>Asked {formatDay(consent.requested_at)}</>}
             {consent.consent_given_at && <> · agreed {formatDay(consent.consent_given_at)}</>}
-            {consent.withdrawn_at && <> · withdrawn {formatDay(consent.withdrawn_at)}</>}
+            {consent.withdrawn_at && <> · {consent.consent_given_at ? 'withdrawn' : 'declined'} {formatDay(consent.withdrawn_at)}</>}
+            {consent.state === 'requested' && consent.expires_at && <> · link valid until {formatDay(consent.expires_at)}</>}
           </div>
+          {consent.state === 'superseded' && (
+            <p className="mt-1 max-w-xl text-[11.5px] leading-relaxed text-axal-muted">
+              This was about an earlier version of the claim, so it no longer publishes the current one. Ask again to confirm the current wording.
+            </p>
+          )}
+          {consent.state === 'requested' && consent.invite_token && (
+            <input
+              aria-label={`Link for ${consent.consenter_name}`}
+              className={`${inputClass} mt-1 font-mono text-[11px]`}
+              readOnly
+              value={`${window.location.origin}/attest/partner/${consent.invite_token}`}
+              onFocus={(e) => e.target.select()}
+            />
+          )}
         </div>
         {live && (
           <button
@@ -150,17 +185,18 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
   // `useState(null)` of the same name in the same file. The rule is right to be
   // crude here: a reader has the same problem.
   if (issuedToken) {
-    const link = `${window.location.origin}/attest/partner/${issuedToken.request_token}`;
+    const link = `${window.location.origin}/attest/partner/${issuedToken.invite_token}`;
     return (
       <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-amber-deep dark:text-amber-300">
-          Copy this link now
+          Send this link to {issuedToken.consenter_name}
         </div>
         <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">
-          This is the only time it is shown. It is {issuedToken.consenter_name}’s
-          credential for answering, so no later read returns it — a firm that
-          could read it back could answer on their client’s behalf, which would
-          make every consent here self-issued.
+          It shows them this claim exactly as it reads now. To answer, they ask for
+          a code that Axal emails to the address you gave, so holding the link is
+          not enough to answer — not for you, and not for anyone it is forwarded to.
+          If you edit the claim before they answer, this request stops applying and
+          you ask again.
         </p>
         <input
           className={`${inputClass} font-mono text-[11.5px]`}
@@ -182,7 +218,7 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
           <input className={inputClass} value={form.consenter_name} maxLength={200}
             onChange={(e) => setForm({ ...form, consenter_name: e.target.value })} />
         </Field>
-        <Field label="Email" hint="Recorded, not sent to.">
+        <Field label="Email" hint="Their code to answer is sent here. It cannot be your firm’s.">
           <input className={inputClass} value={form.consenter_email} maxLength={300}
             onChange={(e) => setForm({ ...form, consenter_email: e.target.value })} />
         </Field>
@@ -193,16 +229,16 @@ function AskPanel({ item, onAsk, busy, issuedToken, note }) {
       </div>
       <button
         type="button" className={`${buttonClass} mt-3`}
-        disabled={busy || !form.consenter_name.trim()}
+        disabled={busy || !form.consenter_name.trim() || !form.consenter_email.trim()}
         onClick={() => onAsk(item, form)}
       >
         Create the ask
       </button>
       <WriteNote note={scopedNote(note, `ask:${item.id}`)} busy={busy} />
       <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
-        This records the ask and gives you a link. It does not send anything —
-        whether this product should email your client on your behalf is not a
-        decision a form should make quietly.
+        This records the ask and gives you a link to pass on. Axal sends nothing
+        on your behalf; the only email is the code your client asks for when they
+        answer.
       </p>
     </div>
   );
@@ -411,7 +447,7 @@ export default function PartnerProofZone() {
   const ask = useCallback((item, form) => run(
     async () => {
       const r = await api.requestPartnerProofConsent(item.id, form);
-      setIssued({ itemId: item.id, request_token: r.request_token, consenter_name: r.consenter_name });
+      setIssued({ itemId: item.id, invite_token: r.invite_token, consenter_name: r.consenter_name });
     },
     'The ask is recorded.', `ask:${item.id}`,
   ), [run]);
@@ -694,14 +730,20 @@ export default function PartnerProofZone() {
             <p className="mt-2">
               <strong>Withdrawing is yours; agreeing is not.</strong> You can record
               that a client has taken their consent back, and it takes effect at
-              once. You cannot record that one agreed — only the person holding the
-              link can, which is what makes the record mean anything.
+              once and for good. You cannot record that one agreed — only the person
+              who reads the address you named can, with a code Axal emails there,
+              which is what makes the record mean anything.
             </p>
             <p className="mt-2">
-              <strong>The ask is recorded, not sent.</strong> Nothing here emails
-              your client. The link is yours to pass on however you already talk to
-              them, and it is shown once because it is their credential rather than
-              yours.
+              <strong>A consent is about one version of the claim.</strong> Editing
+              the title, detail, outcome or engagement makes a new version; a
+              consent stays with the version it was given for, shown as superseded,
+              and the new one is self-stated until the client confirms it.
+            </p>
+            <p className="mt-2">
+              <strong>The ask is recorded, not sent.</strong> The link is yours to
+              pass on however you already talk to your client. It shows them the
+              claim; it cannot answer it.
             </p>
           </StatedLimit>
         </div>

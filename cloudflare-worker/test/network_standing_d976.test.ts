@@ -13,7 +13,7 @@
  *      agreement and Lab host, each alone; a failed block is unreadable, a block
  *      with no store is not recorded; no client name and no rating comment.
  */
-import test from 'node:test';
+import test, { after, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -36,7 +36,11 @@ const JWT_SECRET = 'synthetic-network-standing-key-0123456789';
 // Wednesday 21 October 2026, noon UTC.
 const NOW = Date.parse('2026-10-21T12:00:00Z');
 const iso = (days: number) => new Date(NOW + days * 86400e3).toISOString();
-const future = (days: number) => new Date(Math.max(NOW, Date.now()) + days * 86400e3).toISOString();
+// The fixture's slots sit days either side of NOW, and the booking route reads the clock, so the clock is NOW: on
+// 2026-11-10 at noon the real clock passed slot 4 (NOW + 20 days) and every booking here began answering "Slot is in
+// the past" (D5398: a test never depends on the day it runs).
+before(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+after(() => mock.timers.reset());
 
 const ADMIN = 1, VIC = 2, PIA = 3, NED = 4, FAY = 5, EVE = 6, OLD = 7, NOPRO = 8;
 
@@ -91,7 +95,7 @@ function fixture() {
       VALUES (1, 's1', 30, '${iso(-10)}', '${iso(-10 + 1 / 24)}', 3, 0, '2026-01-01'),
              (2, 's2', 30, '${iso(5)}', '${iso(5 + 1 / 24)}', 3, 0, '2026-01-01'),
              (3, 's3', 30, '${iso(-200)}', '${iso(-200 + 1 / 24)}', 3, 0, '2026-01-01'),
-             (4, 's4', 30, '${future(20)}', '${future(20 + 1 / 24)}', 1, 0, '2026-01-01'),
+             (4, 's4', 30, '${iso(20)}', '${iso(20 + 1 / 24)}', 1, 0, '2026-01-01'),
              (5, 's5', 30, '${iso(6)}', '${iso(6 + 1 / 24)}', 1, 1, '2026-01-01'),
              (6, 's6', 30, '${iso(-90.5)}', '${iso(-90.5 + 1 / 24)}', 1, 0, '2026-01-01'),
              (7, 's7', 30, '${iso(7)}', '${iso(7 + 1 / 24)}', 1, 0, '2026-01-01');

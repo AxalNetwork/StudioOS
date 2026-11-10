@@ -19,7 +19,8 @@
  */
 import type { Env } from '../types';
 import { readMeta, laterOf, type OperationalReadMeta } from '../util/operationalRead';
-import { buildHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
+import { readMeetingBotHealth } from './meetingBotHealth';
+import { buildHealth, readBranchHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
 import { readWebhookDeliveries } from './stripeWebhookDeliveries';
 import { CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState } from '../util/cronHistory';
 import { dlqDepth } from './deadLetters';
@@ -471,6 +472,9 @@ export type PlatformSummaryReaders = {
   cron_streaks: (env: Env) => Promise<unknown>;
   webhook_health: (env: Env) => Promise<unknown>;
   telemetry: (env: Env) => Promise<unknown>;
+  /** D5370: the meeting bot's start outcomes, and each live branch's last stored check. */
+  meeting_bot_health: (env: Env) => Promise<unknown>;
+  branch_health: (env: Env) => Promise<unknown>;
 };
 
 export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
@@ -488,6 +492,8 @@ export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
   cron_streaks: (env) => readCronStreaks(env),
   webhook_health: readWebhookHealth,
   telemetry: (env) => readTelemetryHealth(env),
+  meeting_bot_health: (env) => readMeetingBotHealth(env),
+  branch_health: readBranchHealth,
 };
 
 /** Each block's answer when its reader fails or times out: its own shape, `available: false`, and why. */
@@ -517,6 +523,8 @@ function fallbacks(env: Env): Record<keyof PlatformSummaryReaders, (w: 'failed' 
     cron_streaks: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The recent runs of each scheduled job')(w) }),
     webhook_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The webhook delivery streak')(w) }),
     telemetry: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The telemetry probe')(w) }),
+    meeting_bot_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The meeting bot\'s start outcomes')(w) }),
+    branch_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The branches\' stored health checks')(w) }),
   };
 }
 
@@ -540,6 +548,8 @@ export const PLATFORM_READ_SOURCES: Record<keyof PlatformSummaryReaders, string>
   cron_streaks: 'cron_run_history (D1), the latest runs of each declared trigger',
   webhook_health: 'activity_logs (D1), the Stripe webhook\'s request log',
   telemetry: 'Analytics Engine, through its SQL API',
+  meeting_bot_health: 'meeting_bots (D1): each run\'s startup stage, code and first callback (D5153)',
+  branch_health: 'licence_deployments (D1): the last health check Deployments stored for each live branch (D452)',
 };
 
 type Block = Record<string, unknown> | null | undefined;
@@ -650,6 +660,8 @@ export async function readPlatformSummary(env: Env, { readers = PLATFORM_SUMMARY
       webhook: got.webhook_health as HealthInput['webhook'],
       telemetry: got.telemetry as HealthInput['telemetry'],
       published: got.incidents as HealthInput['published'],
+      meeting_bot: got.meeting_bot_health as HealthInput['meeting_bot'],
+      branches: got.branch_health as HealthInput['branches'],
       stripe_configured: !!env.STRIPE_SECRET_KEY,
       now: new Date(readAt),
     }),

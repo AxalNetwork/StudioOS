@@ -6,7 +6,7 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unreadable, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass,
+  buttonClass, ghostButtonClass, inputClass, zoneError,
 } from '../expertise/kit';
 import {
   VERSION_STATUS_LABEL, VERSION_STATUS_TONE, cardReceiptLine, cardStatus, medianLabel, nudgeTargets,
@@ -143,7 +143,7 @@ export default function DeliveryZone() {
     } catch (error) {
       setState({
         loading: false,
-        error: error?.message || 'The delivery record could not be read.',
+        error: zoneError(error, error?.message || 'The delivery record could not be read.', 'practice'),
         items: [], totals: null,
       });
       return;
