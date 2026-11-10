@@ -19,7 +19,7 @@ import {
   OTHER_LINE, OTHER_TITLE, PLANS_PATH, PLAN_LINE, SAVE_BLOCKED, UNREADABLE_LINE,
   asOf, bars, byClass, cartaChip, harbourChip, holderCards, instruments, needsYou, proposalsFromModel, tiles, whoOwns,
 } from './overviewModel';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, raiseToolRefusal, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1022 (#2859, part 7 of #2432) — Overview's record blocks (CT1, CT1c, CT16,
@@ -76,7 +76,7 @@ function useRead(load, key, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(key))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, error }); });
+      .catch((error) => { if (alive) setState({ status: raiseReadState(error, 'error'), data: null, error }); });
     return () => { alive = false; };
   }, [load, key, reload]);
   return state;
@@ -455,7 +455,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
   );
 }
 
-export function CapTableOverview({ projectId, search = '', holderId = null, open = null }) {
+export function CapTableOverview({ projectId, search = '', holderId = null, open = null, onRefused = null }) {
   const { user } = useAuth() || {};
   const navigate = useNavigate();
   const phone = usePhoneWidth();
@@ -473,6 +473,14 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   const [fromModel, setFromModel] = useState(false);
   const [voiding, setVoiding] = useState(null);
   const [correcting, setCorrecting] = useState(null);
+  // D5079 (#5079): the record read is this tool's authoritative read. When it
+  // is refused, the page around this block must stop drawing the cap table's
+  // own data — its card, its Holders list, Eadwyn's proposals and Evidence —
+  // because "not allowed to read" is not "read and empty". The refusal is
+  // reported up rather than acted on here: this block does not own the page.
+  const refused = record.status === 'refused';
+  useEffect(() => { onRefused?.(raiseToolRefusal(refused, 'this cap table')); }, [onRefused, refused]);
+  useEffect(() => () => onRefused?.(null), [onRefused]);
 
   if (explorer) {
     return (
@@ -512,10 +520,14 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
   let body;
   if (record.status === 'loading') body = <Reading />;
   else if (record.status === 'refused') {
+    // D5079 (#5079): an admin's read-only support path exists, so the refusal
+    // names its door instead of leaving them with nothing to do. The door is
+    // the reason-gated read; it grants nothing by itself.
     body = (
       <Center mark="⊘" title={OTHER_TITLE} line={OTHER_LINE} testId="captable-other-company">
         <Link className={GHOST} to={HOME_PATH}>Switch company</Link>
-        <AskForAccess projectId={projectId} testId="captable-other-company" />
+        {admin ? <Link className={GHOST} to={`/cap-tables/${encodeURIComponent(String(projectId))}`} data-testid="captable-other-company-support">Open for support, with a reason</Link>
+          : <AskForAccess projectId={projectId} testId="captable-other-company" />}
       </Center>
     );
   } else if (record.status === 'error') {
@@ -557,7 +569,11 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
 
   return (
     <div className="flex min-w-0 flex-col gap-3.5" data-testid="captable-overview">
-      <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} />
+      {/* D5079 (#5079): the tool bar reads the record's As of, its 409A and its
+          Carta state, and offers Record an issuance. None of that belongs
+          above a refusal: it is the record speaking, and a write on a record
+          this viewer may not read. */}
+      {refused ? null : <ToolBar record={record} harbourRead={harbourRead} cartaRead={cartaRead} need={need} role={role} plan={plan} onRecord={writes ? onRecord : null} phone={phone} />}
       {body}
       {open?.kind === 'record' && record.status === 'ready' && (writes || admin) ? (
         <RecordDialog projectId={projectId} record={record.data} mode={recordMode} admin={admin && role !== 'owner'} onClose={closeDrawer} onDone={leave} />

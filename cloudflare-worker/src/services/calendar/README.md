@@ -82,6 +82,10 @@ when adding a kind.
   rule: `grow_campaign` and `ad_flight` (all day over a plan's own days),
   `newsletter_send` (a Beehiiv post's send time, unless §b already shows its
   Publish send) and `sequence_step` (the step an active enrolment stands on).
+- `gatherPool.ts`: D5203 (#5203), the bounded pool `gather` reads its sources
+  through: a lane with at most `limit` reads in flight, each settling on its
+  own, outcomes in the given order with their timings. Axal's D1 readers and
+  the Google and Outlook readers run in separate lanes.
 
 Add readers beside the source they represent and test member boundaries with
 synthetic data. Tests stub provider calls. Never log feed tokens, provider

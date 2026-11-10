@@ -26,7 +26,7 @@ import { Hono } from 'hono';
 import security from '../src/routes/admin_security.ts';
 import { requireAuth, JWT_EXPIRY_HOURS } from '../src/auth.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { revokeUserSession } from '../src/services/userSessions.ts';
+import { listActiveSessions, revokeUserSession } from '../src/services/userSessions.ts';
 import {
   loadTokenAnomalies, TOKEN_ANOMALY_FLOOR, TOKEN_ANOMALY_MULTIPLE, TOKEN_ANOMALY_BASELINE_DAYS,
 } from '../src/services/tokenAnomalies.ts';
@@ -163,6 +163,41 @@ test('the list: active, unrevoked sessions in the window, the caller marked Curr
   assert.equal(t1.email, 'fran@example.com', 'a row must name its account');
   for (const row of r.body.rows) assert.ok(!('jti' in row), 'the token key went out on the wire');
   assert.equal(r.body.impersonations.available, true);
+});
+
+test('D4699: newest sign-in first by id, and before_id continues strictly below, each session once', async () => {
+  const db = freshDb();
+  const all = (await call(db, AS_SUPER, 'GET', '/sessions')).body;
+  const ids = all.rows.map((x: any) => x.id);
+  assert.deepEqual(ids, [...ids].sort((a: number, b: number) => b - a), 'not newest id first');
+  assert.equal(all.cursor, null, 'one page holds them all: no cursor');
+  // A seen-just-now session does not jump the queue: the order is the sign-in's, which never moves.
+  db.exec("UPDATE user_sessions SET last_seen_at = datetime('now', '+1 minute') WHERE jti = 'jti-o1'");
+  assert.deepEqual((await call(db, AS_SUPER, 'GET', '/sessions')).body.rows.map((x: any) => x.id), ids, 'a last_seen_at change moved rows');
+  // Pages of two through the service, as the route pages its 200.
+  const pages: number[][] = [];
+  let before: number | null = null;
+  for (let n = 0; n < 10; n += 1) {
+    const page = await listActiveSessions(env(db), null, 2, before);
+    pages.push(page.rows.map((x) => x.id));
+    if (!page.next_before_id) break;
+    before = page.next_before_id;
+  }
+  assert.deepEqual(pages.flat(), ids, 'paging lost, repeated or reordered a session');
+  assert.equal(pages.length, Math.ceil(ids.length / 2));
+  // The route continues from the cursor it is given.
+  const tail = (await call(db, AS_SUPER, 'GET', `/sessions?before_id=${ids[1]}`)).body;
+  assert.deepEqual(tail.rows.map((x: any) => x.id), ids.slice(2));
+  assert.equal(tail.total, all.total, 'the count is the whole window, on every page');
+});
+
+test('D4699: a before_id out of shape is a 400 naming it, never the first page', async () => {
+  const db = freshDb();
+  for (const bad of ['0', '-3', 'abc', '1.5', '1e3']) {
+    const r = await call(db, AS_SUPER, 'GET', `/sessions?before_id=${encodeURIComponent(bad)}`);
+    assert.equal(r.status, 400, bad);
+    assert.equal(r.body.field, 'before_id');
+  }
 });
 
 test('"active" is a token that could still open a door: a signed-out account and an expired token drop out of the list AND the counts', async () => {

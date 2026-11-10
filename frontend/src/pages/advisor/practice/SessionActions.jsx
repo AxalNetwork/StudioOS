@@ -97,6 +97,8 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
   const [asking, setAsking] = useState(null); // { id, action }
   const [reason, setReason] = useState('');
   const [note, setNote] = useState(null);
+  // #4692: set when the worker answered 409 — this panel is behind the booking.
+  const [stale, setStale] = useState(false);
 
   const confirmed = bookings.filter((b) => b.status === 'confirmed');
   const awaiting = bookings.filter((b) => b.awaitingDecision).length;
@@ -108,7 +110,7 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
       setNote({ ok: false, text: 'Say why you are cancelling. The founder is told.' });
       return;
     }
-    setBusy(b.id); setNote(null);
+    setBusy(b.id); setNote(null); setStale(false);
     try {
       if (action === 'complete') await api.completeAdvisorBooking(b.id);
       else if (action === 'no-show') await api.noShowAdvisorBooking(b.id, reason.trim() || undefined);
@@ -116,9 +118,28 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
       setAsking(null); setReason('');
       setNote({ ok: true, text: action === 'complete' ? 'Marked as held.' : action === 'no-show' ? 'Recorded as a no-show.' : 'Cancelled. The founder is told.' });
       await onChanged?.();
-    } catch {
-      setNote({ ok: false, text: 'That could not be recorded. The session is unchanged.' });
+    } catch (e) {
+      // #4692: a 409 is not "that could not be recorded". D4703 made the write
+      // conditional on the status this panel read, so a 409 means the session
+      // MOVED — the founder cancelled it, or a second press got there first —
+      // and this press was refused against a status that no longer holds. The
+      // old message was wrong both ways round: it claimed the session was
+      // unchanged when it had just changed, and it left the advisor pressing
+      // the same button against the same stale list. Say what happened and
+      // offer the reload, which is the only thing that helps.
+      if (e?.status === 409) {
+        setAsking(null);
+        setStale(true);
+        setNote({ ok: false, text: 'This session changed somewhere else while this page was open, so nothing here was recorded. Reload to see where it stands.' });
+      } else {
+        setNote({ ok: false, text: 'That could not be recorded. The session is unchanged.' });
+      }
     } finally { setBusy(0); }
+  };
+
+  const reload = async () => {
+    setStale(false); setNote(null); setReason('');
+    await onChanged?.();
   };
 
   const who = (b) => b.counterpartyName || 'Requester not recorded';
@@ -136,6 +157,10 @@ export function SessionLifecyclePanel({ bookings, loading, onChanged }) {
         </p>
       )}
       <SaveNote note={note} />
+      {stale && (
+        <button type="button" data-testid="lifecycle-reload" className={`${buttonClass} ${TAP} mt-2`}
+          onClick={reload}>Reload these sessions</button>
+      )}
       {loading ? null : confirmed.length === 0 ? (
         <p className="text-[12.5px] leading-relaxed text-axal-muted">
           No confirmed session is waiting to be closed. Accept a request on Opportunities and it appears here.

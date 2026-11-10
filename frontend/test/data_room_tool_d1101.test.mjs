@@ -218,7 +218,9 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1173 (#2455) adds Use of funds' tab words beside these.
   // D1109 (#2989): a file's number forwards to its window over Files, so it reads no record either.
   assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !dataRoomOldFile && !uofTab && !capRelTab && !!projectId'));
-  assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} />"));
+  // D5079 (#5079): Home also reports a refused or summary-only room to the
+  // page, so the page draws none of the room's data under it.
+  assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />"));
   const tool = read('frontend/src/pages/raise/dataroom/DataRoomTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm|prompt)\(/);
   assert.doesNotMatch(tool, /dataRoom(Upload|Delete|Grant|Revoke|Update)/, 'the integration writes nothing');

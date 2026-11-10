@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { KIND_LABEL, rollUp } from '../../lib/partnerBookRollUp.js';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
@@ -54,7 +55,10 @@ import { Eyebrow, Instrument, NotRecorded } from '../../workspaces/canvasKit';
  * this artboard exists to state.
  */
 
-const KIND_LABEL = { client: 'Client', prospect: 'Prospect', referral_source: 'Referral source' };
+// #4609: the label map and the roll-up moved to `lib/partnerBookRollUp.js`
+// so the `/network` board can share the computation without importing a page.
+// Re-exported below, because `rollUp` was this file's export and its other
+// readers (and their tests) name it here.
 const KIND_TONE = { Client: 'ok', Prospect: 'warn', 'Referral source': 'cite', Mixed: 'neutral' };
 
 /** The four chips, over the grouped rows. */
@@ -64,38 +68,8 @@ const NARROW = {
   referrals: (o) => o.kind === 'Referral source',
 };
 
-/**
- * Group the book by the company text on each contact.
- *
- * THE GROUPING KEY IS TRIMMED AND CASE-FOLDED AND THE LABEL IS NOT. "Verwood"
- * and "verwood " are one company to a reader and would be two rows to a naive
- * group-by, which would then report "every row knows exactly one person" as a
- * finding about the firm's relationships when it was a finding about
- * whitespace. The label shown is the first spelling entered, because the page
- * has no basis for preferring another.
- */
-export function rollUp(contacts) {
-  const by = new Map();
-  for (const c of contacts) {
-    const name = (c.organization || '').trim();
-    if (!name) continue;
-    const key = name.toLowerCase();
-    if (!by.has(key)) by.set(key, { key, name, people: 0, kinds: new Set() });
-    const row = by.get(key);
-    row.people += 1;
-    if (c.relationship) row.kinds.add(KIND_LABEL[c.relationship] || c.relationship);
-  }
-  return [...by.values()]
-    .map((row) => ({
-      ...row,
-      // NULL, ONE, OR MIXED — three outcomes and no tie-break. `Mixed` names
-      // both values rather than choosing, which is the same refusal the
-      // Headcount column makes by staying absent.
-      kind: row.kinds.size === 1 ? [...row.kinds][0] : (row.kinds.size > 1 ? 'Mixed' : null),
-      kindList: [...row.kinds].sort(),
-    }))
-    .sort((a, b) => b.people - a.people || a.name.localeCompare(b.name));
-}
+export { rollUp };
+
 
 /**
  * `zoneActions` and `zoneFilters` come down bound from `NetworkWorkspace`, the

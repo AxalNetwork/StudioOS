@@ -204,6 +204,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('inviteAccount', true, true),
       // D262 — HQ's unbind route and licence termination both call it.
       m('unbindAdmin', true, true),
+      // D4669 part 2 — HQ · Security's sign-out on branch deployments (admin_security.ts), on request.
+      m('emergencySignOut', true, true),
     ],
   },
   branchCallsHq: {

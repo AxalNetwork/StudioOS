@@ -28,6 +28,7 @@ The tool is the Capital relationships module, not a page beside it.
 ## The rules for adding here
 
 - **Every row comes from a mounted read.** A read that fails says so where its block would be. A value nobody recorded says "Not recorded", never 0.
+- **A refusal is not a failed read** (D5079, #5079). Overview mapped every failure, a 403 included, to Unreadable — "This is not a claim that nobody has committed" — which claims the store could not be read when it was simply not shown. `useProspects` now answers `refused` through `raiseReadState`, Overview draws `REFUSED_LINE` for it, and it reports the refusal to the module page through `onRefused`, which then draws none of the pipeline's card, records, bands or Evidence.
 - **A commitment with no status is not counted as committed** (#2457 owner question 4).
 - **Every write goes through the one writer** (`cloudflare-worker/src/services/raiseWriters.ts`, `cyclesWrite.raise.*`, or the record's own actions), never `contacts.ts`' older PUT.
 - **Eadwyn proposes next steps, stage moves and message drafts.** It never writes an amount, a status or a Fit.

@@ -1,4 +1,5 @@
 import { holdsLicence } from '../services/accountLicences';
+import { propositionDestination } from '../services/introDestination';
 /**
  * Task #6 (W-1) — Investor introduction requests with quarterly quota.
  *
@@ -385,7 +386,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
           category: 'proactive_nudges',
           title: `Introduction complete — you're connected with ${accepterName}`,
           body: 'Both of you accepted. Open their profile to start the conversation.',
-          link: `/network?tab=introductions&intro=${mirror.uid}`,
+          link: propositionDestination(mirror.uid),
           payload: { proposition_uid: mirror.uid, counterpart_user_id: user.id },
           channels: ['in_app', 'email'],
         }),
@@ -395,7 +396,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
           category: 'proactive_nudges',
           title: `Introduction complete — you're connected with ${targetName}`,
           body: 'Both of you accepted. Open their profile to start the conversation.',
-          link: `/network?tab=introductions&intro=${uid}`,
+          link: propositionDestination(uid),
           payload: { proposition_uid: uid, counterpart_user_id: prop.target_user_id },
           channels: ['in_app'],
         }),
@@ -412,9 +413,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
         body: mirror
           ? 'Review the match on your side to complete the connection.'
           : 'Open Introductions to see the match.',
-        link: mirror
-          ? `/network?tab=introductions&intro=${mirror.uid}`
-          : '/network?tab=introductions',
+        link: propositionDestination(mirror?.uid),
         payload: { counterpart_user_id: user.id },
         channels: ['in_app'],
       });
