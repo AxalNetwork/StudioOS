@@ -5,7 +5,7 @@ import { Pill, Unrecorded } from '../../ui';
 import { titleCase } from '../../lib/absence';
 import { SectionCard, stateBlock } from './LearningStates';
 import { CONTENT_STATUS_TONE, NOT_LIVE, formatDay } from './learningModel';
-import { STORAGE_BANNER_LINE, STREAM_COPY_FIELD, storageBanner, stillOnStorage, streamCopyOf, videoColumn } from './videoUpload';
+import { STORAGE_BANNER_LINE, STORAGE_BANNER_UNREADABLE, STREAM_COPY_FIELD, storageBanner, stillOnStorage, streamCopyOf, videoColumn } from './videoUpload';
 import { hasAnalytics } from './videoAnalyticsModel';
 
 /** The canvas's five filters, each a predicate over a row. */
@@ -31,6 +31,13 @@ function CopyToStream({ row, onCopy }) {
   const state = streamCopyOf(row);
   if (state === 'copy') {
     return onCopy ? <button type="button" className="text-[12px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" onClick={() => onCopy(row)} data-testid={`button-copy-stream-${row.uid}`}>Copy to Stream</button> : null;
+  }
+  if (state === 'starting') {
+    // D4649: the POST is in flight. No button, so a second click cannot start a second copy.
+    return <span className="inline-flex items-center gap-1 text-[12px] text-axal-muted dark:text-gray-400" role="status" data-testid={`copy-starting-${row.uid}`}><Loader2 size={12} className="animate-spin" aria-hidden="true" />Starting copy…</span>;
+  }
+  if (state === 'unreadable') {
+    return <Unrecorded reason="The copy to Stream could not be read. Reload the content list to try again.">Copy state unreadable</Unrecorded>;
   }
   if (state === 'copying') {
     return <span className="inline-flex items-center gap-1 text-[12px] text-axal-muted dark:text-gray-400" role="status"><Loader2 size={12} className="animate-spin" aria-hidden="true" />Copying…</span>;
@@ -88,9 +95,16 @@ export default function StudioContentTable({ status, rows, reason = NOT_LIVE.stu
       {block || (
         <>
           {onStorage ? (
-            <div className="mb-3 flex items-start gap-2 rounded-axal-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-amber-800 dark:bg-amber-900/20 dark:text-gray-200" role="status" data-testid="studio-storage-banner">
+            <div className="mb-3 flex items-start gap-2 rounded-axal-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-axal-ink dark:border-amber-800 dark:bg-amber-900/20 dark:text-gray-200" role="status" data-testid={onStorage === 'unreadable' ? 'studio-storage-banner-unreadable' : 'studio-storage-banner'}>
               <Info size={14} className="mt-0.5 flex-none text-axal-amber-deep dark:text-amber-300" aria-hidden="true" />
-              <span><b>{storageBanner(onStorage)}</b> {STORAGE_BANNER_LINE}</span>
+              {onStorage === 'unreadable' ? (
+                <span>
+                  <b>{STORAGE_BANNER_UNREADABLE}</b> This is not a claim that none do.
+                  {onRetry ? <> <button type="button" className="font-semibold underline" onClick={onRetry} data-testid="studio-storage-banner-retry">Try again</button></> : null}
+                </span>
+              ) : (
+                <span><b>{storageBanner(onStorage)}</b> {STORAGE_BANNER_LINE}</span>
+              )}
             </div>
           ) : null}
           <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter content">

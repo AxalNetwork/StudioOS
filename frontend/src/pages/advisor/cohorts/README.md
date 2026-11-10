@@ -20,10 +20,12 @@ except the provider renders a body only.
 | `GuidanceZone.jsx` | `/cohorts/guidance`, boards C5 and C14: the feed with New guidance always available, the five filters (`?filter=`), and Edit, Publish, Retire, Restore, Answer and History per item | guidance, and its publish and history routes |
 | `GuidanceComposer.jsx` | Board C6 (full screen at 390px, C14): title, cohort, optional week, body, preview, Save draft and Publish, with every save state announced and a version conflict offered as compare | guidance writes |
 | `guidanceModel.js` | Pure decisions for guidance: status, filters, titles, the week rule the Worker enforces, unsaved text kept per cohort, and `guardedWrite` (a write that answers after the cohort changed is dropped) | — |
-| `ThisWeekZone.jsx` | `/cohorts/this-week`: the batch's week from the Lab | the shared week record |
-| `CalendarZone.jsx` | `/cohorts/calendar`: Lab dates and booked sessions, the next 14 days | calendar |
 | `OutcomesZone.jsx` | `/cohorts/outcomes`, board C10 (package 4): This cohort (four figures with definition, source and reporting time, and the by-week table) and Programme outcomes as a separate scope (`?scope=programme`), whose public lists are labelled a selection | `/me/cohort/:id/outcomes`, and the public Spin-Out Lab endpoints |
 | `outcomesModel.js` | Pure decisions for Outcomes: Not recorded and n+, the cohort figures, the completion table, the programme totals and the showcase labels | — |
+| `ThisWeekZone.jsx` | `/cohorts/this-week`, board C7: the week, its dates and named zone, days left, each founder's explicit deliverable status (read-only), needs attention, your actions, guidance and sessions this week | the shared week record, founders, guidance, calendar |
+| `CalendarZone.jsx` | `/cohorts/calendar`, boards C8, C9 and C15: Month, Week and Agenda (14 days, first on a phone), type filters, conflicts explained, event detail, the partial-source line, cohort-scoped .ics export | calendar |
+| `calendarModel.js` | Pure calendar decisions (D4813 package 3): event types, Lab-day keys, the agenda window, week and month grids, conflict sentences, missing sources, event detail, export UIDs | — |
+| `weekModel.js` | Pure This week decisions (D4813 package 3): deliverable status (Not yet assessed is never Complete), the C7 header figures, your actions, recent guidance | — |
 | `kit.jsx` | The seam line, the no-batch boundary and the week tones | — |
 
 Rules for adding here: a new section reads through `useCohortRead` (or the

@@ -63,7 +63,7 @@ test('the seven tiles: each figure, or Not recorded with the Worker\'s reason; a
   // Mutation checked: a missing figure drawn as 0.00x.
   const t = Object.fromEntries(navTiles(LIST().items[0], { positions: POSITIONS(), history: HISTORY() }).map((x) => [x.key, x]));
   assert.deepEqual(Object.keys(t), ['nav', 'paid', 'dist', 'dpi', 'rvpi', 'tvpi', 'irr']);
-  assert.deepEqual([t.nav.text, t.nav.note, t.tvpi.text, t.irr.text, t.irr.note], ['$6,900,000.00', 'latest marks of 1 position', '1.88x', '21.4%', 'since 14 Mar 2025']);
+  assert.deepEqual([t.nav.text, t.nav.note, t.tvpi.text, t.irr.text, t.irr.note], ['$6,900,000.00', 'latest marks of 1 position · marks to 9 Sep 2026', '1.88x', '21.4%', 'since 14 Mar 2025']);
   const two = Object.fromEntries(navTiles(LIST().items[1]).map((x) => [x.key, x]));
   assert.deepEqual([two.tvpi.text, two.tvpi.reason], [null, NCN]);
   assert.deepEqual([two.nav.text, two.nav.reason], [null, 'No position is attributed to this fund yet.']);

@@ -53,7 +53,8 @@ export const adminGovernanceApi = {
   dismissRelated: (uid) => request(`${doc(uid)}/related/dismiss`, { method: 'POST' }),
   update: (uid, body) => request(doc(uid), { method: 'PATCH', body: JSON.stringify(body) }),
   // D4811 part 12: a signed copy also sends signed_on, signatory and attest (CT-12 B).
-  uploadVersion: (uid, { file: upload, signed = false, note = '', signed_on = '', signatory = '', attest = false } = {}) => {
+  // D4811 part 20: and may name the counsel-approved version it is a copy of (copy_of).
+  uploadVersion: (uid, { file: upload, signed = false, note = '', signed_on = '', signatory = '', attest = false, copy_of = '' } = {}) => {
     const fd = new FormData();
     fd.append('file', upload);
     if (signed) {
@@ -61,6 +62,7 @@ export const adminGovernanceApi = {
       fd.append('signed_on', signed_on);
       fd.append('signatory', signatory);
       if (attest) fd.append('attest', 'true');
+      if (copy_of !== '' && copy_of != null) fd.append('copy_of', String(copy_of));
     }
     if (note) fd.append('note', note);
     return request(`${doc(uid)}/versions`, { method: 'POST', body: fd });

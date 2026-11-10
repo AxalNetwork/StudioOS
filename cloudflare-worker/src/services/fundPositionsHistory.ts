@@ -13,6 +13,7 @@
  */
 import type { Env } from '../types';
 import { readFundPerformance } from './fundPerformance';
+import { positionMarkIdSql } from './portfolioValuation';
 
 const NO_MARK = 'No valuation is recorded for this position; invested cost is not its value.';
 export const NO_CALL = 'No capital call is recorded for this fund, so it has no quarter to read.';
@@ -31,9 +32,7 @@ export async function readFundPositions(env: Env, fundId: number, today: string)
             v.value_cents, v.valuation_date, v.source, v.recorded_by, u.name AS recorded_by_name
        FROM portfolio_positions p
        LEFT JOIN projects pr ON pr.id = p.project_id
-       LEFT JOIN fund_position_valuations v ON v.id = (
-         SELECT m.id FROM fund_position_valuations m WHERE m.position_id = p.id AND m.valuation_date <= ?
-         ORDER BY m.valuation_date DESC, m.id DESC LIMIT 1)
+       LEFT JOIN fund_position_valuations v ON v.id = ${positionMarkIdSql('p.id')}
        LEFT JOIN users u ON u.id = v.recorded_by
       WHERE p.fund_id = ?
       ORDER BY p.id`).bind(today, fundId));

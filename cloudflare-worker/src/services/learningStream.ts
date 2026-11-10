@@ -363,6 +363,8 @@ export async function verifySourceToken(env: Env, token: string, nowMs = Date.no
 /** A copy's state as the studio content table draws it: Copy to Stream, Copying…, Verified, Copy failed. */
 export type CopyState =
   | { state: 'none' }
+  /** D4649: the copy table could not be read; the route sends it, `copyStates` never builds it. */
+  | { state: 'unreadable' }
   | { state: 'copying'; stream_uid: string }
   | { state: 'verified'; stream_uid: string; verified_at: string }
   | { state: 'failed'; stream_uid: string; error_code: string | null; error_message: string | null };
@@ -377,10 +379,10 @@ export function copyStateOf(row: { stream_uid: string; state: string; verified_a
 
 /**
  * Each item's copy state, for the items given, from each one's newest r2_copy
- * of the R2 object it plays now. Read in its own guarded query: a store
- * without the Stream table reads as no copies.
+ * of the R2 object it plays now. Read in its own guarded query: a read that
+ * fails, including a store without the Stream table, is `null` (unreadable).
  */
-export async function copyStates(env: Env, items: { uid: string; video_source?: string | null; r2_key?: string | null }[]): Promise<Map<string, CopyState>> {
+export async function copyStates(env: Env, items: { uid: string; video_source?: string | null; r2_key?: string | null }[]): Promise<Map<string, CopyState> | null> {
   const out = new Map<string, CopyState>();
   const uploaded = items.filter((i) => i.video_source === 'r2' && i.r2_key);
   if (!uploaded.length) return out;
@@ -393,6 +395,10 @@ export async function copyStates(env: Env, items: { uid: string; video_source?: 
       const row = rows.find((r: any) => r.item_uid === i.uid && r.source_r2_key === i.r2_key) ?? null;
       out.set(i.uid, copyStateOf(row));
     }
-  } catch { /* no Stream table yet: no copies */ }
+  } catch {
+    // D4649 (#4649): the copies could not be read. Null, never an empty map: an empty map would draw every
+    // uploaded file as "not copied", offering Copy to Stream for a file that may already be copying or verified.
+    return null;
+  }
   return out;
 }

@@ -68,7 +68,7 @@ async function mountAsk(items) {
 const ANSWERED = {
   uid: 'a', question: 'Which rules?', reason: 'answered', answer: 'C5 in Germany [1].', cost_usd: 0.004,
   citations: [
-    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: false },
+    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: false, cited: true },
     { n: 2, title: 'Removed memo', document_uid: 'd-gone', chunk: 3, page: null },
   ],
 };
@@ -79,7 +79,9 @@ test('each source shows its passage, or says it was not recorded, and whether it
     // Mutation checked: render `ct.title` in place of `ct.passage` → the passage is gone.
     assert.equal(textOf(byTid(m, 'ask-passage-a-0')).trim(), 'The C5 criteria catalogue applies to cloud providers');
     const sources = textOf(byTid(m, 'ask-sources-a'));
-    assert.match(sources, /Sources used · 2/);
+    // D4613: the cited source and the retrieved-but-uncited passage are listed apart.
+    assert.match(sources, /Sources cited · 1/);
+    assert.match(sources, /Retrieved, not cited · 1/);
     assert.match(sources, /\[1\] BSI C5 · passage 1page 4✓ Available/);
     assert.match(sources, /\[2\] Removed memo · passage 4⊠ No longer available/);
     assert.match(sources, /Passage not recorded for this answer\./);

@@ -85,6 +85,8 @@ test('founder Network zones match Pages · Founder Network (FN1–FN3)', () => {
 test('founder Research zones match Pages · Founder Research (FS1–FS5)', () => {
   const research = founder.rows.find((r) => r.label === 'Research');
   assert.deepEqual(research.zones.map((z) => [z.slug, archetypeLabel(z)]), [
+    // D5157 (#5157) — My Research, first after the Overview (Research v2 canvas).
+    ['projects', 'COLLECTION'],
     ['ask', 'FEED'],
     ['markets', 'ANALYTICS'],
     // D546 (#1080) — the Geographies pill, beside Markets in every licence.
