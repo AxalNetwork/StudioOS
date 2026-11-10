@@ -7,6 +7,7 @@ import { FileRows, EVENT_NAMES } from './AgreementDetail';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Missing, ReadState, Recorded, button, card, date, downloadPdf, useRead } from './parts';
 import CrossBorderPanel from './CrossBorderPanel';
+import { GoverningList } from './RelatedDocuments';
 
 /**
  * D4811 (#4811) part 14 — one agreement's workspace (board CT-07 "Document
@@ -92,7 +93,7 @@ export default function AgreementWorkspace({ uid }) {
         {tab === 'related' && <dl className="space-y-2">
           <Fact label="Made from">{row.doc_type ? <Link to="/admin/contracts?tab=templates" className="underline">{row.doc_type_label || row.doc_type} in Templates</Link> : <Missing reason="No template is recorded." />}</Fact>
           <Fact label="Company">{m.company.name || <span className="text-axal-muted">{m.company.label}</span>}</Fact>
-          <Fact label="Governance records citing it"><Missing reason="Governance links name templates and records, not agreements (part 8)." /></Fact>
+          <Fact label="Governance records that govern it"><GoverningList kind="agreement" refId={uid} /></Fact>
         </dl>}
       </div>
     </>}</ReadState>
