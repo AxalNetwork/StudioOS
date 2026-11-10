@@ -306,7 +306,9 @@ test('empty range, degraded source and failed request are three different states
     'the canvas empty-range copy changed');
   assert.match(pageRaw, /sources answered and returned nothing for this range\. That means the calendar is working/,
     'the empty range no longer says the sources answered');
-  assert.match(pageRaw, /did not respond\.\s*\n\s*The other \{KINDS\.length - failedSources\.length\} sources loaded\./,
+  // D5204 (#5204): it still names what loaded, now from the server's own count of the sources it attempted
+  // rather than from this page's `KINDS.length`, which counted hidden, role-less and unconnected sources.
+  assert.match(pageRaw, /did not respond\.\s*\n\s*The other \{Math\.max\(0, attempted - failedSources\.length\)\} sources loaded\./,
     'the degraded banner no longer names what loaded');
   assert.match(page, /className="cal-alert" role="alert"/, 'a failed request no longer renders its own state');
   assert.match(page, /setItems\(null\);/, 'a failed request is being stored as an empty list');
