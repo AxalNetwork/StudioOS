@@ -20,6 +20,7 @@ import { NOT_RECORDED } from './absence';
 import { bpsPercent } from './bps';
 import { longDate, dayOf } from './licencePage';
 import { PROGRAMS } from './programGrants';
+import { formatMinorOrCount } from './money.js';
 import {
   ASKED_MAX, NOTE_MAX, PROGRAM_KINDS, TERM_LABEL, answerSentence, askableTerms, termsFor,
 } from './studioProgramTerms';
@@ -66,13 +67,8 @@ const set = (v) => v !== null && v !== undefined && v !== '';
 /** Money in the grant's currency; a currency nobody recorded is said, never assumed. */
 export function grantMoney(cents, currency) {
   if (!set(cents) || !Number.isFinite(Number(cents))) return NOT_RECORDED;
-  const amount = Number(cents) / 100;
-  if (!currency) return `${amount.toLocaleString('en-GB')} (currency not recorded)`;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency, maximumFractionDigits: amount % 1 ? 2 : 0 }).format(amount);
-  } catch {
-    return `${amount.toLocaleString('en-GB')} ${currency}`;
-  }
+  // D5373: at the currency's own decimals; a currency nobody recorded (or not a listed one) names the stored count.
+  return formatMinorOrCount(Number(cents), currency, { locale: 'en-GB', trimWhole: true });
 }
 
 

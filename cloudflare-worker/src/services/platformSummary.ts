@@ -68,6 +68,13 @@ const LAST_SET_BASIS_NOTE =
   + 'console recorded; one set at deploy, or saved again at deploy after being removed from the '
   + 'console, has no date here. A key held in the database is dated by its row.';
 
+/** D5304: where a key's expiry and last use come from, and what neither means. */
+const KEY_STAMPS_NOTE =
+  'Expiry is recorded only where the provider reports one: the date its console shows, entered '
+  + 'when the key is saved or rotated. No managed provider returns an expiry to any call the '
+  + 'platform makes. Last use is the last call that authenticated with the key and succeeded, '
+  + 'recorded at most once an hour. A key saved again at deploy keeps the stamps of the key before it.';
+
 /** P2's note: what the recent list is, and is not. */
 const SYNC_RECENT_NOTE =
   'A ticket keeps only its latest mirror attempt, so this is the latest attempt per ticket, not '
@@ -320,7 +327,13 @@ export async function readIntegrationKeySummary(env: Env) {
         lastSetAt = item.updated_at ?? null;
         lastSetBasis = lastSetAt ? 'd1_row' : 'no_record';
       }
-      return { provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis };
+      // D5304: a key's expiry and last use belong to the key in place, so a provider with no key carries neither.
+      const held = state === 'env' || state === 'db';
+      return {
+        provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis,
+        expires_at: held ? item.expires_at : null,
+        last_used_at: held ? item.last_used_at : null,
+      };
     });
     const count = (st: string) => items.filter((it) => it.state === st).length;
     return {
@@ -334,6 +347,10 @@ export async function readIntegrationKeySummary(env: Env) {
       counts: { env: count('env'), db: count('db'), unset: count('unset'), unreadable: count('unreadable') },
       items,
       last_set_available: lastSet.available,
+      stamps_available: status.stamps_readable,
+      stamps_reason: status.stamps_readable
+        ? KEY_STAMPS_NOTE
+        : 'The key table\'s expiry and last-use columns could not be read, so both are unknown for every key.',
       last_set_reason: lastSet.available
         ? LAST_SET_BASIS_NOTE
         : 'The audit log could not be read, so when a key held as a Worker secret was last saved is unknown.',

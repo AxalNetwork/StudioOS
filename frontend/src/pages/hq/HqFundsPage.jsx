@@ -49,6 +49,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import { registryUnreadable } from './hqTeamBranchModel';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -266,6 +267,12 @@ export function oversightStats(payload) {
   const funds = fundRows(payload).filter((r) => r.kind === 'fund').map((r) => r.fund);
   const answered = sources(payload).filter((s) => s.status === 'ok');
   const cov = payload.branches_coverage || { total: 0, answered: 0 };
+  // D5374 — an unreadable registry yields `{ total: 0, answered: 0 }`, and 0 of 0 reads as "every
+  // branch answered". The set of branches is unknown, so there is nothing for them to have answered.
+  const registryDown = registryUnreadable(payload);
+  // The Worker's own `complete` (D5041: never true over an unreadable registry). A payload from
+  // before the field existed falls back to counting, and `registry_available: false` overrides both.
+  const coverageComplete = typeof cov.complete === 'boolean' ? cov.complete : cov.answered === cov.total;
   const unreported = funds.filter((f) => !f.flags).length;
   return {
     funds: funds.length,
@@ -276,8 +283,11 @@ export function oversightStats(payload) {
     openFlags: flagFeed(payload).length,
     unreported,
     holding: answered.filter((s) => Array.isArray(s.data?.funds) && s.data.funds.length).length,
-    coverage: `of ${cov.total} ${cov.total === 1 ? 'branch' : 'branches'}, ${cov.answered} answered`,
-    complete: payload.hq?.status === 'ok' && cov.answered === cov.total,
+    registryUnreadable: registryDown,
+    coverage: registryDown
+      ? 'the branch list could not be read'
+      : `of ${cov.total} ${cov.total === 1 ? 'branch' : 'branches'}, ${cov.answered} answered`,
+    complete: payload.hq?.status === 'ok' && !registryDown && coverageComplete,
   };
 }
 
@@ -609,6 +619,15 @@ export default function HqFundsPage() {
           <Unreadable what="The funds registry" claim="This is not a claim that no deployment runs a fund." onRetry={load} />
         )}
         {data === null && <p className="text-[12.5px] text-axal-muted">Reading the funds…</p>}
+        {ready && stats.registryUnreadable && (
+          <div data-testid="hq-funds-registry-unreadable">
+            <Unreadable
+              what="HQ's deployment registry"
+              claim={`${data.registry_reason || 'The set of provisioned branches is not established.'} The branch list could not be read, so this is not a claim that every branch answered or that none runs a fund; the funds below are only those of the sources that answered.`}
+              onRetry={load}
+            />
+          </div>
+        )}
 
         {ready && (
           <>

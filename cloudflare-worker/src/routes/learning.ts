@@ -24,6 +24,7 @@
  * content (D558) is read with `enrolledSql`, selected `AS enrolled`, so the
  * check sees whether this caller is enrolled.
  */
+import { resumeLessons } from '../services/learningResume';
 import { COURSE_META_SELECT, courseMetaView } from '../services/learningCourseMeta';
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -522,8 +523,12 @@ r.get('/me', async (c) => {
       .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))),
   };
   const list = rows.results || [];
+  // D5356: each in-progress course row names the lesson to resume and its saved position, by the same rule as
+  // "Next for you" (services/learningResume.ts). A course with none keeps `resume: null` and its course link.
+  const resume = await resumeLessons(c.env, Number(user.id));
   return c.json({
-    in_progress: list.filter((x) => x.status === 'started'),
+    in_progress: list.filter((x) => x.status === 'started')
+      .map((x) => (x.subject_kind === 'course' ? { ...x, resume: resume.get(x.subject_uid) ?? null } : x)),
     completed: list.filter((x) => x.status === 'completed'),
   });
 });
