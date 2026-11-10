@@ -30,6 +30,8 @@
  *                log tab itself, since its filters drive it.
  */
 
+import { plainStripeAmount } from '../../../lib/money';
+
 export const PAY_PATH = '/admin/platform/payments';
 export const PAY_STRIPE_PATH = '/admin/platform/payments/stripe';
 export const PAY_LOG_PATH = '/admin/platform/payments/log';
@@ -114,9 +116,7 @@ export function modeWord(mode) {
 export function priceText(price) {
   if (!price) return 'Not recorded';
   const cur = String(price.currency || '').toUpperCase();
-  const amount = typeof price.unit_amount === 'number'
-    ? `${(price.unit_amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`.trim()
-    : 'No fixed amount';
+  const amount = typeof price.unit_amount === 'number' ? `${plainStripeAmount(price.unit_amount, cur)} ${cur}`.trim() : 'No fixed amount';
   if (!price.interval) return `${amount} · one time`;
   const n = Number(price.interval_count) || 1;
   return n === 1 ? `${amount} / ${price.interval}` : `${amount} every ${n} ${price.interval}s`;
@@ -562,7 +562,8 @@ export function intervalWord(price) {
 /** An amount alone, in its own currency: "20.00 USD". */
 export function amountText(price) {
   if (typeof price?.unit_amount !== 'number') return 'No fixed amount';
-  return `${(price.unit_amount / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${String(price.currency || '').toUpperCase()}`.trim();
+  const cur = String(price.currency || '').toUpperCase();
+  return `${plainStripeAmount(price.unit_amount, cur)} ${cur}`.trim();
 }
 
 /** The prices table's rows: active first, then archived, each in the order the read gave. */

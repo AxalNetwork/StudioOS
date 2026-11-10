@@ -30,6 +30,7 @@ import {
   revokeStaleCrossIdentitySession,
 } from '../auth';
 import { ensureAuthBlockersSchema } from '../services/authBlockersSchema';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { hashEmail } from '../util/hashEmail';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { rpID, rpName, expectedOrigins } from '../util/webauthn';
@@ -309,6 +310,7 @@ passkey.post('/auth-verify', async (c) => {
       await sql.end();
 
       await revokeStaleCrossIdentitySession(c, user.id);
+      await claimLpRowsAtSignIn(c.env, user); // D5318 H8
       const csrf = generateCsrfToken();
       setAuthCookies(c, jwtToken, csrf);
       return c.json({

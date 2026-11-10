@@ -45,6 +45,7 @@ import { isGcipConfigured, getRecaptchaSiteKey, sendVerificationCode, signInWith
 import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -324,6 +325,7 @@ sms.post('/sms/verify-challenge', async (c) => {
     const { revokeStaleCrossIdentitySession } = await import('../auth');
     await revokeStaleCrossIdentitySession(c, user.id);
   } catch (e) { console.warn('[auth_sms] cross-session revoke failed', e); }
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
 
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);

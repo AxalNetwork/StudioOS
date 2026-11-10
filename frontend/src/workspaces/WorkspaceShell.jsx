@@ -108,6 +108,7 @@ export default function WorkspaceShell({
   rail = null,
   activeSlug,
   sectionNav,
+  zoneRow = null,
   children,
 }) {
   const location = useLocation();
@@ -261,7 +262,7 @@ export default function WorkspaceShell({
 
         {intro && <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-axal-muted">{intro}</p>}
 
-        {ownNav ? sectionNav : (bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className="mt-3" />)}
+        {ownNav ? sectionNav : (bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} row={zoneRow} className="mt-3" />)}
 
         <div
           className="mt-3.5 border-t pt-3.5"

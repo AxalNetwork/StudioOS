@@ -78,6 +78,8 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name != 'merge_group'",
   "github.event_name == 'pull_request'",
   "github.event_name == 'push'",
+  // D5398: the failure classifier runs only after a PR's suite failed; it is a pull_request-only job, so never in the queue.
+  "failure() && github.event_name == 'pull_request'",
 ]);
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);

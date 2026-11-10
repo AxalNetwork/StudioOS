@@ -4,6 +4,7 @@
 // carry reads "Not recorded", never a guess.
 import { NOT_RECORDED } from '../../../lib/absence';
 import { programRequestKind } from '../../../lib/studioPrograms';
+import { formatMinorOrCount, parseMinor } from '../../../lib/money.js';
 
 export { NOT_RECORDED };
 
@@ -12,9 +13,8 @@ export const day = (v) => (v ? String(v).slice(0, 10) : null);
 /** Cents as money in the statement's currency; null as "Not recorded". */
 export function money(cents, currency) {
   if (cents === null || cents === undefined || !Number.isFinite(Number(cents))) return NOT_RECORDED;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(Number(cents) / 100);
-  } catch { return `${(Number(cents) / 100).toLocaleString('en-GB')} ${currency || ''}`.trim(); }
+  // D5373: at the currency's own decimals; a missing or unlisted currency names the stored count, it is not read as euros.
+  return formatMinorOrCount(Number(cents), currency, { locale: 'en-GB' });
 }
 
 /** Basis points as a percentage: 3500 → "35%", 1250 → "12.5%". */
@@ -168,11 +168,12 @@ export function usageRows(usage) {
 export const canSendNow = (usage) => usage?.send_now === true;
 
 /** A dispute's amount, typed in the statement's currency, as whole cents; or the sentence that refuses it. */
-export function disputeCents(raw, owedCents) {
+export function disputeCents(raw, owedCents, currency) {
   const t = String(raw ?? '').trim().replace(/,/g, '');
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(t);
-  if (!m) return { ok: false, message: 'Type the amount you dispute, with at most two decimals.' };
-  const cents = Number(m[1]) * 100 + Number((m[2] || '').padEnd(2, '0'));
+  // D5373: at the statement currency's own decimals (JPY none, EUR two, KWD three).
+  const parsed = /^\d+(\.\d+)?$/.test(t) ? parseMinor(t, currency) : { ok: false };
+  if (!parsed.ok) return { ok: false, message: 'Type the amount you dispute, with no more decimals than the statement\'s currency has.' };
+  const cents = parsed.minor;
   if (cents <= 0) return { ok: false, message: 'The amount must be more than zero.' };
   if (cents > owedCents) return { ok: false, message: 'You cannot dispute more than the statement says is owed.' };
   return { ok: true, cents };

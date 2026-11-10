@@ -1,8 +1,11 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { ACCENT, zonePath, zoneForPath } from './shellConfig';
+import { ACCENT, zonePath as shellZonePath, zoneForPath } from './shellConfig';
 import { LensNavLink } from './lens';
 import { projectSearch } from '../pages/cycles/founderToolNavigation';
+
+/** A zone's route; the Overview item of an opt-in `row` (#4834) is the bucket root. */
+const zonePath = (bucket, zone) => (zone.root ? bucket.prefix : shellZonePath(bucket, zone));
 
 /**
  * The zone row — the pill strip under a workspace heading.
@@ -40,7 +43,14 @@ import { projectSearch } from '../pages/cycles/founderToolNavigation';
  * looking at the Fund overview. On a root, no pill is current: the overview is
  * above the zones, not one of them.
  */
-export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '' }) {
+/**
+ * #4834 (D4834): `row` is the Practice v2 section row (PX-10), opt-in per
+ * bucket so no other workspace changes. `row.overview` puts the bucket root
+ * first under that label, current on the root; `row.order` is the canvas's
+ * slug order; `row.scroll` keeps the row on one line that scrolls sideways
+ * below 1024px instead of wrapping, with 44px targets there.
+ */
+export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row = null }) {
   const location = useLocation();
   if (!bucket || !bucket.zones?.length) return null;
 
@@ -48,14 +58,22 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
   const active = activeSlug === undefined
     ? zoneForPath(bucket, location.pathname)
     : (activeSlug === null ? null : bucket.zones.find((z) => z.slug === activeSlug) || null);
+  const ordered = row?.order
+    ? [...bucket.zones].sort((a, b) => row.order.indexOf(a.slug) - row.order.indexOf(b.slug))
+    : bucket.zones;
+  const items = row?.overview
+    ? [{ slug: 'overview', label: row.overview, root: true }, ...ordered]
+    : ordered;
+  const scroll = Boolean(row?.scroll);
 
   return (
     <nav
       aria-label={`${bucket.label} sections`}
-      className={`flex flex-wrap gap-1.5 ${className}`}
+      data-testid={scroll ? 'zone-nav-scroll' : undefined}
+      className={`flex gap-1.5 ${scroll ? 'flex-nowrap overflow-x-auto pb-1 [scrollbar-width:thin] lg:flex-wrap lg:overflow-visible lg:pb-0' : 'flex-wrap'} ${className}`}
     >
-      {bucket.zones.map((zone) => {
-        const on = zone.slug === active?.slug;
+      {items.map((zone) => {
+        const on = zone.root ? active === null : zone.slug === active?.slug;
         return (
           <LensNavLink
             key={zone.slug}
@@ -73,7 +91,7 @@ export default function ZoneNav({ bucket, role = 'founder', activeSlug, classNam
             // D593: the current pill takes the role's dark pair — `tintDark`
             // ground, `deepDark` ink — where it used to keep its light tint, a
             // pale lozenge on the dark ground that the canvases never drew.
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
+            className={`inline-flex ${scroll ? 'min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0 ' : ''}items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] transition-colors text-[color:var(--zn-ink)] bg-[var(--zn-bg)] border-[color:var(--zn-line)] hover:text-[color:var(--zn-hover-ink)] hover:border-[color:var(--zn-hover-line)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:text-[color:var(--zn-hover-ink)] focus-visible:border-[color:var(--zn-hover-line)]${on ? ' dark:bg-[var(--zn-bg-dark)] dark:text-[color:var(--zn-ink-dark)] dark:border-[color:var(--zn-line-dark)]' : ' dark:bg-transparent dark:text-gray-300 dark:border-gray-700 dark:hover:text-gray-100 dark:hover:border-gray-500'}`}
             style={{
               fontWeight: on ? 700 : 600,
               '--zn-ink': on ? accent.deep : '#615c6e',

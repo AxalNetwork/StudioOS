@@ -12,6 +12,7 @@
  *     price's ÷ 12, rounded down (D783, D1010 §1).
  */
 import { PLAN_CARDS } from '../../../lib/sitePricing';
+import { formatMinorOrCount, fromStripeUnits, parseStripeAmount, plainAmount } from '../../../lib/money';
 
 export const REASON_MAX = 500;
 export const CHANGE_REASON_MIN = 10;
@@ -79,18 +80,21 @@ export function planClash(products, level) {
   return (products || []).find((p) => p?.active && (p.plan?.key ?? planKeyOf(p.metadata)) === key) || null;
 }
 
-/** "204.00" → 20400; null for anything that is not an amount with at most two decimals. */
-export function centsOf(text) {
-  const s = String(text ?? '').trim().replace(/,/g, '');
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
-  const [whole, frac = ''] = s.split('.');
-  const cents = Number(whole) * 100 + Number(frac.padEnd(2, '0'));
-  return Number.isSafeInteger(cents) ? cents : null;
+/**
+ * D5373: "204.00" → 20400 USD; the amount in STRIPE's units for the price's currency (JPY 2500 → 2500, KWD 12.34 →
+ * 12340, ISK 100 → 10000). Null for anything that is not an amount the currency can hold (more decimals than it has,
+ * a three-decimal currency off Stripe's step of ten, or a currency that is not listed). Commas are thousands marks.
+ */
+export function centsOf(text, currency = 'usd') {
+  const r = parseStripeAmount(String(text ?? '').trim().replace(/,/g, ''), currency);
+  return r.ok ? r.units : null;
 }
 
 const money = (cents, currency) => {
   const cur = String(currency || '').toUpperCase();
-  const n = (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const minor = fromStripeUnits(cents, cur);
+  const n = minor === null ? null : plainAmount(minor, cur);
+  if (n === null) return formatMinorOrCount(cents, cur);
   return cur === 'USD' ? `$${n}` : `${n} ${cur}`;
 };
 
