@@ -222,11 +222,19 @@ const ledger = (over = {}) => ({
   totals: { gross_cents: 170_000, cut_cents: 25_500, net_cents: 144_500, sessions: 305, priced_sessions: 293, unpriced_sessions: 12 },
   completeness: { basis: 'x', sessions: 305, clients: { listed: 1, total: 151, complete: false }, engagements: { read: true, complete: true } },
   concentration: { client_name: 'Meridian Labs', pct: 29 }, take_rate: { bps: 1500, source: 'setting', updated_at: null }, equity_clients: 0, settlement: 'none',
+  // #4834 (D4834): the Practice v2 ledger lists records, capped, with the rest
+  // summed in one row (the same #4702 rule the client list followed).
+  states: { billed: { sessions: 293, gross_cents: 170_000 }, collected: { sessions: 0, gross_cents: 0 }, written_off: { sessions: 0, gross_cents: 0 }, paid_out_cents: 0, paid_out_count: 0 },
+  lines: {
+    read: true, listed: 1, total: 305, complete: false, unfrozen: 0,
+    items: [{ id: 1, client_name: 'Meridian Labs', topic: 'Strategy review', billing_state: 'billed', amount_cents: 50_000, collected_cents: null, take_rate_bps: 1500, platform_fee_cents: 7_500, net_cents: 42_500, created_at: '2026-11-03T10:00:00.000Z' }],
+    other: { records: 304, gross_cents: 120_000, fee_cents: 18_000, net_cents: 102_000 },
+  },
   ...over,
 });
 
 test('Earnings says what the ledger covers, lists the summed rest, and its CSV carries it', async () => {
-  // Mutation checked: the other-clients row dropped from the CSV → the file's rows no longer add to its Total.
+  // Mutation checked: the summed-records row dropped from the CSV → the file's rows no longer add to its Total.
   let blobText = '';
   const m = await mount(EarningsZone, (c) => {
     if (c.path === '/api/advisors/me/ledger') return json(ledger());
@@ -238,12 +246,10 @@ test('Earnings says what the ledger covers, lists the summed rest, and its CSV c
   });
   const realBlob = globalThis.Blob;
   try {
-    assert.match(m.text(), /Totals cover all 305 bookings created in this window/);
-    assert.match(m.text(), /1 of 151 clients are listed; the rest are summed in one row/);
-    assert.ok(m.byTestId('ledger-d4-other'), 'the rest is one row');
-    assert.match(m.text(), /150 more clients, summed/);
-    assert.match(m.text(), /Retainer is the contract.s value per cycle/);
-    assert.match(m.text(), /not\s*revenue earned in the window/);
+    assert.match(m.text(), /The newest 1 of 305 records are listed and the rest are summed in one row; the cards count all 305/);
+    assert.ok(m.byTestId('ledger-line-other'), 'the rest is one row');
+    assert.match(m.text(), /304 older records, summed/);
+    assert.match(m.text(), /Engagement retainers are contract values per cycle, not billed records/);
     globalThis.Blob = class { constructor(parts) { blobText = parts.join(''); } };
     URL.createObjectURL = () => 'blob:x'; URL.revokeObjectURL = () => {};
     const makeNode = document.createElement.bind(document);
@@ -254,11 +260,12 @@ test('Earnings says what the ledger covers, lists the summed rest, and its CSV c
   assert.ok(blobText, 'the export ran and produced a file');
   {
     const rows = blobText.split('\r\n');
-    assert.ok(rows.some((r) => r.startsWith('"150 more clients"')), 'the export carries the summed rest');
-    const cents = (r) => r.split(',').map(Number);
-    const gross = (r) => cents(r)[4];
-    const body = rows.slice(1, -1).filter((r) => !r.startsWith('Total'));
+    assert.ok(rows.some((r) => r.startsWith('"304 older records, summed"')), 'the export carries the summed rest');
+    // The price column: the fourth cell, read past quoted cells' commas.
+    const cells = (r) => [...r.matchAll(/("(?:[^"]|"")*"|[^,]*)(?:,|$)/g)].map((m) => m[1]);
+    const gross = (r) => Number(cells(r)[3]);
     const total = rows.find((r) => r.startsWith('Total'));
+    const body = rows.slice(1, rows.indexOf(total));
     assert.equal(body.reduce((a, r) => a + gross(r), 0), gross(total), 'the rows add to the Total');
   }
 });

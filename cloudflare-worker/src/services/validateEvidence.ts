@@ -31,6 +31,7 @@
 import type { Env } from '../types';
 import { loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings } from './painGroups';
 import { KPI_KEYS, latestKpis, type KpiKey } from './validateWriters';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export type EvidenceItemFull = {
   id: string;
@@ -67,7 +68,7 @@ const SIGNAL_KIND: Record<string, string> = {
   loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitlist sign-up', need_to_have: 'Need-to-have mention', would_pay: 'Would pay',
 };
 const money = (cents: number | null, currency: string | null) =>
-  cents == null ? null : `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(currency || 'usd').toUpperCase()}`;
+  cents == null ? null : suffixAmount(cents, String(currency || 'usd').toUpperCase(), { trimWhole: true });
 
 /** D4586 § 4: an experiment supplies an observed result only once a result is recorded, whatever its status. */
 export const experimentObserved = (result: string | null | undefined) => typeof result === 'string' && result.trim() !== '';

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pitch Studio v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Raise › Pitch studio · v2 redesign pass · #4839</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Pitch studio — from venture data to an investor-ready pitch, one journey</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">A design and interaction pass over the studio that is already built, not a replacement. Overview leads with one next step, the deck, readiness and investor activity. New deck is one stepper with one price card. The editor is three columns — cards, The Grid, Design · Data · Eadwyn — with document actions in the toolbar and the draft always shown beside the last saved version. Review checks one saved version, with no score. Share starts from the investor and previews exactly what they receive. Analytics keeps tracking off, unreadable, measured zero and not recorded apart. ◇ marks what needs engineering; “Coming later” marks what is not on main.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 10 Nov 2026 · founder licence · Halden Energy, its people, investors and figures are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="14">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Pitch Studio v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['PS-00', 'Current-state audit', 'What is built on main (149 files under pages/raise/pitch, the v2 adapter, the deck routes), where it creates friction, and what is real, gated or missing. Code-informed, not screenshot-verified.', [W('PS00')]],
+      ['PS-01', 'Information architecture and founder journey', 'One navigation model: the StudioOS sidebar, six Pitch tabs, and Editor and Present as full-screen modes. Data → create → edit → save version → review → share → engage → follow up. Draft and version never share a word or a look.', [W('PS00B')]],
+      ['PS-02', 'Studio home', 'A · One Next step chosen from state (here: review v7 before sharing it), the deck with its draft and version side by side, readiness, evidence coverage, cards not Done and investor activity. B · First use: generate from data, build step by step, or import (#4599). C · Loading, unreadable, plan gate, and one panel failing on its own.', [F('PS01', 'A · Deck exists', 840), F('PS01B', 'B · First use', 900), C('PS01C', 'C · States', 1000, 520)]],
+      ['PS-03', 'New deck', 'A · One stepper: audience and round → sources → outline → price → generate → review, with the price card beside it; one-click is a shortcut into the same flow. B · The five price states; unknown is never free, and the run sends the accepted quote. C · Building, with Stop and the charge so far. D · The proposal on The Grid: keep, leave out or regenerate each card; nothing is kept until you accept. E · Out of tokens, part-way failure, generation switched off, plan gate.', [F('PS02', 'A · Guided, price confirmed', 1180), C('PS02B', 'B · Price states', 1180, 560), F('PS02C', 'C · Generating', 760), F('PS02D', 'D · Proposal review', 900), C('PS02E', 'E · Failures', 1000, 480)]],
+      ['PS-04', 'Deck editor', 'A · Three columns: cards by section with status, The Grid with the selected area and its context bar, and Design · Data · Eadwyn on the right (data binding and provenance shown). The toolbar carries Undo, Redo, draft status, the last version, Save version, Present, Review, Share and Export. B · Unsaved, a snapping guide, an area held by a co-editor, and Save version saying what it freezes. C · Every draft, version and connection state. D · A card changed elsewhere: keep mine, keep theirs, or copy mine. E · Read-only.', [F('PS03', 'A · Clean', 900), F('PS03B', 'B · Unsaved, save version', 900), C('PS03C', 'C · Save and connection states', 1180, 820), F('PS03D', 'D · Conflict', 900), F('PS03E', 'E · Read-only', 900)]],
+      ['PS-05', 'Eadwyn on an area', 'One Ask for the selected area, beside it. A · Source, read-only model and price before the run. B · Progress, with Stop. C · Proposal preview with its sources; Accept, Reject or Regenerate (priced). Your area is unchanged until you accept. D · Failure, price unavailable, quote expired, out of tokens, held area, and “still charged” after undo.', [F('PS04', 'A · Price before run', 900), F('PS04B', 'B · Running', 900), F('PS04D', 'C · Proposals', 900), C('PS04C', 'D · Failures and limits', 1180, 520)]],
+      ['PS-06', 'Review and investor readiness', 'A · One saved version (v7), checked as investors would receive it: completeness, evidence and freshness, readability, technical preflight, disclosure and legal, approvals. No readiness score; couldn’t check is never a pass. The AI review is optional and priced. B · Draft differs from the checked version, a result for another version, running, and a check that couldn’t run.', [F('PS05', 'A · Review v7', 1200), C('PS05B', 'B · States', 1000, 460)]],
+      ['PS-07', 'Investor sharing', 'A · One investor at a time: the frozen version or variant, included content, NDA, expiry, download, forwarding, the watermark (always on), time per slide, and walkthrough (Coming later), with a live preview of exactly what Ines receives. B · The same, held by approval. C · Cards not Done, export-blocking finding, withdraw, expired, failed.', [F('PS06', 'A · Ready to send', 1130), F('PS06G', 'B · Held by approval', 1130), C('PS06C', 'C · Gates and status', 1180, 560)]],
+      ['PS-08', 'Investor analytics', 'A · Visits and revisits, most-read card, reached the ask, views per day (first views marked), the funnel, and the links table with version, NDA, expiry, engagement, status and withdraw. Reactions have no founder read yet (◇). B · One investor’s journey: time per card (“Not read” is never 0 s), timeline, Draft follow-up, and the newer version she hasn’t seen. C · Tracking off, unreadable, measured zero, not recorded.', [F('PS07', 'A · Overview', 1080), F('PS07B', 'B · One investor', 860), C('PS07C', 'C · Four kinds of nothing', 1180, 300)]],
+      ['PS-09', 'Mobile 390', 'A dedicated phone model, not the desktop editor squeezed: A · Overview with the Next step. B · New deck at the price step. C · Light editing of one card. D · Restore unsaved changes. E · Conflict. F · Review. G · Share, preview collapsed. H · One investor.', [P('PS08a', 'A · Overview'), P('PS08b', 'B · New deck'), P('PS08c', 'C · Light edit'), P('PS08d', 'D · Recovery'), P('PS08e', 'E · Conflict'), P('PS08f', 'F · Review'), P('PS08g', 'G · Share'), P('PS08h', 'H · Investor')]],
+      ['PS-10', 'Dark mode', 'The editor with proposals and the Share page on the dark tokens. The deck keeps its own theme in both; chrome and theme never borrow from each other.', [F('PS09', 'A · Editor', 900), F('PS09B', 'B · Share', 1130)]],
+      ['PS-11', 'Components, tokens and state specification', 'Chrome tokens light and dark, the shared status vocabulary, Next step, price card, source chip, proposal, Grid selection, recipient preview, absence looks, and accessibility; then every state across the seven screens.', [W('PS10'), W('PS10B')]],
+      ['PS-12', 'Before / after and deviations', 'What changes and why, and each departure from Pitch Deck Studio v2 (D1604) and the Pitch boards (D4254). Nothing approved is removed.', [W('PS11')]],
+      ['PS-13', 'Handoff and roadmap', 'Per screen: what is preserved, what is frontend only, what needs a backend change. Then the roadmap by impact, complexity and dependencies, mapped to #4595–#4599, #4734 and #3716.', [W('PS12'), W('PS12B')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

@@ -14,7 +14,9 @@
  *   PUT    /api/grow/sequences/:uid/steps/:position/recording   multipart: project, seconds, file (the founder's own recording)
  *   GET    /api/grow/sequences/:uid/steps/:position/recording?project=   the recording, for preview
  *   POST   /api/grow/sequences/:uid/enrol { project, contacts: [{ uid, time_zone? }] }
- *   GET    /api/grow/optout/:token                            public; records an `opted_out` suppression; reveals nothing
+ *   GET    /api/grow/optout/:token                            public; a page with one button; writes nothing (D5333)
+ *   POST   /api/grow/optout/:token                            public, CSRF-exempt; records an `opted_out` suppression; reveals nothing.
+ *                                                             The page's form and RFC 8058's `List-Unsubscribe=One-Click` both post here.
  *
  * Another venture's sequence, step or enrolment is 404. Reads follow Grow's
  * canAccessProject read gate; writes its write gate, as the campaign routes.
@@ -28,7 +30,7 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 import {
   BLOCKED_REASONS, MAX_STEPS, OFFERED_CHANNELS, SEQUENCE_INTENT, SequenceRefused, VOICE_MAX_BYTES, VOICE_MIME,
-  addDays, dueSteps, optoutLine, readOptoutToken, recordOptout, safeName, sequencePerson, stopStatement, validTimeZone, voicePrefix,
+  addDays, dueSteps, optoutKnown, optoutLine, readOptoutToken, recordOptout, safeName, sequencePerson, stopStatement, validTimeZone, voicePrefix,
 } from '../services/distribution/sequences';
 
 const router = new Hono<{ Bindings: Env }>();
@@ -336,22 +338,43 @@ router.post('/:uid/enrol', handle(true, async (c, user, pid, b) => {
 }));
 
 // ── Public opt-out ─────────────────────────────────────────────────────────
-// Mounted at its own path, so no sign-in route above can take it. The answer
-// is the same fixed sentence for every valid token and names nobody; a forged
-// or unknown token is 404. Like the newsletter's unsubscribe it has no bucket
-// of its own (a capped opt-out is an opt-out lost); the general per-IP cap applies.
+// Mounted at its own path, so no sign-in route above can take it. D5333: the
+// GET writes nothing, because mail security scanners open every link in a
+// message; it answers a page with one button that posts back to the same URL.
+// The POST records, from that form or from a mail client's RFC 8058 one-click
+// (`List-Unsubscribe=One-Click`); it needs no session and is CSRF-exempt
+// (middleware/csrf.ts), since the signed token is the authority. Every answer
+// is a fixed sentence that names nobody; a forged or unknown token is 404 on
+// both verbs. Like the newsletter's unsubscribe it has no bucket of its own
+// (a capped opt-out is an opt-out lost); the general per-IP cap applies.
 const optout = new Hono<{ Bindings: Env }>();
 const OPTED_OUT = 'You are unsubscribed. You will not receive further messages from this sender’s sequences.';
+const ASK = 'Press the button to stop receiving this sender’s sequence emails.';
+const OPTOUT_HEADERS = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex' };
+const wantsHtml = (c: C) => (c.req.header('accept') || '').includes('text/html');
+const optoutPage = (title: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 16px;line-height:1.6">${body}</body></html>`;
+const notFound = (c: C) => c.json({ detail: 'Not found.' }, 404, OPTOUT_HEADERS);
+
 optout.get('/:token', async (c) => {
   try {
     const contact = await readOptoutToken(c.env, c.req.param('token'));
-    if (!contact || !(await recordOptout(c.env, contact))) return c.json({ detail: 'Not found.' }, 404);
-    const html = (c.req.header('accept') || '').includes('text/html');
-    const headers = { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-robots-tag': 'noindex' };
-    if (!html) return c.json({ ok: true, message: OPTED_OUT }, 200, headers);
-    return c.html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unsubscribed</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 16px"><p>${OPTED_OUT}</p></body></html>`, 200, headers);
+    if (!contact || !(await optoutKnown(c.env, contact))) return notFound(c);
+    if (!wantsHtml(c)) return c.json({ ok: true, message: ASK, method: 'POST' }, 200, OPTOUT_HEADERS);
+    // The form posts to this same URL (form-action 'self'); no script.
+    return c.html(optoutPage('Stop these emails', `<p>${ASK}</p><form method="post"><button type="submit" style="font:inherit;padding:10px 18px;border-radius:8px;border:1px solid #111827;background:#111827;color:#fff;cursor:pointer">Stop these emails</button></form>`), 200, OPTOUT_HEADERS);
   } catch {
-    return c.json({ detail: 'The opt-out could not be recorded. Open the link again.' }, 503);
+    return c.json({ detail: 'This page could not be opened. Open the link again.' }, 503);
+  }
+});
+
+optout.post('/:token', async (c) => {
+  try {
+    const contact = await readOptoutToken(c.env, c.req.param('token'));
+    if (!contact || !(await recordOptout(c.env, contact))) return notFound(c);
+    if (!wantsHtml(c)) return c.json({ ok: true, message: OPTED_OUT }, 200, OPTOUT_HEADERS);
+    return c.html(optoutPage('Unsubscribed', `<p>${OPTED_OUT}</p>`), 200, OPTOUT_HEADERS);
+  } catch {
+    return c.json({ detail: 'The opt-out could not be recorded. Try again.' }, 503);
   }
 });
 
