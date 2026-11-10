@@ -134,7 +134,7 @@ export class PublicationError extends Error {
  * runs inside the batch guarded on `version`, so an edit after the check
  * publishes nothing under the wrong number.
  */
-export async function publishOneTemplate(env: Env, slug: string, version: number, actorId: number, actor: string) {
+export async function publishOneTemplate(env: Env, slug: string, version: number, actorId: number, actor: string, reason: string | null = null) {
   const row = await env.DB.prepare(`SELECT id, slug, version, is_stub, body_md FROM legal_templates
     WHERE slug = ? AND is_active = 1`).bind(slug).first<{ id: number; slug: string; version: number; is_stub: number; body_md: string }>();
   if (!row) throw new PublicationError('template_not_found', 404);
@@ -151,7 +151,7 @@ export async function publishOneTemplate(env: Env, slug: string, version: number
     env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id)
       SELECT 'contract_template_published', ?, ?, ? WHERE EXISTS
         (SELECT 1 FROM legal_template_publications WHERE template_id = ? AND version = ? AND published_at = ?)`)
-      .bind(JSON.stringify({ slug, version, published_at: at }), actor, actorId, row.id, version, at),
+      .bind(JSON.stringify({ slug, version, published_at: at, ...(reason ? { reason } : {}) }), actor, actorId, row.id, version, at),
   ]);
   if (!(insert.meta?.changes ?? 0)) throw new PublicationError('published_version_changed', 409);
   return (await publishedContractTemplates(env)).find(t => t.template_id === row.id) ?? null;

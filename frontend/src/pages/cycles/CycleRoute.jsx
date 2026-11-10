@@ -1025,7 +1025,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }, [adding, editingId]);
 
   // The table's query resets when the module changes.
-  useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
+  // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
+  // read below (its dependency is `query`), so every module page read its module twice when it opened.
+  useEffect(() => {
+    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+  }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
   // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.

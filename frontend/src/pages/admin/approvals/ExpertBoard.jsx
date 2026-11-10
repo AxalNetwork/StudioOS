@@ -10,6 +10,7 @@ import { BOARDS, EXPERT_TABS, dayText, decisionCopy, doneLine, expertBoard, expe
 import {
   BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, WARN_PILL, nf, useBoardOwners, useLoad,
+  BoardBulkBar, BoardRowMore, PickAll, PickBox, copyBoardLink, pickedRow, useBoardPick,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -205,6 +206,7 @@ export default function ExpertBoard({ at }) {
   );
   const decided = (line) => { setDone(line); read.reload(); };
   const own = useBoardOwners('wellbeing-experts', setDone);
+  const pick = useBoardPick(`${tab.key}|${page}`);
   const strip = boardStrip({ status: read.status, label: 'Needs verification', total: verifyBoard && !verifyBoard.partial ? verifyBoard.counts.verify : null,
     rows: verifyBoard ? verifyBoard.rows : [], complete: !!verifyBoard && !verifyBoard.partial, owners: own.owners, noun: 'experts' });
   const rows = board ? board.rows.slice(page * PAGE, page * PAGE + PAGE) : [];
@@ -221,21 +223,25 @@ export default function ExpertBoard({ at }) {
               {board.partial ? <p className={`m-0 ${SUB}`} data-testid="experts-partial">{`This list is the first ${board.read} of ${board.total ?? 'an unknown number of'} experts, so the counts are not drawn.`}</p> : null}
               {board.rows.length ? (
                 <section className={`${CARD} flex flex-col`} data-testid="experts-table">
-                  <div className="overflow-x-auto">
+                  <div className="relative overflow-x-auto">
                     {tab.key === 'verify' ? (
                       // D4814 (AP-12): Expert · Credentials · Waiting · Owner · Review, which reads Verify →.
                       <table className="w-full min-w-[820px]">
                         <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
+                          <PickAll pick={pick} rows={rows} testId="experts-pick-all" />
                           <th className={TH}>Expert</th><th className={TH}>Credentials</th><th className={TH}>Waiting</th><th className={TH}>Owner</th><th className={TH}>Review</th>
+                          <th className={TH}><span className="sr-only">More</span></th>
                         </tr></thead>
                         <tbody>
                           {rows.map((r) => (
-                            <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`expert-${r.key}`}>
+                            <tr key={r.key} {...pickedRow(pick, r)} data-testid={`expert-${r.key}`}>
+                              <PickBox pick={pick} row={r} label={r.name} testId={`expert-pick-${r.key}`} />
                               <td className={TD}><b>{r.name}</b>{r.headline ? <div className={SUB}>{r.headline}</div> : null}</td>
                               <td className={TD}>{r.credentials ? <span className={MONO}>{r.credentials}</span> : <span className={WARN_PILL}>! None given</span>}</td>
                               <td className={TD}><span className={MONO}>{r.age || 'Not recorded'}</span><UrgencyPill sla={slaOfBand(r.band)} /></td>
                               <td className={TD}><OwnerCell row={own.asRow({ ...r, who: r.name })} callerId={own.callerId} onAssign={own.assign} prefix="expert" /></td>
                               <td className={TD}><Link className={`${BTN} sm:min-h-[30px]`} to={`/admin/approvals/wellbeing-experts/${encodeURIComponent(r.key)}`} state={{ from }} data-testid={`expert-open-${r.key}`}>Verify →</Link></td>
+                              <td className={TD}><BoardRowMore label={r.name} href={`/admin/approvals/wellbeing-experts/${encodeURIComponent(r.key)}`} onAssign={() => own.assign([{ id: r.id, name: r.name }])} onCopy={(href) => copyBoardLink(href, setDone)} testId={`expert-more-${r.key}`} /></td>
                             </tr>
                           ))}
                         </tbody>
@@ -261,13 +267,14 @@ export default function ExpertBoard({ at }) {
                     </table>
                     )}
                   </div>
+                  {tab.key === 'verify' ? <BoardBulkBar pick={pick} rows={rows} onAssign={(picked) => own.assign(picked.map((r) => ({ id: r.id, name: r.name })))} testId="experts-bulk" /> : null}
                   <Pager page={page} total={board.rows.length} onPage={setPage} testId="experts-pager" />
                 </section>
               ) : <p className={`m-0 ${SUB}`} data-testid="experts-empty">{`No expert is in ${tab.label}.`}</p>}
             </>
           )}
       {at.item ? <ExpertDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={board ? boardStep(board.rows, at.item) : null} from={from} /> : null}
-      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
+      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={(t) => { pick.clear(); own.finish(t); }} /> : null}
     </div>
   );
 }
