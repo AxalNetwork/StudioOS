@@ -8,6 +8,7 @@ import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, button, card, date } from './parts';
 import { dayLabel, fileKind, fileSize, statusLabel } from './governanceModel';
 import RelatedDocuments, { RelatedBanner } from './RelatedDocuments';
+import LegalReviewPanel, { LastReview } from './LegalReviewPanel';
 
 /**
  * D4811 (#4811) part 5 — one governance record's workspace (board CT-07), at
@@ -30,6 +31,7 @@ export function versionMarkers(document, version, latestVersion) {
   const out = [];
   if (document?.executed_version === version.version) out.push('In force');
   if (version.version === latestVersion) out.push('Latest');
+  if (version.counsel_approved === true) out.push('Approved');
   if (version.signed) out.push('Signed copy');
   return out;
 }
@@ -97,7 +99,8 @@ export default function GovernanceWorkspace({ uid, categories = [], entities = [
         {tab === 'overview' && <Overview d={d} versions={versions} entity={entity} category={category} />}
         {tab === 'document' && <DocumentTab uid={uid} d={d} versions={versions} />}
         {tab === 'versions' && <VersionsTab uid={uid} d={d} versions={versions} />}
-        {tab === 'legal-review' && <div className={`${card} p-4 text-[12.5px]`}><Missing reason="The legal-review record (reviewer, type, jurisdiction, version reviewed, findings, sources, decision) is not built yet. It waits on who records counsel approval (D4811 question C). A record's review state is its In review status for now." /></div>}
+        {/* D4811 part 16: the legal-review record (CT-08), bound to the reviewed version's hash. */}
+        {tab === 'legal-review' && <LegalReviewPanel kind="governance" refId={uid} />}
         {tab === 'activity' && <ActivityTab uid={uid} />}
         {tab === 'related' && <RelatedDocuments uid={uid} read={related} entities={entities} onChanged={() => setRelRev((n) => n + 1)}
           affectedOnly={params.get('affected') === '1'} onShowAll={() => go('related')} />}
@@ -116,8 +119,7 @@ function Overview({ d, versions, entity, category }) {
     ['Effective date', dayLabel(d.effective_date), 'No effective date was entered.'],
     ['Latest version', latest ? `v${latest.version} · ${date(latest.created_at) || 'upload date not recorded'}` : null, 'No file uploaded yet.'],
     ['Executed version', executedLine(d), d.status === 'executed' ? 'Executed, but neither evidence field is set.' : 'Not executed.'],
-    ['Last review', null, 'The legal-review record is not built yet (D4811 question C).'],
-    ['Reviewer', null, 'The legal-review record is not built yet (D4811 question C).'],
+    ['Last review', <LastReview kind="governance" refId={d.uid} />, null],
     ['Linked template', d.template_slug || null, 'No template linked.'],
     ['Linked envelope', d.envelope_id != null ? `#${d.envelope_id}` : null, 'No envelope linked.'],
   ];

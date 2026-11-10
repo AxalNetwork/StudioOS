@@ -506,7 +506,7 @@ test('D659: Inconclusive is the founder\'s mark under a computed verdict; streng
   assert.equal(fig(o.body, 'hypotheses_supported').unit, 'of 3');
   assert.equal(fig(o.body, 'hypotheses_supported').delta_30d, null, 'no verdict history → the change is not recorded');
   assert.equal(fig(o.body, 'hypotheses_supported').reason, 'The change over 30 days is not recorded: verdict history starts later');
-  assert.deepEqual(card(o.body, 'experiments').series.statuses, { untested: 1, testing: 0, supported: 1, refuted: 0, inconclusive: 1, not_recorded: 0 });
+  assert.deepEqual(card(o.body, 'experiments').series.statuses, { untested: 1, testing: 0, supported: 1, contested: 0, refuted: 0, inconclusive: 1, not_recorded: 0 });
 });
 
 test('D659: the market page\'s three checks are stored and read back', async () => {

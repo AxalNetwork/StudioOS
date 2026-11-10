@@ -6,7 +6,7 @@ import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, SidePanel, button, card, input, date } from './parts';
 import {
   ACCEPT, byCategory, dayLabel, draftRow, executedHint, fileProblem, moveLabel,
-  ownershipPayload, recordedPercent, statusLabel, versionLine, isDrill, recordState,
+  ownershipPayload, recordedPercent, statusLabel, versionLine, isDrill, recordState, signedCopyLine, signedCopyProblem, approvedChoices,
 } from './governanceModel';
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
@@ -248,7 +248,7 @@ function Versions({ document: d, versions, onDone }) {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null); // { version, blob } | { version, loading } | { version, error }
   async function send() {
-    const problem = fileProblem(upload?.file);
+    const problem = fileProblem(upload?.file) || signedCopyProblem(upload);
     if (problem) { setError(problem); return; }
     setBusy(true); setError('');
     try { await adminGovernanceApi.uploadVersion(d.uid, upload); setUpload(null); onDone(); }
@@ -268,17 +268,31 @@ function Versions({ document: d, versions, onDone }) {
     <h4 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">Versions</h4>
     {versions.length === 0 ? <p className="text-axal-muted">No file uploaded yet.</p>
       : <ul className="divide-y divide-axal-hairline">{versions.map((v) => <li key={v.version} className="flex flex-wrap items-center justify-between gap-2 py-2">
-        <span className="min-w-0"><span className="block font-semibold">{versionLine(v)}</span><span className="block text-axal-muted">{date(v.created_at) || 'Upload date not recorded'}{v.note ? ` · ${v.note}` : ''}</span></span>
+        <span className="min-w-0"><span className="block font-semibold">{versionLine(v)}</span><span className="block text-axal-muted">{date(v.created_at) || 'Upload date not recorded'}{v.note ? ` · ${v.note}` : ''}</span>
+          {signedCopyLine(v) && <span className="block text-axal-muted" data-testid={`signed-copy-${v.version}`}>{signedCopyLine(v)}</span>}</span>
         <span className="flex gap-2">{v.content_type === 'application/pdf' && <button type="button" className={button} aria-label={`Preview v${v.version}`} onClick={() => open(v)}>Preview</button>}
           <button type="button" className={button} aria-label={`Download v${v.version}`} onClick={() => download(v)}>Download</button></span></li>)}</ul>}
     {preview && <div className="rounded-lg border border-axal-hairline p-2" data-testid="governance-preview">
       <div className="mb-2 flex items-center justify-between"><b>v{preview.version}</b><button type="button" className={button} onClick={() => setPreview(null)}>Close preview</button></div>
       {preview.loading ? <p role="status">Loading the file…</p> : preview.error ? <p role="alert">{preview.error}</p> : <PdfPages blob={preview.blob} title={`${d.title} v${preview.version}`} />}</div>}
     {closed ? <p className="text-axal-muted">{d.status === 'executed' ? 'An executed document takes no new version. Archive it and restore it as a draft to revise it.' : 'An archived document takes no new version. Restore it as a draft first.'}</p>
-      : !upload ? <button type="button" className={button} onClick={() => { setUpload({ file: null, signed: false, note: '' }); setError(''); }}>Upload a version</button>
+      : !upload ? <button type="button" className={button} onClick={() => { setUpload({ file: null, signed: false, note: '', signed_on: '', signatory: '', attest: false, copy_of: approvedChoices(versions)[0]?.version ?? '' }); setError(''); }}>Upload a version</button>
         : <div role="dialog" aria-label="Upload a version" className="space-y-2 rounded-lg border border-axal-hairline p-3">
           <Field label="File (PDF or Word .docx, at most 25 MB)"><input type="file" accept={ACCEPT} className={input} onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] || null })} /></Field>
           <label className="flex items-center gap-2"><input type="checkbox" checked={upload.signed} onChange={(e) => setUpload({ ...upload, signed: e.target.checked })} /> This is the signed copy</label>
+          {/* D4811 part 12 (CT-12 B): a signed copy says when, by whom, and is attested. */}
+          {upload.signed && <fieldset className="space-y-2 rounded-lg border border-axal-hairline p-2" data-testid="governance-signed-copy">
+            <legend className="px-1 font-semibold">Execution evidence</legend>
+            {/* D4811 part 20: only a counsel-approved version can be the one signed; a draft is never offered. */}
+            {approvedChoices(versions).length
+              ? <Field label="Signed copy of"><select className={input} value={String(upload.copy_of)} onChange={(e) => setUpload({ ...upload, copy_of: e.target.value })}>
+                {approvedChoices(versions).map((v) => <option key={v.version} value={String(v.version)}>v{v.version} · counsel approved</option>)}
+                <option value="">No approved version named</option></select></Field>
+              : <p className="text-axal-muted" data-testid="governance-no-approved">No version of this record is approved by counsel, so this copy names none. Request a legal review on the record's Legal Review tab to bind a copy to an approved version.</p>}
+            <Field label="Signed on"><input type="date" className={input} max={new Date().toISOString().slice(0, 10)} value={upload.signed_on} onChange={(e) => setUpload({ ...upload, signed_on: e.target.value })} /></Field>
+            <Field label="Signatory (name, capacity)"><input className={input} maxLength={200} value={upload.signatory} placeholder="S. Example, Manager" onChange={(e) => setUpload({ ...upload, signatory: e.target.value })} /></Field>
+            <label className="flex min-h-[44px] items-start gap-2"><input type="checkbox" checked={upload.attest} onChange={(e) => setUpload({ ...upload, attest: e.target.checked })} /> I confirm this is the complete, fully signed copy.</label>
+          </fieldset>}
           <Field label="Note"><input className={input} maxLength={500} value={upload.note} onChange={(e) => setUpload({ ...upload, note: e.target.value })} /></Field>
           <Problem text={error} />
           <div className="flex gap-2"><button type="button" className={button} onClick={() => setUpload(null)}>Cancel</button><button type="button" className={`${button} bg-violet-600 text-white`} disabled={busy} onClick={send}>{busy ? 'Uploading…' : `Upload as v${versions.length + 1}`}</button></div>

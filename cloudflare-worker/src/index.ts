@@ -2605,6 +2605,21 @@ export default {
         } catch (e) {
           taskFailed('lab reconcile tick', e);
         }
+        // D4663 (#4663, owner decision A): graduation closes the Lab, so the
+        // reconciler above never sees a graduate whose final request died
+        // before the credential was issued. A few such graduates per tick get
+        // the credential and its bonus here. Idempotent; bounded by
+        // CERT_BACKFILL_TICK_LIMIT; recorded in spinout_certificate_backfill_*.
+        try {
+          const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
+          const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
+          if (b.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped}`);
+          }
+        } catch (e) {
+          taskFailed('certificate backfill tick', e);
+        }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
         // for admin review and disappear from LP/partner views immediately.

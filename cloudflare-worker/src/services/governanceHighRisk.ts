@@ -27,11 +27,19 @@ type Refusal = { status: 409 | 422; code: string; message: string };
 
 /** The reason and confirmation a high-risk move carries, or the refusal. */
 export function confirmationOf(to: HighRiskMove, body: any): { ok: true; reason: string } | { ok: false; refusal: Refusal } {
+  return confirmationFor(HIGH_RISK_MOVES[to], body);
+}
+
+/**
+ * D4811 part 13: the same check for any high-risk action named by its typed
+ * word (template publication is PUBLISH, CT-16): a reason of 10 to 500
+ * characters and the exact word.
+ */
+export function confirmationFor(word: string, body: any): { ok: true; reason: string } | { ok: false; refusal: Refusal } {
   const reason = typeof body?.reason === 'string' ? body.reason.trim().replace(/\s+/g, ' ') : '';
   if (reason.length < REASON_MIN || reason.length > REASON_MAX) {
     return { ok: false, refusal: { status: 422, code: 'reason_required', message: `Say why, in ${REASON_MIN} to ${REASON_MAX} characters. It is kept with the record's history. Nothing was saved.` } };
   }
-  const word = HIGH_RISK_MOVES[to];
   if (body?.confirm !== word) {
     return { ok: false, refusal: { status: 422, code: 'confirmation_required', message: `Type ${word} to confirm. Nothing was saved.` } };
   }

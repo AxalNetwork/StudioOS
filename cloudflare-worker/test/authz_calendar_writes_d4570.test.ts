@@ -23,6 +23,12 @@
 // write a copy). No credentials and a disabled party get 401. These are the
 // ledger's `verified` entries for these routes.
 //
+// Every one of the eight answers a non-party exactly as it answers an id that
+// does not exist: the same status and the same body. The RSVP and the push did
+// from the start; the six record writes do since the #4570 hardening fix. A
+// caller who may see the record but not do this to it (an IC invitee asking to
+// cancel or move it) still gets the distinct refusal: they know it exists.
+//
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/authz_calendar_writes_d4570.test.ts
 import test, { after, before } from 'node:test';
@@ -211,7 +217,7 @@ test('every account that is not a party: refused, nothing of the record named, n
     for (const id of OUTSIDERS) {
       const r = await call(w.method, w.path(w.record), id, w.body);
       // Mutation checked, one at a time: each handler's party test removed or widened, and the push's readers unbound from the caller.
-      assert.ok(r.status === 403 || r.status === 404, `${w.route} as ${WHO[id]}: ${r.status} ${r.text}`);
+      assert.equal(r.status, 404, `${w.route} as ${WHO[id]}: ${r.status} ${r.text}`);
       assert.deepEqual(named(r.text), [], `${w.route} as ${WHO[id]}: the refusal names nothing of the record`);
       (answers[w.route] ??= new Set()).add(`${r.status} ${r.text}`);
     }
@@ -222,7 +228,7 @@ test('every account that is not a party: refused, nothing of the record named, n
   assert.equal(outbound.length, 0, 'nothing reached Google: no copy cancelled, moved or written');
 });
 
-test('wrong role on the record: an IC attendee may answer but not cancel or move; a check-in party may not edit the other\'s manual row', async () => {
+test('wrong role on the record: an IC attendee may answer but not cancel or move; a check-in party is a stranger to the other\'s manual row', async () => {
   const before = snapshot();
   // Mutation checked: the IC cancel's and reschedule's organiser test removed → the invited founder cancels or moves it.
   for (const [method, path, body] of [['DELETE', `/ic-meetings/${IC}`, undefined], ['PATCH', `/ic-meetings/${IC}`, { start_at: LATER }]] as const) {
@@ -230,18 +236,18 @@ test('wrong role on the record: an IC attendee may answer but not cancel or move
     assert.equal(r.status, 403, `${method} ${path} as the invited founder: ${r.text}`);
     assert.deepEqual(named(r.text), []);
   }
-  // The counterpart shares the check-in with the founder, not the founder's manual row.
+  // The counterpart shares the check-in with the founder, not the founder's manual row: no party to it, so not found.
   // Mutation checked: the manual row's `row.user_id !== user.id` test removed → the counterpart edits or deletes it.
   for (const [method, body] of [['PATCH', { title: 'Overwritten' }], ['DELETE', undefined]] as const) {
     const r = await call(method, `/events/${ROW}`, COUNTERPART, body);
-    assert.equal(r.status, 403, `${method} /events/${ROW} as the counterpart: ${r.text}`);
+    assert.equal(r.status, 404, `${method} /events/${ROW} as the counterpart: ${r.text}`);
   }
   // The counterpart is not invited to the IC meeting: no RSVP, no push.
   assert.equal((await call('POST', `/ic-meetings/${IC}/rsvp?rsvp=accepted`, COUNTERPART)).status, 404);
   assert.equal((await call('POST', `/push/ic_meeting/${IC}`, COUNTERPART)).status, 404);
   // The organiser is not on the check-in.
   assert.equal((await call('POST', `/push/founder_checkin/${CHECKIN}`, ORGANISER)).status, 404);
-  assert.equal((await call('DELETE', `/founder-checkins/${CHECKIN}`, ORGANISER)).status, 403);
+  assert.equal((await call('DELETE', `/founder-checkins/${CHECKIN}`, ORGANISER)).status, 404);
   assert.equal(snapshot(), before);
   assert.equal(outbound.length, 0);
 });
@@ -261,6 +267,38 @@ test('the RSVP and the push answer a non-party exactly as they answer a record t
       assert.deepEqual([real.status, real.text], [none.status, none.text], `${label} as ${WHO[id]}: no existence leak`);
     }
   }
+  assert.equal(snapshot(), before);
+  assert.equal(outbound.length, 0);
+});
+
+test('the six record writes answer a non-party exactly as they answer a record that does not exist', async () => {
+  const before = snapshot();
+  const records = WRITES.filter((w) => !w.route.includes('/rsvp') && !w.route.includes('/push/'));
+  assert.equal(records.length, 6);
+  for (const w of records) {
+    for (const id of OUTSIDERS) {
+      const real = await call(w.method, w.path(w.record), id, w.body);
+      const none = await call(w.method, w.path(MISSING), id, w.body);
+      // Mutation checked, one route at a time: the old 403 for an existing record restored → this fails.
+      assert.equal(real.status, 404, `${w.route} as ${WHO[id]}: ${real.text}`);
+      assert.deepEqual([real.status, real.text], [none.status, none.text], `${w.route} as ${WHO[id]}: no existence leak`);
+    }
+  }
+  // Someone on one record is a stranger to the other: the same answer as a missing id.
+  for (const [who, method, path, body] of [
+    [ORGANISER, 'DELETE', `/founder-checkins/%`, undefined], [ORGANISER, 'PATCH', `/founder-checkins/%`, { start_at: LATER }],
+    [COUNTERPART, 'DELETE', `/ic-meetings/%`, undefined], [COUNTERPART, 'PATCH', `/ic-meetings/%`, { start_at: LATER }],
+    [COUNTERPART, 'PATCH', `/events/%`, { title: 'Overwritten' }], [COUNTERPART, 'DELETE', `/events/%`, undefined],
+  ] as const) {
+    const record = path.startsWith('/founder') ? CHECKIN : path.startsWith('/ic') ? IC : ROW;
+    const real = await call(method, path.replaceAll('%', String(record)), who, body);
+    const none = await call(method, path.replaceAll('%', String(MISSING)), who, body);
+    assert.deepEqual([real.status, real.text], [none.status, none.text], `${method} ${path} as ${WHO[who]}`);
+  }
+  // An invitee sees the meeting on their list, so their refusal to cancel or move it is still its own.
+  const invitee = await call('DELETE', `/ic-meetings/${IC}`, FOUNDER);
+  assert.equal(invitee.status, 403, invitee.text);
+  assert.notEqual(invitee.text, (await call('DELETE', `/ic-meetings/${MISSING}`, FOUNDER)).text);
   assert.equal(snapshot(), before);
   assert.equal(outbound.length, 0);
 });

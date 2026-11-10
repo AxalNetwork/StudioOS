@@ -144,6 +144,15 @@ test('D647 detail renders parties, history, fingerprint and confirmed reason/res
   } finally { await view.unmount(); restore(); }
 });
 
+// D4811 part 13: publishing asks for a reason and the typed word PUBLISH (CT-16).
+async function fillPublish(view, reason = 'Counsel approved this text on 2026-11-09.', word = 'PUBLISH') {
+  const { act } = await import('react');
+  const area = view.nodes().find((n) => n.tagName === 'TEXTAREA' && String(view.props(n)?.placeholder || '').startsWith('What approves'));
+  const typed = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.autoComplete === 'off' && view.props(n)?.id?.endsWith('-word'));
+  await act(async () => { view.props(area).onChange({ target: { value: reason } }); });
+  await act(async () => { view.props(typed).onChange({ target: { value: word } }); });
+}
+
 test('D647 template usage opens filtered agreements and publication asks for a concrete confirmation', async () => {
   // D717 (#1851, #1852): publication is per template, from the editor; the tab has no library-wide Publish.
   const safe = { slug: 'safe', title: 'SAFE', version: 3, category: 'gp', body_md: 'Body', usage_count: 18 };
@@ -155,10 +164,11 @@ test('D647 template usage opens filtered agreements and publication asks for a c
     await view.flush(); assert.ok(!view.nodes().some(n => view.props(n)?.['data-testid'] === 'template-publish'), 'no library-wide Publish');
     await view.click('SAFE'); await view.flush(); await view.click('Publish v3'); await view.flush();
     assert.equal(calls.filter(([key]) => key === 'publishOne').length, 0, 'the dialog asks first');
+    await fillPublish(view);
     const confirm = view.nodes().find(n => view.props(n)?.['data-testid'] === 'template-publish-confirm');
     const { act } = await import('react');
     await act(async () => { view.props(confirm).onClick({ stopPropagation() {} }); }); await view.flush();
-    assert.deepEqual(calls.filter(([key]) => key === 'publishOne').map(([, a]) => a), [['safe', 3]]); assert.match(view.text(), /Published v3/);
+    assert.deepEqual(calls.filter(([key]) => key === 'publishOne').map(([, a]) => a), [['safe', 3, { reason: 'Counsel approved this text on 2026-11-09.', confirm: 'PUBLISH' }]]); assert.match(view.text(), /Published v3/);
   } finally { await view.unmount(); }
   view = await mountContracts(element(), '/admin/contracts?tab=templates', user);
   try {

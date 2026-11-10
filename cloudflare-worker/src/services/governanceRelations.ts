@@ -7,7 +7,8 @@
  * rewrites a dependant: a flag asks a person to check it.
  */
 
-export const RELATION_KINDS = Object.freeze(['governance', 'template'] as const);
+// D4811 part 19: an agreement (by the uid the Contracts desk uses) is a dependant too (migration 202611092350).
+export const RELATION_KINDS = Object.freeze(['governance', 'template', 'agreement'] as const);
 export type RelationKind = (typeof RELATION_KINDS)[number];
 export const isRelationKind = (k: unknown): k is RelationKind => typeof k === 'string' && (RELATION_KINDS as readonly string[]).includes(k);
 

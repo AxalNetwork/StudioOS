@@ -228,7 +228,18 @@ app.get('/certificates', async (c) => {
     console.error('[certificates] awaiting read failed', (e as Error)?.message);
     unavailable.awaiting = 'The graduate list could not be read, so who is still waiting for a certificate is unknown.';
   }
-  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, unavailable });
+  // D4663 — what the scheduled backfill last did. `last_tick: null` is "not
+  // recorded" (no tick has run here), never "0 issued"; a failed read is
+  // `null` with its sentence in `unavailable`.
+  let scheduledBackfill: unknown = null;
+  try {
+    const { readCertificateBackfillState } = await import('../services/certificateIssuance');
+    scheduledBackfill = await readCertificateBackfillState(c.env);
+  } catch (e) {
+    console.error('[certificates] scheduled backfill read failed', (e as Error)?.message);
+    unavailable.scheduled_backfill = 'When the scheduled backfill last ran could not be read.';
+  }
+  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, scheduled_backfill: scheduledBackfill, unavailable });
 });
 
 app.post('/certificates/:id/revoke', async (c) => {
