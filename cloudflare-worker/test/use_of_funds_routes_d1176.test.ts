@@ -13,7 +13,7 @@ import {SECTION_KEYS} from '../src/services/useOfFunds/plan.ts';
 import {addSectionHire} from '../src/services/raiseWriters.ts';
 const secret='synthetic-d1176-test-jwt-not-a-credential';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-const migrations=['442_raise_cycle_stores.sql','463_raise_record_stores.sql','436_round_calls.sql','520_mercury_raise_feeds.sql','249_project_metrics.sql','606_use_of_funds_scenarios.sql','202611082130_uof_scenario_revision.sql','202611100935_uof_hire_revision.sql','607_raise_money_cents.sql'].map(n=>readFileSync(new URL(`../sql/migrations/${n}`,import.meta.url),'utf8'));
+const migrations=['442_raise_cycle_stores.sql','463_raise_record_stores.sql','436_round_calls.sql','520_mercury_raise_feeds.sql','249_project_metrics.sql','606_use_of_funds_scenarios.sql','202611082130_uof_scenario_revision.sql','202611101555_5375_uof_hire_revision.sql','607_raise_money_cents.sql'].map(n=>readFileSync(new URL(`../sql/migrations/${n}`,import.meta.url),'utf8'));
 const roles=['founder','founder','admin','partner','investor','advisor','exploring'];
 let savedFetch:typeof fetch;let dbs:DatabaseSync[]=[];let fetches=0;
 beforeEach(()=>{ savedFetch=globalThis.fetch;fetches=0;globalThis.fetch=async()=>{fetches++;throw new Error('Provider stub: no network');}; });
