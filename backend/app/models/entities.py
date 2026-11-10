@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, Field
 from sqlalchemy import UniqueConstraint, event, Index, text
+from pydantic import NaiveDatetime
 from typing import Optional
 from datetime import datetime, date
 from enum import Enum
@@ -165,7 +166,7 @@ class User(SQLModel, table=True):
     spinout_lab_admitted: Optional[int] = Field(default=0)
     spinout_lab_cohort: Optional[str] = None
     registration_product: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: NaiveDatetime = Field(default_factory=datetime.utcnow)
 
 
 class Deal(SQLModel, table=True):
@@ -206,7 +207,7 @@ class ActivityLog(SQLModel, table=True):
     action: str
     details: Optional[str] = None
     actor: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: NaiveDatetime = Field(default_factory=datetime.utcnow)
 
 
 class Entity(SQLModel, table=True):
@@ -1066,8 +1067,8 @@ class CompanyProfile(SQLModel, table=True):
     website: Optional[str] = None
     linkedin_url: Optional[str] = None
     description: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: NaiveDatetime = Field(default_factory=datetime.utcnow)
+    updated_at: NaiveDatetime = Field(default_factory=datetime.utcnow)
 
 
 # ===========================================================================
@@ -1300,7 +1301,7 @@ class UserCompanyLink(SQLModel, table=True):
     company_id: int = Field(foreign_key="company_profiles.id", index=True)
     role_in_company: str = Field(default="Member", index=True)  # 'Founder' | 'Admin' | 'Advisor' | 'Member'
     is_primary_admin: bool = Field(default=False, index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: NaiveDatetime = Field(default_factory=datetime.utcnow)
 
 
 class FinancialModel(SQLModel, table=True):
