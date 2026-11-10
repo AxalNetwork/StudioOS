@@ -75,6 +75,7 @@ import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { PUBLIC_PROFILE_FIELD_KEYS, effectiveFlags } from './public';
 import { effectiveCategoryDefaults, mergeCategoryPatch } from '../services/notificationPolicy';
+import { jsonWithEtag } from '../util/httpCache';
 
 const settings = new Hono<{ Bindings: Env }>();
 
@@ -1748,6 +1749,12 @@ settings.put('/profile/corporate', async (c) => {
   } catch (e) { return handleProfileError(c, e); }
 });
 
+// D5318 (#5318, H10): the appearance and explainer reads are one member's own
+// choices, keyed on the session, so `private` (no shared cache may keep them)
+// and `no-cache` (the browser asks every time and gets a 304 when nothing
+// changed), so a save in another tab or device shows on the next load.
+const MEMBER_SETTINGS_CACHE = 'private, no-cache';
+
 // --- Page header explainers (Task #15) --------------------------------------
 //
 // `dismissed_explainers` is a JSON array of pageKey strings stored on
@@ -1765,7 +1772,8 @@ settings.get('/explainers', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
   const row = await getUserSettings(c.env, user.id);
-  return c.json({ dismissed: readDismissedList(row) });
+  // D5318 (H10): one member's list, so never a shared cache; the browser revalidates every time (ETag → 304).
+  return jsonWithEtag(c, { dismissed: readDismissedList(row) }, MEMBER_SETTINGS_CACHE);
 });
 
 settings.post('/explainer-dismissed', async (c) => {
@@ -1961,7 +1969,8 @@ settings.get('/appearance', async (c) => {
   await ensureUserSettingsTable(c.env);
   const user = await requireAuth(c);
   const row = await getUserSettings(c.env, user.id);
-  return c.json(pickAppearance(row));
+  // D5318 (H10): the member's own theme, so never a shared cache; a save shows on the next read (ETag → 304).
+  return jsonWithEtag(c, pickAppearance(row), MEMBER_SETTINGS_CACHE);
 });
 settings.put('/appearance', async (c) => {
   await ensureUserSettingsTable(c.env);
