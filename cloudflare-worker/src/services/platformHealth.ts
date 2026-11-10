@@ -253,7 +253,7 @@ export async function readBranchHealth(env: Env): Promise<BranchHealth> {
   if (branchOf(env)) return { available: true, applies: false, reason: 'A branch has no branches; HQ checks them.' };
   try {
     const rows = (await env.DB.prepare(`SELECT code, status, last_health_at, last_health_ok FROM licence_deployments
-      WHERE status IN (${LIVE_BRANCH_STATES.map(() => '?').join(',')}) ORDER BY code LIMIT 500`).bind(...LIVE_BRANCH_STATES).all<BranchCheck>()).results ?? [];
+      WHERE status IN (?, ?, ?) ORDER BY code LIMIT 500`).bind(...LIVE_BRANCH_STATES).all<BranchCheck>()).results ?? [];
     return { available: true, applies: true, branches: rows };
   } catch (e) {
     if (/no such table/i.test(String((e as Error)?.message ?? e))) return { available: false, reason: 'The deployments registry is not on this database (migration 258).' };
