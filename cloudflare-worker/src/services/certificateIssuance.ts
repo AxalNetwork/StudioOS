@@ -32,7 +32,7 @@
 import type { Env } from '../types';
 import { credentialRefFor } from '../routes/spinout_certificates';
 import { branchOf } from '../util/branch';
-import { programRefusal } from './programEnforcement';
+import { programRefusal, type ProgramRefusal } from './programEnforcement';
 
 export type IssueOutcome =
   | 'issued'
@@ -285,6 +285,17 @@ export async function backfillCertificates(
  * spinout_certificate_backfill_attempts; the tick's own result replaces the
  * one row of spinout_certificate_backfill_tick. A failed candidate read
  * throws, so the cron row reads `partial` rather than "nobody waiting".
+ *
+ * D5360 (#5360) — A LOST BONUS. A graduate whose credential was issued but
+ * whose `creditLabGraduation` never ran (the isolate died between the two
+ * writes) holds a certificate, so the step above never picks them. The same
+ * tick then takes up to the same limit of graduates who hold an ISSUED
+ * credential and have no ledger grant with source ref `lab:<user>:graduation`,
+ * and pays them through `creditLabGraduation`. A revoked credential is never
+ * paid: only `status = 'issued'` counts. Each try is recorded in
+ * spinout_graduation_bonus_backfill_attempts, and one that paid nothing (not
+ * admitted, incorporation never paid) waits CERT_BACKFILL_RETRY_MS, as an
+ * unissuable certificate does.
  */
 export const CERT_BACKFILL_TICK_LIMIT = 3;
 export const CERT_BACKFILL_RETRY_MS = 6 * 60 * 60_000;
@@ -296,6 +307,8 @@ export type CertificateBackfillTick = {
   skipped: number;
   /** True when more graduates were due than this tick took. */
   more_waiting: boolean;
+  /** D5360: the lost-bonus step. Zero counts when the tick was held. */
+  bonus: { scanned: number; paid: number; skipped: number; more_waiting: boolean };
 };
 
 const sqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
@@ -311,19 +324,55 @@ async function branchSuspended(env: Env): Promise<boolean> {
   }
 }
 
+export type LabIssuanceHold = {
+  status: 'frozen' | 'not_granted' | 'grants_unreadable';
+  /** What a route answers: 423 for the freeze, the program refusal's 403 or 503 otherwise. */
+  http: 423 | 403 | 503;
+  body: Record<string, unknown>;
+};
+
+/**
+ * D5360 (#5360) — THE ONE QUESTION every path that issues a Lab credential or
+ * its bonus asks first: may this studio issue right now? The admin routes
+ * (`POST /certificates`, `POST /certificates/backfill`), the scheduled
+ * backfill, and `issueIfGraduated` (the final milestone and the progress
+ * reconciler) all call this, so they answer it the same way.
+ *
+ *   · a suspended branch (D511) holds as `frozen`;
+ *   · a licence that does not hold the Spin-Out Lab (D985) as `not_granted`;
+ *   · grants that cannot be read as `grants_unreadable`;
+ *   · HQ (no BRANCH_CODE) is never held.
+ *
+ * null means issue. A hold records nothing and issues nothing; the milestone
+ * itself is still recorded by its own path, and the scheduled backfill issues
+ * the credential and its bonus on the first tick after the hold lifts.
+ */
+export async function labIssuanceHold(env: Env, nowMs = Date.now()): Promise<LabIssuanceHold | null> {
+  if (!branchOf(env)) return null;
+  if (await branchSuspended(env)) {
+    return {
+      status: 'frozen', http: 423,
+      body: { detail: 'This studio is suspended, so no Spin-Out Lab credential is issued until HQ lifts the suspension.', code: 'branch_suspended' },
+    };
+  }
+  const refused: ProgramRefusal | null = await programRefusal(env, 'spinout-lab', sqlTime(nowMs).slice(0, 10));
+  if (!refused) return null;
+  return { status: refused.status === 503 ? 'grants_unreadable' : 'not_granted', http: refused.status, body: refused.body };
+}
+
 export async function runCertificateBackfillTick(
   env: Env, opts: { limit?: number; nowMs?: number } = {},
 ): Promise<CertificateBackfillTick> {
   const limit = Math.max(1, Math.min(10, Math.floor(Number(opts.limit ?? CERT_BACKFILL_TICK_LIMIT)) || CERT_BACKFILL_TICK_LIMIT));
   const nowMs = opts.nowMs ?? Date.now();
   const now = sqlTime(nowMs);
-  const out: CertificateBackfillTick = { status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false };
+  const out: CertificateBackfillTick = {
+    status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false,
+    bonus: { scanned: 0, paid: 0, skipped: 0, more_waiting: false },
+  };
 
-  if (await branchSuspended(env)) out.status = 'frozen';
-  else {
-    const refused = await programRefusal(env, 'spinout-lab', now.slice(0, 10));
-    if (refused) out.status = refused.status === 503 ? 'grants_unreadable' : 'not_granted';
-  }
+  const held = await labIssuanceHold(env, nowMs);
+  if (held) out.status = held.status;
 
   if (out.status === 'done') {
     const rows = await env.DB.prepare(
@@ -367,26 +416,91 @@ export async function runCertificateBackfillTick(
     }
   }
 
+  if (out.status === 'done') await payLostBonuses(env, out.bonus, limit, nowMs);
+
   await env.DB.prepare(
-    `INSERT INTO spinout_certificate_backfill_tick (id, ran_at, status, scanned, issued, skipped, more_waiting)
-     VALUES (1, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO spinout_certificate_backfill_tick
+       (id, ran_at, status, scanned, issued, skipped, more_waiting, bonus_scanned, bonus_paid, bonus_skipped, bonus_more_waiting)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET ran_at = excluded.ran_at, status = excluded.status, scanned = excluded.scanned,
-       issued = excluded.issued, skipped = excluded.skipped, more_waiting = excluded.more_waiting`,
-  ).bind(now, out.status, out.scanned, out.issued, out.skipped, out.more_waiting ? 1 : 0).run();
+       issued = excluded.issued, skipped = excluded.skipped, more_waiting = excluded.more_waiting,
+       bonus_scanned = excluded.bonus_scanned, bonus_paid = excluded.bonus_paid,
+       bonus_skipped = excluded.bonus_skipped, bonus_more_waiting = excluded.bonus_more_waiting`,
+  ).bind(
+    now, out.status, out.scanned, out.issued, out.skipped, out.more_waiting ? 1 : 0,
+    out.bonus.scanned, out.bonus.paid, out.bonus.skipped, out.bonus.more_waiting ? 1 : 0,
+  ).run();
   return out;
+}
+
+/**
+ * D5360 — the lost-bonus step of the tick. Graduates holding an ISSUED
+ * credential with no `lab:<user>:graduation` grant, untried first, at most
+ * `limit` (read as limit + 1 to answer "more are due"). Throws when the
+ * candidate read fails, as the certificate step does.
+ */
+async function payLostBonuses(
+  env: Env, tally: CertificateBackfillTick['bonus'], limit: number, nowMs: number,
+): Promise<void> {
+  const now = sqlTime(nowMs);
+  const rows = await env.DB.prepare(
+    `SELECT c.user_id
+       FROM spinout_certificates c
+       LEFT JOIN spinout_graduation_bonus_backfill_attempts a ON a.user_id = c.user_id
+      WHERE c.status = 'issued'
+        AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger g
+                         WHERE g.user_id = c.user_id AND g.kind = 'grant'
+                           AND g.source_ref = 'lab:' || c.user_id || ':graduation')
+        AND (a.user_id IS NULL OR a.last_attempt_at <= ?)
+      ORDER BY (a.user_id IS NOT NULL), a.last_attempt_at, c.user_id
+      LIMIT ?`,
+  ).bind(sqlTime(nowMs - CERT_BACKFILL_RETRY_MS), limit + 1).all<{ user_id: number }>();
+  const ids = (rows.results || []).map((r) => Number(r.user_id));
+  tally.more_waiting = ids.length > limit;
+  if (!ids.length) return;
+  const { creditLabGraduation } = await import('./labMilestoneCredits');
+  for (const id of ids.slice(0, limit)) {
+    tally.scanned += 1;
+    const b = await creditLabGraduation(env, id);
+    const paid = b.status === 'granted';
+    if (paid) tally.paid += 1; else tally.skipped += 1;
+    const outcome = b.status === 'skipped' ? `skipped:${b.reason}` : String(b.status);
+    try {
+      await env.DB.prepare(
+        `INSERT INTO spinout_graduation_bonus_backfill_attempts
+           (user_id, attempts, last_outcome, first_attempt_at, last_attempt_at, paid_at)
+         VALUES (?, 1, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           attempts = attempts + 1,
+           last_outcome = excluded.last_outcome,
+           last_attempt_at = excluded.last_attempt_at,
+           paid_at = COALESCE(spinout_graduation_bonus_backfill_attempts.paid_at, excluded.paid_at)`,
+      ).bind(id, outcome, now, now, paid ? now : null).run();
+    } catch (e) {
+      console.error('[certificates] bonus backfill attempt not recorded', id, (e as Error)?.message);
+    }
+  }
 }
 
 export type CertificateBackfillState = {
   /** null: no tick has been recorded. That is "not recorded", never "nothing issued". */
-  last_tick: (CertificateBackfillTick & { ran_at: string }) | null;
+  last_tick: (Omit<CertificateBackfillTick, 'bonus'> & {
+    ran_at: string;
+    /** D5360: null on a tick recorded before the bonus step existed. */
+    bonus: CertificateBackfillTick['bonus'] | null;
+  }) | null;
   /** Graduates the scheduled backfill tried and could not issue, by their last outcome. */
   not_issued: Record<string, number>;
+  /** D5360: credential holders whose bonus the scheduled backfill tried and could not pay, by their last outcome. */
+  bonus_not_paid: Record<string, number>;
 };
 
 /** What the scheduled backfill last did. Throws when it cannot be read; the caller says "unreadable". */
 export async function readCertificateBackfillState(env: Env): Promise<CertificateBackfillState> {
   const t = await env.DB.prepare(
-    `SELECT ran_at, status, scanned, issued, skipped, more_waiting FROM spinout_certificate_backfill_tick WHERE id = 1`,
+    `SELECT ran_at, status, scanned, issued, skipped, more_waiting,
+            bonus_scanned, bonus_paid, bonus_skipped, bonus_more_waiting
+       FROM spinout_certificate_backfill_tick WHERE id = 1`,
   ).first<any>();
   const waiting = await env.DB.prepare(
     `SELECT a.last_outcome, COUNT(*) AS n
@@ -394,13 +508,29 @@ export async function readCertificateBackfillState(env: Env): Promise<Certificat
       WHERE NOT EXISTS (SELECT 1 FROM spinout_certificates c WHERE c.user_id = a.user_id)
       GROUP BY a.last_outcome`,
   ).all<{ last_outcome: string; n: number }>();
+  const unpaid = await env.DB.prepare(
+    `SELECT a.last_outcome, COUNT(*) AS n
+       FROM spinout_graduation_bonus_backfill_attempts a
+      WHERE EXISTS (SELECT 1 FROM spinout_certificates c WHERE c.user_id = a.user_id AND c.status = 'issued')
+        AND NOT EXISTS (SELECT 1 FROM perk_credit_ledger g
+                         WHERE g.user_id = a.user_id AND g.kind = 'grant'
+                           AND g.source_ref = 'lab:' || a.user_id || ':graduation')
+      GROUP BY a.last_outcome`,
+  ).all<{ last_outcome: string; n: number }>();
   const not_issued: Record<string, number> = {};
   for (const r of waiting.results || []) not_issued[String(r.last_outcome)] = Number(r.n);
+  const bonus_not_paid: Record<string, number> = {};
+  for (const r of unpaid.results || []) bonus_not_paid[String(r.last_outcome)] = Number(r.n);
   return {
     last_tick: t ? {
       ran_at: String(t.ran_at), status: t.status, scanned: Number(t.scanned), issued: Number(t.issued),
       skipped: Number(t.skipped), more_waiting: Number(t.more_waiting) === 1,
+      bonus: t.bonus_scanned == null ? null : {
+        scanned: Number(t.bonus_scanned), paid: Number(t.bonus_paid ?? 0), skipped: Number(t.bonus_skipped ?? 0),
+        more_waiting: Number(t.bonus_more_waiting) === 1,
+      },
     } : null,
     not_issued,
+    bonus_not_paid,
   };
 }
