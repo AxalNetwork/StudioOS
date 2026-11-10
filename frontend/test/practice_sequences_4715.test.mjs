@@ -57,8 +57,9 @@ const deferred = () => { let resolve; const promise = new Promise((r) => { resol
 test('5. period switch before the response returns: the old period’s late answers do not land on the new one', async () => {
   const { default: EarningsZone } = await import('../src/pages/advisor/practice/EarningsZone.jsx');
   const now = new Date();
-  const thisQ = periodWindow('this_quarter', now);
-  const lastQ = periodWindow('last_quarter', now);
+  // #4834 (D4834): Practice v2 opens on this month; the switch is to last month.
+  const thisQ = periodWindow('this_month', now);
+  const lastQ = periodWindow('last_month', now);
   const held = { [thisQ.key]: deferred() };
   const note = (key, body) => ({ note: { body, source: 'advisor', period_key: key, updated_at: '2026-10-01T00:00:00Z' } });
   const m = await mount(EarningsZone, async (c) => {
@@ -74,8 +75,8 @@ test('5. period switch before the response returns: the old period’s late answ
     return json({});
   });
   try {
-    // This quarter's note is still in flight; the reader moves to last quarter.
-    await m.press(lastQ.label);
+    // This month's note is still in flight; the reader moves to last month.
+    await m.press('Last month');
     assert.match(m.text(), new RegExp(`Synthetic note for ${lastQ.key}`));
     // Now the old period's answer arrives.
     held[thisQ.key].resolve();

@@ -3,7 +3,8 @@
  * value never carries a line break (`headerSafe` refuses one before a message
  * is built), non-ASCII header text is an RFC 2047 encoded word, and the body is
  * base64 in UTF-8, so no line of it can end the SMTP DATA early. D4493: an
- * attachment makes it multipart/mixed, each part base64 the same way.
+ * attachment makes it multipart/mixed, each part base64 the same way. D5333:
+ * a sequence step's opt-out URL becomes the RFC 8058 List-Unsubscribe pair.
  */
 import type { Outgoing } from './types';
 
@@ -45,6 +46,10 @@ export function buildMime(msg: Outgoing, messageId: string, date = new Date()): 
     `Message-ID: <${messageId}>`,
     'MIME-Version: 1.0',
   ];
+  // D5333: RFC 8058 one-click unsubscribe, only for an https URL that can sit in a header.
+  if (msg.listUnsubscribe && /^https:\/\/[^\s<>]{1,900}$/.test(msg.listUnsubscribe) && headerSafe(msg.listUnsubscribe)) {
+    head.push(`List-Unsubscribe: <${msg.listUnsubscribe}>`, 'List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+  }
   if (!msg.attachments?.length) return [...head, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', body].join('\r\n');
   const boundary = `axal-${crypto.randomUUID().replace(/-/g, '')}`;
   const parts = msg.attachments.map((a) => [
