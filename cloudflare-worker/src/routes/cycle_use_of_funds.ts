@@ -75,7 +75,7 @@ const queryRevision=(c:any)=>{const v=c.req.query('expected_revision');return v!
 r.delete('/milestones/:id',async c=>c.json(await saveMilestone(c.env,c.get('uof'),idOf(c.req.param('id')),queryRevision(c),true)));
 r.get('/hires',async c=>c.json({items:(await hires(c.env,c.get('uof'))).map(h=>({...h,source:'Typed'}))}));
 r.patch('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),await body(c))));
-r.delete('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),{},true)));
+r.delete('/hires/:id',async c=>c.json(await saveHire(c.env,c.get('uof'),idOf(c.req.param('id')),queryRevision(c),true)));
 r.put('/',async c=>c.json(await saveSplit(c.env,c.get('uof'),await body(c),true)));
 /** D1177 (#3104): the plan's history (UF15), newest first, 20 a page. Mercury rows are the founder's alone. */
 r.get('/history',async c=>{

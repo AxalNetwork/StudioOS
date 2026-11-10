@@ -82,6 +82,19 @@ test('D1151: authentication and canonical deal ownership precede every section',
   } finally { f.db.close(); }
 });
 
+test('D5307: holding the partner licence does not change the NDA rule on the founder’s own venture', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("INSERT INTO account_licences (user_id, licence, source) VALUES (2, 'partner', 'test')");
+    for (const section of ['team', 'market', 'traction']) {
+      const own = await read(f, `/100/${section}`, 2);
+      const other = await read(f, `/200/${section}`, 2);
+      assert.deepEqual([own.status, own.body.masked], [200, false]);
+      assert.deepEqual([other.status, other.body.masked], [200, true]);
+    }
+  } finally { f.db.close(); }
+});
+
 test('D1151: missing, expired, malformed and wrong-pair NDAs reveal only the public mask', async () => {
   const f=fixture();
   try {
