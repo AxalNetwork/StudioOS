@@ -137,16 +137,17 @@ async function jwtFor(userId: number, jti: string | null): Promise<string> {
 }
 
 async function req(
-  env: any, method: string, path: string, body?: Record<string, unknown>, as = HQ, jti: string | null = 'totp-1',
+  env: any, method: string, path: string, body: Record<string, unknown>, as = HQ, jti: string | null = 'totp-1',
 ): Promise<{ status: number; body: any }> {
-  const headers: Record<string, string> = { Authorization: `Bearer ${await jwtFor(as, jti)}` };
-  if (body) headers['content-type'] = 'application/json';
+  // Every call here is a POST with a JSON body (CodeQL #7080: the optional body
+  // copied from the D262 harness was never absent in this file).
+  const headers: Record<string, string> = { Authorization: `Bearer ${await jwtFor(as, jti)}`, 'content-type': 'application/json' };
   const silence = ['info', 'warn', 'error', 'log'].map((k) => mock.method(console, k as any, () => {}));
   try {
     const waits: Promise<unknown>[] = [];
     const ctx: any = { waitUntil: (p: Promise<unknown>) => waits.push(p), passThroughOnException() {} };
     const res = await worker.fetch(
-      new Request(`https://axal.vc${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }),
+      new Request(`https://axal.vc${path}`, { method, headers, body: JSON.stringify(body) }),
       env, ctx,
     );
     await Promise.allSettled(waits);
