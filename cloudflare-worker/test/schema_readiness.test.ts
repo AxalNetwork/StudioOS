@@ -39,7 +39,17 @@ function makeRecorder(opts: { throwOnExec?: boolean } = {}) {
         statements.push(sql);
         return { count: 1, duration: 0 };
       },
-      prepare() { throw new Error('unused'); },
+      // #5343: `ensureXSchema`'s column goes through `runSchemaBootstrap`, which reads
+      // `pragma_table_info` and runs the ALTER through prepare(). An empty read is
+      // "could not tell", so the ALTER runs and is recorded like any statement.
+      prepare(sql: string) {
+        const st = {
+          bind: () => st,
+          all: async () => { if (opts.throwOnExec) throw new Error('cold'); return { results: [] }; },
+          run: async () => { if (opts.throwOnExec) throw new Error('cold'); if (!/pragma_table_info/i.test(sql)) statements.push(sql); return { success: true }; },
+        };
+        return st;
+      },
       batch() { throw new Error('unused'); },
       dump() { throw new Error('unused'); },
     },
