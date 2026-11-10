@@ -722,10 +722,27 @@ test('1: each declared action runs its handler, writes its store and logs one ro
   assert.deepEqual({ ...(db.prepare(`SELECT category_key, role, start_month FROM use_of_funds_hires WHERE project_id = ${P}`).get() as any) },
     { category_key: 'product', role: 'Senior engineer', start_month: '2027-01' });
   assert.equal(count(db, `SELECT annual_cents AS n FROM use_of_funds_hires WHERE project_id = ${P}`), 15_000_000);
-  await ok('use-of-funds', 'product', 'edit-split', {
+  // D5375: the drawer serves the Base revision it was read at as the action's `body`; the client sends it back with the form.
+  const splitAction = (await rec(db, 'use-of-funds', 'product')).body.actions.find((a: any) => a.key === 'edit-split');
+  assert.ok(Number.isSafeInteger(splitAction.body?.expected_revision), 'Edit split serves the revision it was read at');
+  const splitForm = {
     amount_to_raise_cents: '150000000', runway_months: '18',
     'pct.product': '40', 'pct.go-to-market': '40', 'pct.reserve': '20', 'milestone_label.product': 'Launch v3', 'milestone_by.product': '2027-06',
-  });
+  };
+  const projectRow = () => JSON.stringify(db.prepare(`SELECT funding_needed, use_of_funds, use_of_funds_meta FROM projects WHERE id = ${P}`).get());
+  const untouched = projectRow();
+  const noRevision = await act(db, 'use-of-funds', 'product', 'edit-split', splitForm);
+  assert.deepEqual([noRevision.status, noRevision.body.code], [400, 'expected_revision_required'], 'a save that names no revision is refused');
+  assert.equal(projectRow(), untouched, 'and writes nothing');
+  await ok('use-of-funds', 'product', 'edit-split', { ...splitForm, ...splitAction.body });
+  // Another drawer, opened before that save, saves the old revision: 409, nothing of it written.
+  const before = projectRow();
+  const logsBefore = count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE project_id = ${P}`);
+  const stale = await act(db, 'use-of-funds', 'product', 'edit-split', { ...splitForm, 'pct.product': '30', 'pct.go-to-market': '50', ...splitAction.body });
+  assert.deepEqual([stale.status, stale.body.code, stale.body.current_revision], [409, 'changed_since_open', splitAction.body.expected_revision + 1]);
+  assert.match(stale.body.detail, /changed somewhere else/);
+  assert.equal(projectRow(), before, 'a stale split writes no line');
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE project_id = ${P}`), logsBefore, 'and no audit row');
   const p = db.prepare(`SELECT funding_needed, use_of_funds, use_of_funds_meta FROM projects WHERE id = ${P}`).get() as any;
   assert.equal(p.funding_needed, 1_500_000);
   assert.deepEqual(JSON.parse(p.use_of_funds).map((x: any) => x.pct), [40, 40, 0, 0, 20]);

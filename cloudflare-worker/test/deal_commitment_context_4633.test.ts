@@ -81,19 +81,17 @@ async function read(db: InstanceType<typeof DatabaseSync>, user: number, company
 }
 const shape = (rows: any[]) => rows.map((r) => [r.uid, r.company_id, r.company_name, r.in_context, r.legacy]);
 
-test('two firms on one deal: each selected firm reads its own commitment, named, and the legacy row apart', async () => {
+test('D5355 two firms: each selected firm reads only its own commitment; a no-firm row is not borrowed', async () => {
   const db = freshDb();
   const alder = await read(db, IVO, ALDER);
   assert.equal(alder.status, 200, JSON.stringify(alder.body));
   assert.deepEqual(shape(alder.body), [
     ['c-alder', ALDER, 'Alder Ventures', true, false],
-    ['c-legacy', null, null, false, true],
-  ], 'Birch\'s commitment is not Alder\'s to see or act on');
+  ], 'neither Birch nor a no-firm commitment is Alder\'s to see or act on');
   assert.ok(alder.body.every((r: any) => r.firm_context === ALDER));
   const birch = await read(db, IVO, BIRCH);
   assert.deepEqual(shape(birch.body), [
     ['c-birch', BIRCH, 'Birch Capital', true, false],
-    ['c-legacy', null, null, false, true],
   ]);
 });
 
