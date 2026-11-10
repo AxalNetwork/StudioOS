@@ -33,7 +33,7 @@ export async function ensureAxalFitSchema(env: Env): Promise<void> {
       "CREATE INDEX IF NOT EXISTS idx_axal_fit_reports_user ON axal_fit_reports (user_id, created_at)",
     );
     await env.DB.exec(
-      "CREATE TABLE IF NOT EXISTS admin_consultation_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, admin_id INTEGER REFERENCES users(id), requested_at TEXT NOT NULL DEFAULT (datetime('now')), slot_at TEXT, status TEXT NOT NULL DEFAULT 'requested', topic TEXT, notes TEXT, report_id INTEGER REFERENCES axal_fit_reports(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      "CREATE TABLE IF NOT EXISTS admin_consultation_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL DEFAULT (lower(hex(randomblob(16)))), user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, admin_id INTEGER REFERENCES users(id), requested_at TEXT NOT NULL DEFAULT (datetime('now')), slot_at TEXT, status TEXT NOT NULL DEFAULT 'requested', topic TEXT, notes TEXT, report_id INTEGER REFERENCES axal_fit_reports(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1))",
     );
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_consultation_bookings_user ON admin_consultation_bookings (user_id, created_at)",
