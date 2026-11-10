@@ -166,6 +166,10 @@ test('HQ library reads 180 skills in a fixed number of queries and keeps the det
   const db = w.env.DB;
   let reads = 0;
   w.env.DB = { ...db, prepare: (query: string) => { reads++; return db.prepare(query); } };
+  // D5058: the first request on a binding learns once that this fixture has no shared `licences` table, so the
+  // count starts after it.
+  assert.equal((await call(w, SUPER, 'GET', HQ)).status, 200);
+  reads = 0;
   const small = await call(w, SUPER, 'GET', HQ);
   assert.equal(small.status, 200, small.text);
   const smallReads = reads;
