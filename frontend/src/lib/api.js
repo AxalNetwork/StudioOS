@@ -2365,18 +2365,19 @@ export const api = {
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
-  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id, client_secret }),
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   // Task #3 — Rotate the secret in place (client_id stays the same).
-  adminRotateIntegrationKeys: (provider, client_secret) =>
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
       method: 'POST',
-      body: JSON.stringify({ client_secret }),
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
