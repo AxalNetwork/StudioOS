@@ -463,6 +463,12 @@ jobs:
           DATABASE_URL: sqlite:///./ci-smoke.db
         run: |
           python -c "import importlib; importlib.import_module('backend.app.main'); print('ok')"
+      - name: Company API contract tests
+        env:
+          DATABASE_URL: sqlite:///./ci-company-tests.db
+        run: |
+          python3 -m unittest backend/tests/test_company_fields_d4962.py
+          python3 -m unittest backend/tests/test_company_routes_d5367.py
 
   # -------------------------------------------------------------------------
   # Epic 11 — supply-chain audits. Both run with `|| true` semantics
