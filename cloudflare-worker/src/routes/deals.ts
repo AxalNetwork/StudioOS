@@ -1026,11 +1026,11 @@ deals.get('/:id/documents', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user, audience } = ctx;
+  const { sql, deal, user } = ctx;
   if (!deal.project_id) { await sql.end(); return c.json([]); }
   // D4631: the venture's document list is behind the venture's NDA, as its team, market and traction sections are.
   // The platform admin and the venture's own founder are exempt; an investor without an active NDA is told why, not given [].
-  if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
+  if (!ndaExempt(user, deal.project_founder_id) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
     await sql.end();
     return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
   }
