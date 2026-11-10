@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { deckPublishApi } from '../../../lib/api/deckPublish.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { TABS, tabHref } from '../caprel/capRelModel';
 import { EXEMPTION_NOT_RECORDED, exemptionLabel } from '../caprel/capRelTabsModel';
 
@@ -72,7 +73,7 @@ export function roundLine(value) {
   return `${r.name || 'Unnamed round'} · ${r.exemption ? exemptionLabel(r.exemption) : EXEMPTION_NOT_RECORDED}`;
 }
 
-const failureOf = (e) => e?.data?.message || e?.data?.detail || (typeof e?.data?.error === 'string' && !/^[a-z_]+$/.test(e.data.error) ? e.data.error : null) || 'It could not be saved. Try again.';
+const failureOf = (e) => userFacingRaiseError(e, { fallback: 'It could not be saved. Try again.', scope: 'raise:pitch:publish' });
 
 export default function PublishPanel({ deck, made }) {
   const [read, setRead] = useState({ status: 'loading', value: null });

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { Lightbox } from '../../../ui';
 import {
   NOTES_EMPTY, NOTES_EYEBROW, NOTE_MAX, NOTE_PLACEHOLDER_ADMIN, NOTE_PLACEHOLDER_FOUNDER,
@@ -129,7 +130,7 @@ function Composer({ deckId, slideCount, viewer, onPosted }) {
       onPosted();
     } catch (e) {
       reportError('pitch-studio:post-note', e);
-      setFailed(e?.message || 'The note could not be posted. Try again.');
+      setFailed(userFacingRaiseError(e, { fallback: 'The note could not be posted. Try again.', scope: 'raise:pitch:notes' }));
     } finally {
       setBusy(false);
     }

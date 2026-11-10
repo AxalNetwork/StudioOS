@@ -6,6 +6,7 @@ import {
   ACCEPT_AND_OPEN, NDA_GATE_TITLE, NDA_UNREADABLE, SIGN_IN_TO_ACCEPT, closedCard, figureChips, frozenLine,
 } from './shareModel';
 import { VOICE_LABEL, sharedVoice } from './voiceModel';
+import { ndaFailure } from './pitchSafeErrors.js';
 
 /**
  * D902 (#2681) — the parts of the investor's viewer (PD20, PD22) that a link's
@@ -56,7 +57,7 @@ export function NdaGate({ token, gate, onAccepted }) {
       onAccepted?.();
     } catch (e) {
       reportError('NdaGate:accept', e);
-      setFailed(e?.data?.error || e?.data?.detail || e?.message || 'The NDA could not be recorded. Try again.');
+      setFailed(ndaFailure(e));
     } finally { setBusy(false); }
   };
 
@@ -113,7 +114,7 @@ export function EmailGate({ token, gate, onPassed }) {
       onPassed?.();
     } catch (err) {
       reportError('EmailGate:submit', err);
-      setFailed(err?.data?.message || err?.data?.error || 'Your email could not be recorded. Try again.');
+      setFailed(userFacingRaiseError(err, { fallback: 'Your email could not be recorded. Try again.', scope: 'raise:pitch:share-email' }));
     } finally { setBusy(false); }
   };
   return (

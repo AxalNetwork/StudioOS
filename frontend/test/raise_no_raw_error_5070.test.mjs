@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIRS = ['pages/raise/caprel', 'pages/raise/narrative', 'pages/raise/dataroom', 'pages/raise/captable', 'pages/raise/useoffunds', 'pages/cycles/evidence'];
+const DIRS = ['pages/raise/caprel', 'pages/raise/narrative', 'pages/raise/dataroom', 'pages/raise/captable', 'pages/raise/useoffunds', 'pages/raise/pitch', 'pages/cycles/evidence'];
 const TOP = ['pages/raise/AdvisorGrantSection.jsx', 'pages/raise/RoundClosesPanel.jsx', 'pages/raise/SupportReadsCard.jsx'];
 const RAW = /\b(?:e|err|error)\??\.(?:message|detail)\b|\.data\??\.(?:message|detail)\b/;
 // A line may read a raw field only to test it with `isSentence` first (the Worker-refusal contract).
