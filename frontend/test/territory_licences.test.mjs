@@ -146,7 +146,7 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   const s = licencePageSource();
   // D4694: the conversion moved into the form's pure module (lib/licenceCoreTermsForm.js) with the dirty-field logic.
   const form = readFileSync(resolve(root, 'frontend/src/lib/licenceCoreTermsForm.js'), 'utf8');
-  assert.match(form, /Math\.round\(n\.value \* 100\)/, 'entered units → integer cents');
+  assert.match(form, /parseMinor\(String\(form\[k\]\)/, 'entered units → integer minor units of the licence\'s own currency (D5373)');
   // D4819: the page's Terms section builds its save in its model, beside the page.
   const model = readFileSync(resolve(root, 'frontend/src/pages/admin/licenceTermsAmendModel.js'), 'utf8');
   assert.match(model, /buildCoreSave\(/, 'the page saves through it');

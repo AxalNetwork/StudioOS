@@ -1460,7 +1460,7 @@ advisors.post('/:uid/book', async (c) => {
 // to the shared booking DTO or the founder's client brief.
 async function requireRosterClient(c: Context<{ Bindings: Env }>) {
   const user = await requireAuth(c);
-  if (!holdsLicence(user, 'advisor')) throw c.json({ detail: 'Advisor required' }, 403);
+  if (!holdsLicence(user, 'advisor')) throw refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
   const advisor = await requireMyAdvisor(c, user);
   if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
   const clientId = Number(c.req.param('clientId'));
@@ -1896,7 +1896,7 @@ advisors.get('/me/booking-links', async (c) => {
 advisors.get('/me/visibility', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     const m = await requireMyAdvisor(c, user);
     return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days'), Date.now(), { limit: c.req.query('limit'), offset: c.req.query('offset') }));
   } catch (e) { return mapError(c, e); }
@@ -1905,7 +1905,7 @@ advisors.get('/me/visibility', async (c) => {
 advisors.get('/me/access-log', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
       `SELECT l.action, l.created_at, p.uid AS project_uid, p.name AS client,
@@ -1923,7 +1923,7 @@ advisors.get('/me/access-log', async (c) => {
 advisors.patch('/me/booking-links/:id', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
     if (typeof body.is_active !== 'boolean') return c.json({ detail: 'is_active must be a boolean' }, 400);

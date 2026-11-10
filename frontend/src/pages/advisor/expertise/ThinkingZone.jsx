@@ -7,7 +7,7 @@ import { usePagedList } from './pages';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
-import { articleStage, revisionLine } from './expertiseModel';
+import { articleStage, articleStateLabel, revisionLine } from './expertiseModel';
 
 /**
  * D4681 (#4681): one piece's saved revisions (D1406's author read), opened on
@@ -104,7 +104,11 @@ export default function ThinkingZone() {
         className="mb-3"
         role="advisor"
         filters={advisorZoneFilters('expertise/thinking', { value: view, onChange: setView })}
-        actions={advisorZoneActions('expertise/thinking', { view: { header: ['Title', 'Subtitle', 'Sector', 'Status', 'Published', 'Words', 'Read minutes', 'Opens here'], rows: shown, cells: (a) => [a.title, a.subtitle, a.sector, a.status, a.published_at, a.word_count, a.read_minutes, a.views] } })}
+        // D4826 (#4826): the Status column carries the shelf's own words
+        // (`articleStateLabel`), not the stored column value — an export is the
+        // one artefact a writer takes away, and it named six states in the
+        // store's language.
+        actions={advisorZoneActions('expertise/thinking', { view: { header: ['Title', 'Subtitle', 'Sector', 'Status', 'Published', 'Words', 'Read minutes', 'Opens here'], rows: shown, cells: (a) => [a.title, a.subtitle, a.sector, articleStateLabel(a), a.published_at, a.word_count, a.read_minutes, a.views] } })}
       />
       <ZoneBody
         loading={state.loading}
@@ -148,7 +152,9 @@ export default function ThinkingZone() {
           )}
           <ul className="divide-y divide-axal-hairline">
             {shown.map((a) => { const stage = articleStage(a); return (
-              <li key={a.id} className="flex items-start justify-between gap-4 py-2.5" data-testid={`advisor-thinking-${a.id}`} data-stage={stage.key}>
+              // D4826 (#4826): the row stacks below `sm`, so a long title no
+              // longer squeezes the state pill and the figures off a phone.
+              <li key={a.id} className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4" data-testid={`advisor-thinking-${a.id}`} data-stage={stage.key}>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <Pill tone={stage.tone}>{stage.label}</Pill>
@@ -172,7 +178,7 @@ export default function ThinkingZone() {
                   </div>
                   {history === a.id ? <History id={a.id} /> : null}
                 </div>
-                <div className="shrink-0 text-right text-[11px] tabular-nums text-axal-faint">
+                <div className="shrink-0 text-left text-[11px] tabular-nums text-axal-faint sm:text-right">
                   {/* A draft has no views because nobody can open it, so it shows
                       no open figure at all. A published piece whose counter did
                       not come back is absent, never a typed zero (D392). */}

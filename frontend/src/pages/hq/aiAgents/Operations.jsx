@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import CohortCard from "./CohortCard.jsx";
 import PolicyControls from "./PolicyControls.jsx";
 import { policyRefusal } from "./refusals.js";
+import { provenanceRows } from "./provenanceModel.js";
 import { adminAiAgentsApi as api } from "../../../lib/api/adminAiAgents";
 const missing = "Not recorded";
 const money = (v) => (v == null ? missing : `$${(v / 1e6).toFixed(2)}`);
@@ -203,6 +204,7 @@ export function Runs() {
 }
 function RunDetail({ uid, close }) {
   const state = useRead(() => api.run(uid), uid);
+  const [open, setOpen] = useState(false);
   return (
     <section className={box}>
       <button onClick={close}>Close run</button>
@@ -219,7 +221,32 @@ function RunDetail({ uid, close }) {
           </>
         )}
       </Reading>
+      <details data-testid="run-provenance" onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="min-h-11 cursor-pointer">Provenance</summary>
+        {open && <RunProvenance uid={uid} />}
+      </details>
     </section>
+  );
+}
+/** #5346 (D4575): the run's lineage, read only when opened; "Not recorded" with its reason, never 0. */
+function RunProvenance({ uid }) {
+  const state = useRead(() => api.runProvenance(uid), uid);
+  return (
+    <Reading state={state}>
+      {(d) => (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+          {provenanceRows(d?.provenance).map((row) => (
+            <React.Fragment key={row.label}>
+              <dt className="font-semibold">{row.label}</dt>
+              <dd className="m-0 break-words">
+                {row.value}
+                {row.why ? <span className="text-axal-muted dark:text-gray-400"> ({row.why})</span> : null}
+              </dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      )}
+    </Reading>
   );
 }
 export function Spend() {

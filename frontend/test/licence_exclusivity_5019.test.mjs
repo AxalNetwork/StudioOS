@@ -50,12 +50,12 @@ test('a save names the revision it read, a reason, and only the targets filled i
       { year: 2, period_start: '', period_end: '', min_revenue: '', min_cohorts: '', min_active_members: '' },
     ],
   };
-  assert.ok(buildSave({ form, revision: 2 }).errors.reason);
-  const ok = buildSave({ form: { ...form, reason: 'Split the US market' }, revision: 2 });
+  assert.ok(buildSave({ form, revision: 2, currency: 'EUR' }).errors.reason);
+  const ok = buildSave({ form: { ...form, reason: 'Split the US market' }, revision: 2, currency: 'EUR' });
   assert.equal(ok.body.expected_revision, 2);
   assert.deepEqual(ok.body.territory, { countries: [], regions: ['US-CA', 'US-NYC'] });
   assert.deepEqual(ok.body.targets, [{ year: 1, period_start: '2027-01-01', period_end: '2027-12-31', min_revenue_cents: 10_000_000, min_cohorts: 2, min_active_members: null, min_network: null }]);
-  assert.ok(buildSave({ form: { ...form, regions: '', reason: 'x y z' }, revision: 2 }).errors.regions);
+  assert.ok(buildSave({ form: { ...form, regions: '', reason: 'x y z' }, revision: 2, currency: 'EUR' }).errors.regions);
   const master = buildSave({ form: { scope_type: 'master_franchise', countries: 'BE', children: 'lic_B, lic_C', reason: 'Benelux master', targets: [] }, revision: 0 });
   assert.deepEqual(master.body.child_licence_uids, ['lic_B', 'lic_C'], 'licence ids keep their case');
 });

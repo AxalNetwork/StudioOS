@@ -148,7 +148,7 @@ adminConsultations.post('/:id/status', async (c) => {
       `INSERT INTO admin_consultation_booking_events (booking_id, from_status, to_status, version, actor_user_id)
        SELECT id, ?, ?, version, ? FROM admin_consultation_bookings
        WHERE id = ? AND version = ? AND status = ?
-       ON CONFLICT(booking_id, version) DO NOTHING`,
+       ON CONFLICT DO NOTHING`,
     ).bind(from, status, admin.id, id, nextVersion, status),
   ]);
 

@@ -25,6 +25,7 @@
  */
 import { bpsPercent } from './bps';
 import { titleCase } from './absence';
+import { formatMinor, parseMinor, toMajorString } from './money';
 
 /* ------------------------------------------------------------------ *
  * The routes' vocabularies
@@ -172,7 +173,7 @@ export function currencyOf(value) {
 }
 
 /**
- * Cents as an amount in its own currency's symbol, or null. The code itself is
+ * Minor units as an amount in its own currency's symbol, at that currency's decimals (D5373), or null. The code itself is
  * printed beside it by the page, so "$" is never the only mark of what the
  * money is. With no currency the amount is a bare number and the page says
  * the currency is not recorded.
@@ -180,16 +181,9 @@ export function currencyOf(value) {
 export function formatMoney(cents, currency) {
   const n = centsOf(cents);
   if (n === null) return null;
-  const code = currencyOf(currency);
-  const amount = n / 100;
-  if (code) {
-    try {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(amount);
-    } catch {
-      // A code Intl does not know: the number, and the page prints the code.
-    }
-  }
-  return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // D5373: at the currency's own decimals (¥1,235, KWD 1.235). A code that is not a listed currency has no known
+  // decimals, so the stored count is shown as a count; the page prints the code beside it and says it is not recorded.
+  return formatMinor(n, currencyOf(currency), { locale: 'en-US' }) ?? `${n.toLocaleString('en-US')} minor units`;
 }
 
 /**
@@ -665,7 +659,7 @@ export function ruleDraftOf(rule) {
   const description = String(rule?.description ?? '');
   const active = ruleActive(rule);
   if (amount?.kind === 'percentage') return { kind: 'percentage', value: String(centsOf(rule.percentage_bps) / 100), description, active };
-  return { kind: 'fixed', value: amount ? (centsOf(rule.amount_cents) / 100).toFixed(2) : '', description, active };
+  return { kind: 'fixed', value: amount ? toMajorString(centsOf(rule.amount_cents), TABLE_DEFAULT_CURRENCY) : '', description, active };
 }
 
 const DECIMAL = /^\d+(\.\d{1,2})?$/;
@@ -689,7 +683,8 @@ export function ruleEditInput(draft) {
     pays = { amount_cents: null, percentage_bps: bps };
   } else {
     if (!DECIMAL.test(raw)) return { error: `Enter the amount in ${TABLE_DEFAULT_CURRENCY}, such as 50 or 49.50.` };
-    const cents = Math.round(Number(raw) * 100);
+    const parsed = parseMinor(raw, TABLE_DEFAULT_CURRENCY);
+    const cents = parsed.ok ? parsed.minor : 0;
     if (cents <= 0) return { error: 'Enter an amount above zero. To stop the rule paying, switch it off.' };
     if (cents > RULE_LIMITS.amountMaxCents) {
       return { error: `The highest flat amount the route accepts is ${formatMoney(RULE_LIMITS.amountMaxCents, TABLE_DEFAULT_CURRENCY)}.` };

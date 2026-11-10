@@ -12,6 +12,7 @@
  */
 import type { Env } from '../types';
 import type { ModuleSlug } from './cycleValidate';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export const str = (v: unknown, max: number): string | null => {
   if (typeof v !== 'string') return null;
@@ -249,7 +250,7 @@ export function amountWord(p: Record<string, unknown>): string | null {
   const cents = posInt(p.amount_cents);
   if (!cents) return null;
   const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
-  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+  return `${suffixAmount(cents, String(p.currency || 'usd').toUpperCase(), { trimWhole: true })}${period}`;
 }
 
 /**
