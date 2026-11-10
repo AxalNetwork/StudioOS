@@ -451,7 +451,9 @@ export function GroupedColumns({ rows, series, height = 220 }) {
 export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
   const [ref, W] = useBoxWidth();
   const LW = W < 420 ? 118 : 196;
-  const RW = 40;
+  // Room after the longest bar for the longest total ("104 waiting"), so no total runs off the edge.
+  const RW = Math.max(40, 12 + 6.5 * Math.max(0, ...rows.map((r) => String(r.total ?? nf(r.parts.reduce((t, p) => t + p.value, 0))).length)));
+  const fits = Math.floor((LW - 12) / 6);
   const rh = 28;
   const H = rows.length * rh + 4;
   const bw = Math.max(40, W - LW - RW);
@@ -465,7 +467,9 @@ export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
           const sum = r.parts.reduce((t, p) => t + p.value, 0);
           return (
             <g key={r.key}>
-              <text x={LW - 8} y={y + 13} textAnchor="end" className={`${INK} font-display text-[11px]`}>{r.label}</text>
+              <text x={LW - 8} y={y + 13} textAnchor="end" className={`${INK} font-display text-[11px]`}>
+                {r.label.length > fits ? <><title>{r.label}</title>{`${r.label.slice(0, fits - 1)}…`}</> : r.label}
+              </text>
               {r.parts.map((p) => {
                 if (!(p.value > 0)) return null;
                 const w = Math.max(3, (bw * p.value) / max);

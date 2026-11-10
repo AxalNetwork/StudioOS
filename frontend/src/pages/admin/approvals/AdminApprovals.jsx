@@ -22,7 +22,7 @@ import {
   itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
-import { FOOT, PhoneBack } from './boardParts';
+import { FOOT, PhoneBack, usePopoverPlace } from './boardParts';
 import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -139,11 +139,17 @@ function DoorFor({ lane }) {
  */
 function DressedDoor({ lane, before, after, className, plain, testId }) {
   const dest = reviewDestination(lane);
+  const box = useRef(null);
+  // The link's own text is the lane alone; its name is the whole control ("Open in KYC & KYB").
+  useEffect(() => {
+    const a = box.current?.querySelector?.('a');
+    if (a && before) a.setAttribute('aria-label', `${before}${a.textContent}`);
+  }, [before, lane]);
   if (/no review page yet|not built yet|^its own page$/.test(dest)) return <span className={plain} data-testid={testId}>{dest}</span>;
   return (
-    <span data-testid={testId}
+    <span ref={box} data-testid={testId}
       className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
-      {before}<DoorFor lane={lane} />{after}
+      <span>{before}<DoorFor lane={lane} />{after}</span>
     </span>
   );
 }
@@ -236,6 +242,7 @@ function RowActions({ row, onAssign, onCopy }) {
   const trigger = useRef(null);
   const popId = `approvals-pop-${row.lane}-${row.id}`;
   const close = (refocus) => { setOpen(false); if (refocus) trigger.current?.focus?.(); };
+  const place = usePopoverPlace(trigger, open, 140);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
@@ -250,8 +257,8 @@ function RowActions({ row, onAssign, onCopy }) {
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={popId} aria-label={`More actions for ${row.who}`} onClick={() => setOpen((o) => !o)}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
       {open ? (
-        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
-          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(false); onAssign([row]); }}>Assign…</button>
+        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
+          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
           <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
@@ -339,13 +346,14 @@ function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
   const ready = v.state === 'ready';
   const row = ready ? [{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }] : null;
   const mine = ready && v.assignee.kind === 'person' && canTake && Number(v.assignee.id) === Number(canTake);
+  const STEP_BOX = 'inline-flex h-11 w-11 items-center justify-center rounded-[7px] border border-axal-hairline bg-white text-[13px] font-bold text-axal-ink hover:bg-gray-50 sm:h-8 sm:w-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
   const stepper = step ? (
     <div className="flex items-center gap-1.5" data-testid="approvals-item-step">
       <span className={`${SUB} ${MONO}`} data-testid="approvals-item-pos">{step.pos}</span>
-      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={BTN_SM} data-testid="approvals-item-prev">‹</Link>
-        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>‹</span>}
-      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={BTN_SM} data-testid="approvals-item-next">›</Link>
-        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>›</span>}
+      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={STEP_BOX} data-testid="approvals-item-prev">‹</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>‹</span>}
+      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={STEP_BOX} data-testid="approvals-item-next">›</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>›</span>}
     </div>
   ) : null;
   return (
@@ -449,7 +457,7 @@ function RowCard({ row, search, onMore, onAssign }) {
   return (
     <li className="flex flex-col gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[44px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
         <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what} · {row.laneLabel}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
@@ -680,7 +688,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
         <StripCell label="Waiting" testId="approvals-strip-waiting" t={strip.waiting} />
         <StripCell label="Overdue" testId="approvals-strip-overdue" t={strip.overdue} tone={strip.overdue.n > 0 ? 'bad' : null} />
         <StripCell label="Unassigned" testId="approvals-strip-unassigned" t={strip.unassigned} tone={strip.unassigned.n > 0 ? 'warn' : null}>
-          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
+          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
         </StripCell>
         <StripCell label="Oldest" testId="approvals-strip-oldest" t={strip.oldest} />
       </section>
@@ -743,7 +751,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
               <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
                 {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
                 {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
-                {' '}<button type="button" className="underline" onClick={inbox.reload}>Try again</button>
+                {' '}<button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] underline" onClick={inbox.reload}>Try again</button>
               </p>
             ) : null}
             {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
@@ -1099,7 +1107,7 @@ function Decided({ decided, superAdmin }) {
         </div>
         {!reply ? <div className="px-3 py-3"><Skeleton.Table rows={6} cols={6} /></div>
           : rows.length ? (
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[900px]">
                 <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
                   <th scope="col" className={TH}>Decided ↓</th><th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Outcome</th><th scope="col" className={TH}>Decided by</th><th scope="col" className={`${TH} text-right`}>Wait</th><th scope="col" className={TH}>Note</th><th scope="col" className={TH}><span className="sr-only">Open</span></th>

@@ -73,6 +73,7 @@
 // D1612 A1 (#3951), read by Team › Skills since #4224:
 //   GET  /api/teams/skills?company=<uid>          → { roles, hq: [SkillCard], company: { uid, name, skills, can_write } | null, can_write_hq }
 //   GET  /api/teams/skills/:uid                   → { skill: SkillCard + { skill_md }, versions, agents }
+//                                                   (D4533: versions[].release_note, null when none was written)
 // `:scope` is 'company' (its uid) or 'project' (its id). A person is { uid, name },
 // never an email. `month_spend` is { available: false } when it cannot be read:
 // the page says "Not recorded", never 0.
@@ -126,7 +127,8 @@ export const teamAgentsApi = {
   // `POST /teams/skills/:uid/publish`; there is no import route, an import is `POST /teams/skills` with `skill_md`.
   createSkill: (body) => request('/teams/skills', { method: 'POST', body: JSON.stringify(body) }),
   updateSkill: (uid, patch) => request(`/teams/skills/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  publishSkill: (uid) => request(`/teams/skills/${enc(uid)}/publish`, { method: 'POST', body: '{}' }),
+  // D4533 (B1): an optional release note, kept on the version (400 release_note_invalid | release_note_too_long).
+  publishSkill: (uid, { releaseNote } = {}) => request(`/teams/skills/${enc(uid)}/publish`, { method: 'POST', body: JSON.stringify(releaseNote ? { release_note: releaseNote } : {}) }),
   // D1612 A2 (#3956): an agent's skills, assigning a skill, team coverage.
   agentSkills: (uid) => request(`/teams/agents/${enc(uid)}/skills`),
   setAgentSkills: (uid, skills) => request(`/teams/agents/${enc(uid)}/skills`, { method: 'PUT', body: JSON.stringify({ skills }) }),

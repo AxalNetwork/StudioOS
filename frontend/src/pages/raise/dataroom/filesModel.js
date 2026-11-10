@@ -360,7 +360,7 @@ export function requestsNeed(read) {
     ? { state: 'open', text: `${n} wait${open === 1 ? 's' : ''} for your answer`, sub: 'Share the room or decline, on Requests.' }
     : { state: 'open', text: `${n} open`, sub: 'The venture’s owner answers them. You can read them on Requests.' };
 }
-export const ACTIVITY_WAIT = 'The last ninety days need the activity read (part 4, D1105). The last fifty events and this week’s counts are on Activity.';
+export const ACTIVITY_NOTE = 'Daily opens, downloads and blocked requests, the last fifty events, and this week’s counts are on Activity.';
 
 /** Who has access: every grant in force, with its end, NDA and folders. */
 export function accessRows(room, now = Date.now()) {

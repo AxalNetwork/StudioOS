@@ -684,6 +684,19 @@ calendar.post('/ic-meetings/:id/rsvp', safe('ic_rsvp', 'Could not record RSVP', 
   return c.json({ ok: true, rsvp });
 }));
 
+/**
+ * #4570 — who may learn that an IC meeting exists: an admin, its organiser,
+ * or someone invited to it (the people `GET /ic-meetings` shows it to). Anyone
+ * else is answered as for a missing id, as the RSVP is, so a sequential id
+ * tells them nothing. An invitee who may see it but not cancel or move it
+ * still gets the organiser-or-admin refusal.
+ */
+async function icVisibleTo(env: Env, user: User, m: { id: number; organizer_user_id: number }): Promise<boolean> {
+  if (isAdmin(lc(user.role)) || m.organizer_user_id === user.id) return true;
+  const sql = getSQL(env);
+  return !!(await sql`SELECT 1 FROM ic_meeting_attendees WHERE meeting_id = ${m.id} AND user_id = ${user.id}` as any[])[0];
+}
+
 calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeting', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'), 10);
@@ -691,7 +704,7 @@ calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeti
   const reason = (url.searchParams.get('reason') || '').trim().slice(0, 240) || null;
   const sql = getSQL(c.env);
   const m = (await sql`SELECT id, organizer_user_id FROM ic_meetings WHERE id = ${id}` as any[])[0];
-  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!m || !(await icVisibleTo(c.env, user, m))) return c.json({ detail: 'IC meeting not found' }, 404);
   if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
     return c.json({ detail: 'Only the organiser or an admin can cancel' }, 403);
   }
@@ -721,7 +734,7 @@ calendar.patch('/ic-meetings/:id', safe('ic_reschedule', 'Could not reschedule I
   const body = await c.req.json().catch(() => ({}));
   const sql = getSQL(c.env);
   const m = (await sql`SELECT id, organizer_user_id, status, duration_min FROM ic_meetings WHERE id = ${id}` as any[])[0];
-  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!m || !(await icVisibleTo(c.env, user, m))) return c.json({ detail: 'IC meeting not found' }, 404);
   if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
     return c.json({ detail: 'Only the organiser or an admin can reschedule' }, 403);
   }
@@ -901,9 +914,10 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
   const row = (await sql`
     SELECT founder_user_id, counterpart_user_id FROM founder_checkins WHERE id = ${id}
   ` as any[])[0];
-  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
-  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
-    return c.json({ detail: 'Only attendees or admin can cancel' }, 403);
+  // #4570: only its two people and an admin may act on a check-in, and
+  // anyone else is answered as for a missing id.
+  if (!row || !(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Check-in not found' }, 404);
   }
   const nowIso = new Date().toISOString();
   await sql`
@@ -931,9 +945,10 @@ calendar.patch('/founder-checkins/:id', safe('ck_reschedule', 'Could not resched
   const row = (await sql`
     SELECT founder_user_id, counterpart_user_id, status, duration_min FROM founder_checkins WHERE id = ${id}
   ` as any[])[0];
-  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
-  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
-    return c.json({ detail: 'Only attendees or admin can reschedule' }, 403);
+  // #4570: only its two people and an admin may act on a check-in, and
+  // anyone else is answered as for a missing id.
+  if (!row || !(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Check-in not found' }, 404);
   }
   if (row.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled check-in cannot be moved.' }, 409);
   const next = rescheduleOf(body, Number(row.duration_min), 10, 240);
@@ -2236,8 +2251,8 @@ calendar.patch('/events/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
     .bind(id).first<{ id: number; user_id: number }>();
-  if (!row) return c.json({ detail: 'Event not found' }, 404);
-  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // #4570: a manual row is its owner's alone; anyone else but an admin is answered as for a missing id.
+  if (!row || (row.user_id !== user.id && user.role !== 'admin')) return c.json({ detail: 'Event not found' }, 404);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const fields: string[] = [];
   const vals: (string | null)[] = [];
@@ -2260,8 +2275,8 @@ calendar.delete('/events/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
     .bind(id).first<{ id: number; user_id: number }>();
-  if (!row) return c.json({ detail: 'Event not found' }, 404);
-  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // #4570: a manual row is its owner's alone; anyone else but an admin is answered as for a missing id.
+  if (!row || (row.user_id !== user.id && user.role !== 'admin')) return c.json({ detail: 'Event not found' }, 404);
   await c.env.DB.prepare('DELETE FROM calendar_events WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });

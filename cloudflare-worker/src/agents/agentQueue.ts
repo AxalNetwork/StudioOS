@@ -104,6 +104,7 @@ export async function repairExhaustedRun(env: Env, uid: string): Promise<Repair>
     if (failed && run.status === 'admitted') throw failed;
   }
   if (run.status !== 'failed' || run.refusal !== 'queue_exhausted') return 'settled';
+  await untrackEnded(env, run);
   const newer = await env.DB.prepare(
     `SELECT 1 AS n FROM agent_task_runs
       WHERE task_id = ? AND id <> ? AND (attempt > ? OR status IN ('admitted', 'running', 'waiting_decision')) LIMIT 1`,
@@ -116,6 +117,19 @@ export async function repairExhaustedRun(env: Env, uid: string): Promise<Repair>
   // Still in_progress after a move that changed nothing: a race we cannot read the end of. Try again.
   if (task?.status === 'in_progress') throw failedMove ?? new Error('task_reopen_unconfirmed');
   return 'settled';
+}
+
+/**
+ * D4594 §4 (#4594, for #4593): the repair ends the run in D1; this tells the scope's object too, so its
+ * live view (the status socket) stops listing it. Best effort and never throws: admission is decided by
+ * D1, so a missed track costs only a stale row until the next rebuild, and it must not fail the repair.
+ */
+async function untrackEnded(env: Env, run: NonNullable<Awaited<ReturnType<typeof runByUid>>>): Promise<void> {
+  try {
+    const agent = await env.DB.prepare('SELECT * FROM team_agents WHERE id = ?').bind(run.agent_id).first<AgentRow>();
+    if (!agent) return;
+    await (await import('./doRuntime')).trackRun(env, scopeOfRow(agent), run);
+  } catch { console.warn('[agent-dlq] untrack_failed'); }
 }
 
 /** Low-cardinality repair telemetry: an outcome code and a number, never a run, task, tenant or payload. */

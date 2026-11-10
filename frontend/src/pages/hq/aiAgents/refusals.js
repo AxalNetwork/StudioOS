@@ -54,6 +54,8 @@ export const SKILL_REFUSALS = {
   replacement_invalid: 'The replacement must be a different, published Axal skill.',
   retire_conflict: 'This skill was retired just now. Reload it.',
   publish_conflict: 'This skill was published by someone else just now. Reload it and try again.',
+  release_note_invalid: 'A release note is text.',
+  release_note_too_long: 'Keep the release note to 2000 characters.',
   needs_approval: 'A second Super Admin must approve this draft before it is published.',
   golden_cases_failing: (d) => (Number.isFinite(d?.pass) && Number.isFinite(d?.total)
     ? `The golden cases pass ${d.pass} of ${d.total}, below the bar. Fix the skill or its cases, then re-run the evals.`

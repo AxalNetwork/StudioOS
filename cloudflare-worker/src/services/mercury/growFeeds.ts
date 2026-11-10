@@ -39,6 +39,7 @@ import { addMonths, bucketMonths, cashNow, monthOf, runwayFrom, RUNWAY_FULL_MONT
 import { LEDGER_CURRENCY, mercuryCreditToEntry, namesStripe, verificationFor } from '../revenueLedger';
 import { raiseReceiptIds } from '../mercuryPersonal';
 import { isVentureFounder } from '../ventureFounder';
+import { isTeamViewer } from './teamViewer';
 import { recomputeRevenueMovements } from '../revenueMovements';
 import { MERCURY_INSERT } from '../../routes/revenue';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
@@ -609,19 +610,8 @@ export async function landGrow(env: Env, integrationId: number, p: GrowProject, 
 
 // ═════════════════════════════════════════════════════════════ the reads
 
-/**
- * Whether the viewer is on the founder's company: its founder, or a member
- * linked to its company. Nobody else — an admin, a partner, an advisor, an
- * investor — sees a Mercury figure, whatever they may read of the venture.
- */
-export async function isTeamViewer(env: Env, viewer: { id: number; founder_id?: number | null }, projectId: number): Promise<boolean> {
-  const p = await env.DB.prepare('SELECT founder_id, company_id FROM projects WHERE id = ?').bind(projectId)
-    .first<{ founder_id: number | null; company_id: number | null }>();
-  if (!p) return false;
-  if (p.founder_id != null && viewer.founder_id != null && Number(viewer.founder_id) === Number(p.founder_id)) return true;
-  if (p.company_id == null) return false;
-  return !!(await env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, viewer.id).first());
-}
+/** Who sees a founder's Mercury figures: `teamViewer.ts`, re-exported for this file's callers. */
+export { isTeamViewer };
 
 /** Whether the viewer is the venture's founder, whose Mercury it is: only they decide what it proposes. */
 export { isVentureFounder };
