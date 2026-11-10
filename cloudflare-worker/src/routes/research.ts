@@ -49,6 +49,7 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
@@ -472,6 +473,14 @@ interface AskAnswerRow {
   cached: number; cost_micro_usd: number; saved: number; discarded?: number; use_note?: string | null; created_at: string;
 }
 
+/** The stored citations JSON as an array; a malformed value is no citations. */
+function storedCitations(raw: string | null | undefined): Array<{ n?: number | null }> {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x === 'object') : [];
+  } catch { return []; }
+}
+
 const answerDto = (r: AskAnswerRow) => ({
   uid: r.uid,
   question: r.question,
@@ -482,12 +491,11 @@ const answerDto = (r: AskAnswerRow) => ({
   // Stored as text, returned as the array the page renders. A malformed value
   // degrades to no citations rather than failing the whole thread — the answer
   // is still worth reading, and an exception here would take the session with it.
-  citations: ((): unknown[] => {
-    try {
-      const parsed = JSON.parse(r.citations || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  })(),
+  // D4613: each citation says whether the answer cites it, so retrieved
+  // context and cited support are told apart on every read, old rows included.
+  citations: markCited(r.answer, storedCitations(r.citations)),
+  // D4613: the answer's bracketed references checked against its own sources.
+  reference_check: referenceCheck(r.answer, storedCitations(r.citations)),
   model: r.model,
   prompt_tokens: r.prompt_tokens,
   completion_tokens: r.completion_tokens,
@@ -946,7 +954,9 @@ research.post('/ask', async (c) => {
     question,
     answer,
     reason: 'answered',
-    citations,
+    // D4613: the same marking and check the history read applies.
+    citations: markCited(answer, citations),
+    reference_check: referenceCheck(answer, citations),
     score_floor: SCORE_FLOOR,
     session_uid: session.uid,
     answer_uid,
@@ -1502,13 +1512,12 @@ const DRAFT_SURFACES: Record<string, {
       ).bind(session.id, userId).all<{ question: string; answer: string | null; reason: string; citations: string }>();
       return (rows.results || []).map((r) => {
         if (r.reason !== 'answered') return `Q: ${r.question}\nA: (no retrievable source — unanswered)`;
-        let cites = '';
-        try {
-          const list = JSON.parse(r.citations || '[]');
-          if (Array.isArray(list) && list.length) {
-            cites = `\nSources: ${list.map((x: any) => `[${x.n}] ${x.title}`).join(', ')}`;
-          }
-        } catch { /* a malformed citation list costs the brief its sources, not its answer */ }
+        // D4613: only the sources the answer actually cites carry through as
+        // its sources; a passage it was given and never cited is not support.
+        // A malformed citation list costs the brief its sources, not its answer.
+        const list = markCited(r.answer, storedCitations(r.citations) as Array<{ n?: number | null; title?: string; cited?: boolean }>);
+        const cited = list.filter((x) => x.cited);
+        const cites = cited.length ? `\nSources: ${cited.map((x) => `[${x.n}] ${x.title}`).join(', ')}` : '';
         return `Q: ${r.question}\nA: ${r.answer}${cites}`;
       });
     },
@@ -3845,13 +3854,15 @@ research.delete('/drafts/:uid', async (c) => {
 const FUND_STAGE_FIT = new Set(['right', 'wrong']);
 const FUND_PATH = new Set(['warm', 'cold']);
 const FUND_STATUS = new Set(['researching', 'passed']);
+/** D4613: a fund-directory uid, as the directory writes them. */
+const CATALOGUE_UID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 interface FundRow {
   id: number; uid: string; owner_user_id: number; project_id: number | null;
   name: string; cheque_min_cents: number | null; cheque_max_cents: number | null;
   stage_fit: string | null; path: string | null; status: string;
   pass_reason: string | null; thesis: string | null; note: string | null;
-  source_url: string | null; created_at: string; updated_at: string;
+  source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
 }
 
 const fundDto = (r: FundRow) => ({
@@ -3870,6 +3881,8 @@ const fundDto = (r: FundRow) => ({
   thesis: r.thesis,
   note: r.note,
   source_url: r.source_url,
+  // D4613: the fund-directory row this came from; null for a hand-written fund.
+  catalogue_uid: r.catalogue_uid ?? null,
   created_at: r.created_at,
   // The dossier's "Last updated" tile. Every write to the row stamps it —
   // PATCH, and a brief accepted into the note.
@@ -4075,25 +4088,41 @@ research.post('/funds', async (c) => {
   const body = await c.req.json<any>().catch(() => ({}));
   const name = clampText(body.name, 200);
   if (!name) return c.json({ detail: 'A fund needs a name' }, 400);
+  // D4613: an add from the fund directory names the directory row it came
+  // from. Checked against a fixed character set before it reaches SQL (bound
+  // there regardless), and absent for a fund typed in by hand.
+  const rawCatalogue = body.catalogue_uid;
+  const catalogueUid = rawCatalogue == null || rawCatalogue === '' ? null : String(rawCatalogue);
+  if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
+    return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+  }
   const uid = newUid();
   const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_funds
+  // D4613: INSERT OR IGNORE against the partial unique index on (owner,
+  // catalogue_uid). A repeat of the same catalogue add — a double click, or a
+  // retry after a lost response — writes nothing and answers with the row the
+  // first one wrote. A hand-written fund (NULL catalogue_uid) never collides.
+  const write = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_funds
        (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
-        stage_fit, path, status, pass_reason, thesis, note, source_url, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, clampInt(body.project_id), name,
     clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
     oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
     oneOf(body.status, FUND_STATUS) || 'researching',
     clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
-    clampText(body.note, 2000), clampText(body.source_url, 500), now, now,
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
   ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow), 201);
+  const created = Number(write.meta?.changes ?? 1) > 0;
+  const row = created
+    ? await c.env.DB.prepare(`SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`).bind(uid, user.id).first<FundRow>()
+    : await c.env.DB.prepare(`SELECT * FROM research_funds WHERE owner_user_id = ? AND catalogue_uid = ?`).bind(user.id, catalogueUid).first<FundRow>();
+  if (!row) return c.json({ detail: 'The fund did not save' }, 500);
+  // 201 for the row this request wrote, 200 for the one an earlier request
+  // wrote. `existing` says which, so the page can say "already on My funds".
+  return c.json({ ...fundDto(row), existing: !created }, created ? 201 : 200);
 });
 
 // ---------------------------------------------------------------------------

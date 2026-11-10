@@ -4987,6 +4987,12 @@ export const api = {
   // freeze at 'promised' exactly as `investor_introductions`'s does.
   portfolioSupportUpdate: (uid, data) =>
     request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D4642 (#4642): the entry's amendment history — one row per accepted
+  // amendment, with the revision it produced and who made it. The desk needs
+  // it because `recorded_by` only says who created the entry: an amendment by
+  // a second member was otherwise unattributable from the page.
+  portfolioSupportHistory: (uid) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}/history`),
   positionMarkCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>

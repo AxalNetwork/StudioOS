@@ -228,7 +228,9 @@ r.get('/items', async (c) => {
   const keys = new Map(((await c.env.DB.prepare(`SELECT uid, r2_key FROM learning_items WHERE video_source = 'r2' AND r2_key IS NOT NULL`)
     .all<{ uid: string; r2_key: string }>()).results ?? []).map((r) => [r.uid, r.r2_key]));
   const copies = await copyStates(c.env, items.map((i: any) => ({ uid: i.uid, video_source: i.video_source, r2_key: keys.get(i.uid) ?? null })));
-  return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: copies.get(i.uid) ?? { state: 'none' } } : i)) });
+  // D4649: `copies === null` is a copy table that could not be read: each uploaded file says so (`unreadable`),
+  // and the Studio offers no Copy to Stream and counts no banner from it.
+  return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: copies === null ? { state: 'unreadable' } : copies.get(i.uid) ?? { state: 'none' } } : i)) });
 });
 
 r.post('/items', async (c) => {

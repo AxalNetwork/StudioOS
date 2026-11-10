@@ -65,28 +65,66 @@ async function attendeeUserIds(env: Env, ev: CalendarEvent): Promise<number[]> {
 }
 
 /**
- * D1485 (#3979): "Copy new Axal sessions to…". A provider the member's
- * `copy_target` leaves out gets no new copy, and is not even asked for a token;
- * a copy it already holds keeps being updated. An unreadable setting is the
- * default, 'all', which is today's behaviour.
+ * Why one provider was, or was not, given this session. Nothing here names the session, the member or the
+ * provider's answer: an outcome is a fixed word, so it is safe to return, record and log (D5201, #5201).
+ *
+ *   selected               the member's `copy_target` names this provider (or 'all')
+ *   existing_copy          the member's setting leaves it out, but this session already has a copy here
+ *   not_selected           the member's setting leaves it out, and there is no copy to update
+ *   preference_unreadable  the setting could not be read: no NEW copy is made
+ *   disconnected           the member has no token for this provider
+ *   connection_refused     the saved connection would not refresh
+ *   write_refused          the provider did not accept the write
+ *   copied                 the copy was made or updated
  */
-async function copyAllowed(env: Env, userId: number, ev: CalendarEvent, provider: 'google' | 'microsoft'): Promise<boolean> {
-  let target: CopyTarget = 'all';
-  try { target = await readCopyTarget(env, userId); } catch { /* no settings store yet: the default */ }
-  if (target === 'all' || target === provider) return true;
-  const held = await env.DB.prepare(
-    'SELECT 1 AS held FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
-  ).bind(userId, provider, ev.kind, ev.source_id).first<{ held: number }>();
-  return Boolean(held);
+export type CopyOutcome =
+  | 'copied' | 'existing_copy' | 'not_selected' | 'preference_unreadable'
+  | 'disconnected' | 'connection_refused' | 'write_refused';
+
+/** What one create hook did, per member and provider: outcomes only, never a title, an address or a body. */
+export type SyncReport = Array<{ userId: number; provider: 'google' | 'microsoft'; outcome: CopyOutcome }>;
+
+/**
+ * D1485 (#3979): "Copy new Axal sessions to…". A provider the member's `copy_target` leaves out gets no new
+ * copy, and is not even asked for a token; a copy it already holds keeps being updated.
+ *
+ * D5201 (#5201): AN UNREADABLE SETTING MAKES NO NEW COPY. It used to read as 'all', so a store that could not
+ * be read for a moment turned an explicit "None" into a copy on every connected provider — a write to someone
+ * else's calendar that the member had refused. The wrong direction to fail for an external write, so the
+ * unreadable case is now exactly the case with no copy of its own: nothing new is created. A copy that already
+ * exists keeps being updated, as it does for a provider the setting leaves out: it was authorised when it was
+ * made, and leaving it stale is its own kind of wrong. The stored preference is never rewritten.
+ */
+async function copyDecision(env: Env, userId: number, ev: CalendarEvent, provider: 'google' | 'microsoft'):
+Promise<{ copy: boolean; outcome: CopyOutcome | null }> {
+  let target: CopyTarget | null = null;
+  try {
+    target = await readCopyTarget(env, userId);
+  } catch {
+    // Unreadable, which is not 'all' and not a reason to write to a provider. Logged by outcome alone.
+    console.warn('[calendar/sync] copy preference unreadable', { provider, outcome: 'preference_unreadable' });
+  }
+  if (target !== null && (target === 'all' || target === provider)) return { copy: true, outcome: null };
+  let held = false;
+  try {
+    held = Boolean(await env.DB.prepare(
+      'SELECT 1 AS held FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
+    ).bind(userId, provider, ev.kind, ev.source_id).first<{ held: number }>());
+  } catch {
+    // The copies cannot be read either: make nothing new.
+    return { copy: false, outcome: target === null ? 'preference_unreadable' : 'not_selected' };
+  }
+  if (held) return { copy: true, outcome: 'existing_copy' };
+  return { copy: false, outcome: target === null ? 'preference_unreadable' : 'not_selected' };
 }
 
 async function pushOneUserOneProvider(
   env: Env, userId: number, ev: CalendarEvent,
   provider: 'google' | 'microsoft',
-): Promise<void> {
+): Promise<CopyOutcome> {
   const tokTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
   const tok = await loadRefreshToken(env, tokTable, userId);
-  if (!tok) return; // user not connected to this provider — no-op
+  if (!tok) return 'disconnected'; // user not connected to this provider — no-op
   let accessToken: string;
   try {
     accessToken = provider === 'google'
@@ -96,7 +134,7 @@ async function pushOneUserOneProvider(
     console.warn('[calendar/sync] refresh failed', { provider, user: userId });
     // D1209: the refusal stays on the status read, so a reload still shows it.
     await recordSyncError(env, userId, provider, 'connection_refused');
-    return;
+    return 'connection_refused';
   }
   if (tok.wasPlaintext) await reencryptRefreshToken(env, tokTable, userId, tok.raw);
   // A refresh that worked proves the connection, not that every copy was made.
@@ -111,7 +149,7 @@ async function pushOneUserOneProvider(
   const externalId = provider === 'google'
     ? await pushEventToGoogle(accessToken, ev, existing?.external_event_id || null)
     : await pushEventToMicrosoft(accessToken, ev, existing?.external_event_id || null);
-  if (!externalId) { await recordSyncError(env, userId, provider, 'copy_refused'); return; }
+  if (!externalId) { await recordSyncError(env, userId, provider, 'copy_refused'); return 'write_refused'; }
 
   const nowIso = new Date().toISOString();
   if (existing) {
@@ -138,20 +176,32 @@ async function pushOneUserOneProvider(
       `;
     }
   }
+  return 'copied';
 }
 
 /**
  * Push an Axal session to every connected attendee's external calendar.
  * Idempotent — re-running updates the same external event via PATCH.
  */
-export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise<void> {
+export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise<SyncReport> {
+  const report: SyncReport = [];
   try {
     const userIds = await attendeeUserIds(env, ev);
-    if (userIds.length === 0) return;
+    if (userIds.length === 0) return report;
     const googleOn = googleOAuthAvailable(env);
     const msOn = microsoftOAuthAvailable(env);
     const push = async (uid: number, provider: 'google' | 'microsoft') => {
-      if (await copyAllowed(env, uid, ev, provider)) await pushOneUserOneProvider(env, uid, ev, provider);
+      const decided = await copyDecision(env, uid, ev, provider);
+      if (!decided.copy) {
+        // D5201: an unreadable preference is recorded against a provider the member has connected, so support
+        // and the status read can tell "the member chose not to copy" from "we could not tell". The UPDATE
+        // touches no row for a provider that was never connected, so a refusal there records nothing.
+        if (decided.outcome === 'preference_unreadable') await recordSyncError(env, uid, provider, 'copy_preference_unreadable');
+        report.push({ userId: uid, provider, outcome: decided.outcome! });
+        return;
+      }
+      const outcome = await pushOneUserOneProvider(env, uid, ev, provider);
+      report.push({ userId: uid, provider, outcome: decided.outcome === 'existing_copy' && outcome === 'copied' ? 'existing_copy' : outcome });
     };
     await Promise.all(userIds.flatMap(uid => [
       googleOn ? push(uid, 'google') : Promise.resolve(),
@@ -160,6 +210,7 @@ export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise
   } catch (e) {
     console.warn('[calendar/sync] onAxalSessionCreated failed', e);
   }
+  return report;
 }
 
 export const onAxalSessionUpdated = onAxalSessionCreated;

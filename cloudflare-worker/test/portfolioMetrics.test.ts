@@ -135,7 +135,13 @@ test('computeFundMetrics reports a total write-off honestly', () => {
   assert.equal(m.tvpi, 0, 'no value left → TVPI 0, not null');
   assert.equal(m.dpi, 0);
   assert.equal(m.nav, 0);
-  assert.equal(m.irr, null, 'no inflow at all → no solvable rate');
+  // D4644 (#4644) changed this line. It used to assert `irr === null`, which a
+  // reader cannot tell from "nothing is recorded yet" — the one answer a
+  // write-off must never give. Capital deployed and nothing back is -100%.
+  assert.equal(m.irr, -1, 'deployed and nothing back is a total loss, not an absent rate');
+  assert.equal(m.returns.irr.state, 'total_loss');
+  assert.equal(m.returns.irr.reason, null, 'a total loss is an answer, so it carries no unavailable reason');
+  assert.equal(m.returns.tvpi.state, 'computed', 'zero over positive paid-in is a recorded zero');
 });
 
 test('computeFundMetrics ignores malformed and non-positive flows', () => {

@@ -131,15 +131,16 @@ test('D393: the four calendar chips narrow the stream by kind', () => {
   assert.deepEqual(ids('client'), ['slot:7']);
   assert.deepEqual(ids('demo_day'), ['demo']);
   const src = read('frontend/src/pages/advisor/cohorts/CalendarZone.jsx');
-  assert.match(src, /downloadIcs\(calendarIcs\(shown\)/, 'the export takes the narrowed rows');
-  assert.match(src, /\{shown\.map\(\(it\) =>/, 'the list draws the narrowed rows');
+  // D4813 p3: the export takes the rows of the view on screen, with the cohort so each UID is scoped to it.
+  assert.match(src, /downloadIcs\(calendarIcs\(shown, ws\.cycleId\)/, 'the export takes the narrowed rows');
+  assert.match(src, /const visible = filterByTypes\(all, types\)/, 'the views draw the narrowed rows');
 });
 
 test('D393: the export is a real calendar, and a Lab date is a point in time, not a meeting', () => {
-  const ics = calendarIcs(ITEMS);
+  const ics = calendarIcs(ITEMS, 12);
   assert.match(ics, /^BEGIN:VCALENDAR\r\nVERSION:2\.0\r\nPRODID:-\/\/Axal\/\/Cohort Calendar\/\/EN/);
   assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 3);
-  const opens = ics.slice(ics.indexOf('UID:week:2:unlock'), ics.indexOf('END:VEVENT'));
+  const opens = ics.slice(ics.indexOf('UID:cohort-12-week-2-unlock'), ics.indexOf('END:VEVENT'));
   assert.match(opens, /DTSTART:20260928T090000Z/);
   assert.doesNotMatch(opens, /DTEND/, 'no end is invented for a week opening');
   assert.match(ics, /DTEND:20260929T150000Z/, 'a session keeps its real end');

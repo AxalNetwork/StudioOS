@@ -144,6 +144,10 @@ const NETWORK_ZONES = [
  */
 const RESEARCH_ZONES = {
   founder: [
+    // D5157 (#5157): My Research, the Research Projects, first after the
+    // Overview as the Research v2 canvas orders it. Its routes are in
+    // `routes/researchProjects.jsx`.
+    { slug: 'projects', label: 'My Research', archetype: A.COLLECTION },
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
     { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
