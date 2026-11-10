@@ -31,6 +31,7 @@ export function versionMarkers(document, version, latestVersion) {
   const out = [];
   if (document?.executed_version === version.version) out.push('In force');
   if (version.version === latestVersion) out.push('Latest');
+  if (version.counsel_approved === true) out.push('Approved');
   if (version.signed) out.push('Signed copy');
   return out;
 }
