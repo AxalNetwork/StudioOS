@@ -71,7 +71,7 @@ and citations by number keep working.
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
 | `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
-| `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |
+| `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
 | `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
 | `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |
 | `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
