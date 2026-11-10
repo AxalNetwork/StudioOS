@@ -14,6 +14,7 @@ The founder's Capital relationships tool at `/raise/capital-relationships` (D118
 | `CapRelActivity.jsx` | D1193 (CRL12): every logged change across investors, the round and its closes, with who, when and its source; Export saves the rows on screen. |
 | `CapRelProposals.jsx` | D1193 (CRL11): Eadwyn's proposals from a note, each beside its words, accepted, edited or dismissed by a person. |
 | `capRelTabsModel.js` | D1193: pure rules for Match, Outreach, Commitments, the proposals and Activity. |
+| `capRelUrlFilters.js` | D5377 (#5377): each tab's filters, sort and page in the address — the allowed values, defaults kept out, the page reset on a filter change, cleared on a venture switch — and `useTabFilters`, which Match, Activity, Commitments and Pipeline's Passed column read through. |
 
 ## Where the tool lives
 

@@ -161,9 +161,13 @@ export const EXPLAINERS = {
   // `calendar.readonly` scope in services/calendar.ts is reserved for. Naming
   // sources that do not exist on the one page whose design rule is not doing
   // that was the worst place in the product for it.
+  // CORRECTED AGAIN 2026-11-10 (D5205, #5205). "One agenda, six sources" named six while the page read
+  // thirty-two, and "events you keep there are not read back in" stopped being true with D1485, which reads a
+  // connected Google or Outlook calendar onto the page. It names no sources now: the rail lists them, from the
+  // Worker's registry, so this sentence cannot fall behind it again.
   calendar: {
-    title: 'One agenda, six sources',
-    body: 'IC meetings, founder check-ins, advisor and expert sessions, partner office hours, and Calendly bookings, in one list. Connect Google or Outlook to copy them out to your own calendar — events you keep there are not read back in.',
+    title: 'One agenda for everything dated',
+    body: 'Dated work from across your modules, and the events in a Google or Outlook calendar you connect, in one list. Show, hide and colour each source; copy one event out to your own calendar, or subscribe with .ics.',
     docPath: 'account/notifications',
   },
   wellbeing: {

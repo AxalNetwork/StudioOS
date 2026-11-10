@@ -4,7 +4,8 @@
  *
  * THE RULES, in order; the first that finds something answers:
  *   1. `continue_course`: the course the member most recently worked on and
- *      has not completed, with its next required lesson not yet complete.
+ *      has not completed, with the lesson Continue learning resumes (D5356:
+ *      the last started lesson, else the first required one not complete).
  *      Reason: "<n> of <m> required lessons complete."
  *   2. `program`: in the published programs the member is actively enrolled
  *      in, in program order, the first content not complete by D4643's
@@ -27,6 +28,7 @@
 import type { Env, User } from '../types';
 import { resolveSubject, type PlanKind } from './learningPlan';
 import { enrolledContents } from './learningPrograms';
+import { resumeLessons } from './learningResume';
 
 export type NextRule = 'continue_course' | 'program' | 'plan';
 export type NextAction = {
@@ -50,19 +52,21 @@ async function continueCourse(env: Env, user: User): Promise<NextAction | null> 
     `SELECT subject_uid FROM learning_progress WHERE user_id = ? AND subject_kind = 'course' AND status = 'started'
       ORDER BY updated_at DESC, id DESC LIMIT 10`,
   ).bind(user.id).all<{ subject_uid: string }>()).results || [];
+  // D5356: the lesson is the one Continue learning resumes (services/learningResume.ts), so the two never differ.
+  const resume = started.length ? await resumeLessons(env, Number(user.id)) : new Map();
   for (const { subject_uid } of started) {
     const course = await resolveSubject(env, user, 'course', subject_uid);
     if (!course) continue;
+    const pick = resume.get(subject_uid);
+    if (!pick) continue;
     const lessons = (await env.DB.prepare(
-      `SELECT l.uid, l.title, (SELECT status FROM learning_progress p WHERE p.user_id = ? AND p.subject_kind = 'lesson' AND p.subject_uid = l.uid) AS status
+      `SELECT (SELECT status FROM learning_progress p WHERE p.user_id = ? AND p.subject_kind = 'lesson' AND p.subject_uid = l.uid) AS status
          FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id
-        WHERE m.course_id = ? AND l.required = 1 ORDER BY m.position, m.id, l.position, l.id`,
-    ).bind(user.id, course.id).all<{ uid: string; title: string; status: string | null }>()).results || [];
+        WHERE m.course_id = ? AND l.required = 1`,
+    ).bind(user.id, course.id).all<{ status: string | null }>()).results || [];
     if (!lessons.length) continue;
     const done = lessons.filter((l) => l.status === 'completed').length;
-    const nextLesson = lessons.find((l) => l.status !== 'completed');
-    if (!nextLesson) continue;
-    const lesson = await resolveSubject(env, user, 'lesson', nextLesson.uid);
+    const lesson = await resolveSubject(env, user, 'lesson', pick.lesson_uid);
     if (!lesson) continue;
     return {
       rule: 'continue_course', kind: 'lesson', uid: lesson.uid, title: `${course.title}: ${lesson.title}`, href: lesson.href,
