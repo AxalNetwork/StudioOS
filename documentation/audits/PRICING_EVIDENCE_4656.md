@@ -27,6 +27,16 @@ Unless stated, seat inclusions, usage caps, overages, service components, refund
 
 The existing `frontend/src/lib/funnel.js` persists anonymous and session identifiers only with analytics consent and drops events after a decline. Report missing or unjoinable stages as unmeasured. Keep browser attribution separate from authenticated billing aggregates unless a consent-compatible join is already supported. Split cohorts by audience, plan and billing interval and show unknowns separately. No live counts were collected for this record.
 
+### Measurement contract for a pilot
+
+- Start cohorts by selection week and record the observation cutoff. Use the stable catalog plan key and the selected billing interval, then report the paid plan and interval separately. A changed selection must not rewrite the original cohort. Use `unknown` for unavailable dimensions.
+- For consented visitors, report the share of distinct pricing visitors who select a plan and the share of selectors who initiate registration. Count each visitor once per cohort and publish the coverage of each join. Do not divide all payments by a consented visitor count.
+- For registered-account cohorts, report the fraction that verifies, produces its audience-specific first useful output within seven days, and pays within 30 days, using observed account and billing milestones. Include only cohorts old enough to have completed the respective window. Treat trials and complimentary access separately from paid conversion.
+- Define continued use as a repeat qualifying workflow in days 31–60 after first payment, and report renewal separately at the first contractual renewal opportunity for each billing interval. Track cancellation and downgrade reasons only when recorded. Report counts with rates so small cohorts are visible.
+- Compare net collected revenue, excluding tax and after refunds, with measured variable AI, data, storage, payment, support and service costs for the same cohort and period. Leave margin unmeasured when the cost basis is incomplete.
+
+The existing tracker posts to `POST /api/track` and stores accepted events in `funnel_events`. Before introducing more events, confirm whether each proposed milestone already exists and can be reused. Validate with consent-on, consent-off, and cross-device test cases. In particular, a missing browser-to-account link stays missing. The pilot should consume aggregate reports only.
+
 ## Decision
 
 Keep the founder $20 and $100 monthly prices as hypotheses. Settle the purchase and entitlement work in #4651, #4653 and #4655 before any pricing experiment. The owner can run interviews and paid pilots separately for validating founders, active fundraisers, investors, and advisors or operating partners. Compare actual paid usage and renewal against contribution after AI, data, storage, payment, support and service costs. Treat starter allowances, annual allowance parity and activation-based provider charging as distinct decisions. This record proposes no price or entitlement change.
