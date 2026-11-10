@@ -2,7 +2,7 @@
  * D5157 (#5157) — the Research Project: create, read, list, update, archive and
  * restore a project, and attach or detach its evidence (Library documents and
  * collections) and its Ask sessions and answers. Mounted at
- * `/api/research/projects` (migration 202611092035_research_projects.sql).
+ * `/api/research/projects` (migration 202611092036_research_projects.sql).
  *
  * OWNER-SCOPED, LIKE EVERY RESEARCH STORE. Every read and write is
  * `WHERE owner_user_id = ?`, and a link may only name the caller's own
