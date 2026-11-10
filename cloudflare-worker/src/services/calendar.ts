@@ -474,6 +474,21 @@ export interface CalendarEvent {
   /** D1206: a scoped projection can never be copied or acted on. */
   read_only?: true;
   /**
+   * D5204 (#5204) — AN ALL-DAY EVENT IS A CALENDAR DATE, NOT AN INSTANT.
+   *
+   * A provider's date-only event ("2026-11-09") used to travel in `start_at` alone, and the page grouped it with
+   * `new Date(...)`, which reads a bare ISO date at UTC midnight. West of UTC that is the evening BEFORE, so a
+   * member in Los Angeles saw an all-day event on the wrong day.
+   *
+   * So an all-day event says so, and carries the provider's own dates as dates: `start_date` inclusive and
+   * `end_date` EXCLUSIVE, exactly as Google states them (a one-day event ends on the next day). The page groups
+   * all-day rows by these and never parses them into an instant. `start_at` and `end_at` keep whatever they held,
+   * so the feed, the .ics file and every existing reader are untouched.
+   */
+  all_day?: boolean;
+  start_date?: string;
+  end_date?: string;
+  /**
    * D1207 — the reader's own words about this row for the person reading it:
    * where they stand (`my_role`, see `services/calendar/items.ts`) and, on a
    * cancelled row, why (`cancel_reason`, null when nothing recorded one). The
@@ -961,6 +976,17 @@ export interface CalendarSourceStatus {
   error: 'unreadable' | 'not_configured' | 'reconnect' | 'rate_limited' | null;
   /** D1485: a connected calendar that stopped at its page cap. */
   truncated?: true;
+  /**
+   * D5202 (#5202) — SAFE SOURCE HEALTH. Why it failed, how long it took, how many items it gave and when. A
+   * read that is Connected but not healthy is the state this page could not show before: the rail said
+   * Connected while the events were missing. Support reads these to tell a provider-wide outage from one
+   * account's problem. Fixed words and numbers only: never a title, an attendee, an address, a join link, a
+   * token or a provider's body.
+   */
+  reason?: string;
+  latency_ms?: number;
+  items?: number;
+  at?: string;
 }
 
 /**
@@ -1045,12 +1071,19 @@ export async function gatherSources(
   const events: CalendarEvent[] = [];
   const sources: CalendarSourceStatus[] = [];
   const timings: CalendarSourceTiming[] = [];
+  // D5202: the moment a row was built, so a stale read is visible as a time rather than guessed at.
+  const at = () => new Date().toISOString();
   for (const kind of asked) {
     const outcome = byKind.get(kind)!;
     if (outcome.ok) {
       const got = outcome.value;
       events.push(...got);
-      sources.push({ kind, ok: true, error: null, ...(got.truncated ? { truncated: true as const } : {}) });
+      // D5202: every source carries its own latency and item count, so a slow or capped provider is a number, not a blank agenda.
+      // D5203 measured each read already; that figure is the latency, so nothing is timed twice.
+      sources.push({
+        kind, ok: true, error: null, ...(got.truncated ? { truncated: true as const } : {}),
+        latency_ms: outcome.ms, items: got.length, at: at(),
+      });
       timings.push({ kind, ms: outcome.ms, ok: true, count: got.length });
       continue;
     }
@@ -1059,8 +1092,11 @@ export async function gatherSources(
     if (e instanceof external.NoSource) continue;
     const error = e instanceof external.ExternalReadError ? e.code
       : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
-    console.warn('[calendar] source failed', { kind, outcome: error });
-    sources.push({ kind, ok: false, error });
+    // D5202: the reason is the reader's own word where it has one, else the shape of the failure.
+    const reason = e instanceof external.ExternalReadError ? e.reason
+      : isMissingTableError(e) || isMissingColumnError(e) ? 'schema_missing' : 'threw';
+    console.warn('[calendar] source failed', { kind, outcome: error, reason, latency_ms: outcome.ms });
+    sources.push({ kind, ok: false, error, reason, latency_ms: outcome.ms, items: 0, at: at() });
     timings.push({ kind, ms: outcome.ms, ok: false, count: 0 });
   }
   events.sort((a, b) => a.start_at.localeCompare(b.start_at));
