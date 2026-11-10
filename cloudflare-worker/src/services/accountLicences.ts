@@ -2,6 +2,7 @@
 import type { Env, User } from '../types';
 import { ensureRoleProfile } from './ensureRoleProfile';
 import { seedObligations } from './trust';
+import { grantLicenceStatements, hasLifecycle, revokeLicenceStatements, withheldPrimaryKey } from './userLicences';
 
 export const LICENCE_ORDER = ['founder', 'investor', 'advisor', 'partner'] as const;
 export type Licence = typeof LICENCE_ORDER[number];
@@ -23,7 +24,10 @@ export async function heldLicences(db: D1Database, user: Pick<Principal, 'id' | 
     if (/no such table: (?:main\.)?account_licences/i.test(String(error))) return LICENCE_ORDER.filter(licence => licence === primary);
     throw error;
   }
-  return LICENCE_ORDER.filter(licence => licence === primary || rows.results.some(row => row.licence === licence));
+  // D5058: the primary licence is `users.role`, and its lifecycle is its `licences` row. A suspended, expired,
+  // terminated or still-proposed primary licence is not held; one with no row (before D5058's backfill) is.
+  const primaryWithheld = (LICENCE_ORDER as readonly string[]).includes(primary) && await withheldPrimaryKey(db, user.id, primary);
+  return LICENCE_ORDER.filter(licence => (licence === primary && !primaryWithheld) || rows.results.some(row => row.licence === licence));
 }
 
 /** Auth hydrates licences once; primary-only objects remain usable by existing pure access predicates. */
@@ -99,6 +103,9 @@ export async function grantLicence(db: D1Database, change: Change): Promise<'gra
         .bind(userId, licence, userId, licence));
   }
   statements.push(...(change.appointmentStatements || []));
+  // D5058: the shared licence row follows the grant, in the same batch and guarded by it. Appended last, so the
+  // indexes read below are unchanged. An Admin appointment keeps the licence the person holds (#3704 D).
+  if (!change.retainPrimary && await hasLifecycle(db)) statements.push(...grantLicenceStatements({ DB: db } as Env, userId, String(licence), actorId, source));
   const result = await db.batch(statements);
   if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal(change.appointmentGuard ? 'licence_cannot_administer' : 'primary_licence', 409);
   if (!result[0].meta.changes && !change.retainPrimary) return 'already_held';
@@ -113,6 +120,7 @@ export async function revokeLicence(db: D1Database, change: Change): Promise<'re
   const user = await subject(db, change);
   if (String(user.role).toLowerCase() === change.licence) throw new LicenceRefusal('primary_licence', 409);
   const { userId, licence, actorId, source } = change;
+  const lifecycle = await hasLifecycle(db);
   const result = await db.batch([
     db.prepare(`UPDATE account_licences SET revoked_at = datetime('now'), revoked_by = ?
       WHERE user_id = ? AND licence = ? AND revoked_at IS NULL
@@ -120,6 +128,8 @@ export async function revokeLicence(db: D1Database, change: Change): Promise<'re
       .bind(actorId, userId, licence, userId, licence),
     db.prepare(`INSERT INTO account_licence_events (user_id, licence, action, actor_id, source)
       SELECT ?, ?, 'revoke', ?, ? WHERE changes() = 1`).bind(userId, licence, actorId, source),
+    // D5058: the shared licence row ends with the grant, guarded by the revoke having landed.
+    ...(lifecycle ? revokeLicenceStatements({ DB: db } as Env, userId, String(licence), actorId, source) : []),
   ]);
   return result[0].meta.changes ? 'revoked' : 'not_held';
 }
