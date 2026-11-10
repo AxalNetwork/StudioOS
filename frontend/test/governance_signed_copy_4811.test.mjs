@@ -84,7 +84,7 @@ test('mounted: the version names its signer; a signed upload asks for the eviden
     await view.flush();
     const [uid, body] = calls.find(([k]) => k === 'uploadVersion')[1];
     assert.equal(uid, 'd1');
-    assert.deepEqual({ ...body, file: body.file.name }, { file: 'signed.pdf', signed: true, note: '', signed_on: '2026-11-05', signatory: 'S. Example, Manager', attest: true });
+    assert.deepEqual({ ...body, file: body.file.name }, { file: 'signed.pdf', signed: true, note: '', signed_on: '2026-11-05', signatory: 'S. Example, Manager', attest: true, copy_of: '' });
   } finally { await view.unmount(); restore(); }
 });
 

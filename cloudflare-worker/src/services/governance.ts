@@ -117,6 +117,8 @@ export type VersionRow = {
   content_type: string; note: string | null; uploaded_by: number | null; created_at: string;
   // D4811 part 12: set on a signed copy's INSERT (migration 202611092105); NULL before it.
   signed_on?: string | null; signatory?: string | null; attested_by?: number | null;
+  // D4811 part 20: the counsel-approved version a signed copy names (migration 202611092355); NULL before it.
+  copy_of_version?: number | null;
 };
 
 /** A document as the tab draws it. */
@@ -126,11 +128,52 @@ export const docView = (d: DocRow, latest: VersionRow | null, versions: number) 
   executed_version: d.executed_version == null ? null : Number(d.executed_version), next_statuses: nextStatuses(d.status),
   versions, latest: latest ? versionView(latest) : null, updated_at: d.updated_at,
 });
-export const versionView = (v: VersionRow) => ({
+/** A version as the page draws it. `approved` (part 20), when read, says which versions counsel approved at their hash; null when not read. */
+export const versionView = (v: VersionRow, approved?: Set<number>) => ({
   version: Number(v.version), signed: !!Number(v.signed), file_bytes: Number(v.file_bytes), content_type: v.content_type,
   file_sha256: v.file_sha256, note: v.note, created_at: v.created_at,
   signed_on: v.signed_on ?? null, signatory: v.signatory ?? null, attested: v.attested_by != null,
+  copy_of: v.copy_of_version == null ? null : Number(v.copy_of_version),
+  counsel_approved: approved ? approved.has(Number(v.version)) : null,
 });
+
+/**
+ * D4811 part 20: the versions of a record that counsel approved (approved, or
+ * approved with conditions) at that version's exact hash (`legal_reviews`,
+ * part 16). A review of other bytes never counts.
+ */
+export async function approvedVersions(env: Env, uid: string): Promise<Set<number>> {
+  const r = await env.DB.prepare(
+    `SELECT DISTINCT v.version FROM governance_document_versions v
+       JOIN legal_reviews r ON r.object_kind = 'governance' AND r.object_ref = v.document_uid AND r.version = v.version
+        AND r.version_sha256 = v.file_sha256 AND r.decision IN ('approved', 'approved_with_conditions')
+      WHERE v.document_uid = ?`,
+  ).bind(uid).all<{ version: number }>();
+  return new Set(((r.results || []) as { version: number }[]).map((x) => Number(x.version)));
+}
+
+/**
+ * D4811 part 20 (CT-12 B): the approved version a signed copy names, if any.
+ * Pure. Empty → `{ ok: true, version: null }` (an older flow names none).
+ * Otherwise the version must exist on this record, must not itself be a signed
+ * copy, and must be counsel approved; the refusal names the fix, as the canvas
+ * does ("v3 is a draft… choose v2, or get v3 approved first").
+ */
+export function copyOfChoice(raw: unknown, versions: VersionRow[], approved: Set<number>):
+  { ok: true; version: number | null } | { ok: false; status: 409 | 422; code: string; message: string } {
+  const text = raw == null ? '' : String(raw).trim();
+  if (!text) return { ok: true, version: null };
+  const n = Number(text.replace(/^v/i, ''));
+  const v = Number.isSafeInteger(n) ? versions.find((x) => Number(x.version) === n) : undefined;
+  if (!v) return { ok: false, status: 422, code: 'copy_of_unknown', message: `This record has no ${/^v?\d+$/i.test(text) ? `v${n}` : 'such version'}. Choose one of its approved versions. Nothing was uploaded.` };
+  if (Number(v.signed) === 1) return { ok: false, status: 422, code: 'copy_of_signed', message: `v${n} is itself a signed copy. Name the approved version that was signed. Nothing was uploaded.` };
+  if (!approved.has(n)) {
+    const best = versions.map((x) => Number(x.version)).filter((x) => approved.has(x)).sort((a, b) => b - a)[0];
+    return { ok: false, status: 409, code: 'copy_of_not_approved',
+      message: `v${n} is not approved by counsel, so it cannot establish execution. ${best != null ? `Choose v${best}, or get v${n} approved first.` : `Get v${n} approved first.`} Nothing was uploaded.` };
+  }
+  return { ok: true, version: n };
+}
 
 /**
  * D4811 part 12 (board CT-12 B): what a version uploaded as the signed copy must
