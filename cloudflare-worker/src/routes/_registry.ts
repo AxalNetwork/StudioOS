@@ -27,6 +27,7 @@ import { mount as admin_licence_exclusivityMount } from './admin_licence_exclusi
 import { mount as admin_licence_packagesMount } from './admin_licence_packages';
 import { mount as admin_licence_pricingMount } from './admin_licence_pricing';
 import { mount as admin_licence_pricing_applyMount } from './admin_licence_pricing_apply';
+import { mount as admin_package_pricingMount } from './admin_package_pricing';
 import { mount as admin_persona_segment_scopesMount } from './admin_persona_segment_scopes';
 import { mount as admin_platform_buildMount } from './admin_platform_build';
 import { mount as admin_program_pricingMount } from './admin_program_pricing';
@@ -96,6 +97,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_licence_packages', mount: admin_licence_packagesMount },
   { file: 'admin_licence_pricing', mount: admin_licence_pricingMount },
   { file: 'admin_licence_pricing_apply', mount: admin_licence_pricing_applyMount },
+  { file: 'admin_package_pricing', mount: admin_package_pricingMount },
   { file: 'admin_persona_segment_scopes', mount: admin_persona_segment_scopesMount },
   { file: 'admin_platform_build', mount: admin_platform_buildMount },
   { file: 'admin_program_pricing', mount: admin_program_pricingMount },
