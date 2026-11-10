@@ -43,7 +43,8 @@ import { SUPPORT_SESSION_REFUSED_CODE, isSupportSession } from '../services/fund
 import { canAccessProject } from '../services/projectAccess';
 import { notify } from '../services/notify';
 import { lintForSend } from '../services/telegramRedactCheck';
-import { isTeamViewer, isVentureFounder, TEAM_ONLY } from '../services/mercury/growFeeds';
+import { isVentureFounder, TEAM_ONLY } from '../services/mercury/growFeeds';
+import { isTeamViewer } from '../services/mercury/teamViewer';
 import { cleanLines, LineError, type Line } from '../services/updateShare';
 import { founderTeam, KIND_WORDS, type Kind } from '../services/reportingDuties';
 import {

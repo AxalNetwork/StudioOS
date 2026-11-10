@@ -1,4 +1,5 @@
 import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
+import { claimStatusV2, distinctRecorded, type ClaimStatusV2 } from '../services/validateMethodology';
 /**
  * The two decisions this bucket gets wrong quietly: who may read a row, and
  * what a missing fact is allowed to imply.
@@ -125,9 +126,21 @@ export type Evidence = {
    * number is what stops that asymmetry lying when the fit is unknown.
    */
   fitUnrecorded: number;
+  /**
+   * D4586 coverage, never part of the status. `both`: interviews touching both
+   * directions (already inside `supporting` when ICP, and `contradicting`).
+   * `interviews`: distinct interviews touching the claim at all, any fit.
+   * `interviewees` / `organizations`: distinct people and companies behind
+   * them, null when not recorded on every one of those interviews.
+   */
+  both?: number;
+  interviews?: number;
+  interviewees?: number | null;
+  organizations?: number | null;
 };
 
-export type Verdict = 'validated' | 'invalidated' | 'unproven';
+/** `contested` is D4586 v2's: the bar is met and the contradiction is material. */
+export type Verdict = 'validated' | 'contested' | 'invalidated' | 'unproven';
 
 /**
  * ICP means strong or partial. NULL is a fourth state, counted separately.
@@ -152,11 +165,12 @@ export const isIcp = (fit: string | null | undefined) => fit === 'strong' || fit
  */
 export function evidenceFor(
   links: Array<{ pain_group_id: number; direction: string }>,
-  interviews: Array<{ icp_fit: string | null; groups: Set<number> }>,
+  interviews: Array<{ icp_fit: string | null; groups: Set<number>; name?: string | null; company?: string | null }>,
 ): Evidence {
   const supports = new Set(links.filter((l) => l.direction === 'supports').map((l) => l.pain_group_id));
   const against = new Set(links.filter((l) => l.direction === 'contradicts').map((l) => l.pain_group_id));
-  let supporting = 0; let contradicting = 0; let fitUnrecorded = 0;
+  let supporting = 0; let contradicting = 0; let fitUnrecorded = 0; let both = 0;
+  const touching: Array<{ name?: string | null; company?: string | null }> = [];
   for (const iv of interviews) {
     let touchesSupport = false; let touchesAgainst = false;
     for (const g of iv.groups) {
@@ -168,56 +182,86 @@ export function evidenceFor(
       if (isIcp(iv.icp_fit)) supporting += 1;
       else if (iv.icp_fit == null) fitUnrecorded += 1;
     }
+    if (touchesSupport && touchesAgainst) both += 1;
+    if (touchesSupport || touchesAgainst) touching.push(iv);
   }
-  return { supporting, contradicting, fitUnrecorded };
+  // D4586 § 2: breadth is display only. A name or company missing on any one interview makes it "not recorded".
+  return {
+    supporting, contradicting, fitUnrecorded, both, interviews: touching.length,
+    interviewees: distinctRecorded(touching.map((iv) => iv.name)),
+    organizations: distinctRecorded(touching.map((iv) => iv.company)),
+  };
+}
+
+/** D4586 v2's statuses in the verdict's stored vocabulary (the history and every reader keep these words). */
+const V2_VERDICT: Record<ClaimStatusV2, Verdict | null> = {
+  supported: 'validated', contested: 'contested', contradicted: 'invalidated', insufficient: 'unproven', unknown: null,
+};
+
+/**
+ * The verdict, or `null` when the rows cannot support one. Methodology v2
+ * (D4586 § 3, `claimStatusV2`):
+ *
+ *   1. CONTRADICTION IS READ BEFORE THE BAR. `invalidated` when at least two
+ *      interviews contradict and they outnumber the supporters, so 5 / 50 is
+ *      no longer "validated" as it was under v1.
+ *   2. `contested` once the bar is met and the contradiction is material
+ *      (at least two, and one for every two supporters).
+ *   3. `validated` once the bar is met otherwise; `unproven` below it.
+ *
+ * `null` IS STILL THE IMPORTANT RETURN VALUE. `icp_fit` is new in migration
+ * 211, so many interviews carry NULL. Counting those as "not ICP" would answer
+ * with confidence on no evidence. v2 answers `null` exactly when counting the
+ * unrecorded fits as ICP would change the status; when they cannot change it,
+ * the status stands and the page still says how many fits are missing.
+ */
+export function verdictFor(e: Evidence, bar: number = VALIDATION_BAR): Verdict | null {
+  return V2_VERDICT[claimStatusV2(e, bar)];
 }
 
 /**
- * The verdict, or `null` when the rows cannot support one.
- *
- * `null` IS THE IMPORTANT RETURN VALUE. `icp_fit` is new in migration 211, so
- * every interview logged before it — and every one logged after by someone who
- * skipped the field — carries NULL. Counting those as "not ICP" would make
- * `supporting` read 0 and this function answer "unproven" for every claim in
- * the product, with total confidence, on no evidence at all. That is
- * indistinguishable on screen from a real finding, which is exactly the failure
- * the absent-is-not-empty rule exists to prevent.
- *
- * So: `validated` survives an unknown fit, because the bar is already met and
- * more supporters cannot un-meet it. Nothing else does — an unrecorded fit
- * could turn an "unproven" into a "validated" and could outweigh the
- * contradictions behind an "invalidated". When it could matter, the honest
- * answer is that we do not know yet, and the page says how many interviews are
- * missing the field.
+ * The v1 rule, kept only so the verdict history can tell a status that moved
+ * because the METHOD changed from one that moved because the evidence did
+ * (D4586 § 6). Never shown as a claim's status.
  */
-export function verdictFor(e: Evidence, bar: number = VALIDATION_BAR): Verdict | null {
+export function verdictForV1(e: Evidence, bar: number = VALIDATION_BAR): Exclude<Verdict, 'contested'> | null {
   if (e.supporting >= bar) return 'validated';
   if (e.fitUnrecorded > 0) return null;
   if (e.contradicting > e.supporting && e.contradicting >= 2) return 'invalidated';
   return 'unproven';
 }
 
-/** Which lane a card sits in. Derived from the verdict, never set by hand. */
+/** Which lane a card sits in. Derived from the verdict, never set by hand. A contested claim stays in Testing (D4586 § 3). */
 export function laneFor(v: Verdict | null, e: Evidence): 'none' | 'testing' | 'validated' | 'invalidated' | 'unknown' {
   if (v === 'validated') return 'validated';
+  if (v === 'contested') return 'testing';
   if (v === 'invalidated') return 'invalidated';
   if (v === null) return 'unknown';
-  if (e.supporting === 0 && e.contradicting === 0) return 'none';
+  // D4586 v2: an interview of unrecorded fit is evidence still to be read, so a claim it touches is being tested.
+  if (e.supporting === 0 && e.contradicting === 0 && !(e.fitUnrecorded > 0)) return 'none';
   return 'testing';
+}
+
+/** A claim's state under v1, for the verdict history's "method changed" test only (D4586 § 6). */
+export function v1StateFor(e: Evidence): { verdict: string | null; lane: string } {
+  const verdict = verdictForV1(e);
+  return { verdict, lane: laneFor(verdict, e) };
 }
 
 /**
  * How far this claim is from its bar, in words, or `null` when unknowable.
  *
- * Returns `null` rather than a cheerful "4 more needed" when fits are missing:
- * the distance depends on a count we do not have, so any number here would be
- * invented.
+ * Returns `null` rather than a cheerful "4 more needed" when the missing fits
+ * could change the status: the distance depends on a count we do not have, so
+ * any number here would be invented. Support and contradiction are named
+ * together whenever both are present (D4586 § 1).
  */
 export function barNoteFor(e: Evidence, bar: number = VALIDATION_BAR): string | null {
-  if (e.supporting >= bar) return `${e.supporting} of ${bar} · bar met`;
-  if (e.fitUnrecorded > 0) return null;
-  if (e.contradicting > e.supporting && e.contradicting >= 2) {
-    return `${e.contradicting} contradict, ${e.supporting} support · bar cannot be met`;
-  }
-  return `${bar - e.supporting} more ICP interviews needed`;
+  const status = claimStatusV2(e, bar);
+  if (status === 'unknown') return null;
+  if (status === 'contradicted') return `${e.contradicting} contradict, ${e.supporting} support · contradiction outweighs support`;
+  if (status === 'contested') return `${e.supporting} of ${bar} · bar met · ${e.contradicting} contradict · contested`;
+  if (status === 'supported') return `${e.supporting} of ${bar} · bar met${e.contradicting > 0 ? ` · ${e.contradicting} contradict` : ''}`;
+  const missing = e.fitUnrecorded > 0 ? ` · ${e.fitUnrecorded} with no fit recorded` : '';
+  return `${bar - e.supporting} more ICP interviews needed${missing}`;
 }

@@ -2,11 +2,13 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
-import MyTasks from '../../pages/work/MyTasks.jsx';
 import { bucketForPath, zoneForPath } from '../shellConfig';
-import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { STATES as ROOM_STATES } from '../../components/deals/dealRoomCopy';
 
 const COMPARE_TITLE = 'Compare';
+const ROOMS_TITLE = 'Deal rooms';
+// D4815 (#4815): the deal rooms at their own route, `/deals/rooms` (owner's pick B, 2026-11-09).
 const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'));
 // D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
 const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
@@ -91,10 +93,13 @@ export default function InvestorDealsRoutes() {
   // would get its first zone lit in the pill row as if they had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const isCompare = location.pathname === COMPARE;
+  // D4815: the deal rooms are a page of the bucket with no pill of their own,
+  // as Compare is; the canvas's zone row is Deal flow, Screening, Commit, Closing.
+  const isRooms = location.pathname === ROOMS;
   const zone = zoneForPath(bucket, location.pathname);
 
   const Zone = ZONES[zone?.slug];
-  const pageTitle = dealsPageTitle({ isRoot, isCompare, slug: zone?.slug });
+  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, slug: zone?.slug });
   useEffect(() => { document.title = pageTitle; }, [pageTitle]);
 
   // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
@@ -105,16 +110,16 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : undefined}
-      activeSlug={isRoot || isCompare ? null : undefined}
-      intro={isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
+      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : undefined}
+      activeSlug={isRoot || isCompare || isRooms ? null : undefined}
+      intro={isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
       rail={(
         <WorkerRail
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
           note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
-          coverage={[`${isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
+          coverage={[`${isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
             // WAS "Nothing on this page drafts a memo or produces a score" —
@@ -138,6 +143,8 @@ export default function InvestorDealsRoutes() {
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
         {isCompare
           ? <DealCompare ids={compareIds(location.search)} />
+          : isRooms
+          ? <DealRoomsPanel />
           : isRoot
           ? <DealsRoot search={location.search} />
           : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
@@ -150,20 +157,13 @@ export default function InvestorDealsRoutes() {
  * The `/deals` root: My Deal Flow (D4815, canvas DX1).
  *
  * WAS the zones' bucket board (Screening desk, Commit room, Closing) and the
- * deal rooms, under a disclosure beneath the flow. The canvas gives the root
- * one job; the zones are one "Other deal activity" line inside `DealFlow`,
- * each linking to its route. The deal rooms (D630) and My tasks (D1614 W8)
- * have no route of their own yet, so they stay here, collapsed under that
- * line, rather than being lost.
+ * deal rooms, under a disclosure beneath the flow; then (slice 1) the deal
+ * rooms (D630) and My tasks (D1614 W8) collapsed under the "Other deal
+ * activity" line. Slice 2 gave the deal rooms their own route, `/deals/rooms`,
+ * and moved the investor's My tasks to Studio, so the root draws the flow and
+ * nothing under it but that line.
  */
 function DealsRoot({ search }) {
   const { view, scope } = dealFlowViewOf(search);
-  const more = (
-    <>
-      <DealRoomsPanel />
-      {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
-      <MyTasks licence="investor" testId="deals-my-tasks" />
-    </>
-  );
-  return <DealFlow view={view} scope={scope} more={more} />;
+  return <DealFlow view={view} scope={scope} />;
 }

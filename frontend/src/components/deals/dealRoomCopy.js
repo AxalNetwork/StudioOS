@@ -17,6 +17,51 @@ export const ROOM_ACCESS_UNREADABLE = 'Deal access could not be confirmed.';
 export const ROOM_REQUEST_CONFIRM = 'This records your invitation request for the selected firm. Nobody is notified automatically. It does not grant access to the deal or diligence.';
 export const ROOM_LEAVE_CONFIRM = 'This removes your room request. It does not withdraw a commitment or change anyone else’s access. Nobody is notified.';
 
+/** D4815: what a completed Leave says once the room has re-read (Scope → Review → Result). */
+export const ROOM_LEFT = 'You left this room. Your invitation request is removed; nothing else changed.';
+
+/** The deal rooms page's result line, naming the room, after a confirmed request or Leave. */
+export function roomResult(kind, name) {
+  return kind === 'left'
+    ? `You left the ${name} room. Your invitation request is removed; nothing else changed.`
+    : `Your invitation request for ${name} is recorded. Access starts after an invitation or commitment.`;
+}
+
+/**
+ * D4815 (#4815, canvas DX1b) — a deal room's access, in the three states the
+ * canvas keeps apart. `can_read` is the Worker's answer: `true` opens the deal,
+ * `false` is refused, and anything else (absent, malformed) is UNREADABLE: the
+ * page cannot say whether this investor may open it, so it offers Try again,
+ * never Request an invitation.
+ */
+export function roomAccess(d) {
+  if (d?.can_read === true) return 'open';
+  if (d?.can_read === false) return 'refused';
+  return 'unreadable';
+}
+
+/**
+ * The deal rooms page's three views (D4815): every live deal, the ones this
+ * investor may open, and the ones they asked into. `test` is over one live deal.
+ */
+export const ROOM_FILTERS = Object.freeze([
+  { key: 'all', label: 'All live deals', test: () => true },
+  { key: 'open', label: 'You can open', test: (d) => roomAccess(d) === 'open' },
+  { key: 'requested', label: 'Requested', test: (d) => Boolean(Number(d?.is_member)) },
+]);
+
+/** What each view says when it holds nothing; a list that was not read never reaches these. */
+export const ROOM_FILTER_EMPTY = Object.freeze({
+  open: 'No deal is open to you yet. An invitation or a commitment opens one.',
+  requested: 'You have not asked into any deal room.',
+});
+
+/** Counts per view, or null when the list was not read: an unread list never counts 0. */
+export function roomFilterCounts(deals) {
+  if (!Array.isArray(deals)) return null;
+  return Object.fromEntries(ROOM_FILTERS.map((f) => [f.key, deals.filter(f.test).length]));
+}
+
 export const JOIN_NOTE = 'Requesting an invitation records your interest. It does not grant access to the deal or diligence. Only an invited or committed investor can read them.';
 
 const PLAN_LABEL = { free: 'Free', plus: 'Plus', professional: 'Professional', institutional: 'Institutional' };
