@@ -185,7 +185,8 @@ const ALLOW = [
     "cloudflare-worker/src/routes/partner_pipeline.ts": 1,
     "cloudflare-worker/src/routes/partnernet.ts": 2,
     "cloudflare-worker/src/routes/research.ts": 7,
-    "cloudflare-worker/src/routes/services.ts": 3,
+    // #4680 snapshots a legacy USD-only price in the atomic INSERT … SELECT.
+    "cloudflare-worker/src/routes/services.ts": 4,
     "cloudflare-worker/src/services/conversationItems.ts": 1,
     "cloudflare-worker/src/services/decks/newDeck.ts": 1,
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
