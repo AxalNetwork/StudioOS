@@ -176,6 +176,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
+  ['frontend/src/pages/partner/pipeline',     'the partner Pipeline bucket’s root and zones, and the pure rules the root reads (D4838)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],
   ['frontend/src/pages/incorporate',          'Incorporate: the formation flow, its review quote, the bank step, Done and HQ\'s read-only frame'],
   ['frontend/src/pages/learning',             'the Learning center: one routed page, its components, and the coming-soon gate'],
