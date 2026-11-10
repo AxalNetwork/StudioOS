@@ -100,6 +100,7 @@ import {
 } from '../services/beehiiv/grow';
 import { workspaceContext, workspaceMember } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
+import { codeAmount } from '../../../frontend/src/lib/money.js';
 import {
   CALENDAR_TAGS, GoogleGrowRefused, calendarProposals, decideProposal, deleteSheetFact, pendingProposal, proposeFromCalendar,
   readCalendar, readFromGoogle, syncMetricsSheets,
@@ -201,7 +202,7 @@ export function dueWindow(due: string, status: string, on: string): string | nul
 export function termsLine(p: Row): string | null {
   if (p.terms_kind == null) return (p.terms as string | null) ?? null;
   const amount = p.terms_pct != null ? `${p.terms_pct}%`
-    : p.terms_amount_cents != null ? `${String(p.terms_currency ?? 'usd').toUpperCase()} ${(Number(p.terms_amount_cents) / 100).toLocaleString('en-US')}` : null;
+    : p.terms_amount_cents != null ? codeAmount(Number(p.terms_amount_cents), String(p.terms_currency ?? 'usd').toUpperCase()) : null;
   return [LABEL[String(p.terms_kind)] ?? String(p.terms_kind), amount].filter(Boolean).join(' · ');
 }
 

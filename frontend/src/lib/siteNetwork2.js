@@ -14,6 +14,7 @@
  * these pages is the Worker's answer or an empty-state sentence.
  */
 import { toUtcInstant } from './notices';
+import { formatMinorOrCount } from './money.js';
 
 // ---------------------------------------------------------------------------
 // The owner's copy
@@ -155,12 +156,8 @@ export function postedLabel(createdAt) {
 /** Whole units of a currency from cents: "$90,000", "€90,000"; an unknown code reads "90,000 XYZ". */
 function bandEnd(cents, currency) {
   const code = String(currency || 'usd').toUpperCase();
-  const units = Number(cents) / 100;
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(units);
-  } catch {
-    return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(units)} ${code}`;
-  }
+  // D5373: at the currency's own decimals (a whole amount drops them); an unlisted code names the stored count.
+  return formatMinorOrCount(Number(cents), code, { locale: 'en-US', trimWhole: true });
 }
 
 /**

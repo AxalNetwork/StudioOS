@@ -1,5 +1,6 @@
 import type { Env } from '../types';
 import { isSuppressed } from './newsletter';
+import { plainStripeAmount } from '../../../frontend/src/lib/money.js';
 
 // A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
 // send inline, so a Google endpoint that never answers holds a person's sign-in
@@ -1021,10 +1022,11 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 
 function formatMoney(amountCents: number, currency: string): string {
-  const amt = (Number(amountCents) || 0) / 100;
+  // D5373: Stripe's amount at its currency's own decimals.
   const cur = (currency || 'usd').toUpperCase();
-  if (cur === 'USD') return `$${amt.toFixed(2)}`;
-  return `${amt.toFixed(2)} ${cur}`;
+  const amt = plainStripeAmount(Number(amountCents) || 0, cur);
+  if (cur === 'USD') return `$${amt}`;
+  return `${amt} ${cur}`;
 }
 
 export interface BrandedInvoiceOpts {

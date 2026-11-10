@@ -38,6 +38,8 @@ const MIG381 = readFileSync(new URL('../sql/migrations/381_credit_reward_rules.s
 const ADMIN = 900;
 const T0 = Date.parse('2026-11-09T12:00:00Z');
 const MIN = 60_000;
+/** The lost-bonus step's tally when it found nobody (D5360). */
+const NO_BONUS = { scanned: 0, paid: 0, skipped: 0, more_waiting: false };
 
 function world(): DatabaseSync {
   const db = migratedDatabase();
@@ -82,12 +84,12 @@ test('#4663 a lost credential and its bonus are restored once; the second tick d
   try {
     await graduateWithoutCredential(db, 11);
     const first = await tick(db, T0);
-    assert.deepEqual(first, { status: 'done', scanned: 1, issued: 1, skipped: 0, more_waiting: false });
+    assert.deepEqual(first, { status: 'done', scanned: 1, issued: 1, skipped: 0, more_waiting: false, bonus: NO_BONUS });
     assert.deepEqual(issuedTo(db), [11]);
     assert.deepEqual(bonuses(db), [11]);
     assert.deepEqual(attempts(db), [{ user_id: 11, attempts: 1, last_outcome: 'issued', bonus_outcome: 'granted', issued_at: '2026-11-09 12:00:00' }]);
     const again = await tick(db, T0 + MIN);
-    assert.deepEqual(again, { status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false });
+    assert.deepEqual(again, { status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false, bonus: NO_BONUS });
     assert.deepEqual([issuedTo(db), bonuses(db)], [[11], [11]], 'nothing issued or paid twice');
     assert.equal(attempts(db)[0].attempts, 1, 'the second tick tried nobody');
     // An automatic issue is attributed to nobody, as the live path's is.
@@ -183,7 +185,7 @@ test('#4663 a suspended branch, or one whose programs cannot be read, issues not
     await graduateWithoutCredential(db, 61);
     db.prepare(`INSERT INTO branch_licence (id, licence_uid, status, pushed_at) VALUES (1, 'lic-synthetic', 'suspended', '2026-11-01 00:00:00')`).run();
     const frozen = await tick(db, T0, { BRANCH_CODE: 'fr' });
-    assert.deepEqual(frozen, { status: 'frozen', scanned: 0, issued: 0, skipped: 0, more_waiting: false });
+    assert.deepEqual(frozen, { status: 'frozen', scanned: 0, issued: 0, skipped: 0, more_waiting: false, bonus: NO_BONUS });
     db.prepare(`UPDATE branch_licence SET status = 'active', program_grants_json = 'not json' WHERE id = 1`).run();
     const unreadable = await tick(db, T0 + MIN, { BRANCH_CODE: 'fr' });
     assert.equal(unreadable.status, 'grants_unreadable');
@@ -204,13 +206,14 @@ test('#4663 the admin read says "not recorded" before any tick, what the tick di
     await graduateWithoutCredential(db, 71);
     const before = await adminGet(db);
     assert.equal(before.status, 200);
-    assert.deepEqual(before.body.scheduled_backfill, { last_tick: null, not_issued: {} });
+    assert.deepEqual(before.body.scheduled_backfill, { last_tick: null, not_issued: {}, bonus_not_paid: {} });
     assert.equal(before.body.unavailable.scheduled_backfill, undefined);
     await tick(db, T0);
     const after = await adminGet(db);
     assert.deepEqual(after.body.scheduled_backfill, {
-      last_tick: { ran_at: '2026-11-09 12:00:00', status: 'done', scanned: 2, issued: 1, skipped: 1, more_waiting: false },
+      last_tick: { ran_at: '2026-11-09 12:00:00', status: 'done', scanned: 2, issued: 1, skipped: 1, more_waiting: false, bonus: NO_BONUS },
       not_issued: { insufficient_data: 1 },
+      bonus_not_paid: {},
     });
     const real = d1Over(db);
     const down = { ...real, prepare: (sql: string) => { if (/spinout_certificate_backfill_tick/.test(sql)) throw new Error('D1_ERROR: unavailable'); return real.prepare(sql); } };
@@ -242,4 +245,131 @@ test('#4663 the every-minute cron runs the backfill after the Lab reconcile tick
   assert.match(src.slice(backfill, backfill + 600), /taskFailed\('certificate backfill tick', e\)/);
   const wrangler = readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8');
   assert.match(wrangler, /"\* \* \* \* \*"/, 'carried by the existing every-minute trigger; no new cron');
+});
+
+// ---------------------------------------------------------------- D5360 ----
+// #5360: a graduate holding an issued credential with no graduation bonus is
+// paid by the same tick, bounded, recorded, and never for a revoked credential.
+
+const bonusAttempts = (db: DatabaseSync) => all(db, `SELECT user_id, attempts, last_outcome, paid_at FROM spinout_graduation_bonus_backfill_attempts ORDER BY user_id`);
+/** The isolate died between the credential and its bonus: the certificate stays, the grant is gone. */
+const loseBonus = (db: DatabaseSync, id: number) => db.prepare(`DELETE FROM perk_credit_ledger WHERE user_id = ? AND source_ref = ?`).run(id, `lab:${id}:graduation`);
+
+// Mutation checked: `payLostBonuses` not called (nothing paid: fails); the ledger NOT EXISTS
+// dropped (the second tick scans the paid graduate again: fails).
+test('#5360 a credential with no bonus row is paid once, and a second tick pays nothing', async () => {
+  const db = world();
+  try {
+    await graduateWithoutCredential(db, 101);
+    await tick(db, T0);
+    loseBonus(db, 101);
+    assert.deepEqual(bonuses(db), []);
+    const first = await tick(db, T0 + MIN);
+    assert.deepEqual([first.scanned, first.bonus], [0, { scanned: 1, paid: 1, skipped: 0, more_waiting: false }],
+      'the certificate step finds nobody (the graduate holds a credential); the bonus step pays');
+    assert.deepEqual(bonuses(db), [101]);
+    assert.deepEqual(bonusAttempts(db), [{ user_id: 101, attempts: 1, last_outcome: 'granted', paid_at: '2026-11-09 12:01:00' }]);
+    const again = await tick(db, T0 + 2 * MIN);
+    assert.deepEqual(again.bonus, NO_BONUS);
+    assert.deepEqual(bonuses(db), [101], 'paid once');
+    // The tick row and the admin read carry the count the Graduation desk draws.
+    const state = await readCertificateBackfillState(envOf(db));
+    assert.deepEqual(state.last_tick?.bonus, NO_BONUS);
+    await tick(db, T0 + 3 * MIN).then(() => loseBonus(db, 101));
+    db.prepare(`DELETE FROM spinout_graduation_bonus_backfill_attempts`).run();
+    await tick(db, T0 + 4 * MIN);
+    assert.deepEqual((await readCertificateBackfillState(envOf(db))).last_tick?.bonus, { scanned: 1, paid: 1, skipped: 0, more_waiting: false });
+  } finally { db.close(); }
+});
+
+// Mutation checked: `c.status = 'issued'` dropped from the bonus candidate read (the revoked
+// holder is paid: fails).
+test('#5360 a holder whose credential was revoked is never paid the lost bonus', async () => {
+  const db = world();
+  try {
+    await graduateWithoutCredential(db, 111);
+    await tick(db, T0);
+    loseBonus(db, 111);
+    db.prepare(`UPDATE spinout_certificates SET status = 'revoked', revoked_at = '2026-11-09 12:30:00' WHERE user_id = 111`).run();
+    const r = await tick(db, T0 + MIN);
+    assert.deepEqual(r.bonus, NO_BONUS);
+    assert.deepEqual([bonuses(db), bonusAttempts(db)], [[], []]);
+  } finally { db.close(); }
+});
+
+// Mutation checked: the bonus read's `LIMIT ?` bound to 1000 (the read returns all five: fails);
+// its `more_waiting` computed as false (fails).
+test('#5360 the bonus step takes at most the same limit per tick, says more are due, and drains', async () => {
+  const db = world();
+  try {
+    const ids = [121, 122, 123, 124, 125];
+    for (const id of ids) await graduateWithoutCredential(db, id);
+    await tick(db, T0); await tick(db, T0 + MIN);
+    assert.deepEqual(bonuses(db), ids);
+    for (const id of ids) loseBonus(db, id);
+    const real = d1Over(db);
+    const read: number[] = [];
+    const counting = { ...real, prepare: (sql: string) => {
+      const st = real.prepare(sql);
+      if (!/FROM spinout_certificates c\s+LEFT JOIN spinout_graduation_bonus_backfill_attempts/.test(sql)) return st;
+      return { bind: (...a: unknown[]) => { const b = st.bind(...a); return { all: async () => { const r = await b.all(); read.push((r.results || []).length); return r; } }; } };
+    } };
+    const a = await quiet(() => runCertificateBackfillTick(envOf(db, {}, counting), { nowMs: T0 + 2 * MIN }));
+    assert.deepEqual(read, [CERT_BACKFILL_TICK_LIMIT + 1], 'the bound is SQL\'s');
+    assert.deepEqual(a.bonus, { scanned: 3, paid: 3, skipped: 0, more_waiting: true });
+    const b = await tick(db, T0 + 3 * MIN);
+    assert.deepEqual(b.bonus, { scanned: 2, paid: 2, skipped: 0, more_waiting: false });
+    assert.deepEqual(bonuses(db), ids);
+  } finally { db.close(); }
+});
+
+// Mutation checked: the bonus retry-interval condition dropped (the unpayable holder is tried
+// again a minute later: fails).
+test('#5360 a holder who cannot be paid does not hold the queue, is retried after the interval, and is counted for the desk', async () => {
+  const db = world();
+  try {
+    await graduateWithoutCredential(db, 131);
+    await tick(db, T0);
+    loseBonus(db, 131);
+    db.prepare(`UPDATE user_spinout_flags SET spinout_lab_admitted = 0 WHERE user_id = 131`).run();
+    const a = await tick(db, T0 + MIN);
+    assert.deepEqual(a.bonus, { scanned: 1, paid: 0, skipped: 1, more_waiting: false });
+    assert.equal((await tick(db, T0 + 2 * MIN)).bonus.scanned, 0, 'not tried again a minute later');
+    const state = await readCertificateBackfillState(envOf(db));
+    assert.deepEqual(state.bonus_not_paid, { 'skipped:not_accepted': 1 });
+    db.prepare(`UPDATE user_spinout_flags SET spinout_lab_admitted = 1 WHERE user_id = 131`).run();
+    assert.equal((await tick(db, T0 + MIN + CERT_BACKFILL_RETRY_MS - MIN)).bonus.scanned, 0, 'still inside its interval');
+    const later = await tick(db, T0 + MIN + CERT_BACKFILL_RETRY_MS);
+    assert.deepEqual(later.bonus, { scanned: 1, paid: 1, skipped: 0, more_waiting: false });
+    assert.deepEqual(bonuses(db), [131]);
+    assert.deepEqual(bonusAttempts(db).map((r) => [r.attempts, r.last_outcome]), [[2, 'granted']]);
+    assert.deepEqual((await readCertificateBackfillState(envOf(db))).bonus_not_paid, {}, 'paid: no longer counted');
+  } finally { db.close(); }
+});
+
+// Mutation checked: `payLostBonuses` run on a held tick too (the frozen branch pays: fails).
+test('#5360 a held tick pays no lost bonus either; the first tick after the hold lifts pays it', async () => {
+  const db = world();
+  try {
+    await graduateWithoutCredential(db, 141);
+    await tick(db, T0);
+    loseBonus(db, 141);
+    db.prepare(`INSERT INTO branch_licence (id, licence_uid, status, pushed_at) VALUES (1, 'lic-synthetic', 'suspended', '2026-11-01 00:00:00')`).run();
+    const held = await tick(db, T0 + MIN, { BRANCH_CODE: 'fr' });
+    assert.deepEqual([held.status, held.bonus], ['frozen', NO_BONUS]);
+    assert.deepEqual(bonuses(db), []);
+    db.prepare(`UPDATE branch_licence SET status = 'active' WHERE id = 1`).run();
+    const lifted = await tick(db, T0 + 2 * MIN, { BRANCH_CODE: 'fr' });
+    assert.deepEqual([lifted.status, lifted.bonus.paid], ['done', 1]);
+    assert.deepEqual(bonuses(db), [141]);
+  } finally { db.close(); }
+});
+
+test('#5360 a tick recorded before the bonus columns existed reads its bonus as not recorded, never zero', async () => {
+  const db = world();
+  try {
+    db.prepare(`INSERT INTO spinout_certificate_backfill_tick (id, ran_at, status, scanned, issued, skipped, more_waiting)
+                VALUES (1, '2026-11-09 11:59:00', 'done', 0, 0, 0, 0)`).run();
+    assert.equal((await readCertificateBackfillState(envOf(db))).last_tick?.bonus, null);
+  } finally { db.close(); }
 });

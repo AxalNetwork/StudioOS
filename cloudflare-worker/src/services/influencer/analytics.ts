@@ -41,6 +41,7 @@
  */
 import type { Env } from '../../types';
 import { BONUS_MILESTONES, CUSTOM_MILESTONE, paidCustomers } from '../influencerCommission';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 export const SMALL_GROUP = 5;
 export const WEEKS = 12;
@@ -351,7 +352,7 @@ export async function influencerAnalytics(env: Env, userId: number, range: Range
   };
 }
 
-const money = (cents: number, currency: string) => `${(cents / 100).toFixed(2)} ${currency}`;
+const money = (cents: number, currency: string) => suffixAmount(cents, currency);
 
 /**
  * IN1's Eadwyn line: the week restated from the figures, with their date.

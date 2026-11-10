@@ -16,6 +16,8 @@
  * Activity each draw their own read, whose rules are `capRelTabsModel.js`.
  */
 
+import { formatMinorOrCount, majorToMinor } from '../../../lib/money.js';
+
 export const SLUG = 'capital-relationships';
 export const HOME_PATH = `/raise/${SLUG}`;
 export const TITLE = 'Capital relationships';
@@ -117,12 +119,10 @@ export function moveSentence(names, from, to) {
   return `${who} will move${was} to ${stageLabel(to)}.${to === PASSED ? ' Their history stays on the record.' : ''}`;
 }
 
-const MONEY = (cents, currency = 'USD') => {
-  try { return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(cents / 100); }
-  catch { return `${currency} ${Math.round(cents / 100).toLocaleString('en-US')}`; }
-};
+// D5373: at the currency's own decimals (a whole amount drops them); an unlisted code names the stored count.
+const MONEY = (cents, currency = 'USD') => formatMinorOrCount(cents, currency, { locale: 'en-US', trimWhole: true });
 /** An amount in dollars (the prospect row's `amount`), or null: "Amount not recorded", never $0 for a missing one. */
-export const amountText = (amount, currency = 'USD') => (num(amount) == null ? null : MONEY(Math.round(num(amount) * 100), currency));
+export const amountText = (amount, currency = 'USD') => (num(amount) == null ? null : MONEY(majorToMinor(num(amount), currency) ?? Number.NaN, currency));
 export const centsText = (cents, currency = 'USD') => (num(cents) == null ? null : MONEY(num(cents), currency));
 
 const day = (v) => (v ? String(v).slice(0, 10) : null);
