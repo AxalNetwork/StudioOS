@@ -8,6 +8,7 @@ import { LifecycleBadge, SafetyOverlayBadge } from './LifecycleBadge';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, button, card, date } from './parts';
 import LegalReviewPanel, { LastReview } from './LegalReviewPanel';
+import { GoverningList } from './RelatedDocuments';
 
 /**
  * D4811 (#4811) part 10 — one template's workspace (board CT-07 for a
@@ -135,7 +136,7 @@ function RelatedTab({ t }) {
   const line = usageLine(t);
   return <div className={`${card} space-y-2 p-4 text-[12.5px]`}>
     <p><b>Agreements:</b> {line ? <>{line}. {Number(t.usage_count) > 0 && <Link className="underline" to={`/admin/contracts?template=${encodeURIComponent(t.slug)}`}>Open them in Agreements</Link>}</> : <Missing reason="The usage count was not returned." />}</p>
-    <p><b>Governance records:</b> <Missing reason="Which governance records govern this template is recorded on each record's Related tab (D4811 part 8); it is not listed here yet." /></p>
+    <div><b>Governance records that govern it:</b> <GoverningList kind="template" refId={t.slug} /></div>
   </div>;
 }
 
