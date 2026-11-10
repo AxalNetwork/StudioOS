@@ -3,7 +3,7 @@
  * Gateway and the models behind it, across every tenant and product that
  * calls it. It sits behind `runGatewayTextModel`'s `deps.admit` seam (D4556
  * §8) and is held in the existing `AiGovernor` Durable Object, under one
- * object per gateway (`upstream:gateway:<slug>`), in that object's durable
+ * object per gateway (`upstream-lease:<slug>`), in that object's durable
  * storage. It is a throttle only: the D1 hold and settlement (D844) stay the
  * only financial authority, and tenant fairness for deck steps stays the
  * per-account governor's (`services/decks/aiGovernor.ts`).
@@ -174,11 +174,11 @@ export type UpstreamAdmitted = {
   release: (end?: { completion: Completion }) => Promise<void>;
   attempt: () => Promise<boolean>;
 };
-export type UpstreamAdmissionRequest = { gateway: string; userId: number; model: string; task: string; executionId: string };
+export type UpstreamAdmissionRequest = { gatewaySlug: string; userId: number; model: string; task: string; executionId: string };
 export type UpstreamAdmission = (req: UpstreamAdmissionRequest) => Promise<UpstreamAdmitted | { ok: false; retryAfterSec: number | null; reason?: string }>;
 
 /** The Durable Object name of a gateway's lease. One object per gateway: its request window is the gateway's. */
-export const upstreamObjectName = (gateway: string) => `upstream:gateway:${gateway}`;
+export const upstreamObjectName = (slug: string) => `upstream-lease:${slug}`;
 
 /**
  * The admission `runGatewayTextModel` calls. It waits at most `maxWaitMs`,
@@ -194,7 +194,7 @@ export function upstreamAdmission(
     if (!env.AI_GOVERNOR) return { ok: false, retryAfterSec: null, reason: 'no_binding' };
     // D264: under the branch's Durable Object jurisdiction, never an unrestricted one.
     const ns = doNamespace(env, env.AI_GOVERNOR);
-    const stub = ns.get(ns.idFromName(upstreamObjectName(req.gateway)));
+    const stub = ns.get(ns.idFromName(upstreamObjectName(req.gatewaySlug)));
     const call = async (path: string, body: unknown): Promise<any> => {
       const r = await stub.fetch(`https://ai-governor/upstream/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) throw new Error(`ai_governor_${r.status}`);

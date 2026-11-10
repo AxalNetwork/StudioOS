@@ -7,7 +7,7 @@
  * Only `governorFor` reaches it, under `account:<n>`.
  *
  * D5338 (#5338): the same class also holds the shared upstream lease of one AI
- * Gateway (`services/upstreamLease.ts`), under `upstream:gateway:<slug>`, on the
+ * Gateway (`services/upstreamLease.ts`), under `upstream-lease:<slug>`, on the
  * `/upstream/*` paths. That state is DURABLE: it is read from and written to
  * this object's storage on every call, so an eviction, a restart or a deploy
  * finds every outstanding lease. Calls are applied one at a time (the storage

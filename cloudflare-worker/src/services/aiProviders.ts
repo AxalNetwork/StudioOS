@@ -332,7 +332,7 @@ export type GatewayAdmitted = {
   release: (end?: { completion: 'done' | 'none' | 'unknown' }) => void | Promise<void>;
   attempt?: () => Promise<boolean>;
 };
-export type GatewayAdmission = (req: { gateway: string; userId: number; model: string; task: string; executionId: string }) =>
+export type GatewayAdmission = (req: { gatewaySlug: string; userId: number; model: string; task: string; executionId: string }) =>
   Promise<GatewayAdmitted | { ok: false; retryAfterSec: number | null; reason?: string }>;
 
 export interface GatewayDeps {
@@ -493,7 +493,7 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
   let completion: 'done' | 'none' | 'unknown' = 'none';
   if (deps.admit) {
     try {
-      const a = await deps.admit({ gateway: cfg.slug, userId: opts.userId, model: m.id, task: opts.task, executionId: opts.executionId });
+      const a = await deps.admit({ gatewaySlug: cfg.slug, userId: opts.userId, model: m.id, task: opts.task, executionId: opts.executionId });
       if (!a.ok) return { ok: false, refusal: 'capacity_unavailable', retryAfterSec: a.retryAfterSec };
       admitted = a;
     } catch {

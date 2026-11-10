@@ -250,7 +250,7 @@ test('D5338: a missing binding refuses, with no in-memory fallback; an object th
   const r = await run(w.env, s.ai);
   assert.deepEqual([r.ok, (r as any).refusal], [false, 'capacity_unavailable']);
   assert.equal(s.gw(), 0, 'no outbound call');
-  assert.deepEqual(await upstreamAdmission(w.env)({ gateway: SLUG, userId: 2, model: MODEL, task: 'publication', executionId: 'x' }), { ok: false, retryAfterSec: null, reason: 'no_binding' });
+  assert.deepEqual(await upstreamAdmission(w.env)({ gatewaySlug: SLUG, userId: 2, model: MODEL, task: 'publication', executionId: 'x' }), { ok: false, retryAfterSec: null, reason: 'no_binding' });
 
   const broken = world({ AI_GOVERNOR: { idFromName: (n: string) => n, get: () => ({ fetch: async () => new Response('down', { status: 500 }) }) } });
   const b = stubAi([answer]);
