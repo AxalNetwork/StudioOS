@@ -364,7 +364,9 @@ mailAccounts.post('/send', async (c) => {
   }
   let out: Awaited<ReturnType<MailAdapter['send']>>;
   try {
-    out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text, ...(attachments ? { attachments } : {}) });
+    // D5333: a sequence step carries its one-click opt-out URL as List-Unsubscribe, where the adapter can set it.
+    out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text, ...(attachments ? { attachments } : {}),
+      ...(sequence ? { listUnsubscribe: sequence.listUnsubscribe } : {}) });
   } catch (e) {
     // Only the adapter's own refusal is definite. Anything else left the provider's answer unknown.
     const definite = e instanceof AdapterError && e.code !== 'uncertain';

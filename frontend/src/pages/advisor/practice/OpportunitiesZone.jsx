@@ -4,7 +4,7 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   NothingYet, Pill, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass, money,
+  buttonClass, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import { bookingView, formatDateTime, offerLine } from '../advisory/kit';
 import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
@@ -85,7 +85,7 @@ export default function OpportunitiesZone() {
       });
     } catch (error) {
       setState({
-        loading: false, error: error?.message || 'The request log could not be read.',
+        loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'),
         bookings: [], services: [], servicesUnavailable: true,
       });
     }
