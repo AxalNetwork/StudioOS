@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
+import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { useRead, ReadState, button, card, input, date } from './parts';
 import { statusLabel } from './governanceModel';
@@ -15,13 +16,21 @@ import { statusLabel } from './governanceModel';
  * admin only.
  */
 
-const KIND_TAG = Object.freeze({ governance: 'Governance', template: 'Template' });
+const KIND_TAG = Object.freeze({ governance: 'Governance', template: 'Template', agreement: 'Agreement' });
 
 /** What a related row can name: its title, or why it cannot be named. */
 export function relationTitle(r) {
   if (r.restricted) return 'Restricted record · Super Admin only';
-  if (r.missing) return r.kind === 'template' ? 'Template no longer in the library' : 'Record not found';
+  if (r.missing) return r.kind === 'template' ? 'Template no longer in the library' : r.kind === 'agreement' ? 'Agreement no longer on the desk' : 'Record not found';
   return r.title || 'Untitled';
+}
+
+/** Where a related row opens: a governance record's or an agreement's workspace (part 19), or null. */
+export function relationHref(r) {
+  if (!r?.ref) return null;
+  if (r.kind === 'governance') return `/admin/contracts/governance/doc/${encodeURIComponent(r.ref)}`;
+  if (r.kind === 'agreement') return `/admin/contracts/agreements/doc/${encodeURIComponent(r.ref)}`;
+  return null;
 }
 
 /** A row's review state in words. Unknown parts say so; nothing is guessed. */
@@ -112,10 +121,10 @@ function RelationRow({ uid, r, onChanged }) {
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="min-w-0">
         <span className="mr-2 rounded border border-axal-hairline px-1 text-[10px] font-bold uppercase tracking-wider">{KIND_TAG[r.kind] || r.kind}</span>
-        {r.kind === 'governance' && !r.restricted && !r.missing
-          ? <Link className="font-semibold underline" to={`/admin/contracts/governance/doc/${encodeURIComponent(r.ref)}`}>{title}</Link>
+        {!r.restricted && !r.missing && relationHref(r)
+          ? <Link className="font-semibold underline" to={relationHref(r)}>{title}</Link>
           : <b>{title}</b>}
-        {r.status && <span className="ml-2 text-axal-muted">{statusLabel(r.status)}</span>}
+        {r.status && <span className="ml-2 text-axal-muted">{r.kind === 'agreement' ? r.status : statusLabel(r.status)}</span>}
       </span>
       <span className="text-right">
         <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${s.tone === 'amber' ? 'border-[#fcd34d] bg-[#fffbeb] text-[#92400e] dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200' : 'border-axal-hairline'}`}>{s.text}</span>
@@ -142,11 +151,16 @@ function LinkForm({ uid, entities, taken, onLinked }) {
   const [ref, setRef] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [q, setQ] = useState('');
   const linkable = useRead(() => (kind === 'template' ? adminGovernanceApi.linkable() : Promise.resolve(null)), [kind]);
+  // D4811 part 19: agreements are found by search on the desk's own list (legacy documents and envelopes carry a stable uid).
+  const agreements = useRead(() => (kind === 'agreement' ? contractsApi.agreements({ q: q.trim(), limit: 25 }) : Promise.resolve(null)), [kind, q]);
   const used = new Set(taken.filter((r) => r.kind === kind && r.ref).map((r) => r.ref));
   const options = kind === 'governance'
     ? entities.flatMap((e) => (e.documents || []).filter((d) => d.uid !== uid && !used.has(d.uid)).map((d) => [d.uid, `${d.title} · ${e.name}`]))
-    : (linkable.data?.templates || []).filter((t) => !used.has(t.slug)).map((t) => [t.slug, t.title]);
+    : kind === 'agreement'
+      ? (agreements.data?.items || []).filter((a) => ['documents', 'esign'].includes(a.source) && !used.has(a.uid)).map((a) => [a.uid, `${a.title}${a.project_name ? ` · ${a.project_name}` : ''}`])
+      : (linkable.data?.templates || []).filter((t) => !used.has(t.slug)).map((t) => [t.slug, t.title]);
   async function add(e) {
     e.preventDefault();
     if (!ref) { setError('Choose a document to link.'); return; }
@@ -160,15 +174,35 @@ function LinkForm({ uid, entities, taken, onLinked }) {
     <div className="flex flex-wrap items-end gap-2">
       <label className="text-[11px] font-semibold">Kind
         <select className={`${input} mt-1`} value={kind} onChange={(e) => { setKind(e.target.value); setRef(''); setError(''); }}>
-          <option value="governance">Governance record</option><option value="template">Template</option></select></label>
+          <option value="governance">Governance record</option><option value="template">Template</option><option value="agreement">Agreement</option></select></label>
+      {kind === 'agreement' && <label className="text-[11px] font-semibold">Find<input className={`${input} mt-1`} type="search" maxLength={120} value={q} onChange={(e) => { setQ(e.target.value); setRef(''); }} placeholder="Title, company, recipient" /></label>}
       <label className="min-w-[220px] flex-1 text-[11px] font-semibold">Document
         <select className={`${input} mt-1`} value={ref} onChange={(e) => setRef(e.target.value)} aria-describedby={error ? 'rel-add-error' : undefined}>
-          <option value="">{kind === 'template' && linkable.loading ? 'Loading templates…' : options.length ? 'Choose…' : 'Nothing left to link'}</option>
+          <option value="">{(kind === 'template' && linkable.loading) || (kind === 'agreement' && agreements.loading) ? 'Loading…' : options.length ? 'Choose…' : 'Nothing left to link'}</option>
           {options.map(([v, label]) => <option key={v} value={v}>{label}</option>)}</select></label>
       <button type="submit" className={`${button} min-h-[44px] md:min-h-0`} disabled={busy}>Link</button>
     </div>
+    {kind === 'agreement' && agreements.error && <p className="text-[11px] text-red-700 dark:text-red-300">Unreadable: the agreements could not be read.</p>}
     {kind === 'template' && linkable.error && <p className="text-[11px] text-red-700 dark:text-red-300">Unreadable: the template library could not be read.</p>}
     {error && <p id="rel-add-error" role="alert" className="text-[11px] text-red-700 dark:text-red-300">{error}</p>}
     <p className="text-[11px] text-axal-muted">A link is a reference: it changes neither document. Linking flags nothing; the next time this record becomes Approved or Executed at a newer version, each linked document is flagged for review.</p>
   </form>;
+}
+
+/**
+ * D4811 part 19: the governance records that govern a template or an
+ * agreement, for their workspaces' Related tab. A confidential governing
+ * record is shown as restricted, never named; outside HQ (where Corporate
+ * Governance is not kept) it says so rather than reading as none.
+ */
+export function GoverningList({ kind, refId }) {
+  const read = useRead(() => adminGovernanceApi.governing(kind, refId).catch((e) => (e?.status === 403 ? { hqOnly: true } : Promise.reject(e))), [kind, refId]);
+  return <ReadState read={read} what="Governing records">{read.data && (read.data.hqOnly
+    ? <p className="text-axal-muted" data-testid="governing-hq-only">Corporate Governance is kept at HQ.</p>
+    : read.data.governing.length
+      ? <ul className="divide-y divide-axal-hairline" data-testid="governing-list">{read.data.governing.map((r) => { const s = stateLine(r); return <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+        <span>{!r.restricted && !r.missing && r.ref ? <Link className="font-semibold underline" to={`/admin/contracts/governance/doc/${encodeURIComponent(r.ref)}`}>{relationTitle(r)}</Link> : <b>{relationTitle(r)}</b>}
+          {r.status && <span className="ml-2 text-axal-muted">{statusLabel(r.status)}</span>}</span>
+        <span className="text-[11px]">{s.text}</span></li>; })}</ul>
+      : <p className="text-axal-muted" data-testid="governing-none">No governance record names this {kind === 'agreement' ? 'agreement' : 'template'} as one it governs.</p>)}</ReadState>;
 }
