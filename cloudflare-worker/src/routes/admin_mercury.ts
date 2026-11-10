@@ -49,7 +49,7 @@ import {
   upsertAccounts, type ConnectionRow,
 } from '../services/mercury/store';
 import { syncConnection } from '../services/mercury/sync';
-import { confirmMatch, proposeManual, rejectMatch, type MatchDeps } from '../services/mercury/match';
+import { confirmMatch, ledgerSides, proposeManual, rejectMatch, type MatchDeps } from '../services/mercury/match';
 import { markNotOurs, withdrawNotOurs } from '../services/mercury/notOurs';
 import { BALANCE_RANGES, balanceSeries, monthlyFlows, type BalanceRange } from '../services/mercury/charts';
 
@@ -303,7 +303,12 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
         WHERE (? IS NULL OR m.state = ?) ORDER BY m.id DESC LIMIT 200`,
     ).bind(state, state).all<any>()).results || [];
     if (!await auditRead(c.env, user, 'mercury_matches_read', { state, rows: rows.length })) return c.json(AUDIT_UNAVAILABLE, 503);
-    return c.json({ ok: true, items: rows });
+    // D4812 part 6 (FA-07 B): each match's ledger side, or null with the reason; a failed ledger read never hides the matches.
+    const sides = await ledgerSides(c.env, rows).catch(() => null);
+    return c.json({ ok: true, items: rows.map((m: any) => {
+      const ledger = sides?.get(`${m.target_kind}:${Number(m.target_id)}`) ?? null;
+      return { ...m, ledger, ledger_unavailable: ledger ? null : sides ? 'This target is no longer on the ledger.' : 'The ledger could not be read.' };
+    }) });
   });
 
   const answer = (c: C, out: { ok: true } | { ok: false; status: 400 | 404 | 409; code: string; detail: string }, extra: Record<string, unknown> = {}) =>

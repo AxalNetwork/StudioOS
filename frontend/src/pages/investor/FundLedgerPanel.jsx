@@ -5,6 +5,7 @@ import { Section, FilterChips, EmptyState } from '../advisor/network/kit';
 import ErrorState from '../../components/ErrorState';
 import Skeleton from '../../components/Skeleton';
 import { Table } from '../admin/fundAdmin/parts';
+import { entrySource, journalTotals } from '../admin/fundAdmin/fundAdminModel.js';
 const money=value=>value==null ? 'Not recorded' : new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(value/100);
 
 /** Read-only layouts from IF3 and Fund Administration's fee-by-period table. */
@@ -76,15 +77,24 @@ function JournalTable({ fund }) {
   const [account, setAccount] = useState('');
   const rows = (fund.journal || []).flatMap((entry, e) => (entry.lines || []).map((line, i) => ({ ...line, entry, key: `${e}-${i}` })));
   const visible = rows.filter(r => (!account || r.code === account) && `${r.entry.description || ''} ${r.code} ${r.name}`.toLowerCase().includes(query.toLowerCase()));
+  // D4812 part 6 (FA-07 C): the period's totals, from every line read (not the filtered view), and whether they balance.
+  const totals = journalTotals(fund.journal);
   const input = 'min-h-11 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
   return <div><div className="mb-3 flex flex-wrap gap-2"><input className={input} aria-label="Search journal entries" placeholder="Search entries" value={query} onChange={e => setQuery(e.target.value)} />
     <select className={input} aria-label="Journal account" value={account} onChange={e => setAccount(e.target.value)}><option value="">Every account</option>{[...new Map(rows.map(r => [r.code, r.name]))].map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</select></div>
-  {!visible.length ? <EmptyState>No journal line matches these filters.</EmptyState> : <Table testId="books-journal" rows={visible} rowKey={r => r.key} template=".9fr 1.8fr 1.3fr 1fr 1fr .8fr" cols={[
+  {!visible.length ? <EmptyState>No journal line matches these filters.</EmptyState> : <Table testId="books-journal" rows={visible} rowKey={r => r.key} template=".9fr 1.8fr 1.3fr 1fr 1fr 1fr .8fr" cols={[
     { key: 'date', label: 'Date', mono: true, cell: r => r.entry.entry_date || 'Not recorded' },
     { key: 'entry', label: 'Entry', cell: r => r.entry.description || 'Not recorded: no entry description.' },
     { key: 'account', label: 'Account', cell: r => `${r.code} · ${r.name}` },
     { key: 'debit', label: 'Debit', mono: true, align: 'right', cell: r => money(r.debit_cents) },
     { key: 'credit', label: 'Credit', mono: true, align: 'right', cell: r => money(r.credit_cents) },
+    { key: 'source', label: 'Source', cell: r => entrySource(r.entry) },
     { key: 'period', label: 'Period', cell: () => fund.period?.label || 'Not recorded: no period recorded.' },
-  ]} foot={<p className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">Reconciliation is recorded on individual lines. No agreement with the bank is inferred from these totals.</p>} />}</div>;
+  ]} foot={<div className="flex flex-col gap-1 px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+    {totals && <p className="m-0 font-semibold text-gray-900 dark:text-gray-100" data-testid="books-totals">
+      {totals.balanced == null ? 'Totals: Not recorded, because a line has no amount.'
+        : `Totals for ${fund.period?.label || 'this period'} · debits ${money(totals.debit)} · credits ${money(totals.credit)} · ${totals.balanced ? 'Balanced' : `Out of balance by ${money(Math.abs(totals.debit - totals.credit))}`}`}
+    </p>}
+    <p className="m-0">Reconciliation is recorded on individual lines. No agreement with the bank is inferred from these totals.</p>
+  </div>} />}</div>;
 }

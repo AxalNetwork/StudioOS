@@ -62,6 +62,12 @@ Files and `?mode=access` to Access.
 - **Every row comes from a mounted read.** A read that fails says Unreadable
   with Try again where its block would be; one failed block never blanks the
   page; a value nobody recorded says "Not recorded".
+- **A refused room ends the page's data** (D5079, #5079). A refusal, and an
+  admin's `summary` answer (which is not the room), both make
+  `DataRoomHomeNav` report to the module page through `onRefused`, and the
+  page then draws none of the room's card, records, counts, Eadwyn bands or
+  Evidence. Home says the room is not theirs to read and points at the
+  reason gate; it never draws nothing, which read as an empty room.
 - **The owner alone** changes a gate or removes a file; a co-founder moves,
   renames, matches and uploads into a folder's gate (D1103).
 - **The owner alone** shares, revokes, changes a grant, sends the NDA and

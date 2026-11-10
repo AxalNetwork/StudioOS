@@ -193,7 +193,13 @@ test('the list names the exact request and its deadline in UTC', async () => {
   const row = await rowFor(h);
   assert.equal(row.requested_at, '2026-01-31 10:00:00');
   assert.ok(Number.isInteger(row.request_id) && row.request_id > 0, 'the row does not name its ledger request');
-  assert.equal(row.deadline_at, '2026-03-02T10:00:00.000Z');
+  // D4675 part 2: one calendar month, clamped to February's last day, to the
+  // end of that UTC day; and the rule is named in the payload, not counted.
+  assert.equal(row.deadline_at, '2026-02-28T23:59:59.999Z');
+  assert.equal(typeof row.overdue, 'boolean', 'the row no longer says whether it is overdue');
+  const list = await h.call(SUPER, 'GET', '/api/admin/security/overview');
+  assert.deepEqual(list.body.dsr.clock, { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' });
+  assert.equal(list.body.dsr.clock_days, undefined, 'a calendar month has no fixed day count to send');
 });
 
 test('a close without the reviewed request or a key is refused, and nothing moves', async () => {

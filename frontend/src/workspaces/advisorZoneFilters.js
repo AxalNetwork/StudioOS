@@ -284,28 +284,28 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'By client', key: 'by_client' },
   ],
 
-  // ALL FIVE RUN, AND ONE OF THEM ONLY RUNS BECAUSE THE STORE RESOLVED THE
-  // CANVAS'S OWN INCONSISTENCY. `Draft` is drawn as a chip and defined as a
-  // pill, but no row in the artboard's fixture carries that state — its draft
-  // row is `state:'Not started'` with `version:'v2 draft'`, two names for one
-  // thing. Clicking the chip as drawn would have returned nothing, which is the
-  // exact failure this file's docblock is about: an empty set reading as an
-  // answer. Migration 239 makes it a real state — a work product whose latest
-  // version has never been sent — so `Draft` is `not_started` and the chip
-  // narrows honestly.
+  // #4833 (D4833): THE PRACTICE V2 CANVAS'S ROW (`Practice v2 Page.dc.html`,
+  // PX-06), which replaced PR3's `All · Unopened · Opened · Draft · By client`.
+  // Each chip narrows on the LATEST version's own stamps (`cardStatus` in
+  // `deliveryTrail.js`): Draft is a latest version with no `sent_at`, Sent has
+  // no receipt yet, Opened has `opened_at`, Accepted has `signed_off_at`. The
+  // receipts are written by the client's routes, never an advisor's (D72,
+  // D4684).
   //
-  // `Unopened` and `Opened` read the derived state, which comes from whether
-  // `opened_at` exists — and that column is written by the FOUNDER side, never
-  // by an advisor route (D72). These two chips are the only place in four
-  // profiles where a filter reads a fact the signed-in user cannot author.
+  // THE CANVAS ALSO DRAWS `Ready`, AND IT IS LEFT OUT, not drawn disabled: the
+  // canvas itself marks it "isn't recorded today" and D4874 lists it as backend
+  // required. `profile_zone_filters.test.mjs` drops it from the canvas row by
+  // name, citing D4874, the way founder's `Cited in deck` is dropped (D549).
   //
-  // `By client` reorders rather than narrows, as on Engagements.
+  // `By client` left the chip row with the PR3 artboard. Grouping by client is
+  // still `?view=by_client` (D571's `/practice/deliverables`), a toggle beside
+  // the cards rather than a chip, because it reorders rather than narrows.
   'practice/delivery': [
-    { canvas: 'All', key: 'all' },
-    { canvas: 'Unopened', key: 'unopened' },
-    { canvas: 'Opened', key: 'opened' },
-    { canvas: 'Draft', key: 'draft' },
-    { canvas: 'By client', key: 'by_client' },
+    { canvas: 'Draft', key: 'draft', label: 'Draft {n}' },
+    { canvas: 'Sent', key: 'sent', label: 'Sent {n}' },
+    { canvas: 'Opened', key: 'opened', label: 'Opened {n}' },
+    { canvas: 'Accepted', key: 'accepted', label: 'Accepted {n}' },
+    { canvas: 'All', key: 'all', label: 'All {n}' },
   ],
 
   // TWO OF THESE CHANGE THE WINDOW AND TWO NARROW IT, which is unusual enough

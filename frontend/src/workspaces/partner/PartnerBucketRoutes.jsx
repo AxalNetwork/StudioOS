@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import { useAuth } from '../../hooks/useAuthSync';
@@ -50,6 +50,9 @@ const PartnerProposals = lazy(() => import('../../pages/partner/pipeline/Proposa
 // because neither has ever had a surface anywhere in the product.
 const PartnerNegotiations = lazy(() => import('../../pages/partner/pipeline/NegotiationsZone'));
 const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/RetainersZone'));
+// D4838 (#4838, part 1): `/pipeline` is a command centre, not five miniature reports — first run is one setup path,
+// populated is attention, metrics with their basis, the lifecycle strip and risks.
+const PipelineCommandCentre = lazy(() => import('../../pages/partner/pipeline/PipelineCommandCentre'));
 // #45 — the three Offers zones migration 209 gave a store to. These are the
 // only bucket a partner can use TODAY: their stores key on `partners.id` rather
 // than on an engagement or a quote, so a firm with no marketplace activity yet
@@ -401,10 +404,16 @@ export default function PartnerBucketRoutes() {
     : isRoot ? null : zoneForPath(bucket, location.pathname);
   const prefix = bucket?.prefix;
   const slug = zone?.slug;
+  // D4838: the Pipeline root reports which state it drew, so the title and the Eadwyn rail's steps follow it.
+  const pipelineRoot = isRoot && prefix === '/pipeline';
+  const [pipelineView, setPipelineView] = useState(null);
 
   const body = useMemo(() => {
     // The bucket root is the canvas overview — the sidebar row lands here,
     // not on the first zone. Zones stay one click away on the cards below.
+    if (pipelineRoot) {
+      return <Suspense fallback={<Loading />}><PipelineCommandCentre onView={setPipelineView} /></Suspense>;
+    }
     if (isRoot) {
       const board = boardFor('partner', prefix, api);
       return board ? (
@@ -428,10 +437,12 @@ export default function PartnerBucketRoutes() {
       what="This zone is named by the canvas and has no surface behind it."
       why="It ships empty rather than as a placeholder that could be mistaken for real data."
     />;
-  }, [prefix, slug, isRoot, bucket, user]);
+  }, [prefix, slug, isRoot, pipelineRoot, bucket, user]);
 
   const INTRO = {
-    '/pipeline': 'Win the work. One firm’s pipeline, from lead to signed retainer.',
+    // D4838: the title is "Win the work" (or "Set up your pipeline" on first run), so the line beneath it does not
+    // repeat it.
+    '/pipeline': 'From first-fit opportunity to recurring engagement.',
     // D4822: the canvas's one purpose line; the eyebrow and title come from the shell, once.
     '/delivery': 'Ship the work. Run active client engagements, deliverables, capacity and reporting in one place.',
     '/offers': 'Package what we sell. The storefront lead scoring reads against.',
@@ -514,11 +525,13 @@ export default function PartnerBucketRoutes() {
 
   // NO `scope` PROP — it read `scope="One firm"`, which named no firm. The shell
   // fills the slot from `ActiveCompanyContext`, the same way in all four profiles.
+  // D4838 (PP01): first run is titled by what to do, and its supporting copy sits on the setup card instead.
+  const firstRun = pipelineRoot && pipelineView?.firstRun;
   return (
     <WorkspaceShell
       role="partner"
-      title={isRoot ? bucketTitle(bucket) : undefined}
-      intro={INTRO[prefix]}
+      title={firstRun ? 'Set up your pipeline' : (isRoot ? bucketTitle(bucket) : undefined)}
+      intro={firstRun ? undefined : INTRO[prefix]}
       activeSlug={landsOnBoard ? 'board' : isRoot ? null : undefined}
       rail={RAIL && (
         <WorkerRail
@@ -528,6 +541,10 @@ export default function PartnerBucketRoutes() {
           note={RAIL.note}
           coverage={coverage}
           unavailable={RAIL.unavailable}
+          // D4838: on the Pipeline root the rail shows what this page asks for next (setup, then attention) in
+          // place of the model list, and model, usage and top-up sit behind Account › AI tokens.
+          steps={pipelineRoot ? pipelineView?.rail || { title: 'For Pipeline', state: 'loading' } : null}
+          usageAt={pipelineRoot ? '/account/ai-tokens' : null}
         />
       )}
     >

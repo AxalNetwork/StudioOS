@@ -20,9 +20,11 @@ import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import { founderAdvisorAccess, optedOutFounderIds, setFounderVisibility, syncCohortAdvisorNotices } from '../services/cohortAdvisorAccess';
 import {
-  guidanceCounts, oldestOpenHours, collisions, withinDays, guidanceStatus, parseGuidanceWeek,
-  GUIDANCE_WEEK_FALLBACK_MAX, type GuidanceRow, type CalendarItem,
+  guidanceCounts, oldestOpenHours, activeOrUpcoming, collapseSessions, collisionDetails,
+  guidanceStatus, parseGuidanceWeek, GUIDANCE_WEEK_FALLBACK_MAX,
+  type BookingRow, type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
+import { COHORT_TZ } from '../services/cohortTiming';
 import { pageFacts, pageWindow } from '../services/listPage';
 import {
   THINKING_PAGE, myAdvisor,
@@ -829,31 +831,50 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     }>();
     if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
 
-    const items: CalendarItem[] = [];
+    // D4813 package 3: EACH HALF IS READ ON ITS OWN, and a failure in one is a
+    // partial calendar, not a failed one. A Lab outage used to blank the
+    // advisor's own sessions too, and a bookings failure blanked the Lab's
+    // deadlines — the page had nothing to say but "could not be read". Now
+    // `sources` says which half answered and the page draws what it has.
+    const labItems: CalendarItem[] = [];
+    let labDates: 'ok' | 'not_recorded' | 'error';
+    let weekRows: Array<{ week_number: number; unlock_at: string; deadline_at: string }> = [];
 
     // The Lab's half. A cycle predating migration 156 has no windows at all,
     // and `windows_recorded: false` is the honest answer for it — the same rule
     // the weeks route states. Rendering an empty calendar would say the batch
     // has no obligations, which is the one thing this page must not claim.
-    const windows = await c.env.DB.prepare(
-      `SELECT week_number, unlock_at, deadline_at FROM week_windows
-        WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
-    ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
-    const weekRows = windows.results || [];
+    try {
+      const windows = await c.env.DB.prepare(
+        `SELECT week_number, unlock_at, deadline_at FROM week_windows
+          WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
+      ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
+      weekRows = windows.results || [];
+      labDates = weekRows.length ? 'ok' : 'not_recorded';
+    } catch (e) {
+      console.error('[advisors] cohort calendar windows read failed:', (e as Error).message);
+      labDates = 'error';
+    }
+    // The UID carries the cycle id (D4813 package 3): `week:2:unlock` is the
+    // same string in every cohort, so an export keyed on the ref made week 2
+    // of March and week 2 of April one calendar entry that each import
+    // overwrote. The ref stays as it was — the Overview keys on it.
     for (const w of weekRows) {
-      items.push({
-        kind: 'cohort', title: `Week ${w.week_number} opens`,
+      labItems.push({
+        kind: 'cohort', type: 'week_opens', title: `Week ${w.week_number} opens`,
         starts_at: w.unlock_at, ends_at: null, ref: `week:${w.week_number}:unlock`,
+        uid: `cohort-${cycleId}-week-${w.week_number}-opens`, week_number: w.week_number,
       });
-      items.push({
-        kind: 'cohort', title: `Week ${w.week_number} deliverables due`,
+      labItems.push({
+        kind: 'cohort', type: 'deadline', title: `Week ${w.week_number} deliverables due`,
         starts_at: w.deadline_at, ends_at: null, ref: `week:${w.week_number}:deadline`,
+        uid: `cohort-${cycleId}-week-${w.week_number}-due`, week_number: w.week_number,
       });
     }
     if (cycle.end_at) {
-      items.push({
-        kind: 'demo_day', title: 'Demo Day', starts_at: cycle.end_at, ends_at: null,
-        ref: `cycle:${cycleId}:end`,
+      labItems.push({
+        kind: 'demo_day', type: 'demo_day', title: 'Demo Day', starts_at: cycle.end_at, ends_at: null,
+        ref: `cycle:${cycleId}:end`, uid: `cohort-${cycleId}-demo-day`,
       });
     }
 
@@ -873,50 +894,70 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     //
     // D4813: FROM NOW ON, in SQL. The read used to take the advisor's first 200
     // bookings ever, oldest first, and only then keep the next 14 days — so an
-    // advisor with 200 past sessions saw no upcoming ones at all. The window
-    // filter below (`withinDays`) still decides what is shown; this only stops
-    // history from spending the cap. `sessions_truncated` says when the cap
-    // was still reached.
-    const me = await myAdvisor(c.env, user as User);
-    const booked = me ? await c.env.DB.prepare(
-      `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
-              b.topic AS topic, u.name AS founder_name
-         FROM advisor_bookings b
-         JOIN advisor_office_hour_slots s ON s.id = b.slot_id
-         LEFT JOIN users u ON u.id = b.founder_user_id
-        WHERE s.advisor_id = ? AND s.is_cancelled = 0
-          AND b.status IN ('pending', 'confirmed')
-          AND datetime(s.starts_at) >= datetime(?)
-        ORDER BY s.starts_at ASC
-        LIMIT 200`
-    ).bind(me.id, nowIso()).all<{
-      slot_id: number; starts_at: string; ends_at: string;
-      topic: string | null; founder_name: string | null;
-    }>() : { results: [] as Array<{
-      slot_id: number; starts_at: string; ends_at: string;
-      topic: string | null; founder_name: string | null;
-    }> };
-    for (const s of booked.results || []) {
-      items.push({
-        kind: 'client',
-        title: s.topic || (s.founder_name ? `Session with ${s.founder_name}` : 'Booked session'),
-        starts_at: s.starts_at, ends_at: s.ends_at, ref: `slot:${s.slot_id}`,
-      });
-    }
-
+    // advisor with 200 past sessions saw no upcoming ones at all. History does
+    // not spend the cap; `sessions_truncated` says when the cap was reached.
+    //
+    // D4813 package 3: "from now on" is by END, not start. A session that began
+    // before now and has not ended is still on — dropping it at its start
+    // minute also dropped every clash it was part of. And the rows are one per
+    // BOOKING, so a group session comes back once per founder;
+    // `collapseSessions` makes each slot one event with its participants.
     const now = nowIso();
-    const upcoming = withinDays(items, now, 14);
-    const clashes = collisions(upcoming);
+    let sessionsSource: 'ok' | 'no_profile' | 'error' = 'ok';
+    let bookingRows: BookingRow[] = [];
+    try {
+      const me = await myAdvisor(c.env, user as User);
+      if (!me) {
+        sessionsSource = 'no_profile';
+      } else {
+        const booked = await c.env.DB.prepare(
+          `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
+                  s.capacity AS capacity, b.topic AS topic, b.status AS status,
+                  u.name AS founder_name
+             FROM advisor_bookings b
+             JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+             LEFT JOIN users u ON u.id = b.founder_user_id
+            WHERE s.advisor_id = ? AND s.is_cancelled = 0
+              AND b.status IN ('pending', 'confirmed')
+              AND datetime(s.ends_at) > datetime(?)
+            ORDER BY s.starts_at ASC, s.id ASC, b.id ASC
+            LIMIT 200`
+        ).bind(me.id, now).all<BookingRow>();
+        bookingRows = booked.results || [];
+      }
+    } catch (e) {
+      console.error('[advisors] cohort calendar sessions read failed:', (e as Error).message);
+      sessionsSource = 'error';
+    }
+    const sessions = activeOrUpcoming(collapseSessions(bookingRows), now, 3660);
+
+    // `items` is the next fourteen days (the Overview and the agenda);
+    // `events` is every Lab date of the cycle plus every session read, so the
+    // month and week views can page through the cohort. Conflicts are checked
+    // over `events`: a clash three weeks out is still one.
+    const upcoming = activeOrUpcoming([...labItems, ...sessions], now, 14);
+    const events = [...labItems, ...sessions]
+      .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.ref.localeCompare(b.ref));
+    const clashes = collisionDetails(events, now);
+    const readFailed = labDates === 'error' || sessionsSource === 'error';
     return c.json({
       cohort_cycle_id: cycleId,
-      windows_recorded: weekRows.length > 0,
-      sessions_truncated: (booked.results || []).length >= 200,
+      // Dates are the Lab's and are shown in its zone, by name.
+      timezone: COHORT_TZ,
+      windows_recorded: labDates === 'ok',
+      sources: { lab_dates: labDates, sessions: sessionsSource },
+      partial: labDates !== 'ok' || sessionsSource === 'error',
+      sessions_truncated: bookingRows.length >= 200,
       items: upcoming,
-      collisions: clashes.map(([a, b]) => ({ a: upcoming[a].ref, b: upcoming[b].ref })),
+      events,
+      collisions: clashes,
+      // #3871: a half that FAILED to read leaves its counts unknown — `null`,
+      // never a number that undercounts. (Windows that were read and are
+      // simply not recorded are a real zero for the Lab's half.)
       counts: {
-        next_14_days: upcoming.length,
-        cohort_obligations: upcoming.filter((i) => i.kind !== 'client').length,
-        collisions: clashes.length,
+        next_14_days: readFailed ? null : upcoming.length,
+        cohort_obligations: labDates === 'error' ? null : upcoming.filter((i) => i.kind !== 'client').length,
+        collisions: readFailed ? null : clashes.length,
         // Nothing stores a session brief, so this is not a zero.
         missing_prep: null,
       },

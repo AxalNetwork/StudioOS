@@ -69,6 +69,11 @@ export default function RecordEmailSheet({ person, label = '', from = null, read
   // As `/email` starts: the records the pack selects.
   const refs = (pack.items ?? []).filter((i) => i.selected).map((i) => i.ref);
   // #4017 (IV-D3): a form the member writes, with Ask's field trigger on a blank Body (`RecordCompose`).
-  return <RecordCompose pack={pack} refs={refs} to={recipientFor(who, shares)} account={sendingAccount(accounts)} from={from} readOnly={readOnly} api={api}
+  // #4611 finding 10: this arm is reached only from `status === 'ready'`, so
+  // the accounts read succeeded. An empty list is therefore "none connected"
+  // and never "could not be read" — the composer says the right one of the two
+  // because this line tells it which, rather than letting it infer from a null.
+  const sending = sendingAccount(accounts);
+  return <RecordCompose pack={pack} refs={refs} to={recipientFor(who, shares)} account={sending} mailboxes={sending ? 'connected' : 'none'} from={from} readOnly={readOnly} api={api}
     onClose={onClose} onSent={onClose} />;
 }

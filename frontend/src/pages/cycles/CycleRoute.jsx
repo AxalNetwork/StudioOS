@@ -930,6 +930,22 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
   // D1464 (#4021): the access pill and banner say HQ for the Super Admin, Studio admin for an Admin.
   const supportViewer = isSuperAdminUser(user) ? 'super_admin' : 'admin';
+  /**
+   * D5079 (#5079): a sensitive Raise tool's own authoritative read can be
+   * refused while this page's module read succeeds — the two are gated
+   * differently, and an admin passes one and not the other. The tool reports
+   * its refusal here, and this page then draws none of the module's
+   * authoritative data for it. The page's own refused branch is what withholds
+   * it — the card, the records table with its Add and row actions, and the
+   * children: Eadwyn's bands, the module's parts and the Evidence block — so
+   * this flag only has to reach it. Only the tool's own refusal and its tab
+   * row stay, because `subnav` sits outside that branch. "Not allowed to
+   * read" must never be drawn as "read, and empty".
+   */
+  const [toolRefusal, setToolRefusal] = useState(null);
+  const onToolRefused = useCallback((refusal) => setToolRefusal(refusal ?? null), []);
+  useEffect(() => { setToolRefusal(null); }, [cycle, slug, projectId]);
+  const refusedTool = !record && toolRefusal?.refused ? toolRefusal : null;
   const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -1360,12 +1376,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         header={distribution ? null : undefined}
         cards={tabs}
         data={module}
-        status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
-        message={moduleStatus === 'refused' ? moduleMessage : undefined}
+        status={projectStatus === 'unreadable' ? 'unreadable' : refusedTool ? 'refused' : moduleStatus}
+        message={refusedTool ? refusedTool.message : moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
-        recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
+        recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
@@ -1383,10 +1399,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}

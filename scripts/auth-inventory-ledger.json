@@ -1343,11 +1343,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "PATCH /api/pipeline/mvp-tasks/:id": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "PATCH /api/research/ask/answers/:uid": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
@@ -2022,11 +2017,6 @@
       "state": "unreviewed"
     },
     "POST /api/partners/referral/:code/use": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
-    "POST /api/pipeline/projects/:id/advance": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",
       "state": "unreviewed"

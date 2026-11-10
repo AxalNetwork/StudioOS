@@ -22,6 +22,10 @@ const dateLabel = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
+const DAY_MS = 86_400_000;
+const LAUNCH_WINDOW_DAYS = 90;
+/** D5203 (#5203): the project-linked kinds a launch calendar shows: events and Grow's dated plans and sends. */
+const LAUNCH_KINDS = Object.freeze(['event_hosted', 'event_ticket', 'publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step']);
 const kindLabel = (value) => titleCase(value) || 'Event';
 const statusLabel = (value) => titleCase(value) || 'State not recorded';
 
@@ -49,11 +53,13 @@ export default function FounderGrowLaunch() {
       if (String(selected.id) !== requestedId) {
         setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(selected.id)); return next; }, { replace: true });
       }
-      const now = new Date();
-      const from = new Date(now); from.setFullYear(from.getFullYear() - 1);
-      const to = new Date(now); to.setFullYear(to.getFullYear() + 1);
+      // D5203 (#5203): 90 days either side (the Worker's personal window is at most
+      // 180 days) and only the launch kinds, not two years of every source.
+      const now = Date.now();
+      const from = new Date(now - LAUNCH_WINDOW_DAYS * DAY_MS);
+      const to = new Date(now + LAUNCH_WINDOW_DAYS * DAY_MS);
       const results = await Promise.allSettled([
-        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString() }),
+        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString(), kinds: LAUNCH_KINDS.join(',') }),
         // Founder side; `/me/attributions` is the partner's and refuses a founder.
         api.founderCoMarketing(selected.id),
       ]);

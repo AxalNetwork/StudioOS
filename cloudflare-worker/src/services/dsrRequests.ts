@@ -39,19 +39,27 @@ import { hashEmail } from '../util/hashEmail';
 export const HQ_DSR_OUTCOMES = ['fulfilled', 'denied'] as const;
 
 /**
- * The clock HQ's list runs, as the code has always run it (D4675 makes it
- * explicit and tested; it does not change it):
+ * THE CLOCK (D4675 part 2, the owner's decision of 2026-11-10 on #4675: Q1 = B,
+ * Q2 = B, consistent with the legal reviewer's pick).
  *
- *   · it starts at RECEIPT, the stamp on `users.deletion_requested_at`;
- *   · it is DSR_CLOCK_DAYS spans of exactly 24 hours, counted in UTC, so a
- *     month's length, a leap day and a daylight-saving change move nothing;
- *   · nothing pauses or extends it — the ledger records no extension.
+ *   · it starts at RECEIPT, the stamp on `users.deletion_requested_at`, read
+ *     as UTC;
+ *   · it runs ONE CALENDAR MONTH: to the same day of the next month, or to
+ *     that month's last day when it has no such day (received 31 January →
+ *     due 28 or 29 February), and never later than that;
+ *   · it ends at the END OF THAT UTC DAY, so the due date is a whole day and
+ *     the request is overdue from the next instant — not 24 hours later;
+ *   · nothing pauses or extends it: the ledger records no extension, and a
+ *     pause while identity is verified (option C) was not chosen.
  *
- * Whether that is the right policy (a calendar month, an extension, a pause
- * while identity is checked) is the owner's and a legal reviewer's call,
- * asked on #4675. Until it is answered this is the rule, and the tests pin it.
+ * Until part 2 the rule was 30 spans of exactly 24 hours, and the list read
+ * "0d left" for the whole day after the deadline had passed. A calendar month
+ * can run past 30 days (received 1 March → due 1 April, end of day), so the
+ * two rules differ in both directions; the tests pin the month ends, leap
+ * years and the year end.
  */
-export const DSR_CLOCK_DAYS = 30;
+export const DSR_CLOCK_RULE = 'calendar_month' as const;
+export const DSR_CLOCK_LABEL = 'One calendar month from receipt, to the end of that UTC day';
 export const DSR_DAY_MS = 86400000;
 
 /**
@@ -66,29 +74,53 @@ export function dsrStampMs(s: string | null | undefined): number {
   return Date.parse(iso);
 }
 
-/** The instant the clock runs out (receipt + DSR_CLOCK_DAYS × 24h), as ISO-8601 UTC, or null when unknown. */
-export function dsrDeadlineIso(requestedMs: number, clockDays: number = DSR_CLOCK_DAYS): string | null {
+/**
+ * The last millisecond of the due day, in UTC, or null when the receipt is
+ * unknown. The due day is receipt's UTC date one calendar month on, clamped
+ * to the last day of that month. `Date.UTC` carries a month past December
+ * into the next year, and day 0 of a month is the previous month's last day.
+ */
+export function dsrDeadlineMs(requestedMs: number): number | null {
   if (!Number.isFinite(requestedMs)) return null;
-  return new Date(requestedMs + clockDays * DSR_DAY_MS).toISOString();
+  const r = new Date(requestedMs);
+  const y = r.getUTCFullYear();
+  const m = r.getUTCMonth();
+  const lastOfNextMonth = new Date(Date.UTC(y, m + 2, 0)).getUTCDate();
+  const dueDay = Math.min(r.getUTCDate(), lastOfNextMonth);
+  return Date.UTC(y, m + 1, dueDay + 1) - 1;
+}
+
+/** The instant the clock runs out (the end of the due day, UTC), as ISO-8601, or null when unknown. */
+export function dsrDeadlineIso(requestedMs: number): string | null {
+  const end = dsrDeadlineMs(requestedMs);
+  return end === null ? null : new Date(end).toISOString();
+}
+
+/** True from the instant after the due day ends. Null when the receipt is unknown. */
+export function dsrOverdue(requestedMs: number, nowMs: number): boolean | null {
+  const end = dsrDeadlineMs(requestedMs);
+  return end === null ? null : nowMs > end;
 }
 
 /**
- * Days remaining on the statutory clock — negative once it has run out.
+ * Whole UTC days from today to the due day: 0 ON the due day ("due today"),
+ * negative once it has passed. Because the clock ends at the end of a UTC day,
+ * `days_left < 0` and `dsrOverdue` are the same fact — there is no window in
+ * which a request is past its deadline and still reads 0.
  *
- * EXTRACTED BECAUSE IT HAD NEVER BEEN TESTED. This arithmetic has driven an
- * amber zone, a red "Nd overdue" and a headline "inside deadline pressure"
- * count since the Security page shipped, and no assertion anywhere touched
- * it: inverting the subtraction would have turned every overdue request into
- * one with weeks left, on the one screen where that is a compliance failure
- * rather than a wrong number.
+ * EXTRACTED BECAUSE IT HAD NEVER BEEN TESTED (D4675 part 1). This arithmetic
+ * drives an amber zone, a red "overdue" and the Overview's deadline findings.
  *
  * `null` for an unparseable stamp, never 0: an unknown clock is not a clock
  * at zero, and rendering it as one would put a request at its deadline that
  * may have days left, or the reverse.
  */
-export function dsrDaysLeft(requestedMs: number, nowMs: number, clockDays: number = DSR_CLOCK_DAYS): number | null {
-  if (!Number.isFinite(requestedMs)) return null;
-  return clockDays - Math.floor((nowMs - requestedMs) / DSR_DAY_MS);
+export function dsrDaysLeft(requestedMs: number, nowMs: number): number | null {
+  const end = dsrDeadlineMs(requestedMs);
+  if (end === null || !Number.isFinite(nowMs)) return null;
+  const dueDayStart = end + 1 - DSR_DAY_MS;
+  const todayStart = Math.floor(nowMs / DSR_DAY_MS) * DSR_DAY_MS;
+  return Math.round((dueDayStart - todayStart) / DSR_DAY_MS);
 }
 export type HqDsrOutcome = (typeof HQ_DSR_OUTCOMES)[number];
 
