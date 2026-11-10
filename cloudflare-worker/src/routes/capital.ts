@@ -15,7 +15,7 @@ import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
 import { requireFundGp } from '../services/fundGpAccess';
 import { assertAdminAct, auditFundAct } from '../services/fundAdminAccess';
 import { refuse } from '../util/refusal';
-import { claimLpRowsByEmail } from '../services/lpClaim';
+import { claimLpRowsByEmail, claimLpRowsForAddress } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
 import { insertCapitalCall } from './_capital_call_writes';
 import { recordReceipt } from '../services/fundCallLedger';
@@ -127,6 +127,8 @@ capital.post('/investors', async (c) => {
     WHERE id = ${fund.id}
   `;
   await sql.end();
+  // D5318 H8: link the new row to the account that already holds the address.
+  await claimLpRowsForAddress(c.env, lp?.email, Number(fund.id));
   return c.json(lpDto({ ...lp, fund_name: fund.name }), 201);
 });
 

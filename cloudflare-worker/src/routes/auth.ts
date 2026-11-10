@@ -165,6 +165,7 @@ import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 // (routes/admin_exploring.ts) shows a suggestion immediately, before the
 // onboarding chatbot even runs.
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { withDeadline } from '../util/deadline';
 
 /**
@@ -664,6 +665,7 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   await sql.end();
 
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
 
@@ -874,6 +876,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // browser user) from being replayed from outside the browser even after
   // the SPA's identity-change purge wipes localStorage.
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
 
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
@@ -1426,6 +1429,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     }
 
     await revokeStaleCrossIdentitySession(c, user.id);
+    await claimLpRowsAtSignIn(c.env, user); // D5318 H8
     const csrf = generateCsrfToken();
     setAuthCookies(c, jwtToken, csrf);
     const landing = newSignup ? '/onboarding/chat' : '/dashboard';

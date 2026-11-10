@@ -72,6 +72,7 @@ import { notify } from '../services/notify';
 import { withDeadline } from '../util/deadline';
 import { refuse } from '../util/refusal';
 import { gcipSentence } from '../services/gcip';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 
 // A stall is an outage, and this limiter fails closed on an outage. Both KV
 // calls carry a deadline because KV takes no AbortSignal: without one the catch
@@ -354,6 +355,7 @@ async function mintRecoverySession(
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).bind(user.id, jti, ua || null, ip || null, factor, assurance).run();
   } catch {}
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
   const csrf = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrf);
   return { token: jwtToken, csrf };
