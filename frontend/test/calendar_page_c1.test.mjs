@@ -49,6 +49,7 @@ const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = raw('design/canvases/integrated/Calendar.dc.html');
 const pageRaw = raw('frontend/src/pages/CalendarPage.jsx');
 const page = codeOnly(pageRaw);
+const readController = raw('frontend/src/pages/calendarReadController.js');
 const css = raw('frontend/src/pages/calendarPage.css');
 const service = raw('cloudflare-worker/src/services/calendar.ts');
 const route = raw('cloudflare-worker/src/routes/calendar.ts');
@@ -311,7 +312,7 @@ test('empty range, degraded source and failed request are three different states
   assert.match(pageRaw, /did not respond\.\s*\n\s*The other \{Math\.max\(0, attempted - failedSources\.length\)\} sources loaded\./,
     'the degraded banner no longer names what loaded');
   assert.match(page, /className="cal-alert" role="alert"/, 'a failed request no longer renders its own state');
-  assert.match(page, /setItems\(null\);/, 'a failed request is being stored as an empty list');
+  assert.match(readController, /status: 'unreadable', items: null/, 'a failed request is being stored as an empty list');
   // And they cannot render as each other: the empty card requires a real list.
   assert.match(page, /\{!loading && Array\.isArray\(inRange\) && inRange\.length === 0 && \(/,
     'the empty-range card can render over a request that never answered');
