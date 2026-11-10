@@ -24,6 +24,7 @@
  * proposition row at generation time so "why this intro" stays auditable.
  */
 import { inGrace } from '../middleware/planSubscription';
+import { propositionDestination } from './introDestination';
 import type { Env } from '../types';
 import {
   confidenceAdjustedAlignment,
@@ -426,7 +427,7 @@ export async function grantPurchasedIntroCredits(
         category: 'billing',
         title: `${args.credits} introduction credits added`,
         body: 'Your purchase is confirmed — the credits are ready to use on new introductions.',
-        link: '/network?tab=introductions',
+        link: propositionDestination(),
         payload: { credits: args.credits, pack: args.pack || null },
         channels: ['in_app'],
       });
@@ -905,7 +906,7 @@ export async function generateIntroPropositions(
             ? `Strong introduction match: ${viewerName}`
             : `New introduction proposition: ${viewerName}`,
           body: `${topReason}. Review the match and accept or decline — accepting uses one introduction credit.`,
-          link: `/network?tab=introductions&intro=${mirrorUid}`,
+          link: propositionDestination(mirrorUid),
           payload: { proposition_uid: mirrorUid, score: mirror.score, urgent },
           channels: ['in_app'],
         });

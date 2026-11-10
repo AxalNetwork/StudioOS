@@ -33,6 +33,9 @@ export default function AgreementDetail({ uid, onClose, onChanged, workspaceLink
   const history = useRead(() => contractsApi.history(uid), [uid]);
   const pdf = useRead(() => contractsApi.signedPdf(uid), [uid]);
   const files = useRead(() => contractsApi.files(uid), [uid]);
+  // D4811 part 17 (CT-15): open cross-border checks hold a resend; the reason is shown, and the Worker refuses too.
+  const crossBorder = useRead(() => contractsApi.crossBorder(uid), [uid]);
+  const held = crossBorder.data?.open?.length ? crossBorder.data.open : null;
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,8 +67,9 @@ export default function AgreementDetail({ uid, onClose, onChanged, workspaceLink
       <h3 className="font-bold">Signed PDF</h3><ReadState read={pdf} what="Signed PDF">{pdf.data && (pdf.data.available ? <div><p className="font-mono break-all text-xs">SHA-256: {pdf.data.sha256}</p><button type="button" className={button} onClick={() => downloadPdf(pdf.data.pdf_base64, 'signed-agreement.pdf')}>Download signed PDF</button></div> : <Missing reason={pdf.data.reason} />)}</ReadState>
       <ReadState read={files} what="Recorded files">{files.data && (files.data.files?.length ? <FileRows files={files.data.files} /> : <Missing reason={files.data.reason || 'No rendered file is recorded for this envelope.'} />)}</ReadState>
       {row.void_reason && <p>Void reason: {row.void_reason}</p>}
-      <div className="flex gap-2">{row.can_resend && <button type="button" className={button} disabled={busy} onClick={() => act('resend')}>Resend</button>}
+      <div className="flex gap-2">{row.can_resend && <button type="button" className={button} disabled={busy || !!held} onClick={() => act('resend')}>Resend</button>}
         {['documents', 'esign'].includes(row.source) && !['signed', 'void'].includes(row.status) && <button type="button" className={button} disabled={busy} onClick={() => setVoiding(true)}>Void…</button>}</div>
+      {row.can_resend && held && <p role="status" className="text-amber-800 dark:text-amber-300" data-testid="agreement-cross-border-held">Resend is held: {held.length} cross-border {held.length === 1 ? 'check is' : 'checks are'} open ({held.join(', ')}). Resolve {held.length === 1 ? 'it' : 'them'} in the agreement's workspace.</p>}
       {voiding && <div className="space-y-2"><label>Reason for voiding<textarea className={input} value={reason} maxLength={1000} onChange={e => setReason(e.target.value)} /></label><p>Use at least five characters. This reason is recorded with the agreement. The recipient can no longer sign.</p><button type="button" className={button} disabled={reason.trim().length < 5 || busy} onClick={() => act('void')}>Confirm void</button><button type="button" className={button} onClick={() => setVoiding(false)}>Cancel</button></div>}
     </>}</ReadState>{message && <p role="status">{message}</p>}
   </SidePanel>;

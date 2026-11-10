@@ -11,6 +11,7 @@ import { AWAITING_DECISION, slotMinutes, slotView } from './advisory/kit';
 import { advisorToday, listNames, todayState } from './advisorToday';
 import './advisorStudioHome.css';
 import { earningsFigures } from './advisorEarnings';
+import { ADVISOR_AGENDA_KINDS } from '../studio/studioAgenda';
 
 /**
  * " · 45 min", or nothing at all.
@@ -126,7 +127,8 @@ export default function AdvisorStudioHome({
   }, []);
   const loadBookings = useCallback(() => read('bookings', setBookings, () => api.listMyAdvisorBookings(), asItems), [read]);
   // The calendar answer is kept whole: its `sources` say whether the advisor-booking source was actually read.
-  const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents(), (r) => r), [read]);
+  // D5203 (#5203): Today reads only the kinds it draws, never all of the calendar's sources.
+  const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents({ kinds: ADVISOR_AGENDA_KINDS.join(',') }), (r) => r), [read]);
   const loadSlots = useCallback((uid) => read('slots', setSlots, () => api.listAdvisorSlots(uid, true), asItems), [read]);
 
   const load = useCallback(() => {

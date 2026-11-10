@@ -68,7 +68,7 @@ async function mountAsk(items) {
 const ANSWERED = {
   uid: 'a', question: 'Which rules?', reason: 'answered', answer: 'C5 in Germany [1].', cost_usd: 0.004,
   citations: [
-    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: false },
+    { n: 1, title: 'BSI C5', document_uid: 'd-1', chunk: 0, page: 4, passage: 'The C5 criteria catalogue applies to cloud providers', passage_truncated: false, cited: true },
     { n: 2, title: 'Removed memo', document_uid: 'd-gone', chunk: 3, page: null },
   ],
 };
@@ -79,7 +79,9 @@ test('each source shows its passage, or says it was not recorded, and whether it
     // Mutation checked: render `ct.title` in place of `ct.passage` → the passage is gone.
     assert.equal(textOf(byTid(m, 'ask-passage-a-0')).trim(), 'The C5 criteria catalogue applies to cloud providers');
     const sources = textOf(byTid(m, 'ask-sources-a'));
-    assert.match(sources, /Sources used · 2/);
+    // D4613: the cited source and the retrieved-but-uncited passage are listed apart.
+    assert.match(sources, /Sources cited · 1/);
+    assert.match(sources, /Retrieved, not cited · 1/);
     assert.match(sources, /\[1\] BSI C5 · passage 1page 4✓ Available/);
     assert.match(sources, /\[2\] Removed memo · passage 4⊠ No longer available/);
     assert.match(sources, /Passage not recorded for this answer\./);
@@ -87,7 +89,7 @@ test('each source shows its passage, or says it was not recorded, and whether it
   } finally { await m.close(); }
 });
 
-test('the tabs change the read; Archived reads all and keeps the discarded', async () => {
+test('the tabs change the read; Archived is its own read, not a filter over All', async () => {
   const m = await mountAsk([ANSWERED]);
   try {
     assert.deepEqual(m.scopes, ['session']);
@@ -96,9 +98,22 @@ test('the tabs change the read; Archived reads all and keeps the discarded', asy
       await m.settle();
     }
     // Mutation checked: tabs wired to a no-op → the scopes never change.
-    assert.deepEqual(m.scopes, ['session', 'all', 'saved', 'all']);
+    //
+    // #4610 — ARCHIVED ASKS FOR `discarded`, WHICH IT USED TO SPELL `all`.
+    // As a narrowing over `scope=all` it searched only the rows that read
+    // returned — the newest two hundred — so an answer archived and then
+    // followed by two hundred questions was unreachable from the one tab whose
+    // whole purpose is finding archived answers. It is a server scope now,
+    // with its own statement, its own cursor and its own totals.
+    assert.deepEqual(m.scopes, ['session', 'all', 'saved', 'discarded']);
     assert.equal(m.props(byTid(m, 'ask-tab-discarded'))['aria-selected'], true);
-    assert.match(m.text(), /No discarded answers\./, 'Archived narrows to discarded answers');
+    // The old assertion was `/No discarded answers\./`, and it only held
+    // because Archived filtered the rows this mock returns for every scope.
+    // Now the tab ASKS for the discarded scope and renders what comes back, so
+    // what is pinned is the request — above — and the tab's own selection. The
+    // empty-scope sentence is covered where an empty scope can be arranged:
+    // `research_shared_history_4610.test.ts` drives the real route.
+    assert.equal(m.scopes[m.scopes.length - 1], 'discarded');
   } finally { await m.close(); }
 });
 

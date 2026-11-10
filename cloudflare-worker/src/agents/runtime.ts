@@ -46,9 +46,19 @@ export const DAILY_LIMIT = 20;
 export const OPEN_PROPOSALS_MAX = 5;
 
 /** What admits a run: a person's start, the sweep, a decided run's `after`, a duty. */
-export type Trigger = { agentId: number; taskId: number; by: number | null; source: 'person' | 'sweep' | 'after' | 'duty' };
+export type Trigger = {
+  agentId: number; taskId: number; by: number | null; source: 'person' | 'sweep' | 'after' | 'duty';
+  /**
+   * D4535: a run uid minted ahead of admission, the per-attempt `run_uid` a
+   * workflow plan froze (`wf-` + 40 hex). Admission uses it in place of a fresh
+   * uid, so the attempt's proposal and hold keys are the plan's, and a repeated
+   * admission of the same attempt answers the run already admitted. Absent for
+   * every other trigger, which keeps a fresh uid.
+   */
+  runUid?: string;
+};
 export type Refusal = { ok: false; status: number; code: string; message: string };
-export type Admission = { ok: true; run: { uid: string; attempt: number } } | Refusal;
+export type Admission = { ok: true; run: { uid: string; attempt: number }; replayed?: true } | Refusal;
 /** A duty's next firing, as an epoch millisecond. */
 export type DutyTimer = { dutyId: number; at: number };
 export type RunHandle = { runUid: string; started: boolean };

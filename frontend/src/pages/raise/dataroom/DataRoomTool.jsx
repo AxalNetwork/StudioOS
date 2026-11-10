@@ -22,7 +22,7 @@ import { useVenture } from '../../cycles/VentureContext.jsx';
 import {
   HOME_PATH, LINE, TABS, TITLE, roomCan, tabHref, tabSearch,
 } from './dataRoomModel';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, raiseToolRefusal, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1101 (#2456) — the Data room tool's tab bar and its tab pages. CycleRoute
@@ -62,10 +62,20 @@ export function DataRoomTabBar({ active, search = '' }) {
  * Home's tab bar and its own blocks (D1106, DR1). D1109: the old files tool is retired, so Home links to no other page.
  * D5074: the venture is the page's context (`useVenture`), never parsed from `search`, which only builds links.
  */
-export function DataRoomHomeNav({ search = '' }) {
+export function DataRoomHomeNav({ search = '', onRefused = null }) {
   const [reload, setReload] = useState(0);
   const venture = useVenture();
   const read = useRoom(venture, reload);
+  /**
+   * D5079 (#5079): the room read is this tool's authoritative read. A refusal,
+   * and an admin's `summary` answer (which is not the room), both mean the
+   * page around this block must stop drawing the room's own data. Home drew
+   * `null` for `summary` and left the module page's empty card, Checklist and
+   * Evidence standing, which read as a room with nothing in it.
+   */
+  const withheld = read.status === 'refused' || (read.status === 'ready' && read.room?.mode === 'summary');
+  useEffect(() => { onRefused?.(raiseToolRefusal(withheld, 'this data room')); }, [onRefused, withheld]);
+  useEffect(() => () => onRefused?.(null), [onRefused]);
   return (
     <div className="flex flex-col gap-3">
       <DataRoomTabBar active="home" search={search} />
@@ -109,7 +119,7 @@ function useRoom(venture, reload) {
     setState((s) => (s.status === 'ready' && s.projectId === projectId ? { ...s, refreshing: true } : { status: 'loading', room: null }));
     Promise.resolve().then(() => api.dataRoom(projectUid))
       .then((room) => { if (alive) setState({ status: 'ready', room, uid: projectUid, projectId }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
+      .catch((error) => { if (alive) setState({ status: raiseReadState(error, 'error'), room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, projectUid, status, reload]);
   return state;

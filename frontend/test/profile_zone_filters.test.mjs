@@ -262,6 +262,12 @@ const PROFILES = {
     // PR5 is a pointer to D4 in the backlog canvas — see `alsoZones` in
     // `canvasFilters` for why the file is read by route and not by directory.
     alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    // #4833 (D4833): a zone the Practice v2 canvas has REPLACED, read from that
+    // canvas by its section builder (`const delivery = () => … chips([…])`).
+    // Its row overrides the PR3 artboard's. `omit` names a chip the canvas
+    // draws over no stored state, with the decision that says so: `Ready`
+    // (D4874, "isn't recorded today").
+    v2Zones: [['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery', { omit: ['Ready'], why: 'D4874' }]],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
     // 7 → 8 → 9 → 10 → 11: `practice/opportunities` brought the bucket's first
@@ -485,7 +491,34 @@ function canvasFilters(profile) {
     assert.ok(chips.length, `${file} draws no view chips for ${zone}`);
     out[zone] = chips;
   }
+
+  // #4833 (D4833): A ZONE THE PRACTICE V2 CANVAS REPLACED. That canvas builds
+  // each section in a script (`const delivery = () => hdr(…) + chips([['Draft',
+  // 1], ['Ready'], …], 'All')`), so its row is read from the section's own
+  // builder, and it overrides the older artboard's row for the same route.
+  // A chip the canvas draws over nothing stored is dropped only by name, and
+  // only with the decision that says so; a name that is not on the canvas
+  // fails here rather than quietly dropping nothing.
+  for (const [zone, file, section, { omit = [], why } = {}] of profile.v2Zones || []) {
+    const chips = v2SectionChips(read(file), section);
+    assert.ok(chips.length, `${file} draws no chips for its ${section} section`);
+    for (const name of omit) {
+      assert.ok(chips.includes(name), `${zone}: ${name} is omitted but the canvas does not draw it`);
+      assert.match(String(why || ''), /^D\d+$/, `${zone}: omitting ${name} must cite its decision`);
+    }
+    out[zone] = chips.filter((label) => !omit.includes(label));
+  }
   return out;
+}
+
+/** The chip names in one Practice v2 section builder, in canvas order. */
+function v2SectionChips(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const from = src.indexOf('chips([', at);
+  if (from < 0) return [];
+  const end = src.indexOf(']],', from);
+  return [...src.slice(from, end + 2).matchAll(/\['([^']+)'/g)].map((m) => m[1]);
 }
 
 /**

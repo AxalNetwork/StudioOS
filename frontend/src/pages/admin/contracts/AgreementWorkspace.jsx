@@ -6,6 +6,8 @@ import { agreementRowSemantics } from '../../../lib/contractLifecycle';
 import { FileRows, EVENT_NAMES } from './AgreementDetail';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Missing, ReadState, Recorded, button, card, date, downloadPdf, useRead } from './parts';
+import CrossBorderPanel from './CrossBorderPanel';
+import { GoverningList } from './RelatedDocuments';
 
 /**
  * D4811 (#4811) part 14 — one agreement's workspace (board CT-07 "Document
@@ -64,7 +66,7 @@ export default function AgreementWorkspace({ uid }) {
           className={`min-h-[44px] whitespace-nowrap px-3 text-[12.5px] font-semibold ${tab === k ? 'border-b-2 border-violet-600 text-axal-ink dark:text-white' : 'text-axal-muted'}`}>{label}</button>)}
       </div>
       <div role="tabpanel" className={`${card} space-y-2 p-4 text-[12.5px]`} data-testid={`agreement-tab-${tab}`}>
-        {tab === 'overview' && <dl className="grid gap-2 sm:grid-cols-2">
+        {tab === 'overview' && <><dl className="grid gap-2 sm:grid-cols-2">
           <Fact label="Document type"><Recorded value={row.doc_type_label || row.doc_type} reason="No document type is recorded." /></Fact>
           <Fact label="Where it stands">{m.warning || m.line || <Missing reason="This store records no state." />}</Fact>
           <Fact label="Company">{m.company.name || <span className="text-axal-muted">{m.company.label}</span>}</Fact>
@@ -72,8 +74,10 @@ export default function AgreementWorkspace({ uid }) {
           <Fact label="Provider"><Recorded value={providerLabel(row.provider)} reason="No provider is recorded." /></Fact>
           <Fact label="Sent"><Recorded value={date(row.sent_at)} reason="No send is recorded." /></Fact>
           <Fact label="Signed"><Recorded value={date(row.signed_at)} reason="No signature date is recorded." /></Fact>
-          <Fact label="Last legal review"><Missing reason="Legal review is not recorded yet (question C)." /></Fact>
-        </dl>}
+          <Fact label="Last legal review"><Missing reason="An agreement is not reviewed on its own: counsel reviews the template it was issued from (its Legal Review tab)." /></Fact>
+        </dl>
+          {/* D4811 part 17 (CT-15): the cross-border checks; open ones hold Send for signature. */}
+          <CrossBorderPanel uid={uid} /></>}
         {tab === 'document' && <ReadState read={pdf} what="Signed PDF">{pdf.data && (pdf.data.available
           ? <div className="space-y-2"><p className="font-mono text-xs break-all">SHA-256: {pdf.data.sha256}</p>
             <button type="button" className={button} onClick={() => downloadPdf(pdf.data.pdf_base64, 'signed-agreement.pdf')}>Download signed PDF</button></div>
@@ -82,14 +86,14 @@ export default function AgreementWorkspace({ uid }) {
           <p className="text-axal-muted">An agreement is issued once, from one template version. These are the files recorded for it: the renderings and the signed copies.</p>
           <ReadState read={files} what="Recorded files">{files.data && (files.data.files?.length ? <FileRows files={files.data.files} /> : <Missing reason={files.data.reason || 'No rendered file is recorded for this agreement.'} />)}</ReadState>
         </>}
-        {tab === 'review' && <Missing reason="No legal-review record exists yet. Who records an approval is open question C." />}
+        {tab === 'review' && <Missing reason="An agreement is not reviewed on its own. Counsel reviews the template it was issued from, and the governance records; open the template's Legal Review tab from Related." />}
         {tab === 'activity' && <ReadState read={history} what="Signing history">{history.data && (activityRows(history.data).length
           ? <ol className="space-y-1">{activityRows(history.data).map((r) => <li key={r.key}>{r.what} · <Recorded value={date(r.at)} reason="This event has no recorded time." /></li>)}</ol>
           : <Missing reason={history.data.reason || 'No signing events were recorded.'} />)}</ReadState>}
         {tab === 'related' && <dl className="space-y-2">
           <Fact label="Made from">{row.doc_type ? <Link to="/admin/contracts?tab=templates" className="underline">{row.doc_type_label || row.doc_type} in Templates</Link> : <Missing reason="No template is recorded." />}</Fact>
           <Fact label="Company">{m.company.name || <span className="text-axal-muted">{m.company.label}</span>}</Fact>
-          <Fact label="Governance records citing it"><Missing reason="Governance links name templates and records, not agreements (part 8)." /></Fact>
+          <Fact label="Governance records that govern it"><GoverningList kind="agreement" refId={uid} /></Fact>
         </dl>}
       </div>
     </>}</ReadState>

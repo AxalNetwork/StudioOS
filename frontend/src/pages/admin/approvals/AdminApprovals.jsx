@@ -22,7 +22,7 @@ import {
   itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
-import { FOOT, PhoneBack } from './boardParts';
+import { FOOT, PhoneBack, usePopoverPlace } from './boardParts';
 import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -242,6 +242,7 @@ function RowActions({ row, onAssign, onCopy }) {
   const trigger = useRef(null);
   const popId = `approvals-pop-${row.lane}-${row.id}`;
   const close = (refocus) => { setOpen(false); if (refocus) trigger.current?.focus?.(); };
+  const place = usePopoverPlace(trigger, open, 140);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
@@ -256,7 +257,7 @@ function RowActions({ row, onAssign, onCopy }) {
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={popId} aria-label={`More actions for ${row.who}`} onClick={() => setOpen((o) => !o)}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
       {open ? (
-        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
+        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
           <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
           <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>

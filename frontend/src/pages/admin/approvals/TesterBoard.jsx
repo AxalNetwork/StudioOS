@@ -11,6 +11,7 @@ import {
 import {
   BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SELECT, SUB,
   TD, TH, Tile, WARN_PILL, nf, useBoardOwners, useLoad,
+  BoardBulkBar, BoardRowMore, PickAll, PickBox, copyBoardLink, pickedRow, useBoardPick,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -99,7 +100,7 @@ function ProfileChart({ chart }) {
   );
 }
 
-function TesterTable({ tab, rows, from, own }) {
+function TesterTable({ tab, rows, from, own, pick, onCopy }) {
   const open = (r) => <Link className={LINK} to={`/admin/approvals/product-testers/${r.id}`} state={{ from }} data-testid={`tester-open-${r.id}`}>Open</Link>;
   if (tab === 'waiting') {
     // D4814 (AP-08): Applicant · Applying as · Waiting · Owner · Review. What
@@ -107,11 +108,14 @@ function TesterTable({ tab, rows, from, own }) {
     return (
       <table className="w-full min-w-[820px]">
         <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
+          <PickAll pick={pick} rows={rows} testId="testers-pick-all" />
           <th className={TH}>Applicant</th><th className={TH}>Applying as</th><th className={TH}>Waiting</th><th className={TH}>Owner</th><th className={TH}>Review</th>
+          <th className={TH}><span className="sr-only">More</span></th>
         </tr></thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`tester-${r.id}`}>
+            <tr key={r.key} {...pickedRow(pick, r)} data-testid={`tester-${r.id}`}>
+              <PickBox pick={pick} row={r} label={r.name} testId={`tester-pick-${r.id}`} />
               <td className={TD}>
                 <b>{r.name}</b>{r.email ? <div className={SUB}>{r.email}</div> : null}
                 <div className="mt-1 flex flex-wrap gap-1.5">
@@ -124,6 +128,7 @@ function TesterTable({ tab, rows, from, own }) {
               <td className={TD}><span className={MONO}>{r.age || 'Not recorded'}</span><UrgencyPill sla={slaOfBand(r.band)} /></td>
               <td className={TD}><OwnerCell row={own.asRow({ ...r, who: r.name })} callerId={own.callerId} onAssign={own.assign} prefix="tester" /></td>
               <td className={TD}><Link className={`${BTN} sm:min-h-[30px]`} to={`/admin/approvals/product-testers/${r.id}`} state={{ from }} data-testid={`tester-open-${r.id}`}>Review →</Link></td>
+              <td className={TD}><BoardRowMore label={r.name} href={`/admin/approvals/product-testers/${r.id}`} onAssign={() => own.assign([{ ...r, who: r.name }])} onCopy={onCopy} testId={`tester-more-${r.id}`} /></td>
             </tr>
           ))}
         </tbody>
@@ -331,6 +336,8 @@ export default function TesterBoard({ at }) {
   );
   const decided = (line) => { setDone(line); all.reload(); inProgram.reload(); };
   const own = useBoardOwners('product-testers', setDone);
+  const pageRows = shown.slice(page * PAGE, page * PAGE + PAGE);
+  const pick = useBoardPick([tab.key, page, f.q, f.profile, f.verified, f.consent, f.sort].join('|'));
   const waitingRows = ready ? testerRows(all.reply.rows.filter((r) => r.status === 'applied')) : [];
   const strip = boardStrip({ status: all.status, label: 'Pending', total: totals ? totals.applied || 0 : null, rows: waitingRows, complete: ready && all.reply.complete, owners: own.owners, noun: 'applications' });
   return (
@@ -362,7 +369,8 @@ export default function TesterBoard({ at }) {
               {!all.reply.complete ? <p className={`m-0 px-3 py-2 ${SUB}`} data-testid="testers-partial">{`This list is the first ${nf(all.reply.rows.length)} of ${nf(all.reply.matching)} testers. Search and filters cover those only.`}</p> : null}
               {shown.length ? (
                 <>
-                  <div className="overflow-x-auto"><TesterTable tab={tab.key} rows={shown.slice(page * PAGE, page * PAGE + PAGE)} from={from} own={own} /></div>
+                  <div className="relative overflow-x-auto"><TesterTable tab={tab.key} rows={pageRows} from={from} own={own} pick={pick} onCopy={(href) => copyBoardLink(href, setDone)} /></div>
+                  {tab.key === 'waiting' ? <BoardBulkBar pick={pick} rows={pageRows} onAssign={(rows) => own.assign(rows.map((r) => ({ ...r, who: r.name })))} testId="testers-bulk" /> : null}
                   <Pager page={page} total={shown.length} onPage={setPage} testId="testers-pager" />
                 </>
               ) : tabRows.length ? <p className={`m-0 px-3 py-4 ${SUB}`} data-testid="testers-none-match">No tester matches these filters.</p>
@@ -386,7 +394,7 @@ export default function TesterBoard({ at }) {
         {chart ? <ProfileChart chart={chart} /> : null}
       </section>
       {at.item ? <TesterDrawer id={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={boardStep(shown, at.item)} from={from} /> : null}
-      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
+      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={(t) => { pick.clear(); own.finish(t); }} /> : null}
     </div>
   );
 }

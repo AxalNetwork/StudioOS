@@ -23,6 +23,8 @@
  * never an email.
  */
 import type { Env, User } from '../types';
+import { requestDestination } from './introDestination';
+import { LIST_PAGE_DEFAULT, LIST_PAGE_MAX, type CursorKey, decodeCursor, encodeCursor, trimPage } from '../util/keyset';
 import { normaliseEmail, normaliseProfileUrl } from './linkedinCsvImport';
 import { notify } from './notify';
 import { opByUid, PENDING_STALE_SECONDS, type OpState } from './mail/sendOps';
@@ -383,7 +385,12 @@ async function event(env: Env, ask: Interaction, kind: string, status: string, a
 }
 
 const personLine = (r: { person_name: string; person_company: string | null }) => `${r.person_name}${r.person_company ? `, ${r.person_company}` : ''}`;
-const introLink = (u: string) => `/network/introductions?intro=${u}`;
+// #4609: the shared builder, so a teammate request's destination and a
+// proposition's are built in one place and each says which system it is from.
+// The path is the one this file already used; what is new is `kind=request`,
+// which is how the desk knows the uid is addressed to IT and not to the
+// proposition body rendered beside it on the same zone.
+const introLink = (u: string) => requestDestination(u);
 
 /** Asks a teammate for an introduction. It sends nothing to the contact: the teammate decides. */
 export async function requestIntro(env: Env, user: User, b: { teammate?: unknown; ref?: unknown; note?: unknown; context_note?: unknown }) {
@@ -413,7 +420,62 @@ export async function requestIntro(env: Env, user: User, b: { teammate?: unknown
   return viewOf(env, user, id);
 }
 
-export type LogFilter = { team?: string | null; status?: string | null };
+export type LogFilter = { team?: string | null; status?: string | null; limit?: number; cursor?: string | null };
+
+/**
+ * #4611 finding 8 — THE LOG IS A PAGE NOW, AND ITS COUNTS ARE NOT THE PAGE'S.
+ *
+ * `LIMIT 100` with nothing after it covered SENT AND RECEIVED TOGETHER and then
+ * split the one page into two lists. Three things followed from that, and all
+ * three were invisible to the reader:
+ *
+ *   - A busy introducer's own asks were crowded out of their `sent` list by
+ *     rows they had been asked, and the reverse. Neither list said so.
+ *   - A pending request older than the newest hundred rows was in no list and
+ *     so could not be answered — the whole point of the log.
+ *   - A notification could name a request the log would not show, which is the
+ *     target-retrieval criterion #4609's destination contract depends on.
+ *
+ * So: keyset pagination on `(created_at, id)` through `util/keyset.ts` (the
+ * same cursor format #4701 established and `contacts.ts` now uses), and
+ * `totals` from THEIR OWN aggregate over the whole filtered set — never from
+ * the page. `sent_pending` and `received_pending` are in that aggregate too,
+ * which is what lets the desk say "3 waiting on you" truthfully while showing
+ * one page; `relationshipSummary` computed the same two numbers and nothing
+ * read them.
+ *
+ * PENDING IS RETRIEVABLE ON ITS OWN, which it already was through
+ * `?status=pending` — what was missing is that the filter ran inside the same
+ * unbounded-then-truncated read, so `status=pending` returned the newest
+ * hundred rows OF ALL STATUSES filtered down, not the newest hundred pending
+ * ones. The filter is in the SQL, so now it is the latter.
+ */
+export type LogTotals = {
+  sent: number; received: number; sent_pending: number; received_pending: number;
+};
+
+async function logTotals(env: Env, user: User, team: string | null, status: string | null): Promise<LogTotals> {
+  const row = await env.DB.prepare(
+    `SELECT
+        COUNT(CASE WHEN requester_user_id = ? THEN 1 END) AS sent,
+        COUNT(CASE WHEN teammate_user_id = ? THEN 1 END) AS received,
+        COUNT(CASE WHEN requester_user_id = ? AND status = 'pending' THEN 1 END) AS sent_pending,
+        COUNT(CASE WHEN teammate_user_id = ? AND status = 'pending' THEN 1 END) AS received_pending
+       FROM relationship_interactions
+      WHERE ? IN (requester_user_id, teammate_user_id) AND kind = 'intro_requested'
+        AND (? IS NULL OR team_key = ?) AND (? IS NULL OR status = ?)`,
+  ).bind(user.id, user.id, user.id, user.id, user.id, team, team, status, status)
+    .first<{ sent: number; received: number; sent_pending: number; received_pending: number }>();
+  // AN UNREADABLE AGGREGATE IS NOT ZERO. D1 throws on a failed read, so a null
+  // row here means the statement answered without the columns — a bug, not an
+  // empty log — and the caller's `failure()` says "could not be read" rather
+  // than drawing four zeroes under a populated list.
+  if (!row || !Number.isSafeInteger(Number(row.sent))) throw new Error('Unreadable count');
+  return {
+    sent: Number(row.sent), received: Number(row.received),
+    sent_pending: Number(row.sent_pending), received_pending: Number(row.received_pending),
+  };
+}
 
 /** The member's own requests, sent and received, filtered by team and status, with their follow-ups due. */
 export async function introRequests(env: Env, user: User, filter: LogFilter = {}) {
@@ -426,12 +488,29 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
   if (team && (team === '*' || !TEAM_KEY.test(team) || !await env.DB.prepare('SELECT 1 FROM team_memberships WHERE user_id = ? AND team_key = ?').bind(user.id, team).first())) {
     throw new RelationshipRefusal(404, 'not_found', NOT_FOUND);
   }
-  const rows = (await env.DB.prepare(
+  const totals = await logTotals(env, user, team, status);
+  const limit = Math.min(Math.max(Number(filter.limit) || LIST_PAGE_DEFAULT, 1), LIST_PAGE_MAX);
+  // A malformed cursor is a refusal, never a silent restart at the newest page.
+  let from: CursorKey[] | null = null;
+  if (filter.cursor) {
+    try { from = decodeCursor(String(filter.cursor), 2); } catch {
+      throw new RelationshipRefusal(400, 'cursor_invalid', 'That page marker is not one this log gave. Open the log again from the start.');
+    }
+  }
+  const page: unknown[] = [user.id, team, team, status, status];
+  let keyset = '';
+  if (from) {
+    // Strictly after the cursor row in `(created_at DESC, id DESC)`.
+    keyset = ' AND (created_at < ? OR (created_at = ? AND id < ?))';
+    page.push(String(from[0]), String(from[0]), Number(from[1]));
+  }
+  const read = (await env.DB.prepare(
     `SELECT * FROM relationship_interactions
       WHERE ? IN (requester_user_id, teammate_user_id) AND kind = 'intro_requested'
-        AND (? IS NULL OR team_key = ?) AND (? IS NULL OR status = ?)
-      ORDER BY created_at DESC, id DESC LIMIT 100`,
-  ).bind(user.id, team, team, status, status).all<Interaction>()).results || [];
+        AND (? IS NULL OR team_key = ?) AND (? IS NULL OR status = ?)${keyset}
+      ORDER BY created_at DESC, id DESC LIMIT ?`,
+  ).bind(...page, limit + 1).all<Interaction>()).results || [];
+  const { rows, hasMore } = trimPage(read, limit);
   const uids = rows.map((r) => r.uid);
   const outcomes = new Map<string, Outcome>();
   const followUps = new Map<string, FollowUp>();
@@ -449,10 +528,53 @@ export async function introRequests(env: Env, user: User, filter: LogFilter = {}
   const names = await namesOf(env, rows.flatMap((r) => [r.requester_user_id, r.teammate_user_id]));
   const ops = await deliveryOps(env, user, rows);
   const view = (r: Interaction) => interactionView(r, user.id, outcomes.get(r.uid) ?? null, followUps.get(r.uid) ?? null, names, ops.get(r.delivery_op_uid ?? '') ?? null);
+  const last = rows[rows.length - 1];
   return {
     sent: rows.filter((r) => r.requester_user_id === user.id).map(view),
     received: rows.filter((r) => r.teammate_user_id === user.id).map(view),
     follow_ups_due: await followUpsDue(env, user),
+    // EXPLICIT SCOPES: `totals` is the whole filtered log, `page_size` is what
+    // `sent` and `received` hold between them. A reader printing one under the
+    // other's label is the defect this names away.
+    totals,
+    page_size: rows.length,
+    has_more: hasMore,
+    next_cursor: hasMore && last ? encodeCursor([String(last.created_at), Number((last as Interaction & { id: number }).id)]) : null,
+    limit,
+  };
+}
+
+/**
+ * #4611 finding 8 — the records behind a positive `follow_ups_due`.
+ *
+ * The count was unbounded and the log beside it was capped, so the desk could
+ * say "7 follow-ups due" over a page holding none of them, and there was no
+ * list to open. These are those rows, newest due first, by the same predicate
+ * the count uses — so the two cannot disagree — and only ever the caller's own.
+ */
+export async function followUpsDueList(env: Env, user: User, on = today(), limit = LIST_PAGE_DEFAULT) {
+  const take = Math.min(Math.max(Number(limit) || LIST_PAGE_DEFAULT, 1), LIST_PAGE_MAX);
+  const rows = (await env.DB.prepare(
+    `SELECT r.* FROM relationship_follow_ups f
+       JOIN relationship_interactions r ON r.uid = f.request_uid AND r.kind = 'intro_requested'
+      WHERE f.user_id = ? AND ? IN (r.requester_user_id, r.teammate_user_id) AND r.status IN ('accepted', 'made')
+        AND f.done_at IS NULL AND COALESCE(CASE WHEN f.snoozed_until > f.due_on THEN f.snoozed_until END, f.due_on) <= ?
+      ORDER BY COALESCE(CASE WHEN f.snoozed_until > f.due_on THEN f.snoozed_until END, f.due_on) ASC, r.id DESC LIMIT ?`,
+  ).bind(user.id, user.id, on, take + 1).all<Interaction>()).results || [];
+  const { rows: page, hasMore } = trimPage(rows, take);
+  const followUps = new Map<string, FollowUp>();
+  if (page.length) {
+    for (const f of (await env.DB.prepare(
+      'SELECT request_uid, due_on, done_at, snoozed_until FROM relationship_follow_ups WHERE user_id = ? AND request_uid IN (SELECT value FROM json_each(?))',
+    ).bind(user.id, JSON.stringify(page.map((r) => r.uid))).all<FollowUp>()).results || []) followUps.set(f.request_uid, f);
+  }
+  const names = await namesOf(env, page.flatMap((r) => [r.requester_user_id, r.teammate_user_id]));
+  const ops = await deliveryOps(env, user, page);
+  return {
+    items: page.map((r) => interactionView(r, user.id, null, followUps.get(r.uid) ?? null, names, ops.get(r.delivery_op_uid ?? '') ?? null)),
+    due: await followUpsDue(env, user, on),
+    has_more: hasMore,
+    on,
   };
 }
 

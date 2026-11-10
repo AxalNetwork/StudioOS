@@ -233,3 +233,21 @@ test('reject needs a reason and is remembered; a line changed after confirm turn
   assert.equal(t.amount_cents, 100000);
   assert.throws(() => db.exec('DELETE FROM mercury_matches'), /append-only/);
 });
+
+test('D4812 part 6: each match reads with its ledger side (LP, call, due date, still owed) or null and the reason', async () => {
+  const db = seed();
+  const env = envFor(db);
+  feePeriod(db, 51, FUND, '2026Q3', 'issued', 250_000);
+  credit(db, 1, 100000, '2026-09-20');
+  credit(db, 2, 250000, '2026-10-05');
+  assert.deepEqual(await proposeMatches(env), { proposed: 2 });
+  const gone = credit(db, 1, 5000, '2026-09-21');
+  db.exec(`INSERT INTO mercury_matches (uid, transaction_id, target_kind, target_id, state, origin, amount_cents) VALUES ('m-gone', ${gone.id}, 'capital_call_line', 999, 'proposed', 'manual', 5000)`);
+  const r = await call(appFor(), env, 'GET', '/matches', ADMIN, { jti: JTI.adminTotp });
+  assert.equal(r.status, 200);
+  const by = (kind: string, id: number) => r.body.items.find((m: any) => m.target_kind === kind && m.target_id === id);
+  assert.deepEqual(by('capital_call_line', 1).ledger, { kind: 'capital_call_line', fund_id: FUND, lp_name: 'LP One', call_number: 1, due_on: '2026-10-01', outstanding_cents: 100000, quarter: null, net_cents: null });
+  assert.deepEqual([by('fee_period', 51).ledger.quarter, by('fee_period', 51).ledger.net_cents], ['2026Q3', 250000]);
+  assert.equal(by('capital_call_line', 999).ledger, null);
+  assert.equal(by('capital_call_line', 999).ledger_unavailable, 'This target is no longer on the ledger.');
+});

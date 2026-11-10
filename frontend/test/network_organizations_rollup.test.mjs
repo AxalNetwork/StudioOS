@@ -51,6 +51,13 @@ function tilesIn(code) {
 const CANVAS = raw('design/canvases/integrated/Pages · Partner Network.dc.html');
 const pageRaw = raw('frontend/src/pages/partner/OrganizationsZone.jsx');
 const page = read('frontend/src/pages/partner/OrganizationsZone.jsx');
+// #4609: the roll-up moved to `lib/partnerBookRollUp.js` so the `/network`
+// board could share the computation with this zone — the finding being that
+// the overview counted a different table. Importing it from the page would
+// have pulled a page (and the rail) into the board graph, which
+// `rail_pages_d768.test.mjs` caught. The two tests below read the function
+// where it now lives; everything else here still reads the page that renders it.
+const rollUpSrc = read('frontend/src/lib/partnerBookRollUp.js');
 const workspace = read('frontend/src/workspaces/NetworkWorkspace.jsx');
 const worker = raw('cloudflare-worker/src/routes/partnernet.ts');
 const migration = raw('cloudflare-worker/sql/migrations/226_partner_book_relationship.sql');
@@ -122,7 +129,7 @@ test('the roll-up groups by trimmed, case-folded company text', () => {
   // naive group-by — which would then report "every row knows exactly one
   // person" as a finding about the firm's relationships when it was a finding
   // about whitespace.
-  const fn = page.slice(page.indexOf('export function rollUp('), page.indexOf('export default function'));
+  const fn = rollUpSrc.slice(rollUpSrc.indexOf('export function rollUp('));
   assert.match(fn, /const key = name\.toLowerCase\(\);/, 'the grouping key is case-sensitive again');
   assert.match(fn, /const name = \(c\.organization \|\| ''\)\.trim\(\);/, 'the grouping key is no longer trimmed');
   assert.match(fn, /if \(!name\) continue;/, 'a contact with no company is being grouped under an empty name');
@@ -133,7 +140,7 @@ test('a company whose contacts disagree reads Mixed, and is not tie-broken', () 
   // it, so two contacts at one company can disagree. Picking the newest or the
   // most common would be the page inventing a relationship the firm never
   // stated — the same refusal `Headcount` makes by staying absent.
-  const fn = page.slice(page.indexOf('export function rollUp('), page.indexOf('export default function'));
+  const fn = rollUpSrc.slice(rollUpSrc.indexOf('export function rollUp('));
   assert.match(fn, /kind: row\.kinds\.size === 1 \? \[\.\.\.row\.kinds\]\[0\] : \(row\.kinds\.size > 1 \? 'Mixed' : null\)/,
     'a disagreement is being resolved instead of reported');
   // And `Mixed` matches none of the three relationship chips: it is not a

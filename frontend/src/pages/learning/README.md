@@ -108,8 +108,8 @@ The Learning home now owns its gutters like Help: its decorative hero uses
 `/site/home-hero.webp` with light/dark overlays, and its content has 16px/32px
 insets. Desktop and phone render the same `LearningHero`; the phone frame's
 optional header wraps its default bar, retaining Back, its subtitle and the
-conditional Eadwyn control, with one heading. The temporary
-coming-soon gate, links, searches and reads are unchanged.
+conditional Eadwyn control, with one heading. Links, searches and reads are
+unchanged, and the coming-soon gate stays dormant (lifted 2026-11-04).
 
 
 ## Video on Stream (#4177, L2 of #3726, on L1's routes, D4176)
@@ -149,6 +149,11 @@ coming-soon gate, links, searches and reads are unchanged.
   /admin/learning/stream/migrations`; a refusal updates the row's own
   `stream_copy` to `{ state: 'failed', error_message }`, read only from the
   route's `error.data.message`, never `e.message`.
+- **One copy per click, and an unreadable copy table (#4649, D4649).** While
+  the POST is in flight the row reads "Starting copy…" with no button, and a
+  second click or "Try again" starts nothing. A copy table the Worker could not
+  read is `stream_copy: { state: 'unreadable' }`: no button on the row, and the
+  banner says the count could not be read (with Try again), never a number.
 - **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
   wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
   `FILL_FIELDS` has no Learning form;

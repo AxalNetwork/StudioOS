@@ -69,7 +69,18 @@ export function AuthProvider({ children }) {
   // handleImpersonate / login still write to localStorage themselves
   // (legacy behaviour) — this also accepts a plain object so context
   // and storage stay in lock-step when the caller goes through here.
+  // D4581 (#4581): the session's generation. A sign-out, or another account, moves it on, and a
+  // `/me` that started under an earlier one is dropped when it answers (see `refresh`). Without it,
+  // a `/me` sent before /login's teardown answered with the still-valid cookie and wrote the old
+  // account back, and AuthScreen (which tears down once) drew "Signing you out…" until a reload.
+  const sessionRef = useRef({ gen: 0, id: user?.id ?? null });
+  const nextSession = (u) => {
+    const id = u?.id ?? null;
+    if (!u || Number(id) !== Number(sessionRef.current.id)) sessionRef.current = { gen: sessionRef.current.gen + 1, id };
+  };
+
   const setUser = useCallback((next) => {
+    nextSession(next);
     setUserState(next);
     try {
       if (next) localStorage.setItem('user', JSON.stringify(next));
@@ -99,9 +110,13 @@ export function AuthProvider({ children }) {
     if (inFlightRef.current) return inFlightRef.current;
 
     setLoading(true);
+    const gen = sessionRef.current.gen;
     const p = (async () => {
       try {
         const me = await api.getMe();
+        // D4581: signed out (or another account signed in) while this was in flight. Its answer is
+        // the old session's; drawing it would sign that account back in on this tab.
+        if (gen !== sessionRef.current.gen) return;
         const stored = safeReadJSON('user', {}) || {};
         // Task #4 — identity-change purge. If /me returned a different user
         // than the one we had cached (e.g. someone signed in with Google on
@@ -119,6 +134,7 @@ export function AuthProvider({ children }) {
             localStorage.removeItem('realToken');
           } catch { /* quota / disabled storage */ }
           try { localStorage.setItem('user', JSON.stringify(me)); } catch { /* ignore */ }
+          nextSession(me);
           setUserState(me);
           lastFetchRef.current = Date.now();
           return;
@@ -187,7 +203,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === 'user') {
-        setUserState(safeReadJSON('user'));
+        const next = safeReadJSON('user');
+        nextSession(next);
+        setUserState(next);
         // Reset the throttle so a freshly-restored session re-validates
         // against the server on the next navigation.
         lastFetchRef.current = 0;
