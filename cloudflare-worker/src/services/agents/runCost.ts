@@ -20,6 +20,11 @@
  *   tokens_per_run / est_usd_per_run = the dearest of those: what a run can cost
  *   cheapest   = the cheapest of them
  *   monthly_at_cap = how many of the dearest runs the monthly cap pays for
+ * WITH THE PREVIEW SKILL-RUNTIME SWITCH ON (`skillEngineOf`, D4555 and
+ * #5340) a skill's tokens are the SDK path's text for it (`sdkEstimateText`:
+ * the catalogue of the pins, the activation, the version's file up to the
+ * run's cap and the closing rule), never the stored legacy figure. With the
+ * switch off nothing here changes.
  * Prices are the offered-model catalogue's at what the sponsor pays
  * (`memberChargeMultiplier`). Every token figure is the AI budget's estimate
  * (`estTokens`). When the price or a skill cannot be read the answer is
@@ -39,6 +44,7 @@ import { RADAR_AXES } from '../skillsTaxonomySchema';
 import { PERSONAS, type AreaKey } from './personas';
 import { loadPersonaSettings, statusOf } from './rosterAdmin';
 import { skillPrompt } from './skillEval';
+import { sdkEstimateText, skillEngineOf, type EstimatePin } from './skillRuntime';
 import type { VersionRow } from './skillLinks';
 
 /** The typical sizes and the threshold the estimate uses: one place to change them. */
@@ -83,8 +89,34 @@ export async function pinTokenMap(env: Env, pins: readonly Pin[]): Promise<Map<s
   } catch { return new Map(); }
 }
 
+/** With the switch on: each pin's SDK text, by the AI budget's estimate (today's figure where a run would fall back); null when any cannot be read. */
+async function sdkPinTokens(env: Env, pins: readonly Pin[]): Promise<number[] | null> {
+  let rows: any[];
+  try {
+    rows = (await env.DB.prepare(
+      `SELECT v.*, s.uid AS skill_uid, s.scope AS skill_scope, s.company_id AS skill_company_id, s.slug AS skill_slug
+         FROM agent_skill_versions v JOIN agent_skills s ON s.id = v.skill_id
+        WHERE v.skill_id || ':' || v.version IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(pins.map((p) => `${p.skill_id}:${p.version}`))).all<any>()).results ?? [];
+  } catch { return null; }
+  const by = new Map(rows.map((r) => [`${r.skill_id}:${r.version}`, r]));
+  const given: EstimatePin[] = [];
+  for (const p of pins) {
+    const r = by.get(`${p.skill_id}:${p.version}`);
+    if (!r) return null;
+    given.push({ skill: { id: Number(r.skill_id), uid: r.skill_uid, scope: r.skill_scope, company_id: r.skill_company_id, slug: r.skill_slug }, version: r });
+  }
+  const out: number[] = [];
+  for (let k = 0; k < given.length; k += 1) {
+    const text = await sdkEstimateText(given, k);
+    out.push(text == null ? contextTokensOf(given[k].version) : estTokens(`\n\n${text}`));
+  }
+  return out;
+}
+
 /** Each pinned version's `context_tokens` (stored, else worked out from the version), or null when any cannot be read. */
 export async function pinTokens(env: Env, pins: readonly Pin[]): Promise<number[] | null> {
+  if (pins.length && skillEngineOf(env) === 'cloudflare_sdk') return sdkPinTokens(env, pins);
   const by = await pinTokenMap(env, pins);
   const out: number[] = [];
   for (const p of pins) {
