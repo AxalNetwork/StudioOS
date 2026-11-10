@@ -48,6 +48,7 @@ test('#3938 part 3: write: false ranks and leaves every line null', async () => 
 test('#3938 part 3 IN10: the query is the firm\'s own audience fit', () => {
   const rules = [
     { kind: 'best_fit', value: 'Seed-stage fintech' },
+    { kind: 'best_fit', value: 'Enterprise fintech', signal: 'weak_intent' },
     { kind: 'sector_declined', value: 'gambling' },
     { kind: 'best_fit', value: '  ' },
   ];
