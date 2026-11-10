@@ -133,7 +133,11 @@ test('mounted D4820 part 5: a new search with a kind chosen hides the counts rat
   } finally { await m.unmount(); }
 });
 
-test('mounted D4820 part 5: rows are grouped by day, time first, each with Open ›, and no member is named', async () => {
+test('mounted D4820 part 5: rows are grouped by day, time first, each with Open ›, and no member is named', async (t) => {
+  // The rows are dated from NOW (2026-11-09) and the box heads each day from its
+  // own clock. Freeze the clock at NOW, or from 2026-11-10 "Today" reads
+  // "Yesterday" and the headings fail on the date alone.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const m = await mount(worker);
   try {
     assert.deepEqual(m.each('community-box-activity-day').map((t) => t.split(/\d{2}:\d{2}|All day/)[0]), ['Today', 'Yesterday', 'Mon 2 Nov']);
