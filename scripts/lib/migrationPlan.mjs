@@ -112,6 +112,14 @@ export const LEGACY_DUPLICATE_STAMPS = Object.freeze([
   Object.freeze(['202611092035_research_fund_catalogue_uid.sql', '202611092035_research_projects.sql']),
 ]);
 const isLegacyStampPair = (a, b) => LEGACY_DUPLICATE_STAMPS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
+// D5398 (#5398): A MINUTE IS NOT AN IDENTITY. Two agents writing a migration in the same UTC minute picked the same
+// name twice (the 202611072219 and 202611092035 pairs above), and each pair turned main and every open PR red. From
+// DISCRIMINATOR_FROM on, a new migration also names its issue: `YYYYMMDDHHMM_<issue>_<slug>.sql`. Two PRs for two
+// issues can no longer collide, the stamp still sorts it after every older file, and the full name still breaks a
+// same-minute tie deterministically. Every file stamped before DISCRIMINATOR_FROM keeps its name (D269: a migration
+// on main is never renamed), and open PRs written before the cut-off keep passing.
+export const DISCRIMINATOR_FROM = '202611110000';
+const DISCRIMINATED = /^(\d{12})_([1-9]\d{0,6})_[a-z][a-z0-9_]*\.sql$/;
 const STAMPED = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})_[a-z0-9][a-z0-9_]*\.sql$/;
 const NUMBERED = /^(\d{1,4})_.+\.sql$/;
 
@@ -124,6 +132,23 @@ export function migrationStamp(name) {
   return ok ? name.slice(0, 12) : null;
 }
 
+/** `202611111015_5398_slug.sql` → '5398'; a name without the issue discriminator → null. */
+export function migrationIssue(name) {
+  const m = DISCRIMINATED.exec(name);
+  return m && migrationStamp(name) ? m[2] : null;
+}
+
+/**
+ * The address two files must never share: the number, the stamp, or (D5398) the stamp and the issue together.
+ * `n<number>`, `t<stamp>` or `t<stamp>_<issue>`.
+ */
+export function migrationIdentity(name) {
+  const stamp = migrationStamp(name);
+  if (!stamp) return `n${migrationNumber(name)}`;
+  const issue = migrationIssue(name);
+  return issue ? `t${stamp}_${issue}` : `t${stamp}`;
+}
+
 /**
  * What is wrong with one migration file's name, or null. A file is either
  * numbered (`NNN_slug.sql`, at most NUMBERED_CEILING) or stamped
@@ -131,7 +156,13 @@ export function migrationStamp(name) {
  */
 export function migrationNameProblem(name) {
   if (/^\d{12}_/.test(name)) {
-    return migrationStamp(name) ? null : `${name}: a stamped migration is YYYYMMDDHHMM_<slug>.sql, a real UTC minute and a lower-case slug.`;
+    const stamp = migrationStamp(name);
+    if (!stamp) return `${name}: a stamped migration is YYYYMMDDHHMM_<issue>_<slug>.sql, a real UTC minute, the issue number and a lower-case slug.`;
+    // D5398: from the cut-off on, the minute alone is not enough.
+    if (stamp >= DISCRIMINATOR_FROM && !migrationIssue(name)) {
+      return `${name}: from ${DISCRIMINATOR_FROM} UTC a migration also names its issue: YYYYMMDDHHMM_<issue>_<slug>.sql (D5398), so two PRs writing in the same minute cannot collide.`;
+    }
+    return null;
   }
   const m = NUMBERED.exec(name);
   if (!m) return `${name}: a migration is named YYYYMMDDHHMM_<slug>.sql (the UTC minute it was written, D4106).`;
@@ -151,10 +182,11 @@ export function migrationDuplicates(names) {
   const out = [];
   for (const name of [...names].sort(compareMigrations)) {
     const stamp = migrationStamp(name);
-    const key = stamp ? `t${stamp}` : `n${migrationNumber(name)}`;
+    const key = migrationIdentity(name);
+    const issue = migrationIssue(name);
     if (!stamp && LEGACY_DUPLICATES.includes(migrationNumber(name))) continue;
     if (byKey.has(key) && stamp && isLegacyStampPair(byKey.get(key), name)) continue;
-    if (byKey.has(key)) out.push(`${byKey.get(key)} and ${name} share ${stamp ? `the stamp ${stamp}` : `the number ${migrationNumber(name)}`}.`);
+    if (byKey.has(key)) out.push(`${byKey.get(key)} and ${name} share ${stamp ? `the stamp ${stamp}${issue ? ` and the issue ${issue}` : ''}` : `the number ${migrationNumber(name)}`}.`);
     else byKey.set(key, name);
   }
   return out;
