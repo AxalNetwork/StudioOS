@@ -31,6 +31,7 @@ import {
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useResearchLinks } from './researchLinks.js';
 import { directoryHref } from './fundDirectoryRead';
+import { formatMinorOrCount } from '../../lib/money';
 
 const SECTIONS = [
   ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
@@ -213,7 +214,7 @@ function FundList({ title, read, more, canOpen = true }) {
                   {canOpen
                     ? <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="text-[12.5px] font-semibold text-axal-violet underline">{f.name}</Link>
                     : <span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{f.name}</span>}
-                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? money(f.fund_size_cents / 100, f.size_currency) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
+                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? formatMinorOrCount(f.fund_size_cents, f.size_currency, { trimWhole: true }) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
                 </li>
               ))}
             </ul>

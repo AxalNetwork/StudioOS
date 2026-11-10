@@ -18,6 +18,7 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 | `PolicyControls.jsx` | #4739 (D4162): SA6's controls: models by area, locks, caps and read tools, and the agent engine's halt beside the pause. Every write takes a reason. |
 | `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and the policy (it draws `PolicyControls.jsx`), with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
 | `CohortCard.jsx` | D4423: Super Admin cohort membership, add by founder email and remove; no feature switch changes. |
+| `provenanceModel.js` | #5346 (D4575): one run's provenance (`GET /runs/:uid/provenance`) as labelled rows for the run detail's Provenance panel in `Operations.jsx`; an unavailable field is "Not recorded" with its reason, never 0. |
 
 ## Rules
 

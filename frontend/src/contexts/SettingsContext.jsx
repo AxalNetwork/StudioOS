@@ -8,6 +8,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
+import { pageMayHaveSession } from '../lib/sessionHint';
 
 const STORAGE_KEY = 'axal_appearance_v1';
 const DEFAULTS = { theme: 'light' };
@@ -55,6 +56,13 @@ export function SettingsProvider({ children }) {
   }, [appearance.theme]);
 
   const refresh = useCallback(async () => {
+    // D5318 (#5318, H10): both reads below are the member's own and answer 401
+    // to a visitor. With no sign of a session they are not sent: an anonymous
+    // page keeps its cached theme and skips two requests on every load.
+    if (!pageMayHaveSession()) {
+      if (mountedRef.current) setLoading(false);
+      return;
+    }
     try {
       const res = await api.getAppearanceSettings();
       if (!mountedRef.current) return;

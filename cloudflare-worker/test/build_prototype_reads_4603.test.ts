@@ -170,3 +170,18 @@ test('5. access is unchanged: another venture\'s founder is refused the paged li
   assert.equal((await page(varied, '&filter=state%3Adone&page=2', 2)).status, 403);
   assert.equal((await page(varied, '&q=must', 2)).status, 403);
 });
+
+test('6. part 3: the Hypothesis filter offers every hypothesis, even when every must-have shares one state', async () => {
+  // Mutation checked (#4603 part 3, item 1): the grouped scan not grouped by hypothesis → one group per state,
+  // carrying one arbitrary hypothesis, and the filter loses the others.
+  const h = await buildReads(0);
+  try {
+    h.db.exec(`INSERT INTO hypotheses(id, project_id, code, claim) VALUES (1, ${PROJECT}, 'H1', 'Synthetic claim one'), (2, ${PROJECT}, 'H2', 'Synthetic claim two');
+      INSERT INTO mvp_features(project_id, title, is_must_have, delivery_status, hypothesis_id, sort_order) VALUES
+        (${PROJECT}, 'Synthetic a', 1, 'Backlog', 1, 1), (${PROJECT}, 'Synthetic b', 1, 'Backlog', 2, 2), (${PROJECT}, 'Synthetic c', 1, 'Backlog', NULL, 3);`);
+    const sqlPath = await page(h, '&page=1'), memoryPath = await page(h, '&q=synthetic');
+    const want = [{ value: '1', label: 'Synthetic claim one' }, { value: '2', label: 'Synthetic claim two' }, { value: 'none', label: 'No hypothesis' }];
+    assert.deepEqual(hypothesisOptions(sqlPath.body), want);
+    assert.deepEqual(hypothesisOptions(memoryPath.body), want);
+  } finally { h.close(); }
+});
