@@ -42,13 +42,13 @@ type Row = {
 const LAST_STARTED = `SELECT c.uid AS course_uid, l.uid AS lesson_uid, l.title AS lesson_title, l.kind AS lesson_kind, l.ref_uid,
          i.kind AS item_kind, i.status AS item_status,
          (SELECT ip.position_seconds FROM learning_progress ip WHERE ip.user_id = ? AND ip.subject_kind = 'item' AND ip.subject_uid = i.uid) AS position_seconds,
-         lp.status AS lesson_status
+         sp.status AS lesson_status
     FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id JOIN learning_courses c ON c.id = m.course_id
     LEFT JOIN learning_items i ON l.kind IN ('video', 'reading') AND i.uid = l.ref_uid
-    JOIN learning_progress lp ON lp.user_id = ? AND lp.subject_kind = 'lesson' AND lp.subject_uid = l.uid AND lp.status = 'started'
+    JOIN learning_progress sp ON sp.user_id = ? AND sp.subject_kind = 'lesson' AND sp.subject_uid = l.uid AND sp.status = 'started'
    WHERE m.course_id IN (SELECT cr.id FROM learning_progress cp JOIN learning_courses cr ON cr.uid = cp.subject_uid
     WHERE cp.user_id = ? AND cp.subject_kind = 'course' AND cp.status = 'started' AND cr.status = 'published')
-   ORDER BY lp.updated_at DESC, lp.id DESC LIMIT ?`;
+   ORDER BY sp.updated_at DESC, sp.id DESC LIMIT ?`;
 const FIRST_REQUIRED = `SELECT c.uid AS course_uid, l.uid AS lesson_uid, l.title AS lesson_title, l.kind AS lesson_kind, l.ref_uid,
          i.kind AS item_kind, i.status AS item_status,
          (SELECT ip.position_seconds FROM learning_progress ip WHERE ip.user_id = ? AND ip.subject_kind = 'item' AND ip.subject_uid = i.uid) AS position_seconds,
