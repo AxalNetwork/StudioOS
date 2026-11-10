@@ -18,7 +18,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import DealRoomPage from '../src/pages/DealRoomPage.jsx';
 import { forgetVisits } from '../src/pages/deal/dealVisit.js';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
-import { myCommitment, proposedTerms, roundLines, LEGACY_LINE } from '../src/pages/deal/dealWorkModel.js';
+import { myCommitment, proposedTerms, roundLines } from '../src/pages/deal/dealWorkModel.js';
 import { keyStrip } from '../src/pages/deal/dealFrameModel.js';
 import { roundAsk } from '../src/components/deals/dealMoney.js';
 import { studioRow } from '../src/pages/investor/dealflow/studioLensModel.js';
@@ -33,14 +33,14 @@ const LEGACY = { uid: 'c-legacy', deal_id: 4, company_id: null, company_name: nu
 
 // ------------------------------------------------------------------ the model
 
-test('the commitment is the one in the read\'s firm, named; a legacy row is listed apart; another deal\'s read is not this one', () => {
+test('D5355 the commitment is the one in the read\'s firm; the retired pre-firm branch promises no assignment', () => {
   const read = { status: 'ready', dealId: 4, items: [LEGACY, ALDER] };
   const c = myCommitment(read, 'USD', 4);
   assert.equal(c.state, 'ready');
   assert.equal(c.uid, 'c-alder', 'never the legacy row, though it is live');
   assert.equal(c.firm, 'Held for Alder Ventures.');
-  assert.deepEqual(c.legacy.map((l) => [l.uid, l.note]), [['c-legacy', LEGACY_LINE]]);
-  assert.equal(myCommitment({ status: 'ready', dealId: 4, items: [LEGACY] }, 'USD', 4).state, 'none', 'a legacy row alone offers no action');
+  assert.equal(c.legacy, undefined);
+  assert.equal(myCommitment({ status: 'ready', dealId: 4, items: [LEGACY] }, 'USD', 4).state, 'none', 'an out-of-context row alone offers no action');
   assert.equal(myCommitment(read, 'USD', 5).state, 'loading', 'a read for deal 4 is never deal 5\'s commitment');
   assert.equal(myCommitment({ status: 'ready', dealId: 4, items: [{ ...ALDER, company_id: null, company_name: null }] }, 'USD', 4).firm, 'Held in your own name.');
   // The key strip reads the same row.
@@ -116,12 +116,13 @@ function base(over = {}) {
   };
 }
 
-test('two firms: the card names the firm, the withdrawal targets that firm\'s commitment, and the legacy row has no action', async () => {
-  const v = await mounted('/deals/4/commitment', base({ 'deals/4/commitments': (u, m) => (m === 'GET' ? response([LEGACY, ALDER]) : null) }));
+test('D5355 two firms: the card names the firm, withdrawal targets it, and no assignment promise is drawn', async () => {
+  const v = await mounted('/deals/4/commitment', base({ 'deals/4/commitments': (u, m) => (m === 'GET' ? response([ALDER]) : null) }));
   try {
     assert.match(v.textOf('deal-my-firm'), /Held for Alder Ventures\./);
     assert.match(v.textOf('deal-my-amount'), /\$50,000/);
-    assert.match(v.textOf('deal-my-legacy'), /\$5,000[\s\S]*Recorded before commitments named a firm/);
+    assert.ok(!v.has('deal-my-legacy'));
+    assert.doesNotMatch(v.text(), /Ask the studio to assign it to a firm/);
     await v.click('deal-withdraw');
     await v.type('deal-withdraw-reason', 'Our allocation closed.');
     await v.click('deal-withdraw-dialog-confirm');

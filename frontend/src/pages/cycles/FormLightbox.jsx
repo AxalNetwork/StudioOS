@@ -219,7 +219,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const saving = useRef(false);
   // D4600: what a write that half succeeded leaves behind. `memory` outlives one Save (a submit keeps there the
   // id of the record it made); `partial` freezes the form to the one operation left.
-  const memory = useRef({});
+  const memory = useRef(typeof base?.makeMemory === 'function' ? base.makeMemory() : {});
   const [partial, setPartial] = useState(null);
   // D4630: false once this instance unmounts; a later answer acts on nothing.
   const mounted = useRef(true);
