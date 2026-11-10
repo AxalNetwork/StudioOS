@@ -16,6 +16,7 @@
  * Canonical migration: 176_deal_pass_taxonomy.sql.
  */
 import type { Env } from '../types';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -81,12 +82,11 @@ export async function ensureDealPassSchema(env: Env): Promise<boolean> {
     }
     try {
       await env.DB.prepare(STAGE_EVENTS_DDL).run();
-      const eventInfo = await env.DB.prepare(`PRAGMA table_info(deal_stage_events)`).all<{ name: string }>();
-      if (!(eventInfo.results || []).some((r) => r.name === 'source')) {
-        await env.DB.prepare(
-          `ALTER TABLE deal_stage_events ADD COLUMN source TEXT CHECK (source IS NULL OR source IN ('hubspot','salesforce','affinity'))`,
-        ).run();
-      }
+      // Migration 202611101052 declares the column; this only heals a preview
+      // or local database, and asks the table first (util/schemaBootstrap.ts).
+      await runSchemaBootstrap(env, [
+        `ALTER TABLE deal_stage_events ADD COLUMN source TEXT CHECK (source IS NULL OR source IN ('hubspot','salesforce','affinity'))`,
+      ]);
       const eventInfoAfter = await env.DB.prepare(`PRAGMA table_info(deal_stage_events)`).all<{ name: string }>();
       stageEventsReady = (eventInfoAfter.results || []).some((r) => r.name === 'source');
       await env.DB.prepare(
