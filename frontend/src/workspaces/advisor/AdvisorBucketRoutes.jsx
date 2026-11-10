@@ -245,6 +245,13 @@ const ZONE = {
  */
 const COPY = ADVISOR_COPY;
 
+/** #4834 (D4834): the Practice v2 section row, in `Practice v2 Page.dc.html`'s `ZONES` order. */
+const PRACTICE_ROW = Object.freeze({
+  overview: 'Overview',
+  order: ['opportunities', 'engagements', 'sessions', 'delivery', 'earnings'],
+  scroll: true,
+});
+
 export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
   const bucket = bucketForPath('advisor', location.pathname);
@@ -409,6 +416,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       role="advisor"
       title={cohorts ? 'Cohorts' : (isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
       sectionNav={cohorts ? <CohortSectionNav /> : undefined}
+      // #4834 (D4834): Practice v2's section row (PX-10): Overview first, the
+      // canvas's order, one line that scrolls sideways on a phone.
+      zoneRow={prefix === '/practice' ? PRACTICE_ROW : null}
       // NO `scope` PROP. It read `scope={prefix === '/cohorts' ? 'One cohort'
       // : 'One practice'}` — a conditional literal the frame contract's
       // attribute-only pattern missed. The shell fills that slot from

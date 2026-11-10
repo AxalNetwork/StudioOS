@@ -113,6 +113,31 @@ export const PROOF_DELETE_FAILED = 'Nothing was deleted. The claim and its conse
 // ─────────────────────────────────────────────────────────── Thinking
 
 /**
+ * D4826 (#4826) — EVERY STATUS THE WORKER WRITES TO `articles.status`, and
+ * nothing else. Read off the two routers that write it:
+ *
+ *   · `routes/articles.ts` — `draft` (a new piece, and Withdraw), `submitted`
+ *     (Submit for review), `published` (nothing here, only the counter);
+ *   · `routes/admin_articles.ts` — `in_review`, `changes_requested`,
+ *     `rejected`, `approved` (also what unfeaturing a published piece returns
+ *     it to), `published`.
+ *
+ * `scheduled` is NOT in this list, and that is the one departure between the
+ * canvas's eight editorial states and the store: it is `approved` with a
+ * `publish_at` the per-minute cron publishes at (D484, migration 346), which
+ * is how `articleQueue.ts` derives it on the admin side too. So the shelf
+ * derives it the same way rather than inventing a status
+ * (`stageKey`), and every other canvas state is a column value.
+ *
+ * `expertise_states_4826.test.mjs` reads both routers and fails if a status
+ * appears there with no stage here — which is what would quietly send a piece
+ * to the `unknown` fallback.
+ */
+export const ARTICLE_STATUSES = Object.freeze([
+  'draft', 'submitted', 'in_review', 'changes_requested', 'rejected', 'approved', 'published',
+]);
+
+/**
  * Each article state, as the writer reads it: the label, who can read the
  * piece, and the one next step. `next.to` is a real route (App.jsx):
  * `/articles/edit/:id` is the editor, `/articles/:slug` the public reader.
@@ -140,13 +165,34 @@ export function stageKey(a) {
 export function articleStage(a) {
   const key = stageKey(a);
   if (!key) {
-    return { key: 'unknown', label: String(a?.status || 'Not recorded'), tone: 'neutral', audience: 'Who can read it is not recorded.', next: { label: 'Open in the editor', to: `/articles/edit/${a?.id}` } };
+    // D4826 (#4826): the label was the raw column value, so a status this page
+    // does not know showed a founder `changes_requested` where every other row
+    // showed a sentence. The state is Not recorded, and the stored value is
+    // named in the audience line, where it reads as the record it is.
+    const stored = String(a?.status ?? '').trim();
+    return {
+      key: 'unknown',
+      label: 'Not recorded',
+      tone: 'neutral',
+      audience: stored
+        ? `Its state is recorded as “${stored}”, which this page has no words for yet. Who can read it is not recorded.`
+        : 'No state is recorded for it. Who can read it is not recorded.',
+      next: { label: 'Open in the editor', to: `/articles/edit/${a?.id}` },
+    };
   }
   const s = STAGES[key];
   const audience = key === 'scheduled' ? `Accepted, not public yet. It goes public on ${day(a.publish_at)}.` : s.audience;
   const to = key === 'published' && a?.slug ? `/articles/${a.slug}` : `/articles/edit/${a?.id}`;
   return { key, label: s.label, tone: s.tone, audience, next: { label: key === 'published' && !a?.slug ? 'Open in the editor' : s.next, to } };
 }
+
+/**
+ * D4826 (#4826): the state an EXPORT row carries — the same words the shelf's
+ * pill shows. The export used to send the column value (`changes_requested`,
+ * `in_review`), so the one artefact a writer takes away named states in the
+ * store's language and called six of them nothing a reader would recognise.
+ */
+export const articleStateLabel = (a) => articleStage(a).label;
 
 /** One revision row, as the History list reads it (D1406's author read). */
 export function revisionLine(r) {

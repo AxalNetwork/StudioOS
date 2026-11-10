@@ -241,5 +241,6 @@ test('no access-control gate compares a bare timestamp column', () => {
   // and D1104 the founder's NDA route's live-grant check in data_room.ts:
   // eighteen normalised comparisons, all required. D4631 part 2 moves data_room.ts's two NDA reads into
   // services/dealAccess.ts's shared rule, keyed three ways (founder id, project id, one pair): nineteen.
-  assert.equal(wrapped, 19, `expected 19 normalised comparisons across the gated files, found ${wrapped}`);
+  // D4672 adds research.ts's open proof-consent request (`datetime(k.expires_at) > datetime('now')`): twenty.
+  assert.equal(wrapped, 20, `expected 20 normalised comparisons across the gated files, found ${wrapped}`);
 });
