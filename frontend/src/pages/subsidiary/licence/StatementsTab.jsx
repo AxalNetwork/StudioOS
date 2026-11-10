@@ -181,7 +181,7 @@ export function DisputeForm({ row, onDone, onCancel, api = licenceAccountApi }) 
   const [busy, setBusy] = useState(false);
   async function submit(e) {
     e.preventDefault();
-    const c = disputeCents(amount, row.owed_cents);
+    const c = disputeCents(amount, row.owed_cents, row.currency);
     if (!c.ok) { setErr(c.message); return; }
     if (reason.trim().length < 10) { setErr('Say why, in at least 10 characters, so HQ can check it.'); return; }
     setBusy(true); setErr('');

@@ -6,6 +6,7 @@
  *   GET /runs?agent=&skill=&area=&team=company:<id>|project:<id>&status=&from=&to=&cursor=
  *                                    SA7: the run log, newest first, 50 a page
  *   GET /runs/:uid                   SA7: one run — steps, inputs as references, output, cost against the hold, errors
+ *   GET /runs/:uid/provenance        #5346 (D4575): the run's lineage, `runProvenance`'s record unchanged; 404 for no such run
  *   GET /spend?by=agent|skill|company|model
  *                                    SA7b: this month against the platform budget, the projection, the teams at their cap
  *   GET /audit?admin=&action=&area=&from=&to=&cursor=
@@ -28,6 +29,7 @@ import { requireSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { overview, runDetail, runFiltersOf, runLog, spend, SPEND_BY, type SpendBy } from '../services/agents/adminReads';
 import { AUDIT_CSV_MAX, auditCsv, auditFiltersOf, readAudit } from '../services/agents/adminAudit';
+import { runProvenance } from '../services/agents/provenance';
 
 import { addToCohort, removeFromCohort, cohortList, CohortError } from '../services/agents/cohort';
 
@@ -68,6 +70,17 @@ r.get('/runs/:uid', async (c) => {
   const run = await runDetail(c.env, uid);
   if (!run) return refuse(c, 404, { code: 'not_found', message: 'No such run.' });
   return c.json({ run });
+});
+
+// #5346 (D4575): the readiness scorecard's run lineage. Super Admin, like every run read here: the
+// record names a sponsor's user id and a run's money. Unknown fields stay `{ available: false, why }`.
+r.get('/runs/:uid/provenance', async (c) => {
+  await requireSuperAdmin(c);
+  const uid = c.req.param('uid');
+  if (!/^[0-9A-Za-z-]{8,64}$/.test(uid)) return refuse(c, 404, { code: 'not_found', message: 'No such run.' });
+  const provenance = await runProvenance(c.env, uid);
+  if (!provenance) return refuse(c, 404, { code: 'not_found', message: 'No such run.' });
+  return c.json({ provenance });
 });
 
 r.get('/spend', async (c) => {

@@ -465,6 +465,13 @@ const NOT_ISSUED_WORDS = {
   error: 'the issue failed',
   already_issued: 'another path issued it at the same moment',
 };
+/** Why a credential holder's lost bonus was not paid (creditLabGraduation's outcomes, D5360). */
+const BONUS_NOT_PAID_WORDS = {
+  'skipped:not_accepted': 'not an admitted cohort member',
+  'skipped:graduation_not_paid': 'the incorporation step was never paid',
+  'skipped:error': 'the grant failed',
+  refused: 'the credit rules refused it',
+};
 const HELD_WORDS = {
   frozen: 'this studio is suspended, so nothing was issued',
   not_granted: 'this studio’s licence does not hold the Spin-Out Lab, so nothing was issued',
@@ -491,6 +498,17 @@ export function scheduledBackfillLine(data) {
   if (stuck.length) {
     const total = stuck.reduce((s, [, n]) => s + Number(n), 0);
     parts.push(`${plural(total, 'graduate it tried still has', 'graduates it tried still have')} no certificate (${stuck.map(([k, n]) => `${nf(n)}: ${NOT_ISSUED_WORDS[k] || k}`).join('; ')}); each is tried again after six hours`);
+  }
+  // D5360: the same tick pays a graduation bonus a credential holder lost. A
+  // tick recorded before that step existed carries no count: nothing is said.
+  if (tick.bonus) {
+    const b = tick.bonus;
+    parts.push(`lost graduation bonuses: ${nf(b.paid)} paid of ${nf(b.scanned)} tried${b.more_waiting ? ', more are due' : ''}`);
+    const unpaid = Object.entries(data.scheduled_backfill.bonus_not_paid || {}).filter(([, n]) => Number(n) > 0);
+    if (unpaid.length) {
+      const total = unpaid.reduce((s, [, n]) => s + Number(n), 0);
+      parts.push(`${plural(total, 'certificate holder it tried is', 'certificate holders it tried are')} still owed the bonus (${unpaid.map(([k, n]) => `${nf(n)}: ${BONUS_NOT_PAID_WORDS[k] || k}`).join('; ')}); each is tried again after six hours`);
+    }
   }
   return { state: 'recorded', text: `${parts.join(' · ')}.` };
 }

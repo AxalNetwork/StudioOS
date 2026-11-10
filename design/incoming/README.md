@@ -2615,3 +2615,12 @@ Three more board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`Portfolio v2 Page.dc.html`**, **`Portfolio v2 · Boards.dc.html`**: boards PF-01 to PF-12, drawn 2026-11-07 (D4817). The shell follows #3704: Portfolio opens from the Account menu.
 
 None is built yet. Companies, people, skills and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Pitch Studio v2, Platform States, and the Licences and Contracts v2 addendum (#4839, #5129, #5303)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10, each as a page plus its boards under the names Claude Design gave them:
+- **`Pitch Studio v2 Page.dc.html`**, **`Pitch Studio v2 · Boards.dc.html`**: sections PS-00 to PS-13, 42 frames (D4839). A design and interaction pass over Pitch Deck Studio v2 (D1604), which stays the baseline.
+- **`Platform States Page.dc.html`**, **`Platform States · Boards.dc.html`**: boards ST-00 to ST-14 (D5129). The shared data-state vocabulary every surface cites; drawn to Question 2's pick A.
+- **`Licences and Contracts v2 Addendum Page.dc.html`**, **`Licences and Contracts v2 Addendum · Boards.dc.html`**: boards L23 to L40 and CT-17 to CT-20 (#5303; addendum sections in D4819 and D4811). Extends the Licences v2 and Contracts v2 canvases rather than forking them.
+
+None is built yet. Ventures, people, investors and amounts are sample content, except the addendum's package names, programs, base fees and guidance ranges, which are the seeded ones; each decision lists what is frontend-only and what needs backend work.
