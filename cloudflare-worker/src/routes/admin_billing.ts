@@ -7,7 +7,7 @@ import { ensureAdminAuditLogTable } from './admin';
 import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 import { refusalBody } from '../util/refusal';
-import { paymentChangeReason } from '../services/catalog';
+import { paymentChangeReason, stripeMode } from '../services/catalog';
 import {
   buildRefundReview, decideRefundPolicy, fromStripe, resolveRefundTarget, reviewIdempotencyKey, verifyReview,
   type RefundTarget, type StripeCharge,
@@ -252,6 +252,19 @@ adminBilling.post('/refund', async (c) => {
     review: reviewSummary(t, requested),
     clawback,
   });
+
+  // D5299 (#5299): the refund's revenue-ledger row, keyed as Stripe's `charge.refunded` for it will be, so the two make
+  // one row. Best-effort like the audit above, because the money has already moved; a failure is logged, and the
+  // webhook still records the refund.
+  try {
+    const { recordHqRefund } = await import('../services/financialEvents');
+    await recordHqRefund(c.env, {
+      refund, refundedBefore: t.refunded, customer: t.customer, metadata: t.metadata, adminUserId: adminUser.id,
+      livemode: stripeMode(c.env) === 'unconfigured' ? null : stripeMode(c.env) === 'live',
+    });
+  } catch (e) {
+    console.error('[admin/billing] refund not recorded in the revenue ledger', refund.id, (e as Error).message);
+  }
 
   return c.json({
     ok: true,

@@ -23,20 +23,13 @@ import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillL
 import { READ_KEYS } from '../src/services/agents/catalogue.ts';
 import { FIRST_TEN_SLUGS } from '../src/services/agents/skillInputs.ts';
 import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { assertionItems, incorrectText, type Pack } from '../src/services/agents/skillScenarios.ts';
 
 const DIR = join(process.cwd(), 'cloudflare-worker/src/services/agents/skills');
 const SCEN = join(DIR, 'scenarios');
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 const CASE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-type Incorrect = { targets: string; text?: string; edit?: [string, string][] };
-type Scenario = {
-  case_id: string; revision: number; name: string; covers: string;
-  input: { records: Record<string, unknown> }; expect: Record<string, unknown>;
-  outputs: { correct: string; incorrect: Incorrect[] };
-  staged?: Array<{ assertion: string; reason: string }>;
-};
-type Pack = { skill: string; pack_revision: number; note: string; scenarios: Scenario[] };
 
 const packs: Pack[] = readdirSync(SCEN).filter((f) => f.endsWith('.json')).sort()
   .map((f) => JSON.parse(readFileSync(join(SCEN, f), 'utf8')) as Pack);
@@ -47,33 +40,7 @@ function toolsOf(slug: string): string[] {
   return m ? m[1].split(',').map((t) => t.trim()).filter(Boolean) : [];
 }
 
-/** The incorrect output: the correct one with its edits applied, each edit's text found exactly once. */
-export function incorrectText(correct: string, bad: Incorrect): string {
-  if (typeof bad.text === 'string') return bad.text;
-  let out = correct;
-  for (const [from, to] of bad.edit ?? []) {
-    const at = out.indexOf(from);
-    if (at < 0 || out.indexOf(from, at + 1) >= 0) throw new Error(`edit text must occur exactly once: ${JSON.stringify(from)}`);
-    out = out.slice(0, at) + to + out.slice(at + from.length);
-  }
-  return out;
-}
-
-/** Each assertion in a case, as the words its failure detail names. */
-export function assertionItems(e: CaseExpect): Array<{ kind: string; names: string }> {
-  const items: Array<{ kind: string; names: string }> = [];
-  for (const w of e.must_include) items.push({ kind: 'must_include', names: `"${w}"` });
-  for (const f of e.must_say_not_recorded) items.push({ kind: 'not_recorded', names: f });
-  for (const n of e.numbers ?? []) items.push({ kind: 'number', names: n.metric });
-  for (const w of e.must_not_include) items.push({ kind: 'must_not_include', names: `"${w}"` });
-  const s = (e as any).structure;
-  if (s) items.push({ kind: 'structure', names: s.sections?.length ? 'section' : s.form });
-  for (const c of (e as any).evidence?.cite ?? []) items.push({ kind: 'evidence', names: `[${c}]` });
-  if ((e as any).refusal) items.push({ kind: 'refusal', names: (e as any).refusal.subject });
-  for (const c of [...((e as any).claims?.required ?? []), ...((e as any).claims?.forbidden ?? [])]) items.push({ kind: 'claim', names: `"${c.subject} … ${c.object}"` });
-  if ((e as any).output_schema) items.push({ kind: 'output_schema', names: 'At ' });
-  return items;
-}
+// `incorrectText` and `assertionItems` are the CI gate's own since D5336 (`skillScenarios.ts`), so the two cannot differ.
 
 test('the pack covers exactly the ten skills of #4588, each with 5 to 10 scenarios', () => {
   assert.deepEqual(packs.map((p) => p.skill).sort(), [...FIRST_TEN_SLUGS].sort());
@@ -92,7 +59,7 @@ test('every case identity is unique, traceable and distinct from the golden case
     assert.ok(Number.isInteger(s.revision) && s.revision >= 1, `${s.case_id}: revision`);
     assert.ok(!ids.has(s.case_id), `case id ${s.case_id} is used twice`);
     ids.add(s.case_id);
-    // The importer dedupes by case name (skillLibrarySeed.ts), so each name is its own identity.
+    // Each scenario is stored under its own name, beside the golden case (D5336).
     assert.ok(!names.has(s.name) && !golden.has(s.name), `case name "${s.name}" is not unique`);
     names.add(s.name);
     assert.ok(s.covers && s.covers.length > 10, `${s.case_id}: says what it covers`);

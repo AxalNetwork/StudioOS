@@ -79,6 +79,25 @@ for (const [width, height, label] of [[1440, 900, 'desktop'], [390, 844, 'phone'
   test.describe(`${label} (${width}px)`, () => {
     test.use({ viewport: { width, height } });
 
+    test('pricing exposes the active comparison and keeps audience choices visible', async ({ page, request }, testInfo) => {
+      await wire(page, await manifestOf(request), { signedIn: false, catalogueDown: 0 });
+      await page.goto('/pricing?for=founder');
+      const comparison = page.getByRole('table', { name: width === 390 ? /plan features/ : 'Compare plans' });
+      await expect(comparison.getByRole('rowheader', { name: 'Customer interviews' })).toBeVisible();
+      if (width !== 390) {
+        await expect(comparison.getByRole('columnheader', { name: 'Validate + Build' })).toBeVisible();
+      }
+      await expect(page.getByRole('tab', { name: 'Founder', exact: true })).toHaveAttribute('aria-selected', 'true');
+      const models = page.getByRole('tab', { name: 'Models', exact: true });
+      await expect(models).toBeInViewport({ ratio: 1 });
+      await page.getByRole('tab', { name: 'Founder', exact: true }).focus();
+      for (let i = 0; i < 4; i += 1) await page.keyboard.press('Tab');
+      await expect(models).toBeFocused();
+      await page.screenshot({ path: testInfo.outputPath('pricing-audience-focus.png') });
+      await page.keyboard.press('Enter');
+      await expect(models).toHaveAttribute('aria-selected', 'true');
+    });
+
     test('Back and choosing another plan before signing up carry the new plan only; the email link opens its checkout', async ({ page, request }) => {
       const manifest = await manifestOf(request);
       const state = { signedIn: false, catalogueDown: 0 };
