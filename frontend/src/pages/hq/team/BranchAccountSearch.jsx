@@ -16,7 +16,7 @@
  * One panel is open at a time. Once a move has answered, the hit shows the move's outcome
  * (`../AccountMoveRecovery.jsx`) and never its controls again.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Unreadable } from '../../../ui';
 import { branchStateText } from '../hqTeamBranchModel';
 import { MoveOutcome } from '../AccountMoveRecovery';
@@ -24,6 +24,7 @@ import { moveView } from '../accountMoveModel';
 import SupportSessionAction from './SupportSessionAction';
 import MoveAccountAction from './MoveAccountAction';
 import UnbindAdminAction from './UnbindAdminAction';
+import { useFocusRequest, useFocusTargets } from './actionFocus';
 
 /**
  * D260 — what a branch hit says about the account's KYC, access and Lab, as
@@ -62,10 +63,16 @@ export function MoveHit({ hit, from, destinations, onMoved, onUnbound, viewAs })
   const canUnbind = !viewAs && isAdminHit && Number(hit.is_active) === 1;
   const states = branchHitStates(hit);
   const toggle = (name) => setPanel((p) => (p === name ? null : name));
+  // D5045: Escape returns focus to the button that opened the panel; an unbind or a move moves it to
+  // the line that replaces the hit.
+  const refs = { support: useRef(null), move: useRef(null), unbind: useRef(null), outcome: useRef(null) };
+  const [focusReq, askFocus] = useFocusRequest();
+  useFocusTargets(focusReq, refs);
+  const close = (name) => () => { setPanel(null); askFocus(name); };
 
   if (unbound) {
     return (
-      <li className="py-1.5 text-[12px] text-axal-muted" data-testid="hq-team-unbound">
+      <li className="py-1.5 text-[12px] text-axal-muted" data-testid="hq-team-unbound" ref={refs.outcome} tabIndex={-1}>
         {hit.name || hit.email} is no longer an administrator of {from}: the role is removed and the account deactivated there.
       </li>
     );
@@ -75,7 +82,7 @@ export function MoveHit({ hit, from, destinations, onMoved, onUnbound, viewAs })
   // leg is open. A refresh finds the same move under Moves to finish (`AccountMoveRecovery.jsx`).
   if (done) {
     return (
-      <li className="py-1.5" data-testid="hq-team-moved">
+      <li className="py-1.5" data-testid="hq-team-moved" ref={refs.outcome} tabIndex={-1}>
         <MoveOutcome view={moveView(done)} />
       </li>
     );
@@ -92,28 +99,28 @@ export function MoveHit({ hit, from, destinations, onMoved, onUnbound, viewAs })
         <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-axal-faint">
           <span>{hit.role} · {active ? 'active' : 'deactivated'}</span>
           {canSupport && (
-            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" data-testid="hq-team-support-toggle" aria-expanded={panel === 'support'} onClick={() => toggle('support')}>
+            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" ref={refs.support} data-testid="hq-team-support-toggle" aria-expanded={panel === 'support'} onClick={() => toggle('support')}>
               Support
             </button>
           )}
           {canMove && (
-            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" data-testid="hq-team-move-toggle" aria-expanded={panel === 'move'} onClick={() => toggle('move')}>
+            <button type="button" className="font-bold text-axal-violet dark:text-violet-300" ref={refs.move} data-testid="hq-team-move-toggle" aria-expanded={panel === 'move'} onClick={() => toggle('move')}>
               Move
             </button>
           )}
           {canUnbind && (
-            <button type="button" className="font-bold text-rose-700 dark:text-rose-300" data-testid="hq-team-unbind-toggle" aria-expanded={panel === 'unbind'} onClick={() => toggle('unbind')}>
+            <button type="button" className="font-bold text-rose-700 dark:text-rose-300" ref={refs.unbind} data-testid="hq-team-unbind-toggle" aria-expanded={panel === 'unbind'} onClick={() => toggle('unbind')}>
               Unbind
             </button>
           )}
         </span>
       </div>
-      {canSupport && panel === 'support' && <SupportSessionAction hit={hit} from={from} />}
+      {canSupport && panel === 'support' && <SupportSessionAction hit={hit} from={from} onCancel={close('support')} />}
       {canUnbind && panel === 'unbind' && (
-        <UnbindAdminAction hit={hit} from={from} onUnbound={(res) => { setUnbound(true); onUnbound?.(res); }} />
+        <UnbindAdminAction hit={hit} from={from} onCancel={close('unbind')} onUnbound={(res) => { setUnbound(true); askFocus('outcome'); onUnbound?.(res); }} />
       )}
       {canMove && panel === 'move' && (
-        <MoveAccountAction hit={hit} from={from} destinations={destinations} onMoved={(res) => { setDone(res); onMoved?.(res); }} />
+        <MoveAccountAction hit={hit} from={from} destinations={destinations} onCancel={close('move')} onMoved={(res) => { setDone(res); askFocus('outcome'); onMoved?.(res); }} />
       )}
     </li>
   );

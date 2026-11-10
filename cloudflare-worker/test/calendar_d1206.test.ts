@@ -101,21 +101,23 @@ test('D1206: source failures carry fixed codes, preserve other sources and leak 
     f.db.prepare("INSERT INTO calendar_events (uid,user_id,source,kind,external_uri,title,start_at,end_at) VALUES ('own',1,'axal','expert_booking','fixture','Fixture meeting',?,?)").run(START, END);
     f.breakSource('FROM ic_meetings');
     const r = await service.fetchUserEventsWithSources(f.env, 1, 'admin', FROM, TO, ['ic_meeting','expert_booking']);
-    assert.deepEqual(r.sources, [{ kind: 'ic_meeting', ok: false, error: 'unreadable' }, { kind: 'expert_booking', ok: true, error: null }]);
+    // D5202 (#5202): a source row also carries safe health (reason, latency_ms, items, at), so these compare
+    // the fields this test is about rather than the whole row.
+    assert.deepEqual(r.sources.map(({ kind, ok, error }: any) => ({ kind, ok, error })), [{ kind: 'ic_meeting', ok: false, error: 'unreadable' }, { kind: 'expert_booking', ok: true, error: null }]);
     assert.deepEqual(r.events.map(e => e.title), ['Fixture meeting']);
     await assert.rejects(() => service.fetchUserEvents(f.env, 1, 'admin', FROM, TO, ['ic_meeting']), { message: 'calendar source ic_meeting failed: unreadable' });
     f.breakSource(''); f.db.exec('DROP TABLE advisor_bookings');
     const missing = await service.fetchUserEventsWithSources(f.env, 1, 'admin', FROM, TO, ['advisor_booking']);
-    assert.deepEqual(missing, { events: [], sources: [{ kind: 'advisor_booking', ok: false, error: 'not_configured' }] });
+    assert.deepEqual({ events: missing.events, sources: missing.sources.map(({ kind, ok, error }: any) => ({ kind, ok, error })) }, { events: [], sources: [{ kind: 'advisor_booking', ok: false, error: 'not_configured' }] });
     await assert.rejects(() => service.fetchUserEvents(f.env, 1, 'admin', FROM, TO, ['advisor_booking']), { message: 'calendar source advisor_booking failed: not_configured' });
     f.db.exec('ALTER TABLE partner_office_hour_slots RENAME COLUMN starts_at TO old_starts_at');
     const column = await service.fetchUserEventsWithSources(f.env, 1, 'admin', FROM, TO, ['partner_office_hour']);
-    assert.deepEqual(column.sources, [{ kind: 'partner_office_hour', ok: false, error: 'not_configured' }]);
+    assert.deepEqual(column.sources.map(({ kind, ok, error }: any) => ({ kind, ok, error })), [{ kind: 'partner_office_hour', ok: false, error: 'not_configured' }]);
     const response = await f.request(`/events?${window}&kinds=ic_meeting,advisor_booking`);
     assert.equal(response.status, 200);
     const body = await response.json() as any;
     // D1484: the page's read also names each source in plain words, from the registry.
-    assert.deepEqual(body.sources, [
+    assert.deepEqual(body.sources.map(({ kind, ok, error, family, module, label }: any) => ({ kind, ok, error, family, module, label })), [
       { kind: 'ic_meeting', ok: true, error: null, family: 'meetings', module: 'Deals › Investment committee', label: 'IC meeting' },
       { kind: 'advisor_booking', ok: false, error: 'not_configured', family: 'meetings', module: 'Advisors › Sessions', label: 'Advisor session' },
     ]);
