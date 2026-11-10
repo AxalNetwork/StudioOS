@@ -423,7 +423,7 @@ test('POST /pipeline/metrics/snapshot: invalid metrics are refused and stored no
     }, e, { waitUntil() {}, passThroughOnException() {} } as any);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   };
-  const rowsIn = () => (db.prepare('SELECT key_metrics, traction_score FROM metrics_snapshots').all() as any[]).map((r) => ({ ...r }));
+  const rowsIn = () => (db.prepare('SELECT key_metrics, traction_score, traction_formula_version FROM metrics_snapshots').all() as any[]).map((r) => ({ ...r }));
 
   for (const km of [{ users: true }, { users: -5 }, { retention: 400 }, { growth: null }, { users: '1e3' }, {}]) {
     const r = await post({ deal_id: 1, key_metrics: km });
@@ -437,6 +437,7 @@ test('POST /pipeline/metrics/snapshot: invalid metrics are refused and stored no
   assert.match(ok.body.score_basis, /Not recorded, so not scored: revenue, growth\./);
   const stored = rowsIn();
   assert.equal(stored.length, 1);
+  assert.equal(stored[0].traction_formula_version, 2);
   assert.deepEqual(JSON.parse(stored[0].key_metrics), { users: 999, engagement: 50, [FORMULA_KEY]: 2 });
   assert.equal(formulaVersionOf(JSON.parse(stored[0].key_metrics)), 2);
 });
