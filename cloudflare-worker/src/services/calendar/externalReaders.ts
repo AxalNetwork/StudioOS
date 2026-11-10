@@ -129,12 +129,34 @@ const isoOf = (v: unknown): string | null => {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 };
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+/** The calendar date of a provider value, without turning it into an instant: `2026-11-09T…` → `2026-11-09`. */
+const dateOf = (v: string | null): string | null => {
+  if (typeof v !== 'string') return null;
+  if (DATE_ONLY.test(v)) return v;
+  const head = v.slice(0, 10);
+  return DATE_ONLY.test(head) ? head : null;
+};
+/** The day after a calendar date, for an exclusive end a provider did not give. */
+function nextDate(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + 1));
+  return t.toISOString().slice(0, 10);
+}
+
 function item(kind: ExternalKind, o: {
   id: string; ical: string | null; title: string | null; start: string; end: string; url: string | null; join: string | null; address: string | null;
+  allDay?: boolean;
 }): CalendarEvent {
+  // D5204: an all-day event keeps its provider dates as dates. `end_date` is exclusive, as Google states it.
+  const startDate = o.allDay ? dateOf(o.start) : null;
+  const endDate = o.allDay ? (dateOf(o.end) ?? (startDate ? nextDate(startDate) : null)) : null;
+  const allDay = o.allDay && startDate
+    ? { all_day: true, start_date: startDate, end_date: endDate && endDate > startDate ? endDate : nextDate(startDate) }
+    : {};
   return {
     id: `${kind}:${o.id}`, kind, source_id: 0, source_uid: o.id,
-    title: o.title || 'Busy', start_at: o.start, end_at: o.end, status: 'confirmed',
+    title: o.title || 'Busy', start_at: o.start, end_at: o.end, status: 'confirmed', ...allDay,
     location_kind: o.join ? 'video' : null, location_uri: o.join,
     organizer_email: null, attendees: [], notes: null,
     url: o.url ?? undefined, read_only: true,
@@ -165,6 +187,8 @@ export async function googleEvents(env: Env, userId: number, fromIso: string, to
       if (!id || !start || !end) continue;
       out.push(item('external_google', {
         id, ical: str(e?.iCalUID, 1024), title: str(e?.summary, 500), start, end,
+        // Google states an all-day event as `start.date`/`end.date`, with no time at all.
+        allDay: typeof e?.start?.date === 'string' && !e?.start?.dateTime,
         url: str(e?.htmlLink, 2048)?.startsWith('https://') ? e.htmlLink : null,
         join: str(e?.hangoutLink, 2048)?.startsWith('https://') ? e.hangoutLink : null, address: tok.address,
       }));
@@ -185,7 +209,7 @@ export async function microsoftEvents(env: Env, userId: number, fromIso: string,
   const first = new URL(GRAPH_VIEW);
   first.search = new URLSearchParams({
     startDateTime: fromIso, endDateTime: toIso, $top: String(PAGE_SIZE),
-    $select: 'id,iCalUId,subject,start,end,isCancelled,webLink,onlineMeeting', $orderby: 'start/dateTime',
+    $select: 'id,iCalUId,subject,start,end,isCancelled,isAllDay,webLink,onlineMeeting', $orderby: 'start/dateTime',
   }).toString();
   let next: string | null = first.toString();
   for (let page = 0; page < MAX_PAGES && next; page += 1) {
@@ -199,6 +223,8 @@ export async function microsoftEvents(env: Env, userId: number, fromIso: string,
       const join = str(e?.onlineMeeting?.joinUrl, 2048);
       out.push(item('external_microsoft', {
         id, ical: str(e?.iCalUId, 1024), title: str(e?.subject, 500), start, end,
+        // Graph gives an all-day event as midnight to midnight with `isAllDay`; its end is exclusive too.
+        allDay: e?.isAllDay === true,
         url: str(e?.webLink, 2048)?.startsWith('https://') ? e.webLink : null,
         join: join?.startsWith('https://') ? join : null, address: tok.address,
       }));
