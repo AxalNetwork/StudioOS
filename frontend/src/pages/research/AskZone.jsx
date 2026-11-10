@@ -15,7 +15,7 @@ import { railPressHeaders } from '../../lib/railPage.js';
 import { RETRIEVAL_UNAVAILABLE } from './askOutcome.js';
 import {
   ASK_STATES, CITATION_AVAILABILITY, HISTORY_TABS, answerWithCitations, answerabilityOf, askStateOf,
-  citationAvailability, indexStateOf, tokensRefusal,
+  citationAvailability, indexStateOf, tokensRefusal, splitCitations, referenceNote, REFERENCE_LIMIT,
 } from './researchStates.js';
 import { openAddTokens } from '../../lib/aiTokens.js';
 import Sheet from '../../ui/Sheet.jsx';
@@ -146,6 +146,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const askOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'ask' });
   useRailOption(busy ? askOption?.key : null, askOption?.label);
   const [error, setError] = useState('');
+  // D4613: what the live region last said about a question (sent, answered).
+  // Errors are announced by their own alert; this is the polite channel.
+  const [announce, setAnnounce] = useState('');
   // D3701 part 4: a 402 from Ask is a budget stop, drawn as RS-11's card.
   const [tokens, setTokens] = useState(null);
   const [lib, setLib] = useState({ loading: true, error: '', payload: null });
@@ -210,11 +213,12 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     e.preventDefault();
     const q = question.trim();
     if (!q) return;
-    setBusy(true); setError(''); setTokens(null);
+    setBusy(true); setError(''); setTokens(null); setAnnounce('Reading your library…');
     try {
       // D778 part 11: the press names its profile's option on the run (founder's by default).
       const r = await api.research.ask(q, sessionUid, railPressHeaders(askOption?.key ?? 'ask:library'));
       setQuestion('');
+      setAnnounce(r?.reason === 'answered' ? 'Answer added to this session.' : 'Your question was recorded without an answer. The reason is shown in this session.');
       // Back to the session view: a reader who asks a question while looking at
       // `All history` has just added to a thread they cannot see, and leaving
       // them there would make the answer look lost.
@@ -222,6 +226,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       await loadThread('session', r?.session_uid || '');
     } catch (err) {
       const stop = tokensRefusal(err);
+      setAnnounce('');
       if (stop) setTokens(stop);
       else setError(err?.message || 'That question could not be answered right now.');
     } finally { setBusy(false); }
@@ -263,6 +268,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   // D3701 RS-07C: only a library read that succeeded can show that a cited
   // document is gone. Null while it loads or when it failed.
   const libraryUids = useMemo(() => (payload ? new Set(items.map((d) => d.uid)) : null), [payload, items]);
+  // D4613: each listed document's current index run, so a citation can say its
+  // document was re-indexed after the answer read it.
+  const libraryRevisions = useMemo(() => (payload ? new Map(items.map((d) => [d.uid, d.indexed_at || null])) : null), [payload, items]);
 
   const all = useMemo(() => thread.payload?.items || [], [thread.payload]);
   const visible = useMemo(() => (NARROW[view] ? all.filter(NARROW[view]) : all), [all, view]);
@@ -365,16 +373,31 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         )}
       >
         <Card className="p-4">
-          <form onSubmit={ask}>
+          {/* D4613: the label stays on screen (the placeholder is only an
+              example), the help and any error are tied to the field, and the
+              form says when it is busy. Ctrl+Enter or ⌘+Enter sends from the
+              field; Tab reaches the Ask button as before. */}
+          <form onSubmit={ask} aria-busy={busy || undefined} aria-label="Ask your library" data-testid="ask-form">
             <label htmlFor="ask-question" className="mb-1.5 block text-[12.5px] font-bold text-axal-ink dark:text-gray-100">What do you want to know?</label>
             <textarea
               id="ask-question"
               rows={3}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !busy && question.trim()) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              aria-describedby={error ? 'ask-question-help ask-question-error' : 'ask-question-help'}
+              aria-invalid={error ? true : undefined}
               className={inputClass}
               placeholder="Ask across the library — e.g. “which SOWs cap revisions?”"
             />
+            <p id="ask-question-help" className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+              Answers come only from documents in your library that Ask can read. Press Ctrl+Enter (⌘+Enter on a Mac) to ask.
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button type="submit" className={buttonClass} disabled={busy || !question.trim()}>
                 {busy ? 'Reading your library…' : 'Ask'}
@@ -391,8 +414,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   last question: {formatCost(all[all.length - 1]?.cost_usd ?? 0)}
                 </span>
               )}
-              {error && <span className="text-[12px] text-gray-700 dark:text-gray-300">{error}</span>}
+              {error && <span id="ask-question-error" role="alert" data-testid="ask-error" className="text-[12px] text-gray-700 dark:text-gray-300">{error}</span>}
             </div>
+            <p role="status" aria-live="polite" className="sr-only" data-testid="ask-status">{announce}</p>
           </form>
         </Card>
 
@@ -485,45 +509,71 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {(t.citations || []).length ? (
                   // D3701 RS-07: Sources used, each with its exact passage and
-                  // whether its document is still in the library.
+                  // whether its document is still in the library. D4613: the
+                  // sources the answer cites come first; passages it was given
+                  // and never cites are listed apart as retrieved context.
                   <div className="w-full" data-testid={`ask-sources-${t.uid}`}>
-                    <Eyebrow className="!text-[9px]">Sources used · {(t.citations || []).length}</Eyebrow>
-                    {phone ? (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={`ask-source-buttons-${t.uid}`}>
-                        {(t.citations || []).map((ct, i) => (
-                          <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
-                            onClick={() => setOpenCite({ t, i })}
-                            className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
-                            {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                    <ol className="mt-1.5 space-y-1.5">
-                        {(t.citations || []).map((ct, i) => {
-                          const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
-                          return (
-                            <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Pill tone="cite" className="!text-[9.5px]">
-                                  {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{`[${ct.n || i + 1}] `}{ct.title}</Link> : <>{`[${ct.n || i + 1}] `}{ct.title}</>}
-                                  {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
-                                </Pill>
-                                {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
-                                {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
-                              </div>
-                              {ct.passage ? (
-                                <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
-                                  {ct.passage}{ct.passage_truncated ? '…' : ''}
-                                </blockquote>
-                              ) : (
-                                <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    )}
+                    {(() => {
+                      const note = referenceNote(t);
+                      return note ? (
+                        <p className="mb-1.5 rounded-[8px] border border-amber-200 bg-amber-50/60 px-2 py-1.5 text-[11.5px] text-gray-800 dark:border-amber-900 dark:bg-amber-950/25 dark:text-gray-200" data-testid={`ask-reference-note-${t.uid}`}>
+                          <span aria-hidden="true">! </span>{note.text}
+                        </p>
+                      ) : null;
+                    })()}
+                    {(() => {
+                      const groups = splitCitations(t);
+                      const sections = [
+                        { key: 'cited', items: groups.cited, label: `Sources cited · ${groups.cited.length}` },
+                        { key: 'retrieved', items: groups.retrieved, label: t.reason === 'answered' ? `Retrieved, not cited · ${groups.retrieved.length}` : `Passages retrieved · ${groups.retrieved.length}` },
+                      ].filter((g) => g.items.length);
+                      return sections.map((g) => (
+                        <section key={g.key} className="mt-1.5" aria-label={g.label} data-testid={`ask-sources-${g.key}-${t.uid}`}>
+                          <Eyebrow className="!text-[9px]">{g.label}</Eyebrow>
+                          {phone ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={g.key === 'cited' ? `ask-source-buttons-${t.uid}` : undefined}>
+                              {g.items.map(({ ct, i }) => (
+                                <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
+                                  onClick={() => setOpenCite({ t, i })}
+                                  className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                                  {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <ol className="mt-1.5 space-y-1.5">
+                              {g.items.map(({ ct, i }) => {
+                                const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids, libraryRevisions)];
+                                return (
+                                  <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Pill tone={g.key === 'cited' ? 'cite' : 'neutral'} className="!text-[9.5px]">
+                                        {`[${ct.n || i + 1}] `}{ct.title}
+                                        {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
+                                      </Pill>
+                                      {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
+                                      {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
+                                      <button type="button" className="text-[11px] font-semibold text-axal-violet underline dark:text-violet-300"
+                                        data-testid={`ask-source-inspect-${t.uid}-${i}`} onClick={() => setOpenCite({ t, i })}>
+                                        Open passage<span className="sr-only">{` [${ct.n || i + 1}] ${ct.title || 'Untitled document'}`}</span>
+                                      </button>
+                                    </div>
+                                    {ct.passage ? (
+                                      <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
+                                        {ct.passage}{ct.passage_truncated ? '…' : ''}
+                                      </blockquote>
+                                    ) : (
+                                      <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          )}
+                        </section>
+                      ));
+                    })()}
+                    {t.reason === 'answered' ? <p className="mt-1.5 text-[10.5px] text-gray-600 dark:text-gray-400">{REFERENCE_LIMIT}</p> : null}
                   </div>
                 ) : null}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
@@ -612,20 +662,34 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
       {openCite ? (() => {
         const ct = openCite.t.citations?.[openCite.i] || {};
-        const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
+        const availKey = citationAvailability(ct, libraryUids, libraryRevisions);
+        const avail = CITATION_AVAILABILITY[availKey];
         return (
-          <Sheet label="Source" eyebrow={`Source ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
+          <Sheet label="Source" eyebrow={`${ct.cited === true ? 'Cited source' : 'Retrieved passage'} ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
             onClose={() => setOpenCite(null)} phone="sheet" width={480} testId="ask-source-sheet">
             <p className="text-[12px] text-gray-600 dark:text-gray-400">
               {[ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(' · ') || 'Page not recorded'}
             </p>
+            {/* D4613: the index run the answer read, so the version is on record beside the passage. */}
+            <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="ask-source-sheet-revision">
+              {ct.revision ? `Indexed version read: ${String(ct.revision).slice(0, 16)}` : 'Indexed version not recorded for this answer'}
+            </p>
+            {ct.cited === true ? null : (
+              <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="ask-source-sheet-uncited">The answer does not cite this passage. It was retrieved as context, not offered as support.</p>
+            )}
             {avail ? <Pill tone={avail.tone} className="mt-2 !text-[10px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
             {ct.passage ? (
               <blockquote className="mt-3 border-l-2 border-violet-500 pl-3 text-[13px] leading-relaxed text-gray-800 dark:text-gray-200" data-testid="ask-source-sheet-passage">
                 {ct.passage}{ct.passage_truncated ? '…' : ''}
               </blockquote>
             ) : <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>}
-            {ct.document_uid && citationAvailability(ct, libraryUids) !== 'gone' ? (
+            {availKey === 'changed' ? (
+              <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-changed">The document was indexed again after this answer. The passage above is the version the answer read; the document may now say something else.</p>
+            ) : null}
+            {availKey === 'gone' ? (
+              <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-gone">The document is no longer in your library, so only the passage recorded with this answer remains.</p>
+            ) : null}
+            {ct.document_uid && availKey !== 'gone' ? (
               <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`} data-testid="ask-source-sheet-open"
                 className="mt-4 flex min-h-[44px] items-center justify-center rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">
                 Open in Library
