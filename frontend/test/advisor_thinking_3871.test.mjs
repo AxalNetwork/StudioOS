@@ -10,6 +10,8 @@ const model = readFileSync(new URL('../src/pages/advisor/expertise/expertiseMode
 const body = kit.slice(kit.indexOf('export function ZoneBody('), kit.indexOf('/** An empty store'));
 // #4689: the zone reads its shelf through the paged-list hook, inlined here as it ships.
 const pages = readFileSync(new URL('../src/pages/advisor/expertise/pages.js', import.meta.url), 'utf8');
+// #5363: the licence refusal's reader, which the kit and the hook import.
+const licence = readFileSync(new URL('../src/pages/advisor/expertise/licenceRefusal.js', import.meta.url), 'utf8').replace(/^export /gm, '');
 const source = `import React, { useCallback, useEffect, useRef, useState } from 'react';
 const MoreRows = () => null;
 const reportError = () => {};
@@ -29,7 +31,7 @@ const Unrecorded = () => <span>Not recorded</span>;
 export const control = {error: new Error('The shelf could not be read.'), payload:null};
 const api = {async listMyAdvisorThinking() {if(control.error) throw control.error; return control.payload;}};
 const articlesApi = {async revisions() { return { revisions: [] }; }};
-` + model + body + pages.replace(/^import .*;\n/gm, '') + page.replace(/^import .*;\n/gm, '');
+` + licence + model + body + pages.replace(/^import .*;\n/gm, '') + page.replace(/^import .*;\n/gm, '');
 
 async function unreadable(module) {
   const f = await mountForm(h(module.default));
@@ -44,7 +46,7 @@ async function unreadable(module) {
 }
 test('the real shelf and ZoneBody show a failed read instead of counts and can retry', async () => {
   await mutationCheck(source, 'pages/advisor/expertise/ThinkingZone.jsx', unreadable, [[
-    "error: errorText", "error: ''",
+    "error: zoneError(e, errorText, surface)", "error: ''",
   ]]);
 });
 test('a successful empty read shows the existing empty shelf state', async () => {

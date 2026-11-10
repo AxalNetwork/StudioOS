@@ -28,6 +28,7 @@ import { isRedirectKey } from '../services/redirectRoutes';
 import { REGISTRY } from '../integrations/registry';
 import { MCP_PROVIDERS } from '../integrations/mcpProviders';
 import { channelRollout } from '../services/channels/connections';
+import { jsonWithEtag } from '../util/httpCache';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -178,14 +179,19 @@ publicRoutes.get('/ai/models', (c) => {
 // and the token packs on sale. D1 only, never Stripe, and no person in it: the
 // allowance is a projection with no recorded_by and no name. D816 (#2262): each
 // plan also carries its monthly and yearly price and the computed yearly
-// saving, and the read is cached at the edge for five minutes; the
-// `public_plans` rate-limit bucket bounds it per IP.
+// saving; the `public_plans` rate-limit bucket bounds it per IP.
+// D5318 (#5318, H10): the body depends on the D1 catalogue mirror and the
+// Worker's Stripe mode only, never on the caller (a signed-in read answers the
+// same bytes), so it is `public`. It is a price, so the window is short: fresh
+// for 60 s, then served stale for at most 60 s more while one request
+// revalidates, so a price or plan change shows within 120 s (D816's five
+// minutes was longer). A revalidation whose ETag still matches answers 304.
+export const PLANS_CACHE_CONTROL = 'public, max-age=60, s-maxage=60, stale-while-revalidate=60';
 publicRoutes.get('/plans-and-packs', async (c) => {
   try {
     const { plansAndPacks } = await import('../services/aiCredits');
     const body = await plansAndPacks(c.env);
-    c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
-    return c.json(body);
+    return await jsonWithEtag(c, body, PLANS_CACHE_CONTROL);
   } catch (e) {
     return refuse(c, 503, { code: 'plans_unreadable', message: 'Unreadable: the plans and token packs could not be read.', raw: e, audience: 'member' });
   }

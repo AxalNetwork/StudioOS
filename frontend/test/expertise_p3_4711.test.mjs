@@ -357,5 +357,7 @@ test('the Expertise routes admit the Advisor licence, and no Expertise file carr
   for (const f of ['ProfileZone.jsx', 'ServicesZone.jsx', 'ProofZone.jsx', 'ThinkingZone.jsx', 'VisibilityZone.jsx', 'kit.jsx']) {
     assert.doesNotMatch(zoneSrc(f), /LicenceSwitcher|ProfileSwitcher|activeLicence|active_profile/, `${f} has no switcher`);
   }
-  assert.match(zoneSrc('kit.jsx'), /advisor_licence_required: 'Expertise needs the Advisor licence on this account\.'/);
+  // #5363: the sentence lives in licenceRefusal.js; the kit's refusal map points at it.
+  assert.match(zoneSrc('licenceRefusal.js'), /expertise: 'Expertise needs the Advisor licence on this account\.'/);
+  assert.match(zoneSrc('kit.jsx'), /advisor_licence_required: LICENCE_SENTENCES\.expertise/);
 });

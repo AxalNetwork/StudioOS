@@ -70,3 +70,63 @@ export async function claimLpRowsByEmail(
     return { claimed: 0 };
   }
 }
+
+/**
+ * D5318 H8 — the one claim every sign-in runs.
+ *
+ * `GET /api/funds` used to claim on every list, so a read wrote. The claim now
+ * happens at the moments an address is proven: each route that mints a
+ * session for the account's own holder (password + TOTP, the email
+ * verification hand-off, magic link, Google, passkey, SMS, account recovery)
+ * and the confirmation of an email change. Impersonation and support
+ * sessions do NOT call it: the actor there is an operator, and a link written
+ * on their session would put the wrong person in the audit trail.
+ *
+ * It is `claimLpRowsByEmail` with the account's own address, nothing more, so
+ * the rules above (never re-point an owned row, never fail the caller) are
+ * the same at every door.
+ */
+export async function claimLpRowsAtSignIn(
+  env: Env,
+  user: { id: unknown; email?: unknown } | null | undefined,
+): Promise<LpClaimResult> {
+  if (!user) return { claimed: 0 };
+  return claimLpRowsByEmail(env, Number(user.id), typeof user.email === 'string' ? user.email : null);
+}
+
+/**
+ * D5318 H8 — claim a newly written LP row for the account that already holds
+ * its address.
+ *
+ * The other half of moving the claim off the list: an account signed in on a
+ * long session when the GP records it as an LP would otherwise wait for its
+ * next sign-in for the link. The row is still reachable by email until then
+ * (`lpMembershipScope`'s unclaimed arm), so nobody loses access either way;
+ * this just makes the link immediate.
+ *
+ * Only an account whose address is verified and that is active is linked,
+ * and only when exactly one account holds the address, so an operator typo
+ * that matches nobody — or an address two rows differ on only by case —
+ * links nothing. Best-effort, like every claim.
+ */
+export async function claimLpRowsForAddress(
+  env: Env,
+  email: string | null | undefined,
+  fundId?: number | null,
+): Promise<LpClaimResult> {
+  const addr = typeof email === 'string' ? email.trim() : '';
+  if (!addr) return { claimed: 0 };
+  try {
+    const found = await env.DB.prepare(
+      `SELECT id, email FROM users
+        WHERE LOWER(email) = LOWER(?) AND email_verified = 1 AND is_active = 1
+        LIMIT 2`,
+    ).bind(addr).all<{ id: number; email: string }>();
+    const rows = found?.results || [];
+    if (rows.length !== 1) return { claimed: 0 };
+    return claimLpRowsByEmail(env, Number(rows[0].id), rows[0].email, fundId);
+  } catch (e) {
+    console.warn('[lpClaim] claim for address failed', e);
+    return { claimed: 0 };
+  }
+}

@@ -143,7 +143,7 @@ Each figure is labelled:
 | --- | --- | --- |
 | Acceptance, edit, discard, open past 3 days, expired | HQ › AI agents › Evaluation (`services/agents/evaluation.ts`, TM14) | Under 10 decisions a role is not rated |
 | Cost per accepted proposal, and per successful task | The same board, and `runCostReader` | An unrecorded charge makes the sum unavailable |
-| A run's lineage (task, scope, agent, sponsor, model configured and invoked, skill version, run and hold keys, proposal and decision, charge) | `runProvenance` (`services/agents/provenance.ts`) | The grants at admission and the data class are not recorded per run, so they read as unavailable |
+| A run's lineage (task, scope, agent, sponsor, model configured and invoked, skill version, run and hold keys, proposal and decision, charge) | `runProvenance` (`services/agents/provenance.ts`). Open it at HQ › AI agents › Runs: pick a run, then **Provenance** in its details (`GET /api/admin/ai-agents/runs/:uid/provenance`, Super Admin, #5346) | The grants at admission and the data class are not recorded per run, so they read "Not recorded" with the reason |
 | Duplicate holds or proposals per run | `runProvenance` reconciliation, and the unique `run_key` | Must be 0 |
 | Unresolved holds: `held_unsettled`, `held_expired`, `mismatch`, `unrecorded` | `runProvenance` over the window's runs | Each needs a named cause before go |
 | Refusal correctness | The board's `refused` by reason, sampled by a person | Synthetic tasks only |

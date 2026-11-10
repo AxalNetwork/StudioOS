@@ -53,7 +53,7 @@ test('a ledger without states reads as absent, not zero', () => {
   assert.equal(stateTiles({ states: { collected: {}, paid_out_cents: null } }).paid_out_cents, null);
 });
 
-test('the page uses the tickets, sends the period with a note, and labels "You received" from collected only', () => {
+test('the page uses the tickets, sends the period with a note, and labels nothing "received"', () => {
   // Success AND failure paths both check the ticket before writing.
   const n = (re) => (PAGE.match(re) || []).length;
   assert.ok(n(/ledgerTicket\.current\.isCurrent\(t\)/g) >= 2, 'ledger success and error');
@@ -61,7 +61,8 @@ test('the page uses the tickets, sends the period with a note, and labels "You r
   assert.ok(n(/draftTicket\.current\.isCurrent\(t\)/g) >= 3, 'draft success, error and finally');
   assert.match(PAGE, /period_key: window_\.key/);
   assert.match(PAGE, /draftFitsPeriod\(draftKey, window_\.key\)/);
-  assert.match(PAGE, /label="You received"[\s\S]{0,80}tiles\?\.received_cents/);
-  assert.equal(/label="You received"[\s\S]{0,80}totals\?\.net_cents/.test(PAGE), false);
-  assert.equal(/`you received \$\{money\(totals/.test(PAGE), false, 'the AI coverage line must not call priced money received');
+  // #4834 (D4834): Practice v2 says "recorded", never "you received": nothing
+  // the store holds shows money reaching the advisor except a paid payout.
+  assert.doesNotMatch(PAGE, /[Yy]ou received/);
+  assert.equal(/received \$\{money\(/.test(PAGE), false, 'the AI coverage line must not call any figure received');
 });

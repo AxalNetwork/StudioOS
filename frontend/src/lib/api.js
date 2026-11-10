@@ -2365,18 +2365,19 @@ export const api = {
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
-  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id, client_secret }),
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   // Task #3 — Rotate the secret in place (client_id stays the same).
-  adminRotateIntegrationKeys: (provider, client_secret) =>
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
       method: 'POST',
-      body: JSON.stringify({ client_secret }),
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
@@ -4575,17 +4576,22 @@ export const api = {
     request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePartnerProof: (id) =>
     request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the firm hands the link over by whatever channel it already
-  // has with the client, and no later read returns it.
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
   requestPartnerProofConsent: (id, data) =>
     request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
   // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
   // is the token holder's alone, which is what makes the record worth anything.
   withdrawPartnerProofConsent: (id, consentId) =>
     request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
-  // The client's own answer. Unauthenticated on purpose — the token is the
-  // credential, and the counterparty on an engagement is often not a user here.
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToPartnerProofConsent: (token, data) =>
     request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
