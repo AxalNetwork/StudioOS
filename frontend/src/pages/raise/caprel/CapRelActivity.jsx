@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
 import { Unreadable } from '../../../ui';
 import { ACTIVITY_PAGE, activityCsv, activityQuery, pageLine, whenText } from './capRelTabsModel';
+import { ACTIVITY_FILTERS, useTabFilters } from './capRelUrlFilters';
 
 /**
  * D1193 (#3127, CRL12) — Activity: every change to the pipeline, the round
@@ -38,8 +39,10 @@ function saveCsv(items) {
 }
 
 export default function CapRelActivity({ projectId }) {
-  const [f, setF] = useState({ q: '', kind: '', investor: '', page: 1 });
-  const [typed, setTyped] = useState('');
+  // D5377: the filters and page are the address's, read through ACTIVITY_FILTERS' allowed sets.
+  const [f, setF] = useTabFilters(ACTIVITY_FILTERS, projectId);
+  const [typed, setTyped] = useState(f.q);
+  useEffect(() => { setTyped(f.q); }, [f.q]);
   const [n, setN] = useState(0);
   const [read, setRead] = useState({ status: 'loading', data: null });
   useEffect(() => {
@@ -50,7 +53,7 @@ export default function CapRelActivity({ projectId }) {
       .catch(() => { if (alive) setRead({ status: 'unreadable', data: null }); });
     return () => { alive = false; };
   }, [projectId, f, n]);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v, page: 1 }));
+  const set = (k, v, opts) => setF({ [k]: v }, opts);
   const d = read.data;
   const items = d?.items || [];
   const investors = [...new Map(items.filter((i) => i.investor).map((i) => [i.investor.prospect_id, i.investor.name])).entries()];
@@ -58,14 +61,15 @@ export default function CapRelActivity({ projectId }) {
     <section className={`${CARD} flex min-w-0 flex-col`} data-testid="caprel-activity">
       <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
         <h3 className={`m-0 mr-auto text-[14px] font-extrabold ${INK}`}>Activity</h3>
-        <form className="flex" onSubmit={(e) => { e.preventDefault(); set('q', typed); }}>
+        <form className="flex" onSubmit={(e) => { e.preventDefault(); set('q', typed, { replace: true }); }}>
           <input className={`${FIELD} w-48`} placeholder="Search activity" aria-label="Search activity" value={typed} onChange={(e) => setTyped(e.target.value)} data-testid="caprel-activity-search" />
         </form>
         <select className={`${FIELD} w-auto`} aria-label="Kind" value={f.kind} onChange={(e) => set('kind', e.target.value)} data-testid="caprel-activity-kind">
           <option value="">Every kind</option>{(d?.kinds || []).map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
         <select className={`${FIELD} w-auto`} aria-label="Investor" value={f.investor} onChange={(e) => set('investor', e.target.value)} data-testid="caprel-activity-investor">
-          <option value="">Every investor</option>{investors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          <option value="">Every investor</option>{investors.map(([id, name]) => <option key={id} value={String(id)}>{name}</option>)}
+          {f.investor && !investors.some(([id]) => String(id) === f.investor) ? <option value={f.investor}>The investor in the address</option> : null}
         </select>
         <button type="button" className={BTN_S} disabled={!items.length} onClick={() => saveCsv(items)} data-testid="caprel-activity-export">Export</button>
       </div>
@@ -95,8 +99,8 @@ export default function CapRelActivity({ projectId }) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-4 py-2.5 text-[12px] dark:border-gray-800">
           <span className={MUTED} data-testid="caprel-activity-count">{pageLine((d.page - 1) * ACTIVITY_PAGE, items.length, d.total)}</span>
           <span className="flex gap-2">
-            <button type="button" className={BTN_S} disabled={d.page <= 1} onClick={() => setF((x) => ({ ...x, page: x.page - 1 }))}>Previous</button>
-            <button type="button" className={BTN_S} disabled={d.page * ACTIVITY_PAGE >= d.total} onClick={() => setF((x) => ({ ...x, page: x.page + 1 }))} data-testid="caprel-activity-next">Next</button>
+            <button type="button" className={BTN_S} disabled={d.page <= 1} onClick={() => setF({ page: d.page - 1 })}>Previous</button>
+            <button type="button" className={BTN_S} disabled={d.page * ACTIVITY_PAGE >= d.total} onClick={() => setF({ page: d.page + 1 })} data-testid="caprel-activity-next">Next</button>
           </span>
         </div>
       ) : null}

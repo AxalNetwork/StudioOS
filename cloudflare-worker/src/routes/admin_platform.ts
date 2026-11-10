@@ -22,6 +22,9 @@
  *                        the last 30 days (D4559 part 2)
  *   POST /capacity/alerts/:id/mute  mute an open episode for up to a week,
  *                        with a reason, audited (D4559 part 2)
+ *   GET  /advisory-refunds-due  advisory charges owed back, open first (D4703)
+ *   POST /advisory-refunds-due/:id/resolve  record that one was refunded, with
+ *                        a reason, audited; moves no money (#5305)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -422,19 +425,100 @@ r.put('/take-rate', async (c) => {
 
 // D4703 (#4703): advisory charges that landed on a cancelled or missed
 // booking, owed back under the no-cancellation-fee policy. Open rows first.
-// Booking uid and amount only: no founder or advisor is named here.
+// Booking uid and amount only: no founder or advisor is named here. #5305 adds
+// the row's id (what the resolve below names), and for a resolved row who
+// resolved it (an operator, by name), when, and the reason they gave.
 r.get('/advisory-refunds-due', async (c) => {
   await requireSuperAdmin(c);
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT booking_uid, booking_status, payment_intent_id, amount_cents, currency, created_at, resolved_at
-         FROM advisory_refunds_due ORDER BY (resolved_at IS NOT NULL), created_at DESC LIMIT 200`,
+      `SELECT r.id AS id, r.booking_uid AS booking_uid, r.booking_status AS booking_status,
+              r.payment_intent_id AS payment_intent_id, r.amount_cents AS amount_cents, r.currency AS currency,
+              r.created_at AS created_at, r.resolved_at AS resolved_at, r.resolved_by AS resolved_by,
+              u.name AS resolved_by_name, r.resolution_reason AS resolution_reason
+         FROM advisory_refunds_due r
+         LEFT JOIN users u ON u.id = r.resolved_by
+        ORDER BY (r.resolved_at IS NOT NULL), r.created_at DESC LIMIT 200`,
     ).all<Record<string, unknown>>();
     const items = rows.results || [];
     return c.json({ items, open: items.filter((r) => r.resolved_at == null).length });
   } catch {
     return c.json({ error: 'The refunds-due record could not be read.', code: 'store_unavailable' }, 503);
   }
+});
+
+// #5305 (D4703 "Built"): an operator records that one refund due was paid
+// back. SUPER ADMIN with the write bar, like every other platform write
+// (D4703 item 14). A written reason is required. The row and its
+// `admin_audit_log` row are one batch, and the UPDATE is conditional on the
+// row still being open, so two operators resolving at once leave one
+// resolution and one audit row; the second is refused with 409.
+//
+// THIS MOVES NO MONEY AND CALLS NO PROVIDER. Refunds stay manual (the owner,
+// 2026-11-07): the operator refunds outside the platform and records it here.
+/** The shortest reason a resolve accepts: the same 12 a refund issued through HQ takes (D224). */
+export const REFUND_DUE_REASON_MIN = 12;
+
+r.post('/advisory-refunds-due/:id/resolve', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return c.json({ error: 'No refund due has that id.', code: 'not_found' }, 404);
+  }
+  let body: { reason?: unknown } = {};
+  try { body = (await c.req.json()) ?? {}; } catch { body = {}; }
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  if (reason.length < REFUND_DUE_REASON_MIN || reason.length > 500) {
+    return c.json({
+      error: `Say how this was refunded, in ${REFUND_DUE_REASON_MIN} to 500 characters. It is kept with the row and in the audit log.`,
+      code: 'reason_required',
+    }, 400);
+  }
+  let row: { booking_uid: string; amount_cents: number | null; currency: string | null; resolved_at: string | null } | null;
+  try {
+    row = await c.env.DB.prepare(
+      'SELECT booking_uid, amount_cents, currency, resolved_at FROM advisory_refunds_due WHERE id = ?',
+    ).bind(id).first<{ booking_uid: string; amount_cents: number | null; currency: string | null; resolved_at: string | null }>();
+  } catch {
+    return c.json({ error: 'The refunds-due record could not be read, so nothing was changed.', code: 'store_unavailable' }, 503);
+  }
+  if (!row) return c.json({ error: 'No refund due has that id.', code: 'not_found' }, 404);
+  const alreadyResolved = () => c.json({
+    error: 'This refund due is already resolved. Nothing was changed.', code: 'already_resolved',
+  }, 409);
+  if (row.resolved_at != null) return alreadyResolved();
+  let changed = 0;
+  try {
+    await ensureAdminAuditLogTable(c.env);
+    const out = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisory_refunds_due
+            SET resolved_at = datetime('now'), resolved_by = ?, resolution_reason = ?
+          WHERE id = ? AND resolved_at IS NULL`,
+      ).bind(actor.id, reason, id),
+      adminAuditStatement(c.env, actor.id, 'advisory_refund_due_resolved', {
+        refund_due_id: id, booking_uid: row.booking_uid, amount_cents: row.amount_cents,
+        currency: row.currency, reason,
+      }, { onlyIfChanged: true }),
+    ]);
+    changed = Number((out?.[0] as any)?.meta?.changes ?? 0);
+  } catch {
+    return c.json({
+      error: 'The resolution could not be saved with its audit record, so nothing was changed.', code: 'store_unavailable',
+    }, 503);
+  }
+  if (changed === 0) return alreadyResolved();
+  const after = await c.env.DB.prepare(
+    'SELECT resolved_at, resolved_by, resolution_reason FROM advisory_refunds_due WHERE id = ?',
+  ).bind(id).first<{ resolved_at: string; resolved_by: number; resolution_reason: string }>().catch(() => null);
+  return c.json({
+    ok: true,
+    id,
+    resolved_at: after?.resolved_at ?? null,
+    resolved_by: actor.id,
+    resolution_reason: reason,
+    moves_money: false,
+  });
 });
 
 // D886 B10: aggregated HQ operations, never customer content.

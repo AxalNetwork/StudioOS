@@ -17,10 +17,15 @@ const ROUTES = 'cloudflare-worker/src/routes';
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const programs = FROZEN.find((r) => r.row === 'Programs');
 
-/** Route files whose code awaits the grant gate. */
+/**
+ * Route files whose code awaits the grant gate. D5360: the certificate routes
+ * ask it through `labIssuanceHold(c.env)`, the one Lab issuance hold, which
+ * calls `programRefusal(env, 'spinout-lab')` itself.
+ */
+const GRANT_GATE = /await (?:programRefusal\(c\.env, '[a-z-]+'\)|labIssuanceHold\(c\.env\))/;
 function filesThatGrantGate() {
   return readdirSync(resolve(process.cwd(), ROUTES))
-    .filter((f) => f.endsWith('.ts') && /await programRefusal\(c\.env, '[a-z-]+'\)/.test(codeOnly(read(`${ROUTES}/${f}`))))
+    .filter((f) => f.endsWith('.ts') && GRANT_GATE.test(codeOnly(read(`${ROUTES}/${f}`))))
     .sort();
 }
 
@@ -45,7 +50,7 @@ test('each call site names a program a branch route can hold', () => {
 test('in every handler the grant gate comes after the freeze, never before it', () => {
   for (const f of filesThatGrantGate()) {
     const src = codeOnly(read(`${ROUTES}/${f}`));
-    for (const m of src.matchAll(/await programRefusal\(c\.env,/g)) {
+    for (const m of src.matchAll(/await (?:programRefusal\(c\.env,|labIssuanceHold\(c\.env\))/g)) {
       const before = src.slice(0, m.index);
       const handler = Math.max(before.lastIndexOf('.post('), before.lastIndexOf('.patch('), before.lastIndexOf('export async function '));
       assert.ok(handler >= 0, `${f}: no handler above the gate`);
@@ -57,4 +62,12 @@ test('in every handler the grant gate comes after the freeze, never before it', 
 
 test('the row tells the reader the grant is a second condition, outside a suspension', () => {
   assert.match(programs.note, /Outside a suspension, admissions, host approvals, certificate issues, mentor assignments, perk approvals and Refer & Earn acceptances also need the program in this studio’s licence: granted by HQ, not paused, and inside its dates\.$/);
+});
+
+// D5360: the hold the certificate routes ask is the D985 gate for the Spin-Out Lab.
+test('labIssuanceHold asks the D985 grant gate for the Spin-Out Lab', () => {
+  const src = codeOnly(read('cloudflare-worker/src/services/certificateIssuance.ts'));
+  const at = src.indexOf('export async function labIssuanceHold');
+  assert.ok(at >= 0);
+  assert.match(src.slice(at, at + 900), /await programRefusal\(env, 'spinout-lab',/);
 });
