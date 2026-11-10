@@ -26,6 +26,7 @@
  */
 import type { Env } from '../../types';
 import { isInfluencer } from './membership';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 export { isInfluencer };
 
@@ -33,6 +34,8 @@ export { isInfluencer };
 export const INFLUENCER_TERMS_VERSION = '2026-11-03';
 /** $50, in the minor unit of the terms' currency. */
 export const PAYOUT_MINIMUM_CENTS = 5000;
+/** The minimum in the terms' currency, at its own decimals (D5373): 5000 minor units is 50.00 EUR, 5,000 JPY, 5.000 KWD. */
+export const payoutMinimumWords = (currency: string): string => suffixAmount(PAYOUT_MINIMUM_CENTS, currency) ?? '';
 export const TAX_FORM_TYPES = ['w9', 'w8ben'] as const;
 export type TaxFormType = typeof TAX_FORM_TYPES[number];
 export type TaxFormStatus = 'missing' | 'submitted' | 'accepted' | 'rejected';
@@ -139,7 +142,7 @@ export async function payoutReadiness(env: Env, userId: number, now: Date = new 
       key: 'minimum', ready: payable >= PAYOUT_MINIMUM_CENTS, blocks: true, code: 'below_payout_minimum',
       payable_cents: payable, currency,
       line: payable >= PAYOUT_MINIMUM_CENTS ? 'Your payable balance is over the minimum.'
-        : `A payout needs at least ${(PAYOUT_MINIMUM_CENTS / 100).toFixed(2)} ${currency} payable.`,
+        : `A payout needs at least ${payoutMinimumWords(currency)} payable.`,
     },
     {
       key: 'monthly', ready: !thisMonth, blocks: true, code: 'payout_already_requested_this_month',
@@ -166,7 +169,7 @@ export function payoutGate(r: Readiness, amountCents: number, currency: string):
     return { status: 400, code: 'payout_currency_not_terms', message: `Your Influencer terms pay in ${r.currency}. Request the payout in ${r.currency}.`, extra: { readiness: 'minimum', currency: r.currency } };
   }
   if (amountCents < r.minimum_cents) {
-    return { status: 400, code: 'below_payout_minimum', message: `A payout is at least ${(r.minimum_cents / 100).toFixed(2)} ${r.currency}.`, extra: { readiness: 'minimum' } };
+    return { status: 400, code: 'below_payout_minimum', message: `A payout is at least ${suffixAmount(r.minimum_cents, r.currency)}.`, extra: { readiness: 'minimum' } };
   }
   return null;
 }

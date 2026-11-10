@@ -1,3 +1,4 @@
+import { formatStripeAmount } from '../../lib/money';
 // Shared helpers for the Products storefront (catalog-driven, cart, checkout).
 // Prices ALWAYS come from GET /catalog/products — never hardcoded, never
 // client-computed. VAT is a display estimate; the server is authoritative.
@@ -10,14 +11,8 @@ export function vatRate(billingCountry) {
 }
 
 export function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency', currency: (currency || 'usd').toUpperCase(),
-    }).format(amt);
-  } catch {
-    return `${amt.toFixed(2)} ${(currency || 'USD').toUpperCase()}`;
-  }
+  // D5373: Stripe's amount at its currency's own decimals; the storefront's default currency is USD.
+  return formatStripeAmount(Number(cents) || 0, currency || 'usd');
 }
 
 export function formatDate(iso) {

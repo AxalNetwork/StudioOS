@@ -8,14 +8,16 @@
  * is whether the viewer may create an IC meeting, and it matches
  * `canScheduleIc` in `routes/calendar.ts` word for word (`admin || investor`).
  *
- * ONE KIND TABLE. `KINDS` below is the single source of truth for the filter
+ * ONE KIND TABLE. `KINDS` is the single source of truth for the filter
  * chips, the rail's legend and every event's dot. It used to be three
  * hardcoded lists — `KIND_LABEL`, `KIND_COLOR` and a literal filter array —
  * and they had drifted: `partner_office_hour` was in two of the three, so
  * office hours were reachable only under "All" and no chip could ever select
- * them. `frontend/test/calendar_page_c1.test.mjs` now compares this table
- * against the `CalendarEvent` union the worker can actually emit, so a seventh
- * kind cannot be added without a chip.
+ * them. D5205 (#5205): it was then a fourth list, in this file, beside the
+ * Worker's registry, and that drifted too. `KINDS`, `FAMILIES` and
+ * `PUSHABLE_KINDS` now come from `calendarViews.js`, which builds them from
+ * `cloudflare-worker/src/services/calendar/registry.ts` itself, so a kind
+ * cannot be added without a chip.
  *
  * SIX KINDS, NOT THE CANVAS'S FIVE. The canvas omits `expert_booking` on the
  * stated grounds that it is "in the type union and produced by nothing". It IS
@@ -95,7 +97,7 @@ import PageExplainer from '../components/PageExplainer';
 import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
-import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
+import { KINDS, KIND_LABEL, NOT_YET, PUSHABLE_KINDS, VIEWS, chipCount, viewOf, waitsOf, windowFor } from './calendarViews';
 import CalendarItemDrawer, { CancelDialog, ExternalItemSheet } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
 import CalendarScopeView, { ScopeSwitch } from './calendarScope/CalendarScopeView';
@@ -108,82 +110,16 @@ import AgentSessionSheet, { ScheduleAgentSheet } from './CalendarAgentSessions';
 import { AGENT_KIND } from './calendarAgentModel';
 import AskButton from './team/AskButton.jsx';
 import { ConnectedPanel, ConnectedSummary, GooglePanel, SubscribeDialog } from './CalendarConnected';
-import { CONNECTED_PATH, connectedOf, externalReadError, stripLabel, weekStrip } from './calendarConnectedModel';
+import { CONNECTED_PATH, connectedOf, externalReadError, readHealth, stripLabel, weekStrip } from './calendarConnectedModel';
 import CalendarSourcesPanel from './CalendarSourcesPanel';
 import { SOURCES_PATH, coloursOf, sourcesOpen } from './calendarSourcesModel';
 import { calendarSourcesApi } from '../lib/api/calendarSources';
 import { PlanSheet } from './learning/PlanSheet';
 import { PlanRowActions } from './learning/PlanRowActions';
 import {
-  anchorOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
+  anchorOf, dayKeyOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
 } from './calendarGrid';
 import './calendarPage.css';
-
-/**
- * The kinds, in the canvas's reading order. `from` is the module the events
- * come from, in plain words, never a table name (D1613, #3723). D1484 (#3977):
- * the Worker's registry (`services/calendar/registry.ts`) says where each
- * source comes from, and the legend shows the read's `sources[].module` first;
- * `from` carries the same words for the moment before the read answers.
- * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
- * /compliance page; the canvas draws no deadline kind, so its mark is derived
- * in the same idiom as the others (calendarPage.css).
- */
-const KINDS = [
-  { id: 'ic_meeting', label: 'IC meeting', from: 'Deals › Investment committee' },
-  { id: 'founder_checkin', label: 'Check-in', from: 'Ventures › Check-ins' },
-  { id: 'advisor_booking', label: 'Advisor', from: 'Advisors › Sessions' },
-  { id: 'partner_office_hour', label: 'Office hour', from: 'Partners › Office hours' },
-  { id: 'calendly_event', label: 'Calendly', from: 'Calendly' },
-  { id: 'expert_booking', label: 'Expert session', from: 'Wellbeing › Expert sessions' },
-  { id: 'event_ticket', label: 'Event ticket', from: 'My events › Tickets' },
-  { id: 'event_hosted', label: 'Hosting', from: 'My events › Hosting' },
-  { id: 'investor_meeting', label: 'Investor meeting', from: 'Raise › Capital relationships' },
-  { id: 'compliance_due', label: 'Compliance', from: 'Build › Compliance' },
-  // D1484 (#3977): D1208's three readers and "New event", page only.
-  { id: 'interview_call', label: 'Interview call', from: 'Validate › Customer research' },
-  { id: 'cohort_date', label: 'Cohort date', from: 'Spin-Out Lab › Cohort' },
-  { id: 'deal_closing', label: 'Deal closing', from: 'Deals › Closings' },
-  { id: 'manual', label: 'Your event', from: 'Calendar' },
-  // #3959: the Learning source, page only.
-  { id: 'learning', label: 'Learning', from: 'Learning › Your plan' },
-  // D1486 §b (#3981): Grow's dated stores, page only.
-  { id: 'publish_send', label: 'Publish send', from: 'Publish' },
-  { id: 'content_planned', label: 'Planned content', from: 'Grow › Distribution' },
-  // D1486 §a (#3980): the meeting bot's calls, page only; done reads Recorded.
-  { id: 'bot_call', label: 'Recorded call', from: 'Validate › Record a session' },
-  // #3982 (D1486 §c): Raise's dated stores, page only.
-  { id: 'round_close', label: 'Round close', from: 'Raise › Round' },
-  { id: 'nda_expiry', label: 'NDA expiry', from: 'Raise › NDAs' },
-  // #3983 (D1486 §d): the dated task stores, page only.
-  { id: 'workflow_task', label: 'Workflow task', from: 'Workflows › Tasks' },
-  { id: 'mvp_task', label: 'Build task', from: 'Build › Board' },
-  { id: 'work_item', label: 'Work item', from: 'Work › Board' },
-  { id: 'contact_task', label: 'Contact follow-up', from: 'Contacts › Follow-ups' },
-  { id: 'engagement_milestone', label: 'Milestone', from: 'Engagements › Milestones' },
-  // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.
-  { id: 'external_google', label: 'Google event', from: 'Google Calendar' },
-  { id: 'external_microsoft', label: 'Outlook event', from: 'Outlook' },
-  // #3957: a scheduled AI agent work session; its work comes back as proposals in Approvals.
-  { id: 'agent_session', label: 'AI agent session', from: 'Team › Agents' },
-  // #5131 (D1486 §e): Grow's campaign plans, ad flights, newsletter sends and sequence steps, page only.
-  { id: 'grow_campaign', label: 'Campaign', from: 'Grow › Campaigns' },
-  { id: 'ad_flight', label: 'Ad flight', from: 'Grow › Ads' },
-  { id: 'newsletter_send', label: 'Newsletter send', from: 'Grow › Newsletter' },
-  { id: 'sequence_step', label: 'Sequence step', from: 'Grow › Sequences' },
-];
-const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
-
-/**
- * Mirrors `PUSHABLE_KINDS` in `cloudflare-worker/src/routes/calendar.ts`. The
- * two lists are asserted equal by `frontend/test/calendar_page_c1.test.mjs`,
- * because the whole point of drawing the control conditionally is that the
- * condition is the route's.
- */
-const PUSHABLE_KINDS = new Set([
-  'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
-  'event_ticket', 'event_hosted',
-]);
 
 const PROVIDER_LABEL = { google: 'Google', microsoft: 'Outlook' };
 
@@ -425,6 +361,9 @@ export default function CalendarPage() {
 function PersonalCalendar({ scopes = [] }) {
   const [items, setItems] = useState(null);        // null = not read yet
   const [sources, setSources] = useState([]);       // per-source answer, from the worker
+  // D5204 (#5204): the worker's own coverage of the sources it attempted. Null until it is read, and for a
+  // worker that does not send it — the page says "not reported" rather than counting a constant of its own.
+  const [coverage, setCoverage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [kindsOpen, setKindsOpen] = useState(false); // D1210: the Kinds panel (CAL6)
@@ -474,6 +413,7 @@ function PersonalCalendar({ scopes = [] }) {
   const shownKinds = useMemo(() => KINDS.filter((k) => allowedKinds.includes(k.id)), [allowedKinds]);
   const chosen = useMemo(() => kindsFrom(search, allowedKinds), [search, allowedKinds]);
   const needs = needsFrom(search);
+  const waits = waitsOf();
 
   const window_ = useMemo(() => windowFor(range, anchor), [range, anchor]);
   const label = rangeLabel(range, window_.from, window_.to);
@@ -487,15 +427,45 @@ function PersonalCalendar({ scopes = [] }) {
       });
       setItems(Array.isArray(r?.items) ? r.items : []);
       setSources(Array.isArray(r?.sources) ? r.sources : []);
+      setCoverage(r?.coverage && typeof r.coverage === 'object' ? r.coverage : null);
     } catch (e) {
       // Nothing answered — different from a source that failed, and the
       // agenda says so rather than showing an empty range that would read as
       // "you have nothing scheduled".
       setItems(null);
       setSources([]);
+      setCoverage(null);
       setError(e?.message || 'The calendar could not be read.');
     }
     setLoading(false);
+  }, [window_.from, window_.to]);
+
+  /**
+   * D5202 (#5202): re-read ONE external provider's events, and nothing else. A rate-limited or unreadable
+   * Google read is not a reason to ask every other source again, and the member is waiting on this one. The
+   * provider's own events replace its own, and its source row replaces its own: no other source is touched.
+   */
+  const reloadProvider = useCallback(async (provider) => {
+    const kind = provider === 'google' ? 'external_google' : 'external_microsoft';
+    setSources((was) => (Array.isArray(was) ? was.map((s) => (s?.kind === kind ? { ...s, ok: true, error: null, reading: true } : s)) : was));
+    try {
+      const r = await api.listCalendarEvents({ from: window_.from.toISOString(), to: window_.to.toISOString(), kinds: kind });
+      const got = Array.isArray(r?.items) ? r.items : [];
+      const row = (Array.isArray(r?.sources) ? r.sources : []).find((x) => x?.kind === kind) ?? null;
+      setItems((was) => [...(Array.isArray(was) ? was.filter((e) => e?.kind !== kind) : []), ...got]
+        .sort((x, y) => String(x?.start_at).localeCompare(String(y?.start_at))));
+      setSources((was) => {
+        const rest = Array.isArray(was) ? was.filter((s) => s?.kind !== kind) : [];
+        return row ? [...rest, row] : rest;
+      });
+
+    } catch (e) {
+      // The re-read itself did not answer: this source alone says so, and the rest of the calendar is untouched.
+      setSources((was) => {
+        const rest = Array.isArray(was) ? was.filter((s) => s?.kind !== kind) : [];
+        return [...rest, { kind, ok: false, error: 'unreadable', reason: 'retry_failed' }];
+      });
+    }
   }, [window_.from, window_.to]);
 
   const loadGoogle = useCallback(async () => {
@@ -578,14 +548,16 @@ function PersonalCalendar({ scopes = [] }) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const out = new Map();
     for (const e of pool) {
-      const d = new Date(e.start_at);
-      if (Number.isNaN(d.getTime())) continue;
-      const midnight = new Date(d); midnight.setHours(0, 0, 0, 0);
-      const key = midnight.toISOString();
+      // D5204 (#5204): the agenda groups by the same calendar date the grids use. An all-day row is placed by
+      // the date the provider stated; parsing it into an instant put it on the day before, west of UTC.
+      const key = dayKeyOf(e);
+      if (!key) continue;
+      const [yy, mm, dd] = key.split('-').map(Number);
+      const midnight = new Date(yy, mm - 1, dd);
       if (!out.has(key)) {
         out.set(key, {
           key,
-          date: d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
+          date: midnight.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }),
           rel: relativeDay(midnight, today),
           events: [],
         });
@@ -597,6 +569,10 @@ function PersonalCalendar({ scopes = [] }) {
 
   const gState = providerState(google, googleResult, externalReadError(sources, 'google'));
   const mState = providerState(microsoft, microsoftResult, externalReadError(sources, 'microsoft'));
+  // D5202: the read's health is its own dimension, so a connected provider whose events did not load is shown
+  // as exactly that, instead of a green Connected over a gap in the agenda.
+  const gHealth = readHealth(sources, 'google', { loading });
+  const mHealth = readHealth(sources, 'microsoft', { loading });
   // A provider whose sync was just refused cannot take a push either — the
   // canvas is explicit about this, drawing C6's expired Google as no provider
   // at all and putting the reconnect wording in place of the push control.
@@ -608,19 +584,35 @@ function PersonalCalendar({ scopes = [] }) {
     ? 'Push needs a working connection. A calendar connection was refused — reconnect it in the panel on the right, then this event can be copied there once.'
     : 'Push needs a connected calendar. Connect Google or Outlook in the panel on the right, then this event can be copied there once.';
 
+  /**
+   * D5204 (#5204) — COVERAGE IS THE SERVER'S COUNT, NOT A CONSTANT HERE.
+   *
+   * "26 of 28 sources answered" was built from `KINDS.length`, a list in this file. That denominator counted
+   * sources the member had hidden, sources their role never had, providers they have not connected, and
+   * anything a later registry adds that this page has not been rebuilt for. The Worker now says what it
+   * attempted and what answered, so the page reports that instead and a new source needs no edit here.
+   */
+  // `attempted` and `hidden` are the server's: only it knows which sources the read asked for and which the
+  // member has hidden. What answered is read from the rows the page holds, so a scoped re-read of one provider
+  // (D5202) moves the count without asking every other source again; the rows and the count cannot disagree.
   const answered = sources.filter((s) => s && s.ok !== false).length;
+  const attempted = coverage ? coverage.attempted : sources.length;
+  const truncatedKinds = sources.filter((s) => s?.truncated).map((s) => s.kind);
+  const partly = truncatedKinds.length > 0;
+  const hiddenNote = coverage?.hidden ? ` · ${coverage.hidden} hidden` : '';
   const meta = error
     ? 'no source answered'
     : loading
-      ? `reading ${KINDS.length} sources`
-      : failedSources.length
-        ? `${answered} of ${KINDS.length} sources answered`
-        : sources.length === 0
-          // An older worker returns items with no `sources`. The page will not
-          // claim every source answered on the strength of a field that is not
-          // in the response.
-          ? 'source coverage not reported'
-          : `${sources.length} sources · all answered${Array.isArray(inRange) && inRange.length === 0 ? ' · 0 events' : ''}`;
+      ? 'reading your sources'
+      : !coverage && sources.length === 0
+        // An older worker returns items with no `sources` and no `coverage`. The page will not claim every
+        // source answered on the strength of a field that is not in the response.
+        ? 'source coverage not reported'
+        : failedSources.length
+          ? `${answered} of ${attempted} sources answered${hiddenNote}`
+          : partly
+            ? `${attempted} sources · all answered, ${truncatedKinds.length} partly${hiddenNote}`
+            : `${attempted} sources · all answered${hiddenNote}${Array.isArray(inRange) && inRange.length === 0 ? ' · 0 events' : ''}`;
 
   const page = (
     <div className="cal" data-testid="calendar-page">
@@ -629,10 +621,11 @@ function PersonalCalendar({ scopes = [] }) {
         {!phone && (
           <div style={{ minWidth: 0 }}>
             <h1>Calendar</h1>
-            <p>
-              Investment-committee meetings, founder check-ins, advisor sessions, partner office
-              hours, expert sessions booked through wellbeing, and anything synced in from Calendly.
-              Nothing else is aggregated here.
+            {/* D5205 (#5205): no list of sources in prose. The one that stood here named six and said
+                nothing else was read; the rail names every source, from the Worker's registry. */}
+            <p data-testid="cal-head-about">
+              Everything dated across your modules and the calendars you connect, in one place. The
+              rail lists each source and where it comes from.
             </p>
           </div>
         )}
@@ -724,11 +717,12 @@ function PersonalCalendar({ scopes = [] }) {
 
           {failedSources.length > 0 && (
             <div className="cal-degraded" role="status">
-              <span className="cal-eb">{failedSources.length} of {KINDS.length} sources</span>
+              {/* D5204: the counts are the server's attempted set, not this page's list of kinds. */}
+              <span className="cal-eb">{failedSources.length} of {attempted} sources</span>
               <div style={{ minWidth: 0 }}>
                 <strong>
                   {failedSources.map((s) => KIND_LABEL[s.kind] || s.kind).join(', ')} did not respond.
-                  The other {KINDS.length - failedSources.length} sources loaded.
+                  The other {Math.max(0, attempted - failedSources.length)} sources loaded.
                 </strong>
                 <p>
                   Events from {failedSources.length === 1 ? 'that source are' : 'those sources are'} missing
@@ -737,6 +731,28 @@ function PersonalCalendar({ scopes = [] }) {
                 </p>
               </div>
               <button type="button" className="cal-btn cal-btn-o cal-btn-sm" onClick={load}>Retry this source</button>
+            </div>
+          )}
+
+          {/*
+            * D5204 (#5204): a source that stopped at its page cap is PARTLY loaded, and the page says so. The
+            * Worker has always marked it `truncated`; nothing read that flag, so a 1,000-event Google read
+            * that had more to give looked exactly like a complete one.
+            */}
+          {truncatedKinds.length > 0 && (
+            <div className="cal-degraded" role="status" data-testid="cal-truncated">
+              <span className="cal-eb">Partly loaded</span>
+              <div style={{ minWidth: 0 }}>
+                <strong>
+                  {truncatedKinds.map((k) => KIND_LABEL[k] || k).join(', ')} {truncatedKinds.length === 1 ? 'is' : 'are'} partially loaded.
+                  Narrow the date range to see everything.
+                </strong>
+                <p>
+                  Only the first events in this range were read, so counts and the agenda may be short for
+                  {truncatedKinds.length === 1 ? ' that source' : ' those sources'}. This is not a claim that
+                  nothing else is scheduled.
+                </p>
+              </div>
             </div>
           )}
 
@@ -750,7 +766,7 @@ function PersonalCalendar({ scopes = [] }) {
               <h2>No events between {label}.</h2>
               <p>
                 {failedSources.length
-                  ? `${answered} of ${KINDS.length} sources answered and returned nothing for this range. The rest did not respond, so this may not be the whole picture.`
+                  ? `${answered} of ${attempted} sources answered and returned nothing for this range. The rest did not respond, so this may not be the whole picture.`
                   : sources.length === 0
                     ? 'The request returned no events for this range and did not report which sources answered. Widen the range, or create the first event.'
                     : `All ${sources.length} sources answered and returned nothing for this range. That means the calendar is working — there is simply nothing booked. Widen the range, or create the first event.`}
@@ -849,13 +865,16 @@ function PersonalCalendar({ scopes = [] }) {
             </p>
           </div>
 
-          {/* D1205 (#2420): what the canvas draws that no read carries yet. */}
-          <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
-            <div className="cal-eb">{NOT_YET}</div>
-            {['deadlines', 'interviews'].map((k) => (
-              <p key={k} className="cal-foot" data-testid={`cal-wait-${k}`}>{WAITS[k]}</p>
-            ))}
-          </div>
+          {/* D1205 (#2420): what the canvas draws that no read carries yet. D5205: only the waits that name no
+              kind the registry reads, and no card at all when none is left. */}
+          {waits.length > 0 && (
+            <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
+              <div className="cal-eb">{NOT_YET}</div>
+              {waits.map((w) => (
+                <p key={w.key} className="cal-foot" data-testid={`cal-wait-${w.key}`}>{w.text}</p>
+              ))}
+            </div>
+          )}
         </aside>
       </div>
 
@@ -867,6 +886,7 @@ function PersonalCalendar({ scopes = [] }) {
       {showCk && <NewCheckinDialog role={role} meetAvailable={gState === 'connected'} onClose={() => setShowCk(false)} onSaved={() => { setShowCk(false); load(); }} />}
       {connected === 'list' && (
         <ConnectedPanel google={google} microsoft={microsoft} gState={gState} mState={mState}
+                        gHealth={gHealth} mHealth={mHealth} rereadProvider={reloadProvider}
                         reloadGoogle={loadGoogle} reloadMicrosoft={loadMicrosoft} onClose={() => navigate(behind)} />
       )}
       {sourcesPanel && (

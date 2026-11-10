@@ -24,7 +24,7 @@ import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
 import { currencyCode } from './currencies';
 import { previewReferralClawback } from './referralCommissions';
-import { exponentOf, parseMinor } from '../../../frontend/src/lib/money.js';
+import { STRIPE_HUNDREDTHS, exponentOf, parseMinor } from '../../../frontend/src/lib/money.js';
 
 export interface StripePaymentIntent {
   id: string; amount: number; amount_received?: number; currency: string; latest_charge?: string | null;
@@ -37,11 +37,11 @@ export interface StripeCharge {
 }
 
 /** Stripe counts these in hundredths though ISO 4217 gives them no decimals (D5029). */
-const STRIPE_HUNDREDTHS = new Set(['ISK', 'UGX']);
+const STRIPE_HUNDREDTHS_SET = new Set<string>(STRIPE_HUNDREDTHS);
 /** Stripe units to the currency's own minor unit. */
-export const fromStripe = (n: number, currency: string | null) => (currency && STRIPE_HUNDREDTHS.has(currency) ? Math.round(n / 100) : n);
+export const fromStripe = (n: number, currency: string | null) => (currency && STRIPE_HUNDREDTHS_SET.has(currency) ? Math.round(n / 100) : n);
 /** The currency's own minor unit to Stripe units. */
-export const toStripe = (n: number, currency: string | null) => (currency && STRIPE_HUNDREDTHS.has(currency) ? n * 100 : n);
+export const toStripe = (n: number, currency: string | null) => (currency && STRIPE_HUNDREDTHS_SET.has(currency) ? n * 100 : n);
 
 export type RefundTarget = {
   payment_intent: string | null;

@@ -176,11 +176,11 @@ test('the charts: who holds each program, and requests by month (null when unrea
 });
 
 test('terms: typed in units, sent as cents and basis points, only what changed', () => {
-  assert.equal(termInput('fee_cents', '2000'), 200000);
+  assert.equal(termInput('fee_cents', '2000', 'EUR'), 200000);
   assert.equal(termInput('hq_share_bps', '12.5'), 1250);
   assert.equal(termInput('capacity_uncapped', '1'), 1);
   assert.equal(termInput('reporting', ''), null);
-  assert.deepEqual(termsPayload(['fee_cents', 'credits_per_quarter'], { fee_cents: '2000', credits_per_quarter: '400' }, { fee_cents: 200000, credits_per_quarter: 300 }), { credits_per_quarter: 400 });
+  assert.deepEqual(termsPayload(['fee_cents', 'credits_per_quarter'], { fee_cents: '2000', credits_per_quarter: '400', currency: 'EUR' }, { fee_cents: 200000, credits_per_quarter: 300, currency: 'EUR' }), { credits_per_quarter: 400 });
   const s = liveSentence({ studio: 'Studio Lisbon', program: 'Perks', terms: { ...COMMON, starts_on: '2026-11-01' }, licence: { status: 'pending_activation' } });
   assert.equal(s, 'Studio Lisbon may run Perks from 1 Nov 2026 to the end of its licence, paying HQ €2,000 a year. It starts when the licence is active. It starts when the program schedule is signed.');
 });
