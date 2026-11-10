@@ -883,8 +883,9 @@ export function SecurityConsole({
         scoped per subsidiary yet, the guardrail counters included.
       </p>
       <p>
-        Freshness is the time this browser received each read. No store records when it was last collected,
-        so no source here can be marked Stale yet.
+        &quot;Observed&quot; is the time this browser received each read. Each store also records its last good read
+        (D5247) and has its own age, set from how often it is written: a store past its age is marked Stale.
+        Sanctions screenings run on request only and have no age, so they are never Stale.
       </p>
     </>
   );

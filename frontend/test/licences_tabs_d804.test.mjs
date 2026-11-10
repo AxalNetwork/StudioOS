@@ -199,11 +199,11 @@ test('annual fee invoices are D802\'s: listed when the answer carries them, said
 });
 
 test('Dispute a line takes an amount in the statement\'s currency and a reason; a void statement offers none', () => {
-  assert.deepEqual(disputeCents('1,200', 2408000), { ok: true, cents: 120000 });
-  assert.deepEqual(disputeCents('12.5', 2408000), { ok: true, cents: 1250 });
-  assert.equal(disputeCents('0', 2408000).ok, false);
-  assert.equal(disputeCents('1.234', 2408000).ok, false);
-  assert.equal(disputeCents('24081', 2408000).ok, false, 'more than owed');
+  assert.deepEqual(disputeCents('1,200', 2408000, 'EUR'), { ok: true, cents: 120000 });
+  assert.deepEqual(disputeCents('12.5', 2408000, 'EUR'), { ok: true, cents: 1250 });
+  assert.equal(disputeCents('0', 2408000, 'EUR').ok, false);
+  assert.equal(disputeCents('1.234', 2408000, 'EUR').ok, false);
+  assert.equal(disputeCents('24081', 2408000, 'EUR').ok, false, 'more than owed');
   const rows = statementRows([statement({ uid: 'a' }), statement({ uid: 'b', status: 'paid' }), statement({ uid: 'c', status: 'void' })]);
   assert.deepEqual(rows.map((r) => r.disputable), [true, true, false]);
   const html = render(StatementsView, { answer: { ...STATEMENTS, statements: [statement({ uid: 'v', status: 'void' })] } });

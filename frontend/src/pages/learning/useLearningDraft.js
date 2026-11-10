@@ -56,5 +56,6 @@ export function useLearningDraft({ kind, uid, attempt = null }, { hold = HOLD_MS
     return () => { document.removeEventListener('visibilitychange', hidden); window.removeEventListener('pagehide', commit); commit(); };
   }, [commit]);
 
-  return { initial: found ? found.value : undefined, state, write, clear, key };
+  // D5356 part 2: when the device copy was written, so a resume can prefer the newer of it and the server's.
+  return { initial: found ? found.value : undefined, initialAt: found ? found.at : null, state, write, clear, key };
 }

@@ -40,6 +40,7 @@ import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordConte
 import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
 import { lovablePart, type LovablePart } from '../lovableAppLinks';
 import type { FindingKind } from '../interviewFindings';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 type Any = Record<string, any>;
 type Body = Record<string, unknown> | FormData;
@@ -68,7 +69,7 @@ const userId = (ctx: RecordContext) => Number(ctx.user.id);
 const field = (body: Body, key: string): unknown => (body instanceof FormData ? body.get(key) ?? undefined : body[key]);
 const refId = (raw: unknown): string | number => (typeof raw === 'number' || typeof raw === 'string' ? raw : '');
 const money = (cents: number | null | undefined, currency: string | null | undefined) =>
-  cents == null ? null : `${(Number(cents) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(currency || 'usd').toUpperCase()}`;
+  cents == null ? null : suffixAmount(Number(cents), String(currency || 'usd').toUpperCase(), { trimWhole: true });
 
 /** A writer's refusal, as the status and sentence the route answers with. */
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
