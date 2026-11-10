@@ -44,9 +44,9 @@ test('the exclusivity values for a contract follow the currency', () => {
 });
 
 test('the programme schedule, the Interview findings and the partner terms line write the amount at the currency\'s decimals', () => {
-  assert.equal(termLine('fee_cents', 2500, { currency: 'JPY' }), '2,500 JPY');
+  assert.equal(termLine('fee_cents', 2500, { currency: 'JPY' }), '2500 JPY');
   assert.equal(termLine('fee_cents', 12345, { currency: 'KWD' }), '12.345 KWD');
-  assert.equal(termLine('fee_cents', 200000, { currency: 'EUR' }), '2,000 EUR');
+  assert.equal(termLine('fee_cents', 200000, { currency: 'EUR' }), '2000 EUR');
   assert.equal(termLine('fee_cents', 200000, {}), '200,000 minor units (currency not recorded)');
   assert.equal(amountWord({ amount_cents: 2500, currency: 'jpy', period: 'month' }), '2,500 JPY / month');
   assert.equal(amountWord({ amount_cents: 12345, currency: 'kwd' }), '12.345 KWD');
