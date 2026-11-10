@@ -1112,11 +1112,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "GET /api/services/offerings/:id": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "GET /api/settings/headshot/:uid": {
       "review": "no_gate_found",
       "kind": "unclassified",

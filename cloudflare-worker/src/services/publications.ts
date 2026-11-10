@@ -5,7 +5,8 @@
  *   - loadSectionAggregates(): pulls k≥5 aggregate rows for an MI section
  *   - draftSummary(): calls aiRouter.run('publication', …) to draft 3-5 bullets,
  *     or, with AI_PROVIDER_GATEWAY_OPENAI exactly 'on', the D4556 gateway
- *     model first (D4870, off by default)
+ *     model first (D4870, off by default), admitted by the gateway's shared
+ *     upstream lease (D5338)
  *   - sectionToCsv(): CSV export with n<5 row suppression
  *   - publicationHtml(): five-page printable HTML for Browser Rendering
  *   - signPublicationToken / verifyPublicationToken: 24h HMAC download tokens
@@ -16,6 +17,7 @@ import * as ai from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { runGatewayTextModel, type GatewayDeps, type GatewayRunResult } from './aiProviders';
 import { gatewayTextOn } from './ai/catalogue';
+import { upstreamAdmission } from './upstreamLease';
 
 // k-anonymity floor — mirrors K_MIN in routes/market_intel.ts. Any aggregate
 // row with n<5 is suppressed both server-side (here) AND defensively
@@ -186,7 +188,12 @@ async function draftViaGateway(
       recordRef: rail.record ?? undefined,
       executionId: `publication:draft:${crypto.randomUUID()}`,
       request: { system: systemPrompt, messages: [{ role: 'user', content: userMessage }], maxTokens: 600 },
-    }, deps);
+    }, {
+      ...deps,
+      // D5338: the gateway's shared upstream lease. Without the governor binding it refuses, and the
+      // summary goes back to Workers AI (`capacity_unavailable` falls back), a different upstream.
+      admit: deps.admit ?? upstreamAdmission(env, { sleep: deps.sleep }),
+    });
   } catch {
     // Never the thrown message. A throw may follow a call, so it is not retried on Workers AI.
     return { ok: false, refusal: 'all_models_failed', completion: 'unknown' };

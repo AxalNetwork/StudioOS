@@ -27,6 +27,10 @@ import { perkListingCounts, perkListingRows } from '../../lib/perkListings.js';
  */
 export default function partnerOffersBoard(role, api) {
   return {
+    // D4841 (#4841): the root draws the Offer Readiness view (`OfferReadiness.jsx`,
+    // derived in `offerReadiness.js`) over these same sources and sections,
+    // in place of the generic six-section board. Opt-in: no other board sets it.
+    overview: 'readiness',
     sources: {
       catalog: () => api.listServiceOfferings({ mine: 1 }),
       // The firm's OWN submissions (`GET /perks/partner`), the dataset the Perk

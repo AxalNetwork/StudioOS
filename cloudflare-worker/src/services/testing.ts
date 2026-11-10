@@ -913,7 +913,7 @@ export async function apply(env: Env, user: { id: number; role: string }, uid: s
          AND (p.opens_at IS NULL OR julianday(p.opens_at) <= julianday('now'))
          AND (p.closes_at IS NULL OR julianday(p.closes_at) > julianday('now'))
          AND p.eligible_roles IS ? AND p.questions IS ?
-         AND ${PICKED} < p.places
+         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
          AND EXISTS (SELECT 1 FROM product_testers WHERE user_id = ? AND status = 'active')`,
     ).bind(appUid, user.id, JSON.stringify(answers), availability, consent ? now : null, consent ? CONSENT_VERSION : null,
       p.id, p.eligible_roles, p.questions, user.id),

@@ -556,8 +556,13 @@ export async function saveUseOfFunds(env: Env, a: { projectId: number; userId: n
   const user = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.userId).first<User>();
   const owner = await env.DB.prepare("SELECT u.id FROM projects p JOIN users u ON u.founder_id=p.founder_id AND u.role='founder' AND u.is_active=1 WHERE p.id=? AND p.deleted_at IS NULL ORDER BY u.id LIMIT 1").bind(a.projectId).first<{id:number}>();
   if (!user || !owner) throw new WriterError(404, 'The founder plan is unavailable.');
-  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body); }
-  catch (e) { if (e instanceof PlanError) throw new WriterError(e.status, e.sentence); throw e; }
+  // D5375: this path no longer saves without the revision it was opened at. The record drawer's
+  // Edit split sends `expected_revision` (read with the record); a body without one is refused.
+  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body, true); }
+  catch (e) {
+    if (e instanceof PlanError) throw new WriterError(e.status, e.sentence, { code: e.code, error: e.code, ...(e.currentRevision !== undefined ? { current_revision: e.currentRevision } : {}) });
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -9,13 +9,13 @@
  * no-op (D1's ALTER is not natively idempotent).
  */
 import type { Env } from '../../types';
-import { bindingKey } from '../../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
 export async function ensureExtractorSchema(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
-  const stmts: Array<{ sql: string; ignoreDuplicateColumn?: boolean }> = [
+  const stmts: Array<{ sql: string; asksFirst?: boolean }> = [
     { sql:
       `CREATE TABLE IF NOT EXISTS market_intel_signals (
          id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,17 +74,23 @@ export async function ensureExtractorSchema(env: Env): Promise<void> {
          created_at TEXT NOT NULL DEFAULT (datetime('now'))
        )` },
     { sql: `CREATE INDEX IF NOT EXISTS idx_mi_snippets_dim ON market_intel_snippets(extractor, dimension_key, period_key)` },
-    { sql: `ALTER TABLE users ADD COLUMN mi_contribution_optout INTEGER NOT NULL DEFAULT 0`, ignoreDuplicateColumn: true },
+    { sql: `ALTER TABLE users ADD COLUMN mi_contribution_optout INTEGER NOT NULL DEFAULT 0`, asksFirst: true },
     { sql: `CREATE INDEX IF NOT EXISTS idx_users_mi_optout ON users(mi_contribution_optout) WHERE mi_contribution_optout = 1` },
   ];
+  // #5343 (#4568 R2-04): the `users` column is asked first (`runSchemaBootstrap`).
+  // `users` is at D1's 100-column limit, so the blind ALTER this replaces failed
+  // "too many columns" (not "duplicate column") on every fresh isolate, logged a
+  // warning, and the binding was marked ready anyway. A statement that fails now
+  // leaves the binding unready, so the next call tries again.
+  let failed = false;
   for (const s of stmts) {
     try {
-      await env.DB.exec(s.sql.replace(/\n\s+/g, ' '));
+      if (s.asksFirst) await runSchemaBootstrap(env, [s.sql]);
+      else await env.DB.exec(s.sql.replace(/\n\s+/g, ' '));
     } catch (e) {
-      const msg = (e as Error).message || '';
-      if (s.ignoreDuplicateColumn && /duplicate column/i.test(msg)) continue;
-      console.warn('[mi.extractor_schema]', msg);
+      failed = true;
+      console.warn('[mi.extractor_schema]', (e as Error).message || '');
     }
   }
-  READY.set(bindingKey(env), true);
+  if (!failed) READY.set(bindingKey(env), true);
 }

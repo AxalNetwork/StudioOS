@@ -36,6 +36,7 @@ async function prepared(c: any, user: User, b: Record<string, unknown>) {
   if (await aiPaused(c.env,user.id)) throw new DistributionRefused(403,'ai_paused',AI_PAUSED_MESSAGE);
   const context = await distributionContext(c.env,input,user);
   const options: RunOptions = { userId:user.id,task:'distribution_draft',systemPrompt:DISTRIBUTION_SYSTEM,messages:[{role:'user',content:JSON.stringify({ records:context.material,targets:context.targets })}],maxTokens:DISTRIBUTION_MAX_TOKENS,surface:AI_SURFACE.growDistribution,rail:{page:DISTRIBUTION_PAGE,option:input.kinds.some(k=>k.kind==='sequence')?SEQUENCE_OPTION:DISTRIBUTION_OPTION,record:`distribution:${input.project}`} };
+  if (input.piece_uid) options.systemPrompt += ' For repurpose targets, adapt the recorded planned piece into one post for each target channel. A title is a topic, not evidence for factual claims.';
   return { input,context,options };
 }
 router.post('/quote',handle(async(c,user)=>{

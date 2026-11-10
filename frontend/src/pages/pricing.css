@@ -90,6 +90,7 @@
   font-family: inherit; font-weight: 600; font-size: 14px; background: transparent; color: var(--p-body);
 }
 .axp-tab.is-on { font-weight: 700; background: #6d28d9; color: #fff; }
+.axp-tab:focus-visible { outline: 2px solid var(--p-violet); outline-offset: -2px; }
 .axp-bill { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 16px; }
 .axp-bill-sw { display: flex; gap: 2px; padding: 3px; border-radius: 99px; background: var(--p-wash-2); }
 .axp-bill-sw button {
@@ -295,6 +296,7 @@
   .axp-hero { padding-top: 44px; }
   .axp-h1 { font-size: 42px; }
   .axp-tabwrap { justify-content: flex-start; }
+  .axp-tabs { flex-wrap: wrap; overflow: visible; }
   .axp-grid-2, .axp-grid-3, .axp-grid-4, .axp-lp, .axp-lp-feats { grid-template-columns: minmax(0, 1fr); }
   .axp-band, .axp-closing { flex-direction: column; align-items: flex-start; padding: 28px; }
   .axp-desk { display: none; }

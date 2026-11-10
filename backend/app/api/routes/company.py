@@ -7,7 +7,7 @@ plus optional Founder / Admin / Advisor / Member rows.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -278,11 +278,15 @@ def my_memberships(
 # ---------------------------------------------------------------------------
 @router.post("/company/create")
 def create_company(
-    body: dict = Body(...),
+    body: Any = Body(default=None),
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
     from backend.app.services.audit import log_audit, AuditAction
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={
+            "code": "body_invalid", "field": "", "detail": "Send the fields as a JSON object.",
+        })
     name = str(body.get("company_name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="company_name required")
@@ -331,7 +335,7 @@ def create_company(
 @router.patch("/company/{uid}")
 def update_company(
     uid: str,
-    body: dict = Body(...),
+    body: Any = Body(default=None),
     session: Session = Depends(get_session),
     user: User = Depends(get_current_user),
 ):
@@ -343,6 +347,11 @@ def update_company(
                 "detail": "HQ reads this company. Its members make the changes here.",
             })
         raise HTTPException(status_code=403, detail="Not authorized to edit this company")
+
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=400, content={
+            "code": "body_invalid", "field": "", "detail": "Send the fields as a JSON object.",
+        })
 
     from backend.app.services.audit import log_audit, AuditAction
     # D4962: the Worker's contract; an unknown field, a logo link, a bad stage or head count is refused, not stored.
