@@ -96,7 +96,7 @@ function CopyTarget({ gState, mState }) {
 }
 
 /** CAL9 / CAL21d: the four calendars, the six states and what each option does. */
-export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle, reloadMicrosoft, onClose }) {
+export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle, reloadMicrosoft, gHealth = null, mHealth = null, rereadProvider = null, onClose }) {
   const [connections, setConnections] = useState(undefined);
   const [said, setSaid] = useState({});
   const [disconnecting, setDisconnecting] = useState(null);
@@ -107,8 +107,8 @@ export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle
   useEffect(() => { readConnections(); }, [readConnections]);
   const say = (k) => (text) => setSaid((s) => ({ ...s, [k]: text }));
   const rows = [
-    connectionRow('google', gState, google),
-    connectionRow('microsoft', mState, microsoft),
+    connectionRow('google', gState, google, gHealth),
+    connectionRow('microsoft', mState, microsoft, mHealth),
     connectionRow('calendly', connectorState(connections, 'calendly')),
     connectionRow('zoom', connectorState(connections, 'zoom')),
   ];
@@ -117,6 +117,8 @@ export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle
     if (a.key === 'connect') return startConnect(row.key, say(row.key));
     if (a.key === 'sync') return runCopy(row.key, say(row.key), reloadOf[row.key]);
     if (a.key === 'retry') return reloadOf[row.key]?.();
+    // D5202: re-read this provider's events alone; the connection is not in question.
+    if (a.key === 'retry-read') return rereadProvider?.(row.key);
     if (a.key === 'disconnect') return setDisconnecting(row.key);
     return null;
   };
@@ -135,6 +137,10 @@ export function ConnectedPanel({ google, microsoft, gState, mState, reloadGoogle
               </div>
               <div className="cal-conn-side">
                 <Pill state={row.state} status={row.key === 'google' ? google : row.key === 'microsoft' ? microsoft : null} testId={`cal-conn-${row.key}-pill`} />
+                {/* D5202 (#5202): the read's own state, beside the connection's, never in place of it. */}
+                {row.healthPill
+                  ? <span className={`cal-nr ${TONE[row.healthTone] ?? ''}`} data-testid={`cal-conn-${row.key}-health`}>{row.healthPill}</span>
+                  : null}
                 <div className="cal-conn-actions">
                   {row.actions.map((a) => (a.to
                     ? <Link key={a.key} to={a.to} className="cal-btn cal-btn-o cal-btn-sm" data-testid={`cal-conn-${row.key}-${a.key}`}>{a.label}</Link>

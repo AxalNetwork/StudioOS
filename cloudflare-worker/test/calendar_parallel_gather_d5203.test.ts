@@ -91,7 +91,9 @@ test('3. one rejection keeps the sources that answered, and is that source\'s al
     };
     const { events, sources } = await gatherSources(readers, env, 1, FROM, TO, undefined, {}, quiet);
     assert.deepEqual(events.map((e) => e.id), ['founder_checkin:1']);
-    assert.deepEqual(sources, [
+    // D5202 added latency_ms, items, at and reason to every row; this test is about which source answered
+    // with which code, in which order, so it compares those fields and lets the evidence fields vary.
+    assert.deepEqual(sources.map(({ kind, ok, error }) => ({ kind, ok, error })), [
       { kind: 'ic_meeting', ok: false, error: 'unreadable' },
       { kind: 'founder_checkin', ok: true, error: null },
       { kind: 'manual', ok: false, error: 'unreadable' },
@@ -162,7 +164,7 @@ test('7. NoSource is omitted; truncated and a provider code survive', async () =
       manual: async () => { throw new NoSource(); },
     };
     const { sources } = await gatherSources(readers, env, 1, FROM, TO, undefined, {}, quiet);
-    assert.deepEqual(sources, [
+    assert.deepEqual(sources.map(({ kind, ok, error, truncated }) => ({ kind, ok, error, ...(truncated ? { truncated } : {}) })), [
       { kind: 'external_google', ok: true, error: null, truncated: true },
       { kind: 'external_microsoft', ok: false, error: 'reconnect' },
     ]);
