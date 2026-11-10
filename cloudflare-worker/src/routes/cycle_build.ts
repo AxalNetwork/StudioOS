@@ -1207,7 +1207,7 @@ async function writeContext(c: any): Promise<{ project: Project; user: Awaited<R
  * satisfies; `actionCall()` gives an action's record id and body the same
  * shape and answers as the route would.
  */
-export type WriteCall = { env: Env; req: { json(): Promise<unknown>; param(key: string): string | undefined }; json(body: unknown, status?: number): Response };
+export type WriteCall = { env: Env; req: { json(): Promise<unknown>; param(key: string): string | undefined; header?(key: string): string | undefined }; json(body: unknown, status?: number): Response };
 export type WriteCtx = { project: Project; user: Viewer };
 export function actionCall(env: Env, params: Record<string, string>, body: unknown): WriteCall {
   return { env, req: { json: async () => body, param: key => params[key] },
@@ -1767,6 +1767,7 @@ const FILING_KINDS: Record<string, string> = {
   formation: 'Formation', ein: 'EIN', '83b': '83(b) election', annual_report: 'Annual report', franchise_tax: 'Franchise tax', other: 'Other',
 };
 const FILING_STATE_IN: Record<string, string> = { upcoming: 'todo', due_soon: 'todo', filed: 'done', todo: 'todo', doing: 'doing', done: 'done' };
+const FILING_IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 type FilingFields = { kind?: string | null; jurisdiction?: string | null; holderId?: number | null; holderName?: string | null; state?: string };
 /** The new filing fields a body carries, each undefined when absent. */
 async function filingFields(c: WriteCall, p: Project, body: Record<string, unknown>, due: string | null): Promise<FilingFields | Response> {
@@ -1804,6 +1805,16 @@ app.post('/formation-steps', async c => {
   return postFormationStep(c, ctx);
 });
 async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const idempotencyKey = c.req.header?.('Idempotency-Key')?.trim() || null;
+  if (idempotencyKey && !FILING_IDEMPOTENCY_KEY.test(idempotencyKey)) {
+    return c.json({ error: 'idempotency_key_invalid', message: 'Send an idempotency key of 8 to 128 letters, digits, - or _.' }, 400);
+  }
+  if (idempotencyKey) {
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM formation_steps WHERE project_id = ? AND created_by = ? AND idempotency_key = ?',
+    ).bind(ctx.project.id, ctx.user.id, idempotencyKey).first<{ id: number }>();
+    if (existing) return c.json({ id: Number(existing.id), replayed: true });
+  }
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
   const due = dateValue(body.due_date);
@@ -1813,14 +1824,34 @@ async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response>
   const named = Object.hasOwn(body, 'title') && body.title != null && body.title !== '' ? text(body.title) : null;
   const title = named ?? (fields.kind === '83b' && fields.holderName ? `${kindLabel} · ${fields.holderName}` : kindLabel);
   if (!title || named === false) return c.json({ detail: 'Valid title and due date required' }, 400);
-  const [result] = await c.env.DB.batch([
-    c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id),
-    // An 83(b) row reads "83(b) election", never the founder's name (decision 15).
-    loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', kindLabel ? `Filing added: ${kindLabel}` : 'Filing added'),
+  if (!idempotencyKey) {
+    const [result] = await c.env.DB.batch([
+      c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id),
+      // An 83(b) row reads "83(b) election", never the founder's name (decision 15).
+      loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', kindLabel ? `Filing added: ${kindLabel}` : 'Filing added'),
+    ]);
+    return c.json({ id: Number(result.meta.last_row_id) }, 201);
+  }
+  const summary = kindLabel ? `Filing added: ${kindLabel}` : 'Filing added';
+  const [insert] = await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by, idempotency_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, created_by, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`)
+      .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id, idempotencyKey),
+    c.env.DB.prepare(`INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+      SELECT ?, ?, 'build.company-creation', 'step-' || CAST(f.id AS TEXT), 'build_formation_step_created', ?, ?
+      FROM formation_steps f WHERE f.project_id = ? AND f.created_by = ? AND f.idempotency_key = ?
+      AND NOT EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = f.project_id
+        AND a.entity_type = 'build.company-creation' AND a.entity_id = 'step-' || CAST(f.id AS TEXT)
+        AND a.action = 'build_formation_step_created')`)
+      .bind(ctx.project.id, ctx.user.id, summary, `user:${ctx.user.id}`, ctx.project.id, ctx.user.id, idempotencyKey),
   ]);
-  const id = Number(result.meta.last_row_id);
-  return c.json({ id }, 201);
+  const row = await c.env.DB.prepare(
+    'SELECT id FROM formation_steps WHERE project_id = ? AND created_by = ? AND idempotency_key = ?',
+  ).bind(ctx.project.id, ctx.user.id, idempotencyKey).first<{ id: number }>();
+  if (!row) throw new Error('Formation step idempotency row missing after create');
+  const created = Number(insert.meta.changes ?? 0) === 1;
+  return c.json({ id: Number(row.id), ...(created ? {} : { replayed: true }) }, created ? 201 : 200);
 }
 
 app.patch('/formation-steps/:id', async c => {
