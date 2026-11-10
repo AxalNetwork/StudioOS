@@ -69,9 +69,18 @@ export function dayLabel(value) {
 export function signedCopyLine(v) {
   if (!v?.signed) return null;
   const on = dayLabel(v.signed_on);
-  if (!on || !v.signatory) return 'Signature date and signatory not recorded';
-  return `Signed ${on} by ${v.signatory}${v.attested ? ' · attested complete' : ''}`;
+  // D4811 part 20: the counsel-approved version it is a copy of, when it names one.
+  const of = v.copy_of != null ? ` · copy of approved v${v.copy_of}` : '';
+  if (!on || !v.signatory) return `Signature date and signatory not recorded${of}`;
+  return `Signed ${on} by ${v.signatory}${v.attested ? ' · attested complete' : ''}${of}`;
 }
+
+/**
+ * D4811 part 20 (CT-12 B): the versions a signed copy may name — counsel
+ * approved at their hash, never a signed copy — newest first. A list read
+ * before approvals were read (`counsel_approved` null) offers none.
+ */
+export const approvedChoices = (versions = []) => versions.filter((v) => v.counsel_approved === true && !v.signed).sort((a, b) => b.version - a.version);
 
 /** What a signed upload still lacks before it is sent (the Worker checks it again), or null. */
 export function signedCopyProblem(upload, today = new Date().toISOString().slice(0, 10)) {

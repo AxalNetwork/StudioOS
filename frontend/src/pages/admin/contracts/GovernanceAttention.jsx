@@ -89,7 +89,7 @@ function CountPills({ counts }) {
 const latestLine = (f, withheld) => f?.latest_executed
   ? <>{f.latest_executed.title}<span className="block font-mono text-[11px] text-axal-muted">{f.latest_executed.version ? `v${f.latest_executed.version} · ` : ''}{dayLabel(f.latest_executed.effective_date) ? `effective ${dayLabel(f.latest_executed.effective_date)}` : 'effective date not recorded'}</span></>
   : <span className="text-axal-muted">{withheld > 0 ? 'None you can open' : 'None recorded as executed'}</span>;
-const LAST_REVIEW = 'The legal-review record is not built yet (D4811 question C).';
+const LAST_REVIEW = 'Each record\'s legal review is on its Legal Review tab (D4811 part 16).';
 
 /** The entities table (CT-03), with phone rows. */
 export function EntitiesTable({ entities }) {
@@ -131,6 +131,8 @@ export function EntityAttention({ entity, onAdd, onOpen }) {
   const f = entity.attention?.facts;
   const records = entity.attention?.records || [];
   const facts = [
+    // D4811 part 17 (question A, owner 2026-11-09): the entity's formation jurisdiction, from the Worker.
+    ['Formation jurisdiction', entity.jurisdiction || <Missing key="j" reason="Not recorded for this entity." />],
     ['Latest executed', latestLine(f, entity.withheld)],
     ['Last review', <Missing key="r" reason={LAST_REVIEW} />],
     ['Outstanding issue', issueLine(f?.outstanding_issue) || <span key="i" className="text-axal-muted">None</span>],
@@ -142,8 +144,8 @@ export function EntityAttention({ entity, onAdd, onOpen }) {
     <div className="flex flex-wrap items-end justify-between gap-3">
       <h3 id={`governance-entity-h-${entity.key}`} className="text-xl font-bold">{entity.name}</h3>
       <button type="button" className={`${button} bg-violet-600 text-white`} onClick={() => onAdd(null)}>Add governance record</button></div>
-    <dl className="grid overflow-hidden rounded-xl border border-axal-hairline sm:grid-cols-2 xl:grid-cols-4">{facts.map(([k, v], i) =>
-      <div key={k} className={`border-b border-r border-axal-hairline p-3 text-[12.5px] ${i === 2 && f?.outstanding_issue ? 'bg-[#fffbeb] dark:bg-amber-950/30' : 'bg-white dark:bg-gray-900'}`}>
+    <dl className="grid overflow-hidden rounded-xl border border-axal-hairline sm:grid-cols-2 xl:grid-cols-5">{facts.map(([k, v], i) =>
+      <div key={k} className={`border-b border-r border-axal-hairline p-3 text-[12.5px] ${i === 3 && f?.outstanding_issue ? 'bg-[#fffbeb] dark:bg-amber-950/30' : 'bg-white dark:bg-gray-900'}`}>
         <dt className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{k}</dt><dd className="mt-1 font-semibold">{v}</dd></div>)}</dl>
     <section aria-labelledby={`governance-expected-h-${entity.key}`} className={`${card} overflow-hidden`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-3 py-2">

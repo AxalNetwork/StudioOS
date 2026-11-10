@@ -108,7 +108,9 @@ test('linking: records and templates; refused for itself, a duplicate, an unknow
   assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'governance', ref: lpa })).body.error, 'relation_self');
   assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'template', ref: 'made_up_retired_4811' })).body.error, 'relation_target_not_found');
   assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'governance', ref: '00000000-0000-0000-0000-000000000000' })).body.error, 'relation_target_not_found');
-  assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'agreement', ref: 'x' })).status, 400);
+  assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'contract', ref: 'x' })).status, 400);
+  // D4811 part 19: an agreement is a kind now; one that is not on the desk is refused by name.
+  assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'agreement', ref: 'x' })).status, 422);
   assert.equal((await call(f, ADMIN, 'POST', `/documents/${lpa}/related`, { kind: 'template', ref: '  ' })).status, 400);
   const g = await call(f, ADMIN, 'GET', `/documents/${lpa}/related`);
   assert.equal(g.body.dependants.length, 2);

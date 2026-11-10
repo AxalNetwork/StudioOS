@@ -12,6 +12,7 @@ import { Pill } from '../../../ui';
 import { input } from './parts';
 import useRecordCrumb from '../useRecordCrumb';
 import PublishDialog, { PublishResult } from './PublishDialog';
+import { isSuperAdminUser } from '../../../lib/shellRole';
 import DraftPages from './DraftPages';
 import VersionCompare from './VersionCompare';
 
@@ -272,6 +273,9 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
         : publishedVersion != null
           ? <button type="button" className={secondary} onClick={() => setDialog('withdraw')} data-testid="template-withdraw">Withdraw published v{publishedVersion}</button>
           : null;
+    } else if (!isSuperAdminUser(user) && (unsaved || publishedVersion !== V)) {
+      // D4811 part 15 (CT-16): publishing (Activate) is the Super Admin's alone; the Worker refuses anyone else.
+      publishSlot = <span className={`text-[12.5px] ${muted}`} data-testid="template-publish-super-admin">Only the Super Admin publishes a template.</span>;
     } else if (unsaved) {
       publishSlot = <button type="button" className={primary} disabled data-testid="template-publish-one">Publish v{V + 1}</button>;
     } else if (publishedVersion === V) {

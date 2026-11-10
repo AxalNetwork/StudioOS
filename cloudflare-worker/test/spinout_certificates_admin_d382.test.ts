@@ -51,6 +51,8 @@ function freshDb() {
   graduate(db, OTHER_GRAD_ID, '2026-08-02 10:00:00');
   m.run(NON_GRAD_ID, 1, 'project_created', '2026-07-02 10:00:00');
   labEnrollmentSchema(db);
+  // D4663: the scheduled backfill's record, which the list reads beside the registry.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611092031_lab_certificate_backfill.sql'), 'utf8'));
   return db;
 }
 
