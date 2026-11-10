@@ -7,7 +7,7 @@
  * routes/advisors.ts; it and the route modules split out of it (advisors_*.ts)
  * import them from here, so there is still one implementation of each.
  */
-import { actingAdvisor } from '../services/advisorAccess';
+import { actingAdvisor, mayActAsAdvisor, ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { refuse } from '../util/refusal';
@@ -170,18 +170,34 @@ export const sentRevision = (body: any): string | null =>
 // creates an obligation on Axal — see the header of migration 205.
 // ===========================================================================
 
+/** #5363: an eligible account that owns no advisor row. Our sentence, a fixed code. */
+export const ADVISOR_PROFILE_MISSING = {
+  code: 'advisor_profile_missing',
+  message: 'No advisor profile attached to your account',
+} as const;
+
 /**
- * The caller's own advisor row, or an error naming what is missing.
+ * The caller's own advisor row, or a thrown coded refusal.
  *
  * Also the single door every store endpoint below goes through, which is where
  * the lazy schema bootstrap belongs — one call site rather than nine, and it
  * short-circuits on a database that already has the schema. See
  * `services/advisorStoresSchema.ts` for why a bootstrap is required at all.
+ *
+ * #5363: TWO REFUSALS, TOLD APART. An account that is not eligible
+ * (`mayActAsAdvisor` false: no Advisor licence today, or one revoked, and not
+ * an admin) gets the same 403 `advisor_licence_required` that `GET`/`POST
+ * /me` answer, so the page can say "needs the Advisor licence" instead of a
+ * generic failure. An eligible account with no row of its own keeps today's
+ * 400 under the fixed code `advisor_profile_missing`. Both are thrown as a
+ * Response, which `mapError` passes through untouched; neither carries
+ * exception text. Who passes is D4715's policy, unchanged.
  */
 export async function requireMyAdvisor(c: Context<{ Bindings: Env }>, user: User): Promise<AdvisorRow> {
+  if (!mayActAsAdvisor(user)) throw refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
   await ensureAdvisorStoresSchema(c.env);
   const m = await myAdvisor(c.env, user);
-  if (!m) throw new Error('No advisor profile attached to your account');
+  if (!m) throw refuse(c, 400, ADVISOR_PROFILE_MISSING);
   return m;
 }
 

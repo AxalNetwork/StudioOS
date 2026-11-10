@@ -135,6 +135,8 @@ async function refreshAccessToken(env: Env, refreshToken: string, isSandbox: boo
     const txt = await res.text();
     throw new Error(`salesforce_refresh_failed: ${res.status} ${txt.slice(0, 300)}`);
   }
+  // D5304: the client secret authenticated a refresh; stamp its last use (hourly at most, never fails the caller).
+  await (await import('../../services/providerOauthKeys')).markProviderKeyUsed(env, 'salesforce');
   return await res.json() as SfTokenResponse;
 }
 

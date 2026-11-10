@@ -5,6 +5,7 @@
  * body a save sends.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { codeAmount, parseMinor } from '../../../lib/money.js';
 
 export { NOT_RECORDED };
 
@@ -33,7 +34,7 @@ export const PROGRESS_LABELS = Object.freeze({
 
 const METRIC_LABELS = { qualifying_revenue_cents: 'Revenue', cohorts: 'Cohorts', active_members: 'Active members', network: 'Network' };
 
-const money = (cents, currency) => `${currency || ''} ${(Number(cents) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim();
+const money = (cents, currency) => codeAmount(Number(cents), currency, { locale: undefined });
 const figure = (metric, v, currency) => (v === null || v === undefined ? NOT_RECORDED : metric === 'qualifying_revenue_cents' ? money(v, currency) : Number(v).toLocaleString());
 
 /** One target year as the panel lists it. An unmeasured target reads Not recorded, never 0. */
@@ -54,12 +55,14 @@ export function yearLine(p, currency) {
 const codes = (text, re) => [...new Set(String(text || '').split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean))].filter((x) => re.test(x));
 
 /** A target year typed in the form: money in currency units, counts as whole numbers, blank for no target. */
-function targetOf(t) {
+function targetOf(t, currency) {
   const n = (v) => (String(v ?? '').trim() === '' ? null : Number(v));
-  const revenue = n(t.min_revenue);
+  // D5373: the revenue target is typed in the licence's currency, at that currency's own decimals; not money for it is NaN.
+  const revenueText = String(t.min_revenue ?? '').trim();
+  const revenue = revenueText === '' ? null : parseMinor(revenueText, currency);
   return {
     year: Number(t.year), period_start: t.period_start, period_end: t.period_end,
-    min_revenue_cents: revenue === null ? null : Math.round(revenue * 100),
+    min_revenue_cents: revenue === null ? null : revenue.ok ? revenue.minor : Number.NaN,
     min_cohorts: n(t.min_cohorts), min_active_members: n(t.min_active_members), min_network: null,
   };
 }
@@ -69,13 +72,13 @@ function targetOf(t) {
  * or `{ ok: false, errors }`. A reason is required; a scope that needs a
  * territory names one.
  */
-export function buildSave({ form, revision }) {
+export function buildSave({ form, revision, currency }) {
   const errors = {};
   const countries = codes(form.countries, /^[A-Z]{2}$/);
   const regions = codes(form.regions, /^[A-Z0-9-]{2,40}$/);
   if (form.scope_type === 'regional_exclusive' && !regions.length) errors.regions = 'Name at least one region.';
   if ((form.scope_type === 'country_exclusive' || form.scope_type === 'master_franchise') && !countries.length && !regions.length) errors.countries = 'Name the countries this covers.';
-  const targets = (form.targets || []).filter((t) => t.period_start || t.period_end || t.min_revenue || t.min_cohorts || t.min_active_members).map(targetOf);
+  const targets = (form.targets || []).filter((t) => t.period_start || t.period_end || t.min_revenue || t.min_cohorts || t.min_active_members).map((t) => targetOf(t, currency));
   if (targets.some((t) => !t.period_start || !t.period_end)) errors.targets = 'Each target year needs its start and end dates.';
   if (targets.some((t) => [t.min_revenue_cents, t.min_cohorts, t.min_active_members].some((v) => v !== null && (!Number.isFinite(v) || v < 0)))) errors.targets = 'Targets are amounts and whole numbers, or blank for none.';
   const reason = String(form.reason || '').trim();

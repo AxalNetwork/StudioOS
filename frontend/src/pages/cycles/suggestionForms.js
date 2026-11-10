@@ -1,3 +1,4 @@
+import { parseMinor, toMajorString } from '../../lib/money.js';
 /**
  * D4590 (#4590) — an interview suggestion edited in typed fields, never JSON.
  *
@@ -111,8 +112,12 @@ export function visibleFields(kind, draft) {
   return spec.fields.filter((f) => !hidden.has(f.key));
 }
 
-/** "1200.5" from 120050 cents; empty when none. */
-const unitsOf = (cents) => (Number.isInteger(cents) && cents > 0 ? String(cents / 100) : '');
+/** "1200.5" from 120050 minor units of the currency (USD when none is named); empty when none (D5373). */
+const unitsOf = (cents, currency) => {
+  if (!(Number.isInteger(cents) && cents > 0)) return '';
+  const major = toMajorString(cents, currency ? String(currency).toUpperCase() : 'USD');
+  return major === null ? '' : major.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+};
 
 /** A suggestion's payload as a draft: one string per field. */
 export function draftFrom(kind, payload) {
@@ -121,7 +126,7 @@ export function draftFrom(kind, payload) {
   if (!spec) return {};
   const d = {};
   for (const f of spec.fields) {
-    if (f.type === 'amount') d.amount = unitsOf(p.amount_cents);
+    if (f.type === 'amount') d.amount = unitsOf(p.amount_cents, p.currency);
     else if (f.type === 'currency') d.currency = p.currency ? String(p.currency).toUpperCase() : '';
     else d[f.key] = p[f.key] == null ? '' : String(p[f.key]);
   }
@@ -146,8 +151,13 @@ export function payloadFrom(kind, draft, original = {}) {
     const v = tidy(d[f.key]);
     if (f.type === 'amount') {
       if (!v) continue;
-      if (!/^\d+(\.\d{1,2})?$/.test(v) || Number(v) <= 0) { errors.amount = 'Write the amount as a number above zero, like 1200 or 49.99.'; continue; }
-      payload.amount_cents = Math.round(Number(v) * 100);
+      // D5373: the amount is typed in the draft's currency (USD when it names none), at that currency's own decimals.
+      const curText = tidy(d.currency);
+      const parsed = parseMinor(v, /^[a-z]{3}$/i.test(curText) ? curText.toUpperCase() : curText ? 'XXX' : 'USD');
+      if (!parsed.ok && parsed.reason === 'decimals') { errors.amount = parsed.message; continue; }
+      if (!parsed.ok && parsed.reason === 'currency') { if (!errors.currency) errors.currency = 'Choose a currency StudioOS can price in, like USD or EUR.'; continue; }
+      if (!parsed.ok || parsed.minor <= 0) { errors.amount = 'Write the amount as a number above zero, like 1200 or 49.99.'; continue; }
+      payload.amount_cents = parsed.minor;
       if (payload.amount_cents > 100_000_000_000) errors.amount = 'That amount is larger than Axal records.';
       continue;
     }

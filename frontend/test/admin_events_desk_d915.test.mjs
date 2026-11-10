@@ -152,7 +152,7 @@ test('money is drawn in its own currency, and two currencies are never added', (
   assert.equal(money(1550, 'eur'), '€15.50');
   assert.equal(money(0, 'usd'), 'Free');
   assert.equal(money(null, 'usd'), 'Not recorded');
-  assert.equal(money(4000, 'xyz1'), '40 XYZ1', 'a code Intl does not know is still named');
+  assert.equal(money(4000, 'xyz1'), '4,000 minor units (currency "XYZ1" is not one we can price in)', 'D5373: a code that is not a listed currency is named beside the stored count, never divided by 100');
   assert.equal(moneyTotals([{ cents: 4000, currency: 'usd' }, { cents: 1500, currency: 'usd' }, { cents: 4000, currency: 'eur' }]), '$55 · €40');
   assert.equal(moneyTotals([]), 'Free');
 });

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform States · boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Platform · design system · data states · #5129 · part of #5128</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Platform States — one vocabulary every redesigned surface cites</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">How the platform shows data that is present, absent, failed, refused, partial or old. Six value states (Value, None, Not recorded, Not applicable, Unavailable, Refused), three modifiers (Stale, Partial, Provisional) and Loading as a transient skeleton. Missing data reads “Not recorded”, never 0; a failed read is never drawn as zero, as an empty list or as Not recorded; nothing is made up to fill a gap. Built on the v2 chip shape and tokens, mapped to the Worker’s OperationalRead contract (D4858), and drawn as a redraw of <code>ui/Honesty.jsx</code>. Drawn to pick A on Question 2: the screen says “Unavailable” for a failed read (ST-11 shows B and C).</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Tue 10 Nov 2026 · funds, companies, figures and dates are sample data, used only to show the states</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="15">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Platform States Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['ST-00', 'Cover and dictionary', 'One row per state and modifier: its meaning, the exact copy, the glyph, the chip, and the Worker status it comes from.', [C('ST00', false, 1440, 700)]],
+      ['ST-01', 'The chip set', 'Every state and modifier at 11px: alone, in a table cell, at a row’s right edge, stacked (Stale + Provisional), and in greyscale, where glyph, border and word still tell them apart.', [C('ST01', false, 1200, 1030)]],
+      ['ST-02', 'One value, every state', '“Committed capital” as a KPI tile, a table cell and a sentence: Value, measured 0, Not recorded, Not applicable, Unavailable, Refused, Value + Stale.', [C('ST02', false, 1440, 1140)]],
+      ['ST-03', 'Lists and tables', 'Value, None, Unavailable (no rows, no count, the claim it does not make, Retry), Refused, Partial (readable rows under one banner) and Loading.', [C('ST03', false, 1440, 890)]],
+      ['ST-04', 'Charts and trends', 'A Not recorded gap breaks the line; an Unavailable period is an outlined slot; a measured 0 is a mark on the baseline; a stale last point shows its age. Deltas only when both ends are Values.', [C('ST04', false, 1440, 780)]],
+      ['ST-05', 'A composite header with Partial', 'One banner above the block. The missing source’s figures show Unavailable; totals that would include it are withheld and say why.', [C('ST05', false, 1440, 680)]],
+      ['ST-06', 'The provenance line', 'The faint footer from D4858: read time, source time, source. Variants for source time not recorded, Stale (with and without a recorded age), Partial, Unavailable and Refused.', [C('ST06', false, 1200, 1040)]],
+      ['ST-07', 'Phone 390', 'Tiles and lists at phone width. Reasons are visible text, never tooltips; chips never truncate the word.', [C('ST07', 'A · Tiles', 390, 1150), C('ST07B', 'B · Lists', 390, 850)]],
+      ['ST-08', 'Dark theme', 'The chips, the seven tiles, and the list states on the dark tokens.', [C('ST08', 'A · Chips and tiles', 1440, 540), C('ST08B', 'B · Lists', 1200, 620)]],
+      ['ST-09', 'Accessibility', 'Each state’s accessible name, role and live region (alert only for Unavailable after a user action), and focus order for Retry.', [C('ST09', false, 1200, 800)]],
+      ['ST-10', 'Do / Don’t', 'Six pairs: 0 for a failed read; a dash with no reason; “No data”; a Stale value without an age; Unavailable drawn as Not recorded; a Refused block that still shows totals.', [C('ST10', false, 1440, 860)]],
+      ['ST-11', 'Question 2: the word for a failed read', 'A (drawn): Unavailable on screen. B: Unreadable everywhere, only the word changes. C: Unreadable plus a separate Not connected state.', [C('ST11', false, 1200, 450)]],
+      ['ST-12', 'States, modifiers and surface labels', 'Surface labels (Backed, Mismatch, Founder only, Failed, Changed since pinned) reuse the chip shape with their own meaning. Raise v2’s words, the other canvases’ words and the per-surface lists are each settled.', [C('ST12', false, 1200, 1140)]],
+      ['ST-13', 'The shared component', 'DataState, StateChip, PartialBanner, ProvenanceLine and stateFromRead, as a redraw of ui/Honesty.jsx with Unrecorded and Unreadable kept as aliases; the mapping from the Worker contract.', [C('ST13', false, 1200, 910)]],
+      ['ST-14', 'Handoff', 'Frontend-only work, what needs the Worker (#5247 last-good time), the local copies to fold in, and what this canvas supersedes (Raise v2 RA-08).', [C('ST14', false, 1200, 880)]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

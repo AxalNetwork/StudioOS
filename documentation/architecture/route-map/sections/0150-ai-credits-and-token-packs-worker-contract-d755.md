@@ -21,7 +21,7 @@ D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486
 | `POST /api/admin/catalog/token-packs/adopt` | Super Admin | `{price_id}`: records an existing one-time USD price of whole dollars from $5 to $500. |
 | `PATCH /api/admin/catalog/token-packs/:uid` | Super Admin | `on_sale`, `bonus_usd` (0–10% of face) and `sort`. The amount never changes. |
 | `POST /api/admin/catalog/token-packs/:uid/archive` | Super Admin | Off sale for good, and the Stripe price archived. |
-| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached five minutes at the edge (D816), its own rate-limit bucket, no person named. D816 adds each plan's `monthly`, `yearly` and `yearly_saving_percent` (below). |
+| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, `public, max-age=60, stale-while-revalidate=60` with an ETag and 304 (D5318; five minutes under D816), its own rate-limit bucket, no person named. D816 adds each plan's `monthly`, `yearly` and `yearly_saving_percent` (below). |
 
 D806 (#2245): Billing's invoices and the card's address (`routes/billing.ts`, `services/billingInvoices.ts`).
 
