@@ -15,6 +15,7 @@
  */
 
 import { eventTime, onEventDay } from './eventTime';
+import { eventCurrency, formatMinorOrCount } from '../../lib/money.js';
 
 export const PATH = '/my/events';
 export const TITLE = 'Events';
@@ -227,9 +228,7 @@ export function discoverAction(ev, held) {
 export function priceOf(ev) {
   const cents = Number(ev?.price_cents);
   if (!Number.isFinite(cents) || cents <= 0) return 'Free';
-  const code = /^[A-Za-z]{3}$/.test(String(ev?.currency || '')) ? String(ev.currency).toUpperCase() : 'USD';
-  try { return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: code, maximumFractionDigits: cents % 100 ? 2 : 0 }); }
-  catch { return `${cents / 100} ${code}`; }
+  return formatMinorOrCount(cents, eventCurrency(ev?.currency), { locale: 'en-US', trimWhole: true });
 }
 
 

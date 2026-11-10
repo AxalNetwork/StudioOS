@@ -30,6 +30,7 @@ belongs in `../services/`.
 | `deadline.ts` | `withDeadline` — an await that cannot hang for ever, for the remote calls that take no `AbortSignal` (KV, D1). Throws `DeadlineExceeded` so a `catch` that already implements the failure policy covers a stall too. A `fetch` should use `AbortSignal.timeout` directly instead. |
 | `thrownResponse.ts` | `withThrownResponses` — lets a gate that refuses by **throwing** a `Response` produce that Response. Hono re-throws non-`Error` values past `app.onError`, so without this the nine throwing gates (tier upsells, the fund 404) escaped to the runtime as worker exceptions. |
 | `clientIp.ts` | `clientIp` — the address Cloudflare observed: `cf-connecting-ip` first, else the first hop of `x-forwarded-for`, else `unknown`, clipped to 64 characters. Written because `cofounder.ts` read `x-forwarded-for` first and stored it on `nda_signed_ip_a` / `nda_signed_ip_b`, so a signer could put any address they liked into an NDA-evidence field (D219). |
+| `httpCache.ts` | `jsonWithEtag`, `etagMatches` — D5318 (#5318, H10): a JSON answer with the route's `Cache-Control` and a strong ETag over the exact body, answering 304 with no body when `If-None-Match` names it. The route still builds the body to compare, so a 304 saves bytes, not D1 reads; a route that varies by caller must pass a `private` policy. |
 
 D1174 (#3101): `useOfFunds.ts` owns the five fixed section keys and the shared
 stored-split reader for readiness, cards, records and decks. Unknown or invalid
