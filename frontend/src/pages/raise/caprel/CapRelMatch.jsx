@@ -9,6 +9,7 @@ import { DraftDialog } from './CapRelOutreach';
 import { tabHref, TABS } from './capRelModel';
 import { FIT_FILTERS, FIT_WORDS, MATCH_PAGE, MATCH_SORTS, fundSize, matchQuery, pageLine, verifiedLine } from './capRelTabsModel';
 import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { MATCH_FILTERS, useTabFilters } from './capRelUrlFilters';
 
 /**
  * D1193 (#3127, CRL7) — Match: the fund directory against this venture
@@ -47,8 +48,10 @@ function Facet({ label, name, value, options = [], onChange, none = 'Any' }) {
 }
 
 export default function CapRelMatch({ projectId, search = '' }) {
-  const [f, setF] = useState({ q: '', hq_country: '', focus: '', size_band: '', fit: '', warm: false, sort: 'name', offset: 0 });
-  const [typed, setTyped] = useState('');
+  // D5377: the filters, sort and offset are the address's, read through MATCH_FILTERS' allowed sets.
+  const [f, setF] = useTabFilters(MATCH_FILTERS, projectId);
+  const [typed, setTyped] = useState(f.q);
+  useEffect(() => { setTyped(f.q); }, [f.q]);
   const [n, setN] = useState(0);
   const [read, setRead] = useState({ status: 'loading', data: null, error: '' });
   const [adding, setAdding] = useState(null);
@@ -64,7 +67,7 @@ export default function CapRelMatch({ projectId, search = '' }) {
   }, [projectId, f, n]);
   // A new read (filters, page, retry) is a new list: its order is the read's again.
   useEffect(() => { setRank(null); }, [projectId, f, n]);
-  const set = (k, v) => setF((x) => ({ ...x, [k]: v, offset: 0 }));
+  const set = (k, v, opts) => setF({ [k]: v }, opts);
   const d = read.data;
   const shown = applyRank(d?.items || [], (fund) => fund.uid, rank);
   const items = shown.list;
@@ -92,7 +95,7 @@ export default function CapRelMatch({ projectId, search = '' }) {
           <section className={`${CARD} flex min-w-0 flex-col`} data-testid="caprel-match-funds">
             <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
               <h3 className={`m-0 mr-auto text-[14px] font-extrabold ${INK}`}>From the fund directory</h3>
-              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); set('q', typed); }}>
+              <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); set('q', typed, { replace: true }); }}>
                 <input className={`${FIELD} w-48`} placeholder="Search funds" value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Search funds" data-testid="caprel-match-search" />
               </form>
               <select className={`${FIELD} w-auto`} value={f.sort} onChange={(e) => set('sort', e.target.value)} aria-label="Sort" data-testid="caprel-match-sort">
@@ -143,8 +146,8 @@ export default function CapRelMatch({ projectId, search = '' }) {
               <div className="flex items-center justify-between gap-2 border-t border-axal-hairline px-4 py-2.5 text-[12px] dark:border-gray-800">
                 <span className={MUTED} data-testid="caprel-match-count">{pageLine(f.offset, items.length, d.total)}</span>
                 <span className="flex gap-2">
-                  <button type="button" className={BTN_S} disabled={f.offset === 0} onClick={() => setF((x) => ({ ...x, offset: Math.max(0, x.offset - MATCH_PAGE) }))}>Previous</button>
-                  <button type="button" className={BTN_S} disabled={f.offset + items.length >= d.total} onClick={() => setF((x) => ({ ...x, offset: x.offset + MATCH_PAGE }))} data-testid="caprel-match-next">Next</button>
+                  <button type="button" className={BTN_S} disabled={f.offset === 0} onClick={() => setF({ offset: Math.max(0, f.offset - MATCH_PAGE) })}>Previous</button>
+                  <button type="button" className={BTN_S} disabled={f.offset + items.length >= d.total} onClick={() => setF({ offset: f.offset + MATCH_PAGE })} data-testid="caprel-match-next">Next</button>
                 </span>
               </div>
             ) : null}
