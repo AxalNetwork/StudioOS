@@ -81,7 +81,7 @@ userLicences.post('/admin/user-licences/:uid/status', async (c) => {
   const reason = reasonOf(body);
   const updated = await transitionLicence(c.env, { uid: l.uid, action, expectedRevision: revisionOf(body), reason, actorId: admin.id });
   await logAdminAction(c.env, admin.id, admin.email || '', 'user_licence_status_changed', {
-    licence_uid: l.uid, user_id: l.user_id, licence_type: l.licence_type, action, from: l.status, to: updated.status, revision: updated.revision, reason,
+    licence_uid: l.uid, target_user_id: l.user_id, licence_type: l.licence_type, action, from: l.status, to: updated.status, revision: updated.revision, reason,
   });
   return c.json({ licence: updated });
 });
@@ -96,7 +96,7 @@ userLicences.post('/admin/user-licences/:uid/renew', async (c) => {
   if (!v.ok) throw new UserLicenceError(400, 'invalid_renewal', 'The renewal has fields to fix.', { fields: v.errors });
   const out = await renewLicence(c.env, { uid: l.uid, expectedRevision: expected, input: v.value, reason, actorId: admin.id });
   await logAdminAction(c.env, admin.id, admin.email || '', 'user_licence_renewed', {
-    licence_uid: l.uid, user_id: l.user_id, licence_type: l.licence_type, term_no: out.term.term_no, starts_on: out.term.starts_on,
+    licence_uid: l.uid, target_user_id: l.user_id, licence_type: l.licence_type, term_no: out.term.term_no, starts_on: out.term.starts_on,
     ends_on: out.term.ends_on, agreement_version: out.term.agreement_version, revision: out.licence.revision, reason,
   });
   return c.json(out);
