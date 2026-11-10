@@ -264,8 +264,19 @@ test('an unrecorded hour count is never a zero, on the page or in the total', ()
   assert.match(P, /totals\.entries_without_hours > 0 && totals\.hours_recorded === 0\s*\n?\s*\? 'Not recorded'/,
     'a ledger of untimed entries reports 0 hours');
   // The route counts the untimed entries rather than folding them in.
-  assert.match(ROUTE, /if \(s\.hours == null\) \{ x\.entries_without_hours \+= 1; withoutHours \+= 1; \}/,
+  //
+  // #4647 (D4647) moved this from a loop over the returned page to the
+  // ledger's own GROUP BY, because every figure here has to be over the whole
+  // authorized population and not over the 400 rows that happened to be
+  // shown. The rule is unchanged and so is what this case is for: an untimed
+  // entry is COUNTED, never summed as zero. Both halves are pinned, since the
+  // sum and the count are now separate columns — and behaviourally too, in
+  // cloudflare-worker/test/portfolio_periods_pages_4647.test.ts, which checks
+  // a ledger where every entry is untimed.
+  assert.match(ROUTE, /SUM\(CASE WHEN s\.hours IS NULL THEN 1 ELSE 0 END\) AS entries_without_hours/,
     'the route no longer counts untimed entries separately');
+  assert.match(ROUTE, /SUM\(CASE WHEN s\.hours IS NULL THEN 0 ELSE s\.hours END\)/,
+    'the hours total no longer excludes the untimed entries');
   assert.match(ROUTE, /if \(v === undefined \|\| v === null \|\| v === ''\) return null;/,
     'an empty hours field is coerced to a number');
   // And the form sends absence as absence.

@@ -349,3 +349,46 @@ test('the compliance read defaults to the completed period and states its window
   // than quietly resolved to something else.
   assert.match(src, /if \(asked && !bounds\)/);
 });
+
+// 11 ──────────────────────────────────────────────────────────────────────────
+test('a ledger whose every entry is untimed reports no hours and counts them all', async () => {
+  // D56/D68, carried through #4647's move of these figures into the GROUP BY:
+  // `null` hours is "nobody timed this" and `0` is "it took none". The totals
+  // must keep the two apart at the extreme — a ledger where NOTHING was timed
+  // reports `hours_recorded: 0` only alongside the count that explains it, so
+  // the page can print "Not recorded" instead of a zero that reads as a
+  // measurement. `investor_portfolio_ip3.test.mjs` pins the page's half.
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, founder_id INTEGER, investor_id INTEGER,
+                               is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, name TEXT, email TEXT);
+           CREATE TABLE projects (id INTEGER PRIMARY KEY, uid TEXT, name TEXT, deleted_at TEXT);
+           CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, uid TEXT, name TEXT);
+           CREATE TABLE portfolio_positions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, fund_id INTEGER);`);
+  db.exec(file('237'));
+  db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
+  db.prepare("INSERT INTO projects (id, uid, name) VALUES (1, 'p-1', 'One')").run();
+  const ins = db.prepare(`INSERT INTO portfolio_support_entries
+    (uid, project_id, kind, state, hours, summary, recorded_by, created_at, updated_at)
+    VALUES (?,1,'intro','delivered',NULL,?,?,'2026-11-01T00:00:00Z','2026-11-01T00:00:00Z')`);
+  for (let i = 0; i < 5; i += 1) ins.run(`u-${i}`, `Entry ${i}`, ADMIN);
+
+  const res = await get(db, '');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.totals.entries, 5);
+  assert.equal(res.body.totals.hours_recorded, 0, 'nothing was timed, so no hours are recorded');
+  assert.equal(res.body.totals.entries_without_hours, 5, 'and every entry is counted as untimed');
+  const company = res.body.companies.find((x: any) => x.project_id === 1);
+  assert.equal(company.entries_without_hours, company.entries,
+    'the per-company row says all of its entries are untimed');
+  assert.equal(company.hours, 0);
+
+  // One timed entry alongside them: the sum is that entry's hours only, and
+  // the untimed ones are still counted rather than dragging the sum down.
+  db.prepare(`INSERT INTO portfolio_support_entries
+    (uid, project_id, kind, state, hours, summary, recorded_by, created_at, updated_at)
+    VALUES ('u-timed',1,'intro','delivered',3,'Timed',?,'2026-11-02T00:00:00Z','2026-11-02T00:00:00Z')`).run(ADMIN);
+  const mixed = await get(db, '');
+  assert.equal(mixed.body.totals.hours_recorded, 3, 'only the recorded hours are summed');
+  assert.equal(mixed.body.totals.entries_without_hours, 5);
+  assert.equal(mixed.body.totals.entries, 6);
+});
