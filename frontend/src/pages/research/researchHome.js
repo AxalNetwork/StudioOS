@@ -8,10 +8,13 @@
  *   { state: 'not_recorded', reason }  no store holds this yet
  *   { state: 'ok', ... }               an empty list is `ok` with no rows
  *
- * WHAT IS NOT RECORDED. The canvas's Recent research projects and Saved briefs
- * are a Research Project and a sectioned brief, and neither object exists
- * (D3701 "Existing vs proposed"). Their cards say so instead of borrowing Ask
- * sessions or collections and calling them projects.
+ * WHAT IS NOT RECORDED. The canvas's Saved briefs are a sectioned brief, which
+ * is not stored yet (D3701 "Existing vs proposed"), and its card says so
+ * instead of borrowing saved Ask answers and calling them briefs.
+ *
+ * RECENT RESEARCH PROJECTS (D5157, #5157) reads the Research Project store:
+ * the three most recently touched active projects (`recentProjects` in
+ * `researchProjects.js`). It used to read Not recorded, when no store existed.
  *
  * WHAT IS. Continue where you left off is the newest Ask exchange
  * (`research_ask_answers`, scope `all`). Recently added evidence is the library,
@@ -19,6 +22,7 @@
  * shortlist (`research_funds`); markets and companies have no "track" store.
  */
 import { answerabilityOf, indexStateOf } from './researchStates.js';
+import { recentProjects } from './researchProjects.js';
 
 /** The three examples. They fill the question field; nothing runs until Start research. */
 export const EXAMPLES = [
@@ -28,7 +32,6 @@ export const EXAMPLES = [
 ];
 
 export const NOT_RECORDED_REASONS = {
-  projects: 'Research projects are not stored yet. A project would hold one question with its evidence, findings and brief; until it exists, each Ask question stands on its own.',
   briefs: 'Briefs are not stored yet. Saved Ask answers are kept, with their citations, on the Ask page.',
   trackingOther: 'Markets and companies cannot be tracked yet; only the funds you add are kept.',
 };
@@ -82,7 +85,8 @@ export function trackingCard(read) {
   };
 }
 
-export const projectsCard = () => ({ state: 'not_recorded', reason: NOT_RECORDED_REASONS.projects });
+/** D5157: the three most recently touched active projects, from the list read. */
+export const projectsCard = (read) => recentProjects(read);
 export const briefsCard = () => ({ state: 'not_recorded', reason: NOT_RECORDED_REASONS.briefs });
 
 /** A date for a card line, or Not recorded. Never today's date for a missing one. */

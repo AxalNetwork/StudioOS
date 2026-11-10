@@ -49,6 +49,15 @@ const SECTIONS = [
   ['Library', '/research/library'],
 ];
 
+/**
+ * D5157: New research opens My Research's create form, carrying the question
+ * already typed here. It creates nothing by itself: the form does, on Create.
+ */
+export function newResearchHref(question) {
+  const q = String(question || '').trim().slice(0, 1000);
+  return `/research/projects?new=1${q ? `&question=${encodeURIComponent(q)}` : ''}`;
+}
+
 export default function FounderResearchDesk() {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
@@ -201,8 +210,8 @@ export default function FounderResearchDesk() {
     <div className="a7-canvas">
       <div className="a7-main">
         {/* D3701 RS-01: the house header — eyebrow, title, purpose, Ask Eadwyn
-            and the one violet primary. There is no research-project store, so
-            New research starts the question below rather than creating one. */}
+            and the one violet primary. New research opens My Research's
+            create form with the question typed below (D5157). */}
         <header className="a7-hero">
           <div className="ask-hero-top rh-header">
             <div>
@@ -212,7 +221,7 @@ export default function FounderResearchDesk() {
             </div>
             <div className="rh-actions">
               <HeaderAsk />
-              <button type="button" className="rh-primary" data-testid="button-new-research" onClick={() => questionRef.current?.focus?.()}>New research</button>
+              <Link className="rh-primary" data-testid="button-new-research" to={newResearchHref(question)}>New research</Link>
             </div>
           </div>
           <section className="a7-card rh-question">
