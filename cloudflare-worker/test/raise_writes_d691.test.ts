@@ -797,6 +797,7 @@ function cycleFixture() {
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('606_use_of_funds_scenarios.sql'));
   db.exec(sqlOf('202611082130_uof_scenario_revision.sql'));
+  db.exec(sqlOf('202611100935_uof_hire_revision.sql'));
   addColumnsFrom(db, sqlOf('607_raise_money_cents.sql'), 'raise_prospect_events'); // D1190: a meeting's start
   db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
   raiseEvidenceTables(db);
