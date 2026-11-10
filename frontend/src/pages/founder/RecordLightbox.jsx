@@ -172,6 +172,7 @@ const BOT_INSTEAD = new Set(['meeting_not_in_calendar', 'meeting_not_hosted', 'm
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
+  initialClientKey = null,
   cycle = cycleValidateApi,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
@@ -222,7 +223,8 @@ export default function RecordLightbox({
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const startKey = useRef(null);
-  if (startKey.current === null) startKey.current = newStartKey();
+  if (startKey.current === null) startKey.current = initialClientKey || newStartKey();
+  const setupKey = (bot) => initialClientKey || `${startKey.current}${bot ? '-bot' : ''}`;
   const [name, setName] = useState(interview?.interviewee_name || '');
   const [company, setCompany] = useState(interview?.interviewee_company || '');
   const [mode, setMode] = useState(initialMode);
@@ -354,7 +356,7 @@ export default function RecordLightbox({
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
   const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
-  const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
+  const label = refusal?.retrySetup ? 'Try again' : howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -525,8 +527,13 @@ export default function RecordLightbox({
       const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
       const botFields = { ...fields, meeting_url: false };
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}-bot` }, botFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: setupKey(true) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(true) }, botFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(r.message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       // D1363: refused for AI tokens, the member tops up here and the send is made again on
       // the same session once the tokens land; the meeting then opens (or the session page offers it).
       const send = async () => {
@@ -588,8 +595,13 @@ export default function RecordLightbox({
       // is the one setup call.
       const captureFields = useBot ? { ...fields, meeting_url: false } : fields;
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: `${startKey.current}${useBot ? '-bot' : ''}` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}${useBot ? '-bot' : ''}` }, captureFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: setupKey(useBot) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(useBot) }, captureFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(r.message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       const into = person(r.interview);
       if (useBot) {
         const url = link.trim();

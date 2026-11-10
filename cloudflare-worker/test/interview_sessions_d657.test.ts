@@ -935,6 +935,46 @@ test("D4628: the setup call's failed activity-log write is not reported as succe
     'and still exactly one audit row');
 });
 
+test('D5353: capture routes refuse an incomplete setup and become usable only after the same request resumes it', async () => {
+  const f = fixture();
+  const body = {
+    channel: 'in_person', interviewee: { name: 'Unfinished capture' }, consent: { status: 'given', method: 'written' },
+    client_key: 'unfinished-capture',
+  };
+  const restore = failOnce(f.env, /INSERT INTO activity_logs/);
+  const failed = await setup(f, body);
+  restore();
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id, setup_complete_at FROM interview_sessions WHERE client_key = 'unfinished-capture'").get() as any;
+  assert.equal(row.setup_complete_at, null);
+
+  const refused = [
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/start`),
+    await call(f.env, FOUNDER, 'PUT', `/sessions/${row.id}/chunks/0`, new Uint8Array(4000), { 'content-type': 'audio/webm' }),
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/bot`, { meeting_url: 'https://meet.google.com/abc-defg-hij' }),
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/finish`, { last_seq: 0 }),
+  ];
+  for (const result of refused) {
+    assert.equal(result.status, 409, JSON.stringify(result.body));
+    assert.equal(result.body.detail, 'setup_incomplete');
+  }
+  assert.equal(f.r2Calls.put, 0, 'an incomplete session wrote audio');
+
+  const resumed = await setup(f, body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id);
+  assert.ok(resumed.body.session.setup_complete_at);
+  const started = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/start`);
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  const uploaded = await call(f.env, FOUNDER, 'PUT', `/sessions/${row.id}/chunks/0`, new Uint8Array(4000), { 'content-type': 'audio/webm' });
+  assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/stop`)).status, 200);
+  const finished = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/finish`, { last_seq: 0 });
+  assert.equal(finished.status, 202, JSON.stringify(finished.body));
+  const bot = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/bot`, { meeting_url: 'https://meet.google.com/abc-defg-hij' });
+  assert.notEqual(bot.body?.detail, 'setup_incomplete', 'a completed setup remained behind the setup gate');
+});
+
 test('D4628: a failed pasted-transcript write on /interviews/:id/sessions is not reported as success; a retry lands the submitted text once, and holds the interview once', async () => {
   const f = fixture();
   const body = { channel: 'text', call_provider: 'paste', client_key: 'resume-text', messages: [{ author: 'Dana', text: 'We lose a day a week to invoicing.' }] };
