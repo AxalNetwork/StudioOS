@@ -83,14 +83,15 @@ export function ReferencePrices({ read, reload }) {
   const programs = Array.isArray(read.data?.programs) ? read.data.programs : [];
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   async function publish(p) {
-    const base = centsOf(form.base);
+    const cur = (form.currency || 'EUR').toUpperCase();
+    const base = centsOf(form.base, cur);
     if (base === null || Number.isNaN(base) || base <= 0) { setErr('Give the base price, like 20000. A program is never free by default.'); return; }
-    const initial = centsOf(form.initial);
+    const initial = centsOf(form.initial, cur);
     if (Number.isNaN(initial)) { setErr('The initial fee is an amount like 5000, or blank.'); return; }
     setBusy(true); setErr('');
     try {
       await programPricingApi.publish(p.program_key, {
-        currency: (form.currency || 'EUR').toUpperCase(), base_annual_fee_cents: base, base_initial_fee_cents: initial,
+        currency: cur, base_annual_fee_cents: base, base_initial_fee_cents: initial,
         effective_from: form.effective_from, reason: form.reason || '', expected_version: p.active?.version ?? 0,
       });
       setOpen(null); setForm({}); reload();
