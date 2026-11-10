@@ -30,6 +30,7 @@ import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, 
 import { canRedeemPromo } from './promoRedemption';
 import { planByKey } from './planCatalogue';
 import { todayUtc } from './referralPartnerTerms';
+import { plainStripeAmount, suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export const NOT_RECORDED = 'Not recorded';
 export const OFFER_STATUSES = ['active', 'paused', 'ended'] as const;
@@ -154,7 +155,7 @@ export function whoFor(promo: PromoRow): string {
 export function discountLine(promo: PromoRow): string {
   let amount: string;
   if (promo.percent_off != null) amount = `${promo.percent_off}% off`;
-  else if (promo.amount_off != null && promo.currency) amount = `${(promo.amount_off / 100).toFixed(2)} ${promo.currency.toUpperCase()} off`;
+  else if (promo.amount_off != null && promo.currency) amount = `${plainStripeAmount(promo.amount_off, promo.currency)} ${promo.currency.toUpperCase()} off`;
   else return NOT_RECORDED;
   if (promo.duration === 'repeating') return promo.duration_in_months ? `${amount} for ${promo.duration_in_months} months` : `${amount} (${NOT_RECORDED.toLowerCase()} how many months)`;
   if (promo.duration === 'forever') return `${amount} every invoice`;
@@ -281,7 +282,7 @@ export async function linkOffer(env: Env, adminId: number, influencerUserId: num
     const linked = await env.DB.prepare(`SELECT COALESCE(SUM(budget_cents), 0) AS n FROM influencer_offers WHERE influencer_user_id = ? AND status <> 'ended' AND currency = ?`)
       .bind(influencerUserId, input.currency).first<{ n: number }>();
     if (Number(linked?.n || 0) + input.budget_cents > cap.cents) {
-      return { status: 409, code: 'terms_budget_exceeded', message: `The terms allow ${(cap.cents / 100).toFixed(2)} ${cap.currency} of offers in all. Lower this budget or end another offer.` };
+      return { status: 409, code: 'terms_budget_exceeded', message: `The terms allow ${suffixAmount(cap.cents, cap.currency)} of offers in all. Lower this budget or end another offer.` };
     }
   }
   const uid = newUid();

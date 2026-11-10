@@ -5,6 +5,7 @@
  * `AdminLicences.jsx` unchanged when the page was split by domain.
  */
 import React from 'react';
+import { codeAmount } from '../../../lib/money.js';
 
 export const UNAVAILABLE = Symbol('unavailable');
 
@@ -127,9 +128,10 @@ export const n0 = (n) => Number(n || 0).toLocaleString();
 // an intention rather than the tree. It is true now because there IS one
 // definition, and `frontend/test/bps_single_definition.test.mjs` keeps it true.
 
+// D5373: at the currency's own decimals ("EUR 12,000", "JPY 12,000", "KWD 12.345").
 export const fee = (cents, currency) => (cents === null || cents === undefined
   ? null
-  : `${currency || ''} ${(Math.round(Number(cents)) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim());
+  : codeAmount(Number(cents), currency, { locale: undefined }));
 
 // D138 — `toUtcInstant` and `daysTo` moved to `lib/notices.js`. They were
 // exported from this PAGE for their test, and `HqTeamTable.jsx` needs the same

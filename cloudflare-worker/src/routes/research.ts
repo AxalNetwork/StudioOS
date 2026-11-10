@@ -83,6 +83,7 @@ import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -3255,7 +3256,7 @@ const DRAFT_SURFACES: Record<string, {
         + `; kind ${s.kind || 'not recorded'}`
         // The price is spelled as unset rather than zeroed: 0 is a price an
         // advisor may genuinely mean, and the instruction turns on this word.
-        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; price ${s.price_cents == null ? 'NOT SET' : suffixAmount(Number(s.price_cents), String(s.currency || 'USD').toUpperCase(), { trimWhole: true })}`
         + `; duration ${s.duration_note || 'not recorded'}`
         + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
       ));

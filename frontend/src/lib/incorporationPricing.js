@@ -7,6 +7,8 @@
  * module formats them and never computes a price.
  */
 
+import { formatStripeAmount } from './money.js';
+
 /**
  * Server order statuses that mean the incorporation fee was paid. `packet_ready`
  * and `filed` are set by an Axal admin by hand (D601, the owner's answer 1A on
@@ -33,9 +35,8 @@ export const PACKET_NOT_BUILT =
  */
 export function fmtCents(cents, currency = 'usd') {
   if (!Number.isInteger(cents)) return null;
-  return (cents / 100).toLocaleString('en-US', {
-    style: 'currency', currency: String(currency || 'usd').toUpperCase(), minimumFractionDigits: 0,
-  });
+  // D5373: Stripe's amount at its currency's own decimals (a whole amount drops them).
+  return formatStripeAmount(cents, currency || 'usd', { locale: 'en-US', trimWhole: true });
 }
 
 /**

@@ -26,6 +26,7 @@
  */
 
 import { NOT_RECORDED, titleCase } from '../../../lib/absence.js';
+import { formatMinorOrCount } from '../../../lib/money.js';
 import { SCOPE_LABEL, SCOPE_TITLE } from '../insights/insightsModel.js';
 import { parseStamp } from '../../../ui/parseStamp.js';
 
@@ -249,14 +250,8 @@ export function money(cents, currency) {
   const n = Number(cents);
   if (cents === null || cents === undefined || cents === '' || !Number.isFinite(n)) return NOT_RECORDED;
   if (n <= 0) return 'Free';
-  const code = String(currency || '').trim().toUpperCase();
-  const digits = n % 100 === 0 ? 0 : 2;
-  if (!code) return `${(n / 100).toFixed(digits)} (currency not recorded)`;
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(digits)} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a missing or unlisted code names the stored count, it is not read as dollars.
+  return formatMinorOrCount(n, String(currency || '').trim().toUpperCase(), { locale: 'en-US', trimWhole: true });
 }
 
 /** Amounts summed per currency, in the order each currency first appears: '$55 · €40'. */
