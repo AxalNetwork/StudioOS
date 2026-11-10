@@ -150,12 +150,12 @@ test('a completed test is Tested, not Built or live; the lead, bars, filter and 
 
 const file = () => new File(['%PDF-1.4'], 'proof.pdf', { type: 'application/pdf' });
 
-async function mountFiling(forms, Lightbox, { upload }) {
+async function mountFiling(forms, Lightbox, { upload, create = async () => ({ id: 9 }) }) {
   const form = forms.FORMS.build['company-creation'][0];
   const calls = [];
   const events = { saved: [], closed: 0 };
   const w = {
-    build: new Proxy({}, { get: (_t, name) => async (...args) => { calls.push([name, ...args]); return { id: 9 }; } }),
+    build: new Proxy({}, { get: (_t, name) => async (...args) => { calls.push([name, ...args]); return name === 'formationStep' ? create(...args) : { id: 9 }; } }),
     formOptions: async () => ({ jurisdiction: { options: [{ value: 'DE', label: 'DE' }] }, for_holder_id: { options: [] } }),
     recordAction: async (...args) => { calls.push(['recordAction', ...args]); return upload(...args); },
   };
@@ -234,12 +234,28 @@ async function assertRetry({ forms, Lightbox }) {
     created++;
   } finally { await failing.unmount(); }
   assert.equal(created, 1);
+
+  // The create answer itself is lost: the same open form retries with one key.
+  let createAttempts = 0;
+  const ambiguous = await mountFiling(forms, Lightbox, {
+    upload: async () => ({ ok: true }),
+    create: async () => { createAttempts += 1; if (createAttempts === 1) throw new Error('The answer was lost'); return { id: 9, replayed: true }; },
+  });
+  try {
+    await ambiguous.submit();
+    await ambiguous.submit();
+    const creates = ambiguous.sends('formationStep');
+    assert.equal(creates.length, 2);
+    assert.match(creates[0][3], /^[A-Za-z0-9_-]{8,128}$/);
+    assert.equal(creates[1][3], creates[0][3], 'the key belongs to the open form, not one press');
+  } finally { await ambiguous.unmount(); }
 }
 
 test('a failed proof upload keeps the created filing: one filing, both uploads to its id, the form shows what is left', async () => {
   await assertRetry({ forms: realForms, Lightbox: RealLightbox });
   await mutationCheck(read(FORMS), FORMS, (m) => assertRetry({ forms: m, Lightbox: RealLightbox }), [
-    ["    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v));", "    const made = await w.build.formationStep(projectId, buildFiling.toBody(v));"],
+    ["    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v), memory.idempotencyKey);", "    const made = await w.build.formationStep(projectId, buildFiling.toBody(v), memory.idempotencyKey);"],
+    ["    memory.idempotencyKey ||= filingIdempotencyKey();", "    memory.idempotencyKey = filingIdempotencyKey();"],
     ["        memory.filing = made;\n", ''],
     ["    if (memory.filing && !hasFile) {", "    if (false) {"],
     ["const PROOF_RETRY = 'Retry proof upload';", "const PROOF_RETRY = 'Add filing';"],

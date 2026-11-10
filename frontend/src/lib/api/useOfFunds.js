@@ -1,6 +1,7 @@
 // D1176: Use of funds' mounted Worker routes. Project scope is explicit on every call.
 // D5069: every write to a scenario, its split or its milestones carries `expected_revision`, the
 // `revision` it was read at; a plan that moved since answers 409 `changed_since_open`.
+// D5375: so does a hire edit or removal, with the hire's own revision.
 import { request } from '../api.js';
 const q = (project, values = {}) => new URLSearchParams({ ...values, project: String(project) }).toString();
 const seg = value => encodeURIComponent(String(value));
@@ -25,7 +26,8 @@ export const useOfFundsApi = {
   deleteMilestone: (project, id, revision) => request(`/cycles/raise/use-of-funds/milestones/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   hires: project => request(`/cycles/raise/use-of-funds/hires?${q(project)}`),
   updateHire: (project, id, body) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  deleteHire: (project, id) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project)}`, { method: 'DELETE' }),
+  // D5375: a hire edit carries `expected_revision` in its body; a removal, having no body, carries it in the query.
+  deleteHire: (project, id, revision) => request(`/cycles/raise/use-of-funds/hires/${seg(id)}?${q(project, revision == null ? {} : { expected_revision: String(revision) })}`, { method: 'DELETE' }),
   // D1177 (#3104): the plan's history, 20 a page; Mercury rows are the founder's alone.
   history: (project, page = 1) => request(`/cycles/raise/use-of-funds/history?${q(project, { page: String(page) })}`),
   saveSplit: (project, body) => request(`/cycles/raise/use-of-funds?${q(project)}`, { method: 'PUT', body: JSON.stringify(body) }),

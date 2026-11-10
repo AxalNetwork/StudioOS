@@ -3247,6 +3247,15 @@ export default {
                 taskFailed('axal-search re-embed', type, e);
               }
             }
+            try {
+              const { sweepResearchIndex } = await import('./services/researchIndexSweep');
+              const r = await sweepResearchIndex(env, now);
+              if (r.pending_scanned || r.legacy_scanned || r.pending_failed) {
+                console.info(`[cron] research index recovery pending=${r.pending_scanned} enqueued=${r.pending_enqueued} requeued=${r.pending_requeued} failed=${r.pending_failed} legacy=${r.legacy_scanned}/${r.legacy_enqueued}`);
+              }
+            } catch (e) {
+              taskFailed('research index recovery', e);
+            }
           } catch (e) {
             taskFailed('axal-search re-embed', e);
           }

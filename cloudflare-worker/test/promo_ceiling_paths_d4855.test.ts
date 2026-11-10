@@ -154,6 +154,45 @@ test('D4855 plan checkout: a discount that fits is reserved before Stripe is ask
   assert.equal(used, 500);
 });
 
+test('D5368 automatic retry: its original offer survives after the code cap and licence ceiling fill', async () => {
+  const { db, env } = world(2500);
+  db.prepare('UPDATE promo_codes SET max_redemptions = 1 WHERE id = ?').run('promo_p20');
+  db.prepare(`INSERT INTO influencer_offers (uid, influencer_user_id, promo_id, budget_cents, currency, status, featured, created_by)
+    VALUES ('off-retry', ?, 'promo_p20', 50000, 'USD', 'active', 0, ?)`).run(JANE, SUPER);
+  const first = await start(env, db, 'nonce-auto-retry', undefined, OTHER);
+  assert.equal(first.status, 200, first.text);
+  db.prepare(`INSERT INTO promo_ceiling_reservations
+    (ref,period,currency,amount_cents,promo_id,state,expires_at,created_at,updated_at)
+    VALUES ('other-fill',?,'USD',500,'promo_six','reserved','2099-01-01T00:00:00.000Z','x','x')`).run(PERIOD);
+  const retry = await start(env, db, 'nonce-auto-retry', undefined, OTHER);
+  assert.equal(retry.status, 200, retry.text);
+  const subs = posted('/subscriptions');
+  assert.equal(subs.length, 2);
+  assert.ok(subs.every((p) => p.get('discounts[0][promotion_code]') === 'promo_p20'));
+  assert.ok(subs.every((p) => p.get('metadata[influencer_offer_uid]') === 'off-retry'));
+  assert.equal(ledger(db).filter((r) => r.ref !== 'other-fill').length, 1, 'the retry made no second hold');
+});
+
+test('D5368: typed plan checkout and cart order both reserve the final code use atomically', async () => {
+  const plan = world(100000);
+  plan.db.prepare('UPDATE promo_codes SET max_redemptions = 1 WHERE id = ?').run('promo_p5');
+  const [pa, pb] = await Promise.all([
+    start(plan.env, plan.db, 'cap-plan-a', 'PCT5', MEMBER),
+    start(plan.env, plan.db, 'cap-plan-b', 'PCT5', OTHER),
+  ]);
+  assert.deepEqual([pa.status, pb.status].sort(), [200, 400]);
+  assert.equal((pa.status === 400 ? pa : pb).body.reason, 'usage_limit_reached');
+
+  const order = world(100000);
+  order.db.prepare('UPDATE promo_codes SET max_redemptions = 1 WHERE id = ?').run('promo_six');
+  const [oa, ob] = await Promise.all([
+    hit(order.env, order.db, '/api/orders/intent', MEMBER, cart('cap-cart-a', 'SIX')),
+    hit(order.env, order.db, '/api/orders/intent', OTHER, cart('cap-cart-b', 'SIX')),
+  ]);
+  assert.deepEqual([oa.status, ob.status].sort(), [200, 400]);
+  assert.equal((oa.status === 400 ? oa : ob).body.reason, 'usage_limit_reached');
+});
+
 test('D4855 plan checkout: the quote judges the member, so a once-per-member code is shown to a member who has not used it', async () => {
   const { db, env } = world(100000);
   const q = await quote(env, db, 'PCT20');
