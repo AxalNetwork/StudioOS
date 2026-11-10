@@ -97,7 +97,7 @@ export function migrationNumber(name) {
 //   LEGACY_DUPLICATES the seven prefixes that already exist twice; never more
 export const NUMBERED_CEILING = 799;
 export const LEGACY_DUPLICATES = Object.freeze([11, 68, 118, 228, 229, 230, 259]);
-// The one same-minute pair already on main: #4970 (D4675) and #4991 (D4691) each
+// The same-minute pairs already on main. First, #4970 (D4675) and #4991 (D4691) each
 // wrote a migration at 2026-11-07 22:19 UTC and merged an hour apart. A migration
 // on main is never renamed (D269), and the two touch different tables, so the
 // full-name tiebreak orders them safely. Named by file, so a third file in that

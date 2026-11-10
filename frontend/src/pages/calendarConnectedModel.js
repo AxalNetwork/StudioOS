@@ -48,6 +48,65 @@ export function externalReadError(sources, provider) {
   return row && !row.ok ? (row.error || 'unreadable') : null;
 }
 
+export const sourceKindOf = (provider) => (provider === 'google' ? 'external_google' : 'external_microsoft');
+
+/**
+ * D5202 (#5202) — READ HEALTH, A DIMENSION OF ITS OWN.
+ *
+ * Connection and read health are not the same thing, and the page used to show only the first. A provider whose
+ * events came back `rate_limited` or `unreadable` still drew a green "Connected" while the events were missing:
+ * production showed "26 of 28 sources answered" with both Google and Outlook failing and both rails green.
+ *
+ * So: CONNECTION says whether the credential works (`STATES`: off, unconfigured, connected, reconnect, …) and
+ * READ HEALTH says whether the last read of its events answered. `reconnect` belongs to the connection, because
+ * a withdrawn credential is not a read problem; everything else a read can do lives here.
+ */
+export const READ_HEALTH = Object.freeze([
+  { key: 'reading', label: 'Checking its events', tone: 'n', sub: 'Its events are being read.' },
+  { key: 'healthy', label: 'Events up to date', tone: 'g', sub: '' },
+  { key: 'rate_limited', label: 'Rate limited', tone: 'a', sub: 'The provider is asking us to slow down, so its events may be missing from this range. Try again in a few minutes.' },
+  { key: 'unavailable', label: 'Events temporarily unavailable', tone: 'a', sub: 'Its events could not be read just now, so they may be missing from this range. This is not a sign that the connection is broken.' },
+  { key: 'truncated', label: 'Partially loaded', tone: 'a', sub: 'Only the first events in this range were read. Narrow the date range to see everything.' },
+  { key: 'not_read', label: 'Events not read here', tone: 'n', sub: '' },
+]);
+export const readHealthOf = (key) => READ_HEALTH.find((h) => h.key === key) || READ_HEALTH[0];
+
+/**
+ * One provider's read health from `GET /calendar/events`' `sources`. `loading` is the page's own read in flight.
+ * A provider with no source row was not asked (it is not connected), which is not a failure.
+ */
+export function readHealth(sources, provider, { loading = false } = {}) {
+  if (loading) return 'reading';
+  const row = Array.isArray(sources) ? sources.find((s) => s?.kind === sourceKindOf(provider)) : null;
+  if (!row) return 'not_read';
+  if (row.ok === false) {
+    if (row.error === 'rate_limited') return 'rate_limited';
+    // A withdrawn credential is the connection's state, not the read's: the row says so and the connection shows it.
+    if (row.error === 'reconnect') return 'not_read';
+    return 'unavailable';
+  }
+  return row.truncated ? 'truncated' : 'healthy';
+}
+
+/**
+ * What support may see of one source, from the Worker's own evidence: fixed words and numbers only, never a
+ * title, an attendee, an address, a join link or a provider body.
+ */
+export function readEvidence(sources, provider) {
+  const row = Array.isArray(sources) ? sources.find((s) => s?.kind === sourceKindOf(provider)) : null;
+  if (!row) return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  return {
+    kind: row.kind,
+    outcome: row.ok === false ? (row.error || 'unreadable') : 'ok',
+    reason: typeof row.reason === 'string' ? row.reason : null,
+    latency_ms: n(row.latency_ms),
+    items: n(row.items),
+    truncated: row.truncated === true,
+    at: typeof row.at === 'string' ? row.at : null,
+  };
+}
+
 /** "10 Nov 09:12", or null when the stamp is missing or not a date. */
 export function stamp(at) {
   if (!at) return null;
@@ -83,9 +142,14 @@ const CONNECTOR_PAGE = { calendly: '/account/connectors/calendly', zoom: '/accou
  * out; Calendly brings bookings in; Zoom makes links. The provider's own error
  * text is never shown: D1209 stores a code and its one sentence.
  */
-export function connectionRow(key, state, status = null) {
+export function connectionRow(key, state, status = null, health = null) {
   const name = NAMES[key];
-  const base = { key, name, letter: LETTER[key], state, pill: pillText(state, status), tone: stateOf(state).tone };
+  // D5202: the read's own state rides alongside the connection's, never in place of it.
+  const h = health && health !== 'healthy' && health !== 'not_read' ? readHealthOf(health) : null;
+  const base = {
+    key, name, letter: LETTER[key], state, pill: pillText(state, status), tone: stateOf(state).tone,
+    health: health || null, healthPill: h ? h.label : null, healthTone: h ? h.tone : null, healthSub: h ? h.sub : '',
+  };
   if (key === 'calendly' || key === 'zoom') {
     const sub = key === 'calendly'
       ? 'Brings your Calendly bookings in. They are not copied back out.'
@@ -102,8 +166,14 @@ export function connectionRow(key, state, status = null) {
     case 'connected':
       return {
         ...base,
-        sub: `Copies your StudioOS meetings, sessions and events to ${where}. ${lastLine}${status?.sync_error_read === false ? ' Whether the last copy worked could not be read.' : ''}`,
-        actions: [{ key: 'sync', label: 'Copy now' }, key === 'google' ? { key: 'manage', label: 'Manage', to: GOOGLE_PATH } : { key: 'disconnect', label: 'Disconnect…' }],
+        // D5202: Connected is about the credential. When the read of its events is not healthy the row says both,
+        // so "Connected" is never shown as if the events were there, and Retry re-reads THIS provider alone.
+        sub: `Copies your StudioOS meetings, sessions and events to ${where}. ${lastLine}${status?.sync_error_read === false ? ' Whether the last copy worked could not be read.' : ''}${h ? ` ${h.sub}` : ''}`,
+        actions: [
+          ...(h ? [{ key: 'retry-read', label: 'Try reading its events again', primary: true }] : []),
+          { key: 'sync', label: 'Copy now' },
+          key === 'google' ? { key: 'manage', label: 'Manage', to: GOOGLE_PATH } : { key: 'disconnect', label: 'Disconnect…' },
+        ],
       };
     case 'failed':
       return {

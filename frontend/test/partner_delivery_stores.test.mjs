@@ -196,9 +196,10 @@ const KNOWN_DUPLICATE_NUMBERS = {
   // scripts/lib/migrationPlan.mjs.
   '202611072219': ['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql'],
   // #5261 (D5157) and #5273 (D4613) each stamped a migration 2026-11-09 20:35
-  // UTC and merged four minutes apart. Both are on main and touch different
-  // tables; renaming either would edit a migration on main (D269). The same
-  // pair is in LEGACY_DUPLICATE_STAMPS in scripts/lib/migrationPlan.mjs.
+  // UTC and merged four minutes apart: research_projects and research_funds'
+  // catalogue_uid, different tables. Both are on main; renaming either would
+  // edit a migration on main (D269). The same pair is in LEGACY_DUPLICATE_STAMPS
+  // in scripts/lib/migrationPlan.mjs.
   '202611092035': ['202611092035_research_fund_catalogue_uid.sql', '202611092035_research_projects.sql'],
 };
 
