@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { GUARD_MODEL, withGuard } from './_guard_stub.mjs';
 import { draftSummary, gatewayFallsBack, PUBLICATION_GATEWAY_MODEL } from '../src/services/publications.ts';
+import { governorNamespace } from './_ai_governor_fixture.ts';
 import { GATEWAY_TEXT_MODELS, GATEWAY_TEXT_SLUG_VAR, GATEWAY_TEXT_SWITCH, GATEWAY_TEXT_ZDR_VAR } from '../src/services/ai/catalogue.ts';
 
 const ME = 2;
@@ -29,7 +30,8 @@ const ON = { [GATEWAY_TEXT_SWITCH]: 'on', [GATEWAY_TEXT_SLUG_VAR]: 'providers-sl
 function world(env: Record<string, unknown> = {}) {
   const { DB, db } = aiBudgetFixture();
   db.exec(migration('510_member_ai_pauses.sql') + migration('525_ai_reservation_idempotency.sql') + migration('632_ai_hold_context.sql'));
-  return { db, env: { DB, ...env } as any };
+  // D5338: the caller passes the gateway's shared upstream lease, held in the governor object.
+  return { db, env: { DB, AI_GOVERNOR: governorNamespace().ns, ...env } as any };
 }
 
 const gwAnswer = (text = '- [sector_heat:fintech] Heat rose (2026-W44)') => new Response(JSON.stringify({

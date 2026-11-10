@@ -97,7 +97,10 @@ const syncLedgerDdl = () => {
   const m295 = readFileSync(resolve(dir, '295_licence_push_pending.sql'), 'utf8').replace(/^--.*$/gm, '');
   const m4686 = readFileSync(resolve(dir, '202611071927_licence_sync_revision.sql'), 'utf8')
     .replace(/^--.*$/gm, '').split(';').filter((x) => x.trim() && !/branch_licence/.test(x)).join(';\n');
-  return `${m295};\n${m4686};`;
+  // D5361 (#5361): the demotion batch also records each former administrator's
+  // pending trust re-seed, so the ledger carries that migration's table too.
+  const m5361 = readFileSync(resolve(dir, '202611101105_termination_trust_reseeds.sql'), 'utf8').replace(/^--.*$/gm, '');
+  return `${m295};\n${m4686};\n${m5361}`;
 };
 
 /** Migration 264's `admin_notices`, with its own CHECKs. */
