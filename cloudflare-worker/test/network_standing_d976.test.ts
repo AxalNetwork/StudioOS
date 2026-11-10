@@ -33,8 +33,11 @@ const read = (rel: string) => readFileSync(resolve(ROOT, rel), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const MIGRATION = read('cloudflare-worker/sql/migrations/552_network_member_states.sql');
 const JWT_SECRET = 'synthetic-network-standing-key-0123456789';
-// Wednesday 21 October 2026, noon UTC.
-const NOW = Date.parse('2026-10-21T12:00:00Z');
+// The real clock, to the minute. It was pinned to 21 October 2026 noon UTC, but
+// the booking route checks a slot against the real clock, so slot 4 (NOW + 20
+// days) fell into the past at noon UTC on 10 November 2026 and every booking
+// assertion read 400. readStanding takes NOW, so it agrees with any value.
+const NOW = Math.floor(Date.now() / 60_000) * 60_000;
 const iso = (days: number) => new Date(NOW + days * 86400e3).toISOString();
 // The fixture's slots sit days either side of NOW, and the booking route reads the clock, so the clock is NOW: on
 // 2026-11-10 at noon the real clock passed slot 4 (NOW + 20 days) and every booking here began answering "Slot is in
