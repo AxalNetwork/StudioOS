@@ -156,3 +156,10 @@ export function grantRows(room, now = Date.now()) {
   }));
 }
 
+/**
+ * D5079 (#5079) — what Home says when the room is not this viewer's to read.
+ * A refusal and an admin's `summary` answer are both "not shown", not "empty":
+ * neither is a claim about what the room holds.
+ */
+export const ROOM_REFUSED_LINE = 'You do not have access to this venture’s data room.';
+export const ROOM_SUMMARY_LINE = 'This room is not yours to read. Open a tab and give a reason, and it opens read only.';

@@ -116,7 +116,11 @@ export async function listActiveSessions(
   env: Env,
   currentJti: string | null,
   limit: number = SESSION_LIST_LIMIT,
-): Promise<{ rows: SessionListRow[]; total: number }> {
+  beforeId: number | null = null,
+): Promise<{ rows: SessionListRow[]; total: number; next_before_id: number | null }> {
+  // D4699 — a stable order and a cursor. Newest sign-in first, by `id`, which never changes:
+  // `last_seen_at` moves on every request, so ordering by it moved rows between pages and reads.
+  // One row past the page says whether there is more; `next_before_id` continues strictly below.
   const res = await env.DB.prepare(
     `SELECT s.id, s.user_id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at, s.revoked_at,
             u.email, u.name, u.role, u.jwt_min_iat
@@ -125,12 +129,15 @@ export async function listActiveSessions(
       WHERE s.revoked_at IS NULL
         AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
         AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)
-      ORDER BY s.last_seen_at DESC, s.id DESC
+        AND (? IS NULL OR s.id < ?)
+      ORDER BY s.id DESC
       LIMIT ?`,
-  ).bind(...USER_SESSION_LIFETIME_BINDS, limit).all<Record<string, unknown>>();
+  ).bind(...USER_SESSION_LIFETIME_BINDS, beforeId, beforeId, limit + 1).all<Record<string, unknown>>();
+  const got = res.results || [];
+  const more = got.length > limit;
   const total = await countActiveSessions(env);
   const now = Date.now();
-  const rows = (res.results || []).map((r) => {
+  const rows = got.slice(0, limit).map((r) => {
     const factor = (r.factor as string) ?? null;
     const holder = factor === BRANCH_SUPPORT_FACTOR
       ? supportIdentity({ id: 0 }, { id: r.user_id, name: r.name, email: r.email })
@@ -151,7 +158,7 @@ export async function listActiveSessions(
       status: userSessionStatus(r, now),
     };
   });
-  return { rows, total };
+  return { rows, total, next_before_id: more && rows.length ? rows[rows.length - 1].id : null };
 }
 
 /**

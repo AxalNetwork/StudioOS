@@ -20,6 +20,7 @@ import { mount as admin_deck_stage_normsMount } from './admin_deck_stage_norms';
 import { mount as admin_governanceMount } from './admin_governance';
 import { mount as admin_hq_skillsMount } from './admin_hq_skills';
 import { mount as admin_influencersMount } from './admin_influencers';
+import { mount as admin_legal_reviewsMount } from './admin_legal_reviews';
 import { mount as admin_licence_agreement_policiesMount } from './admin_licence_agreement_policies';
 import { mount as admin_licence_agreementsMount } from './admin_licence_agreements';
 import { mount as admin_licence_exclusivityMount } from './admin_licence_exclusivity';
@@ -68,6 +69,7 @@ import { mount as learning_listsMount } from './learning_lists';
 import { mount as learning_streamMount } from './learning_stream';
 import { mount as legal_incorporation_quoteMount } from './legal_incorporation_quote';
 import { mount as public_handleMount } from './public_handle';
+import { mount as research_projectsMount } from './research_projects';
 import { mount as team_platform_statusMount } from './team_platform_status';
 import { mount as votesMount } from './votes';
 
@@ -87,6 +89,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_governance', mount: admin_governanceMount },
   { file: 'admin_hq_skills', mount: admin_hq_skillsMount },
   { file: 'admin_influencers', mount: admin_influencersMount },
+  { file: 'admin_legal_reviews', mount: admin_legal_reviewsMount },
   { file: 'admin_licence_agreement_policies', mount: admin_licence_agreement_policiesMount },
   { file: 'admin_licence_agreements', mount: admin_licence_agreementsMount },
   { file: 'admin_licence_exclusivity', mount: admin_licence_exclusivityMount },
@@ -135,6 +138,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'learning_stream', mount: learning_streamMount },
   { file: 'legal_incorporation_quote', mount: legal_incorporation_quoteMount },
   { file: 'public_handle', mount: public_handleMount },
+  { file: 'research_projects', mount: research_projectsMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
   { file: 'votes', mount: votesMount },
 ];

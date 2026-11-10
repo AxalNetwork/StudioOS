@@ -261,3 +261,48 @@ export const REFUSALS = Object.freeze({
   support: { title: 'A support session cannot read fund administration.', line: 'End the support session in the bar above to return to your own admin account.' },
   member: { title: 'This page is for studio admins.', line: 'Fund administration is run by HQ’s admins.', action: { label: 'Go to your home' } },
 });
+
+// ─────────────────────────────────────────────── D4812 part 6 (FA-06, FA-07)
+
+/** FA-07 A: one account's balance and when it was read; every account has no single balance. */
+export function accountBalanceLine(account) {
+  if (!account) return 'Pick one account to see its balance.';
+  const read = account.balance_read_at ? `as of ${account.balance_read_at}` : 'read time not recorded';
+  return `Balance ${balanceText(account.current)} · ${read}`;
+}
+
+/**
+ * FA-06: who an LP quarterly report reaches: one capital statement per LP in
+ * its pack (same fund, same period). Any other pack names its own audience.
+ * Issuing sends no email: the LPs read it in their portal.
+ */
+export function packRecipients(draft, items = []) {
+  if (draft?.kind !== 'lp_quarterly_report') return null;
+  const n = items.filter((d) => d?.kind === 'lp_capital_statement' && d.fund_id === draft.fund_id && d.period_label === draft.period_label && d.status !== 'superseded').length;
+  return n;
+}
+
+const ENTRY_SOURCE = { journal: 'Manual journal', expense: 'Expense', fee_accrual: 'Fee accrual' };
+/** FA-07 C: where a journal entry came from: its kind, and the fee terms it accrued under. */
+export function entrySource(entry) {
+  const base = ENTRY_SOURCE[entry?.kind] || 'Not recorded';
+  return entry?.kind === 'fee_accrual' && entry.fee_terms_id != null ? `${base} · fee terms #${entry.fee_terms_id}` : base;
+}
+
+/** FA-07 C: the period's debits and credits and whether they balance; a line without cents makes the totals Not recorded. */
+export function journalTotals(journal = []) {
+  const lines = (Array.isArray(journal) ? journal : []).flatMap((e) => e?.lines || []);
+  if (!lines.length) return null;
+  const ok = (v) => Number.isSafeInteger(Number(v)) && v !== null && v !== '';
+  if (!lines.every((l) => ok(l.debit_cents) && ok(l.credit_cents))) return { debit: null, credit: null, balanced: null };
+  const debit = lines.reduce((n, l) => n + Number(l.debit_cents), 0);
+  const credit = lines.reduce((n, l) => n + Number(l.credit_cents), 0);
+  return { debit, credit, balanced: debit === credit };
+}
+
+/** FA-06: the queue's count line, over the filtered rows, with how many prepared packs wait to be issued in the whole queue. */
+export function queueLine(all = [], shown = []) {
+  const waiting = (Array.isArray(all) ? all : []).filter((d) => d?.status === 'prepared' && d.kind !== 'lp_capital_statement').length;
+  const n = Array.isArray(shown) ? shown.length : 0;
+  return `${n} draft${n === 1 ? '' : 's'} · ${waiting ? `${waiting} prepared, waiting to be issued` : 'none waiting to be issued'}`;
+}

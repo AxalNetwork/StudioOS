@@ -35,7 +35,7 @@ import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import {
-  decideIntro, followUpDone, introRequests, myTeams, reconcileIntroDelivery, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare,
+  decideIntro, followUpDone, followUpsDueList, introRequests, myTeams, reconcileIntroDelivery, recordOutcome, RelationshipRefusal, requestIntro, setFollowUp, setShare,
   snoozeFollowUp, relationshipSummary, whoKnows, whoKnowsQuery, withdrawIntro,
 } from '../services/relationships';
 import { refuse } from '../util/refusal';
@@ -151,10 +151,29 @@ relationships.post('/intro-request', async (c) => {
   try { return c.json({ request: await requestIntro(c.env, user, await body(c)) }, 201); } catch (e) { return failure(c, e); }
 });
 
+// #4611 finding 8: one keyset page of the log, with `totals` covering the whole
+// filtered history beside it, so a pending request older than the newest page
+// is still reachable — and a notification can name a record the log will show.
 relationships.get('/intro-requests', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
-  try { return c.json(await introRequests(c.env, user, { team: c.req.query('team') || null, status: c.req.query('status') || null })); } catch (e) { return failure(c, e); }
+  try {
+    return c.json(await introRequests(c.env, user, {
+      team: c.req.query('team') || null,
+      status: c.req.query('status') || null,
+      limit: Number(c.req.query('limit')) || undefined,
+      cursor: c.req.query('cursor') || null,
+    }));
+  } catch (e) { return failure(c, e); }
+});
+
+// #4611 finding 8: the records behind a positive `follow_ups_due`. The count was
+// unbounded while the log beside it was capped, so the desk could name follow-ups
+// it had no page to show; this is the navigable list the criterion asks for.
+relationships.get('/intro-requests/follow-ups-due', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  try { return c.json(await followUpsDueList(c.env, user, undefined, Number(c.req.query('limit')) || undefined)); } catch (e) { return failure(c, e); }
 });
 
 relationships.post('/intro-requests/:uid/decide', async (c) => {

@@ -46,7 +46,19 @@ async function failedRead(t: any, router = advisors, failure = 'all', table = 'a
   const f = await fixture(t);
   f.failure = failure; f.table = table;
   const r = await shelf(f, router, table === 'articles' ? '/me/thinking' : '/me/cohort/9/calendar');
-  assert.deepEqual([r.status, r.body.error, r.body.message, r.body.counts, r.body.items], [500, 'storage_error', 'Something went wrong saving or loading this. The failure has been logged.', undefined, undefined]);
+  if (table === 'week_windows') {
+    // RE-AIMED IN D4813 package 3 (#4813): the calendar reads its two halves on
+    // their own, so a failed windows read is a PARTIAL calendar, not a 500. The
+    // rule this test exists for still holds: the failure is stated
+    // (`sources.lab_dates: 'error'`), and the obligation counts it would have
+    // fed are unknown (`null`), never a zero that undercounts.
+    assert.deepEqual(
+      [r.status, r.body.sources?.lab_dates, r.body.partial, r.body.windows_recorded, r.body.counts?.next_14_days, r.body.counts?.cohort_obligations, r.body.counts?.collisions],
+      [200, 'error', true, false, null, null, null],
+    );
+  } else {
+    assert.deepEqual([r.status, r.body.error, r.body.message, r.body.counts, r.body.items], [500, 'storage_error', 'Something went wrong saving or loading this. The failure has been logged.', undefined, undefined]);
+  }
   assert.equal(JSON.stringify(r.body).includes('synthetic'), false);
 }
 test('an articles all() rejection is an error, never a successful zero-count shelf', t => failedRead(t));
@@ -86,7 +98,8 @@ test('restoring the swallowed read makes the failure regression fail, then the o
   const source = readFileSync(routeUrl, 'utf8');
   for (const [table, route, marker] of [
     ['articles', '/me/thinking', '    const items = rows.results || [];'],
-    ['week_windows', '/me/cohort/:cycleId/calendar', '    const weekRows = windows.results || [];'],
+    // D4813 p3: the windows read now sits in its own try, so the marker moved in.
+    ['week_windows', '/me/cohort/:cycleId/calendar', '      weekRows = windows.results || [];'],
   ]) {
     const at = source.indexOf(marker, source.indexOf(`advisors.get('${route}'`));
     const before = source.slice(0, at);

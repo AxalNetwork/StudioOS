@@ -124,9 +124,9 @@ test('AP-18e: only the refusals that wrote nothing read as "changed while you we
 });
 
 test('AP-18f: a decision recorded but not delivered says so; notified null or missing is the ordinary line', () => {
-  assert.deepEqual(afterDecision('Gus is a tester now.', { notified: true }, 'Gus'), { warn: false, text: 'Gus is a tester now.' });
-  assert.deepEqual(afterDecision('Gus is a tester now.', { notified: null }, 'Gus'), { warn: false, text: 'Gus is a tester now.' });
-  assert.deepEqual(afterDecision('Gus is a tester now.', {}, 'Gus'), { warn: false, text: 'Gus is a tester now.' });
+  assert.deepEqual(afterDecision('Gus is a tester now.', { notified: true }, 'Gus'), { warn: false, text: 'Gus is a tester now.', decided: true });
+  assert.deepEqual(afterDecision('Gus is a tester now.', { notified: null }, 'Gus'), { warn: false, text: 'Gus is a tester now.', decided: true });
+  assert.deepEqual(afterDecision('Gus is a tester now.', {}, 'Gus'), { warn: false, text: 'Gus is a tester now.', decided: true });
   const warn = afterDecision('Gus is a tester now.', { notified: false }, 'Gus');
   assert.equal(warn.warn, true);
   assert.equal(warn.text, 'The decision was recorded, but the notification could not be delivered.');

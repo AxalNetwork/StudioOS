@@ -5,7 +5,10 @@ import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import {
+  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationNeedsSetup, keepThroughSetup,
+  loginRedirectFor, markPendingNextRedirected, pendingNextRedirected,
+} from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -486,6 +489,10 @@ const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
 // D1295 (#3391, ART17b): a member who opens a Content queue address is told it is for studio admins, with the way to their own articles.
 const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPermission'));
+// #4579: who reads Grow's boundary instead of a silent bounce home. Kept in step with
+// GROW_BOUNDARY_ROLES in pages/founder/GrowBoundary.jsx (a test compares them).
+const GrowBoundary = lazy(() => import('./pages/founder/GrowBoundary'));
+const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -1671,6 +1678,22 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     if (pendingRedirect) markPendingNextRedirected();
   }, [pendingRedirect]);
 
+  // #4579 (D4579): a destination that needs a finished account (Grow) does not
+  // exempt the visitor from setup the way an invitation does. The setup gates
+  // below keep it (`keepThroughSetup`) as they redirect, and once setup is
+  // complete the visitor is returned to it here, once. Read in render, cleared
+  // after commit, so StrictMode's two renders agree.
+  const deferPendingToSetup = !!(pendingNext && destinationNeedsSetup(pendingNext));
+  const exemptFromSetup = atPendingNext && !deferPendingToSetup;
+  const afterSetup = user && onboardingLoaded && onboardingComplete ? destinationAfterSetup() : null;
+  const afterSetupDue = !!(afterSetup && location.pathname !== afterSetup.split(/[?#]/)[0]);
+  useEffect(() => {
+    if (afterSetup) clearDestinationAfterSetup();
+  }, [afterSetup]);
+  // Called by each setup gate just before it redirects. Idempotent: the same
+  // safe path written twice by StrictMode's two renders.
+  const keepForAfterSetup = () => keepThroughSetup(`${location.pathname}${location.search}${location.hash}`);
+
   useEffect(() => {
     if (!user) return;
     // A different account must not inherit the previous one's choice. The
@@ -1832,12 +1855,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding/chat" replace />;
   }
 
@@ -1849,12 +1873,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'licence' &&
     !onboardingComplete &&
     !onLicencePath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -1885,7 +1910,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   if (
     termsPending &&
     !licenceGateOwnsConsent &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
@@ -1925,7 +1950,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !onWizardPath &&
     chatGateRole !== 'admin'
   ) {
+    keepForAfterSetup();
     return <Navigate to={myWizard} replace />;
+  }
+
+  // #4579: setup is done; return to the destination it was started for, once.
+  if (afterSetupDue) {
+    return <Navigate to={afterSetup} replace />;
   }
 
   // Onboarding gate: only investors must complete KYC before accessing other
@@ -1999,6 +2030,8 @@ const ROUTE_BOUNDARIES = [
   // An admin previewing another role is sent home as before (`notPreview`).
   { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
   { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
+  // #4579: an account without the Founder licence reads why Grow is closed to it, and how to open it.
+  { under: /^\/grow(\/|$)/, roles: GROW_BOUNDARY_ROLES, Panel: GrowBoundary },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -3604,7 +3637,9 @@ function AppInner() {
           read, and /grow/<module> its module pages. The seven Grow pages
           below are static and win over /grow/:slug; no module slug is one of
           them. */}
-      <Route path="/grow" element={founderGrowLanding
+      {/* #4579: signed out, /grow goes through the guard itself, so sign-in
+          returns here (`next=/grow`) rather than to the page it would forward to. */}
+      <Route path="/grow" element={founderGrowLanding || !user
         ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
       {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}

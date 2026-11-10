@@ -32,6 +32,7 @@
  * until its intro drafts land (part 8b).
  */
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Sheet from '../../ui/Sheet';
 import Lightbox from '../../ui/Lightbox';
 import { FillMark, FillTrigger } from '../../ui/FillMark.jsx';
@@ -46,7 +47,30 @@ import { BODY, BTN, ERROR, EYEBROW, INPUT, MUTED, PRIMARY } from './emailParts.j
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function RecordCompose({ pack, refs, project = null, to, account, from = null, readOnly = false, onClose, onSent, api = mailApi, introUid = null, initialSubject = '', initialBody = '', ask = true, title = 'Email', saveDelayMs }) {
+/**
+ * #4611 finding 10 — "COULD NOT BE READ" AND "NONE CONNECTED" ARE DIFFERENT
+ * ANSWERS, AND THIS COMPONENT USED TO GIVE ONE SENTENCE FOR BOTH.
+ *
+ * `account` arrives as a prop and this component branched on its truthiness
+ * alone, so a null from a FAILED mailbox lookup and a null from a member with
+ * no mailbox both rendered "Connect a mailbox to send" and "From no mailbox
+ * yet" — telling someone whose mailbox is connected to go and connect it, and
+ * hiding an outage behind a setup prompt.
+ *
+ * `mailboxes` makes the caller say which it is, and there is no default that
+ * guesses: `'connected'` (the list had one), `'none'` (the read SUCCEEDED and
+ * the list was empty) or `'unreadable'` (the read failed). Both callers already
+ * hold that distinction — `RecordEmailSheet` has an `unreadable` state and
+ * `IntroCompose` an `error` one — and neither passed it on, which is why it was
+ * lost here rather than never known.
+ *
+ * `'none'` IS THE ONLY STATE THAT GETS SETUP GUIDANCE, and it gets a route to
+ * follow rather than an instruction with nowhere to go: the finding's
+ * "connection guidance follows a successful empty mailbox response". An
+ * `'unreadable'` composer says the read failed and offers no setup step,
+ * because there may be nothing to set up.
+ */
+export default function RecordCompose({ pack, refs, project = null, to, account, mailboxes = account ? 'connected' : 'none', from = null, readOnly = false, onClose, onSent, api = mailApi, introUid = null, initialSubject = '', initialBody = '', ask = true, title = 'Email', saveDelayMs }) {
   const person = pack.person;
   const [address, setAddress] = useState(to ?? '');
   const [subject, setSubject] = useState(initialSubject);
@@ -118,7 +142,7 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
   const footer = (
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className={PRIMARY} disabled={!sendable || busy || !!unsure} onClick={() => setConfirm(true)} data-testid="record-compose-send">
-        {account ? `Send from ${account.address}` : 'Connect a mailbox to send'}
+        {account ? `Send from ${account.address}` : mailboxes === 'unreadable' ? 'Your mailboxes could not be read' : 'Connect a mailbox to send'}
       </button>
       <span className={`text-[12px] ${MUTED}`}>Nothing is sent until you press Send.</span>
     </div>
@@ -133,7 +157,22 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
           aria-describedby={to ? undefined : 'record-compose-no-address'} data-testid="record-compose-to" />
         {!to && <span id="record-compose-no-address" className={`text-[12px] ${MUTED}`}>No address is recorded for {person.name}. Type the one to send to.</span>}
       </label>
-      <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="record-compose-from">From {account ? account.address : 'no mailbox yet'}</p>
+      <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="record-compose-from">From {account ? account.address : mailboxes === 'unreadable' ? 'a mailbox that could not be read' : 'no mailbox yet'}</p>
+      {/* #4611 finding 10: guidance only after a read that SUCCEEDED and came
+          back empty. A failed read says so and stops — it cannot know whether
+          there is a mailbox to connect, and a setup prompt would assert there
+          is not. */}
+      {!account && mailboxes === 'none' ? (
+        <p className="m-0 text-[12.5px]" data-testid="record-compose-connect">
+          No mailbox is connected to this account, so nothing can be sent yet.{' '}
+          <Link to="/email/settings" className="font-bold underline">Connect a mailbox</Link>, then open this again.
+        </p>
+      ) : null}
+      {!account && mailboxes === 'unreadable' ? (
+        <p className={`m-0 text-[12.5px] ${ERROR}`} role="alert" data-testid="record-compose-mailboxes-unreadable">
+          Your mailboxes could not be read, so this cannot be sent. That is a failed read, not a missing mailbox — nothing about your setup has changed.
+        </p>
+      ) : null}
       <label className="flex flex-col gap-1">
         <span className={EYEBROW}>Subject</span>
         <input className={INPUT} value={subject} onChange={(e) => edit({ subject: e.target.value })} readOnly={readOnly} data-testid="record-compose-subject" />

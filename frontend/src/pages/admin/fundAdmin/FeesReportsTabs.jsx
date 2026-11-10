@@ -7,8 +7,8 @@ import { FundActControl } from '../../../lib/fundActs';
 import { bpsPercent } from '../../../lib/bps';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { Banner } from '../../account/ConnectorSheet';
-import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, refusalText, keepFund } from './fundAdminModel';
-import { Line, NUM, Note, Panel, Section, Table } from './parts';
+import { NO_FUND, QUARTER_RE, REJECT_REASON_MIN, money, packRecipients, queueLine, refusalText, keepFund } from './fundAdminModel';
+import { Line, NUM, TAP_LINK, Note, Panel, Section, Table } from './parts';
 import { ActFlow } from './MoneyFlow';
 import { actButton, feePeriodEffects, feeTermsEffects, reportIssueEffects } from './moneyFlowModel';
 import { useRead } from './useRead';
@@ -60,7 +60,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
     { key: 'window', label: 'Window', mono: true, cell: (p) => p.window_start && p.window_end ? `${p.window_start} to ${p.window_end}` : 'Not recorded: no complete period window.' },
     { key: 'ref', label: 'Reference', mono: true, cell: (p) => p.remittance_reference || 'no reference yet' },
     { key: 'status', label: 'Status', cell: (p) => <Pill tone={p.status === 'paid' ? 'ok' : 'neutral'}>{p.status}</Pill> },
-    { key: 'open', label: 'Lines', cell: (p) => <button type="button" className={BTN.link} data-testid={`fee-period-open-${p.quarter}`} onClick={() => setSelected(p.quarter)}>Open</button> },
+    { key: 'open', label: 'Lines', cell: (p) => <button type="button" className={TAP_LINK} data-testid={`fee-period-open-${p.quarter}`} onClick={() => setSelected(p.quarter)}>Open</button> },
   ];
   return (
     <FundFrame title="Management fees" testId="fees-section" funds={funds} fund={fund} overview={overview} onFund={onFund}
@@ -143,7 +143,7 @@ export function FeesTab({ apis, access, funds, fund, overview, onFund }) {
   );
 }
 
-function DraftRow({ d, apis, access, onChanged, compact = false }) {
+function DraftRow({ d, apis, access, onChanged, compact = false, items = [] }) {
   const [opened, setOpened] = useState(null);
   const [text, setText] = useState('');
   const [mode, setMode] = useState(null);
@@ -158,11 +158,13 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
   };
   const done = async () => { setMode(null); setText(''); setOpened(null); await onChanged(); };
   const sha = opened?.figures_sha256;
+  // D4812 part 6 (FA-06): who the pack reaches, counted from the queue's own rows.
+  const recipients = packRecipients(d, items);
   return (
     <div data-testid={compact ? undefined : `draft-${d.uid}`}>
       {!compact && <Line a={`${d.period_label || 'Period not recorded'} · ${String(d.kind || '').replace(/_/g, ' ')}`} chip={<Pill>{d.status}</Pill>} />}
       <div className="flex flex-wrap gap-2">
-          {d.fund_id && d.report_period_id && <Link className={BTN.link} to={`/funds/${d.fund_id}/reporting/${d.report_period_id}`} data-testid={`draft-period-${d.uid}`}>Report period</Link>}
+          {d.fund_id && d.report_period_id && <Link className={TAP_LINK} to={`/funds/${d.fund_id}/reporting/${d.report_period_id}`} data-testid={`draft-period-${d.uid}`}>Report period</Link>}
           <button type="button" className={BTN.ghost} disabled={busy} data-testid={`draft-open-${d.uid}`}
             onClick={() => run(async () => setOpened(await apis.reporting.read(d.uid)), 'The draft could not be opened.')}>Open</button>
           <button type="button" className={BTN.ghost} disabled={busy} data-testid={`draft-export-${d.uid}`}
@@ -211,7 +213,8 @@ function DraftRow({ d, apis, access, onChanged, compact = false }) {
       )}
       {issuing && opened && (
         <ActFlow apis={apis} access={access} act="fund_report.issue" testId={`draft-flow-${d.uid}`} title="Issue report pack"
-          sub={d.period_label || 'Report pack'} effects={reportIssueEffects(d, sha)} label={`Issue ${d.period_label || 'this'} report pack`}
+          sub={d.period_label || 'Report pack'} effects={reportIssueEffects(d, sha, recipients)}
+          label={recipients ? `Issue ${d.period_label || 'this'} report to ${recipients} LP${recipients === 1 ? '' : 's'}` : `Issue ${d.period_label || 'this'} report pack`}
           consequences={['Freezes these figures for the LPs.', 'A correction needs a new issue.', ...(issuing.acknowledgement ? [`Your check: ${issuing.acknowledgement}`] : [])]}
           run={() => apis.reporting.issue(d.uid, { figures_sha256: sha, acknowledgement: issuing.acknowledgement })}
           receipt={() => [['Pack', d.period_label || 'Report pack'], ['Figures', `${String(sha || '').slice(0, 12)}…`], ['Audit', 'Recorded as fund_report.issue']]}
@@ -242,7 +245,7 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
       {fund && part === 'periods' && <ReportPeriods apis={apis} fund={fund} />}
       {fund && part === 'notices' && <Notices apis={apis} fund={fund} />}
       {part === 'packs' && <div data-testid="reports">
-        <Panel label="Packs · review queue" sub={read.status === 'ready' ? `${items.length} draft${items.length === 1 ? '' : 's'}` : null}>
+        <Panel label="Packs · review queue" sub={read.status === 'ready' ? <span data-testid="reports-queue-count">{queueLine(read.data.items, items)}</span> : null}>
           <div className="flex flex-wrap gap-2 p-4">
             <input className={INPUT} aria-label="Search packs" placeholder="Search packs" value={query} onChange={e => setQuery(e.target.value)} />
             <select className={INPUT} aria-label="Pack period" value={period} onChange={e => setPeriod(e.target.value)}><option value="">Every period</option>{[...new Set((read.data?.items || []).map(d => d.period_label).filter(Boolean))].map(v => <option key={v} value={v}>{v}</option>)}</select>
@@ -261,7 +264,7 @@ export function ReportsTab({ apis, access, funds, fund, overview, onFund }) {
                   { key: 'status', label: 'Status', cell: d => <Pill tone={d.status === 'issued' ? 'ok' : d.status === 'prepared' ? 'warn' : 'neutral'}>{d.status}</Pill> },
                   { key: 'prepared', label: 'Prepared by', cell: d => d.prepared_by == null ? 'Not recorded: no preparer.' : `Admin #${d.prepared_by}` },
                   { key: 'date', label: 'Date', mono: true, cell: d => d.prepared_at || d.created_at || 'Not recorded: no date.' },
-                  { key: 'actions', label: 'Actions', cell: d => <DraftRow compact d={d} apis={apis} access={access} onChanged={read.reload} /> },
+                  { key: 'actions', label: 'Actions', cell: d => <DraftRow compact d={d} apis={apis} access={access} onChanged={read.reload} items={read.data?.items || []} /> },
                 ]} rows={items} rowKey={d => d.uid} rowTestId={d => `draft-${d.uid}`} template="1.6fr 1fr .9fr .8fr 1fr 1.1fr 1.3fr" />}
         </Panel>
       </div>}
@@ -295,10 +298,10 @@ function FeeLines({ apis, access, fund, quarter }) {
         : <Table cols={[
           { key: 'lp', label: 'LP', cell: l => `LP #${l.limited_partner_id}` },
           ...[['commitment_cents', 'Commitment'], ['gross_fee_cents', 'Fee'], ['offset_cents', 'Offset'], ['net_fee_cents', 'Net fee']].map(([key, label]) => ({ key, label, mono: true, align: 'right', cell: l => amount(l[key]) })),
-          { key: 'statement', label: 'Statement', cell: l => <button type="button" className={BTN.link} disabled={busy} data-testid={`fee-statement-${l.limited_partner_id}`} onClick={() => open(l.limited_partner_id)}>{l.status === 'draft' ? 'Draft · preview' : 'Open statement'}</button> },
+          { key: 'statement', label: 'Statement', cell: l => <button type="button" className={TAP_LINK} disabled={busy} data-testid={`fee-statement-${l.limited_partner_id}`} onClick={() => open(l.limited_partner_id)}>{l.status === 'draft' ? 'Draft · preview' : 'Open statement'}</button> },
         ]} rows={lines} rowKey={l => l.limited_partner_id} template="1fr 1fr 1fr 1fr 1fr 1fr" />}
     {read.status === 'ready' && !lines.length && <Note>{lpQuery ? 'No LP id matches this search.' : 'No fee line recorded for this period.'}</Note>}
-    {!linking && <><Alert text={error} />{error && statementLp && <button type="button" className={BTN.link} onClick={() => open(statementLp)}>Try again</button>}</>}
+    {!linking && <><Alert text={error} />{error && statementLp && <button type="button" className={TAP_LINK} onClick={() => open(statementLp)}>Try again</button>}</>}
     {linking && <Lightbox phone="sheet" title="Link a funding call" label="Link a funding call" testId="fee-funding-dialog" onClose={() => { if (!busy) setLinking(false); }}>
       <Note>Links this fee period to an already recorded capital call. It records paid lines only where the received call amount covers the fee. It moves no money.</Note>
       <form className="flex flex-col gap-3 p-4" data-testid="fee-funding-form" onSubmit={async e => {
@@ -336,7 +339,7 @@ function ReportPeriods({ apis, fund }) {
   return <Panel label="Report periods" testId="reports-periods" aside={<Link className={BTN.ghost} to={`/funds/${fund.id}/reporting/new`}>New report period</Link>}>
     <Note>Save the quarterly letter as a draft on its report period page. A Super Admin issues through the reviewed pack.</Note>
     {read.status === 'loading' ? <Busy /> : read.status === 'unreadable' ? <Failed read={read} what="The report periods" claim="Packs and notices can still be opened." />
-      : !read.data?.items?.length ? <Note>No report period recorded yet.</Note> : read.data.items.map(p => <Line key={p.id} a={p.period} b={p.issued_at ? `Issued ${p.issued_at}` : 'Not issued yet'} chip={<Pill tone={p.status === 'issued' ? 'ok' : 'neutral'}>{p.status || 'Not recorded'}</Pill>} action={<Link className={BTN.link} to={`/funds/${fund.id}/reporting/${p.id}`}>Open report period</Link>} />)}
+      : !read.data?.items?.length ? <Note>No report period recorded yet.</Note> : read.data.items.map(p => <Line key={p.id} a={p.period} b={p.issued_at ? `Issued ${p.issued_at}` : 'Not issued yet'} chip={<Pill tone={p.status === 'issued' ? 'ok' : 'neutral'}>{p.status || 'Not recorded'}</Pill>} action={<Link className={TAP_LINK} to={`/funds/${fund.id}/reporting/${p.id}`}>Open report period</Link>} />)}
   </Panel>;
 }
 
@@ -369,7 +372,7 @@ function Notices({ apis, fund }) {
         { key: 'reference', label: 'Reference', mono: true, cell: n => n.reference || 'Not recorded: no reference was recorded.' },
         { key: 'amount', label: 'Amount', mono: true, cell: n => n.amount_cents == null ? <Unrecorded reason="No amount is recorded for this notice." /> : amount(n.amount_cents) },
         { key: 'date', label: 'Date', mono: true, cell: n => n.notice_date || 'Not recorded: no notice date was recorded.' },
-        { key: 'open', label: 'Figures', cell: n => <button type="button" className={BTN.link} disabled={busy} data-testid={`notice-open-${n.uid}`} onClick={() => run(async () => setOpened(await apis.notices.one(n.uid)))}>Open</button> },
+        { key: 'open', label: 'Figures', cell: n => <button type="button" className={TAP_LINK} disabled={busy} data-testid={`notice-open-${n.uid}`} onClick={() => run(async () => setOpened(await apis.notices.one(n.uid)))}>Open</button> },
       ]} rows={visible} rowKey={n => n.uid} template="1.2fr 1fr 1.3fr 1fr 1fr .5fr" />}
     {!opened && <Alert text={error} />}
     {opened && <Lightbox phone="sheet" title={opened.title || 'Notice'} label="Notice figures" testId="notice-figures" onClose={() => { if (!busy) setOpened(null); }}>

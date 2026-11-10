@@ -113,7 +113,8 @@ function Loading() {
 // needed none — its canvas artboard is "room access", assembled from the
 // `data_room_grants` an investor already holds. All three leave ZONE_COPY here
 // and join the zones that read something.
-const LIVE_ZONES = new Set(['markets', 'geographies', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence', 'client-prep']);
+// D5157: My Research (`projects`) reads the research project store.
+const LIVE_ZONES = new Set(['markets', 'geographies', 'companies', 'library', 'ask', 'funds', 'benchmarking', 'diligence', 'client-prep', 'projects']);
 
 /**
  * EMPTY, AND THAT IS THE STATE RATHER THAN AN OVERSIGHT. Every zone this
@@ -152,6 +153,7 @@ const ZONE_BLURB = {
   companies: 'The competitor and market analyses you have run yourself.',
   library: 'Documents you have added, and which of them Ask can actually read.',
   ask: 'Questions answered only from your own library, with the passage each answer used.',
+  projects: 'Each research question you keep, with the evidence and Ask answers you attached to it.',
 };
 
 function ResearchOverview({ role }) {

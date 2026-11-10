@@ -234,8 +234,12 @@ export default function EventsWorkspace({
   const [howOpen, setHowOpen] = useState(false);
   const opener = useRef(null);
 
+  // D4699 — the first page Load older belongs to. A page that answers after the list changed
+  // (a new filter, a retry) is dropped: it belongs to the old list, not this one.
+  const listOf = useRef(feed);
   // A new first page is a new list: what Load older appended belongs to the old one.
   useEffect(() => {
+    listOf.current = feed;
     setOlder([]);
     setOlderState({ cursor: ready ? feed.cursor || null : null, busy: false, failed: false, split: Boolean(ready && feed.page_split_second) });
   }, [feed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -257,12 +261,15 @@ export default function EventsWorkspace({
 
   const more = async () => {
     if (!olderState.cursor || olderState.busy) return;
+    const list = feed;
     setOlderState((s) => ({ ...s, busy: true, failed: false }));
     try {
       const page = await loadOlder(olderState.cursor.before);
+      if (listOf.current !== list) return;
       setOlder((cur) => [...cur, page.rows || []]);
       setOlderState({ cursor: page.cursor || null, busy: false, failed: false, split: Boolean(page.page_split_second) });
     } catch {
+      if (listOf.current !== list) return;
       setOlderState((s) => ({ ...s, busy: false, failed: true }));
     }
   };

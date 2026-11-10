@@ -25,6 +25,11 @@ const POSITIONS = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioPo
 const UPDATES = codeOnly(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'));
 const API = read('frontend/src/lib/api.js');
 const POSITIONS_ROUTE = read('cloudflare-worker/src/routes/positions.ts');
+// D4644 (#4644) moved the as-of mark rule out of the route and into one
+// service every consumer reads, so the pin that the marks are cut at the date
+// follows it there. The guarantee is the same one; the file that holds it is
+// not the route any more.
+const VALUATION = read('cloudflare-worker/src/services/portfolioValuation.ts');
 
 test('the admin mark and distribution forms write through the governed path', () => {
   assert.match(ADMIN_PAGE, /api\.positionMarkCreate\(detail\.project\.uid, \{/, 'the mark form is unwired');
@@ -56,7 +61,8 @@ test('the quarter-end export reads the book as of the date, and the route cuts b
   assert.match(API, /positionsAnalytics: \(asOf\)/, 'api.js lost the as_of read');
   // The route's half: the marks are read at-or-before the date, and the flows
   // after it are excluded.
-  assert.match(POSITIONS_ROUTE, /as_of_date <= \?/, 'the marks are not cut at the date');
+  assert.match(VALUATION, /as_of_date <= \?/, 'the marks are not cut at the date');
+  assert.match(POSITIONS_ROUTE, /latestProjectMarks\(/, 'the route no longer reads the one as-of mark rule');
   assert.match(POSITIONS_ROUTE, /if \(asOf && date && date > asOf\) continue;/, 'the flows are not cut at the date');
   assert.match(POSITIONS_ROUTE, /as_of: asOf,/, 'the route stopped echoing the date the figures speak for');
 });

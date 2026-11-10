@@ -18,6 +18,7 @@ import {
   computeFundMetrics, rollUpPosition, currentPeriod, daysSince, periodCounts,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
+import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
 import { HELD_SCOPE, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -48,31 +49,18 @@ const DIST_KINDS = new Set(['exit', 'secondary', 'dividend', 'recapitalization']
 /**
  * Latest mark per project (build queue #125). One grouped query rather
  * than per-project lookups — the old per-row pattern here was an N+1.
+ *
+ * D4644 (#4644): the selection itself moved to
+ * `services/portfolioValuation.ts`, so this read, the fund board and the
+ * fund's performance read all pick the same record. The old query here took
+ * `MAX(as_of_date)` and then read bare columns, so a mark corrected for the
+ * same effective date was resolved by SQLite's arbitrary choice of row; and it
+ * ignored `fund_id`, so one fund's mark could price another fund's position.
+ * Both are now decided by the documented rule. These two investor reads are
+ * the project-level aggregate, hence the `firm` scope.
  */
-async function latestMarksByProject(env: Env, projectIds: number[] | null = null, asOf: string | null = null): Promise<Map<number, { fmv: number; as_of_date: string; basis: string }>> {
-  const scopeCsv = projectIds == null ? null : projectIds.join(',');
-  // `asOf` is the quarter-end read (D463): the latest mark AT OR BEFORE the
-  // date, so a quarter-end export never prices the book with a mark that did
-  // not exist yet. Absent, the behaviour is unchanged — the latest mark.
-  // Placeholders bind in text order: the subquery's two come first.
-  const rows = await env.DB.prepare(
-    `SELECT m.project_id, m.fmv, m.as_of_date, m.basis
-       FROM portfolio_marks m
-       JOIN (SELECT project_id, MAX(as_of_date) AS d FROM portfolio_marks
-             WHERE (? IS NULL OR as_of_date <= ?) GROUP BY project_id) latest
-         ON latest.project_id = m.project_id AND latest.d = m.as_of_date
-       WHERE (? IS NULL OR instr(',' || ? || ',', ',' || CAST(m.project_id AS TEXT) || ',') > 0)
-       GROUP BY m.project_id`,
-  ).bind(asOf, asOf, scopeCsv, scopeCsv).all<any>().catch(() => ({ results: [] as any[] }));
-  const out = new Map<number, { fmv: number; as_of_date: string; basis: string }>();
-  for (const row of (rows.results || [])) {
-    out.set(Number(row.project_id), {
-      fmv: Number(row.fmv) || 0,
-      as_of_date: String(row.as_of_date),
-      basis: String(row.basis || 'gp_estimate'),
-    });
-  }
-  return out;
+async function latestMarksByProject(env: Env, projectIds: number[] | null = null, asOf: string | null = null) {
+  return latestProjectMarks(env, { projectIds, asOf, scope: { kind: 'firm' } });
 }
 
 // GET /api/positions — portfolio ownership summary (one row per project)
@@ -82,6 +70,11 @@ r.get('/', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
+    // D4644: this list honours `as_of` the way the metrics read below already
+    // did. Before, the list always used the latest mark ever recorded while the
+    // metrics beside it used the mark as of the requested date, so one page
+    // could show a position and the totals priced on different days.
+    const listAsOf = isoDate(c.req.query('as_of'));
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
     // handful of holdings.
@@ -110,14 +103,19 @@ r.get('/', async (c) => {
     ).bind(scopeCsv, scopeCsv).all<any>();
     const latestBy = new Map<number, any>();
     for (const l of (latestRows.results || [])) latestBy.set(Number(l.project_id), l);
-    const marks = await latestMarksByProject(c.env, projectIds);
+    const marks = await latestMarksByProject(c.env, projectIds, listAsOf);
 
     const items = (rows.results || []).map((row: any) => {
       const pid = Number(row.project_id);
       const latest = latestBy.get(pid);
       const mark = marks.get(pid) || null;
       const invested = Number(row.total_invested) || 0;
-      const roll = rollUpPosition(invested, mark ? mark.fmv : null);
+      // D4644: a mark the scope cannot choose between (two funds, one effective
+      // date) is not a carrying value, so the position carries at cost and says
+      // which of the two reasons applies.
+      const carried = carryingValue(mark);
+      const roll = rollUpPosition(invested, carried.fmv);
+      const reason = carried.unavailable_reason ?? roll.unsupported;
       return {
         project_id: pid,
         project: row.proj_id
@@ -138,8 +136,13 @@ r.get('/', async (c) => {
         multiple: roll.multiple,
         marked_down: roll.marked_down,
         unmarked: roll.unmarked,
-        mark_as_of: mark?.as_of_date ?? null,
-        mark_basis: mark?.basis ?? null,
+        // Null unless the mark the scope found cannot be used as a value.
+        mark_unavailable_reason: reason,
+        mark_unavailable: reason ? MARK_UNAVAILABLE_REASONS[reason] : null,
+        mark_as_of: carried.fmv == null ? null : mark?.as_of_date ?? null,
+        mark_basis: carried.fmv == null ? null : mark?.basis ?? null,
+        /** Which fund's mark answered, or null for a firm-level one (D4644 §3). */
+        mark_fund_id: carried.fmv == null ? null : mark?.fund_id ?? null,
       };
     });
     // D1057: the read says which companies it lists. An investor sees the ones they hold a confirmed
@@ -283,13 +286,18 @@ r.get('/analytics', async (c) => {
     }
 
     // NAV = Σ carrying value. Unmarked positions carry at cost.
+    // D4644: a mark the scope cannot choose between, or one that is not a value
+    // at all, carries at cost like an unmarked position and is counted apart, so
+    // mark coverage never reports a disputed position as marked.
     let nav = 0;
     let unmarkedCount = 0;
+    let unusableMarkCount = 0;
     for (const [pid, invested] of investedByProject) {
-      const mark = marks.get(pid);
-      const roll = rollUpPosition(invested, mark ? mark.fmv : null);
+      const carried = carryingValue(marks.get(pid));
+      const roll = rollUpPosition(invested, carried.fmv);
       nav += roll.fmv;
       if (roll.unmarked) unmarkedCount++;
+      if (carried.unavailable_reason && carried.unavailable_reason !== 'no_mark') unusableMarkCount++;
     }
 
     const metrics = computeFundMetrics(flows, nav, today);
@@ -300,6 +308,8 @@ r.get('/analytics', async (c) => {
       as_of: asOf,
       position_count: investedByProject.size,
       unmarked_position_count: unmarkedCount,
+      /** D4644: positions whose recorded mark could not be used, and why not. */
+      unusable_mark_count: unusableMarkCount,
       // Coverage is the honesty dial on the whole payload: with a low
       // mark coverage, NAV is mostly cost and TVPI approaches 1.0 for
       // reasons that have nothing to do with performance.

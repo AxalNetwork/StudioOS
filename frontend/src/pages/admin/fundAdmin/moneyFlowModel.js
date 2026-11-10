@@ -150,23 +150,48 @@ export function feePeriodEffects(fund, p) {
   ];
 }
 
-/** Issue a report pack: what, for which period, frozen by its digest. */
-export function reportIssueEffects(d, sha) {
+/**
+ * Issue a report pack: what, for which period, to whom, frozen by its digest.
+ * `recipients` is the count of LP statements in the pack (D4812 part 6,
+ * FA-06), or null when the pack is not an LP report; issuing sends no email.
+ */
+export function reportIssueEffects(d, sha, recipients = null) {
   return [
     ['Pack', `${String(d?.kind || 'report').replace(/_/g, ' ')}`],
     ['Period', d?.period_label || nr('No period label is recorded.')],
+    ['Recipients', recipients == null ? 'No LP receives this pack: it is kept on the fund.'
+      : recipients === 0 ? nr('No LP statement is in this pack.')
+        : `${recipients} LP${recipients === 1 ? '' : 's'}, one statement each, in the LP portal. No email is sent.`],
     ['Figures', sha ? `${String(sha).slice(0, 12)}… (frozen on issue)` : nr('The pack was not opened.')],
     ['After issue', 'Locked; a correction is a new issue.'],
   ];
 }
 
-/** Confirm a bank match: the transaction, what it pays, and that it records. */
+/**
+ * Confirm a bank match: the transaction, what it pays, and its effect (D4812
+ * part 6, FA-07 B). A capital-call match records a receipt on its line, so the
+ * line's outstanding before → after is said when the ledger side was read; a
+ * fee-period match links the credit and marks the period collected.
+ */
+export function matchOutcome(m) {
+  const amount = cents(m?.amount_cents);
+  const l = m?.ledger;
+  if (m?.target_kind === 'fee_period') {
+    return `Links this credit to fee period ${l?.quarter || `#${m?.target_id}`}, which then reads as collected. Nothing moves money.`;
+  }
+  const owed = cents(l?.outstanding_cents);
+  const on = l?.call_number != null ? ` on call ${l.call_number}` : '';
+  if (amount == null) return nr('No amount is recorded.');
+  if (owed == null) return `Records a ${money(amount)} receipt${on}. ${m?.ledger_unavailable || 'The line did not read.'}`;
+  return `Records a ${money(amount)} receipt${on} · outstanding ${money(owed)} → ${money(Math.max(0, owed - amount))}`;
+}
+
 export function matchEffects(m, target) {
   return [
     ['Bank transaction', `${m?.counterparty_name || 'No counterparty recorded'} · ${m?.posted_on || 'not posted'}`],
     ['Amount', cents(m?.amount_cents) != null ? money(m.amount_cents) : nr('No amount is recorded.')],
     ['Pays', target],
-    ['Effect', 'Records the match; it moves no money.'],
+    ['Effect', matchOutcome(m)],
   ];
 }
 

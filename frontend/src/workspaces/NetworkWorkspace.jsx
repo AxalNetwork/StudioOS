@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { WorkerRail, Skeleton } from '../ui';
 import WorkspaceShell from './WorkspaceShell';
 import BucketOverview from './BucketOverview';
@@ -12,6 +12,7 @@ import { api } from '../lib/api';
 import { NETWORK_ORG_COPY, ORG_BACKED } from './noStoreCopy';
 import RelationshipRequests from '../components/RelationshipRequests';
 import { relationshipLogPath } from '../lib/partnerEarnings';
+import { legacyZonePath } from '../lib/introDestination';
 
 const FounderNetworkRelationships = lazy(() => import('../pages/founder/FounderNetworkRelationships'));
 const NetworkContacts = lazy(() => import('../pages/NetworkContacts'));
@@ -154,6 +155,29 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   const location = useLocation();
   const bucket = bucketForPath(role, location.pathname);
   const isRoot = bucket && location.pathname === bucket.prefix;
+  /**
+   * #4609 — A LEGACY `?tab=` LINK IS FORWARDED TO THE PATH IT MEANS, instead of
+   * rendering the overview and dropping the record.
+   *
+   * This shell resolves its zone from the PATHNAME and has never read the query.
+   * That is right, and it is also why five notification sites' destination —
+   * `/network?tab=introductions&intro=<uid>` — died here: on `/network`,
+   * `isRoot` is true, `NetworkOverview` renders the board, and the uid the
+   * member was told to open is nowhere on the screen with nothing saying so.
+   * `NetworkPage` (operator, founder) and `InvestorNetworkWorkspace` read
+   * `?tab=` for themselves, so only partner and advisor fell through — the two
+   * licences that reach Network through this shell alone.
+   *
+   * NEW LINKS NO LONGER TAKE THIS PATH: the Worker's `introDestination` now
+   * writes `/network/introductions?intro=…&kind=…`, which lands on the zone
+   * route directly. This is for the links already sent, which cannot be
+   * rewritten, and it is a `replace` so the dead `/network?tab=` address does
+   * not sit in the member's history waiting to be stepped back onto.
+   *
+   * NAVIGATION, NOT PRESENTATION. #3701 owns how the Network overview looks;
+   * this changes no overview, only which address renders instead of it.
+   */
+  const forward = isRoot ? legacyZonePath(location.search) : null;
   const zone = isRoot ? null : zoneForPath(bucket, location.pathname);
   const slug = zone?.slug;
 
@@ -297,6 +321,10 @@ export default function NetworkWorkspace({ role = 'founder' }) {
   }, [role, slug, isRoot, zoneFilters]);
 
   const orgGap = slug === 'organizations' && !ORG_BACKED.has(role);
+
+  // Before the shell draws anything: a legacy `/network?tab=<zone>` address is
+  // that zone's address, so answer at the zone rather than at the overview.
+  if (forward) return <Navigate to={forward} replace />;
 
   return (
     <WorkspaceShell

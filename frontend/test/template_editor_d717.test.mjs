@@ -266,6 +266,14 @@ test('Save then Publish: disabled while unsaved, asks first, publishes once at t
   } finally { await e.view.unmount(); restore(); }
 });
 
+test('D4811 part 15: an admin who is not the Super Admin is told publishing is the Super Admin\'s, and is offered no Publish', async () => {
+  const e = await open('agree', { who: { ...user, is_super_admin: 0 } });
+  try {
+    assert.equal(e.byTestId('template-publish-one'), undefined);
+    assert.equal(e.textOf(e.byTestId('template-publish-super-admin')), 'Only the Super Admin publishes a template.');
+  } finally { await e.view.unmount(); restore(); }
+});
+
 test('Publish names the recorded admin id when someone else published', async () => {
   const e = await open('agree', { contract: { publishOne: async () => ({ ok: true, publication: { version: 3, published_at: '2026-10-18 12:00:00', published_by: 77 } }) } });
   try {
