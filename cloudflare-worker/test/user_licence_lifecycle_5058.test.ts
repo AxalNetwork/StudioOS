@@ -232,3 +232,14 @@ test('D4472\'s grant and revoke keep the shared row in step, and a re-grant re-o
   assert.deepEqual(all('SELECT action FROM user_licence_events WHERE licence_uid = ? ORDER BY id', row.uid).map((e) => e.action), ['grant', 'terminate', 'grant']);
   assert.equal(all("SELECT uid FROM licences WHERE licence_family = 'user' AND holder_id = '10' AND licence_type = 'advisor'").length, 1, 'one licence, never two');
 });
+
+test('a suspended primary Operating Partner licence is not held: partner and operating_partner are one licence', async () => {
+  const { db, env, call } = fixture();
+  rerunMigration(db);
+  assert.deepEqual(await heldLicences(env.DB, { id: PARTNER, role: 'partner' }), ['partner']);
+  const l = (await list(call, ADMIN, PARTNER)).body.licences[0];
+  assert.equal(l.licence_type, 'operating_partner');
+  assert.equal(l.is_primary, true);
+  assert.equal((await status(call, l.uid, 'suspend', l.revision)).status, 200);
+  assert.deepEqual(await heldLicences(env.DB, { id: PARTNER, role: 'partner' }), []);
+});

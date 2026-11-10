@@ -90,25 +90,6 @@ function licenceOf(r: Record<string, any>, primaryRole: string | null): UserLice
   };
 }
 
-/**
- * The primary-licence types whose `licences` row says their access is NOT held (suspended, expired, terminated,
- * or still proposed). `heldLicences` (D4472) removes the primary role's licence when it is listed here; a primary
- * with no row (a database before this migration) is held as before.
- */
-export async function withheldPrimaryKey(db: D1Database, userId: number, primaryRole: string): Promise<boolean> {
-  const type = typeOfAccessKey(primaryRole);
-  if (!type) return false;
-  try {
-    const r = await db.prepare(
-      "SELECT status FROM licences WHERE licence_family = 'user' AND holder_type = 'user' AND holder_id = ? AND licence_type = ?",
-    ).bind(String(userId), type).first<{ status: string }>();
-    return !!r && !(ACCESS_STATUSES as readonly string[]).includes(String(r.status));
-  } catch (error) {
-    if (/no such table: (?:main\.)?licences/i.test(String(error))) return false;
-    throw error;
-  }
-}
-
 export async function licencesOfUser(env: Env, userId: number): Promise<UserLicence[]> {
   const u = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first<{ role: string }>();
   if (!u) throw new UserLicenceError(404, 'not_found', 'Account not found.');
@@ -152,7 +133,7 @@ export async function eventsOf(env: Env, filter: { uid?: string; userId?: number
 
 /**
  * The access row, in step with the licence, for an ADDITIONAL licence. The primary licence has no access row
- * (it is `users.role`); its access follows the licence row through `withheldPrimaryKey`. The statement is guarded
+ * (it is `users.role`); its access follows the licence row through `heldLicences` (accountLicences.ts). The statement is guarded
  * by the licence row having reached `revision` with `status`, so it lands only when the licence write did.
  */
 function accessStatement(env: Env, l: UserLicence, status: UserLicenceStatus, revision: number, actorId: number): D1PreparedStatement {
