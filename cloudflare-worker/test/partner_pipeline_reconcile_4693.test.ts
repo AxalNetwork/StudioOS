@@ -34,6 +34,7 @@ import partnerPipeline from '../src/routes/partner_pipeline.ts';
 import { quotesRouter } from '../src/routes/needs.ts';
 import pipeline from '../src/routes/pipeline.ts';
 import { analysePipeline } from '../src/services/bdAnalytics.ts';
+import { MATCH_DEPS } from '../src/services/ai/matchRows.ts';
 import {
   companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
 } from '../src/services/partnerPipelineRules.ts';
@@ -247,6 +248,28 @@ async function call(e: any, method: string, path: string, company: number | null
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
 const get = (e: any, path: string, company: number | null) => call(e, 'GET', path, company);
+
+test('lead ranking only hands eligible marketplace needs to the ranker', async (t) => {
+  const db = freshDb();
+  t.after(() => db.close());
+  db.exec("UPDATE founder_needs SET status = 'closed'");
+  const need = db.prepare('INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description) VALUES (?, ?, 9, ?, ?, ?, ?)');
+  for (const [id, title] of ['Eligible design', 'Gambling project', 'Mainframe support', 'Already bid', 'Already passed'].entries()) {
+    need.run(900 + id, `rank-${id}`, FOUNDER_USER, 'design', title, 'Marketplace fixture');
+  }
+  db.exec(`INSERT INTO partner_fit_rules (uid, partner_id, kind, value) VALUES
+      ('declined', 1, 'sector_declined', 'gambling'), ('missing', 1, 'capability_absent', 'mainframe');
+    INSERT INTO quotes (uid, need_id, partner_id, price, deliverables) VALUES ('bid-rank', 903, 1, 100, '[]');
+    INSERT INTO partner_lead_passes (partner_id, need_id, reason) VALUES (1, 904, 'timing');`);
+  const rerank = t.mock.fn(async (_query: string, _contexts: string[]) => null);
+  t.mock.method(MATCH_DEPS, 'make', () => ({ embed: async () => null, rerank, write: async () => assert.fail('ranking must not write') }));
+  const response = await call(env(db), 'POST', '/api/partner/pipeline/leads/rank', CO_A, { query: 'design' });
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.deepEqual(response.body.rows.map((row: { need_id: number }) => row.need_id), [900]);
+  assert.equal(rerank.mock.callCount(), 1);
+  assert.match(rerank.mock.calls[0].arguments[1].join('\n'), /^Eligible design\./);
+  assert.equal(rerank.mock.calls[0].arguments[1].length, 1);
+});
 
 // 1 ───────────────────────────────────────────────────────────────────────────
 test('the overview and the proposal zone count the same populations and print the same win rate, with and without a company', async () => {
