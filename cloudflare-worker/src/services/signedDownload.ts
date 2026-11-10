@@ -33,7 +33,7 @@
  */
 import type { Env } from '../types';
 
-type SignerEnv = Pick<Env, 'KEK_R2' | 'JWT_SECRET' | 'TOKENS' | 'FILES'>;
+type SignerEnv = Pick<Env, 'KEK_R2' | 'JWT_SECRET' | 'FILES' | 'ENVIRONMENT'> & Partial<Pick<Env, 'TOKENS'>>;
 
 const MAX_TTL_SEC = 300; // 5 minutes — task #33 invariant
 const KV_PREFIX = 'r2dl:';
@@ -88,6 +88,8 @@ export async function mintDownloadToken(
   env: SignerEnv,
   opts: { key: string; ttlSec?: number; audience: string; userId?: number },
 ): Promise<{ token: string; expires_at: string }> {
+  const production = env.ENVIRONMENT === 'production';
+  if (production && !env.TOKENS) throw new Error('Signed downloads are unavailable');
   const ttl = Math.min(Math.max(1, opts.ttlSec ?? MAX_TTL_SEC), MAX_TTL_SEC);
   const exp = Math.floor(Date.now() / 1000) + ttl;
   const jti = crypto.randomUUID();
@@ -100,9 +102,11 @@ export async function mintDownloadToken(
   // download (extremely unlikely with 128 random bits but cheap to defend).
   if (env.TOKENS) {
     try {
-      await env.TOKENS.put(`${KV_PREFIX}${jti}`, '1', { expirationTtl: ttl + 5 });
+      // Workers KV requires at least 60 seconds. The signed expiry still limits the URL.
+      await env.TOKENS.put(`${KV_PREFIX}${jti}`, '1', { expirationTtl: Math.max(60, ttl + 5) });
     } catch (e) {
-      console.error('[signedDownload] KV put failed (continuing — token will still validate):', e);
+      if (production) throw new Error('Signed downloads are unavailable');
+      console.error('[signedDownload] KV registration failed:', e);
     }
   }
   return { token, expires_at: new Date(exp * 1000).toISOString() };
@@ -124,6 +128,7 @@ export async function verifyAndConsumeToken(
   env: SignerEnv,
   token: string,
 ): Promise<VerifiedToken | { error: 'invalid' | 'expired' | 'consumed' }> {
+  if (env.ENVIRONMENT === 'production' && !env.TOKENS) return { error: 'invalid' };
   const dot = token.indexOf('.');
   if (dot < 1 || dot === token.length - 1) return { error: 'invalid' };
   const payloadB64 = token.slice(0, dot);

@@ -152,7 +152,8 @@ async function assertWhen(m) {
     await filing.choose('kind', 'ein');
     assert.ok(!filing.text().includes('No founder recorded yet.'), 'For shows only for an 83(b) election');
     await filing.submit();
-    assert.deepEqual(filing.calls, [['formationStep', P, { kind: 'ein', jurisdiction: 'Federal', due_date: null, for_holder_id: null, state: 'upcoming' }]]);
+    assert.deepEqual(filing.calls[0].slice(0, 3), ['formationStep', P, { kind: 'ein', jurisdiction: 'Federal', due_date: null, for_holder_id: null, state: 'upcoming' }]);
+    assert.match(filing.calls[0][3], /^[A-Za-z0-9_-]{8,128}$/, 'the form sends its stable idempotency key');
   } finally { await filing.unmount(); }
 
   const founder = await mount(m.BUILD_FORMS['founding-team'][0], { slug: 'founding-team' });
@@ -503,13 +504,19 @@ test('6 (PR 3b): each Build Edit reads the record\'s stored words as the canvas\
 
 async function assertBuildWrites(m) {
   const sent = [];
-  const w = m.makeCycleWrites(async (url, opts = {}) => { sent.push([url, opts.method ?? 'GET', opts.inlinePaywall === true, opts.body instanceof FormData ? 'form' : opts.body ? JSON.parse(opts.body) : null]); return {}; });
+  const idempotency = [];
+  const w = m.makeCycleWrites(async (url, opts = {}) => {
+    sent.push([url, opts.method ?? 'GET', opts.inlinePaywall === true, opts.body instanceof FormData ? 'form' : opts.body ? JSON.parse(opts.body) : null]);
+    if (opts.headers?.['Idempotency-Key']) idempotency.push([url, opts.headers['Idempotency-Key']]);
+    return {};
+  });
   await w.build.addFeature(P, { title: 'f' });
   await w.build.addMustHave(P, { title: 'm' });
   await w.build.roadmapItem(P, { title: 'i' });
   await w.build.roadmapItemUpdate(P, 3, { column: 'now' });
   await w.build.founder(P, { name: 'Ana' });
   await w.build.founderUpdate(P, 'h-4', { role: 'CTO' });
+  await w.build.formationStep(P, { kind: 'ein' }, 'filing-key-5306');
   await w.recordAction('build', P, 'company-creation', 'step-9', 'upload-proof', new FormData());
   assert.deepEqual(sent, [
     ['/cycles/build/features?project=3', 'POST', false, { title: 'f' }],
@@ -518,8 +525,10 @@ async function assertBuildWrites(m) {
     ['/cycles/build/roadmap/3?project=3', 'PATCH', false, { column: 'now' }],
     ['/cycles/build/founders?project=3', 'POST', true, { name: 'Ana' }],
     ['/cycles/build/founders/h-4?project=3', 'PATCH', true, { role: 'CTO' }],
+    ['/cycles/build/formation-steps?project=3', 'POST', false, { kind: 'ein' }],
     ['/cycles/build/modules/company-creation/records/step-9/actions/upload-proof?project=3', 'POST', false, 'form'],
   ], 'the venture in the query; Add founder’s plan refusal drawn in the dialog (inlinePaywall)');
+  assert.deepEqual(idempotency, [['/cycles/build/formation-steps?project=3', 'filing-key-5306']], 'only filing creation carries its retry key');
   await assert.rejects(() => w.recordAction('nope', P, 'x', 1, 'y'), /no records/);
 }
 
@@ -529,6 +538,7 @@ test('11 (PR 3b): each Build write calls its spelled-out route, Add founder draw
     ["{ method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),\n      founderUpdate", "{ method: 'POST', body: JSON.stringify(body) }),\n      founderUpdate"],
     ["        method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body),", "        method: 'POST', body: JSON.stringify(body),"],
     ["roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PATCH',", "roadmapItemUpdate: (projectId, id, body) => request(`/cycles/build/roadmap/${seg(id)}?${q(projectId)}`, { method: 'PUT',"],
+    ["        method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey },", "        method: 'POST', body: JSON.stringify(body),"],
   ]);
   const calls = extractClientCalls(writes).map((c) => `${c.method} ${normalizePath(c.path)}`);
   for (const want of ['POST /cycles/build/features', 'POST /cycles/build/must-haves', 'POST /cycles/build/roadmap', 'PATCH /cycles/build/roadmap/:p',

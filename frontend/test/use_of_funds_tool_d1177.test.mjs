@@ -52,8 +52,8 @@ function planFixture({ viewer = { kind: 'founder', can_write: true, mercury: tru
       { id: 2, category_key: 'operations', label: 'EU entity', due_on: '2027-04', cost_cents: null, source: 'Typed', cost_state: 'not_costed' },
     ],
     hires: { state: 'ok', items: [
-      { id: 11, category_key: 'product', role: 'Senior engineer', start_month: '2026-12', annual_cents: 15000000, currency: 'usd' },
-      { id: 12, category_key: 'go-to-market', role: 'Account executive', start_month: '2027-02', annual_cents: 42000000, currency: 'usd' },
+      { id: 11, category_key: 'product', role: 'Senior engineer', start_month: '2026-12', annual_cents: 15000000, currency: 'usd', revision: 3 },
+      { id: 12, category_key: 'go-to-market', role: 'Account executive', start_month: '2027-02', annual_cents: 42000000, currency: 'usd', revision: 0 },
     ] },
     model: {
       sections: KEYS.map((k, i) => ({ key: k, allocation: modelled(alloc[i]), payroll: modelled(M.map(() => (k === 'product' ? 1250000 : 0))), spend: modelled(spend[i]) })),
@@ -302,6 +302,40 @@ test('D5069 a split refused because the plan changed keeps the dialog, says so, 
     await v.click('uof-review-latest');
     assert.ok(reads() > before, 'Review latest reads the plan again');
     assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire edit and a hire removal carry the hire\'s own revision', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': () => response({ id: 11 }), 'DELETE /cycles/raise/use-of-funds/hires/12': () => response({ ok: true }) } });
+  try {
+    await v.click('uof-hire-edit-open');
+    await v.type('uof-hire-role', 'Staff engineer');
+    await v.click('uof-hire-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/hires/11'));
+    assert.deepEqual(patch.body, { role: 'Staff engineer', category_key: 'product', start_month: '2026-12', expected_revision: 3 });
+    assert.ok(!('annual_cents' in patch.body) && !('currency' in patch.body), 'the cost and its currency are not rewritten');
+    await v.click('uof-hire-edit-open');
+    await v.click('uof-hire-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/hires/11') && s.line.includes('expected_revision=3')), 'a removal names the revision in its query');
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire refused because it changed keeps the dialog, says so, and offers Review latest', async () => {
+  const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This hire was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 4 }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': conflict, 'DELETE /cycles/raise/use-of-funds/hires/11': conflict } });
+  try {
+    for (const press of ['uof-hire-save', 'uof-hire-remove']) {
+      await v.click('uof-hire-edit-open');
+      await v.click(press);
+      assert.match(v.text('uof-hire-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+      assert.ok(v.by('uof-edit-hire'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+      const before = reads();
+      await v.click('uof-review-latest');
+      assert.ok(reads() > before, 'Review latest reads the plan again');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
   } finally { await v.close(); }
 });
 

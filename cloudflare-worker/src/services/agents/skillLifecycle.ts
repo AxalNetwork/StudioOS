@@ -170,14 +170,8 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * D4531 slice 3: the fingerprint of a case as the evaluator ran it: its checked name, input and expectations
- * (`checkCase`'s output), so a starter case shipped with new text, or an HQ case under another uid, is a different
- * case to `skillEvalCompare`. One function for the draft and the published histories, so one case reads the same in
- * both.
- */
-export const caseSha = (c: { name: string; input: unknown; expect: unknown }): Promise<string> =>
-  sha256Hex(JSON.stringify([c.name, c.input, c.expect]));
+/** D4531 slice 3's case fingerprint; it lives beside the case identity since D5336 (`skillCaseIdentity.ts`). */
+export { caseSha } from './skillCaseIdentity';
 
 export type EvidencePart = 'definition' | 'cases' | 'evaluator' | 'models';
 export type SuiteCase = { uid: string; name: string; sha256: string };
