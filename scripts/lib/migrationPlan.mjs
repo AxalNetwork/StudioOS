@@ -102,11 +102,13 @@ export const LEGACY_DUPLICATES = Object.freeze([11, 68, 118, 228, 229, 230, 259]
 // on main is never renamed (D269), and the two touch different tables, so the
 // full-name tiebreak orders them safely. Named by file, so a third file in that
 // minute, or any other shared stamp, still fails.
+// A second pair followed on 2026-11-09 20:35 UTC: #5261 (D5157, Research
+// projects) and #5273 (D4613, the fund catalogue uid) merged four minutes apart
+// on 2026-11-10. They touch different tables (new research_projects tables;
+// research_funds gains a column), so the tiebreak is just as safe, and the same
+// rule holds: a migration on main is never renamed (D269).
 export const LEGACY_DUPLICATE_STAMPS = Object.freeze([
   Object.freeze(['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql']),
-  // #5261 (D5157) and #5273 (D4613) each stamped a migration 2026-11-09 20:35
-  // UTC and merged four minutes apart. Same reasoning: both are on main, they
-  // touch different tables, and renaming either is refused by the gate.
   Object.freeze(['202611092035_research_fund_catalogue_uid.sql', '202611092035_research_projects.sql']),
 ]);
 const isLegacyStampPair = (a, b) => LEGACY_DUPLICATE_STAMPS.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
