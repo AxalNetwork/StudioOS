@@ -355,6 +355,66 @@ export function currentPeriod(cadence: KpiCadence, today: string): string | null
 }
 
 /**
+ * #4647 (D4647) — the last period that has ENDED, as of `today`.
+ *
+ * `currentPeriod` names the period `today` falls inside, which for a reporting
+ * measure is the wrong default and wrong in one direction: on 2 October, Q4 is
+ * one day old, nobody can have reported on it yet, and a completion read
+ * against it says every company in the book is delinquent. A reporting period
+ * can only be measured once it is over, so this is what a default resolves to;
+ * `currentPeriod` stays for the question "which period are we in".
+ *
+ * The year transition is the case to get right, and it is why this is a
+ * function and not a subtraction: January's completed month is the previous
+ * December, and Q1's completed quarter is the previous year's Q4.
+ */
+export function completedPeriod(cadence: KpiCadence, today: string): string | null {
+  const t = toTime(today);
+  if (!Number.isFinite(t)) return null;
+  const d = new Date(t);
+  const y = d.getUTCFullYear();
+  if (cadence === 'monthly') {
+    const m = d.getUTCMonth(); // 0-based: already the previous month's index
+    return m === 0 ? `${y - 1}-12` : `${y}-${String(m).padStart(2, '0')}`;
+  }
+  const q = Math.floor(d.getUTCMonth() / 3) + 1;
+  return q === 1 ? `${y - 1}-Q4` : `${y}-Q${q - 1}`;
+}
+
+/**
+ * The first and last dates a period covers, so a response can state the window
+ * it measured instead of leaving a reader to infer it from a label.
+ */
+export function periodBounds(cadence: KpiCadence, period: string): { from: string; until: string } | null {
+  const q = /^(\d{4})-Q([1-4])$/.exec(period);
+  if (cadence === 'quarterly') {
+    if (!q) return null;
+    const year = Number(q[1]);
+    const first = (Number(q[2]) - 1) * 3 + 1;
+    const last = first + 2;
+    return { from: `${year}-${String(first).padStart(2, '0')}-01`, until: endOfMonth(year, last) };
+  }
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(period);
+  if (!m) return null;
+  return { from: `${m[1]}-${m[2]}-01`, until: endOfMonth(Number(m[1]), Number(m[2])) };
+}
+
+/** The last day of a month, from the calendar rather than a table of lengths (February, leap years). */
+function endOfMonth(year: number, month: number): string {
+  const next = month === 12 ? Date.UTC(year + 1, 0, 1) : Date.UTC(year, month, 1);
+  return new Date(next - 86_400_000).toISOString().slice(0, 10);
+}
+
+/** True when the period has ended on or before `today`, so a completion figure over it is final. */
+export function periodComplete(cadence: KpiCadence, period: string, today: string): boolean | null {
+  const bounds = periodBounds(cadence, period);
+  if (!bounds) return null;
+  const t = toTime(today);
+  if (!Number.isFinite(t)) return null;
+  return bounds.until <= String(today).slice(0, 10);
+}
+
+/**
  * D1057 (#2927, #2427 finding 3): whether an update's stored `period` counts
  * for the period a report is due for.
  *

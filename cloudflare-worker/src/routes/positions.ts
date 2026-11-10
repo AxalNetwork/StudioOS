@@ -15,7 +15,8 @@ import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { assertAdminAct } from '../services/fundAdminAccess';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
-  computeFundMetrics, rollUpPosition, currentPeriod, daysSince, periodCounts,
+  computeFundMetrics, rollUpPosition, completedPeriod, currentPeriod, daysSince, periodBounds,
+  periodComplete, periodCounts,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
 import { latestProjectMarks, carryingValue, MARK_UNAVAILABLE_REASONS } from '../services/portfolioValuation';
@@ -334,7 +335,24 @@ r.get('/kpi-compliance', async (c) => {
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
-    const period = currentPeriod(cadence, today);
+    // #4647 (D4647): THE DEFAULT IS THE LAST COMPLETED PERIOD.
+    //
+    // This measured `currentPeriod` — the period today falls inside. On 2
+    // October, that is a Q4 one day old: nobody can have reported on it, so
+    // the read said every company in the book was delinquent and
+    // `compliance_pct` was near zero by construction. A reporting period is
+    // measurable only once it has ended.
+    //
+    // An explicit `period=` still asks for whatever period the caller names,
+    // including the one in progress, and the response says whether that period
+    // has finished — so a partial figure can be read as partial instead of
+    // looking like a final one.
+    const asked = String(c.req.query('period') || '').trim();
+    const period = asked || completedPeriod(cadence, today);
+    const bounds = period ? periodBounds(cadence, period) : null;
+    if (asked && !bounds) {
+      return c.json({ detail: cadence === 'quarterly' ? 'period must look like 2026-Q3' : 'period must look like 2026-09' }, 400);
+    }
 
     const [defs, held, updates] = await Promise.all([
       c.env.DB.prepare(
@@ -387,10 +405,25 @@ r.get('/kpi-compliance', async (c) => {
       cadence,
       period,
       as_of: today,
+      // #4647: the window measured, the zone it was resolved in, and whether
+      // the period is over. The label alone left a reader to infer all three,
+      // and `period_in_progress` is the difference between a final completion
+      // figure and one that is still being earned.
+      period_from: bounds?.from ?? null,
+      period_until: bounds?.until ?? null,
+      period_complete: period ? periodComplete(cadence, period, today) : null,
+      period_in_progress: period ? periodComplete(cadence, period, today) === false : null,
+      period_default: asked ? null : 'last_completed',
+      period_now: currentPeriod(cadence, today),
+      timezone: 'UTC',
       kpi_set: defs.results || [],
       companies,
       reported_count: reported,
       total_count: companies.length,
+      // The numerator and the denominator are over the SAME population — the
+      // companies held in this caller's book — and the same period. Both are
+      // named here so the ratio can be checked rather than trusted.
+      population: { basis: 'companies_held_in_book', period },
       compliance_pct: companies.length > 0 ? Math.round((reported / companies.length) * 100) : null,
     });
   } catch (e) { return mapError(c, e); }

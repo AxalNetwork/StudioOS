@@ -86,13 +86,24 @@ test('quarterly compliance reads Grow\'s monthly periods: a submitted September 
   update(db, { project_id: 3, period: '2026-06' });          // last quarter
   update(db, { project_id: 4, period: '2026-09', status: 'draft' });
   update(db, { project_id: 5, period: 'Q3 2026' });
-  const q = await get(positions, db, '/kpi-compliance?as_of=2026-09-15');
+  // #4647 (D4647): the period is NAMED here. What this case is about is
+  // `periodCounts` — that a stored `2026-08` counts for Q3 — and it used to
+  // get Q3 from the route's default, which was the period `as_of` falls
+  // inside. That default is now the last COMPLETED period (on 15 September,
+  // Q2), because a completion figure over a quarter still running says the
+  // whole book is delinquent. Asking for Q3 explicitly keeps this case about
+  // the matching, and the default's own behaviour is pinned in
+  // portfolio_periods_pages_4647.test.ts.
+  const q = await get(positions, db, '/kpi-compliance?as_of=2026-09-15&period=2026-Q3');
   assert.equal(q.status, 200);
   assert.equal(q.body.period, '2026-Q3');
+  assert.equal(q.body.period_in_progress, true, 'and Q3 is still running on 15 September');
+  const dflt = await get(positions, db, '/kpi-compliance?as_of=2026-09-15');
+  assert.equal(dflt.body.period, '2026-Q2', 'the default is the quarter that has ended');
   const reported = Object.fromEntries(q.body.companies.map((x: any) => [x.project_id, x.reported]));
   assert.deepEqual(reported, { 1: true, 2: true, 3: false, 4: false, 5: false });
   assert.equal(q.body.reported_count, 2);
-  const m = await get(positions, db, '/kpi-compliance?as_of=2026-08-20&cadence=monthly');
+  const m = await get(positions, db, '/kpi-compliance?as_of=2026-08-20&cadence=monthly&period=2026-08');
   assert.equal(m.body.period, '2026-08');
   assert.deepEqual(m.body.companies.filter((x: any) => x.reported).map((x: any) => x.project_id), [1], 'monthly compares months');
 });
