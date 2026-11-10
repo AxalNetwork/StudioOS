@@ -11,11 +11,12 @@
  * sign-out answered, so the cell reports the act rather than silently returning to a button.
  * Neither is persisted: a revoke is an act, not a preference.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ShieldCheck, LogOut } from 'lucide-react';
 import { Unrecorded } from '../../../ui';
 import { daysTo, rungRank } from '../../../lib/notices';
 import SignOutAccountAction from './SignOutAccountAction';
+import { useFocusRequest, useFocusTargets } from './actionFocus';
 
 const RUNG = {
   frozen: {
@@ -74,7 +75,11 @@ function rungDetail(row) {
 }
 
 
-function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCancel, onDone, done }) {
+function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCancel, onDone, done, focus }) {
+  const openerRef = useRef(null);
+  const statusRef = useRef(null);
+  // D5045: Cancel returns focus to Sign out; a confirmed sign-out moves it to the line that says so.
+  useFocusTargets(focus, { opener: openerRef, status: statusRef });
   const rung = RUNG[row.rung] || RUNG.clear;
   const detail = rungDetail(row);
   return (
@@ -150,16 +155,8 @@ function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCance
       </td>
       <td className="py-2 text-[12px]" data-testid="hq-team-sessions">
         {done ? (
-          // NO CLOCK HERE, and the guard that caught the first draft was right for
-          // a reason it does not actually name. `hq_team_h9`'s ban on `new Date(`
-          // is written for SQL-format stamps, which V8 reads as the reader's LOCAL
-          // time; `revoked_at` is epoch SECONDS, which is unambiguous, so this was
-          // not that defect. It was still the wrong thing to draw: the operator
-          // just pressed the button, so the second adds nothing, and a clock
-          // rendered client-side beside an act whose authoritative stamp is the
-          // audit row invites being read AS that stamp. The fact is the whole
-          // message.
-          <span role="status" className="text-[11.5px] text-amber-800 dark:text-amber-300">
+          // No clock: the authoritative time of the act is its audit row (see D5045).
+          <span role="status" ref={statusRef} tabIndex={-1} data-testid="hq-team-signed-out" className="text-[11.5px] text-amber-800 dark:text-amber-300">
             Signed out
           </span>
         ) : open ? (
@@ -167,6 +164,7 @@ function AdminRow({ row, ladderReadable, licencesReadable, open, onOpen, onCance
         ) : (
           <button
             type="button"
+            ref={openerRef}
             onClick={onOpen}
             data-testid="hq-team-revoke"
             className="inline-flex items-center gap-1 rounded-md border border-axal-hairline px-2 py-1 text-[11.5px] font-semibold text-axal-muted hover:border-red-700 hover:text-red-700 dark:hover:border-red-500 dark:hover:text-red-300"
@@ -205,6 +203,7 @@ export default function HqAdminRoster({ rows, ladderReadable, licencesReadable, 
   // so the cell can report the act rather than silently returning to a button.
   const [revokeFor, setRevokeFor] = useState(null);
   const [revoked, setRevoked] = useState({});
+  const [focusReq, askFocus] = useFocusRequest();
   return (
     <div className="mt-2 overflow-x-auto">
       <table className="w-full text-left">
@@ -229,10 +228,12 @@ export default function HqAdminRoster({ rows, ladderReadable, licencesReadable, 
               open={revokeFor === row.user_id}
               done={revoked[row.user_id]}
               onOpen={() => setRevokeFor(row.user_id)}
-              onCancel={() => setRevokeFor(null)}
+              focus={focusReq?.key === row.user_id ? focusReq : null}
+              onCancel={() => { setRevokeFor(null); askFocus('opener', row.user_id); }}
               onDone={(res) => {
                 setRevoked((prev) => ({ ...prev, [row.user_id]: res }));
                 setRevokeFor(null);
+                askFocus('status', row.user_id);
                 onSignedOut?.(row, res);
               }}
             />

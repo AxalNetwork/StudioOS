@@ -207,6 +207,8 @@ export function canOf(ev: CalendarEvent, isAdmin: boolean, nowMs = Date.now()): 
 
 /** A date with no time is a whole day. Every reader today writes a time. */
 export function isAllDay(ev: CalendarEvent): boolean {
+  // D5204 (#5204): a reader that says so is believed first; a provider's all-day event is a calendar date.
+  if (ev.all_day === true) return true;
   // D1484: D1208's all-day readers write a bare date (`deadline()`), so this holds for them too.
   return /^\d{4}-\d{2}-\d{2}$/.test(String(ev.start_at));
 }

@@ -19,6 +19,7 @@ import React, { useState } from 'react';
 import { api } from '../../../lib/api';
 import { useGovernedAction } from './governedAction';
 import ActionNotice from './ActionNotice';
+import { escapeCloses, useFocusOnMount } from './actionFocus';
 
 /** The minimum reason, as the route and the branch both check it (D120). */
 export const SUPPORT_REASON_MIN = 10;
@@ -57,7 +58,7 @@ export function SupportNoticeOutcome({ told }) {
   );
 }
 
-export default function SupportSessionAction({ hit, from }) {
+export default function SupportSessionAction({ hit, from, onCancel }) {
   const [supportReason, setSupportReason] = useState('');
   const [supportUrl, setSupportUrl] = useState(null);
   // D530 — the branch's `target_notified`, as HQ's route passed it on.
@@ -73,12 +74,14 @@ export default function SupportSessionAction({ hit, from }) {
     return res;
   }, { fallback: 'The support session could not be opened.', tag: 'hq-team-support', initial: 'open' });
   const supportBusy = support.busy;
+  const firstField = useFocusOnMount();
 
   return (
     <form
       className="mt-2 grid gap-2 rounded-lg border border-axal-hairline bg-axal-ground p-2"
       data-testid="hq-team-support"
       data-state={support.state}
+      onKeyDown={escapeCloses(supportBusy, onCancel)}
       onSubmit={(e) => {
         e.preventDefault();
         support.submit(supportReason.trim());
@@ -94,7 +97,7 @@ export default function SupportSessionAction({ hit, from }) {
       </p>
       <label className="text-[11px] text-axal-muted">
         Reason (at least 10 characters). It is recorded here and on the branch.
-        <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} value={supportReason} disabled={supportBusy} onChange={(e) => setSupportReason(e.target.value)} />
+        <textarea className="mt-1 block w-full rounded-md border border-axal-hairline bg-white px-2 py-1 text-[12px] dark:bg-gray-900" rows={2} ref={firstField} value={supportReason} disabled={supportBusy} onChange={(e) => setSupportReason(e.target.value)} />
       </label>
       <ActionNotice action={support} prefix="hq-team-support" />
       {supportUrl && (
