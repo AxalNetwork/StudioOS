@@ -134,7 +134,10 @@ test('mounted D4820 part 5: a new search with a kind chosen hides the counts rat
 });
 
 test('mounted D4820 part 5: rows are grouped by day, time first, each with Open ›, and no member is named', async () => {
-  const m = await mount(worker);
+  // The lightbox reads the clock for Today and Yesterday; the rows are fixed at NOW's dates, so the test reads NOW.
+  const realNow = Date.now;
+  Date.now = () => NOW;
+  const m = await mount(worker).catch((e) => { Date.now = realNow; throw e; });
   try {
     assert.deepEqual(m.each('community-box-activity-day').map((t) => t.split(/\d{2}:\d{2}|All day/)[0]), ['Today', 'Yesterday', 'Mon 2 Nov']);
     const rows = m.each('community-box-activity-row');
@@ -142,7 +145,7 @@ test('mounted D4820 part 5: rows are grouped by day, time first, each with Open 
     assert.match(rows[1], /^08:05.*Job.*“Ops Lead” was closed\..*Last change.*Open ›/s);
     assert.match(rows[2], /^All day.*3 registrations/s);
     assert.doesNotMatch(rows.join('\n'), /\bmember\b/);
-  } finally { await m.unmount(); }
+  } finally { Date.now = realNow; await m.unmount(); }
 });
 
 test('mounted D4820 part 5: the chips are a radio group with arrow keys that wrap and take focus', async () => {
