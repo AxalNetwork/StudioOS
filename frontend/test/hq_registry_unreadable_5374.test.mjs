@@ -18,8 +18,7 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { mountForm, mutationCheck, textOf } from './_form_d695.mjs';
 import { api } from '../src/lib/api.js';
-import HqHomePage from '../src/pages/hq/HqHomePage.jsx';
-import HqFundsPage, { oversightStats } from '../src/pages/hq/HqFundsPage.jsx';
+import { oversightStats } from '../src/pages/hq/HqFundsPage.jsx';
 
 const h = React.createElement;
 const read = (rel) => readFileSync(new URL(`../src/pages/hq/${rel}`, import.meta.url), 'utf8');
