@@ -42,6 +42,8 @@ function freshDb() {
       is_active INTEGER NOT NULL DEFAULT 1, jwt_min_iat INTEGER, founder_id INTEGER, spinout_lab_active INTEGER);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+    -- #5343: the cap-table bootstrap now refuses a database without this table (it used to pass silently).
+    CREATE TABLE cap_table_scenarios (id INTEGER PRIMARY KEY, is_variant INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE cap_table_option_pools (id INTEGER PRIMARY KEY, user_id INTEGER, name TEXT,
       shares_authorized REAL, shares_issued REAL, shares_available REAL, source TEXT, updated_at TEXT);
     CREATE TABLE cap_table_vesting (id INTEGER PRIMARY KEY, user_id INTEGER, holder_id TEXT, security_id TEXT,
