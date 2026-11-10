@@ -69,3 +69,4 @@ and citations by number keep working.
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
 | `D4569.md` | #4569 (proposed, gated on #4567/#4568): conditional D1 partitioning options A–D, authority boundaries, payer shard key and the financial-consistency protocol. No migration. |
+| `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
