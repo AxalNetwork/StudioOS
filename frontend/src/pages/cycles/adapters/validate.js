@@ -18,6 +18,8 @@
  *   real output through every function.
  */
 
+import { formatMinorOrCount } from '../../../lib/money.js';
+
 /**
  * The seven modules, as `services/cycleValidate.ts` lists them. The module page
  * builds its tabs from this rather than reading the whole overview again;
@@ -344,7 +346,8 @@ const pill = (map, v) => (map[v] ? { text: map[v][0], tone: map[v][1] } : null);
 const word = (map, v) => (v == null ? null : map[v] || String(v));
 const money = (cents, currency, period) => {
   if (!num(cents)) return null;
-  const amount = (cents / 100).toLocaleString('en-US', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 });
+  // D5373: at the currency's own decimals (a whole amount drops them); a missing or unlisted code names the stored count.
+  const amount = formatMinorOrCount(cents, currency ? String(currency).toUpperCase() : 'USD', { locale: 'en-US', trimWhole: true });
   return `${amount}${PERIOD[period] ?? ''}`;
 };
 const trend = (n) => (!num(n) ? null : n === 0 ? 'no change' : `${n > 0 ? '▲' : '▼'} ${Math.abs(n)}`);

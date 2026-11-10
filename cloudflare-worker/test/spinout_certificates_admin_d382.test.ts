@@ -39,7 +39,7 @@ function ddl(name: string): string {
 function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'spinout_lab_milestones', 'activity_logs', 'spinout_applications',
-    'projects', 'user_spinout_flags', 'spinout_certificates']) db.exec(ddl(t));
+    'projects', 'user_spinout_flags', 'spinout_certificates', 'perk_credit_ledger']) db.exec(ddl(t));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN_ID, 'admin', 'Admin One', 'admin@example.test');
   u.run(GRAD_ID, 'founder', 'Ada Graduate', 'ada@example.test');
@@ -53,6 +53,8 @@ function freshDb() {
   labEnrollmentSchema(db);
   // D4663: the scheduled backfill's record, which the list reads beside the registry.
   db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611092031_lab_certificate_backfill.sql'), 'utf8'));
+  // D5360: and its lost-bonus step's record.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100844_lab_graduation_bonus_backfill.sql'), 'utf8'));
   return db;
 }
 

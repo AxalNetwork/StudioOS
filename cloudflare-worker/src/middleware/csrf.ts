@@ -92,6 +92,9 @@ export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     if (CSRF_PATH_EXEMPT.has(c.req.path)) return next();
     // D1312 — a Lovable page's sign-up form posts from another site; the token in the address is the authorisation.
     if (c.req.path.startsWith('/api/validate/lovable-signups/')) return next();
+    // D5333 — a sequence's opt-out POST, from its own page's form or a mail client's RFC 8058 one-click:
+    // the signed token in the address is the authorisation, as for the newsletter's one-click route.
+    if (c.req.path.startsWith('/api/grow/optout/')) return next();
 
     const cookieHeader = c.req.header('Cookie') || '';
     const authCookie = readCookie(cookieHeader, authCookieName(c.env));

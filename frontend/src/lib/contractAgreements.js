@@ -6,6 +6,11 @@ import { PROGRAMS } from './programGrants.js';
 export const AGREEMENT_TYPE_OPTIONS = [
   ['', 'Any agreement type'],
   ['territory_licence', 'Territory licence'],
+  // D5060 (#5060): the four user licence agreements, in the Worker's order.
+  ['founder_licence', 'Founder Licence Agreement'],
+  ['investor_licence', 'Investor Licence Agreement'],
+  ['operating_partner_licence', 'Operating Partner Licence Agreement'],
+  ['advisor_licence', 'Advisor Licence Agreement'],
   ['package', 'Package agreement'],
   ['program_licence', 'Program licence'],
   ['program_schedule_addendum', 'Program schedule / addendum'],

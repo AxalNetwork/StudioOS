@@ -15,6 +15,7 @@
  *   - `GET /api/calendar/event-links/:id`: Google and Outlook (D1033).
  * The host's name is in none of them, so the ticket says so.
  */
+import { eventCurrency, formatMinorOrCount } from '../../lib/money.js';
 import { formatWord, isPast, statusOf, timeLine, visibilityWord } from './myEventsModel';
 import { GATE, onEventDay } from './hostHeaderModel';
 import { publishAction } from './eventOrganiserModel';
@@ -66,9 +67,7 @@ const n = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : 
 export function money(cents, currency) {
   const c = n(cents);
   if (c == null) return null;
-  const code = /^[A-Za-z]{3}$/.test(String(currency || '')) ? String(currency).toUpperCase() : 'USD';
-  try { return (c / 100).toLocaleString('en-US', { style: 'currency', currency: code, maximumFractionDigits: c % 100 ? 2 : 0 }); }
-  catch { return `${c / 100} ${code}`; }
+  return formatMinorOrCount(c, eventCurrency(currency), { locale: 'en-US', trimWhole: true });
 }
 
 /** Your place at this event: in Upcoming first, then Past's page. Null when neither read holds one. */

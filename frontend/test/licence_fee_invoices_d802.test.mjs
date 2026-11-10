@@ -35,10 +35,10 @@ test('the words: money in the invoice\'s currency, the typed total, the fee line
   assert.equal(money(5, 'usd'), '$0.05');
   assert.equal(money(123456, 'CHF'), 'CHF 1,234.56');
   assert.equal(money(null, 'EUR'), 'Not recorded');
-  assert.equal(parseAmount('4,000.5'), 400050);
-  assert.equal(parseAmount('€12000'), 1200000);
-  assert.equal(parseAmount('0'), 0);
-  for (const bad of ['1.234', '-1', 'abc', '']) assert.equal(parseAmount(bad), null, bad);
+  assert.equal(parseAmount('4,000.5', 'EUR'), 400050);
+  assert.equal(parseAmount('€12000', 'EUR'), 1200000);
+  assert.equal(parseAmount('0', 'EUR'), 0);
+  for (const bad of ['1.234', '-1', 'abc', '']) assert.equal(parseAmount(bad, 'EUR'), null, bad);
   assert.deepEqual(feeLine(READ), { ok: true, text: 'Annual fee €12,000.00. Each licence year starts on the anniversary of 2020-03-15.' });
   assert.equal(feeLine({ ...READ, annual_fee_cents: null }).ok, false);
   assert.match(feeLine({ ...READ, starts_on: null }).text, /No start date/);
