@@ -21,9 +21,15 @@
  * EVERY INCIDENT SAYS WHERE TO GO: a console in the app where one exists, and always a runbook section in
  * `documentation/operations/PLATFORM_OBSERVABILITY.md` §7.
  *
- * NOT DETECTED HERE, AND SAID SO (`not_detected`): branch Worker and database health, which `/api/admin/deployments`
- * reads by fanning out to every branch and which this summary must not wait on (D110); and the meeting bot, which
- * is not deployed (D886).
+ * NOT DETECTED HERE, AND SAID SO (`not_detected`): only reasons that are true on this deployment (D5370). The
+ * meeting bot's staged diagnostics are an owner's on-demand check kept in R2 with no index, so they are not read;
+ * the bot itself is, unless it is off here or this is a branch.
+ *
+ * D5370 (#5370) added two signals. The MEETING BOT (`meetingBotHealth.ts`): its latest start failed, or failed
+ * several times in a row, or its readiness preflight failed; a failed check and a report that never arrived are
+ * different incidents (D4857). BRANCH HEALTH: not the fan-out (D110 keeps that in Deployments), but the last result
+ * Deployments stored on `licence_deployments` (D452). A branch whose last check said not ok is an incident; one not
+ * checked for BRANCH_CHECK_STALE_HOURS is a low note, because only opening Deployments refreshes it.
  *
  * Coordinates with D4559 (`platformCapacity.ts`): capacity thresholds stay there; this file reads no D1 size or
  * queue metric and adds no second observability store.
@@ -32,6 +38,8 @@ import type { Env } from '../types';
 import { CRON_TRIGGERS, FAILED_STATUSES } from '../util/cronHistory';
 import { probeTelemetry, TELEMETRY_PROBE_HOURS } from './analyticsReports';
 import { STRIPE_WEBHOOK_PATH } from './stripeWebhookDeliveries';
+import { BOT_START_FAILURE_STREAK, PREFLIGHT_CODES, type MeetingBotHealth } from './meetingBotHealth';
+import { branchOf } from '../util/branch';
 
 // ── Thresholds ─────────────────────────────────────────────────────────────
 
@@ -52,6 +60,10 @@ export const DLQ_HIGH = 100;
 export const TELEMETRY_STALE_MINUTES = 60;
 /** Where the last successful telemetry read is kept, so an outage can say when it last worked. */
 export const TELEMETRY_LAST_OK_KEY = 'health:telemetry:last_ok';
+/** A live branch whose stored health check is older than this is noted (low): nobody has opened Deployments since. */
+export const BRANCH_CHECK_STALE_HOURS = 24;
+/** The provisioning states in which a branch is expected to answer (migration 258). */
+export const LIVE_BRANCH_STATES = ['worker_live', 'hostname_active', 'linked'] as const;
 
 /** Repo-relative, as `frontend/src/lib/integrationKeys.js`'s guides are: the page adds where the repository is read. */
 const RUNBOOK = 'documentation/operations/PLATFORM_OBSERVABILITY.md';
@@ -65,6 +77,14 @@ export const REMEDIATION = {
   telemetry: {
     surface: { label: 'Topology › This deployment', href: '/admin/platform/topology' },
     runbook: { label: 'Runbook: telemetry cannot be read', doc: `${RUNBOOK}#74-telemetry-cannot-be-read` },
+  },
+  meeting_bot: {
+    surface: { label: 'Platform › Meeting bots', href: '/admin/platform/meeting-bots' },
+    runbook: { label: 'Runbook: the meeting bot is not starting', doc: `${RUNBOOK}#75-the-meeting-bot-is-not-starting` },
+  },
+  branch: {
+    surface: { label: 'Platform › Deployments', href: '/admin/platform' },
+    runbook: { label: 'Runbook: a branch is unhealthy or unchecked', doc: `${RUNBOOK}#76-a-branch-is-unhealthy-or-unchecked` },
   },
 } as const;
 
@@ -222,6 +242,25 @@ export async function readTelemetryHealth(env: Env, now: Date = new Date()): Pro
 
 type JobsBlock = { available?: boolean; reason?: string; triggers?: { name: string; trigger_name: string; state: string; expected_at: string | null; last_started_at: string | null; error: string | null }[] } | null | undefined;
 type CronBlock = { available?: boolean; reason?: string; streaks?: CronStreak[] } | null | undefined;
+export type BranchCheck = { code: string; status: string; last_health_at: string | null; last_health_ok: number | null };
+export type BranchHealth = { available: false; reason: string } | { available: true; applies: false; reason: string } | { available: true; applies: true; branches: BranchCheck[] };
+
+/**
+ * D5370: each live branch's LAST STORED health check (D452), never a fresh fan-out (D110). Deployments writes it when
+ * a branch answers, so an unreachable branch keeps its old time and shows up as unchecked.
+ */
+export async function readBranchHealth(env: Env): Promise<BranchHealth> {
+  if (branchOf(env)) return { available: true, applies: false, reason: 'A branch has no branches; HQ checks them.' };
+  try {
+    const rows = (await env.DB.prepare(`SELECT code, status, last_health_at, last_health_ok FROM licence_deployments
+      WHERE status IN (?, ?, ?) ORDER BY code LIMIT 500`).bind(...LIVE_BRANCH_STATES).all<BranchCheck>()).results ?? [];
+    return { available: true, applies: true, branches: rows };
+  } catch (e) {
+    if (/no such table/i.test(String((e as Error)?.message ?? e))) return { available: false, reason: 'The deployments registry is not on this database (migration 258).' };
+    throw e;
+  }
+}
+
 type DlqBlock = { available?: boolean; reason?: string; total?: number | null } | null | undefined;
 type WebhookBlock = Awaited<ReturnType<typeof readWebhookHealth>> | { available: false; reason: string } | null | undefined;
 type IncidentBlock = { available?: boolean; reason?: string; count?: number | null; window_days?: number } | null | undefined;
@@ -233,6 +272,9 @@ export type HealthInput = {
   webhook: WebhookBlock;
   telemetry: TelemetryHealth | { status?: undefined; available: false; reason: string } | null | undefined;
   published: IncidentBlock;
+  /** D5370: the meeting bot's start outcomes, and each live branch's last stored check. */
+  meeting_bot: MeetingBotHealth | null | undefined;
+  branches: BranchHealth | null | undefined;
   /** Whether Stripe is set up here at all, so a silent webhook is worth noting. */
   stripe_configured: boolean;
   now: Date;
@@ -330,6 +372,54 @@ export function detectIncidents(input: HealthInput): { incidents: DetectedIncide
     add(inc({ key: 'telemetry:stale', kind: 'telemetry', severity: 'medium', title: 'Telemetry is stale', detail: tel.reason ?? '', since: tel.last_event_at, observed_at: observed }));
   }
 
+  // D5370 — the meeting bot's starts. A failed check and a report that never arrived are different incidents.
+  const bot = input.meeting_bot;
+  if (!bot || bot.available === false) unknown.push({ signal: 'Meeting bot starts', reason: (bot as { reason?: string } | null)?.reason || 'The meeting bot\'s start outcomes were not reported.' });
+  else if (bot.applies && bot.latest && bot.latest.outcome !== 'started') {
+    const n = bot.consecutive_failures;
+    const many = n >= BOT_START_FAILURE_STREAK;
+    const inRow = n > 1 ? ` ${bot.streak_at_least ? `at least ${n}` : n} times in a row` : '';
+    if (bot.latest.outcome === 'check_failed') {
+      const preflight = !!bot.latest.code && PREFLIGHT_CODES.has(bot.latest.code);
+      add(inc({
+        key: 'meeting_bot:start_failed', kind: 'meeting_bot', severity: many || preflight ? 'high' : 'medium',
+        title: preflight ? `The meeting bot's readiness preflight failed${inRow}` : `The meeting bot failed to start${inRow}`,
+        detail: `Latest: ${bot.latest.code} at ${bot.latest.stage ?? 'an unrecorded stage'}, ${bot.latest.at}. The meeting provider was not contacted.`,
+        since: bot.streak_started_at, observed_at: observed,
+      }));
+    } else {
+      add(inc({
+        key: 'meeting_bot:unreported', kind: 'meeting_bot', severity: many ? 'high' : 'medium',
+        title: `A meeting bot start never reported back${inRow}`,
+        detail: `Latest: ${bot.latest.failure_code ?? 'failed'} at ${bot.latest.at}, with no startup code and no callback from the runtime. This is a missing report, not a failed check.`,
+        since: bot.streak_started_at, observed_at: observed,
+      }));
+    }
+  }
+
+  // D5370 — each live branch's last stored check (D452); the fan-out stays in Deployments (D110).
+  const br = input.branches;
+  if (!br || br.available === false) unknown.push({ signal: 'Branch health', reason: (br as { reason?: string } | null)?.reason || 'The deployments registry was not reported.' });
+  else if (br.applies) {
+    for (const b of br.branches) {
+      const at = msOf(b.last_health_at);
+      if (b.last_health_ok === 0) {
+        add(inc({
+          key: `branch:${b.code}`, kind: 'branch', severity: 'medium', title: `Branch ${b.code} reported unhealthy at its last check`,
+          detail: `Checked ${b.last_health_at ?? 'at an unrecorded time'} by Deployments. Open Deployments to ask it again.`,
+          since: b.last_health_at, observed_at: observed,
+        }));
+      } else if (Number.isNaN(at) || input.now.getTime() - at > BRANCH_CHECK_STALE_HOURS * 3_600_000) {
+        add(inc({
+          key: `branch:${b.code}`, kind: 'branch', severity: 'low',
+          title: b.last_health_at ? `Branch ${b.code} has not been checked in ${BRANCH_CHECK_STALE_HOURS} hours` : `Branch ${b.code} has never answered a health check`,
+          detail: 'Only Deployments asks a branch, and it stores the answer only when the branch replies. A branch that is down looks the same as one nobody checked.',
+          since: b.last_health_at, observed_at: observed,
+        }));
+      }
+    }
+  }
+
   const incidents = [...found.values()].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity) || a.key.localeCompare(b.key));
   return { incidents, unknown };
 }
@@ -342,10 +432,18 @@ export function healthStateOf(incidents: DetectedIncident[], unknown: unknown[])
   return 'healthy';
 }
 
+/** Always true on main: the diagnostic is an owner's on-demand check, kept in R2 per run with no index (#3708). */
 export const NOT_DETECTED = [
-  { signal: 'Branch Worker and database health', reason: 'Read by Deployments, which asks every branch and must not hold up this summary (D110). Its rows on this page say each branch\'s state.' },
-  { signal: 'Meeting bot diagnostics', reason: 'The meeting bot is not deployed yet (D886), so it reports nothing to detect.' },
+  { signal: 'Meeting bot staged diagnostics', reason: 'A diagnostic is a check the owner starts, kept per run in R2 with no index, so it is not read here. Its Not recorded stages show on Meeting bots.' },
 ];
+
+/** What is not detected on this read: the fixed list, plus any signal that does not apply here, with its own reason. */
+export function notDetected(input: Pick<HealthInput, 'meeting_bot' | 'branches'>) {
+  const out: { signal: string; reason: string }[] = [...NOT_DETECTED];
+  if (input.meeting_bot && input.meeting_bot.available && !input.meeting_bot.applies) out.push({ signal: 'Meeting bot starts', reason: input.meeting_bot.reason });
+  if (input.branches && input.branches.available && !input.branches.applies) out.push({ signal: 'Branch health', reason: input.branches.reason });
+  return out;
+}
 
 export const PUBLISHED_NOTE = 'Published incidents are entered by hand on the status page. They are counted here apart from what the platform detects, and never raise or clear its state.';
 
@@ -358,7 +456,7 @@ export function buildHealth(input: HealthInput) {
     observed_at: input.now.toISOString(),
     detected: incidents,
     unknown,
-    not_detected: NOT_DETECTED,
+    not_detected: notDetected(input),
     published: published && published.available !== false
       ? { available: true as const, count: published.count ?? null, window_days: published.window_days ?? null, manual: true as const, note: PUBLISHED_NOTE }
       : { available: false as const, reason: published?.reason || 'The published incident count was not reported.', manual: true as const, note: PUBLISHED_NOTE },
@@ -368,6 +466,7 @@ export function buildHealth(input: HealthInput) {
     thresholds: {
       cron_failure_streak: CRON_FAILURE_STREAK, webhook_failure_streak: WEBHOOK_FAILURE_STREAK, webhook_failure_critical: WEBHOOK_FAILURE_CRITICAL,
       webhook_silence_hours: WEBHOOK_SILENCE_HOURS, dlq_high: DLQ_HIGH, telemetry_stale_minutes: TELEMETRY_STALE_MINUTES,
+      bot_start_failure_streak: BOT_START_FAILURE_STREAK, branch_check_stale_hours: BRANCH_CHECK_STALE_HOURS,
     },
   };
 }

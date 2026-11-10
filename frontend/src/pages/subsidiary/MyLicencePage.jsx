@@ -27,6 +27,7 @@ import ContractTab from './licence/ContractTab';
 import RequestsTab from './licence/RequestsTab';
 import ProgramsTab, { ProgramsUnlinked } from './licence/ProgramsTab';
 import StatementsTab from './licence/StatementsTab';
+import { formatMinorOrCount } from '../../lib/money.js';
 
 /**
  * Licences — /admin/my-licence and its five tabs (D800, #2233: Summary, Terms,
@@ -57,10 +58,8 @@ import StatementsTab from './licence/StatementsTab';
 
 const fmtMoney = (cents, currency) => {
   if (cents == null) return 'Not recorded';
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'EUR' })
-      .format(Number(cents) / 100);
-  } catch { return `${(Number(cents) / 100).toLocaleString()} ${currency || ''}`.trim(); }
+  // D5373: at the currency's own decimals; a missing or unlisted currency names the stored count, it is not read as euros.
+  return formatMinorOrCount(Number(cents), currency);
 };
 // Basis points, not a float — see migration 187. 3500 → "35%".
 //

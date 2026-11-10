@@ -125,14 +125,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     for (const label of bannedIn(sql)) offenders.push(`${DIR}/${file} — ${label}`);
   }
 
-  // D4106: every name is numbered (at most NUMBERED_CEILING) or stamped
-  // (YYYYMMDDHHMM_<slug>.sql), and no two files share a number or a stamp.
+  // D4106: every name is numbered (at most NUMBERED_CEILING) or stamped; D5398: from DISCRIMINATOR_FROM a stamped
+  // name also carries its issue (YYYYMMDDHHMM_<issue>_<slug>.sql), and no two files share a number or an identity.
   const naming = [...files.map(migrationNameProblem).filter(Boolean), ...migrationDuplicates(files)];
   if (naming.length) {
     console.error('✖ check-sql-migrations (names, D4106):');
     for (const n of naming) console.error(`  - ${n}`);
-    console.error('\nName a new migration by the UTC minute it was written: YYYYMMDDHHMM_<slug>.sql.');
-    console.error('Two files with one number or stamp leave their order to a tiebreak.');
+    console.error('\nName a new migration by the UTC minute it was written and its issue: YYYYMMDDHHMM_<issue>_<slug>.sql (D4106, D5398).');
+    console.error('Two files with one number or identity leave their order to a tiebreak.');
     process.exit(1);
   }
 

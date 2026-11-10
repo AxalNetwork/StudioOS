@@ -306,6 +306,8 @@ linkedin.get('/oauth/callback', async (c) => {
     accessToken = String(tokenJson?.access_token || '');
     scopes = grantedScopes(tokenJson?.scope);
     if (!accessToken) return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);
+    // D5304: the managed client secret authenticated the exchange; stamp its last use (hourly at most, never throws).
+    await (await import('../services/providerOauthKeys')).markProviderKeyUsed(c.env, 'linkedin');
   } catch (e: any) {
     console.error('[LINKEDIN] token exchange threw:', e?.message || e);
     return redirectBack(c.env, 'error', returnTo, 'token_unavailable' satisfies LinkedInCallbackCode);

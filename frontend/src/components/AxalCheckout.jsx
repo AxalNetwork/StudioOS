@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useSettings } from '../contexts/SettingsContext';
 import { getStripe, buildAppearance } from '../lib/stripe';
 import Skeleton from './Skeleton';
+import { formatStripeAmount } from '../lib/money';
 
 /**
  * Task #4 — Axal-branded embedded checkout component.
@@ -58,15 +59,8 @@ function promoReasonText(reason) {
 }
 
 function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: (currency || 'usd').toUpperCase(),
-    }).format(amt);
-  } catch {
-    return `${amt.toFixed(2)} ${(currency || '').toUpperCase()}`.trim();
-  }
+  // D5373: Stripe's amount at its currency's own decimals; the storefront's default currency is USD.
+  return formatStripeAmount(Number(cents) || 0, currency || 'usd');
 }
 
 export default function AxalCheckout(props) {

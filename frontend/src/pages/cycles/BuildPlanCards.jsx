@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import {
-  DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landsIn, moduleName, writeRefusal,
+  DISCARD, EDIT_FIELDS, KEEP, KIND_WORD, STATUS_WORD, WORDING_TAG, becauseChips, decidedLine, editPayload, editStart, landedHref, landsIn, moduleName, opensRecord, writeRefusal,
 } from './buildPlanModel';
 
 /**
@@ -115,7 +115,15 @@ export function ProposalCard({ item, phone = false, readOnly = false, paused = f
   );
 }
 
-/** An accepted or dismissed item, collapsed to one line (VB1, VB3). Open goes to the module it landed in. */
+/**
+ * An accepted or dismissed item, collapsed to one line (VB1, VB3).
+ *
+ * D4602 (#4602): Open goes to the ROW the item landed in, where the module's
+ * record route reads that table (`landedHref`), and to the module where it does
+ * not. The label says which, so the founder knows what the link opens before
+ * pressing it, and the title attribute names the destination for a screen
+ * reader on a row whose words are the item's.
+ */
 export function DoneRow({ item, module, search = '', readOnly = false }) {
   const dismissed = item.status === 'discarded';
   return (
@@ -126,7 +134,13 @@ export function DoneRow({ item, module, search = '', readOnly = false }) {
         <span className={LAND}>{item.status === 'edited' ? `${decidedLine(item)} · edited` : decidedLine(item)}</span>
       </div>
       {!dismissed && !readOnly && item.kind !== 'connect-door'
-        ? <Link to={`/build/${module}${search}`} className={`${BTN_G} min-h-[30px]`} data-testid={`plan-done-open-${item.uid}`}>Open</Link>
+        ? (
+          <Link to={landedHref(item, module, search)} className={`${BTN_G} min-h-[30px]`}
+            title={opensRecord(item, module) ? `Opens this item's record in ${moduleName(module)}` : `Opens ${moduleName(module)}`}
+            data-testid={`plan-done-open-${item.uid}`}>
+            {opensRecord(item, module) ? 'Open the record' : 'Open the module'}
+          </Link>
+        )
         : null}
     </div>
   );
@@ -200,6 +214,43 @@ export function PlanConfirm({ title, body, button, danger = false, run, onClose,
 }
 
 /**
+ * D4602 (#4602, Build audit 3/4) — a choice field as NATIVE RADIOS.
+ *
+ * These were `<button role="radio">`s in a `role="radiogroup"` with no
+ * arrow-key handling and no managed tab order, so the group could be entered
+ * but not moved through: a keyboard user tabbed through every option and
+ * `aria-checked` was the only thing that moved. The WAI-ARIA radio pattern
+ * asks for one tab stop, arrows that move AND select, and a group label.
+ *
+ * Native `<input type="radio">` inputs that share a `name` are given all of
+ * that by the browser — one tab stop on the checked input, arrows that move
+ * and select, Tab out to the next field — so there is no keyboard code here to
+ * get wrong. The chip look is the label's; `peer-checked` and `peer-focus`
+ * draw the selected and focused states, and the input stays in the accessible
+ * tree (`sr-only`, never `display: none`, which would take it out). The
+ * `<fieldset>`/`<legend>` is the group's accessible name.
+ */
+export function ChoiceField({ field, value, onPick, name }) {
+  const chip = 'inline-flex min-h-[34px] cursor-pointer items-center rounded-full border px-3 text-[12px] border-axal-hairline bg-white font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 '
+    + 'peer-checked:border-axal-violet peer-checked:bg-axal-lavender peer-checked:font-bold peer-checked:text-axal-violet-deep dark:peer-checked:border-violet-500 dark:peer-checked:bg-violet-900/30 dark:peer-checked:text-violet-300 '
+    + 'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-axal-violet dark:peer-focus-visible:outline-violet-400';
+  return (
+    <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+      <legend className={EYE}>{field.label}</legend>
+      <span className="flex flex-wrap gap-1.5">
+        {field.options.map((o) => (
+          <span key={o} className="inline-flex">
+            <input type="radio" name={name} value={o} checked={value === o} onChange={() => onPick(o)}
+              className="peer sr-only" id={`${name}-${o}`} data-testid={`plan-edit-${field.key}-${o}`} />
+            <label htmlFor={`${name}-${o}`} className={chip}>{field.words?.[o] || o}</label>
+          </span>
+        ))}
+      </span>
+    </fieldset>
+  );
+}
+
+/**
  * VB4: Edit and accept. The item opens in its module's own fields (D1066 §2's
  * list); its evidence stays with it and cannot be removed here. Only the
  * fields changed are sent, so the item reads edited only when it was.
@@ -239,15 +290,10 @@ export function EditDialog({ item, module, onClose, onDone, accept }) {
         <section className="flex flex-col gap-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
           {(EDIT_FIELDS[item.kind] || []).map((f) => (
             <div key={f.key} className="flex flex-col gap-1.5">
-              <span className={EYE} id={`plan-edit-label-${f.key}`}>{f.label}</span>
+              {f.kind !== 'choice' ? <span className={EYE} id={`plan-edit-label-${f.key}`}>{f.label}</span> : null}
               {f.kind === 'choice' ? (
-                <span className="flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby={`plan-edit-label-${f.key}`}>
-                  {f.options.map((o) => (
-                    <button key={o} type="button" role="radio" aria-checked={form[f.key] === o} onClick={() => set(f.key, o)}
-                      className={`min-h-[34px] rounded-full border px-3 text-[12px] ${form[f.key] === o ? 'border-axal-violet bg-axal-lavender font-bold text-axal-violet-deep dark:border-violet-500 dark:bg-violet-900/30 dark:text-violet-300' : 'border-axal-hairline bg-white font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'}`}
-                      data-testid={`plan-edit-${f.key}-${o}`}>{f.words?.[o] || o}</button>
-                  ))}
-                </span>
+                // D4602: native radios, so the group is one tab stop the arrows move through.
+                <ChoiceField field={f} value={form[f.key]} onPick={(o) => set(f.key, o)} name={`plan-edit-${item.uid}-${f.key}`} />
               ) : f.kind === 'area' ? (
                 <textarea className={`${FIELD} min-h-[64px]`} aria-labelledby={`plan-edit-label-${f.key}`} maxLength={f.max} value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} data-testid={`plan-edit-${f.key}`} />
               ) : (

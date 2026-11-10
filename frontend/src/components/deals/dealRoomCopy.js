@@ -1,4 +1,5 @@
 import { dealMoney } from './dealMoney';
+import { parseMinor } from '../../lib/money.js';
 /**
  * D630 (#1388) — the deal room's words, in one place.
  *
@@ -186,13 +187,14 @@ export function transferRefusal(e) {
   return { code, title: 'The transfer was not recorded', body: e?.message || 'Try again. Nothing was recorded.' };
 }
 
-/** "12,500.00" or "12500" → 1250000 cents; NaN for anything that is not a positive amount. */
-export function amountToCents(raw) {
+/**
+ * "12,500.00" or "12500" → the deal currency's minor units (1250000 in USD, 12500 in JPY, 12500000 in KWD); NaN for
+ * anything that is not a positive amount that currency can hold (D5373).
+ */
+export function amountToCents(raw, currency = 'USD') {
   const s = String(raw ?? '').replace(/[,\s]/g, '');
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return Number.NaN;
-  const [whole, frac = ''] = s.split('.');
-  const cents = Number(whole) * 100 + Number((frac + '00').slice(0, 2));
-  return cents > 0 ? cents : Number.NaN;
+  const r = /^\d+(\.\d+)?$/.test(s) ? parseMinor(s, currency) : { ok: false };
+  return r.ok && r.minor > 0 ? r.minor : Number.NaN;
 }
 
 /** Cents as money, to the cent: 1250000 → "$12,500.00". */
