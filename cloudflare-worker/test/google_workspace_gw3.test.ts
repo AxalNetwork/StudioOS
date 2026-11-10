@@ -14,6 +14,7 @@
  *   · interviewIntake re-checks the venture.
  */
 import test from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -55,6 +56,7 @@ async function fixture() {
   db.exec(mig('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(mig('255_hypothesis_verdict_history.sql'));
   for (const m of ['440_validate_cycle_stores.sql', '460_validate_record_stores.sql', '464_verdict_decisions.sql', '438_interview_sessions.sql']) db.exec(mig(m));
+  applyAcceptRetryKeys(db); // D5352
   applySessionTranslationColumns(db);
   // deleteSession clears the session's proposals too (214, 246, 439, 447).
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '439_validate_proposals_structuring.sql', '447_assistant_interviews.sql']) db.exec(mig(m));
