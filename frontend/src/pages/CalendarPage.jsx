@@ -8,14 +8,16 @@
  * is whether the viewer may create an IC meeting, and it matches
  * `canScheduleIc` in `routes/calendar.ts` word for word (`admin || investor`).
  *
- * ONE KIND TABLE. `KINDS` below is the single source of truth for the filter
+ * ONE KIND TABLE. `KINDS` is the single source of truth for the filter
  * chips, the rail's legend and every event's dot. It used to be three
  * hardcoded lists — `KIND_LABEL`, `KIND_COLOR` and a literal filter array —
  * and they had drifted: `partner_office_hour` was in two of the three, so
  * office hours were reachable only under "All" and no chip could ever select
- * them. `frontend/test/calendar_page_c1.test.mjs` now compares this table
- * against the `CalendarEvent` union the worker can actually emit, so a seventh
- * kind cannot be added without a chip.
+ * them. D5205 (#5205): it was then a fourth list, in this file, beside the
+ * Worker's registry, and that drifted too. `KINDS`, `FAMILIES` and
+ * `PUSHABLE_KINDS` now come from `calendarViews.js`, which builds them from
+ * `cloudflare-worker/src/services/calendar/registry.ts` itself, so a kind
+ * cannot be added without a chip.
  *
  * SIX KINDS, NOT THE CANVAS'S FIVE. The canvas omits `expert_booking` on the
  * stated grounds that it is "in the type union and produced by nothing". It IS
@@ -95,7 +97,7 @@ import PageExplainer from '../components/PageExplainer';
 import { usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
-import { NOT_YET, VIEWS, WAITS, chipCount, viewOf, windowFor } from './calendarViews';
+import { KINDS, KIND_LABEL, NOT_YET, PUSHABLE_KINDS, VIEWS, chipCount, viewOf, waitsOf, windowFor } from './calendarViews';
 import CalendarItemDrawer, { CancelDialog, ExternalItemSheet } from './CalendarItemDrawer';
 import { NewCheckinDialog, NewIcDialog, NewMenu } from './CalendarNewDialogs';
 import CalendarScopeView, { ScopeSwitch } from './calendarScope/CalendarScopeView';
@@ -118,72 +120,6 @@ import {
   anchorOf, dayKeyOf, familiesFor, kindsFrom, kindsOfFamilies, needsFrom, needsMe, shiftAnchor, withDate, withKinds, withNeeds,
 } from './calendarGrid';
 import './calendarPage.css';
-
-/**
- * The kinds, in the canvas's reading order. `from` is the module the events
- * come from, in plain words, never a table name (D1613, #3723). D1484 (#3977):
- * the Worker's registry (`services/calendar/registry.ts`) says where each
- * source comes from, and the legend shows the read's `sources[].module` first;
- * `from` carries the same words for the moment before the read answers.
- * D1384 (#3692): `compliance_due` is the Compliance layer, which replaced the
- * /compliance page; the canvas draws no deadline kind, so its mark is derived
- * in the same idiom as the others (calendarPage.css).
- */
-const KINDS = [
-  { id: 'ic_meeting', label: 'IC meeting', from: 'Deals › Investment committee' },
-  { id: 'founder_checkin', label: 'Check-in', from: 'Ventures › Check-ins' },
-  { id: 'advisor_booking', label: 'Advisor', from: 'Advisors › Sessions' },
-  { id: 'partner_office_hour', label: 'Office hour', from: 'Partners › Office hours' },
-  { id: 'calendly_event', label: 'Calendly', from: 'Calendly' },
-  { id: 'expert_booking', label: 'Expert session', from: 'Wellbeing › Expert sessions' },
-  { id: 'event_ticket', label: 'Event ticket', from: 'My events › Tickets' },
-  { id: 'event_hosted', label: 'Hosting', from: 'My events › Hosting' },
-  { id: 'investor_meeting', label: 'Investor meeting', from: 'Raise › Capital relationships' },
-  { id: 'compliance_due', label: 'Compliance', from: 'Build › Compliance' },
-  // D1484 (#3977): D1208's three readers and "New event", page only.
-  { id: 'interview_call', label: 'Interview call', from: 'Validate › Customer research' },
-  { id: 'cohort_date', label: 'Cohort date', from: 'Spin-Out Lab › Cohort' },
-  { id: 'deal_closing', label: 'Deal closing', from: 'Deals › Closings' },
-  { id: 'manual', label: 'Your event', from: 'Calendar' },
-  // #3959: the Learning source, page only.
-  { id: 'learning', label: 'Learning', from: 'Learning › Your plan' },
-  // D1486 §b (#3981): Grow's dated stores, page only.
-  { id: 'publish_send', label: 'Publish send', from: 'Publish' },
-  { id: 'content_planned', label: 'Planned content', from: 'Grow › Distribution' },
-  // D1486 §a (#3980): the meeting bot's calls, page only; done reads Recorded.
-  { id: 'bot_call', label: 'Recorded call', from: 'Validate › Record a session' },
-  // #3982 (D1486 §c): Raise's dated stores, page only.
-  { id: 'round_close', label: 'Round close', from: 'Raise › Round' },
-  { id: 'nda_expiry', label: 'NDA expiry', from: 'Raise › NDAs' },
-  // #3983 (D1486 §d): the dated task stores, page only.
-  { id: 'workflow_task', label: 'Workflow task', from: 'Workflows › Tasks' },
-  { id: 'mvp_task', label: 'Build task', from: 'Build › Board' },
-  { id: 'work_item', label: 'Work item', from: 'Work › Board' },
-  { id: 'contact_task', label: 'Contact follow-up', from: 'Contacts › Follow-ups' },
-  { id: 'engagement_milestone', label: 'Milestone', from: 'Engagements › Milestones' },
-  // D1485 (#3979): the member's own Google and Outlook events, read-only and page only.
-  { id: 'external_google', label: 'Google event', from: 'Google Calendar' },
-  { id: 'external_microsoft', label: 'Outlook event', from: 'Outlook' },
-  // #3957: a scheduled AI agent work session; its work comes back as proposals in Approvals.
-  { id: 'agent_session', label: 'AI agent session', from: 'Team › Agents' },
-  // #5131 (D1486 §e): Grow's campaign plans, ad flights, newsletter sends and sequence steps, page only.
-  { id: 'grow_campaign', label: 'Campaign', from: 'Grow › Campaigns' },
-  { id: 'ad_flight', label: 'Ad flight', from: 'Grow › Ads' },
-  { id: 'newsletter_send', label: 'Newsletter send', from: 'Grow › Newsletter' },
-  { id: 'sequence_step', label: 'Sequence step', from: 'Grow › Sequences' },
-];
-const KIND_LABEL = Object.fromEntries(KINDS.map((k) => [k.id, k.label]));
-
-/**
- * Mirrors `PUSHABLE_KINDS` in `cloudflare-worker/src/routes/calendar.ts`. The
- * two lists are asserted equal by `frontend/test/calendar_page_c1.test.mjs`,
- * because the whole point of drawing the control conditionally is that the
- * condition is the route's.
- */
-const PUSHABLE_KINDS = new Set([
-  'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
-  'event_ticket', 'event_hosted',
-]);
 
 const PROVIDER_LABEL = { google: 'Google', microsoft: 'Outlook' };
 
@@ -477,6 +413,7 @@ function PersonalCalendar({ scopes = [] }) {
   const shownKinds = useMemo(() => KINDS.filter((k) => allowedKinds.includes(k.id)), [allowedKinds]);
   const chosen = useMemo(() => kindsFrom(search, allowedKinds), [search, allowedKinds]);
   const needs = needsFrom(search);
+  const waits = waitsOf();
 
   const window_ = useMemo(() => windowFor(range, anchor), [range, anchor]);
   const label = rangeLabel(range, window_.from, window_.to);
@@ -684,10 +621,11 @@ function PersonalCalendar({ scopes = [] }) {
         {!phone && (
           <div style={{ minWidth: 0 }}>
             <h1>Calendar</h1>
-            <p>
-              Investment-committee meetings, founder check-ins, advisor sessions, partner office
-              hours, expert sessions booked through wellbeing, and anything synced in from Calendly.
-              Nothing else is aggregated here.
+            {/* D5205 (#5205): no list of sources in prose. The one that stood here named six and said
+                nothing else was read; the rail names every source, from the Worker's registry. */}
+            <p data-testid="cal-head-about">
+              Everything dated across your modules and the calendars you connect, in one place. The
+              rail lists each source and where it comes from.
             </p>
           </div>
         )}
@@ -927,13 +865,16 @@ function PersonalCalendar({ scopes = [] }) {
             </p>
           </div>
 
-          {/* D1205 (#2420): what the canvas draws that no read carries yet. */}
-          <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
-            <div className="cal-eb">{NOT_YET}</div>
-            {['deadlines', 'interviews'].map((k) => (
-              <p key={k} className="cal-foot" data-testid={`cal-wait-${k}`}>{WAITS[k]}</p>
-            ))}
-          </div>
+          {/* D1205 (#2420): what the canvas draws that no read carries yet. D5205: only the waits that name no
+              kind the registry reads, and no card at all when none is left. */}
+          {waits.length > 0 && (
+            <div className="cal-card" style={{ marginTop: 12 }} data-testid="cal-waits">
+              <div className="cal-eb">{NOT_YET}</div>
+              {waits.map((w) => (
+                <p key={w.key} className="cal-foot" data-testid={`cal-wait-${w.key}`}>{w.text}</p>
+              ))}
+            </div>
+          )}
         </aside>
       </div>
 

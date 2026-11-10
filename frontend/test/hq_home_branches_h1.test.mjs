@@ -106,10 +106,10 @@ test('each of the three absent states gives a DIFFERENT reason', () => {
   // The three sentences are the point. Collapsing them would put "we could not
   // reach this branch" and "this licence has no branch" behind one dash, and
   // only the second is a fact about the licence.
-  const m = /const branchReason = \(b, what\) => \{([\s\S]*?)\n\};/.exec(PAGE);
+  const m = /const branchReason = \(b, what(?:, registryDown = false)?\) => \{([\s\S]*?)\n\};/.exec(PAGE);
   assert.ok(m, 'the reason helper must exist');
   const body = m[1];
-  assert.match(body, /if \(!b\)/, 'a licence with no branch has its own sentence');
+  assert.match(body, /if \(!b\) return/, 'a licence with no branch has its own sentence');
   assert.match(body, /status === 'not_deployed'/, 'a branch with no binding has its own sentence');
   assert.match(body, /status === 'unreadable'/, 'a branch that did not answer has its own sentence');
   // The branch's OWN reason wins where it has one — the server writes a better

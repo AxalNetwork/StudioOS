@@ -17,6 +17,7 @@ its `ZONE` map.
 | `SessionActions.jsx` | PR4 · Sessions | `/practice/sessions` | CONTROLS | Publish a slot and close a confirmed session (held, no-show, cancel); no store of its own (D4687) |
 | `EarningsZone.jsx` | **D4** · Earnings | `/practice/earnings` | LEDGER | the take rate, payout account, payouts and per-line cut (241) + the period note (242) + `advisor_bookings` amounts (205) + `advisor_engagements` retainers (238) |
 | `DeliverableSheet.jsx` | Practice v2 PX-06 B–D · Delivery detail | `/practice/delivery` | SHEET + DIALOGS | One work product's detail sheet (latest version, immutable history with each version's own recipient and receipts), Add version and the send confirmation; no store of its own (D4833) |
+| `SourceState.jsx` | Practice v2 PX-08 · States | every Practice zone | STATE | One source's loading, empty, unreadable, not-recorded or withheld state in PX-08's words; a small stand-in for #5129's shared component; no store of its own (D4834) |
 
 **THE OPS CANVAS'S FOUR PRACTICE SCREENS ARE SECTIONS OF THESE ZONES, NOT
 ZONES OF THEIR OWN (D571).** `design/incoming/Ops Page.dc.html` draws

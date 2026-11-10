@@ -14,6 +14,7 @@ import { gateLine } from './autoReloadModel';
 import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
 import { allowanceView as storageAllowance } from './storagePageModel';
+import { formatMinor } from '../../lib/money';
 
 const OPEN = 'text-xs font-semibold text-axal-violet hover:underline dark:text-violet-300';
 const VALUE = 'font-mono text-[28px] font-medium tracking-tight';
@@ -122,7 +123,8 @@ export function RecentInvoices({ invoices }) {
           : <>{invoices.data.degraded?.includes('stripe') && <Unreadable what="Plan invoices" claim="The order invoices below still load." onRetry={invoices.reload} />}
             {!rows.length ? <EmptyState size="sm" title={invoices.data.degraded?.includes('stripe') ? 'No order invoices yet.' : 'No invoices yet.'} /> : rows.map((row) => {
               let amount = null;
-              try { if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: row.currency }).format(row.amount_cents / 100); } catch { /* invalid currency remains missing */ }
+              // D5373: at the currency's own decimals; a missing or unlisted currency leaves the amount unrecorded.
+              if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = formatMinor(row.amount_cents, String(row.currency).toUpperCase(), { locale: 'en-US' });
               const date = new Date(toUtcInstant(row.date) || NaN);
               return <div key={`${row.kind}:${row.id}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline py-3 text-xs last:border-0 dark:border-gray-800">
                 <div className="min-w-0"><time>{Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</time><p className="break-words font-semibold">{row.description || 'Not recorded'}</p></div>

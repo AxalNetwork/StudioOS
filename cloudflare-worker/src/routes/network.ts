@@ -10,6 +10,7 @@ import { refuse } from '../util/refusal';
 import { isInfluencer, payoutGate, payoutReadiness } from '../services/influencer/payoutReadiness';
 import { logAdminAction } from '../services/adminAudit';
 import { FIRING_RULES, termsPayment } from '../services/referralPartnerTerms';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const network = new Hono<{ Bindings: Env }>();
 
@@ -844,7 +845,7 @@ network.post('/payout/request', async (c) => {
       if (remaining <= 0) break;
       if (row.amount_cents > remaining) {
         // For simplicity we don't split commissions — payouts must equal sum of full commission rows.
-        return c.json({ error: 'Amount must match sum of available commissions. Try amount=' + (balance / 100).toFixed(2) + ` ${cur} (full balance) or a smaller value matching commission row(s).` }, 400);
+        return c.json({ error: 'Amount must match sum of available commissions. Try amount=' + suffixAmount(balance, cur) + ` (full balance) or a smaller value matching commission row(s).` }, 400);
       }
       remaining -= row.amount_cents;
       usedIds.push(row.id);
@@ -888,7 +889,7 @@ network.post('/payout/request', async (c) => {
     }
     const payout = { ...insertedRows[0], commission_ids: [...usedIds].sort((a, b) => a - b) };
 
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: ${(amt / 100).toFixed(2)} ${cur} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: ${suffixAmount(amt, cur)} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
     return c.json(payout);
   } finally { await sql.end(); }
 });
@@ -905,7 +906,7 @@ network.patch('/admin/payouts/:id/process', async (c) => {
     const rows = await sql`SELECT p.*, u.email, u.name FROM payouts p JOIN users u ON u.id = p.user_id WHERE p.id = ${id}`;
     if (!rows.length) return c.json({ error: 'Payout not found' }, 404);
     const p: any = rows[0];
-    const money = `${(p.amount_cents / 100).toFixed(2)} ${p.currency || 'USD'}`;
+    const money = suffixAmount(p.amount_cents, p.currency || 'USD');
     // D572 — each step moves only a payout still open for it. A completed or
     // failed payout is final: completing a failed one would pay commissions
     // that were given back, and failing a completed one would give back

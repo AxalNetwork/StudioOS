@@ -13,6 +13,7 @@
  * each again; this only says what is missing before the press.
  */
 import { CURRENCIES, money, planKeyWord, toMinor } from './promoModel';
+import { toMajorString } from '../../../lib/money.js';
 
 export const STEPS = Object.freeze(['Applies to', 'Discount', 'Duration', 'Limits and dates', 'Review']);
 export const CODE_RE = /^[A-Z0-9_-]{3,64}$/;
@@ -89,7 +90,7 @@ export function draftFrom(p) {
   d.products = plans.length ? [] : [...products];
   if (p?.percent_off != null) { d.type = 'percent'; d.percent = String(p.percent_off); } else if (p?.amount_off != null) {
     d.type = 'fixed'; d.currency = String(p.currency || 'usd').toLowerCase();
-    d.amount = Number.isSafeInteger(Number(p.amount_off)) ? (Number(p.amount_off) / 100).toFixed(2) : '';
+    d.amount = Number.isSafeInteger(Number(p.amount_off)) ? toMajorString(Number(p.amount_off), d.currency.toUpperCase()) ?? '' : '';
   }
   d.duration = ['once', 'repeating', 'forever'].includes(p?.duration) ? p.duration : 'once';
   if (p?.duration_in_months) d.months = String(p.duration_in_months);

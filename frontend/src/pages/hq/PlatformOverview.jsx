@@ -20,6 +20,7 @@ import {
   STATUS, SEVERITY_SYM, signals, platformHealth, healthLine, attention, unknownSignals,
   coverage, activity, switchRows, webhookHealth, keyLevels, channelState, utcStamp,
   CONSOLE_GROUPS, PREVIEW_CONSOLES, WEBHOOK_SILENCE_HOURS, WEBHOOK_CRITICAL_RUN, DLQ_CRITICAL, CATALOG_STALE_DAYS, stampDate,
+  KEY_EXPIRY_WARN_DAYS, expirySummary,
 } from './platformOverviewModel';
 
 const TONE = {
@@ -438,6 +439,7 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
         <>
           <KV k="Required keys">{lv ? (lv.Required.total ? `${lv.Required.set} / ${lv.Required.total} set` : 'none declared') : <Unrecorded reason={d?.integration_keys?.reason} />}</KV>
           <KV k="Recommended keys">{lv ? `${lv.Recommended.set} / ${lv.Recommended.total} set` : <Unrecorded />}</KV>
+          <KV k="Key expiry">{lv ? expirySummary(d.integration_keys, now) : <Unrecorded />}</KV>
           <KV k="Optional keys">{lv ? `${lv.Optional.set} / ${lv.Optional.total} set · the rest not configured` : <Unrecorded />}</KV>
           <KV k="Broadcast">{tg ? `${chStates.filter((s) => s === 'Verified recently').length} verified · ${chStates.filter((s) => s === 'Unbound').length} unbound · ${tg.channels.length} Telegram` : <Unrecorded reason={d?.broadcast?.telegram?.reason} />}</KV>
         </>
@@ -447,7 +449,9 @@ export function CoreSystems({ data, sigs, rows, now, observedAt, UNAVAILABLE }) 
         <How title="How keys are levelled" testid="hq-keys-levels-how">
           Required, Recommended and Optional are D4860&apos;s levels for the fourteen managed keys, for the owner to confirm. None is
           Required: each enables one integration or channel. An Optional key that is not set is not configured, which is a choice, not a
-          problem. A key&apos;s value is never read here, and nothing records when a key expires, rotates or was last used, so none is drawn.
+          problem. A key&apos;s value is never read here. An expiry is drawn only where the provider reported one, and a key within{' '}
+          {KEY_EXPIRY_WARN_DAYS} days of it, or past it, joins Needs attention; last use is the last successful call with the key,
+          stamped at most hourly. Either one not recorded reads Not recorded. Rotation is not recorded beyond the console&apos;s last save.
         </How>
       ),
       link: <Link to="/admin/integration-keys" className={`text-[12px] font-bold text-emerald-800 dark:text-emerald-300 ${FOCUS}`}>Integration keys →</Link>,

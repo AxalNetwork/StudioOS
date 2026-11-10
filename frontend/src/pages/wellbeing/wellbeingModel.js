@@ -20,6 +20,7 @@
  *     for that week, never as zero.
  */
 import { titleCase } from '../../lib/absence';
+import { codeAmount, formatMinorOrCount, parseMinor, toMajorString } from '../../lib/money.js';
 
 /* ------------------------------------------------------------------ *
  * Check-ins
@@ -262,15 +263,8 @@ export function money(cents, currency = 'usd') {
   if (cents == null || cents === '') return null;
   const n = Number(cents);
   if (!Number.isFinite(n)) return null;
-  const code = String(currency || 'usd').toUpperCase();
-  const whole = Number.isInteger(n / 100);
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency', currency: code, minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2,
-    }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: at the currency's own decimals. A service's currency column defaults to 'usd', so none given is USD.
+  return formatMinorOrCount(n, String(currency || 'usd').toUpperCase(), { locale: 'en-US', trimWhole: true });
 }
 
 /** The viewer's zone, or UTC where the browser will not say. */
@@ -379,8 +373,7 @@ export function servicePrice(s) {
   const cents = Number(s?.price_cents);
   if (!Number.isFinite(cents)) return null;
   if (cents === 0) return 'Free';
-  const cur = String(s?.currency || 'usd').toUpperCase();
-  return `${cur} ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  return codeAmount(cents, String(s?.currency || 'usd').toUpperCase());
 }
 
 /** D574 — the Confirm step's service line: the chosen service, or a plain session. */
@@ -415,7 +408,8 @@ export function withArrived(experts = [], arrived = null) {
 export function expertRate(expert) {
   if (expert?.pricing_model === 'free') return 'Free';
   const n = Number(expert?.hourly_rate_usd);
-  return Number.isFinite(n) && n > 0 ? `${money(n * 100, 'usd')} / hr` : null;
+  // money-contract: USD. `hourly_rate_usd` is a USD float by its column name; rounded once to cents.
+  return Number.isFinite(n) && n > 0 ? `${money(Math.round(n * 100), 'usd')} / hr` : null;
 }
 
 /** An expert's categories, named from the catalogue where it was read. */
@@ -472,7 +466,7 @@ export function serviceDraft(service) {
   return {
     title: service?.title || '',
     minutes: String(service?.duration_minutes ?? SESSION_MINUTES),
-    price: Number.isFinite(cents) ? String(cents / 100) : '0',
+    price: Number.isFinite(cents) ? (toMajorString(cents, String(service?.currency || 'usd').toUpperCase()) ?? String(cents)).replace(/\.0+$/, '') : '0',
     currency: String(service?.currency || 'usd').toLowerCase(),
     description: service?.description || '',
   };
@@ -491,15 +485,16 @@ export function serviceBody(draft) {
   if (!Number.isInteger(minutes) || minutes < SERVICE_MINUTES.min || minutes > SERVICE_MINUTES.max) {
     fields.minutes = `Length is whole minutes, ${SERVICE_MINUTES.min} to ${SERVICE_MINUTES.max}.`;
   }
-  const price = Number(String(draft?.price ?? '').trim() === '' ? NaN : draft.price);
-  if (!Number.isFinite(price) || price < 0) fields.price = 'Rate is an amount of zero or more. Zero is a free session.';
+  // D5373: the rate is typed in the service's own currency, at that currency's decimals, and sent in its minor units.
+  const priceParsed = parseMinor(String(draft?.price ?? '').trim(), String(draft?.currency || 'usd').toUpperCase());
+  if (!priceParsed.ok) fields.price = priceParsed.reason === 'decimals' ? priceParsed.message : 'Rate is an amount of zero or more. Zero is a free session.';
   if (Object.keys(fields).length) return { ok: false, fields };
   return {
     ok: true,
     body: {
       title,
       duration_minutes: minutes,
-      price_cents: Math.round(price * 100),
+      price_cents: priceParsed.minor,
       currency: String(draft?.currency || 'usd').toLowerCase(),
       description: String(draft?.description || '').trim() || null,
     },

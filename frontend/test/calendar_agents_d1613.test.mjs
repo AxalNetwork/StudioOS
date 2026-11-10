@@ -18,6 +18,7 @@ import {
 } from '../src/pages/calendarAgentModel.js';
 import { AgentPicker, AgentSessionFooter, AgentSessionView, StateChip } from '../src/pages/CalendarAgentSessions.jsx';
 import { newMenu } from '../src/pages/calendarItemModel.js';
+import { FAMILIES, KINDS } from '../src/pages/calendarViews.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -65,8 +66,9 @@ test('the seam: every #3957 method goes through its client, and every client pat
 test('the kind and the family are in KINDS and FAMILIES once #3957 puts the kind on the calendar read', () => {
   assert.equal(AGENT_KIND, 'agent_session');
   assert.deepEqual(AGENT_FAMILY, { key: 'agents', label: 'AI agents' });
-  assert.match(read('frontend/src/pages/CalendarPage.jsx'), /id: 'agent_session'/);
-  assert.match(read('frontend/src/pages/calendarViews.js'), /\{ key: 'agents', label: 'AI agents', kinds: \['agent_session'\] \}/);
+  // D5205 (#5205): the kind and its family come from the Worker registry, not a frontend list.
+  assert.ok(KINDS.some((k) => k.id === 'agent_session'), 'the page has no agent_session kind');
+  assert.deepEqual(FAMILIES.find((f) => f.key === AGENT_FAMILY.key), { key: 'agents', label: AGENT_FAMILY.label, kinds: ['agent_session'] });
   assert.match(read('frontend/src/pages/calendarPage.css'), /--k-agent_session: #0f766e;/, 'teal, light');
   assert.match(read('frontend/src/pages/calendarPage.css'), /--k-agent_session: #2dd4bf;/, 'teal, dark');
   assert.match(read('cloudflare-worker/src/services/calendar.ts'), /agent_session: async \(env, userId, from, to\)/, 'the Worker reads the kind');
@@ -226,14 +228,12 @@ test('the page: the session route opens its own sheet; the grids draw the agent 
 });
 
 test('the rail names modules, never tables', () => {
-  const page = codeOnly(read('frontend/src/pages/CalendarPage.jsx'));
-  const block = page.match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '';
-  const froms = [...block.matchAll(/from: '([^']+)'/g)].map((m) => m[1]);
+  // D5205 (#5205): each kind's module is the Worker registry's, read through `KINDS`.
+  const froms = KINDS.map((k) => k.from);
   // Every kind names its module (#3959 added Learning as the eleventh).
   assert.ok(froms.length >= 10);
-  assert.equal(froms.length, (block.match(/\bid: '/g) || []).length, 'a kind without its module words');
+  assert.ok(froms.every((f) => typeof f === 'string' && f.length > 0), 'a kind without its module words');
   for (const f of froms) assert.doesNotMatch(f, /_|^[a-z]+s$/, `${f} reads like a table`);
-  assert.doesNotMatch(block, /src: '/);
 });
 
 test('the canvases: the addendum is in design/incoming, with the named logo edit', () => {

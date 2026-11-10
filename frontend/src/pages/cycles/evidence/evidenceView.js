@@ -12,6 +12,7 @@
  * ("100+"); a figure with no record says "Not recorded".
  */
 import { AREAS, CLAIM_STATE, SHARING, SOURCES } from './evidenceModel.js';
+import { formatMinorOrCount, plainAmount } from '../../../lib/money.js';
 
 /** Where each claim surface lives (D1264 §2), its area and the module that states it. */
 export const SURFACES = Object.freeze({
@@ -91,7 +92,12 @@ export function figure(value, unit, currency = null) {
   const n = num(value);
   if (n == null) return null;
   const cur = currency && String(currency).toUpperCase() !== 'USD' ? `${String(currency).toUpperCase()} ` : '$';
-  if (unit === 'cents') return `${cur}${thousands(n / 100)}`;
+  if (unit === 'cents') {
+    // D5373: at the currency's own decimals (¥1,235, KWD 1.235); an unlisted code names the stored count.
+    const code = currency ? String(currency).toUpperCase() : 'USD';
+    const plain = plainAmount(n, code, { trimWhole: true });
+    return plain === null ? formatMinorOrCount(n, code) : `${cur}${plain}`;
+  }
   if (unit === 'money') return `${cur}${thousands(n)}`;
   if (unit === 'percent') return `${thousands(n)}%`;
   if (unit === 'months') return `${thousands(n)} months`;
