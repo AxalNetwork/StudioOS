@@ -477,10 +477,11 @@ export function weekChart(reply) {
   ];
   const last = (v) => (Array.isArray(v) ? v[v.length - 1] : null);
   const first = (v) => (Array.isArray(v) ? v[0] : null);
+  const period = (n) => (n === null || n === undefined ? 'Not recorded' : nf(n));
   const sum = [
     'Items that arrived and were decided each week for eight weeks.',
-    t.arrived ? `Arrivals went from ${nf(first(t.arrived))} to ${nf(last(t.arrived))} a week.` : 'Arrivals are not counted.',
-    t.decided ? `Decisions went from ${nf(first(t.decided))} to ${nf(last(t.decided))}.` : 'Decisions are not counted.',
+    t.arrived ? `Arrivals went from ${period(first(t.arrived))} to ${period(last(t.arrived))} a week.` : 'Arrivals are not counted.',
+    t.decided ? `Decisions went from ${period(first(t.decided))} to ${period(last(t.decided))}.` : 'Decisions are not counted.',
     'This week is not finished.',
   ].join(' ');
   const out = [...new Set([...(t.decided_leaves_out || [])])];

@@ -27,6 +27,7 @@ import {
   CATALOG_SYNC_BASIS, CATALOG_SYNC_CAPABILITY, catalogSyncStateOf, readCatalogMirrorSummary, readCatalogSyncHistory,
 } from '../src/services/catalog.ts';
 import { CHANGE_ACTIONS } from '../src/services/paymentsChangeLog.ts';
+import { SYNC_LAG_UNREADABLE } from '../src/services/supportQueues.ts';
 import { blockReadMeta, PLATFORM_READ_SOURCES, PLATFORM_SUMMARY_READERS, readPlatformSummary, type PlatformSummaryReaders } from '../src/services/platformSummary.ts';
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -131,6 +132,20 @@ test('blockReadMeta: both parts of a composite down is unavailable; integration 
   const jobs = blockReadMeta('jobs', { available: true, triggers: [{ last_finished_at: '2026-11-07 08:00:00' }, { last_started_at: '2026-11-07 09:30:00' }, {}] }, AT);
   assert.equal(jobs.source_updated_at, '2026-11-07 09:30:00', 'the latest run across triggers');
   assert.equal(blockReadMeta('promo_codes', null, AT).status, 'unavailable', 'a missing block is not ready');
+});
+
+test('blockReadMeta: GitHub sync is partial when counts answer but the nested lag event log does not', () => {
+  const meta = blockReadMeta('github_sync', {
+    window: { available: true, synced: 2, failed: 1, lag: { value: null, reason: SYNC_LAG_UNREADABLE } },
+    recent: { available: true, items: [] },
+  }, AT);
+  assert.deepEqual([meta.status, meta.complete, meta.completeness_reason], ['partial', false, SYNC_LAG_UNREADABLE]);
+
+  const noMirrors = blockReadMeta('github_sync', {
+    window: { available: true, synced: 0, failed: 0, lag: { value: null, reason: 'Not recorded: no mirrored ticket.' } },
+    recent: { available: true, items: [] },
+  }, AT);
+  assert.equal(noMirrors.status, 'ready', 'no measured lag is complete when its event log answered');
 });
 
 // ── the catalogue's own sync facts ────────────────────────────────────────

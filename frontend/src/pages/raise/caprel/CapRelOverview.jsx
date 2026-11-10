@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
+import { derivedSummary, summarySource } from '../../../lib/derivedSummary.js';
 import { raiseReadState, raiseToolRefusal } from '../../../lib/raiseErrors.js';
 import { Unreadable } from '../../../ui';
 import { useProspects } from './CapRelPipeline';
@@ -37,17 +38,22 @@ export function MovedNotice() {
   );
 }
 
-function RoundBlock({ projectId }) {
+function useCommitments(projectId) {
   const [n, setN] = useState(0);
-  const [read, setRead] = useState({ status: 'loading', data: null });
+  const [read, setRead] = useState({ status: 'loading', data: null, projectId });
   useEffect(() => {
     let alive = true;
-    setRead({ status: 'loading', data: null });
+    setRead((current) => ({ status: 'loading', data: current.projectId === projectId ? current.data : null, projectId }));
     Promise.resolve().then(() => capitalRelationshipsApi.commitments(projectId))
-      .then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), data: null }); });
+      .then((data) => { if (alive) setRead({ status: 'ready', data, projectId }); })
+      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), data: null, projectId }); });
     return () => { alive = false; };
   }, [projectId, n]);
+  const own = read.projectId === projectId ? read : { status: 'loading', data: null };
+  return { ...own, reload: () => setN((x) => x + 1) };
+}
+
+function RoundBlock({ read }) {
   const d = read.data;
   const t = d?.totals;
   const cur = d?.currency || d?.round?.currency || 'USD';
@@ -55,7 +61,7 @@ function RoundBlock({ projectId }) {
     <section className={CARD} data-testid="caprel-ov-round">
       <h3 className={H3}>The round at a glance</h3>
       {read.status === 'loading' ? <div className="h-16 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" data-testid="caprel-ov-round-loading" /> : null}
-      {read.status === 'unreadable' ? <Unreadable what="Your commitments" claim="This is not a claim that nobody has committed." onRetry={() => setN((x) => x + 1)} /> : null}
+      {read.status === 'unreadable' ? <Unreadable what="Your commitments" claim="This is not a claim that nobody has committed." onRetry={read.reload} /> : null}
       {read.status === 'refused' ? <p className={`m-0 text-[12.5px] ${INK}`} data-testid="caprel-ov-round-refused">{ROUND_REFUSED_LINE}</p> : null}
       {d ? (
         <div className="flex flex-col gap-1.5">
@@ -67,7 +73,7 @@ function RoundBlock({ projectId }) {
             : !d.round.target_cents ? <span className={NR}>Target not recorded</span> : null}
           <p className={`m-0 text-[12.5px] ${MUTED}`}>Counted: Received, Signed, Wired, Confirmed and Pending. {t?.not_counted_cents ? `${centsText(t.not_counted_cents, cur)} is listed but not counted (soft, indicated, or no status).` : ''}</p>
           {t?.partial ? <p className="m-0 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid="caprel-ov-partial">One source could not be read, so this total may be short. Commitments says which.</p> : null}
-          <Link className={`${LINK} text-[12px]`} to={hrefOf('commitments', `?project_id=${projectId}`)}>Open Commitments</Link>
+          <Link className={`${LINK} text-[12px]`} to={hrefOf('commitments', `?project_id=${read.projectId}`)}>Open Commitments</Link>
         </div>
       ) : null}
     </section>
@@ -77,8 +83,13 @@ function RoundBlock({ projectId }) {
 /** Overview's blocks, under its tab bar. */
 export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused = null }) {
   const read = useProspects(projectId);
+  const commitments = useCommitments(projectId);
   const f = read.items ? overviewFigures(read.items, today) : null;
   const needs = f ? needsYou(f) : [];
+  const needsSummary = [read.status, commitments.status].includes('loading') ? null : derivedSummary(needs, [
+    summarySource('prospects', read.status),
+    summarySource('commitments', commitments.status),
+  ]);
   const max = f ? Math.max(1, ...f.byStage.map((s) => s.n)) : 1;
   const failed = read.status === 'unreadable';
   /**
@@ -101,12 +112,19 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
   return (
     <div className="flex flex-col gap-3.5" data-testid="caprel-overview">
       <div className="grid gap-3.5 lg:grid-cols-3">
-        <RoundBlock projectId={projectId} />
+        <RoundBlock read={commitments} />
         <section className={CARD} data-testid="caprel-ov-needs">
           <h3 className={H3}>Needs you</h3>
           {read.status === 'loading' && !f ? <div className="h-16 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" /> : null}
           {failed ? <Unreadable what="Your investors" claim="This is not a claim that nothing needs you." onRetry={read.reload} /> : null}
-          {f && !needs.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="caprel-ov-needs-none">Nothing needs you: no follow-up is overdue or due today, every conversation has a next step, and every commitment has a status.</p> : null}
+          {f && !needsSummary && !needs.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="caprel-ov-needs-checking">Checking commitment status…</p> : null}
+          {f && needsSummary?.state === 'partial' && !needs.length ? (
+            <div className="flex flex-col gap-1" data-testid="caprel-ov-needs-partial">
+              <p className={`m-0 text-[12.5px] font-semibold text-amber-800 dark:text-amber-300`}>Needs you could not be fully checked.</p>
+              <p className={`m-0 text-[12px] ${MUTED}`}>Follow-ups and conversation steps are current; commitment status could not be read.</p>
+            </div>
+          ) : null}
+          {f && needsSummary?.complete && !needs.length ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="caprel-ov-needs-none">Nothing needs you: no follow-up is overdue or due today, every conversation has a next step, and every commitment has a status.</p> : null}
           {needs.length ? (
             <ul className="m-0 flex list-none flex-col p-0">
               {needs.map((x) => (
@@ -117,6 +135,8 @@ export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused 
               ))}
             </ul>
           ) : null}
+          {needs.length && !needsSummary ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-ov-needs-checking">Checking commitment status…</p> : null}
+          {needs.length && needsSummary?.state === 'partial' ? <p className="m-0 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid="caprel-ov-needs-partial">Commitment status could not be read, so this list may be incomplete.</p> : null}
         </section>
         <section className={CARD} data-testid="caprel-ov-stages">
           <h3 className={H3}>The pipeline by stage</h3>
