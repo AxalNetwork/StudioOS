@@ -111,7 +111,7 @@ test('#5343 batch 2: a database missing each column gets it once; the next isola
       await ensureCardBlobSchema(first.env);
       await ensureXSchema(first.env);
     });
-    const added = (t: string) => first.log.alters.filter((a) => new RegExp(`ALTER TABLE ${t} `).test(a)).length;
+    const added = (t: string) => first.log.alters.filter((a) => a.includes(`ALTER TABLE ${t} `)).length;
     assert.deepEqual(['cap_table_scenarios', 'user_role_review', 'users', 'pitch_decks', 'x_posts'].map(added), [1, 1, 1, 1, 1]);
     assert.ok(columns(db, 'cap_table_scenarios').includes('is_variant'));
     assert.ok(columns(db, 'user_role_review').includes('needs_assessment_completed'));
@@ -138,9 +138,9 @@ test('#5343 batch 2: the cap table with no table throws its readiness error, is 
     const orig = console.error; console.error = (...a: unknown[]) => { logged.push(a); };
     try {
       // Mutation checked: the old swallowing try/catch restored → this resolves and the assertion fails.
-      await assert.rejects(ensureCapTableVariantColumn(env), new RegExp(CAPTABLE_SCHEMA_NOT_READY));
+      await assert.rejects(ensureCapTableVariantColumn(env), { message: CAPTABLE_SCHEMA_NOT_READY });
       const before = log.statements;
-      await assert.rejects(ensureCapTableVariantColumn(env), new RegExp(CAPTABLE_SCHEMA_NOT_READY));
+      await assert.rejects(ensureCapTableVariantColumn(env), { message: CAPTABLE_SCHEMA_NOT_READY });
       assert.ok(log.statements > before, 'tried again rather than trusting a failed bootstrap');
     } finally { console.error = orig; }
     assert.deepEqual(logged, [['[captable] schema_not_ready'], ['[captable] schema_not_ready']]);
@@ -160,7 +160,7 @@ test('#5343 batch 2: a failing ALTER leaves the extractor, X and card-blob boots
     try {
       db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE pitch_decks (id INTEGER PRIMARY KEY);');
       let broken = true;
-      const { env } = isolate(db, (sql) => (broken && new RegExp(`^\\s*ALTER TABLE ${table} `).test(sql) ? 'disk I/O error' : null));
+      const { env } = isolate(db, (sql) => (broken && sql.trimStart().startsWith(`ALTER TABLE ${table} `) ? 'disk I/O error' : null));
       await quiet(async () => { try { await (run as any)(env); } catch { /* the failure itself */ } });
       assert.equal(ok(db), false, `${name}: the column was not added`);
       broken = false;
