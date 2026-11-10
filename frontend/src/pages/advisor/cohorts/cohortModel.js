@@ -509,3 +509,17 @@ export function summaryFigures({ roster, rosterTruncated, rows, weeksReadable, g
     sessions: sessions == null ? { value: null } : { value: sessions, capped: Boolean(calendar?.sessions_truncated) },
   };
 }
+
+/**
+ * D4813 (#4813, package 4) — Eadwyn's cohort prompts, first in the rail's Ask
+ * panel on every Cohorts section (`WorkerRail` `prompts`). Each only fills the
+ * composer with its words; nothing runs, writes or publishes until the advisor
+ * sends it, and Eadwyn never changes a milestone record or publishes guidance.
+ */
+export const COHORT_PROMPTS = Object.freeze([
+  'Summarize this cohort',
+  'Who needs attention?',
+  'Draft weekly guidance',
+  'Prepare my next session',
+  'Explain this metric',
+]);

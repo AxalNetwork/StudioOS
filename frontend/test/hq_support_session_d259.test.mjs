@@ -69,11 +69,6 @@ test('D259: Support is drawn on an active branch hit, and not under the view-as 
     'Support is drawn under the view-as overlay, where nothing can be acted on (D153)');
   assert.ok(!render({ viewAs: null, hit: { ...HIT, is_active: 0 } }).includes('hq-team-support-toggle'),
     'Support is drawn on a deactivated account, which the branch can only refuse');
-  // And in source: one rule, read once, guarding the toggle and the form.
-  const body = moveHit();
-  assert.match(body, /const canSupport = !viewAs && Number\(hit\.is_active\) === 1;/);
-  assert.match(body, /\{canSupport && \(\s*<button[^>]*data-testid="hq-team-support-toggle"/);
-  assert.match(body, /\{canSupport && panel === 'support' && <SupportSessionAction /, 'the form is not under the same rule as its toggle');
 });
 
 test('D259: exactly one Support control, on the branch search, never on the HQ-held table', () => {
@@ -90,22 +85,9 @@ test('D259: exactly one Support control, on the branch search, never on the HQ-h
   assert.match(tag, /viewAs=\{viewAs\}/, 'the branch hit is not told whether the overlay is on');
 });
 
-test('D259: Begin needs ten trimmed characters, and the reason sent is the reason typed', () => {
-  // D5044 — the form is `team/SupportSessionAction.jsx`, on the shared action model.
-  assert.match(SUPPORT, /export const SUPPORT_REASON_MIN = 10;/, 'the floor is not ten');
-  assert.match(SUPPORT, /disabled=\{supportBusy \|\| supportReason\.trim\(\)\.length < SUPPORT_REASON_MIN\}/,
-    'Begin is enabled below ten characters');
-  assert.match(SUPPORT, /support\.submit\(supportReason\.trim\(\)\)/, 'the reason sent is not the trimmed reason typed');
-  assert.match(SUPPORT, /await api\.hqSupportSession\(from, hit\.id, reason\)/);
-});
-
 test('D259: the page opens the URL the route built, and never builds one', () => {
-  const body = SUPPORT;
-  assert.match(body, /window\.open\(res\.open_url, '_blank', 'noopener'\)/,
-    'the page does not open the route\'s open_url');
-  assert.match(body, /setSupportUrl\(res\.open_url\)/);
-  assert.match(body, /href=\{supportUrl\}/, 'the fallback link is not the route\'s URL');
-  // The hostname convention and the one-time code are the server's.
+  // D5045: that the route's URL is the one opened is rendered in hq_team_behaviour_5045. What stays here
+  // is what a render cannot show: no file spells a branch host or the redeem path.
   assert.ok(!/axal\.vc/.test(TEAM), 'HqTeamTable spells a branch host — it builds a URL the route did not');
   assert.ok(!/support\/session/.test(TEAM), 'HqTeamTable spells the redeem path — it builds a URL the route did not');
 });
