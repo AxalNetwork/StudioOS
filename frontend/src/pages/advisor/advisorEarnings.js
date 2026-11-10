@@ -2,16 +2,12 @@
  * Money on Advisor Studio, and the Earnings module's two figures (D572).
  * Kept out of the page so they can be tested without rendering it.
  */
+
+import { formatMinorOrCount } from '../../lib/money.js';
 export function formatMoney(cents, currency = 'USD') {
   if (cents == null) return 'Not recorded';
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: String(currency || 'USD').toUpperCase(),
-    }).format(Number(cents) / 100);
-  } catch {
-    return `${(Number(cents) / 100).toFixed(2)} ${String(currency || 'USD').toUpperCase()}`;
-  }
+  // D5373: at the currency's own decimals; the Earnings ledger's default currency is USD.
+  return formatMinorOrCount(Number(cents), String(currency || 'USD').toUpperCase());
 }
 
 /**

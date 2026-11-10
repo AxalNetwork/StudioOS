@@ -4,6 +4,7 @@ import ZoneActions from '../../../workspaces/ZoneActions';
 import { FillLabel } from '../../../ui/useScopedFill.jsx';
 import { moneyCents } from '../../../workspaces/boards/format';
 import { amountToCents } from '../../../lib/moneyInput';
+import { LICENCE_SENTENCES, isLicenceSentence } from './licenceRefusal';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -63,6 +64,9 @@ export function ZoneHeading({ title, blurb, action }) {
  * which asserts that nothing exists. Reading the error first means the page
  * can only ever claim a store is empty when it actually read the store.
  */
+// #5363: the licence refusal's sentences and reader (`licenceRefusal.js`).
+export { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES, isLicenceSentence, zoneError } from './licenceRefusal';
+
 export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, children }) {
   // `actions` renders ABOVE all four states, on purpose. A zone's header row is
   // as true while the store is loading, or failed, or empty, as it is when rows
@@ -91,6 +95,20 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
         <span className="sr-only">Loading…</span>
         <Skeleton className="h-9" /><Skeleton className="h-28" />
       </div>,
+    );
+  }
+  if (error && isLicenceSentence(error)) {
+    // #5363: not a failed read, so no "Source unavailable" and no Try again.
+    return wrap(
+      <Card variant="dashed" padding="lg" role="alert" data-testid="advisor-licence-required">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+          Advisor licence
+        </div>
+        <h3 className="mt-2 text-sm font-extrabold tracking-tight">{error}</h3>
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
+          This account does not hold the Advisor licence today, so nothing here can be read.
+        </p>
+      </Card>,
     );
   }
   if (error) {
@@ -306,7 +324,7 @@ export const ASK_REFUSALS = Object.freeze({
   attester_email_required: 'Give their email address: their code is sent there when they answer.',
   attester_is_requester: 'That address is your own. Someone else confirms your claim.',
   attester_name_required: 'Name the person you are asking.',
-  advisor_licence_required: 'Expertise needs the Advisor licence on this account.',
+  advisor_licence_required: LICENCE_SENTENCES.expertise,
 });
 export const refusalText = (err, fallback) => ASK_REFUSALS[err?.code] || fallback;
 

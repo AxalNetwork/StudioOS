@@ -89,7 +89,8 @@ function verifyModel(m) {
 test('1: the form model: drafts, payloads, plain-language errors, hidden amounts, kept ids, the module named', async () => {
   verifyModel(forms);
   await mutationCheck(src('pages/cycles/suggestionForms.js'), 'pages/cycles/suggestionForms.js', verifyModel, [
-    ['String(cents / 100)', 'String(cents)'],
+    // D5373: the draft shows the amount at the currency's own decimals, trailing zeros dropped (1200.5, not 1200.50).
+    ["major.replace(/(\\.\\d*?)0+$/, '$1')", 'major'],
     ['payload.currency = v.toLowerCase();', 'payload.currency = v;'],
     ['if (f.required) errors[f.key]', 'if (false) errors[f.key]'],
     ['if (v.length > f.max)', 'if (v.length > f.max + 50)'],
@@ -99,7 +100,7 @@ test('1: the form model: drafts, payloads, plain-language errors, hidden amounts
     ["'demand-signals': 'Demand and urgency signals'", "'demand-signals': 'Demand signals'"],
     [".trim().replace(/\\s+/g, ' ');", ';'],
     ["if (payload.amount_cents == null && (payload.currency || payload.period) && !errors.amount)", 'if (false)'],
-    ['Number(v) <= 0', 'Number(v) < 0'],
+    ['parsed.minor <= 0', 'parsed.minor < 0'],
     ['/^[a-z]{3}$/i.test(v)', '/^[a-z]{2,3}$/i.test(v)'],
   ]);
 });
