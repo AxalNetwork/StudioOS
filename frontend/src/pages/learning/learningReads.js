@@ -25,8 +25,8 @@ import { articles, publications, eventsPublic } from '../../lib/api';
 // D527: a domain module is imported from its own file, as research's are.
 import { learningApi } from '../../lib/api/learning.js';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
-  mySubmissionRows, parseVtt, previewOf, publicationRow, statsTiles,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, clockLabel, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
+  mySubmissionRows, parseVtt, previewOf, publicationRow, resumeAt, statsTiles,
 } from './learningModel';
 
 function listOf(reply, key, what) {
@@ -123,17 +123,34 @@ export async function readItemPreview(uid, now = Date.now()) {
   return url;
 }
 
-/** Where a row of `GET /me` opens: a course, an item, or nowhere for a bare lesson. */
+/**
+ * Where a row of `GET /me` opens: a course, an item, or nowhere for a bare lesson. D5356: a course row the Worker
+ * names a resume lesson for opens that lesson inside the course (the player starts at the item's saved position);
+ * one with none keeps its course link.
+ */
 export function meRowHref(row) {
-  if (row?.subject_kind === 'course') return row.course_slug ? `/learning/courses/${encodeURIComponent(row.course_slug)}` : null;
+  if (row?.subject_kind === 'course') {
+    if (!row.course_slug) return null;
+    const course = `/learning/courses/${encodeURIComponent(row.course_slug)}`;
+    const lesson = typeof row.resume?.lesson_uid === 'string' && row.resume.lesson_uid ? row.resume.lesson_uid : null;
+    return lesson ? `${course}/${encodeURIComponent(lesson)}` : course;
+  }
   if (row?.subject_kind === 'item') return itemHref({ kind: row.item_kind, uid: row.subject_uid });
   return null;
+}
+
+/** D5356: what Continue resumes, in words: "Resume Valuation at 04:12", or null when it opens the course. */
+export function resumeLabel(row) {
+  const r = row?.subject_kind === 'course' ? row.resume : null;
+  if (!r || typeof r.lesson_uid !== 'string' || !r.lesson_uid || !row.course_slug) return null;
+  const at = clockLabel(resumeAt(r.position_seconds));
+  return `Resume ${r.lesson_title || 'the lesson'}${at ? ` at ${at}` : ''}`;
 }
 
 /** The caller's own record: what they have started and finished, each row with where it opens. */
 export async function readMe() {
   const reply = await learningApi.me();
-  const withHref = (rows) => rows.map((r) => ({ ...r, href: meRowHref(r) }));
+  const withHref = (rows) => rows.map((r) => ({ ...r, href: meRowHref(r), resume_label: resumeLabel(r) }));
   return {
     in_progress: withHref(listOf(reply, 'in_progress', 'Your learning record')),
     completed: withHref(listOf(reply, 'completed', 'Your learning record')),
