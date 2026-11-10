@@ -5,7 +5,9 @@
  * Every field the Worker marks `{ available: false, why }` reads "Not
  * recorded", with its reason: never 0, never a blank.
  */
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from '../../../lib/absence.js';
+
+export { NOT_RECORDED };
 
 export const RECONCILIATION_WORDS = Object.freeze({
   nothing_charged: 'Nothing charged: no hold, no usage row, no proposal',
