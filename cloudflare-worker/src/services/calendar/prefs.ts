@@ -10,7 +10,7 @@
  * the subscription feeds and the provider push ignore them.
  */
 import type { Env } from '../../types';
-import { SOURCES, SOURCE_FAMILIES, SOURCE_KINDS, type SourceFamily } from './registry';
+import { FAMILY_LABELS, SOURCES, SOURCE_FAMILIES, SOURCE_KINDS, type SourceFamily } from './registry';
 
 /** Palette tokens, never hex; the page maps each to a light and a dark value. */
 export const COLOURS = ['violet', 'blue', 'teal', 'green', 'amber', 'orange', 'red', 'pink', 'slate'] as const;
@@ -18,10 +18,8 @@ export type Colour = typeof COLOURS[number];
 export const COPY_TARGETS = ['all', 'google', 'microsoft', 'none'] as const;
 export type CopyTarget = typeof COPY_TARGETS[number];
 
-export const FAMILY_LABELS: Readonly<Record<SourceFamily, string>> = Object.freeze({
-  meetings: 'Meetings', events: 'Events', validate: 'Validate', grow: 'Grow', deadlines: 'Deadlines',
-  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars', agents: 'AI agents',
-});
+/** D5205: the family names live in the registry now; re-exported so existing imports keep working. */
+export { FAMILY_LABELS };
 
 export const isSourceKey = (v: unknown): v is string => typeof v === 'string' && (SOURCE_KINDS as readonly string[]).includes(v);
 export const isColour = (v: unknown): v is Colour => typeof v === 'string' && (COLOURS as readonly string[]).includes(v);

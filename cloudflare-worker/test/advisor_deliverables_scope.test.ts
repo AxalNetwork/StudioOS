@@ -600,7 +600,8 @@ test('an account with no advisor profile cannot reach the store at all', async (
     ['POST', '/me/deliverables', { title: 'X', client_name: 'Y' }],
   ] as const) {
     const r = await call(e, method, path, fran, body);
-    assert.equal(r.status, 400, `${method} ${path}`);
-    assert.match(String(r.body.detail), /No advisor profile/);
+    // #5363: a founder holds no Advisor licence, so the coded licence refusal.
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.error, 'advisor_licence_required');
   }
 });

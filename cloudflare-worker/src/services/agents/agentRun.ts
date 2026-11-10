@@ -268,6 +268,14 @@ function promptRefusal(prompt: unknown): AgentRefusal | null {
 export async function agentQuote(env: Env, input: Omit<AgentRunInput, 'prompt'> & { prompt?: string }): Promise<AgentQuote> {
   const c = await check(env, { ...input, prompt: input.prompt?.trim() ? input.prompt : ' ' });
   if (!c.ok) return c;
+  // #5340: with the preview switch on, a quote for a named skill holds the text the SDK path sends; switched off, nothing is read for it.
+  if (input.skill != null && skillEngineOf(env) === 'cloudflare_sdk') {
+    const skill = await skillForRun(env, input.agent, input.skill, [], input.skillVersion ?? null);
+    if (!skill.ok) return skill;
+    const loaded = await skillTextForRun(env, input.agent.id, skill, 'cloudflare_sdk', input.skillDeps);
+    if (!loaded.ok) return no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.');
+    c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+  }
   try {
     const q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface });
     // `misconfigured` is quoteRun's "Unreadable": the price is unknown, which is not 0 and not a refusal of the run.
@@ -324,14 +332,17 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
     if (allowed) return allowed;
     c.opts.model = m.model;
   }
-  const ceiling = policy.per_run_ceiling_microusd;
-  if (ceiling != null) {
-    let q: Awaited<ReturnType<typeof quoteRun>>;
-    try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
-    if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
-    if (q.hold_microusd > ceiling) {
-      return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
-    }
+  return ceilingRefusal(env, c, policy.per_run_ceiling_microusd);
+}
+
+/** D4162's per-run ceiling, quoted on the run's system prompt as it stands; also called once the SDK path's skill text is in (#5340). */
+async function ceilingRefusal(env: Env, c: { opts: Omit<RunOptions, 'rail' | 'surface'>; rail: RailContext; surface: string }, ceiling: number | null): Promise<AgentRefusal | null> {
+  if (ceiling == null) return null;
+  let q: Awaited<ReturnType<typeof quoteRun>>;
+  try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
+  if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
+  if (q.hold_microusd > ceiling) {
+    return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
   }
   return null;
 }
@@ -366,6 +377,13 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
     loaded = await skillTextForRun(env, a.id, skill, engine, input.skillDeps);
     if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input.module, input.option);
     c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+    // #5340: the SDK path's text (activation and files) is priced before any hold; the ceiling quote above did not hold it.
+    if (loaded.runtime === 'cloudflare_sdk') {
+      const policy = await readPolicy(env);
+      const over = policy ? await ceilingRefusal(env, c, policy.per_run_ceiling_microusd)
+        : no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
+      if (over) return refused(env, a, over, input.module, input.option);
+    }
   }
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {

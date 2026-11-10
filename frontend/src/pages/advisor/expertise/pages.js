@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { reportError } from '../../../lib/log';
+import { zoneError } from './licenceRefusal';
 
 /**
  * #4689 — one Expertise list, read a page at a time.
@@ -63,6 +64,8 @@ export function showingLine(shown, page) {
  *                          "Booked without a link" row is not one of its links)
  *   errorText              the sentence for a first page that failed
  *   moreErrorText          the sentence for a "Show more" that failed
+ *   surface                'expertise' or 'practice': whose licence sentence
+ *                          a 403 `advisor_licence_required` reads as (#5363)
  *
  * A FAILURE READS AS A FIXED SENTENCE (#4697), never the thrown error's text:
  * `errorText` for a first page, `moreErrorText` for a "Show more". A raw
@@ -75,6 +78,7 @@ export function usePagedList(fetchPage, {
   errorText = 'This list could not be read.',
   moreErrorText = 'The next rows could not be read. Try again.',
   refreshErrorText = 'The list could not be read again, so it may be out of date. Try again.',
+  surface = 'expertise',
 } = {}) {
   const [state, setState] = useState({ loading: true, error: '', rows: [], res: null, moreBusy: false, moreError: '' });
   const latest = useRef(null);
@@ -93,9 +97,10 @@ export function usePagedList(fetchPage, {
       reportError('expertise:list', e);
       if (mine !== seq.current) return;
       latest.current = null;
-      setState({ loading: false, error: errorText, rows: [], res: null, moreBusy: false, moreError: '' });
+      // #5363: the licence refusal reads as its own sentence (no Try again).
+      setState({ loading: false, error: zoneError(e, errorText, surface), rows: [], res: null, moreBusy: false, moreError: '' });
     }
-  }, [fetchPage, key, errorText]);
+  }, [fetchPage, key, errorText, surface]);
   const more = useCallback(async () => {
     const offset = nextOffset(latest.current?.[pageKey]);
     if (offset === null) return;

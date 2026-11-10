@@ -27,7 +27,7 @@ import { ensureFundGpColumns } from '../services/fundGpSchema';
 import { lpMembershipScope, lpSelfScope, fundGpScope, NO_ROWS } from '../services/tenancyScope';
 import { refuse } from '../util/refusal';
 import { CommsInputError, addCommunication, listCommunications, parseCommInput, parseLpType } from '../services/fundLpComms';
-import { claimLpRowsByEmail } from '../services/lpClaim';
+import { claimLpRowsByEmail, claimLpRowsForAddress } from '../services/lpClaim';
 import { userMeetsInvestorTier, investorUpsell } from '../middleware/requireInvestorTier';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { splitCall } from '../services/fundCallSplit';
@@ -122,7 +122,12 @@ funds.get('/', async (c) => {
     // An admin operates every fund through `requireFundGp`'s bypass.
     return c.json({ ok: true, items: (list.results || []).map((f: any) => ({ ...f, can_manage: true, relationship: 'admin' })) });
   }
-  await claimLpRowsByEmail(c.env, Number(user.id), (user as any).email);
+  // D5318 H8: no claim here. The list is a read, and it used to write
+  // (`UPDATE limited_partners ... LOWER(email)`) on every call. The claim runs
+  // once, at sign-in (`claimLpRowsAtSignIn`) and when an LP row is written
+  // for an address an account already holds (`claimLpRowsForAddress`). An
+  // unclaimed row stays visible here through lpMembershipScope's email arm,
+  // unchanged, so a caller sees the same funds either way.
   const scope = visibleFundsScope(user, { includeLp: true });
   const where = [scope.sql];
   const binds = [...scope.binds];
@@ -1012,6 +1017,9 @@ funds.post('/:id/lps', async (c) => {
   }
   const lp = await LPs.create(c.env, { ...body, fund_id: fundId });
   if (!lp) return c.json({ error: 'create failed' }, 500);
+  // D5318 H8: an account already holding this address is linked now, not at
+  // its next sign-in. A row given an explicit user_id is not touched.
+  if ((lp as any).user_id == null) await claimLpRowsForAddress(c.env, (lp as any).email, fundId);
   // First-call automation: enqueue a notice immediately if amount provided.
   // Task #197 — `call_uid` identifies THIS call, so the job's ledger rows are
   // idempotent across retries without two presses colliding. See
