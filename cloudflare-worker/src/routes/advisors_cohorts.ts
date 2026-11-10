@@ -14,6 +14,7 @@ import type { Env, User } from '../types';
 import { requireAdmin, requireAuth, requireBranchNotSuspended } from '../auth';
 import { programRefusal } from '../services/programEnforcement';
 import { refuse } from '../util/refusal';
+import { ADVISOR_LICENCE_REQUIRED } from '../services/advisorAccess';
 import { logAdminAction } from '../services/adminAudit';
 import { mapError, nowIso, newUid, trimOrNull } from './_t13t14t15_helpers';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
@@ -986,7 +987,8 @@ advisors.get('/me/thinking', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!holdsLicence(user, 'advisor')) {
-      return c.json({ detail: 'Only an advisor has a thinking shelf' }, 403);
+      // #5363: the shared coded refusal, so the Expertise page reads the licence sentence.
+      return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     }
     // #4689: a page of the shelf, ordered to a unique column. The counts are
     // read over the whole shelf by their own query, so a writer with 101

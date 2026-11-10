@@ -6,6 +6,8 @@
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
  *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
+ *                                    D5325: each row's `readiness` (SK-13, `services/agents/skillReadiness.ts`) and
+ *                                    `run_cost: null` (Not recorded until #4536 records cost by executed version)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
@@ -82,6 +84,7 @@ import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
 
 const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
@@ -203,25 +206,13 @@ adminHqSkills.get('/', async (c) => {
 
   // Only the latest result per case and REQUIRED model under the current
   // evidence counts; a required run with no result is not evaluated, as on the detail page.
-  const [evalResult, tokens] = await Promise.all([
-    env.DB.prepare(`WITH want AS (
-        SELECT CAST(j.key AS INTEGER) AS skill_id, json_extract(j.value, '$.e') AS evidence, json_extract(j.value, '$.m') AS models FROM json_each(?) j
-      ), latest AS (
-        SELECT MAX(r.id) AS id
-        FROM want w JOIN agent_skill_eval_results r ON r.skill_id = w.skill_id AND r.evidence_hash = w.evidence
-        WHERE r.model_id IN (SELECT value FROM json_each(w.models))
-        GROUP BY r.skill_id, r.case_id, r.model_id
-      )
-      SELECT r.skill_id, COUNT(*) AS recorded,
-        SUM(CASE WHEN r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
-        MAX(r.run_at) AS last_run
-      FROM latest JOIN agent_skill_eval_results r ON r.id = latest.id
-      JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
-      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, models, evidence }) => [row.id, { e: evidence, m: models }]))))
-      .all<{ skill_id: number; recorded: number; pass: number; last_run: string }>(),
+  // D5325: the same evidence answers each row's readiness, with one more read for the reviews and older runs.
+  const wants = drafts.map(({ row, models, evidence }) => ({ skill_id: row.id, evidence, models }));
+  const [evals, history, tokens] = await Promise.all([
+    currentResults(env, wants),
+    reviewHistory(env, wants),
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
-  const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
   let draftsUnevaluated = 0;
   const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
@@ -237,6 +228,11 @@ adminHqSkills.get('/', async (c) => {
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
       golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
+      // D5325: SK-13's state, decided here (`skillReadiness.ts`); `unknown` when a fact it needs could not be read.
+      readiness: readinessOf({ scope: row.scope, status: row.status, live_cases: row.live_cases, models: models.length,
+        results: summary ?? { recorded: 0, pass: 0, last_run: null }, history: history ? history.get(row.id) ?? null : null }),
+      // D5325: a recorded cost per run does not exist yet (#4536 records it by executed version); null reads "Not recorded", never 0.
+      run_cost: null,
     };
   });
   // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
