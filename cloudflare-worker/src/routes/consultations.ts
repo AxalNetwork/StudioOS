@@ -16,6 +16,18 @@ import { buildBestFitReport, persistBestFitReport } from '../services/bestFit';
 import { ensureAxalFitSchema } from '../services/axalFitSchema';
 
 const CONSULTATION_STATUSES = ['requested', 'confirmed', 'completed', 'cancelled'] as const;
+type ConsultationStatus = typeof CONSULTATION_STATUSES[number];
+export const CONSULTATION_TRANSITIONS: Readonly<Record<ConsultationStatus, readonly ConsultationStatus[]>> = Object.freeze({
+  requested: ['confirmed', 'cancelled'],
+  confirmed: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: [],
+});
+
+const ADMIN_BOOKING_SELECT = `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
+  b.topic, b.notes, b.report_id, b.created_at, b.version,
+  u.name AS user_name, u.email AS user_email
+  FROM admin_consultation_bookings b JOIN users u ON u.id = b.user_id`;
 
 const consultations = new Hono<{ Bindings: Env }>();
 
@@ -84,22 +96,15 @@ adminConsultations.get('/', async (c) => {
     : null;
   const where = filterStatus ? 'WHERE b.status = ?' : '';
   try {
-    const stmt = c.env.DB.prepare(
-      `SELECT b.id, b.uid, b.user_id, b.admin_id, b.requested_at, b.slot_at, b.status,
-              b.topic, b.notes, b.report_id, b.created_at,
-              u.name AS user_name, u.email AS user_email
-         FROM admin_consultation_bookings b
-         JOIN users u ON u.id = b.user_id
-         ${where}
-        ORDER BY b.created_at DESC`,
-    );
+    const stmt = c.env.DB.prepare(`${ADMIN_BOOKING_SELECT} ${where} ORDER BY b.created_at DESC`);
     const res = await (filterStatus ? stmt.bind(filterStatus) : stmt).all<Record<string, unknown>>();
     return c.json(res.results || []);
   } catch (e) {
-    // Cold/un-migrated D1 or a missing-table race: degrade to an empty queue
-    // rather than surfacing the global 500 ("Internal server error").
     console.error('[consultations] admin list failed:', (e as Error).message);
-    return c.json([]);
+    return c.json({
+      code: 'consultations_unreadable',
+      message: 'Best-Fit consultations could not be read. This is not a claim that nobody is waiting.',
+    }, 503);
   }
 });
 
@@ -111,24 +116,46 @@ adminConsultations.post('/:id/status', async (c) => {
   if (!Number.isFinite(id) || id <= 0) return c.json({ error: 'bad id' }, 400);
 
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
-  const status = String(body.status || '');
+  const status = String(body.status || '') as ConsultationStatus;
   if (!(CONSULTATION_STATUSES as readonly string[]).includes(status)) {
-    return c.json({ error: 'invalid status' }, 400);
+    return c.json({ code: 'invalid_status', message: 'status is requested, confirmed, completed or cancelled.' }, 400);
+  }
+  const expectedVersion = body.expected_version;
+  if (!(typeof expectedVersion === 'number' && Number.isSafeInteger(expectedVersion) && expectedVersion >= 1)) {
+    return c.json({ code: 'expected_version_required', message: 'Name the version you read in expected_version.' }, 400);
   }
   const slotAt = typeof body.slot_at === 'string' ? body.slot_at : null;
 
-  await c.env.DB.prepare(
-    `UPDATE admin_consultation_bookings
-        SET status = ?,
-            admin_id = COALESCE(admin_id, ?),
-            slot_at = COALESCE(?, slot_at)
-      WHERE id = ?`,
-  ).bind(status, admin.id, slotAt, id).run();
+  const read = () => c.env.DB.prepare(`${ADMIN_BOOKING_SELECT} WHERE b.id = ?`).bind(id).first<Record<string, unknown>>();
+  const before = await read();
+  if (!before) return c.json({ code: 'not_found', message: 'That consultation does not exist.' }, 404);
+  if (Number(before.version) !== expectedVersion) {
+    return c.json({ code: 'version_conflict', message: 'This consultation changed after you read it.', current: before }, 409);
+  }
+  const from = String(before.status) as ConsultationStatus;
+  if (!CONSULTATION_TRANSITIONS[from]?.includes(status)) {
+    return c.json({ code: 'illegal_transition', message: `A consultation cannot move from ${from} to ${status}.`, current: before }, 409);
+  }
 
-  const row = await c.env.DB.prepare(
-    `SELECT id, uid, user_id, admin_id, status, slot_at, report_id
-       FROM admin_consultation_bookings WHERE id = ?`,
-  ).bind(id).first<Record<string, unknown>>();
+  const nextVersion = expectedVersion + 1;
+  const [updated] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE admin_consultation_bookings
+          SET status = ?, admin_id = COALESCE(admin_id, ?), slot_at = COALESCE(?, slot_at), version = version + 1
+        WHERE id = ? AND version = ? AND status = ?`,
+    ).bind(status, admin.id, slotAt, id, expectedVersion, from),
+    c.env.DB.prepare(
+      `INSERT INTO admin_consultation_booking_events (booking_id, from_status, to_status, version, actor_user_id)
+       SELECT id, ?, ?, version, ? FROM admin_consultation_bookings
+       WHERE id = ? AND version = ? AND status = ?
+       ON CONFLICT(booking_id, version) DO NOTHING`,
+    ).bind(from, status, admin.id, id, nextVersion, status),
+  ]);
+
+  const row = await read();
   if (!row) return c.json({ error: 'not found' }, 404);
+  if (Number(updated.meta?.changes ?? 0) !== 1) {
+    return c.json({ code: 'version_conflict', message: 'This consultation changed after you read it.', current: row }, 409);
+  }
   return c.json({ booking: row });
 });

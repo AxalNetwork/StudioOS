@@ -181,8 +181,20 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id WHERE e.approved_at IS NOT NULL',
   },
   {
-    key: 'best_fit', recorded: false, since: null,
-    reason: 'A Best-Fit booking keeps no time for its confirmation or cancellation, and nothing else records it.',
+    // #5301: confirming and cancelling are the review outcomes. Completion is
+    // operational; it stays in the full transition history without becoming a
+    // second approval. A later cancellation is preserved beside confirmation.
+    key: 'best_fit', recorded: true, since: '2026-11-10',
+    caveat: 'Best-Fit decisions before 10 November 2026 were not recorded.',
+    sql:
+      'SELECT b.id AS item_id, ' + WHO('u', 'b.user_id') + ' AS who, '
+      + "CASE e.to_status WHEN 'confirmed' THEN 'approved' ELSE 'declined' END AS outcome, "
+      + "CASE e.to_status WHEN 'confirmed' THEN 'Confirmed' ELSE 'Cancelled' END AS outcome_word, "
+      + 'datetime(e.created_at) AS decided_at, e.actor_user_id AS decided_by_id, NULL AS decided_by_label, '
+      + 'datetime(b.requested_at) AS arrived_at, NULL AS note, 0 AS note_shown '
+      + 'FROM admin_consultation_booking_events e JOIN admin_consultation_bookings b ON b.id = e.booking_id '
+      + 'LEFT JOIN users u ON u.id = b.user_id '
+      + "WHERE e.to_status IN ('confirmed', 'cancelled')",
   },
   {
     key: 'due_diligence', recorded: false, since: null,
@@ -570,7 +582,7 @@ export function weekStart(ms: number): number {
 
 type LaneSeries = {
   key: string; label: string; available: boolean; reason?: string;
-  arrived: number[] | null; decided: number[] | null; scope?: 'hq';
+  arrived: Array<number | null> | null; decided: Array<number | null> | null; scope?: 'hq';
 };
 
 /**
@@ -604,6 +616,7 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
 
   const series: LaneSeries[] = [];
   const unreadable: string[] = [];
+  const notRecordedPeriods: string[] = [];
   const thisWeekWaits: number[] = [];
   let thisWeekDecided: number | null = 0;
   for (const l of a.lanes) {
@@ -613,6 +626,10 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       continue;
     }
     try {
+      const recordingSince = l.since ? utcMs(`${l.since} 00:00:00`) : Number.NEGATIVE_INFINITY;
+      const notRecorded = weeks.map((w) => utcMs(`${w.week_start} 00:00:00`) < recordingSince);
+      const currentWeekNotRecorded = notRecorded[SERIES_WEEKS - 1];
+      if (notRecorded.some(Boolean)) notRecordedPeriods.push(base.label);
       const q = await env.DB.prepare(listSql(l)).bind(...binds({ ...NO_FILTERS, from }), SERIES_LANE_CAP + 1).all<any>();
       const rows = q.results || [];
       if (rows.length > SERIES_LANE_CAP) {
@@ -626,7 +643,7 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       for (const r of rows) {
         const w = index(r.decided_at);
         if (w >= 0) decided[w] += 1;
-        if (w === SERIES_WEEKS - 1) {
+        if (w === SERIES_WEEKS - 1 && !currentWeekNotRecorded) {
           if (thisWeekDecided != null) thisWeekDecided += 1;
           const h = waitHours(r.arrived_at, r.decided_at);
           if (h != null) thisWeekWaits.push(h);
@@ -635,8 +652,11 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
         if (prev == null || utcMs(r.arrived_at) < utcMs(prev)) firstArrival.set(Number(r.item_id), r.arrived_at);
       }
 
-      let arrived: number[] | null = null;
-      let reason: string | undefined;
+      const decidedWithHistory = decided.map((n, i) => (notRecorded[i] ? null : n));
+      let arrived: Array<number | null> | null = null;
+      let reason: string | undefined = notRecorded.some(Boolean) && l.since
+        ? `${base.label} was not recorded before ${l.since}; those periods are Not recorded.`
+        : undefined;
       if (l.arrivals === false) {
         reason = `${base.label} keeps no arrival time once an item is decided, so its arrivals are not counted.`;
       } else {
@@ -656,11 +676,13 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
           arrived = new Array(SERIES_WEEKS).fill(0);
           for (const at of [...firstArrival.values(), ...waiting]) {
             const w = index(at);
-            if (w >= 0) arrived[w] += 1;
+            if (w >= 0) arrived[w] = Number(arrived[w] ?? 0) + 1;
           }
+          arrived = arrived.map((n, i) => (notRecorded[i] ? null : n));
         }
       }
-      series.push({ ...base, available: true, ...(reason ? { reason } : {}), arrived, decided });
+      if (currentWeekNotRecorded) thisWeekDecided = null;
+      series.push({ ...base, available: true, ...(reason ? { reason } : {}), arrived, decided: decidedWithHistory });
     } catch (e) {
       console.error('[approvals] weekly lane', l.key, (e as Error)?.message);
       unreadable.push(base.label);
@@ -669,9 +691,11 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
     }
   }
 
-  const sum = (pick: (s: LaneSeries) => number[] | null) => {
+  const sum = (pick: (s: LaneSeries) => Array<number | null> | null) => {
     const counted = series.filter((s) => s.available && pick(s));
-    return counted.length ? weeks.map((_, i) => counted.reduce((t, s) => t + (pick(s) as number[])[i], 0)) : null;
+    return counted.length ? weeks.map((_, i) => counted.some((s) => (pick(s) as Array<number | null>)[i] == null)
+      ? null
+      : counted.reduce((t, s) => t + Number((pick(s) as Array<number | null>)[i]), 0)) : null;
   };
   const notRecorded = series.filter((s) => !s.available && !unreadable.includes(s.label)).map((s) => s.label);
   return {
@@ -685,12 +709,15 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       decided_leaves_out: series.filter((s) => !s.decided).map((s) => s.label),
     },
     tile: thisWeekDecided == null
-      ? { decided_this_week: null, median_wait_hours: null, reason: `${unreadable.join(', ')} could not be read, so this week's decisions are not known.` }
+      ? { decided_this_week: null, median_wait_hours: null, reason: unreadable.length
+        ? `${unreadable.join(', ')} could not be read, so this week's decisions are not known.`
+        : `${notRecordedPeriods.join(', ')} was not recorded for all of this week, so this week's decisions are Not recorded.` }
       : {
         decided_this_week: thisWeekDecided,
         median_wait_hours: medianOfHours(thisWeekWaits),
         ...(notRecorded.length ? { leaves_out: notRecorded } : {}),
       },
     unreadable,
+    ...(notRecordedPeriods.length ? { not_recorded_periods: notRecordedPeriods } : {}),
   };
 }

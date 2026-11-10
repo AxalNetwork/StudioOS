@@ -145,7 +145,7 @@ test('every lane is in the log, in the canvas\'s order, and every recorded lane 
     db.prepare(countSql(l)).get(null, null, null, null, null, null, null, null);
   }
   assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key),
-    ['jobs', 'best_fit', 'due_diligence', 'kyb', 'wellbeing_experts', 'ai_runs']);
+    ['jobs', 'due_diligence', 'kyb', 'wellbeing_experts', 'ai_runs']);
 });
 
 test('a referral\'s verdicts are the store\'s own list', () => {
@@ -290,11 +290,9 @@ test('GET /decided/weekly: eight weeks to this one, arrived and decided per lane
   // A lane that does not record is not a zero.
   assert.deepEqual([lane('jobs').available, lane('jobs').decided, lane('jobs').arrived], [false, null, null]);
   assert.ok(body.totals.decided_leaves_out.includes('Jobs'));
-  assert.equal(body.totals.decided[7], body.lanes.filter((l: any) => l.decided).reduce((s: number, l: any) => s + l.decided[7], 0));
-  // The tile: every decision this week, and the median wait of those with both ends.
-  assert.equal(body.tile.decided_this_week, 14);
-  assert.equal(typeof body.tile.median_wait_hours, 'number');
-  assert.ok(body.tile.leaves_out.includes('Wellbeing experts'));
+  assert.equal(body.totals.decided[7], null, 'a week before Best-Fit history is Not recorded, never a short zero');
+  assert.equal(body.tile.decided_this_week, null);
+  assert.match(body.tile.reason, /Best-Fit.*not recorded/i);
 });
 
 test('weekly: a failed lane makes the tile unknown, never a short count', async (t) => {
