@@ -141,11 +141,14 @@ test('every lane is in the log, in the canvas\'s order, and every recorded lane 
   const db = fixture();
   for (const l of DECISION_LANES) {
     if (!l.recorded) { assert.ok(l.reason.length > 20, `${l.key} says why it does not record`); continue; }
-    db.prepare(listSql(l)).all(null, null, null, null, null, null, null, null, 5);
-    db.prepare(countSql(l)).get(null, null, null, null, null, null, null, null);
+    // D5302: a lane that binds its own values (KYB's studio) binds them first.
+    const own = l.bindings ? l.bindings({} as any) : [];
+    db.prepare(listSql(l)).all(...own as any[], null, null, null, null, null, null, null, null, 5);
+    db.prepare(countSql(l)).get(...own as any[], null, null, null, null, null, null, null, null);
   }
+  // D5302: Due diligence, KYB and Wellbeing experts record their decisions now.
   assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key),
-    ['jobs', 'best_fit', 'due_diligence', 'kyb', 'wellbeing_experts', 'ai_runs']);
+    ['jobs', 'best_fit', 'ai_runs']);
 });
 
 test('a referral\'s verdicts are the store\'s own list', () => {
@@ -196,7 +199,8 @@ test('GET /decided: newest first, with outcome, who decided, the wait and whethe
   assert.match(jobs.reason, /no decision time/);
   assert.equal(body.lanes.find((l: any) => l.key === 'partner_profiles').since, '2026-10-25');
   assert.equal(body.lanes.find((l: any) => l.key === 'lp').count, 2);
-  assert.ok(body.not_recorded.includes('Wellbeing experts'));
+  assert.ok(body.not_recorded.includes('Jobs'));
+  assert.ok(!body.not_recorded.includes('Wellbeing experts'), 'D5302: Wellbeing experts records its decisions');
 });
 
 test('HQ\'s lanes are a Super Admin\'s: a plain Admin reads none and cannot name one', async (t) => {
@@ -294,7 +298,8 @@ test('GET /decided/weekly: eight weeks to this one, arrived and decided per lane
   // The tile: every decision this week, and the median wait of those with both ends.
   assert.equal(body.tile.decided_this_week, 14);
   assert.equal(typeof body.tile.median_wait_hours, 'number');
-  assert.ok(body.tile.leaves_out.includes('Wellbeing experts'));
+  assert.ok(body.tile.leaves_out.includes('Jobs'));
+  assert.ok(!body.tile.leaves_out.includes('Wellbeing experts'), 'D5302: Wellbeing experts records its decisions');
 });
 
 test('weekly: a failed lane makes the tile unknown, never a short count', async (t) => {

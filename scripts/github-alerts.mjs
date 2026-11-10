@@ -15,7 +15,7 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import {
-  ALERT_KINDS, QUEUE_DEFAULTS, failingTests, futureClockMessage, mainState, message, queueState, reviewState, transition,
+  ALERT_KINDS, QUEUE_DEFAULTS, failingTests, mainState, message, queueState, reviewState, transition,
 } from './lib/githubAlerts.mjs';
 
 const env = process.env;
@@ -95,7 +95,7 @@ async function main() {
       const runs = page?.workflow_runs || [];
       oldest = runs.length ? runs[runs.length - 1].created_at : null;
     }
-    const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds });
+    const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds, issueOpen: Boolean(await openIssue('queue')) });
     return apply('queue', q.active, q);
   }
   if (mode === 'future-clock') {
@@ -103,7 +103,10 @@ async function main() {
     const tap = file && existsSync(file) ? readFileSync(file, 'utf8') : '';
     const failures = failingTests(tap);
     console.log(`future-clock: ${failures.names.length + failures.more} failing test(s)`);
-    return slack(futureClockMessage({ days: Number(env.FUTURE_CLOCK_DAYS) || 0, failures, runUrl: env.RUN_URL }));
+    // D5398: one issue, opened on the first failing night and closed on the first clean one. No log at all says
+    // nothing (unknown), never "recovered".
+    const active = tap.trim() ? failures.names.length + failures.more > 0 : null;
+    return apply('future-clock', active, { days: Number(env.FUTURE_CLOCK_DAYS) || 0, failures, runUrl: env.RUN_URL });
   }
   throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue or future-clock`);
 }

@@ -11,6 +11,7 @@ import { boardFor } from '../boards';
 import { api } from '../../lib/api';
 import { ADVISOR_COPY } from '../noStoreCopy';
 import { CohortSectionNav, CohortWorkspaceProvider } from '../../pages/advisor/cohorts/CohortWorkspace';
+import { COHORT_PROMPTS } from '../../pages/advisor/cohorts/cohortModel';
 
 const AdvisorAdvisoryWorkspace = lazy(() => import('../../pages/advisor/advisory/AdvisorAdvisoryWorkspace'));
 const CohortsFoundersZone = lazy(() => import('../../pages/advisor/cohorts/FoundersZone'));
@@ -244,6 +245,13 @@ const ZONE = {
  */
 const COPY = ADVISOR_COPY;
 
+/** #4834 (D4834): the Practice v2 section row, in `Practice v2 Page.dc.html`'s `ZONES` order. */
+const PRACTICE_ROW = Object.freeze({
+  overview: 'Overview',
+  order: ['opportunities', 'engagements', 'sessions', 'delivery', 'earnings'],
+  scroll: true,
+});
+
 export default function AdvisorBucketRoutes({ preview = false }) {
   const location = useLocation();
   const bucket = bucketForPath('advisor', location.pathname);
@@ -408,6 +416,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
       role="advisor"
       title={cohorts ? 'Cohorts' : (isRoot ? bucketTitle(bucket) : zoneHead?.h1)}
       sectionNav={cohorts ? <CohortSectionNav /> : undefined}
+      // #4834 (D4834): Practice v2's section row (PX-10): Overview first, the
+      // canvas's order, one line that scrolls sideways on a phone.
+      zoneRow={prefix === '/practice' ? PRACTICE_ROW : null}
       // NO `scope` PROP. It read `scope={prefix === '/cohorts' ? 'One cohort'
       // : 'One practice'}` — a conditional literal the frame contract's
       // attribute-only pattern missed. The shell fills that slot from
@@ -423,6 +434,9 @@ export default function AdvisorBucketRoutes({ preview = false }) {
           note={RAIL.note}
           coverage={coverage}
           unavailable={RAIL.unavailable}
+          // D4813 package 4: Eadwyn's advisor prompts on every Cohorts section.
+          // They fill the Ask composer and send nothing (`promptOptions`).
+          prompts={cohorts ? COHORT_PROMPTS : undefined}
         />
       )}
     >

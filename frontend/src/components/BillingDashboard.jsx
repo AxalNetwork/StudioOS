@@ -6,6 +6,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { getStripe, buildAppearance } from '../lib/stripe';
 import { cancelWords, openCheckout, planKeyOfProduct } from './checkout/checkoutEntry';
 import { useAccountRead } from '../pages/account/AccountCenter';
+import { formatStripeAmount } from '../lib/money';
 
 /**
  * Task #5 — In-app billing dashboard.
@@ -33,10 +34,7 @@ import { useAccountRead } from '../pages/account/AccountCenter';
 const fmtMoney = (amt, cur) =>
   amt == null
     ? '—'
-    : new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: (cur || 'usd').toUpperCase(),
-      }).format(amt / 100);
+    : formatStripeAmount(amt, cur || 'usd');
 
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
 export default function BillingDashboard({ scope = 'founder', variant = 'subscriber', flash, onChanged, overviewRead = null }) {
