@@ -21,6 +21,7 @@ import {
 export { ApprovalAgeList, ageTone };
 import { Card, Unrecorded, Unreadable } from '../../ui';
 import BranchZone from './BranchZone';
+import { formatMinorOrCount } from '../../lib/money';
 
 /**
  * Branch · Analytics — this territory over time (S15, D210).
@@ -369,11 +370,8 @@ export function WeekGates({ timeline, onRetry }) {
 /** Whole cents as a currency figure, for a stream that reports one. */
 function cents(n, currency) {
   if (typeof n !== 'number' || !Number.isFinite(n)) return null;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency || 'EUR' }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(2)} ${currency || ''}`.trim();
-  }
+  // D5373: at the currency's own decimals; a stream with no currency names the stored count, it is not read as euros.
+  return formatMinorOrCount(n, currency, { locale: 'en-GB' });
 }
 
 /**

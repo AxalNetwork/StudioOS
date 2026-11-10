@@ -144,8 +144,9 @@ const REF = /\b(?:FROM|JOIN|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE(?:\s+OR\s+\w+)?
 export function referencedTables(sql) {
   const clean = stripSqlLiterals(sql);
   // The boundary belongs to WITH, not the comma after a closing parenthesis.
-  // SQLite also permits an explicit column list before AS (VALUES CTEs).
-  const ctes = new Set([...clean.matchAll(/(?:\bWITH|,)\s+(\w+)(?:\s*\([^)]*\))?\s+AS\s*\(/gi)]
+  // SQLite also permits an explicit column list before AS (VALUES CTEs), and
+  // a [NOT] MATERIALIZED hint after it (D5318).
+  const ctes = new Set([...clean.matchAll(/(?:\bWITH|,)\s+(\w+)(?:\s*\([^)]*\))?\s+AS\s*(?:(?:NOT\s+)?MATERIALIZED\s*)?\(/gi)]
     .map((m) => norm(m[1])));
   return [...clean.matchAll(REF)].map((m) => norm(m[1])).filter((t) => !ctes.has(t));
 }

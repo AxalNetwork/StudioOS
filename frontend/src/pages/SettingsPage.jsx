@@ -68,6 +68,7 @@ import { isSuperAdminUser } from '../lib/shellRole';
 import { sessionRowState } from '../lib/sessionRows';
 import { effectiveDisplayName } from '../lib/displayName';
 import DsrOutcomeNotice from '../components/DsrOutcomeNotice';
+import { formatStripeAmount } from '../lib/money';
 
 // D433 — THE COMPLIANCE BRIDGE. The Account canvas puts a trust-score strip
 // above every pane: the write side of Trust Center, on the page whose data the
@@ -4920,7 +4921,7 @@ function EmbeddedCheckoutCard({ flash, onPaid }) {
   if (prices.length === 0) return null;
 
   const fmt = (amt, cur) =>
-    amt == null ? '—' : new Intl.NumberFormat(undefined, { style: 'currency', currency: (cur || 'usd').toUpperCase() }).format(amt / 100);
+    amt == null ? '—' : formatStripeAmount(amt, cur || 'usd');
 
   return (
     <Card title="Pay by card" description="Complete your upgrade inline — no redirect to Stripe.">

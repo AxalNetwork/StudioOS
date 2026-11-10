@@ -7,6 +7,7 @@
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { bpsPercent } from '../../../lib/bps.js';
+import { codeAmount, parseMinor } from '../../../lib/money.js';
 
 /** The five figures, in the order the panel lists them. `kind` decides the unit. */
 export const PRICING_FIGURES = Object.freeze([
@@ -41,7 +42,7 @@ export const REVIEW_STATE_LABELS = Object.freeze({
 export function figure(value, kind, currency) {
   if (value === null || value === undefined) return NOT_RECORDED;
   if (kind === 'bps') return bpsPercent(Number(value)) ?? NOT_RECORDED;
-  return `${currency || ''} ${(Number(value) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim();
+  return codeAmount(Number(value), currency, { locale: undefined });
 }
 
 /** A signed difference, or null when either side is unknown. */
@@ -69,13 +70,13 @@ export function freshness(country) {
   return { label: dates.length ? `Oldest input as of ${dates[0]}` : NOT_RECORDED, missing, provisional };
 }
 
-/** Money typed in currency units ("42000.50") to whole cents, or null when blank, or NaN when not a number. */
-export function centsFrom(text) {
+/** Money typed in the licence currency's units ("42000.50") to whole minor units of THAT currency (D5373), or null when blank, or NaN when not money for it. */
+export function centsFrom(text, currency) {
   const s = String(text ?? '').trim();
   if (!s) return null;
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return Number.NaN;
-  const [whole, frac = ''] = s.split('.');
-  return Number(whole) * 100 + Number((frac + '00').slice(0, 2));
+  if (!/^\d+(\.\d+)?$/.test(s)) return Number.NaN;
+  const r = parseMinor(s, String(currency ?? '').toUpperCase());
+  return r.ok ? r.minor : Number.NaN;
 }
 
 /**
@@ -88,10 +89,11 @@ export function buildApply({ view, form, reviewUid = null }) {
   const snap = view?.recommendation;
   if (!snap) return { ok: false, errors: { form: 'Refresh the recommendation first.' } };
   const accepted = {};
+  const currency = view?.terms?.currency ?? snap.currency;
   for (const f of PRICING_FIGURES) {
     const raw = form?.accepted?.[f.key];
     if (raw === undefined || String(raw).trim() === '') continue;
-    const v = f.kind === 'bps' ? (/^\d+$/.test(String(raw).trim()) ? Number(raw) : Number.NaN) : centsFrom(raw);
+    const v = f.kind === 'bps' ? (/^\d+$/.test(String(raw).trim()) ? Number(raw) : Number.NaN) : centsFrom(raw, currency);
     if (!Number.isFinite(v) || v < 0 || (f.kind === 'bps' && v > 10000)) { errors[f.key] = f.kind === 'bps' ? 'must be whole basis points from 0 to 10000' : 'must be an amount like 42000 or 42000.50'; continue; }
     if (v !== snap.recommended?.[f.key]) accepted[f.key] = v;
   }

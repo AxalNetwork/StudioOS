@@ -419,6 +419,19 @@ test('#4663 the scheduled backfill line: not recorded before any tick, what it d
   } finally { await ran.close(); }
 });
 
+// D5360 (#5360): the same line says what the lost-bonus step paid.
+// Mutation checked: the bonus part dropped (fails); a tick with no bonus count drawn as
+// "0 paid" (the null case fails); the owed reasons dropped (fails).
+test('#5360 the scheduled backfill line says what the lost-bonus step paid, and says nothing for a tick that predates it', () => {
+  const tick = (o = {}) => ({ ran_at: '2026-11-09 12:00:00', status: 'done', scanned: 0, issued: 0, skipped: 0, more_waiting: false, ...o });
+  assert.equal(scheduledBackfillLine({ ...CERTS, scheduled_backfill: { last_tick: tick({ bonus: null }), not_issued: {}, bonus_not_paid: {} } }).text,
+    'Scheduled backfill, last tick 2026-11-09 12:00 UTC: 0 issued of 0 tried.');
+  assert.equal(scheduledBackfillLine({ ...CERTS, scheduled_backfill: {
+    last_tick: tick({ bonus: { scanned: 3, paid: 2, skipped: 1, more_waiting: true } }), not_issued: {},
+    bonus_not_paid: { 'skipped:not_accepted': 1, 'skipped:error': 0 },
+  } }).text, 'Scheduled backfill, last tick 2026-11-09 12:00 UTC: 0 issued of 0 tried · lost graduation bonuses: 2 paid of 3 tried, more are due · 1 certificate holder it tried is still owed the bonus (1: not an admitted cohort member); each is tried again after six hours.');
+});
+
 test('the source: no browser pop-up, no bare dash, no venture filter in the browser, and the tabs no longer mount the old consoles', () => {
   const files = ['LabHosts.jsx', 'LabFormation.jsx', 'LabGraduation.jsx', 'labParts.jsx', 'labDesksModel.js'].map((f) => codeOnly(read(`frontend/src/pages/admin/lab/${f}`))).join('\n');
   assert.doesNotMatch(files, /window\.(prompt|confirm|alert)|\balert\(|useToast|dangerouslySetInnerHTML/);

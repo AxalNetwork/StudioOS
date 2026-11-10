@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { PIPELINE_FILTERS, clearFilters, useTabFilters } from './capRelUrlFilters';
 import { api } from '../../../lib/api';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
@@ -390,8 +391,7 @@ function Card({ p, onOpen, onMove }) {
   );
 }
 
-function Board({ cols, onOpen, onMove, phone }) {
-  const [showPassed, setShowPassed] = useState(false);
+function Board({ cols, onOpen, onMove, phone, showPassed, setShowPassed }) {
   const [one, setOne] = useState(STAGES[0]);
   const visible = phone ? cols.columns.filter((c) => c.stage === one) : cols.columns;
   return (
@@ -414,7 +414,7 @@ function Board({ cols, onOpen, onMove, phone }) {
         {!phone ? (
           <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-gray-300 p-2.5 dark:border-gray-700" data-testid="caprel-col-passed">
             <button type="button" className={`m-0 border-0 bg-transparent p-0 text-left text-[12px] font-extrabold uppercase tracking-[.06em] ${MUTED}`}
-              aria-expanded={showPassed} onClick={() => setShowPassed((x) => !x)} data-testid="caprel-passed-toggle">Passed · {cols.passed.length}</button>
+              aria-expanded={showPassed} onClick={() => setShowPassed(!showPassed)} data-testid="caprel-passed-toggle">Passed · {cols.passed.length}</button>
             {showPassed ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{cols.passed.map((p) => <Card key={p.id} p={p} onOpen={onOpen} onMove={onMove} />)}</ul> : null}
           </section>
         ) : null}
@@ -488,6 +488,8 @@ export default function CapRelPipeline({ projectId, search = '' }) {
   const openId = /^[1-9][0-9]{0,9}$/.test(params.get('investor') || '') ? Number(params.get('investor')) : null;
   const setView = (v) => setParams((p) => { const n = new URLSearchParams(p); if (v === 'list') n.set('view', 'list'); else n.delete('view'); return n; }, { replace: true });
   const setOpen = (p) => setParams((cur) => { const n = new URLSearchParams(cur); if (p) n.set('investor', String(p.id)); else n.delete('investor'); return n; });
+  // D5377: whether the Passed column is open is the address's too (`?passed=1`); a venture switch closes it.
+  const [board, setBoard] = useTabFilters(PIPELINE_FILTERS, projectId);
   const [dialog, setDialog] = useState(null);
   const reload = useCallback(() => read.reload(), [read]);
   const items = read.items || [];
@@ -499,7 +501,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
     if (lastProject.current === projectId) return;
     lastProject.current = projectId;
     setDialog(null);
-    setParams((p) => { const n = new URLSearchParams(p); n.delete('investor'); return n; }, { replace: true });
+    setParams((p) => { const n = clearFilters(PIPELINE_FILTERS, p); n.delete('investor'); return n; }, { replace: true });
   }, [projectId, setParams]);
   const cols = useMemo(() => boardColumns(items), [items]);
   const onMove = (p, to) => setDialog({ kind: 'move', prospects: [p], to });
@@ -530,7 +532,7 @@ export default function CapRelPipeline({ projectId, search = '' }) {
           <div className="flex gap-2"><button type="button" className={BTN_P} onClick={() => setDialog({ kind: 'add' })}>Add investor</button><button type="button" className={BTN_S} onClick={() => setDialog({ kind: 'import' })}>Import</button></div>
         </section>
       ) : null}
-      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} /> : null}
+      {items.length && view === 'board' ? <Board cols={cols} onOpen={setOpen} onMove={onMove} phone={phone} showPassed={board.passed} setShowPassed={(v) => setBoard({ passed: v }, { replace: true })} /> : null}
       {items.length && view === 'list' ? <List items={items} onOpen={setOpen} onBulk={(ps) => setDialog({ kind: 'move', prospects: ps, to: '' })} /> : null}
       {cols.unknown.length ? <p className={`m-0 text-[12px] ${MUTED}`} data-testid="caprel-unknown-stage">{cols.unknown.length} {cols.unknown.length === 1 ? 'investor has' : 'investors have'} a stage the board does not draw; the list shows them.</p> : null}
 

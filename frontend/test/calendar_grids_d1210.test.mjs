@@ -104,13 +104,14 @@ test('the address: ?date= anchors the view and steps a month or a week; ?kinds= 
   assert.equal(kindsFrom('?kinds=bogus', allowed), null, 'nothing known left is everything');
   assert.equal(kindsFrom('', allowed), null);
   assert.equal(withKinds('?date=2026-12-01', new Set(allowed), allowed), '?date=2026-12-01', 'every kind is no parameter');
-  assert.equal(withKinds('', new Set(['event_ticket', 'ic_meeting']), allowed), `?kinds=${encodeURIComponent('event_ticket,ic_meeting')}`);
+  // D5205: in the registry's order, where Meetings comes before Events.
+  assert.equal(withKinds('', new Set(['event_ticket', 'ic_meeting']), allowed), `?kinds=${encodeURIComponent('ic_meeting,event_ticket')}`);
   assert.equal(needsFrom('?needs=1'), true);
   assert.equal(withNeeds('?needs=1', false), '');
   assert.equal(quickKinds('everything', allowed), null);
-  // D1384: Deadlines carries compliance_due, so Hide deadlines drops exactly it (D1484: and the cohort dates and deal closings;
-  // #3982: and a round's close and an NDA's expiry; #3983: and the four task stores' due dates).
-  assert.deepEqual([...quickKinds('no-deadlines', allowed)].sort(), allowed.filter((k) => !['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'work_item'].includes(k)).sort());
+  // D1384: Deadlines carries compliance_due, so Hide deadlines drops exactly it (D1484: and the cohort dates and deal closings).
+  // D5205 (#5205): the registry's Deadlines family; a round's close and an NDA's expiry are Raise's, and the task stores are Tasks.
+  assert.deepEqual([...quickKinds('no-deadlines', allowed)].sort(), allowed.filter((k) => !['compliance_due', 'cohort_date', 'deal_closing'].includes(k)).sort());
 });
 
 test('the Kinds panel counts: a family sums its kinds, says how many are unread, and has no count when the list was not read', () => {
@@ -124,8 +125,12 @@ test('the Kinds panel counts: a family sums its kinds, says how many are unread,
 });
 
 test('the Explorer: Events and From other calendars only; "needs me" is an invitation you have not answered', () => {
-  assert.deepEqual(familiesFor('exploring').map((f) => f.key), ['events', 'other']);
-  assert.equal(familiesFor('founder').length, 8); // D1486 §b (#3981): Grow is the seventh; §d tasks share Deadlines; #3957: AI agents is the eighth.
+  // D5205 (#5205): the registry's families. An Explorer keeps the same six kinds it always had: its events, its own
+  // events (Tasks, where the registry files "Your event") and its other calendars.
+  assert.deepEqual(familiesFor('exploring').map((f) => f.key), ['events', 'tasks', 'external']);
+  assert.deepEqual(familiesFor('exploring').flatMap((f) => f.kinds).sort(),
+    ['calendly_event', 'event_hosted', 'event_ticket', 'external_google', 'external_microsoft', 'manual']);
+  assert.equal(familiesFor('founder').length, 10, 'every registry family has a kind');
   const ev = { attendees: [{ email: 'f@example.com', rsvp: 'invited' }, { email: 'g@example.com', rsvp: 'accepted' }] };
   assert.equal(needsMe(ev, 'f@example.com'), true);
   assert.equal(needsMe(ev, 'g@example.com'), false);
@@ -242,17 +247,19 @@ test('the Kinds filter (CAL6): families with counts, a dash and why for a source
   try {
     assert.equal(v.text('cal-kinds'), 'Kinds 32 on');
     await v.click('cal-kinds');
-    assert.ok(v.text('cal-fam-meetings').startsWith('Meetings 2'));
-    assert.ok(v.text('cal-fam-sessions').includes('and 1 unread'));
-    assert.ok(v.text('cal-fam-sessions').includes('— · Could not be read'));
-    await v.change('cal-fam-box-sessions', false);
-    await v.change('cal-fam-box-other', false);
+    // D5205: the registry files advisor sessions and office hours under Meetings.
+    assert.ok(v.text('cal-fam-meetings').startsWith('Meetings 3'));
+    assert.ok(v.text('cal-fam-meetings').includes('and 1 unread'));
+    assert.ok(v.text('cal-fam-meetings').includes('— · Could not be read'));
+    for (const k of ['advisor_booking', 'partner_office_hour', 'expert_booking']) await v.change(`cal-kind-box-${k}`, false);
+    await v.change('cal-fam-box-external', false);
     assert.equal(v.text('cal-kinds-show'), 'Show 3 items');
     await v.click('cal-kinds-show');
     const q = new URLSearchParams(v.seen.location.search);
     // D1384: Deadlines (the Compliance layer) stays ticked. D1484 (#3977): with its own events, interview calls, cohort dates and deal closings; #3959: so does Learning; D1486 §b: so does Grow;
     // §c (#3982): and a round's close and an NDA's expiry, with the other deadlines; §d (#3983): and the four task stores; §e (#5131): and Grow's four dated stores.
-    assert.deepEqual(q.get('kinds').split(','), ['event_ticket', 'event_hosted', 'manual', 'ic_meeting', 'founder_checkin', 'investor_meeting', 'interview_call', 'bot_call', 'compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'work_item', 'learning', 'publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step', 'agent_session']);
+    // D5205: in the registry's family order.
+    assert.deepEqual(q.get('kinds').split(','), ['ic_meeting', 'founder_checkin', 'bot_call', 'event_ticket', 'event_hosted', 'interview_call', 'publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step', 'compliance_due', 'cohort_date', 'deal_closing', 'investor_meeting', 'round_close', 'nda_expiry', 'manual', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'work_item', 'learning', 'agent_session']);
     assert.equal(q.get('date'), TK, 'the date stays');
     assert.equal(v.text('cal-kinds'), 'Kinds 26 on');
     assert.ok(!v.has('cal-gchip-calendly_event:4') && !v.has('cal-gchip-advisor_booking:5'));
@@ -291,7 +298,7 @@ test('the Explorer (CAL14): reaches the calendar, sees Events and From other cal
   try {
     assert.ok(!v.has('cal-new-menu') && !v.ids().some((id) => id.startsWith('cal-new')), 'no New');
     await v.click('cal-kinds');
-    assert.deepEqual(v.ids().filter((id) => /^cal-fam-[a-z]+$/.test(id)), ['cal-fam-events', 'cal-fam-other']);
+    assert.deepEqual(v.ids().filter((id) => /^cal-fam-[a-z]+$/.test(id)), ['cal-fam-events', 'cal-fam-tasks', 'cal-fam-external']);
     // D1484 (#3977): Events holds the member's own events too; D1485 (#3979): From other calendars holds Google and Outlook.
     assert.equal(v.text('cal-kinds'), 'Kinds 6 on');
   } finally { await v.close(); }
