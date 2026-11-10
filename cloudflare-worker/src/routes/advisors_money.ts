@@ -573,6 +573,8 @@ advisors.get('/me/ledger', async (c) => {
     // by an operator). Nothing here moves money. One refund row per booking, as
     // before; the window is the booking's, as for every other figure here.
     const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    // #5305: an unreadable refund store is null below, never "0 owed".
+    let refundsRead = false;
     try {
       const rr = await c.env.DB.prepare(
         `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
@@ -589,6 +591,7 @@ advisors.get('/me/ledger', async (c) => {
           });
         }
       }
+      refundsRead = true;
     } catch { /* table absent or unreadable: no refund figure, never a guess */ }
     const refundsFor = (resolved: boolean) => [...refundByBooking.values()].filter((r) => r.resolved === resolved);
     // PAID OUT is the provider paying the advisor, which is a separate event
@@ -610,14 +613,14 @@ advisors.get('/me/ledger', async (c) => {
       collected: agg.states.collected,
       written_off: agg.states.written_off,
       unpriced: { sessions: agg.states.unpriced },
-      refunds_owed: {
+      refunds_owed: refundsRead ? {
         sessions: refundsFor(false).length,
         amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
-      },
-      refunded: {
+      } : null,
+      refunded: refundsRead ? {
         sessions: refundsFor(true).length,
         amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
-      },
+      } : null,
       paid_out_cents: paidOutCents,
       void_sessions: agg.voidSessions,
     };
