@@ -48,6 +48,7 @@ import {
   type StudioStage,
 } from '../mappings/salesforce_fields';
 import { acquireRefreshLease } from '../refreshLease';
+import { runSystemMove } from '../../services/dealTransitions';
 
 const PROVIDER_KEY = 'salesforce';
 const SF_API_VERSION = 'v60.0';
@@ -635,15 +636,14 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
         const next = sfStageToStudio(stageMaps, r.StageName);
         if (!next) continue;
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status FROM deals d ' +
+          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
           'WHERE d.sf_opportunity_id = ? AND f.user_id = ? ' +
           'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
-        ).bind(r.Id, row.user_id, row.id).first<{ id: number; status: string }>();
+        ).bind(r.Id, row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local && local.status !== next) {
-          await c.env.DB.prepare('UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .bind(next, local.id).run();
+          await runSystemMove(c.env, { dealId: local.id, to: next, source: 'salesforce' });
           counts.pulled++;
         }
       }

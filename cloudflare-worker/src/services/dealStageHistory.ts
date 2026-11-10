@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS deal_stage_events (
     kind          TEXT NOT NULL DEFAULT 'set' CHECK (kind IN ('advance','pass','set')),
     days_in_from  INTEGER,
     actor_user_id INTEGER,
+    source        TEXT CHECK (source IS NULL OR source IN ('hubspot','salesforce','affinity')),
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 )`;
 
@@ -68,6 +69,7 @@ export async function ensureDealPassSchema(env: Env): Promise<boolean> {
     const info = await env.DB.prepare(`PRAGMA table_info(deals)`).all<{ name: string }>();
     const have = new Set((info.results || []).map((r) => r.name));
     let altered = false;
+    let stageEventsReady = false;
     for (const [col, ddl] of PASS_COLUMNS) {
       if (have.has(col)) continue;
       altered = true;
@@ -79,6 +81,14 @@ export async function ensureDealPassSchema(env: Env): Promise<boolean> {
     }
     try {
       await env.DB.prepare(STAGE_EVENTS_DDL).run();
+      const eventInfo = await env.DB.prepare(`PRAGMA table_info(deal_stage_events)`).all<{ name: string }>();
+      if (!(eventInfo.results || []).some((r) => r.name === 'source')) {
+        await env.DB.prepare(
+          `ALTER TABLE deal_stage_events ADD COLUMN source TEXT CHECK (source IS NULL OR source IN ('hubspot','salesforce','affinity'))`,
+        ).run();
+      }
+      const eventInfoAfter = await env.DB.prepare(`PRAGMA table_info(deal_stage_events)`).all<{ name: string }>();
+      stageEventsReady = (eventInfoAfter.results || []).some((r) => r.name === 'source');
       await env.DB.prepare(
         `CREATE INDEX IF NOT EXISTS idx_deal_stage_events_deal ON deal_stage_events(deal_id, created_at)`,
       ).run();
@@ -87,7 +97,7 @@ export async function ensureDealPassSchema(env: Env): Promise<boolean> {
       ).run();
     } catch (e) { console.warn('[dealStageHistory] deal_stage_events bootstrap failed', e); }
 
-    const ok = altered ? await passColumnsPresent(env) : true;
+    const ok = (altered ? await passColumnsPresent(env) : true) && stageEventsReady;
     if (ok) READY.set(key, true);
     else console.warn('[dealStageHistory] pass columns still missing after bootstrap');
     return ok;

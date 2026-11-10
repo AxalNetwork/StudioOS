@@ -38,6 +38,7 @@ import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../
 import { loadDealstageMap, studioStageToHubspot, hubspotStageToStudio, type StudioStage } from '../mappings/hubspot_stages';
 import { enabledCompanyIds, projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import { acquireRefreshLease } from '../refreshLease';
+import { runSystemMove } from '../../services/dealTransitions';
 
 const HS_API = 'https://api.hubapi.com';
 const HS_AUTH = 'https://app.hubspot.com';
@@ -558,15 +559,14 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
         const localStage = hubspotStageToStudio(map, hd.properties.dealstage || '');
         if (!localStage) continue;
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status FROM deals d ' +
+          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
           'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
           'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
-        ).bind(hd.id, row.user_id, row.id).first<{ id: number; status: string }>();
+        ).bind(hd.id, row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local && local.status !== localStage) {
-          await c.env.DB.prepare('UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .bind(localStage, local.id).run();
+          await runSystemMove(c.env, { dealId: local.id, to: localStage, source: 'hubspot' });
           counts.pulled++;
         }
       }
@@ -649,16 +649,16 @@ async function webhook(c: Context<{ Bindings: Env }>, row: IntegrationRow, body:
         // the inbound-sync join (deals→projects→founders) and require
         // `founders.user_id = row.user_id`.
         const local = await c.env.DB.prepare(
-          'SELECT d.id, d.status FROM deals d ' +
+          'SELECT d.id, d.status, d.stage_changed_at FROM deals d ' +
           'LEFT JOIN projects p ON p.id = d.project_id ' +
           'LEFT JOIN founders f ON f.id = p.founder_id ' +
           'WHERE d.hubspot_deal_id = ? AND f.user_id = ? ' +
           'AND EXISTS (SELECT 1 FROM integration_companies ic WHERE ic.integration_id = ? AND ic.company_id = p.company_id AND ic.enabled = 1)',
-        ).bind(String(ev.objectId), row.user_id, row.id).first<{ id: number; status: string }>();
+        ).bind(String(ev.objectId), row.user_id, row.id).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (local) {
           const next = hubspotStageToStudio(map, ev.propertyValue);
           if (next && next !== local.status) {
-            await c.env.DB.prepare('UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').bind(next, local.id).run();
+            await runSystemMove(c.env, { dealId: local.id, to: next, source: 'hubspot' });
             handled++;
           }
         }
@@ -833,13 +833,19 @@ export async function importHubspotPipeline(
       const status = stageMap[d.properties.dealstage] || 'applied';
       try {
         const existing = await env.DB.prepare(
-          'SELECT d.id, d.project_id FROM deals d WHERE d.hubspot_deal_id = ? LIMIT 1',
-        ).bind(d.id).first<{ id: number; project_id: number }>();
+          'SELECT d.id, d.project_id, d.status, d.stage_changed_at FROM deals d WHERE d.hubspot_deal_id = ? LIMIT 1',
+        ).bind(d.id).first<{ id: number; project_id: number; status: string; stage_changed_at: string | null }>();
         if (existing) {
           if (!(await projectEnabled(env, row.id, existing.project_id))) { errors++; continue; }
-          await env.DB.prepare(
-            'UPDATE deals SET status = ?, amount = COALESCE(?, amount), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          ).bind(status, Number(d.properties.amount) || null, existing.id).run();
+          const amount = Number(d.properties.amount) || null;
+          await runSystemMove(env, {
+            dealId: existing.id,
+            to: status,
+            source: 'hubspot',
+            // Preserve the old COALESCE behavior: a missing CRM amount does
+            // not erase the value already recorded in Axal.
+            fields: amount == null ? {} : { amount },
+          });
         } else {
           // deals.project_id is NOT NULL — find-or-create a placeholder
           // project per imported deal (keyed by dealname) so the import
