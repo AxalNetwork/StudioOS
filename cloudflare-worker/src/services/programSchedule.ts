@@ -37,6 +37,7 @@ import { programOf, termsHashOf, termsOf, type LicenceLite } from './programGran
 import { clearGuard, decisionGuard, runDecision } from './decisionBatch';
 import { queuePushStatement } from './licencePush';
 import { agreementSignedStatements } from './programAgreements';
+import { plainAmount, suffixAmount } from '../../../frontend/src/lib/money.js';
 
 /** The document type every schedule envelope carries. */
 export const PROGRAM_SCHEDULE_DOC_TYPE = 'program_schedule';
@@ -67,8 +68,13 @@ const WORDS: Record<string, string> = {
 };
 
 function money(cents: number, currency: unknown): string {
-  const whole = (cents / 100).toFixed(2).replace(/\.00$/, '');
-  return typeof currency === 'string' && currency ? `${whole} ${currency}` : `${whole} (currency not recorded)`;
+  const code = typeof currency === 'string' ? currency.trim().toUpperCase() : '';
+  // D5373: the currency's own decimals (JPY none, KWD three). The schedule is the text a licensee signs and has always
+  // printed an amount without thousands separators ("2000 EUR", "1500.50 USD"), so the grouping `plainAmount` adds is
+  // dropped: only the exponent changes, not how the text reads. A missing or unlisted currency names the stored count.
+  const plain = code ? plainAmount(cents, code, { trimWhole: true }) : null;
+  if (plain !== null) return `${plain.replace(/,/g, '')} ${code}`;
+  return suffixAmount(cents, code || null, { trimWhole: true }) ?? '';
 }
 
 /** One term as the schedule prints it. */

@@ -181,11 +181,18 @@ export async function completeLabMilestone(env: Env, userId: number, rawKey: unk
  * graduation rule (view spinout_lab_graduates, by_rule) and holds none yet.
  * Idempotent and best-effort: the certificate backfill and the reconciler
  * catch up anything missed. Returns the bonus outcome, or null.
+ *
+ * D5360: a suspended branch, or one whose licence does not hold the Spin-Out
+ * Lab (or whose grants cannot be read), issues neither. The milestone that
+ * completed graduation is already recorded; the scheduled backfill issues the
+ * credential and its bonus on the first tick after the hold lifts. The same
+ * `labIssuanceHold` the admin routes and the backfill ask.
  */
 export async function issueIfGraduated(env: Env, userId: number): Promise<unknown> {
   try {
     if (!(await graduationOf(env, userId)).by_rule) return null;
-    const { issueOnGraduation } = await import('./certificateIssuance');
+    const { issueOnGraduation, labIssuanceHold } = await import('./certificateIssuance');
+    if (await labIssuanceHold(env)) return null;
     if ((await issueOnGraduation(env, userId)) !== 'issued') return null;
     const { creditLabGraduation } = await import('./labMilestoneCredits');
     return await creditLabGraduation(env, userId);

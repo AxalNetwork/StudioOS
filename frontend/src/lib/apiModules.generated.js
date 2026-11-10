@@ -8,6 +8,7 @@ export * from './api/accountLicences.js';
 export * from './api/accountPortfolio.js';
 export * from './api/adminAccountWrites.js';
 export * from './api/adminAccounts.js';
+export * from './api/adminAdvisoryRefundsDue.js';
 export * from './api/adminAiAgents.js';
 export * from './api/adminAiModels.js';
 export * from './api/adminAiUsage.js';

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
 import { Pill } from '../../ui';
 import { STATUS_TONE, STATUS_WORDS, feeLine, money, paidLine, parseAmount } from './licenceFeeInvoicesModel';
+import { toMajorString } from '../../lib/money.js';
 
 /**
  * D802 (#2238) — HQ's "Annual fee invoices" on a licence: one invoice per
@@ -80,9 +81,9 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
 
 function InvoiceRow({ inv, licence, api, busy, act }) {
   const [mode, setMode] = useState(null);
-  const [amount, setAmount] = useState(inv.paid_cents > 0 ? (inv.paid_cents / 100).toFixed(2) : '');
+  const [amount, setAmount] = useState(inv.paid_cents > 0 ? toMajorString(inv.paid_cents, inv.currency) ?? '' : '');
   const [note, setNote] = useState('');
-  const cents = parseAmount(amount);
+  const cents = parseAmount(amount, inv.currency);
   const download = () => act(async () => {
     const { blob, filename } = await api.pdfBlob(licence.uid, inv.uid);
     const url = URL.createObjectURL(blob);

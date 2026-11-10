@@ -14,6 +14,7 @@ import {
 } from './ddCaseModel.js';
 import { SEVERITY_WORD } from './ddListModel.js';
 import { Note, btnCls, cardCls, eyebrowCls, inputCls, muted, primaryCls } from './DdUi.jsx';
+import { codeAmount } from '../../lib/money';
 
 export function Who({ text, testId }) {
   return <p className={`m-0 text-[12.5px] ${muted}`} data-testid={testId}>{text}</p>;
@@ -148,7 +149,7 @@ export function OverviewTab({ data, focusSection, open, sectionRefs }) {
             <Block title="Deal context" testId="dd-deal">
               <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
                 <dt className={muted}>Round</dt><dd className="m-0">{cs.round_label || NOT_RECORDED}</dd>
-                <dt className={muted}>Cheque</dt><dd className="m-0">{cs.cheque_cents != null ? `${(Number(cs.cheque_cents) / 100).toLocaleString('en-US')} ${cs.cheque_currency || ''}`.trim() : NOT_RECORDED}</dd>
+                <dt className={muted}>Cheque</dt><dd className="m-0">{cs.cheque_cents != null ? codeAmount(Number(cs.cheque_cents), cs.cheque_currency, { trimWhole: true }) : NOT_RECORDED}</dd>
                 <dt className={muted}>Deal</dt><dd className="m-0">{cs.deal_id != null ? `Deal #${cs.deal_id}` : NOT_RECORDED}</dd>
               </dl>
             </Block>

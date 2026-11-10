@@ -370,11 +370,12 @@ test('no advisory surface renders a charge as accomplished fact', () => {
   // deployment that reads as live is the failure this whole flag exists to
   // prevent.
   const page = read(`${SRC}/../../frontend/src/pages/advisor/practice/EarningsZone.jsx`);
-  // The page branches on the mode rather than asserting one.
-  assert.match(page, /d\.settlement === 'none'/);
+  // The page branches on the mode rather than asserting one. #4834 (D4834):
+  // it reads `settlement` from the ledger response (`L`) now.
+  assert.match(page, /L\.settlement === 'none'/);
   assert.match(page, /Payments are running in/);
   // And the mode is RENDERED, so a reader in test mode is told it is test.
-  assert.match(page, /\{d\.settlement\}/);
+  assert.match(page, /\{L\.settlement\}/);
 
   // The worker never hard-codes the answer.
   const adv = read(`${SRC}/routes/advisors.ts`);

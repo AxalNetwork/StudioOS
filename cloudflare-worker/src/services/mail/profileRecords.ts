@@ -27,6 +27,7 @@ import { updateFigures } from '../../routes/portfolio_updates';
 import { optedOutFounderIds } from '../cohortAdvisorAccess';
 import type { Person, PackItem } from './contextPack';
 import { RELATIONSHIP_OF } from './intents';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 export type Profile = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'explorer';
 
@@ -184,7 +185,7 @@ async function services(env: Env, advisorId: number): Promise<PackItem[]> {
     'SELECT uid, title, kind, duration_note, price_cents, currency, scope, updated_at FROM advisor_services WHERE advisor_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 5',
   ).bind(advisorId).all<any>();
   return (results || []).map((s: any) => source(`service:${s.uid}`, 'service', `Expertise · ${said(s.title)}`, day(s.updated_at), '/expertise',
-    [said(s.title), `Kind: ${said(s.kind)}`, `Price: ${s.price_cents == null ? 'Not recorded' : `${(Number(s.price_cents) / 100).toFixed(2)} ${said(s.currency, '')}`.trim()}`,
+    [said(s.title), `Kind: ${said(s.kind)}`, `Price: ${s.price_cents == null ? 'Not recorded' : suffixAmount(Number(s.price_cents), String(s.currency ?? '').toUpperCase())}`,
       `Duration: ${said(s.duration_note)}`, `Scope: ${said(s.scope)}`].join('\n')));
 }
 
