@@ -478,7 +478,7 @@ test('the consent DTO uses 209 column names, not 204 ones', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
   const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
-    consenter_name: 'Dana', consenter_email: 'dana@client.example', consenter_email: 'dana@example.com', consenter_role: 'CTO',
+    consenter_name: 'Dana', consenter_email: 'dana@example.com', consenter_role: 'CTO',
   });
   // Copying `advisors.ts`'s consentDto wholesale returns undefined for every
   // field and throws nothing. Only this catches it.
