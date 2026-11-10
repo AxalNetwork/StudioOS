@@ -13,6 +13,8 @@
  * Nothing here is a price, a total or a date the Worker did not send.
  */
 
+import { formatStripeAmount } from '../../lib/money';
+
 export const TITLE = 'Checkout';
 export const NOT_YET = 'Not read here yet';
 export const SECURE_LINE = 'Paid securely through Stripe. Axal VC never stores your card details.';
@@ -32,6 +34,8 @@ const FAMILY = {
 };
 export const familyOf = (plan) => FAMILY[plan?.family] || { label: 'Plan', tone: 'muted' };
 
+// money-contract: USD. Plans (`intervalPrice` refuses any other currency) and AI token packs are sold in US dollars only
+// (D1050, D5373), so these two formatters divide by 100 on purpose; `moneyOf` below is the variable-currency one.
 const usd = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: cents % 100 ? 2 : 0 });
 const usd2 = (cents) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
@@ -131,12 +135,9 @@ export const planKeyOf = (plan) => (typeof plan?.catalogue?.key === 'string' && 
 /** Cents in the quote's currency, or null: never "$0.00" for a figure that was not sent. */
 export function moneyOf(cents, currency = 'usd') {
   if (cents == null || cents === '' || !Number.isFinite(Number(cents))) return null;
-  const code = String(currency || 'usd').toUpperCase();
-  try {
-    return (Number(cents) / 100).toLocaleString('en-US', { style: 'currency', currency: code, minimumFractionDigits: 2 });
-  } catch {
-    return `${(Number(cents) / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: Stripe's amount, at its currency's own decimals (¥2,500, KWD 12.340). A currency that is not a listed one
+  // shows Stripe's count with the currency named, never a figure divided by 100.
+  return formatStripeAmount(Number(cents), currency, { locale: 'en-US' });
 }
 
 /** A Worker date (ISO or epoch seconds) as "21 Nov 2026", or null. */

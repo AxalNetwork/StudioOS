@@ -410,6 +410,7 @@ export function ContinueLearning({ state, onRetry, onBrowse }) {
               <span className="min-w-0 flex-1 break-words"><RowTitle href={r.href}>{r.title || 'Untitled'}</RowTitle></span>
               <span className="flex-none text-[12px] tabular-nums text-axal-muted dark:text-gray-400">{has ? `${Math.round(p)}%` : 'Started'}</span>
             </div>
+            {r.resume_label && <p className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="continue-resume">{r.resume_label}</p>}
             {r.href ? <Link to={r.href} className="inline-flex min-h-[44px] items-center rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white dark:bg-violet-400 dark:text-gray-950 sm:min-h-[32px]">Continue</Link> : <Unrecorded>Course link not recorded</Unrecorded>}
             {has && (
               <div className="h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800" aria-hidden="true">
@@ -720,7 +721,7 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
     cont.rows = inProgressCourses(me).slice(0, 1).map((r) => {
       const p = Number(r.percent);
       const has = r.percent !== null && r.percent !== undefined && Number.isFinite(p);
-      return { key: `${r.subject_kind}:${r.subject_uid}`, title: r.title || 'Untitled', description: kindLabel(r.subject_kind === 'item' ? r.item_kind : r.subject_kind), value: has ? `${Math.round(p)}%` : 'Started', bar: has ? Math.round(p) : null, to: r.href, testid: 'learning-phone-continue-row' };
+      return { key: `${r.subject_kind}:${r.subject_uid}`, title: r.title || 'Untitled', description: r.resume_label || kindLabel(r.subject_kind === 'item' ? r.item_kind : r.subject_kind), value: has ? `${Math.round(p)}%` : 'Started', bar: has ? Math.round(p) : null, to: r.href, testid: 'learning-phone-continue-row' };
     });
     if (!cont.rows.length) cont.note = <span className="block space-y-2"><span className="block">No course in progress.</span><button type="button" className={HOME_SECONDARY} onClick={onBrowse} disabled={!onBrowse} data-testid="learning-browse-courses">Browse courses</button></span>;
   }

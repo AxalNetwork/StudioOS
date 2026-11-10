@@ -1492,7 +1492,8 @@ test('the shared zone body actually renders the row it is handed', () => {
   for (const state of ['loading', 'error', 'isEmpty']) {
     assert.ok(body.includes(state), `ZoneBody no longer handles ${state}`);
   }
-  assert.equal((body.match(/wrap\(/g) || []).length, 4,
+  // Five return paths: loading, the licence refusal (#5363), error, empty, rows.
+  assert.equal((body.match(/wrap\(/g) || []).length, 5,
     'a ZoneBody return path stopped carrying the actions row');
 });
 

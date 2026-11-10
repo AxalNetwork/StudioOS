@@ -11,12 +11,13 @@
 // concurrent submit + nightly audit + retried jobs.
 import type { Env } from '../types';
 import { sendFlaggedScoreEmail } from './email';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const NOTIFY_KIND_FLAGGED = 'flagged_score_alert';
 
 const NOTIF_MIGRATED = new WeakMap<object, boolean>();
-async function ensureNotificationsSchema(env: Env): Promise<boolean> {
+/** Exported for #5343's runtime-DDL test. */
+export async function ensureNotificationsSchema(env: Env): Promise<boolean> {
   if (NOTIF_MIGRATED.get(bindingKey(env))) return true;
   // Each step must succeed; if any throws, leave the flag false so the
   // next call retries. Notify callers fail closed (return false from
@@ -36,8 +37,10 @@ async function ensureNotificationsSchema(env: Env): Promise<boolean> {
          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
        )`,
     ).run();
-    // Older deployments may have the table without dedupe_key; add it.
-    try { await env.DB.prepare(`ALTER TABLE notifications ADD COLUMN dedupe_key TEXT`).run(); } catch {}
+    // Older deployments may have the table without dedupe_key; add it. #5343: asked first
+    // (`runSchemaBootstrap`), so an up-to-date database issues no ALTER; a real failure
+    // reaches the catch below, which leaves the flag unset and fails the caller closed.
+    await runSchemaBootstrap(env, ['ALTER TABLE notifications ADD COLUMN dedupe_key TEXT']);
     await env.DB.prepare(
       `CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_dedupe
          ON notifications(user_id, kind, dedupe_key)`,
@@ -49,7 +52,7 @@ async function ensureNotificationsSchema(env: Env): Promise<boolean> {
     NOTIF_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
-    console.error('[notifications] schema migration failed', e);
+    console.error('[notifications] schema_not_ready', (e as Error)?.message ?? '');
     return false;
   }
 }

@@ -456,6 +456,8 @@ test('D4635 compare: a failed flow read is said, never "Not on your deals"; the 
     assert.ok(t.byId('dealflow-compare-1') && t.byId('dealflow-compare-2'), 'the ventures that were read are still compared');
     assert.match(t.text(t.byId('dealflow-compare-1')), /Stage unreadable/);
     assert.doesNotMatch(t.text(t.byId('dealflow-compare-page')), /Not on your deals/);
+    assert.equal(t.props(t.byId('dealflow-compare-days-1')).title, 'Your deal flow could not be read.', 'missing days name the failed flow read');
+    assert.notEqual(t.props(t.byId('dealflow-compare-days-1')).title, 'Not on your deals.', 'an unknown flow never implies absence');
     assert.ok(t.byId('dealflow-compare-fit-failed'), 'the fit failure is its own line');
     assert.equal(t.byId('dealflow-compare-scores-failed'), undefined, 'the scores were read');
     fitFails = false;
@@ -464,6 +466,20 @@ test('D4635 compare: a failed flow read is said, never "Not on your deals"; the 
     assert.equal(fitReads, before + 1, 'retry reads the fit again');
     assert.equal(t.byId('dealflow-compare-fit-failed'), undefined);
   } finally { s.restore(); await t.close(); }
+});
+
+test('D5357 cells: an unreadable flow is distinct from a successful read where the venture is absent', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { DaysCell, OwnerCell } = await import('../src/pages/investor/dealflow/FlowCells.jsx');
+  const row = { inFlow: false, daysInStage: null, owner: null };
+  for (const Cell of [DaysCell, OwnerCell]) {
+    const unknown = renderToStaticMarkup(h(Cell, { row, flowUnknown: true }));
+    assert.match(unknown, /title="Your deal flow could not be read\."/);
+    assert.doesNotMatch(unknown, /Not on your deals/);
+    const absent = renderToStaticMarkup(h(Cell, { row }));
+    assert.match(absent, /title="Not on your deals\."/);
+    assert.doesNotMatch(absent, /deal flow could not be read/);
+  }
 });
 
 test('D4635 compare notes: a partly unreadable read says how many could not be read and keeps the ones that could', async () => {

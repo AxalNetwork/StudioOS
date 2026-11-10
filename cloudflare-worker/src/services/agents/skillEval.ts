@@ -123,6 +123,13 @@ export async function skillForRun(env: Env, a: Pick<AgentRow, 'id' | 'tool_grant
   return { ok: true, skill: s, version: v, tools };
 }
 
+/**
+ * The closing rule of a skill's part of the system prompt, on both skill
+ * runtimes (D4555 addendum, #5340): `skillPrompt()` ends with it and the SDK
+ * path's text (`skillRuntime.ts`) ends with it, from this one constant.
+ */
+export const NO_INVENTED_FIGURE_RULE = 'Never invent a figure: write "Not recorded" for anything the records do not hold.';
+
 /** The skill's part of the system prompt: the pinned version's steps and its allow-list. */
 export function skillPrompt(v: VersionRow): string {
   const p = versionParts(v);
@@ -131,7 +138,7 @@ export function skillPrompt(v: VersionRow): string {
     `It proposes ${p.output_kind === 'record_change' ? 'a record change' : `a ${p.output_kind}`}; a named person decides.`,
     'Follow its steps:', ...p.steps.map((s, i) => `${i + 1}. ${s}`),
     p.tools.length ? `It may read only: ${p.tools.join(', ')}.` : 'It reads nothing beyond what you are given.',
-    'Never invent a figure: write "Not recorded" for anything the records do not hold.',
+    NO_INVENTED_FIGURE_RULE,
   ].join('\n');
 }
 

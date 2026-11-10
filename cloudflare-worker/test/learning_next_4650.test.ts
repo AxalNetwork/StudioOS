@@ -99,6 +99,8 @@ function course(db: DatabaseSync, uid = 'c-open') {
   const id = (db.prepare('SELECT id FROM learning_courses WHERE uid = ?').get(uid) as any).id;
   db.prepare("INSERT INTO learning_course_modules (uid, course_id, title, position) VALUES (?, ?, 'Basics', 0)").run(`m-${uid}`, id);
   const mod = (db.prepare('SELECT id FROM learning_course_modules WHERE uid = ?').get(`m-${uid}`) as any).id;
+  // D5356: a reading lesson is resumable only while the reading it opens is published.
+  db.exec("INSERT OR IGNORE INTO learning_items (uid, kind, title, status, visibility, created_by) VALUES ('itm', 'reading', 'Reading', 'published', 'open', 1)");
   const l = db.prepare("INSERT INTO learning_lessons (uid, module_id, title, position, kind, ref_uid, required) VALUES (?, ?, ?, ?, 'reading', 'itm', ?)");
   l.run(`${uid}-l1`, mod, 'Term sheets', 0, 1); l.run(`${uid}-l2`, mod, 'Valuation', 1, 1); l.run(`${uid}-l3`, mod, 'Closing', 2, 1); l.run(`${uid}-opt`, mod, 'Extra', 3, 0);
 }

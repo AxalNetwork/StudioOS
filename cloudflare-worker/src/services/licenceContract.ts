@@ -23,6 +23,7 @@
 import type { LicenceRow } from '../routes/admin_licences';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 import { LICENCE_TERM_FIELDS, type LicenceTerms } from './licenceTerms';
+import { codeAmount, exponentOf } from '../../../frontend/src/lib/money.js';
 
 /** `{{field}}`, the spelling `extractMergeFields` already recognises. */
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
@@ -51,14 +52,20 @@ export function moneyFromCents(cents: number | null | undefined, currency: strin
   if (cents === null || cents === undefined) return null;
   const n = Number(cents);
   if (!Number.isFinite(n)) return null;
+  // D5373: the licence's own currency sets the decimals (JPY none, EUR two, KWD three). `licences.currency` is NOT NULL
+  // DEFAULT 'EUR'; a code that is not a listed currency has no known decimals, so the field stays unfilled (null).
+  const code = currency || 'EUR';
+  const exp = exponentOf(code);
+  if (exp === null) return null;
   const abs = Math.abs(n);
-  const whole = Math.floor(abs / 100);
+  const unit = 10 ** exp;
+  const whole = Math.floor(abs / unit);
   // The minor units left over, to six places, with the trailing zeros dropped:
-  // 50 → "50", 5 → "05", 34.5 → "34" + "5" (the digits after the two that are cents).
-  const [minor, extra = ''] = String(Number((abs - whole * 100).toFixed(6))).split('.');
-  const frac = minor.padStart(2, '0') + extra;
+  // 50 → "50", 5 → "05", 34.5 → "34" + "5" (the digits after the `exp` that are whole minor units).
+  const [minor, extra = ''] = String(Number((abs - whole * unit).toFixed(6))).split('.');
+  const frac = exp === 0 ? extra : minor.padStart(exp, '0') + extra;
   const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${currency || 'EUR'} ${n < 0 ? '-' : ''}${grouped}.${frac}`;
+  return `${code} ${n < 0 ? '-' : ''}${grouped}${frac ? `.${frac}` : ''}`;
 }
 
 /**
@@ -105,7 +112,7 @@ const SCOPE_WORDS: Record<string, string> = {
 
 export function exclusivityValues(x: ExclusivityMerge | null, currency: string | null): Record<string, string | null> {
   if (!x) return {};
-  const money = (c: number | null) => (c === null ? null : `${currency || ''} ${(c / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 })}`.trim());
+  const money = (c: number | null) => (c === null ? null : codeAmount(c, currency, { locale: 'en-GB' }));
   const out: Record<string, string | null> = {
     scope: SCOPE_WORDS[x.scope_type] ?? null,
     territory: [...x.countries, ...x.regions].join(', ') || null,
