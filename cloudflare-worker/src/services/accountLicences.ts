@@ -3,7 +3,6 @@ import type { Env, User } from '../types';
 import { ensureRoleProfile } from './ensureRoleProfile';
 import { seedObligations } from './trust';
 import { grantLicenceStatements, hasLifecycle, revokeLicenceStatements } from './userLicences';
-import { bindingKey } from '../util/schemaBootstrap';
 
 export const LICENCE_ORDER = ['founder', 'investor', 'advisor', 'partner'] as const;
 export type Licence = typeof LICENCE_ORDER[number];
@@ -13,9 +12,6 @@ export function isLicence(value: unknown): value is Licence {
 
 type Principal = { id: number; role: string; licences?: readonly string[] };
 
-/** Bindings whose database has D4472's table but not D5057/D5058's (a test database); learned once. */
-const noLifecycle = new WeakSet<object>();
-
 export async function heldLicences(db: D1Database, user: Pick<Principal, 'id' | 'role'>): Promise<Licence[]> {
   const primary = String(user.role || '').toLowerCase();
   // D5058: ONE statement. Held grants come from `account_licences`; a primary licence (`users.role`) whose
@@ -23,23 +19,22 @@ export async function heldLicences(db: D1Database, user: Pick<Principal, 'id' | 
   // left out. A primary with no row (before D5058's backfill) is held as before.
   let rows: D1Result<{ licence: string }>;
   try { rows = await db.prepare(
-    noLifecycle.has(bindingKey({ DB: db } as Env))
-      ? 'SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL'
-      : `SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL
+    `SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL
      UNION ALL
      SELECT '!' || CASE licence_type WHEN 'operating_partner' THEN 'partner' ELSE licence_type END FROM licences
       WHERE licence_family = 'user' AND holder_type = 'user' AND holder_id = ?
         AND status NOT IN ('active', 'renewal_pending')`,
-  ).bind(...(noLifecycle.has(bindingKey({ DB: db } as Env)) ? [user.id] : [user.id, String(user.id)])).all<{ licence: string }>();
+  ).bind(user.id, String(user.id)).all<{ licence: string }>();
   } catch (error) {
     // A pre-migration database has no possible grants; preserve its primary
     // access. Other read failures propagate and never manufacture a grant.
     if (/no such table: (?:main\.)?account_licences/i.test(String(error))) return LICENCE_ORDER.filter(licence => licence === primary);
-    // A database with D4472's table but not D5057/D5058's: grants only, as before.
+    // A database with D4472's table but not D5057/D5058's (only a test database): grants only, as before. It is
+    // retried on every call rather than remembered per binding, so a request costs the same statements whether or
+    // not it is the binding's first; production has both tables and runs the one statement above.
     if (/no such table: (?:main\.)?licences/i.test(String(error))) {
-      noLifecycle.add(bindingKey({ DB: db } as Env));
       try {
-        rows = await db.prepare('SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL').bind(user.id).all<{ licence: string }>();
+        rows = await db.prepare('SELECT g.licence FROM account_licences g WHERE g.user_id = ? AND g.revoked_at IS NULL').bind(user.id).all<{ licence: string }>();
       } catch (inner) {
         if (/no such table: (?:main\.)?account_licences/i.test(String(inner))) return LICENCE_ORDER.filter(licence => licence === primary);
         throw inner;
