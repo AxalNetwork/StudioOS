@@ -48,6 +48,7 @@ function store() {
   db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)');
   db.exec(migration('584_trust_content.sql'));
   db.exec(migration('202611072220_trust_publish_key.sql'));
+  db.exec(migration('202611092240_subprocessor_notice_recovery.sql')); // D4683
   const sub = db.prepare("INSERT INTO trust_subprocessors (uid, name, purpose, data_seen, location, state, starts_at, published_at) VALUES (?, ?, 'p', 'd', 'EU', ?, ?, '2026-11-01')");
   const person = db.prepare("INSERT INTO subprocessor_subscribers (uid, email_hash, email_enc, status, confirmed_at) VALUES (?, ?, 'x', ?, ?)");
   const delivery = db.prepare('INSERT INTO subprocessor_notice_deliveries (subprocessor_id, subscriber_id, outcome) VALUES (?, ?, ?)');
