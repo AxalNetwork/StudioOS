@@ -55,6 +55,10 @@ test('D4820 part 5: rows group by UTC day, newest first, with the time first; a 
 
 async function mount(handle) {
   const restore = installDocument();
+  // The lightbox labels days from Date.now(); pin it to the fixture's NOW so "Today" is the fixture's day,
+  // whatever day the suite runs on.
+  const realNow = Date.now;
+  Date.now = () => NOW;
   const original = globalThis.fetch;
   const seen = [];
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -98,7 +102,7 @@ async function mount(handle) {
     async click(id) { await act(async () => { props(node(id)).onClick({ preventDefault() {} }); }); await settle(); },
     async key(id, key) { await act(async () => { props(node(id)).onKeyDown({ key, preventDefault() {} }); }); await settle(); },
     async change(id, value) { await act(async () => { props(node(id)).onChange({ target: { value } }); }); await settle(); },
-    async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; restore(); },
+    async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; Date.now = realNow; restore(); },
   };
 }
 
