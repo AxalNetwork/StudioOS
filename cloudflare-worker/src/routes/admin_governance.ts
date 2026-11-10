@@ -40,7 +40,7 @@ import { entityJurisdiction } from '../services/crossBorder';
 import {
   DOCX, GOVERNANCE_CATEGORIES, GOVERNANCE_ENTITIES, GOVERNANCE_STATUSES, MAX_FILE_BYTES, PDF, canMove, dateOf, docView, entityName,
   envelopeExists, isCategory, isEntity, isStatus, ownershipOf, readDoc, readVersions, sha256Hex, sniffDocument,
-  templateExists, versionKey, versionView, type DocRow, type GovernanceEntity, signedCopyOf,
+  templateExists, versionKey, versionView, type DocRow, type GovernanceEntity, signedCopyOf, approvedVersions, copyOfChoice,
 } from '../services/governance';
 import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
 import { GOVERNANCE_ACTIONS, eventOf } from '../services/governanceActivity';
@@ -156,7 +156,8 @@ governance.get('/documents/:uid', async (c) => {
   if (doc instanceof Response) return doc;
   const versions = await readVersions(c.env, doc.uid);
   if (Number(doc.confidential) === 1) await audit(c, user, 'governance_document_viewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category });
-  return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map(versionView) });
+  const approved = await approvedVersions(c.env, doc.uid);
+  return c.json({ document: docView(doc, versions[0] ?? null, versions.length), versions: versions.map((v) => versionView(v, approved)) });
 });
 
 /**
@@ -354,7 +355,7 @@ governance.patch('/documents/:uid', async (c) => {
   if (links.template_slug !== undefined) { next.template_slug = links.template_slug; changed = true; }
   if (links.envelope_id !== undefined) { next.envelope_id = links.envelope_id; changed = true; }
   let status = doc.status;
-  let highRisk: { reason: string; evidence: string | null; sha256?: string | null } | null = null;
+  let highRisk: { reason: string; evidence: string | null; sha256?: string | null; copyOf?: number | null } | null = null;
   if (b.status !== undefined) {
     if (!isStatus(b.status)) return c.json({ error: `status must be one of ${GOVERNANCE_STATUSES.join(', ')}` }, 400);
     if (!canMove(doc.status, b.status)) return refuse(c, 409, { code: 'status_move_refused', message: `A ${doc.status} document cannot move to ${b.status}. Nothing was saved.` });
@@ -377,7 +378,12 @@ governance.patch('/documents/:uid', async (c) => {
       if (chosen.evidence.envelope != null) next.envelope_id = chosen.evidence.envelope;
       highRisk!.evidence = chosen.evidence.version != null ? `v${chosen.evidence.version}` : `envelope #${chosen.evidence.envelope}`;
       // D4811 part 12 (CT-92 "Execution evidence"): the evidence's hash is logged with it.
-      if (chosen.evidence.version != null) highRisk!.sha256 = versions.find((v) => Number(v.version) === chosen.evidence.version)?.file_sha256 ?? null;
+      if (chosen.evidence.version != null) {
+        const ev = versions.find((v) => Number(v.version) === chosen.evidence.version);
+        highRisk!.sha256 = ev?.file_sha256 ?? null;
+        // D4811 part 20: and the approved version the signed copy names, when it names one.
+        highRisk!.copyOf = ev?.copy_of_version == null ? null : Number(ev.copy_of_version);
+      }
     }
     // The step-up comes after every form check, so a mistyped word never asks for a code; a missing step-up answers 403 step_up_required.
     if (highRisk) await requireStepUp(c);
@@ -393,7 +399,8 @@ governance.patch('/documents/:uid', async (c) => {
   await audit(c, user, b.status !== undefined && b.status !== doc.status ? 'governance_document_status' : 'governance_document_updated', {
     uid: doc.uid, entity: doc.entity_key, category: doc.category, from: doc.status, status,
     fields: Object.keys(b).filter((k) => b[k] !== undefined && !['reason', 'confirm', 'evidence'].includes(k)),
-    ...(highRisk ? { reason: highRisk.reason, evidence: highRisk.evidence, ...(highRisk.sha256 ? { evidence_sha256: highRisk.sha256 } : {}) } : {}),
+    ...(highRisk ? { reason: highRisk.reason, evidence: highRisk.evidence, ...(highRisk.sha256 ? { evidence_sha256: highRisk.sha256 } : {}),
+      ...(highRisk.copyOf != null ? { copy_of: highRisk.copyOf } : {}) } : {}),
   });
   const saved = (await readDoc(c.env, doc.uid))!;
   const versions = await readVersions(c.env, doc.uid);
@@ -429,6 +436,13 @@ governance.post('/documents/:uid/versions', async (c) => {
   // D4811 part 12 (CT-12 B): a signed copy says when it was signed, by whom, and is attested by the uploader.
   const copy = signed ? signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, now().slice(0, 10)) : null;
   if (copy && !copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message });
+  // D4811 part 20: a signed copy may name the counsel-approved version it is a copy of; a draft never can.
+  let copyOf: number | null = null;
+  if (signed) {
+    const choice = copyOfChoice(form?.get('copy_of'), await readVersions(c.env, doc.uid), await approvedVersions(c.env, doc.uid));
+    if (!choice.ok) return refuse(c, choice.status, { code: choice.code, message: choice.message });
+    copyOf = choice.version;
+  }
   const noteRaw = form?.get('note');
   const note = typeof noteRaw === 'string' && noteRaw.trim() ? noteRaw.trim().slice(0, 500) : null;
   const sha = await sha256Hex(bytes);
@@ -438,10 +452,10 @@ governance.post('/documents/:uid/versions', async (c) => {
   await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { governance_uid: doc.uid, version: String(version) } });
   try {
     await c.env.DB.prepare(
-      `INSERT INTO governance_document_versions (document_uid, version, signed, r2_key, file_sha256, file_bytes, content_type, note, uploaded_by, signed_on, signatory, attested_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO governance_document_versions (document_uid, version, signed, r2_key, file_sha256, file_bytes, content_type, note, uploaded_by, signed_on, signatory, attested_by, copy_of_version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(doc.uid, version, signed ? 1 : 0, key, sha, bytes.length, type, note, Number(user.id),
-      copy?.ok ? copy.signed_on : null, copy?.ok ? copy.signatory : null, copy?.ok ? Number(user.id) : null).run();
+      copy?.ok ? copy.signed_on : null, copy?.ok ? copy.signatory : null, copy?.ok ? Number(user.id) : null, copyOf).run();
   } catch {
     // Another upload took this number first: its row stands, and this file is not recorded.
     await c.env.FILES.delete(key).catch(() => {});
@@ -449,9 +463,9 @@ governance.post('/documents/:uid/versions', async (c) => {
   }
   await c.env.DB.prepare('UPDATE governance_documents SET updated_by = ?, updated_at = ? WHERE uid = ?').bind(Number(user.id), now(), doc.uid).run();
   await audit(c, user, 'governance_version_uploaded', { uid: doc.uid, entity: doc.entity_key, category: doc.category, version, signed, bytes: bytes.length, sha256: sha,
-    ...(copy?.ok ? { signed_on: copy.signed_on } : {}) });
+    ...(copy?.ok ? { signed_on: copy.signed_on } : {}), ...(copyOf != null ? { copy_of: copyOf } : {}) });
   const versions = await readVersions(c.env, doc.uid);
-  return c.json({ document: docView((await readDoc(c.env, doc.uid))!, versions[0] ?? null, versions.length), version: versionView(versions[0]) }, 201);
+  return c.json({ document: docView((await readDoc(c.env, doc.uid))!, versions[0] ?? null, versions.length), version: versionView(versions[0], await approvedVersions(c.env, doc.uid)) }, 201);
 });
 
 governance.get('/documents/:uid/versions/:n/file', async (c) => {
