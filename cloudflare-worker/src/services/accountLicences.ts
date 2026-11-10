@@ -38,7 +38,12 @@ export async function heldLicences(db: D1Database, user: Pick<Principal, 'id' | 
     // A database with D4472's table but not D5057/D5058's: grants only, as before.
     if (/no such table: (?:main\.)?licences/i.test(String(error))) {
       noLifecycle.add(bindingKey({ DB: db } as Env));
-      rows = await db.prepare('SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL').bind(user.id).all<{ licence: string }>();
+      try {
+        rows = await db.prepare('SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL').bind(user.id).all<{ licence: string }>();
+      } catch (inner) {
+        if (/no such table: (?:main\.)?account_licences/i.test(String(inner))) return LICENCE_ORDER.filter(licence => licence === primary);
+        throw inner;
+      }
     } else throw error;
   }
   const results = rows.results || [];
