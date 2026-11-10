@@ -73,6 +73,7 @@ import { mount as legal_incorporation_quoteMount } from './legal_incorporation_q
 import { mount as public_handleMount } from './public_handle';
 import { mount as research_projectsMount } from './research_projects';
 import { mount as team_platform_statusMount } from './team_platform_status';
+import { mount as tiktok_webhookMount } from './tiktok_webhook';
 import { mount as votesMount } from './votes';
 
 export const ROUTE_MODULES: readonly RegisteredModule[] = [
@@ -144,5 +145,6 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'public_handle', mount: public_handleMount },
   { file: 'research_projects', mount: research_projectsMount },
   { file: 'team_platform_status', mount: team_platform_statusMount },
+  { file: 'tiktok_webhook', mount: tiktok_webhookMount },
   { file: 'votes', mount: votesMount },
 ];
