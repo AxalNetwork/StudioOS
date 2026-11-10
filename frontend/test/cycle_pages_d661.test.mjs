@@ -489,7 +489,8 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
   for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.equal(buildPages.includes(page), !isRetiredRedirect(`/build/${page}`), `/build/${page}`);
   for (const m of LIVE_MODULES.build) assert.ok(!buildPages.includes(m.slug), `${m.slug} would be shadowed by a Build page`);
-  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
+  // #4579: signed out, /grow goes through the guard itself, so sign-in keeps next=/grow.
+  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding \|\| !user\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
   assert.match(app, /<Route path="\/grow\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)\} \/>/, 'Grow has its module pages');
   // The seven Grow pages keep their static routes, and no module slug is one of them.
   const growPages = ['focus', 'talent', 'customers', 'partnerships', 'capital-match', 'brand', 'launch'];
