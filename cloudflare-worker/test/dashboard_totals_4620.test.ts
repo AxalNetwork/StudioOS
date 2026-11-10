@@ -23,6 +23,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 
 import dashboard, { DEAL_CANDIDATE_CAP } from '../src/routes/dashboard.ts';
+import networkfx from '../src/routes/networkfx.ts';
 import { splitStatements } from './_baseline.mjs';
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
@@ -32,14 +33,16 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const INV = 3;    // an investor with no introductions
 const INV2 = 4;   // a second one, so the cache test starts from an empty L1 entry
+const INV3 = 5;   // quick-stat cache isolation
 const FOUNDER = 2;
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-function makeD1(db: InstanceType<typeof DatabaseSync>) {
+function makeD1(db: InstanceType<typeof DatabaseSync>, fail: RegExp[] = []) {
   return {
     prepare(sql: string) {
+      if (fail.some((pattern) => pattern.test(sql))) throw new Error(`synthetic unreadable: ${sql.slice(0, 40)}`);
       let b: any[] = [];
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
@@ -83,6 +86,7 @@ function freshDb() {
   u.run(FOUNDER, 'fay-founder', 'fay@example.test', 'founder', 'Fay Founder', 10);
   u.run(INV, 'ian-investor', 'ian@example.test', 'investor', 'Ian Investor', null);
   u.run(INV2, 'ivy-investor', 'ivy@example.test', 'investor', 'Ivy Investor', null);
+  u.run(INV3, 'ira-investor', 'ira@example.test', 'investor', 'Ira Investor', null);
   db.prepare(`INSERT INTO founders (id, name, email) VALUES (10, 'Fay Founder', 'fay@example.test')`).run();
   return db;
 }
@@ -96,12 +100,21 @@ function seedVentures(db: any, n: number, hidden: number[] = []) {
   }
 }
 
-async function call(db: any, path: string, as = INV, role = 'investor') {
+async function call(db: any, path: string, as = INV, role = 'investor', fail: RegExp[] = []) {
   const jwt = await new SignJWT({ user_id: as, role })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
-  const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) };
+  const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, fail) };
   const res = await dashboard.request(path, { headers: { Authorization: `Bearer ${jwt}` } }, env);
+  return { status: res.status, body: (await res.json()) as any };
+}
+
+async function callEffects(db: any, fail: RegExp[] = []) {
+  const jwt = await new SignJWT({ user_id: INV, role: 'investor' })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, fail) };
+  const res = await networkfx.request('/effects', { headers: { Authorization: `Bearer ${jwt}` } }, env);
   return { status: res.status, body: (await res.json()) as any };
 }
 
@@ -138,6 +151,42 @@ test('a true zero is 0, from a read that answered', async () => {
   assert.equal(body.proprietary_deal_flow_summary.total, 0);
   assert.equal(body.proprietary_deal_flow.length, 0);
   assert.equal(body.source_status.deals, 'ready');
+  assert.deepEqual(body.quick_stats, {
+    month_earnings_cents: 0,
+    lifetime_earnings_cents: 0,
+    compound_earnings_cents: 0,
+    pending_payouts_cents: 0,
+    active_syndicates: 0,
+    my_syndicates: 0,
+    ai_score_avg: null,
+    network_reach: 0,
+    marketplace_available: 0,
+  });
+  assert.equal(body.performance_analytics.network_reach, 0);
+});
+
+test('every unreadable quick-stat source yields null, including the second network reach', async () => {
+  const db = freshDb();
+  const fail = [/FROM commissions/, /FROM referral_chains/, /FROM marketplace_profiles/, /FROM syndicates/, /FROM syndicate_members/];
+  const { status, body } = await call(db, '/?fresh=1', INV3, 'investor', fail);
+  assert.equal(status, 200);
+  for (const key of [
+    'month_earnings_cents', 'lifetime_earnings_cents', 'compound_earnings_cents', 'pending_payouts_cents',
+    'active_syndicates', 'my_syndicates', 'network_reach', 'marketplace_available',
+  ]) assert.equal(body.quick_stats[key], null, `${key} is not an invented zero`);
+  assert.equal(body.performance_analytics.network_reach, null);
+  for (const key of ['monthEarnings', 'lifetimeEarnings', 'compoundEarnings', 'pendingPayouts', 'chainCounts', 'marketplaceCount', 'syndicatesAll', 'mySyndicateMemberships']) {
+    assert.equal(body.source_status[key], 'unreadable', key);
+  }
+});
+
+test('a payload with a null quick-stat figure is not cached', async () => {
+  const db = freshDb();
+  const failed = await call(db, '/?fresh=1', INV3, 'investor', [/FROM commissions/]);
+  assert.equal(failed.body.quick_stats.month_earnings_cents, null);
+  const recovered = await call(db, '/', INV3);
+  assert.equal(recovered.body.cached, false);
+  assert.equal(recovered.body.quick_stats.month_earnings_cents, 0);
 });
 
 test('a deal read that failed has no total, and says it is unreadable', async () => {
@@ -180,6 +229,24 @@ test('a founder is not filtered, and gets a total as well', async () => {
   const { body } = await call(db, '/?fresh=1', FOUNDER, 'founder');
   assert.equal(body.proprietary_deal_flow_summary.total, 14);
   assert.equal(body.proprietary_deal_flow.length, 12);
+});
+
+test('NetworkFX effects uses numbers for readable zeros and null plus source status for failed reads', async () => {
+  const db = freshDb();
+  const readable = await callEffects(db);
+  assert.equal(readable.status, 200);
+  assert.deepEqual(
+    [readable.body.compound_earnings_cents, readable.body.direct_earnings_cents, readable.body.chain_counts,
+      readable.body.active_syndicates, readable.body.my_syndicates, readable.body.marketplace_available],
+    [0, 0, { L1: 0, L2: 0, L3: 0 }, 0, 0, 0],
+  );
+  const failed = await callEffects(db, [/FROM commissions/, /FROM referral_chains/, /FROM syndicates/, /FROM syndicate_members/, /FROM marketplace_profiles/]);
+  assert.deepEqual(
+    [failed.body.compound_earnings_cents, failed.body.direct_earnings_cents, failed.body.chain_counts,
+      failed.body.active_syndicates, failed.body.my_syndicates, failed.body.marketplace_available],
+    [null, null, null, null, null, null],
+  );
+  assert.ok(Object.values(failed.body.source_status).every((value) => value === 'unreadable'));
 });
 
 test('lifecycle: a count whose read failed is null, the others keep their numbers', async () => {
