@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { clockVars, withClock } from '../../scripts/future-clock.mjs';
+import { RUNS_UNSHIFTED, clockVars, withClock, withoutPreload } from '../../scripts/future-clock.mjs';
 import { clockReport } from '../../scripts/future-clock-check.mjs';
 
 const root = resolve(process.cwd());
@@ -46,6 +46,21 @@ test('withClock puts the clock back into an env a test set itself, and leaves ev
   // The command itself is never treated as options, even an object-looking one.
   const first = { env: { PATH: '/bin' } };
   assert.equal(withClock([first], vars)[0], first);
+});
+
+test('workerd alone starts without the preload: it dies under libfaketime and wrangler waits forever', () => {
+  assert.ok(RUNS_UNSHIFTED.test('/repo/node_modules/@cloudflare/workerd-linux-64/bin/workerd'));
+  assert.ok(RUNS_UNSHIFTED.test('workerd'));
+  for (const cmd of ['bash', 'node', '/x/wrangler', '/x/workerd-helper', 'workerd.sh']) assert.equal(RUNS_UNSHIFTED.test(cmd), false, cmd);
+  const inherited = { LD_PRELOAD: '/x/libfaketime.so.1', FAKETIME: '+7d', PATH: '/bin' };
+  // spawn(cmd, args, opts) with an env of its own: only LD_PRELOAD goes.
+  const [, a1, o1] = withoutPreload(['workerd', ['serve'], { env: { ...inherited, A: '1' }, stdio: 'pipe' }], inherited);
+  assert.deepEqual(a1, ['serve']);
+  assert.deepEqual(o1, { env: { FAKETIME: '+7d', PATH: '/bin', A: '1' }, stdio: 'pipe' });
+  // No options: the inherited env, without the preload, becomes its env.
+  assert.deepEqual(withoutPreload(['workerd', ['serve']], inherited)[2], { env: { FAKETIME: '+7d', PATH: '/bin' } });
+  // spawn(cmd, opts): the options sit second.
+  assert.deepEqual(withoutPreload(['workerd', { cwd: '/w' }], inherited)[1], { cwd: '/w', env: { FAKETIME: '+7d', PATH: '/bin' } });
 });
 
 test('clockReport passes only when JavaScript, SQLite and a clean-env shell all lead by the same days', () => {

@@ -44,11 +44,35 @@ export const withClock = (args, vars) => args.map((a, i) => (
     : a
 ));
 
+/**
+ * workerd, the local Workers runtime wrangler starts for `d1 execute --local`,
+ * dies with libfaketime preloaded and leaves wrangler waiting forever
+ * (build_systems_d686's local D1 rebuild timed out at 45 s; 23 s without it).
+ * So workerd alone starts without the preload, on the real clock; the test,
+ * SQLite and scripts stay shifted.
+ */
+export const RUNS_UNSHIFTED = /(^|[/\\])workerd(\.exe)?$/;
+
+/** A spawn of workerd with LD_PRELOAD taken out of the env it will get, explicit or inherited. */
+export const withoutPreload = (args, env = process.env) => {
+  const at = Array.isArray(args[1]) ? 2 : 1;
+  const opts = args[at] && typeof args[at] === 'object' && !Array.isArray(args[at]) ? args[at] : {};
+  const rest = { ...(opts.env ?? env) };
+  delete rest.LD_PRELOAD;
+  const out = args.slice();
+  if (at === 2 && out.length < 2) out[1] = [];
+  out[at] = { ...opts, env: rest };
+  return out;
+};
+
 if (process.env.FAKETIME && /faketime/.test(process.env.LD_PRELOAD || '')) {
   const vars = clockVars(process.env);
   for (const name of ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']) {
     const real = childProcess[name];
-    childProcess[name] = function (...args) { return real.apply(this, withClock(args, vars)); };
+    childProcess[name] = function (...args) {
+      const unshifted = typeof args[0] === 'string' && RUNS_UNSHIFTED.test(args[0]);
+      return real.apply(this, unshifted ? withoutPreload(args) : withClock(args, vars));
+    };
   }
   syncBuiltinESMExports();
 } else {
