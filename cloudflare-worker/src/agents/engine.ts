@@ -129,7 +129,24 @@ export async function engineRefusal(env: Env, by: number | null, scope?: ScopeRe
  * object, which runs one admission at a time, so the counts cannot race
  * within a scope; the single-flight index covers anything else.
  */
+/** D4535: the shape of a workflow plan's per-attempt run uid (`skillWorkflow.ts` `planRun`). */
+export const PLANNED_RUN_UID_RE = /^wf-[0-9a-f]{40}$/;
+
 export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<Admission> {
+  if (t.runUid !== undefined && !(typeof t.runUid === 'string' && PLANNED_RUN_UID_RE.test(t.runUid))) {
+    return no(400, 'invalid_run', 'A planned run is named by its plan\'s attempt uid.');
+  }
+  // D4535: a planned attempt admitted before answers with that run, and admits
+  // nothing new: the same attempt never becomes two runs. A planned uid already
+  // used by another agent or task is refused rather than reused.
+  if (t.runUid) {
+    const prior = await env.DB.prepare('SELECT agent_id, task_id, attempt FROM agent_task_runs WHERE uid = ?').bind(t.runUid)
+      .first<{ agent_id: number; task_id: number; attempt: number }>();
+    if (prior) {
+      if (prior.agent_id !== t.agentId || prior.task_id !== t.taskId) return no(409, 'run_uid_taken', 'That planned run belongs to another task.');
+      return { ok: true, run: { uid: t.runUid, attempt: prior.attempt }, replayed: true };
+    }
+  }
   const engine = await engineRefusal(env, t.by, s);
   if (engine) return engine;
   const settings = await scopeSettings(env, s);
@@ -156,7 +173,7 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
     admittedCompany = p?.company_id ?? null;
   }
   const attempt = Number((await env.DB.prepare('SELECT MAX(attempt) AS n FROM agent_task_runs WHERE task_id = ?').bind(task.id).first<{ n: number | null }>())?.n ?? 0) + 1;
-  const uid = crypto.randomUUID();
+  const uid = t.runUid ?? crypto.randomUUID();
   try {
     await env.DB.prepare(
       `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id)

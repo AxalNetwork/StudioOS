@@ -3619,10 +3619,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.
-  hqSecuritySessions: () => request('/admin/security/sessions'),
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
   hqRevokeSession: (sessionId, reason) =>
     request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
@@ -5005,11 +5017,19 @@ export const api = {
     request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
+  // #4611 finding 8: `project_id` is a SERVER filter now, applied inside the
+  // authorized scope and before the page, and the read is paginated. The
+  // response carries `total`, `counts`, `has_more` and `next_cursor`, whose
+  // scopes the Worker documents; a caller that passes none of these behaves as
+  // it did, on a page rather than on a 500-row cap.
   contactsList: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.audience) qs.set('audience', opts.audience);
     if (opts.status) qs.set('status', opts.status);
     if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    if (opts.project_id != null && opts.project_id !== '') qs.set('project_id', String(opts.project_id));
+    if (opts.limit != null) qs.set('limit', String(opts.limit));
+    if (opts.cursor) qs.set('cursor', String(opts.cursor));
     const s = qs.toString();
     return request(`/contacts${s ? `?${s}` : ''}`);
   },
@@ -5248,8 +5268,17 @@ export const api = {
     // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
     // back, in the page, because both are predicates over `reason` and
     // `citations` rather than a different read.
-    askSessions: (scope = 'session', sessionUid) => {
-      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+    // #4610: `cursor` and `limit`. The history is paginated, with `totals`
+    // covering the whole selected scope and `next_cursor`/`has_more` saying
+    // whether more of it exists — a caller passing neither gets the first page,
+    // which for every scope is the NEWEST rows.
+    askSessions: (scope = 'session', sessionUid, opts = {}) => {
+      const q = new URLSearchParams({
+        scope,
+        ...(sessionUid ? { session: sessionUid } : {}),
+        ...(opts.cursor ? { cursor: String(opts.cursor) } : {}),
+        ...(opts.limit != null ? { limit: String(opts.limit) } : {}),
+      }).toString();
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),

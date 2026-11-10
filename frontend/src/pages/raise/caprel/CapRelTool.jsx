@@ -51,12 +51,12 @@ export function CapRelTabBar({ active, search = '' }) {
 }
 
 /** Overview's tab bar, the moved notice, and Overview's blocks (D1192, CRL1) above the module page's own. */
-export function CapRelHomeNav({ search = '', projectId = null }) {
+export function CapRelHomeNav({ search = '', projectId = null, onRefused = null }) {
   return (
     <div className="flex flex-col gap-4">
       <MovedNotice />
       <CapRelTabBar active="overview" search={search} />
-      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} /> : null}
+      {projectId ? <CapRelOverviewBlocks projectId={projectId} search={search} onRefused={onRefused} /> : null}
     </div>
   );
 }
@@ -71,6 +71,9 @@ function useModule(projectId) {
     setRead({ status: 'loading', data: null });
     Promise.resolve().then(() => cyclesApi.module('raise', projectId, SLUG, query))
       .then((data) => { if (alive) setRead({ status: 'ready', data }); })
+      // The Calls tab's own state machine takes ready, loading or unreadable
+      // only (D1221), so this read keeps its two answers; D5079's refusal
+      // contract is the Overview read's, in CapRelOverview.
       .catch((error) => { if (alive) setRead({ status: 'unreadable', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, query, reload]);

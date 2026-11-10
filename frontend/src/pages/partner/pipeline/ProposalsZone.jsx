@@ -190,7 +190,8 @@ export default function PartnerProposalsZone() {
             <ProposalTile
               label="Live proposals"
               value={String(d?.live_count ?? 0)}
-              note={`${moneyDollars(d?.live_value_dollars ?? 0)} in play`}
+              // D4838: money only over proposals that exist; none live is not "$0 in play".
+              note={d?.live_count ? `${moneyDollars(d.live_value_dollars ?? 0)} in play` : 'nothing in play'}
             />
             <ProposalTile
               label="Opened, unanswered"

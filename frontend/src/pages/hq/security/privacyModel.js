@@ -3,8 +3,8 @@
  * says about data-subject requests, from `/overview`'s `dsr`. Pure, for the
  * tests.
  *
- * ONE RULE, SHOWN AS A DATE. The due date is received + 30 days, as the server
- * counts it (`deadline_at`); the page prints that date and the days remaining,
+ * ONE RULE, SHOWN AS A DATE. The due date is one calendar month from receipt,
+ * to the end of that UTC day, as the server counts it (`deadline_at`, D4675); the page prints that date and the days remaining,
  * so nobody does the arithmetic. An unparseable receipt has no due date: it is
  * Unknown, never "0 days".
  *

@@ -197,6 +197,7 @@ pull.
 | `claude-review/` | The advisory pull-request review on the Anthropic Messages API (`claude-review.yml`): `review.mjs`, its own `package.json` pinning the SDK, and `rates.json`. Its rules live in `lib/claudeReview.mjs`. |
 | `__pycache__/` | Python bytecode. Not source. |
 | `record-asset-deploy.mjs` | D1364: stamp the latest retention entry only after successful deployment, before caching it. |
+| `perf/worker-bundle-baseline.mjs` | D4574 H3: where the Worker script's bytes come from, from the metafile `wrangler deploy --dry-run --metafile` writes: the script's raw, gzip and brotli size, and its bytes by `src/` folder, npm package and largest input. Local and read-only. |
 
 ## Adding a guard
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dataRoomApi } from '../../../lib/api/dataRoom';
 import { Unreadable } from '../../../ui';
-import { HOME_PATH, TABS, tabSearch } from './dataRoomModel.js';
+import { HOME_PATH, ROOM_REFUSED_LINE, ROOM_SUMMARY_LINE, TABS, tabSearch } from './dataRoomModel.js';
 import { ACTIVITY_NOTE, accessRows, fileHref, needsYou, recentFiles, requestsNeed, roomChips } from './filesModel.js';
 
 /**
@@ -62,9 +62,18 @@ function RequestsNeed({ projectUid, search }) {
 
 export default function DataRoomHome({ read, retry, search = '' }) {
   if (read.status === 'loading') return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid="dataroom-home-loading" />;
-  if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`} data-testid="dataroom-home-refused">{read.message || 'You do not have access to this venture’s data room.'}</p>;
+  if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`} data-testid="dataroom-home-refused">{read.message || ROOM_REFUSED_LINE}</p>;
   if (read.status === 'error') return <div data-testid="dataroom-home-unreadable"><Unreadable what="The data room" claim="This is not a claim that the room is empty." onRetry={retry} /></div>;
-  if (read.room?.mode === 'summary') return null;
+  // D5079 (#5079): a `summary` answer is not the room. Home used to draw
+  // nothing here, which left the module page's empty card, checklist and
+  // Evidence standing as though the room held nothing.
+  if (read.room?.mode === 'summary') {
+    return (
+      <p className={`m-0 text-[13px] ${INK}`} data-testid="dataroom-home-summary">
+        {ROOM_SUMMARY_LINE} <Link className={LINK} to={tabTo('files', search)} data-testid="dataroom-home-summary-open">Open Files</Link>
+      </p>
+    );
+  }
   const room = read.room;
   const needs = needsYou(room);
   const who = accessRows(room);

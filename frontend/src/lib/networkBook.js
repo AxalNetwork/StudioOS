@@ -43,6 +43,40 @@ export function isCold(row, now = Date.now()) {
   return days !== null && days > COLD_AFTER_DAYS;
 }
 
+/**
+ * #4611 finding 9 — THE ARRAY-SAFE COLD VIEW FOR `last_activity_at`.
+ *
+ * `contacts.filter(isCold)` is what the relationship book did, and
+ * `Array.prototype.filter` calls its callback as `(element, index, array)`. So
+ * `isCold`'s second parameter — `now`, defaulting to `Date.now()` — received
+ * the ROW INDEX. For the first row `now` was 0, and `daysSince(stamp, 0)`
+ * clamps at `Math.max(0, …)`, so every contact whose last activity is after
+ * 1970 measured 0 days old and no row was ever cold. The summary tile read
+ * "Going cold: 0" and "Coldest: Unavailable" while the chip filter beside it
+ * — `(row) => isCold(row)`, an arrow, so correctly defaulted — and the table's
+ * own per-row "· going cold" both flagged the same records. Three readers of
+ * one definition, one of them silently measuring against a clock of 0, 1, 2.
+ *
+ * `coldView` existed and could not be used: it reads `last_interaction_at`,
+ * the investor and advisor tie column, which a founder contact does not carry.
+ * This is its founder twin, on `last_activity_at`, and it takes `now` ONCE for
+ * the whole list — so every row in a summary is measured against the same
+ * instant, which a per-row call cannot guarantee across a midnight boundary.
+ *
+ * Passing `isCold` bare to `filter` is now a mistake with an alternative
+ * rather than a mistake with a workaround.
+ */
+export function coldBookView(rows, now = Date.now()) {
+  return (rows || []).filter((row) => isCold(row, now));
+}
+
+/** Days since the coldest book contact's last recorded activity, or null when none are cold. */
+export function coldestBookDays(rows, now = Date.now()) {
+  const cold = coldBookView(rows, now);
+  if (!cold.length) return null;
+  return Math.max(...cold.map((row) => daysSince(row.last_activity_at, now)));
+}
+
 /** The organization a contact recorded, or '' — never inferred from an email domain. */
 export function organizationOf(row) {
   return String(row?.organization || row?.company || row?.firm || '').trim();

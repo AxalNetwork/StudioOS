@@ -40,7 +40,7 @@ const OVERVIEW = () => ({
   kyc: { pending: 1, approved: 3, rejected: 0 },
   kyc_not_recorded: [],
   dsr: {
-    clock_days: 30,
+    clock: { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' },
     kinds: [{ kind: 'erasure', recorded: true }, { kind: 'access', recorded: false, reason: 'Only deletion requests are recorded.' }],
     rows: [{ id: 31, email: 'lumen@example.com', name: 'Lumen Founder', role: 'founder', kind: 'erasure', requested_at: '2026-10-20 09:00:00', days_left: 22, prior_requests: 0, last_outcome: null, last_outcome_at: null }],
     by_branch: [{ branch: 'HQ-held', open: 1 }],
