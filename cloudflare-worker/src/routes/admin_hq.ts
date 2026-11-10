@@ -44,7 +44,7 @@ import type { BranchOverview, BranchAccountHit, FundsRegistry } from '../rpc/bra
 import { readFundsRegistry } from '../rpc/branchOps';
 import { FUND_METRIC_UNAVAILABLE } from '../services/fundRollup';
 import { FREEZING_STATUSES } from '../util/authErrors';
-import { ensureLastActiveColumn } from '../middleware/lastActive';
+import { LAST_ACTIVE_NOT_READY, ensureLastActiveColumn } from '../middleware/lastActive';
 import { ticketBacklog } from '../services/supportQueues';
 import {
   ACTIVE_ACCOUNT_BASIS, ANALYTICS_RANGES, GAP_SENTENCES, gapNotes, parseAnalyticsRange, seriesValues,
@@ -478,8 +478,13 @@ r.get('/admins', async (c) => {
   }
   // `last_active_at` is a runtime-added column on databases older than
   // migration 049's helper (see its header). Selecting it without this is the
-  // "no such column" 500 that #203 was written about.
-  await ensureLastActiveColumn(env);
+  // "no such column" 500 that #203 was written about. #5343: a bootstrap that
+  // genuinely failed answers a 503 the page can retry, never an incomplete read.
+  try { await ensureLastActiveColumn(env); }
+  catch (e) {
+    if ((e as Error).message !== LAST_ACTIVE_NOT_READY) throw e;
+    return c.json({ error: 'schema_not_ready', message: 'The team list could not be read just now. Try again shortly.', detail: 'The team list could not be read just now. Try again shortly.' }, 503);
+  }
 
   const admins = await env.DB.prepare(
     `SELECT id, uid, email, name, is_active, last_active_at, created_at

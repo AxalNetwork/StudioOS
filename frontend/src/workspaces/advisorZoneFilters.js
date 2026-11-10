@@ -233,8 +233,16 @@ export const ADVISOR_ZONE_FILTERS = {
     { canvas: 'Awaiting consent', key: 'awaiting' },
     { canvas: 'Self-stated', key: 'self' },
   ],
-  // `articles.status` is draft or published. Nothing classifies a piece as an
-  // essay rather than a note or a post — there is no kind column on articles.
+  // D4826 (#4826): `articles.status` is SEVEN values, not two — draft,
+  // submitted, in_review, changes_requested, rejected, approved, published —
+  // and an approved piece with a `publish_at` is Scheduled (D484). The note
+  // here used to say "draft or published", which was wrong when D4681 gave the
+  // shelf a pill per state. These two chips are the canvas's own axis (AX4's
+  // `filters: fil(['All','Published','Drafts','Essays'], 0)`), so Drafts stays
+  // the coarse "not public yet" narrowing the canvas asks for; the row's pill,
+  // its audience line and the export all name the real state
+  // (`expertiseModel.articleStage`). Nothing classifies a piece as an essay
+  // rather than a note or a post — there is no kind column on articles.
   'expertise/thinking': [
     { canvas: 'All', key: 'all' },
     { canvas: 'Published', key: 'published' },

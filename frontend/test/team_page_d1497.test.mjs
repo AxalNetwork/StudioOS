@@ -6,7 +6,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/team_page_d1497.test.mjs
-import test from 'node:test';
+import test, { after, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import React, { act } from 'react';
@@ -39,6 +39,11 @@ const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const TEAM = 'frontend/src/pages/team';
 const NOW = new Date('2026-10-31T12:00:00Z');
+// The page reads the clock, and invitation i1 expires 2026-11-11 10:00 UTC: after that the real clock reads it as expired
+// and its Revoke button goes. So the clock is NOW (D5398: a test never depends on the day it runs; found by the +7-day
+// run).
+before(() => mock.timers.enable({ apis: ['Date'], now: NOW.getTime() }));
+after(() => mock.timers.reset());
 
 // ---------------------------------------------------------------- fixtures (the canvas's samples)
 
