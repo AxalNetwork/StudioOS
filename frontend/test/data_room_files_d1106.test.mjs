@@ -328,7 +328,13 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
     assert.ok(!v.of('dataroom-needs').includes('not read here yet'), 'the wait that named the gap is gone');
     assert.match(v.of('dataroom-who'), /Juniper Angels.*NDA needed · Legal · No end date/s);
     assert.match(v.of('dataroom-recent'), /Contract\.pdf/);
-    assert.match(v.of('dataroom-90-wait'), /part 4/);
+    // D5072: no implementation language under the last ninety days; it names Activity and links to it.
+    assert.doesNotMatch(v.of('dataroom-90'), /part 4|D1105|need the activity read/);
+    assert.match(v.of('dataroom-90-note'), /on Activity\.$/);
+    assert.equal(v.prop('dataroom-90-link', 'href'), '/raise/data-room/activity?project_id=3');
+    // D5072: opening Home repeats no read (it used to read the module twice: a fresh query object re-ran its effect).
+    const gets = v.calls.filter((c) => c.method === 'GET').map((c) => c.url.replace(/^.*\/api/, ''));
+    assert.deepEqual(gets.filter((u, i) => gets.indexOf(u) !== i), [], 'no read is repeated');
     assert.ok(v.has('cycle-module'));
   } finally { await v.close(); }
   const f = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { room: true }) });

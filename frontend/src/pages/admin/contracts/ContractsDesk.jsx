@@ -22,6 +22,7 @@ import { AgreementCategories, LIBRARY_ITEMS, LibraryMenu, isLibrary, primaryOf, 
 import MetricStrip from './MetricStrip';
 import AttentionQueues from './AttentionQueues';
 import LinkRecipient from './LinkRecipient';
+import AttachEvidence from './AttachEvidence';
 import { contractRailSteps } from './contractRailSteps';
 import GovernanceTab from './GovernanceTab';
 
@@ -50,6 +51,7 @@ export default function ContractsDesk({ section = null }) {
   // D4811 part 14: ?agreement=<uid> opens the quick panel (the workspace's "Resend or void in the panel").
   const [selected, setSelected] = useState(() => (section ? null : params.get('agreement')));
   const [linking, setLinking] = useState(null);
+  const [evidencing, setEvidencing] = useState(null);
   const [revision, setRevision] = useState(0);
   const stats = useRead(() => contractsApi.stats(), [revision]);
   const filters = Object.fromEntries(filterKeys.filter(key => params.has(key)).map(key => [key, params.get(key)]));
@@ -82,7 +84,7 @@ export default function ContractsDesk({ section = null }) {
     <ContractSearch onOpen={openResult} />
     <ReadState read={stats} what="Contract counts"><MetricStrip stats={stats.data} onDrill={drill} /></ReadState>
     {/* D4811 part 11: the short queues under the strip (CT-01): stalled, data repair (with its repair), legal review. */}
-    {!away && allowed && primary === 'agreements' && <AttentionQueues hq={hqDesk} revision={revision} onOpen={setSelected} onLink={setLinking} onDrill={drill} />}
+    {!away && allowed && primary === 'agreements' && <AttentionQueues hq={hqDesk} revision={revision} onOpen={setSelected} onLink={setLinking} onEvidence={setEvidencing} onDrill={drill} />}
     {/* D4811 part 7: four workflow tabs; NDAs and Partner deals are Agreements categories; Forms and Document types are under Library. */}
     <div className="flex flex-wrap items-end justify-between gap-2 border-b border-axal-hairline">
       <nav aria-label="Contracts tabs" className="flex gap-1 overflow-x-auto">
@@ -101,6 +103,8 @@ export default function ContractsDesk({ section = null }) {
             workspaceLink={(slug) => <Link to={`/admin/contracts/templates/doc/${encodeURIComponent(slug)}`} className="text-[11px] font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
     <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/programs/spinout-lab/formation" className="underline">Open its Formation tab.</Link></p>
+    {/* D4811 part 18: attach execution evidence to a legacy agreement marked signed. */}
+    {evidencing && <AttachEvidence row={evidencing} onClose={() => setEvidencing(null)} onAttached={() => setRevision(n => n + 1)} />}
     {linking && <LinkRecipient row={linking} onClose={() => setLinking(null)} onLinked={() => setRevision(n => n + 1)} />}
     {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)}
       workspaceLink={(uid) => <Link to={`/admin/contracts/agreements/doc/${encodeURIComponent(uid)}`} className="text-xs font-semibold text-violet-700 underline dark:text-violet-300">Open workspace →</Link>} />}

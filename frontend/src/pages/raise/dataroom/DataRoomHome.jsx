@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { dataRoomApi } from '../../../lib/api/dataRoom';
 import { Unreadable } from '../../../ui';
 import { HOME_PATH, TABS, tabSearch } from './dataRoomModel.js';
-import { ACTIVITY_WAIT, accessRows, fileHref, needsYou, recentFiles, requestsNeed, roomChips } from './filesModel.js';
+import { ACTIVITY_NOTE, accessRows, fileHref, needsYou, recentFiles, requestsNeed, roomChips } from './filesModel.js';
 
 /**
  * D1106 (#2986) — DR1, Home's own blocks, under the tool's tab row on the
@@ -103,8 +103,8 @@ export default function DataRoomHome({ read, retry, search = '' }) {
           )}
         </Block>
       </div>
-      <Block title="The last ninety days" testId="dataroom-90">
-        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-90-wait">{ACTIVITY_WAIT}</p>
+      <Block title="The last ninety days" testId="dataroom-90" aside={<Link className={`text-[12px] ${LINK}`} to={tabTo('activity', search)} data-testid="dataroom-90-link">Activity</Link>}>
+        <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-90-note">{ACTIVITY_NOTE}</p>
       </Block>
     </div>
   );

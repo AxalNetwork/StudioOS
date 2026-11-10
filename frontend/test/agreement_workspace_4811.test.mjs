@@ -12,6 +12,9 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import Desk from '../src/pages/admin/contracts/ContractsDesk.jsx';
 import { AGREEMENT_TABS, activityRows, panelHref, providerLabel } from '../src/pages/admin/contracts/AgreementWorkspace.jsx';
 import { mountContracts } from './_contracts_dom.mjs';
+import { adminGovernanceApi } from '../src/lib/api/adminGovernance.js';
+// D4811 part 19: the Related tab reads which governance records govern the agreement; none here.
+adminGovernanceApi.governing = async (kind, ref) => ({ kind, ref, governing: [] });
 
 const originals = { ...api }, contractOriginals = { ...contractsApi };
 const never = () => new Promise(() => {});
@@ -65,10 +68,10 @@ test('mounted: the workspace reads the agreement; each tab says what is recorded
     const tab = async (label) => { const b = view.nodes().find((n) => view.props(n)?.role === 'tab' && walk(n) === label); await act(async () => { view.props(b).onClick(); }); };
     await tab('Document'); assert.match(view.text(), /Not signed yet\./);
     await tab('Versions'); assert.match(view.text(), /No rendered file is recorded for this agreement\./);
-    await tab('Legal Review'); assert.match(view.text(), /No legal-review record exists yet/);
+    await tab('Legal Review'); assert.match(view.text(), /An agreement is not reviewed on its own/);
     await tab('Activity'); assert.match(view.text(), /Created · .*Sent · .*mystery_event · Not recorded/);
     await tab('Related'); assert.match(view.text(), /Subscription agreement in Templates/);
-    assert.match(view.text(), /Governance records citing it.*Not recorded/);
+    assert.match(view.text(), /Governance records that govern it.*No governance record names this agreement as one it governs\./);
   } finally { await view.unmount(); restore(); }
 });
 

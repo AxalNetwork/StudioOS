@@ -40,6 +40,7 @@ function fixture() {
   const user = db.prepare('INSERT INTO users(id,role,name,email,is_active) VALUES(?,?,?,?,?)');
   user.run(1, 'admin', 'HQ owner', 'hq@example.test', 1);
   // D4811 part 13: publishing one template needs a recent step-up; this session's TOTP sign-in is one.
+  db.exec('INSERT INTO super_admins (user_id) VALUES (1)'); // D4811 part 15: publishing is the Super Admin's.
   db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (1, 'sess', 'totp', ?)").run(new Date().toISOString().replace('T', ' ').slice(0, 19));
   db.exec(`INSERT INTO legal_templates(slug,title,category,body_md,version,doc_kind,axal_party) VALUES
     ('d4811_ready','Ready Agreement','gp','Ready body for {{recipient_name}}',2,'agreement','holdings'),
