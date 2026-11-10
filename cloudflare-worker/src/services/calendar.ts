@@ -1572,6 +1572,7 @@ function googlePayload(ev: CalendarEvent): any {
 
 export async function pushEventToGoogle(
   accessToken: string, ev: CalendarEvent, googleEventId: string | null,
+  createKey?: string, refused?: (status: number) => void,
 ): Promise<string | null> {
   if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
@@ -1585,6 +1586,7 @@ export async function pushEventToGoogle(
       if (r.status === 404) {
         // Remote was deleted — fall through to a fresh insert.
       } else if (!r.ok) {
+        refused?.(r.status);
         console.warn('[CAL] gcal patch', r.status);
         return null;
       } else {
@@ -1593,15 +1595,25 @@ export async function pushEventToGoogle(
     }
     const r = await fetchWithTimeout(
       `${GOOGLE_CALENDAR_API}/calendars/primary/events`,
-      { method: 'POST', headers, body: payload },
+      { method: 'POST', headers, body: createKey ? JSON.stringify({ ...googlePayload(ev), id: createKey }) : payload },
     );
+    if (r.status === 409 && createKey) {
+      const saved = await fetchWithTimeout(
+        `${GOOGLE_CALENDAR_API}/calendars/primary/events/${createKey}`,
+        { method: 'PATCH', headers, body: payload },
+      );
+      if (saved.ok) return createKey;
+      refused?.(saved.status);
+      return null;
+    }
     if (!r.ok) {
+      refused?.(r.status);
       console.warn('[CAL] gcal insert', r.status);
       return null;
     }
     return ((await r.json()) as any).id as string;
-  } catch (e: any) {
-    console.warn('[CAL] gcal push exception:', e?.message || e);
+  } catch {
+    console.warn('[CAL] google_copy_failed');
     return null;
   }
 }
@@ -1645,6 +1657,7 @@ function microsoftPayload(ev: CalendarEvent): any {
 
 export async function pushEventToMicrosoft(
   accessToken: string, ev: CalendarEvent, eventId: string | null,
+  createKey?: string, refused?: (status: number) => void,
 ): Promise<string | null> {
   if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
@@ -1658,6 +1671,7 @@ export async function pushEventToMicrosoft(
       if (r.status === 404) {
         // Fall through to fresh insert.
       } else if (!r.ok) {
+        refused?.(r.status);
         console.warn('[CAL] ms patch', r.status);
         return null;
       } else {
@@ -1666,15 +1680,16 @@ export async function pushEventToMicrosoft(
     }
     const r = await fetchWithTimeout(
       `${MICROSOFT_GRAPH}/me/events`,
-      { method: 'POST', headers, body: payload },
+      { method: 'POST', headers, body: createKey ? JSON.stringify({ ...microsoftPayload(ev), transactionId: createKey }) : payload },
     );
     if (!r.ok) {
+      refused?.(r.status);
       console.warn('[CAL] ms insert', r.status);
       return null;
     }
     return ((await r.json()) as any).id as string;
-  } catch (e: any) {
-    console.warn('[CAL] ms push exception:', e?.message || e);
+  } catch {
+    console.warn('[CAL] microsoft_copy_failed');
     return null;
   }
 }
@@ -1744,6 +1759,7 @@ async function syncUserToProvider(
   const copyKinds = KNOWN_KINDS.filter(kind => kind !== 'calendly_event');
   const events = await fetchUserEvents(env, userId, role, fromIso, toIso, copyKinds);
   let pushed = 0, updated = 0, failed = 0;
+  const { calendarCopyKey } = await import('./calendar/sync');
   for (const ev of events) {
     const rec = (await sql`
       SELECT external_event_id FROM calendar_sync_records
@@ -1751,9 +1767,10 @@ async function syncUserToProvider(
         AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
     ` as any[])[0];
     const existing = rec?.external_event_id || null;
+    const createKey = await calendarCopyKey(env, userId, provider, ev);
     const newId = provider === 'google'
-      ? await pushEventToGoogle(accessToken, ev, existing)
-      : await pushEventToMicrosoft(accessToken, ev, existing);
+      ? await pushEventToGoogle(accessToken, ev, existing, createKey)
+      : await pushEventToMicrosoft(accessToken, ev, existing, createKey);
     if (!newId) { failed++; continue; }
     const nowIso = new Date().toISOString();
     if (rec) {

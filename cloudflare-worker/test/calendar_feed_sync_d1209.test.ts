@@ -19,7 +19,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import calendar from '../src/routes/calendar.ts';
-import { onAxalSessionCreated } from '../src/services/calendar/sync.ts';
+import { onAxalSessionCreated, resumeCalendarCopies } from '../src/services/calendar/sync.ts';
 import { accountMarker, takeRetainedMarker, retainCopies, SYNC_ERRORS } from '../src/services/calendar/syncState.ts';
 
 const SECRET = 'synthetic-calendar-d1209-'.repeat(3);
@@ -75,6 +75,7 @@ function fixture() {
     .run('member-9@example.test', 'Fixture 9', 'founder', 'free', 'free');
   db.prepare("INSERT INTO calendar_feed_tokens (id, user_id, scope, token_sha256) VALUES (41, 9, 'my_events', ?)").run('d'.repeat(64));
   db.exec(readFileSync(new URL('../sql/migrations/610_calendar_feed_scope_sync_errors.sql', import.meta.url), 'utf8'));
+  db.exec(readFileSync(new URL('../sql/migrations/202611101741_5207_calendar_copy_jobs.sql', import.meta.url), 'utf8'));
   const users: Array<[number, string, string]> = [[1, 'admin', 'free'], [2, 'founder', 'free'], [3, 'investor', 'professional'], [4, 'investor', 'free']];
   for (const [id, role, tier] of users) {
     db.prepare('INSERT INTO users (id,email,name,role,investor_tier,investor_subscription_status) VALUES (?,?,?,?,?,?)')
@@ -297,10 +298,12 @@ test('a booking\'s create hook writes the error state, and a refresh that works 
   providersWork();
   const base = answer;
   answer = (url, method, body) => (url.hostname === 'www.googleapis.com' ? json({}, 500) : base(url, method, body));
+  await resumeCalendarCopies(f.env, 3, 'google');
   await onAxalSessionCreated(f.env, ev);
   assert.equal((await f.signedIn('/api/calendar/google/status', 3)).body.sync_error.code, 'copy_refused',
     'the refresh cleared "connection refused"; the refused copy wrote its own');
   providersWork();
+  f.db.exec('UPDATE calendar_copy_jobs SET next_attempt_at = 0');
   await onAxalSessionCreated(f.env, ev);
   assert.equal((await f.signedIn('/api/calendar/google/status', 3)).body.sync_error.code, 'copy_refused',
     'one copy made does not clear a refused one: only a full sync does');
