@@ -458,7 +458,8 @@ test('three places write the dataset, and the branch code rides in the sixth blo
   assert.doesNotMatch(deck, /_KIND = '\//, 'a deck kind never starts with a slash');
   const obs = CODE.find((f) => f.file === 'middleware/observability.ts')!.code;
   const call = bodyAfter(obs, '.writeDataPoint(');
-  assert.match(call, /indexes:\s*\[path\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
+  // D4672: the path is recorded with any credential parameter replaced (`recorded`); still one index, the route path.
+  assert.match(call, /indexes:\s*\[recorded\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
   const blobs = /blobs:\s*\[([\s\S]*?)\]/.exec(call);
   assert.ok(blobs, 'the request row writes blobs');
   const slots = blobs![1].split('\n').map((l) => l.replace(/\/\/.*$/, '').trim()).join(' ').split(',').map((x) => x.trim()).filter(Boolean);

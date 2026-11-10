@@ -123,7 +123,8 @@ export function resourcePathOk(path: unknown): path is string {
 }
 const kindOf = (path: string): ResourceKind => (path.startsWith('references/') ? 'reference' : path.startsWith('assets/') ? 'asset' : 'file');
 
-function stepsOf(v: VersionRow): string[] | null {
+/** The pinned version's steps, or null when they cannot be used (the gate then leaves the skill out). */
+export function stepsOf(v: VersionRow): string[] | null {
   try {
     const s = JSON.parse(v.steps_json);
     if (!Array.isArray(s) || s.length < 1 || s.length > STEPS_MAX || s.some((x) => typeof x !== 'string' || !x.trim())) return null;
