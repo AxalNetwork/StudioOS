@@ -30,10 +30,26 @@ import {
 
 const NOW = new Date('2026-11-10T12:00:00Z');
 const render = (props) => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(IntegrationKeysPanel, props)));
-const text = (html) => html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
+// The visible text of rendered markup: every tag dropped, whitespace collapsed.
+// A character walk rather than a regex, so no tag-shaped remainder survives.
+const text = (html) => {
+  let out = '';
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === '<') inTag = true;
+    else if (ch === '>') inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out.split(/\s+/).join(' ');
+};
+// The text of the first <span data-testid="id">…</span>, found by plain string search.
 const slot = (html, id) => {
-  const m = html.match(new RegExp(`data-testid="${id}"[^>]*>([\\s\\S]*?)</span>`));
-  return m ? text(m[1]).trim() : null;
+  const at = html.indexOf(`data-testid="${id}"`);
+  if (at < 0) return null;
+  const open = html.indexOf('>', at);
+  const close = html.indexOf('</span>', open);
+  if (open < 0 || close < 0) return null;
+  return text(html.slice(open + 1, close)).trim();
 };
 
 const item = (provider_key, extra = {}) => ({ provider_key, state: 'env', last_set_at: null, last_set_basis: 'no_record', expires_at: null, last_used_at: null, ...extra });
