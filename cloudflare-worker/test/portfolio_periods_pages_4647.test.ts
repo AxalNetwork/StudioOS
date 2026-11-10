@@ -106,6 +106,7 @@ function fixture(entries: number) {
            CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, uid TEXT, name TEXT);
            CREATE TABLE portfolio_positions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, fund_id INTEGER);`);
   db.exec(file('237'));
+  db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   const p = db.prepare('INSERT INTO projects (id, uid, name) VALUES (?,?,?)');
   p.run(1, 'p-1', 'One');
@@ -365,6 +366,7 @@ test('a ledger whose every entry is untimed reports no hours and counts them all
            CREATE TABLE vc_funds (id INTEGER PRIMARY KEY, uid TEXT, name TEXT);
            CREATE TABLE portfolio_positions (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, fund_id INTEGER);`);
   db.exec(file('237'));
+  db.exec(file('202611092215')); // D4642: the route reads revision and updated_by
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?,?,?,?)').run(ADMIN, 'admin', 'Root', 'root@example.test');
   db.prepare("INSERT INTO projects (id, uid, name) VALUES (1, 'p-1', 'One')").run();
   const ins = db.prepare(`INSERT INTO portfolio_support_entries

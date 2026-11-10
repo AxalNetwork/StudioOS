@@ -51,6 +51,9 @@ export const STATUS = {
   Reading: { sym: '…', tone: 'neutral' },
   'Not recorded': { sym: '○', tone: 'neutral' },
   Planned: { sym: '◇', tone: 'neutral' },
+  // D5304: a managed key past, or within 30 days of, the expiry its provider reported.
+  Expired: { sym: '✕', tone: 'bad' },
+  Expiring: { sym: '◷', tone: 'warn' },
 };
 
 /** The severities of the Needs attention queue, most severe first. */
@@ -146,6 +149,77 @@ export function keyLevels(keys) {
     if (k.state === 'env' || k.state === 'db') b.set += 1;
     else if (k.state === 'unset') b.unset.push(k.provider_key);
     else b.unknown += 1;
+  }
+  return out;
+}
+
+/* ── managed keys: expiry and last use (D5304) ─────────────────────────── */
+
+/** A key this close to its provider-reported expiry joins Needs attention. */
+export const KEY_EXPIRY_WARN_DAYS = 30;
+const DAY = 24 * HOUR;
+
+/**
+ * A key's expiry as the platform records it. `Not recorded` when no expiry is
+ * stored (no provider reports one to the platform, and none was entered), and
+ * `days` is then null: never a date, never 0 days. `Expired` once the stamp has
+ * passed, `Expiring` inside KEY_EXPIRY_WARN_DAYS, `Valid` beyond it. `days` is
+ * whole days to the expiry (negative once expired), rounded toward zero.
+ */
+export function keyExpiry(k, now) {
+  const at = stampDate(k?.expires_at);
+  if (!at || !now) return { state: 'Not recorded', at: null, days: null };
+  const ms = at.getTime() - now.getTime();
+  const days = Math.trunc(ms / DAY);
+  if (ms <= 0) return { state: 'Expired', at, days };
+  return { state: ms <= KEY_EXPIRY_WARN_DAYS * DAY ? 'Expiring' : 'Valid', at, days };
+}
+
+/** "3 Dec 2026" from a stamp, in UTC (the canvas's key dates). */
+export function keyDay(at) {
+  const d = at instanceof Date ? at : stampDate(at);
+  return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : null;
+}
+
+/** The expiry line on a key row: "3 Dec 2026 · in 26 d", "3 Jun 2026 · expired 4 d ago", or "Not recorded". */
+export function keyExpiryText(k, now) {
+  const e = keyExpiry(k, now);
+  if (e.state === 'Not recorded') return 'Not recorded';
+  if (e.state === 'Expired') return `${keyDay(e.at)} · expired${e.days < 0 ? ` ${-e.days} d ago` : ' today'}`;
+  return `${keyDay(e.at)} · in ${e.days > 0 ? `${e.days} d` : 'under a day'}`;
+}
+
+/**
+ * The Integrations block's one line on expiry, over the keys in place: how
+ * many are expired, how many expire within the window, how many carry no
+ * recorded expiry. "Unreadable" when the stamps could not be read.
+ */
+export function expirySummary(keys, now) {
+  if (!keys?.available) return null;
+  if (keys.stamps_available === false) return 'Unreadable';
+  const held = (keys.items || []).filter((k) => k.state === 'env' || k.state === 'db');
+  const by = { Expired: 0, Expiring: 0, Valid: 0, 'Not recorded': 0 };
+  for (const k of held) by[keyExpiry(k, now).state] += 1;
+  return `${by.Expired} expired · ${by.Expiring} within ${KEY_EXPIRY_WARN_DAYS} d · ${by['Not recorded']} of ${held.length} not recorded`;
+}
+
+/** The last-use line on a key row: a UTC minute, or "Not recorded" for a key no successful use has stamped. */
+export const keyLastUsedText = (k) => utcStamp(k?.last_used_at) || 'Not recorded';
+
+/**
+ * The Needs attention items for keys whose recorded expiry has passed (High)
+ * or falls within KEY_EXPIRY_WARN_DAYS (Medium). A key with no recorded expiry
+ * raises nothing: unknown is not soon.
+ */
+export function keyExpiryItems(keys, now, seen) {
+  if (!keys?.available) return [];
+  const out = [];
+  for (const k of keys.items || []) {
+    if (k.state !== 'env' && k.state !== 'db') continue;
+    const e = keyExpiry(k, now);
+    const name = cap(k.provider_key);
+    if (e.state === 'Expired') out.push({ severity: 'High', title: `${name} key expired`, detail: `The provider reported it expires ${keyDay(e.at)}. Rotate it in Integration keys.`, state: 'Expired', since: utcStamp(e.at), observed: seen, link: { ...LINK.keys, label: 'Rotate key' } });
+    else if (e.state === 'Expiring') out.push({ severity: 'Medium', title: `${name} key expires in ${e.days > 0 ? plural(e.days, 'day', 'days') : 'under a day'}`, detail: `The provider reported it expires ${keyDay(e.at)}. Rotate it before then.`, state: 'Expiring', observed: seen, link: { ...LINK.keys, label: 'Rotate key' } });
   }
   return out;
 }
@@ -424,6 +498,7 @@ export function signals({ data, deps, traffic, now, observed = {}, UNAVAILABLE }
     const kItems = [];
     if (lv) {
       if (lv.Required.unset.length) kItems.push({ severity: 'High', title: `${plural(lv.Required.unset.length, 'required key', 'required keys')} not set`, detail: lv.Required.unset.join(', '), state: 'Not configured', observed: seen, link: LINK.keys });
+      kItems.push(...keyExpiryItems(d.integration_keys, now, seen));
       if (lv.Recommended.unset.length) kItems.push({ severity: 'Low', title: `${plural(lv.Recommended.unset.length, 'recommended key', 'recommended keys')} not set`, detail: `${lv.Recommended.unset.join(', ')}. The features that use them are off.`, state: 'Not configured', observed: seen, link: LINK.keys });
     }
     add({ key: 'keys', name: 'Integration keys', status: lv ? 'Healthy' : 'Unknown', line: '', items: kItems, config: true, levels: lv });

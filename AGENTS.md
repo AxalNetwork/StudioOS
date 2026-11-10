@@ -158,13 +158,54 @@ without being merged.
 - Decision numbers come from the issue: a new decision is `D<issue number>`
   (D4106), and older issues that name a lower D number keep it. A new
   migration needs no number at all: it is named by the UTC minute it was
-  written, `YYYYMMDDHHMM_<slug>.sql` (D4106). Never take "the next free
-  number" for either.
+  written and its issue, `YYYYMMDDHHMM_<issue>_<slug>.sql` (D4106, D5398;
+  required from 2026-11-11 00:00 UTC). Never take "the next free number" for
+  either.
 
 ### File ownership
 
 An issue names the files it owns. Never edit files that another open issue or
 PR owns; ask on your own issue instead.
+
+### Red main and a backed-up queue (D5398)
+
+One broken merge turns every open PR red at once. Then every slot ports the
+same fix, or merges `main` into its branch, or re-runs its suite. That queued
+over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
+2026-11-10. So, while `[alert] main is red` is open:
+
+1. **There is exactly one repair PR.** Session 1 names it on the alert issue.
+   If none is named and you have the fix, open it, link it on the alert, and
+   say so in your STATUS. Never open a second one; review or extend the named
+   one.
+2. **Never port the repair into your branch.** It reaches your PR when it
+   merges.
+3. **Never merge `main` into, or rebase, an open PR only to chase the
+   inherited failure.** Merge `main` only for your own conflict, or once main
+   is green again and your PR needs a fresh run.
+4. **Never re-run a failed workflow for an inherited failure.** The gate
+   job's summary says which it is (`scripts/ci-classify.mjs`):
+   - `inherited_main_failure`: every failed part is red on main too. Do
+     nothing to the PR.
+   - `pr_failure`: at least one part is yours. Fix it.
+   - `main_health_unknown`: main's state could not be read. Treat it as
+     yours until you know otherwise.
+5. **Report it once.** Your STATUS says `blockers: inherited main failure,
+   <alert issue>`, and no comment goes on each PR.
+
+When main is green again, let PRs revalidate as they merge through the queue.
+Do not press "Update branch" on every PR at once.
+
+While `[alert] the Actions queue is backed up` is open, the same backpressure
+applies to everything that is not a fix for a PR's own failure:
+
+- no branch updates;
+- no bulk "re-run all jobs", and at most one failed job re-run, and only for
+  a PR-specific failure;
+- no manually dispatched load or CI jobs.
+
+The alert clears only once the queue is well below its thresholds, so wait for
+it to close.
 
 ### CHANGELOG.md is Session 1's
 
@@ -271,9 +312,10 @@ documents it indexes.
   test:drift` fails while either is stale. If two branches both add a line to
   a generated file, rerun its script instead of resolving the conflict by hand.
 - **Migrations.** A migration is a new file under
-  `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<slug>.sql` by the
-  UTC minute you write it (D4106); an issue written before D4106 may still give
-  a number up to 799. Never edit an applied migration, and never create a
+  `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<issue>_<slug>.sql`
+  by the UTC minute you write it and your issue's number (D4106, D5398: two PRs
+  in one minute no longer collide); an issue written before D4106 may still
+  give a number up to 799. Never edit an applied migration, and never create a
   trigger by hand.
 - **Honesty.** Where no store exists, the screen says "Not recorded" and gives
   the reason. Where a read fails, it says "Unreadable", never zero. Never

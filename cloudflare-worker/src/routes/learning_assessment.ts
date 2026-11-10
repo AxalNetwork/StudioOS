@@ -202,10 +202,87 @@ r.post('/exams/:uid/attempts', async (c) => {
     if (created && attempt.uid !== uid) created = false;
   }
   const dl = deadlineMs(attempt.started_at, policyOf(attempt, exam).time_limit_minutes);
+  // D5356 part 2: the choices saved on the server for this open attempt, so another device resumes them.
+  const draft = await attemptDraft(c.env, attempt.uid, inOrder(all, attempt.question_order_json));
   return c.json({
     attempt: { uid: attempt.uid, started_at: attempt.started_at, deadline: dl === null ? null : new Date(dl).toISOString() },
     questions: inOrder(all, attempt.question_order_json).map(memberQuestion),
+    draft,
   }, created ? 201 : 200);
+});
+
+// ---- D5356 part 2: an open attempt's choices, held on the server ---------------------------------------------------
+
+/** The highest revision a client may send; a save is an integer step, so this is years of clicks. */
+export const DRAFT_REVISION_MAX = 1_000_000_000;
+
+/**
+ * The saved choices of an open attempt, re-validated against its questions (an edited exam drops what no longer fits),
+ * or null when nothing is saved or the column is not on this database yet.
+ */
+async function attemptDraft(env: Env, attemptUid: string, shown: StoredQuestion[]) {
+  try {
+    const row = await env.DB.prepare('SELECT draft_answers_json, draft_revision, draft_saved_at FROM learning_exam_attempts WHERE uid = ?')
+      .bind(attemptUid).first<{ draft_answers_json: string | null; draft_revision: number; draft_saved_at: string | null }>();
+    if (!row || !row.draft_answers_json) return null;
+    let raw: unknown = null;
+    try { raw = JSON.parse(row.draft_answers_json); } catch { raw = null; }
+    return { answers: normaliseAnswers(raw, shown) ?? {}, revision: Number(row.draft_revision) || 0, saved_at: row.draft_saved_at };
+  } catch (e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) return null;
+    throw e;
+  }
+}
+
+/**
+ * PUT /exams/:uid/attempts/:attempt/answers — save an open attempt's choices. Only the caller's own attempt, open and
+ * inside its time limit; the choices are validated against the attempt's questions and options; `revision` must be
+ * above the last accepted one, so a delayed request cannot overwrite a newer save (409 `stale_revision`, with the
+ * saved copy). It never grades, never reveals and never uses an allowance: it writes three draft columns only.
+ */
+r.put('/exams/:uid/attempts/:attempt/answers', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const exam = await visibleExam(c, user); if (exam instanceof Response) return exam;
+  const a = await c.env.DB.prepare(
+    'SELECT id, uid, user_id, started_at, submitted_at, question_order_json, pass_mark_percent, time_limit_minutes, reveal FROM learning_exam_attempts WHERE uid = ? AND exam_id = ?',
+  ).bind(c.req.param('attempt'), exam.id).first<any>();
+  // Another member's attempt answers as if it did not exist.
+  if (!a || Number(a.user_id) !== Number(user.id)) return refuse(c, 404, { code: 'not_found', message: 'No such attempt.' });
+  if (a.submitted_at) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted, so nothing more is saved.' });
+  const dl = deadlineMs(a.started_at, policyOf(a, exam).time_limit_minutes);
+  if (dl !== null && Date.now() > dl + SUBMIT_GRACE_SECONDS * 1000) {
+    return refuse(c, 409, { code: 'time_limit_passed', message: 'The time limit has passed, so nothing more is saved.' });
+  }
+  const body = await c.req.json().catch(() => null) as { answers?: unknown; revision?: unknown } | null;
+  const revision = Number(body?.revision);
+  if (!Number.isSafeInteger(revision) || revision < 1 || revision > DRAFT_REVISION_MAX) {
+    return refuse(c, 400, { code: 'bad_revision', message: 'revision is a whole number from 1, one higher than the last save.' });
+  }
+  const all = ((await c.env.DB.prepare(QUESTIONS_SQL).bind(exam.id).all<StoredQuestion>()).results || []);
+  const shown = inOrder(all, a.question_order_json);
+  const answers = normaliseAnswers(body?.answers, shown);
+  if (!answers) return refuse(c, 400, { code: 'bad_answers', message: 'answers maps each question uid to the option indexes chosen; a single-choice question takes one.' });
+  const saved = new Date().toISOString();
+  let upd;
+  try {
+    // One statement decides: the attempt is still open and this revision is newer than the stored one.
+    upd = await c.env.DB.prepare(
+      `UPDATE learning_exam_attempts SET draft_answers_json = ?, draft_revision = ?, draft_saved_at = ?
+        WHERE id = ? AND user_id = ? AND submitted_at IS NULL AND draft_revision < ?`,
+    ).bind(JSON.stringify(answers), revision, saved, a.id, user.id, revision).run();
+  } catch (e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) {
+      return refuse(c, 503, { code: 'drafts_not_recorded', message: 'Saving choices on the server is not set up on this database yet. They are still kept on this device.' });
+    }
+    throw e;
+  }
+  if (!Number(upd?.meta?.changes ?? 0)) {
+    const now = await attemptDraft(c.env, a.uid, shown);
+    const still = await c.env.DB.prepare('SELECT submitted_at FROM learning_exam_attempts WHERE id = ?').bind(a.id).first<{ submitted_at: string | null }>();
+    if (still?.submitted_at) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted, so nothing more is saved.' });
+    return refuse(c, 409, { code: 'stale_revision', message: 'A newer save of these choices is already on the server.', extra: { draft: now } });
+  }
+  return c.json({ draft: { answers, revision, saved_at: saved } });
 });
 
 function attemptView(a: any, exam: any, questions: StoredQuestion[]) {

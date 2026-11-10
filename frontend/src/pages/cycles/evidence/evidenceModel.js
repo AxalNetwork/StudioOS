@@ -14,6 +14,7 @@
  * adds no grade of its own.
  */
 import { SOURCE_GRADE } from '../../../components/scoring/scorecard/scorecardModel.js';
+import { codeAmount, formatMinorOrCount } from '../../../lib/money.js';
 
 export const BASE = '/raise/evidence';
 export const TITLE = 'Evidence';
@@ -127,7 +128,8 @@ export function figureOf(item) {
   const cur = item?.currency || '';
   const money = (v) => `${cur ? `${cur} ` : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
   switch (item?.value_unit) {
-    case 'cents': return money(n / 100);
+    // D5373: at the currency's own decimals; no usable currency names the stored count.
+    case 'cents': return cur ? codeAmount(n, cur) : formatMinorOrCount(n, null);
     case 'money': return money(n);
     case 'percent': return `${n.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`;
     case 'months': return `${n.toLocaleString('en-US', { maximumFractionDigits: 1 })} months`;

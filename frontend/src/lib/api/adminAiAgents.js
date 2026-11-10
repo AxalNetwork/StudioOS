@@ -5,6 +5,7 @@
 //   GET /admin/ai-agents/overview
 //   GET /admin/ai-agents/runs?agent=&skill=&area=&team=&status=&from=&to=&cursor=
 //   GET /admin/ai-agents/runs/:uid
+//   GET /admin/ai-agents/runs/:uid/provenance   #5346 (D4575): the run's lineage; unknown fields are { available: false, why }
 //   GET /admin/ai-agents/spend?by=agent|skill|company|model
 //   GET /admin/ai-agents/audit?admin=&action=&area=&from=&to=&cursor=
 //   GET /admin/ai-agents/audit.csv?(the same filters)
@@ -36,6 +37,7 @@ export const adminAiAgentsApi = {
   overview: () => request('/admin/ai-agents/overview'),
   runs: (filters = {}) => request(`/admin/ai-agents/runs?${q(filters)}`),
   run: (uid) => request(`/admin/ai-agents/runs/${enc(uid)}`),
+  runProvenance: (uid) => request(`/admin/ai-agents/runs/${enc(uid)}/provenance`),
   spend: (by = 'agent') => request(`/admin/ai-agents/spend?${q({ by })}`),
   audit: (filters = {}) => request(`/admin/ai-agents/audit?${q(filters)}`),
   auditCsv: (filters = {}) => api._downloadCsv(`/admin/ai-agents/audit.csv?${q(filters)}`, 'ai-agents-audit.csv'),

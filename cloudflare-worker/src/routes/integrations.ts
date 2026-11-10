@@ -70,6 +70,7 @@ import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 import { syncedWithOf } from '../integrations/providers/github/lovableMark';
+import { markProviderKeyUsed } from '../services/providerOauthKeys';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
@@ -665,6 +666,9 @@ integrations.post('/connect', async (c) => {
     });
     return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
+  // D5304: a code exchange authenticated with Axal's managed client secret and succeeded. Stamped hourly at most;
+  // a provider whose key is not managed is skipped, and the stamp never fails the connection.
+  if (desc.auth_type === 'oauth2' && body.oauth_code) await markProviderKeyUsed(c.env, key);
 
   // Upsert. Insert with random uid, encrypt against that uid; on conflict
   // (user already has this provider) update credentials in place but keep
@@ -1607,6 +1611,8 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       });
       return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }
+    // D5304: the code exchange used Axal's managed client secret and succeeded (hourly at most, never throws).
+    await markProviderKeyUsed(c.env, provider);
     const sql = getSQL(c.env);
     try {
       const existing = await c.env.DB.prepare(

@@ -46,6 +46,7 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `LessonFooter.jsx`, `lessonFooterModel.js`, `lessonFooter.css` | D4478: the accessible lesson position/completion footer and its phone bar. |
 | `lessonPositionWriter.js`, `useOnline.js` | D4478: the browser connection and latest-position offline queue around the existing progress throttle. |
 | `LearningHomeActions.jsx` | D4481 (#4481): the home’s shared registration action and current seat refresh, structured refusals, phone course primary and webinar rows. |
+| `CurriculumCoverage.jsx`, `coverageModel.js` | D4650 (#4650, part 4): the studio's curriculum coverage record, below the content table. Each of the founder, investor, advisor and partner journeys as Published, Not reachable, Unknown or Missing, with the courses behind it, from `GET /api/admin/learning/coverage`. A course with no audience makes a journey Unknown, never Missing; a failed read is Unreadable. It reads the catalogue only. |
 
 ## The rules for adding here
 
