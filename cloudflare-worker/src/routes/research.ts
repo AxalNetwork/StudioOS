@@ -2712,10 +2712,16 @@ const DRAFT_SURFACES: Record<string, {
       if (!me?.partner_id) return [];
       const rows = await c.env.DB.prepare(
         `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                -- D4672: a consent counts only about the claim as it now reads (its pinned
+                -- hash is the item's current one), and an ask is pending only while its
+                -- link is live and about that same revision.
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL) AS live,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256) AS live,
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL) AS pending,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256
+                    AND (k.expires_at IS NULL OR datetime(k.expires_at) > datetime('now'))) AS pending,
                 (SELECT COUNT(*) FROM partner_proof_consents k
                   WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
            FROM partner_proof_items p

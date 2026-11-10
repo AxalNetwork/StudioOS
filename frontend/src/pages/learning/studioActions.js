@@ -39,6 +39,13 @@ export async function readStudioCourses() {
   return { rows: listOf(await adminLearningApi.listCourses(), 'courses', 'The course list') };
 }
 
+/** D4650 (#4650, part 4): the curriculum coverage record (`coverageModel.js` reads it). */
+export async function readCoverage() {
+  const reply = await adminLearningApi.coverage();
+  if (!reply?.coverage || !Array.isArray(reply.coverage.journeys)) throw new Error('The coverage record came back in a shape this page cannot read.');
+  return { coverage: reply.coverage };
+}
+
 /** One course with its modules and lessons, for the builder. */
 export async function readStudioCourse(uid) {
   const reply = await adminLearningApi.getCourse(uid);
