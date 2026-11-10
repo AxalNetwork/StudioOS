@@ -195,7 +195,15 @@ test('an introduction request reaches the teammate alone, sends nothing to the c
     const uid = ask.body.request.uid;
     assert.equal((await call(f, 4, 'GET', '/api/relationships/intro-requests')).body.sent[0].uid, uid);
     assert.equal((await call(f, 2, 'GET', '/api/relationships/intro-requests')).body.received[0].uid, uid);
-    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, { sent: [], received: [], follow_ups_due: 0 });
+    // #4611: the log answers with its page and its whole-scope totals, so the
+    // shape is ten fields. The claim is unchanged and still exact — a member on
+    // neither side of the request reads nothing of it — and every count is zero
+    // because the scope is empty for them rather than because the page is.
+    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, {
+      sent: [], received: [], follow_ups_due: 0,
+      totals: { sent: 0, received: 0, sent_pending: 0, received_pending: 0 },
+      page_size: 0, has_more: false, next_cursor: null, limit: 200,
+    });
     assert.equal((await call(f, 4, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'accepted' })).status, 404, 'the asker cannot answer for the teammate');
     assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'maybe' })).status, 400);
     // D4329: Accept and Made are two steps; Made is recorded when the intro is sent (relationships_intro_lifecycle_d4329).
