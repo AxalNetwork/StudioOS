@@ -55,6 +55,11 @@ test('D4820 part 5: rows group by UTC day, newest first, with the time first; a 
 
 async function mount(handle) {
   const restore = installDocument();
+  // The lightbox heads each day relative to now ('Today', 'Yesterday'); the
+  // fixture's rows are dated around NOW, so the mounted page reads the same
+  // clock, whatever day the suite runs on.
+  const realNow = Date.now;
+  Date.now = () => NOW;
   const original = globalThis.fetch;
   const seen = [];
   const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -98,7 +103,7 @@ async function mount(handle) {
     async click(id) { await act(async () => { props(node(id)).onClick({ preventDefault() {} }); }); await settle(); },
     async key(id, key) { await act(async () => { props(node(id)).onKeyDown({ key, preventDefault() {} }); }); await settle(); },
     async change(id, value) { await act(async () => { props(node(id)).onChange({ target: { value } }); }); await settle(); },
-    async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; restore(); },
+    async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; Date.now = realNow; restore(); },
   };
 }
 
@@ -134,7 +139,10 @@ test('mounted D4820 part 5: a new search with a kind chosen hides the counts rat
 });
 
 test('mounted D4820 part 5: rows are grouped by day, time first, each with Open ›, and no member is named', async () => {
-  const m = await mount(worker);
+  // The lightbox reads the clock for Today and Yesterday; the rows are fixed at NOW's dates, so the test reads NOW.
+  const realNow = Date.now;
+  Date.now = () => NOW;
+  const m = await mount(worker).catch((e) => { Date.now = realNow; throw e; });
   try {
     assert.deepEqual(m.each('community-box-activity-day').map((t) => t.split(/\d{2}:\d{2}|All day/)[0]), ['Today', 'Yesterday', 'Mon 2 Nov']);
     const rows = m.each('community-box-activity-row');
@@ -142,7 +150,7 @@ test('mounted D4820 part 5: rows are grouped by day, time first, each with Open 
     assert.match(rows[1], /^08:05.*Job.*“Ops Lead” was closed\..*Last change.*Open ›/s);
     assert.match(rows[2], /^All day.*3 registrations/s);
     assert.doesNotMatch(rows.join('\n'), /\bmember\b/);
-  } finally { await m.unmount(); }
+  } finally { Date.now = realNow; await m.unmount(); }
 });
 
 test('mounted D4820 part 5: the chips are a radio group with arrow keys that wrap and take focus', async () => {

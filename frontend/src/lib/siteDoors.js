@@ -140,7 +140,7 @@ export const DOORS = {
         k: 'Research',
         t: 'Go deep on a market or a company.',
         d: 'Ask a question and get an answer with its sources. Read markets, countries, companies, and funds, and keep what you find in your library.',
-        list: ['Ask', 'Markets', 'Geographies', 'Companies', 'Funds', 'Library'],
+        list: ['My Research', 'Ask', 'Markets', 'Geographies', 'Companies', 'Funds', 'Library'],
       },
       {
         k: 'Your profile',

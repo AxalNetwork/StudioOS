@@ -10,6 +10,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { logAdminAction } from '../services/adminAudit';
+import { logActorAct } from '../services/actorLog';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull } from './_t13t14t15_helpers';
 import { loadUserVectors, confidenceAdjustedAlignment, skillComplementarity, computeWatchOuts } from '../services/matchingVectors';
@@ -1268,6 +1269,40 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   ).bind(opts.nextStatus, opts.reason ?? null, decision, decision, at, cancelledBy, at, id, b.status).run();
   if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
     return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
+  }
+  // #4692: WHO closed the session, and when.
+  //
+  // The row carried the OUTCOME and not the hand: `status` says what happened,
+  // `cancelled_by` says which side cancelled and `advisor_decision` holds the
+  // answer, but none of them names the account that pressed the button, and
+  // `updated_at` is the row's clock rather than an act. So a completed session
+  // (which is what the advisor is paid on) and a cancel could not be traced to
+  // a person at all — including a cancel an admin made on someone else's
+  // booking, which reached no audit store.
+  //
+  // Recorded AFTER the conditional UPDATE changed a row, so the refused press
+  // on a stale status above leaves no record of an act that did not happen.
+  // Both writers are best effort by their own contract: the session has
+  // already changed, and a lost line is better than an act undone by its own
+  // record.
+  //
+  // An admin's press is the privileged one and goes to `logAdminAction`, which
+  // reaches HQ's governance feed (D159); the advisor's and the client's own go
+  // to `activity_logs` through `logActorAct` (D637). `adm` decides, exactly as
+  // it decides `cancelled_by` above, so one press cannot be an admin to one
+  // store and the advisor to the other. Ids and states only: `opts.reason` is
+  // free text the person typed and stays out of both.
+  const actorRole = adm ? 'admin' : isAdvisor ? 'advisor' : 'client';
+  const act = {
+    booking_id: id, advisor_id: b.advisor_id, slot_id: b.slot_id,
+    from_status: b.status, to_status: opts.nextStatus,
+    actor_role: actorRole, cancelled_by: cancelledBy, decision, at,
+  };
+  if (actorRole === 'admin') {
+    await logAdminAction(c.env, user.id, String(user.email || ''),
+      `advisor_booking_${opts.nextStatus}`, { ...act, target_user_id: b.founder_user_id });
+  } else {
+    await logActorAct(c.env, user, `advisor_booking_${opts.nextStatus}`, act);
   }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so

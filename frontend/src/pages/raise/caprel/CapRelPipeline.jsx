@@ -12,7 +12,7 @@ import {
 import CapRelProposals from './CapRelProposals';
 import Sheet from '../../../ui/Sheet.jsx';
 import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
-import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { raiseReadState, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1192 (#3126) — Capital relationships' Pipeline (CRL2 the board, CRL3 the
@@ -53,12 +53,15 @@ export function useProspects(projectId) {
     setRead((r) => ({ status: 'loading', items: r.projectId === projectId ? r.items : null, projectId }));
     Promise.resolve().then(() => api.raiseProspects(projectId))
       .then((d) => { if (alive) setRead({ status: 'ready', items: Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : [], projectId }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', items: null, projectId }); });
+      // D5079 (#5079): a refusal is not a failed read. Mapping a 403 to
+      // `unreadable` told the founder the pipeline "could not be read", which
+      // is a claim about the store rather than about access.
+      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), items: null, projectId, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [projectId, n]);
   // The frame before the effect runs still holds the previous venture's state: never draw it.
   const own = read.projectId === projectId ? read : { status: 'loading', items: null };
-  return { status: own.status, items: own.items, reload: () => setN((x) => x + 1) };
+  return { status: own.status, items: own.items, message: own.message ?? '', reload: () => setN((x) => x + 1) };
 }
 
 /* ------------------------------------------------------------------ *

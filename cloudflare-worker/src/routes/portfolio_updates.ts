@@ -14,12 +14,13 @@ import type { Env, User } from '../types';
 import { requireAuth, canAccessFounderResource } from '../auth';
 import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jload } from './_t13t14t15_helpers';
 import { notify } from '../services/notify';
+import { pageFacts, pageWindow } from '../services/listPage';
 import { ensureFollowsSchema } from './follows';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
 import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
-  ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
+  ASK_AGAIN_DAYS, ASK_KINDS, ASK_MODULE, LineError, METRIC_KEYS, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
   draftLines, landReply, noMetrics, payloadFor, periodFacts,
   type Audience, type AskKind, type Snapshot, type ShippedItem,
 } from '../services/updateShare';
@@ -191,41 +192,131 @@ async function dto(env: Env, u: UpdateRow): Promise<any> {
 }
 
 // GET /api/portfolio-updates — investor inbox (submitted); founders see own drafts too
+/**
+ * #4647 (D4647): WHICH UPDATES THIS CALLER MAY READ, as one predicate.
+ *
+ * It was inline in `GET /`, which is why there was no way to read one
+ * company's latest update except by paging the whole history — and the history
+ * stopped at a bare `LIMIT 500` with no offset, so there was no paging either.
+ * Two routes now share this, so neither can drift from the other's idea of who
+ * may see what.
+ *
+ * Returns null when the caller may read nothing at all, which is not the same
+ * as reading nothing: the callers answer an empty list and say so.
+ */
+async function readableUpdates(c: any, user: User): Promise<{ where: string; params: any[] } | null> {
+  let where = '1=1';
+  const params: any[] = [];
+  if (isInvestorSide(user)) {
+    where += " AND status = 'submitted'";
+    // D889: an admin reads every submitted update; anyone else needs the relationship and the founder's grant.
+    if (!isAdmin(user)) {
+      const ids = await readerProjectIds(c, user);
+      if (ids.length === 0) where += ' AND 1 = 0';
+      else {
+        where += ` AND project_id IN (${ids.map(() => '?').join(',')})`;
+        params.push(...ids);
+        where += ` AND ${isInvestor(user) ? INVESTOR_GRANT : TEAM_GRANT}`;
+        params.push(user.id);
+      }
+    }
+  } else if (isFounder(user) && user.founder_id) {
+    // Founders only see updates for projects they own.
+    where += ' AND project_id IN (SELECT id FROM projects WHERE founder_id = ?)';
+    params.push(user.founder_id);
+  } else {
+    return null;
+  }
+  return { where, params };
+}
+
+/** #4647: one page of the history. The page is a page and says so. */
+const UPDATES_PAGE = 500;
+
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     const projectId = c.req.query('project_id');
     const period = c.req.query('period');
-    let where = '1=1';
-    const params: any[] = [];
-    if (isInvestorSide(user)) {
-      where += " AND status = 'submitted'";
-      // D889: an admin reads every submitted update; anyone else needs the relationship and the founder's grant.
-      if (!isAdmin(user)) {
-        const ids = await readerProjectIds(c, user);
-        if (ids.length === 0) where += ' AND 1 = 0';
-        else {
-          where += ` AND project_id IN (${ids.map(() => '?').join(',')})`;
-          params.push(...ids);
-          where += ` AND ${isInvestor(user) ? INVESTOR_GRANT : TEAM_GRANT}`;
-          params.push(user.id);
-        }
-      }
-    } else if (isFounder(user) && user.founder_id) {
-      // Founders only see updates for projects they own.
-      where += ' AND project_id IN (SELECT id FROM projects WHERE founder_id = ?)';
-      params.push(user.founder_id);
-    } else {
-      return c.json({ items: [] });
-    }
+    const scope = await readableUpdates(c, user);
+    if (!scope) return c.json({ items: [], page: { offset: 0, limit: UPDATES_PAGE, total: 0, next_offset: null } });
+    let { where } = scope;
+    const params = [...scope.params];
     if (projectId) { where += ' AND project_id = ?'; params.push(Number(projectId)); }
     if (period) { where += ' AND period = ?'; params.push(String(period)); }
+    // #4647: `?limit=&offset=`, and a total read by its own query. The history
+    // stopped at `LIMIT 500` with nothing to ask for the next page, so update
+    // 501 was unreachable; and the ordering was
+    // `COALESCE(submitted_at, updated_at) DESC` alone, which is not unique, so
+    // two updates sharing a timestamp could repeat across pages or fall
+    // between them. The order now ends in `id`.
+    const win = pageWindow({ limit: c.req.query('limit'), offset: c.req.query('offset') }, UPDATES_PAGE);
+    const counted = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM portfolio_updates WHERE ${where}`)
+      .bind(...params).first<{ n: number }>();
     const rows = await c.env.DB.prepare(
-      `SELECT * FROM portfolio_updates WHERE ${where} ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 500`
+      `SELECT * FROM portfolio_updates WHERE ${where}
+        ORDER BY COALESCE(submitted_at, updated_at) DESC, id DESC
+        LIMIT ? OFFSET ?`
+    ).bind(...params, win.limit, win.offset).all<UpdateRow>();
+    const items: any[] = [];
+    for (const u of (rows.results || []) as UpdateRow[]) items.push(await dto(c.env, u));
+    return c.json({ items, page: pageFacts(win, Number(counted?.n ?? 0), items.length) });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * GET /api/portfolio-updates/latest — the newest update this caller may read
+ * for EACH company, or for one with `?project_id=`.
+ *
+ * #4647: "the latest relevant update for each company can be retrieved
+ * independently of global history pagination". It could not be. The only
+ * history read was `GET /` ordered by time across every company, so finding
+ * one company's latest meant paging a global list — and a company whose last
+ * update fell past the limit simply had none as far as any caller could tell.
+ * Here each company's own newest row is picked by the database, so the answer
+ * does not depend on how deep that row sits in the whole history.
+ *
+ * The population is stated: `companies` is how many answered, and a company
+ * with nothing readable is absent rather than present with a null.
+ */
+r.get('/latest', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const scope = await readableUpdates(c, user);
+    if (!scope) return c.json({ items: [], companies: 0 });
+    let { where } = scope;
+    const params = [...scope.params];
+    const projectId = c.req.query('project_id');
+    if (projectId) { where += ' AND project_id = ?'; params.push(Number(projectId)); }
+    // One row per project: the newest by the same ordering the history uses,
+    // with `id` breaking the tie so the choice is deterministic rather than
+    // whichever row the engine happened to keep.
+    //
+    // A window function, and the table is NOT aliased. `INVESTOR_GRANT` and
+    // `TEAM_GRANT` are written against `portfolio_updates.id` and
+    // `portfolio_updates.audience_json` by name, so aliasing the table would
+    // put those columns out of scope and break this read for exactly the
+    // non-admin readers it is for — while still compiling. The predicate is
+    // used as it stands, and bound once.
+    const rows = await c.env.DB.prepare(
+      // `SELECT *` over the subquery rather than a column list: `dto` names
+      // the fields it answers with, so the window's own `rn` never reaches a
+      // caller, and a column added to the table later does not have to be
+      // added here too.
+      `SELECT * FROM (SELECT portfolio_updates.*,
+                      ROW_NUMBER() OVER (
+                        PARTITION BY portfolio_updates.project_id
+                        ORDER BY COALESCE(portfolio_updates.submitted_at, portfolio_updates.updated_at) DESC,
+                                 portfolio_updates.id DESC) AS rn
+                 FROM portfolio_updates
+                WHERE ${where})
+        WHERE rn = 1
+        ORDER BY COALESCE(submitted_at, updated_at) DESC, id DESC
+        LIMIT 1000`
     ).bind(...params).all<UpdateRow>();
     const items: any[] = [];
     for (const u of (rows.results || []) as UpdateRow[]) items.push(await dto(c.env, u));
-    return c.json({ items });
+    return c.json({ items, companies: items.length, complete: items.length < 1000 });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -833,15 +924,61 @@ r.post('/asks/:askUid/ask-again', async (c) => {
     if (refused) return refused;
     const n = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM update_ask_replies WHERE ask_id = ?').bind(ask.id).first<{ n: number }>();
     if (!canAskAgain(ask.sent_at, Number(n?.n ?? 0), ask.asked_again_at)) {
-      return c.json({ detail: 'An ask can be asked again once it has had no reply for 14 days' }, 409);
+      return c.json({ detail: `An ask can be asked again once it has had no reply for ${ASK_AGAIN_DAYS} days` }, 409);
     }
+    // #4645 (D4645): CLAIM THE COOLDOWN BEFORE SENDING, and claim it in SQL.
+    //
+    // The cooldown was checked above and then written AFTER the whole
+    // recipient loop, by id and unconditionally. Two presses at once — a
+    // double click, a retried request — both passed the check above and both
+    // notified every recipient, and the second write overwrote the first's
+    // timestamp. Worse, a `notify` that threw part-way through the loop left
+    // `asked_again_at` unset, so a retry re-sent to everyone who had already
+    // been told: the recipients at the front of the list got the reminder
+    // twice, and nothing recorded how far the first attempt had got.
+    //
+    // The claim is now the same predicate `canAskAgain` applies, written into
+    // the UPDATE's WHERE clause and bound. Only the request whose write
+    // changes a row sends anything; the loser gets the same 409 as a request
+    // inside the cooldown, which is what it is. `changes()` is the lock.
+    const claimedAt = nowIso();
+    const earliest = new Date(Date.now() - ASK_AGAIN_DAYS * 86_400_000).toISOString();
+    const claim = await c.env.DB.prepare(
+      `UPDATE update_asks SET asked_again_at = ?
+        WHERE id = ? AND (asked_again_at IS NULL OR asked_again_at <= ?)
+          AND NOT EXISTS (SELECT 1 FROM update_ask_replies WHERE ask_id = update_asks.id)`,
+    ).bind(claimedAt, ask.id, earliest).run();
+    if (Number((claim as any)?.meta?.changes ?? 0) === 0) {
+      return c.json({ detail: 'This ask was asked again a moment ago. Reload it to see where it stands.' }, 409);
+    }
+    // The recipients are read AFTER the claim, so the list is the one current
+    // at the moment this reminder is actually sent rather than one read before
+    // a wait (#4645: "current recipient and record identities after data refresh").
     const rcps = await c.env.DB.prepare('SELECT DISTINCT user_id FROM update_recipients WHERE update_id = ? AND user_id IS NOT NULL').bind(ask.update_id).all<{ user_id: number }>();
-    for (const x of rcps.results || []) {
-      await notify(c.env, { userId: x.user_id, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
-        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' });
+    const recipients = (rcps.results || []).map((x) => Number(x.user_id));
+    // Per-recipient outcome. `notify` answers with the inbox row's id, or null
+    // when it could not deliver, and never throws — so one recipient's failure
+    // cannot cost the rest their reminder, and the response can be reconciled
+    // against the list instead of asserting that all of them were reached.
+    let notified = 0;
+    const failed: number[] = [];
+    for (const userId of recipients) {
+      const id = await notify(c.env, { userId, type: 'followed_entity_news', title: 'Asked again', body: ask.text,
+        link: `/updates/${ask.update_uid}`, payload: { ask_uid: ask.uid }, category: 'proactive_nudges' })
+        .catch(() => null);
+      if (id == null) failed.push(userId); else notified += 1;
     }
-    await c.env.DB.prepare('UPDATE update_asks SET asked_again_at = ? WHERE id = ?').bind(nowIso(), ask.id).run();
-    return c.json({ uid: ask.uid, asked_again: (rcps.results || []).length });
+    return c.json({
+      uid: ask.uid, asked_again_at: claimedAt,
+      // `asked_again` was the length of the recipient list — a claim of
+      // delivery the handler never checked. These three are what happened.
+      recipients: recipients.length, notified, failed: failed.length,
+      // What this guarantees, stated as narrowly as it is true: the cooldown
+      // claim makes one reminder per ask per window, and each recipient gets
+      // at most one inbox row from this request. Delivery beyond the inbox
+      // (email, push) is the notify pipeline's, and is not exactly-once.
+      delivery: 'in_app inbox rows written here; onward channels are the notify pipeline\'s and are not guaranteed exactly once',
+    });
   } catch (e) { return mapError(c, e); }
 });
 

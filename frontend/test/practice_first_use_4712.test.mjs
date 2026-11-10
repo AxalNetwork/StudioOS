@@ -142,7 +142,7 @@ test('mounted Delivery, empty: the work-product form shows, and held sessions ar
   });
   try {
     assert.match(m.text(), /No work product is on file/);
-    assert.match(m.text(), /Sessions you have held/, 'the review section is drawn with no deliverable');
+    assert.match(m.text(), /Post-session reviews/, 'the review section is drawn with no deliverable');
     assert.ok(m.byTestId('row-pr3-session-7'));
     assert.ok(m.buttonWith(/Review this session/), 'and can be reviewed');
     assert.match(m.text(), /1 without a review/);
@@ -185,12 +185,14 @@ test('mounted Delivery: "Add a version" is a real revision form: a note and a li
     return base(c);
   });
   try {
+    // #4833 (D4833): the controls live in the work product's detail sheet.
+    await m.pressId('open-pr3-1');
     await m.pressId('version-pr3-1');
     assert.equal(m.writes().length, 0, 'opening the form writes nothing');
-    assert.ok(m.byTestId('attach-form-a1-1'), 'the revision form is open');
+    assert.ok(m.byTestId('add-version-form-1'), 'the revision form is open');
     assert.match(m.text(), /v2, not sent/);
     assert.match(m.text(), /v1 stays exactly as recorded/);
-    await m.submit('attach-form-a1-1');
+    await m.submit('add-version-form-1');
     assert.equal(m.writes().length, 0, 'an empty revision is refused before it is sent');
     assert.match(m.text(), /Say what changed/);
     assert.match(m.text(), /v1 has no content to send/, 'and the empty v1 cannot be sent');
@@ -207,9 +209,13 @@ test('mounted Delivery: Send says which version goes out; a version with content
     return base(c);
   });
   try {
+    await m.pressId('open-pr3-1');
     assert.match(m.text(), /Sends v2 — “Added the cohort table” · opens docs\.example/);
     assert.notEqual(m.props(m.byTestId('send-pr3-1')).disabled, true);
     await m.pressId('send-pr3-1');
+    // #4833 (D4833): Send opens the confirmation; nothing goes until it is confirmed.
+    assert.equal(m.writes().length, 0, 'Send asks first');
+    await m.pressId('send-confirm-go-1');
     assert.deepEqual(m.writes().map((c) => [c.method, c.path]), [['POST', '/api/advisors/me/deliverables/1/versions/2/send']]);
   } finally { await m.close(); }
 });

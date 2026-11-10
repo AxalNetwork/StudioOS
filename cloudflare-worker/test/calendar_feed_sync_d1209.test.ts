@@ -65,7 +65,9 @@ function providersWork() {
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql']) {
+  // D5201 (#5201): 708 brings `calendar_settings`, which production has. Without it `readCopyTarget` throws, and
+  // an unreadable copy preference now makes no new copy, so the hook below would refuse before reaching its subject.
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '603_calendar_feed_tokens.sql', '708_calendar_source_prefs.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
   }
   // A my-events token made before 610: the rebuild must keep it working.

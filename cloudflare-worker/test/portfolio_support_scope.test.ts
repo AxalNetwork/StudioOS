@@ -45,19 +45,39 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
   return {
     prepare(sql: string) {
       let b: any[] = [];
+      const runSync = () => {
+        const r = db.prepare(sql).run(...b);
+        return { success: true, meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
+      };
       const api: any = {
         bind: (...x: any[]) => { b = coerce(x); return api; },
         async first() { return db.prepare(sql).get(...b) ?? null; },
         async all() { return { results: db.prepare(sql).all(...b) }; },
-        async run() {
-          const r = db.prepare(sql).run(...b);
-          return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
-        },
+        async run() { return runSync(); },
+        runSync,
       };
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    // D4642: this used to hand the statements back WITHOUT running them, so a
+    // batched write would look as though it had succeeded and write nothing.
+    // #4642's amendment path is the first batch on this route and it reads
+    // `success` and `meta.changes` back, so the fixture has to execute — inside
+    // a savepoint, as `_d1_sqlite.mjs` does, so a failing statement rolls its
+    // siblings back rather than leaving half a write behind.
+    async batch(x: any[]) {
+      const list = x || [];
+      db.exec('SAVEPOINT support_batch');
+      try {
+        const out = list.map((s) => s.runSync());
+        db.exec('RELEASE support_batch');
+        return out;
+      } catch (e) {
+        db.exec('ROLLBACK TO support_batch');
+        db.exec('RELEASE support_batch');
+        throw e;
+      }
+    },
   };
 }
 
@@ -109,7 +129,18 @@ function freshDb() {
       hours REAL, promised_at TEXT, delivered_at TEXT, withdrawn_at TEXT,
       summary TEXT NOT NULL, outcome TEXT, recorded_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      -- Migration 202611092215 (D4642), verbatim in shape.
+      revision INTEGER NOT NULL DEFAULT 1, updated_by INTEGER
+    );
+    CREATE TABLE portfolio_support_entry_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+      entry_id INTEGER NOT NULL, revision INTEGER NOT NULL,
+      action TEXT NOT NULL CHECK (action IN ('amended','delivered','withdrawn')),
+      from_state TEXT, to_state TEXT,
+      changed_json TEXT NOT NULL DEFAULT '[]', actor_user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (entry_id, revision)
     );
     CREATE TABLE mi_pro_subscriptions (
       user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT,

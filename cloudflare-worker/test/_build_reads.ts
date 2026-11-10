@@ -25,7 +25,8 @@ import { loadSchema } from './_schema_once.mjs';
 const JWT_SECRET = 'synthetic-4603-only-not-a-real-credential'.repeat(2);
 export const PROJECT = 101;
 
-export type Statement = { sql: string; rows: number };
+/** `rowsRead` is D1's `meta.rows_read`, set only when the harness runs on a local D1 (`useD1`, `_build_rows_read.ts`). */
+export type Statement = { sql: string; rows: number; rowsRead?: number };
 
 /** A D1 binding that records each statement executed and how many rows it returned. */
 function countingD1(db: DatabaseSync, log: () => Statement[]) {
@@ -174,11 +175,14 @@ export async function buildReads(n: number) {
       const body = await res.json() as any;
       const ms = performance.now() - t0;
       const statements = [...log];
-      return { status: res.status, body, ms, statements: statements.length, rows: statements.reduce((t, s) => t + s.rows, 0), log: statements };
+      const rowsRead = statements.every((s) => s.rowsRead != null) ? statements.reduce((t, s) => t + s.rowsRead!, 0) : null;
+      return { status: res.status, body, ms, statements: statements.length, rows: statements.reduce((t, s) => t + s.rows, 0), rowsRead, log: statements };
     } finally { [console.log, console.warn, console.error] = quiet; }
   }
   const close = () => { globalThis.fetch = real; db.close(); rmSync(scratch, { recursive: true, force: true }); };
-  return { get, close, db };
+  /** #4603 part 3: answer from another D1 binding (a local D1 that reports rows read), logging into the same statement log. */
+  const useD1 = (make: (log: () => Statement[]) => unknown) => { env.DB = make(() => log); };
+  return { get, close, db, useD1 };
 }
 
 export const MODULE_SLUGS = ['solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems'] as const;

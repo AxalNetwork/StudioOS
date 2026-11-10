@@ -175,7 +175,8 @@ export function buildOverview({ overview, feed }) {
       couldNot('dsr-unreadable', 'Deletion requests could not be checked', ov.dsr?.reason || 'The deletion-request store could not be read. This is not a claim that none are open.', 'overview', 'privacy');
     }
     const dsr = dsrReadable ? ov.dsr?.rows || [] : [];
-    const clock = isNum(ov.dsr?.clock_days) ? `${ov.dsr.clock_days}-day clock` : 'statutory clock';
+    // D4675 part 2: a calendar month has no fixed day count, so the clock is named, not counted.
+    const clock = ov.dsr?.clock?.rule === 'calendar_month' ? 'one-month clock' : 'statutory clock';
     const overdue = dsr.filter((d) => isNum(d.days_left) && d.days_left < 0).length;
     const near = dsr.filter((d) => isNum(d.days_left) && d.days_left >= 0 && d.days_left <= 14).length;
     if (overdue > 0) {

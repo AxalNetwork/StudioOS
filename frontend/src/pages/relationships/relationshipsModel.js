@@ -180,6 +180,40 @@ export function introSubject(r, askerCompany = null) {
 export const teamLabelOf = (r, teams = []) => (teams.find((t) => t.key === r?.team_key)?.label) || 'Your team';
 
 /**
+ * #4611 finding 11 — THE NOTE THE DECLINE FORM PROMISES, AND WHO MAY READ IT.
+ *
+ * The decline form's own label is "A note they will read (optional)". The note
+ * is stored on `relationship_interactions.decision_note`, and
+ * `interactionView` has always returned it to BOTH people on the request — and
+ * nothing in `frontend/src/` referenced the field. `grep decision_note` over
+ * the whole frontend returned nothing. So the teammate typed an explanation,
+ * the product told them the asker would read it, the Worker served it, and the
+ * asker's log had no column and no cell for it. The notification only said
+ * "There is a note for you", pointing at a page that would not show it.
+ *
+ * WHAT THE DECISION CONTEXT IS. A bare note is not an explanation; it is a
+ * sentence with no subject. The line pairs the note with the verdict and its
+ * date — "Declined on 2026-11-04" — so the asker reads WHY beside WHAT, which
+ * is the finding's "with the relevant decision context".
+ *
+ * WHO. Only the two people on a request can read it, which is already true at
+ * the API: every read names the caller in its WHERE clause, so a third party's
+ * request is 404 and is in no response this function ever sees. Nothing is
+ * widened here; the field that was already being served is finally drawn.
+ *
+ * A NOTE ON AN ACCEPTANCE IS SHOWN TOO. The same column holds it, the same
+ * person wrote it for the same reader, and suppressing it would be a second
+ * version of this bug.
+ */
+export function decisionLine(r) {
+  const note = String(r?.decision_note || '').trim();
+  if (!note) return null;
+  const verdict = STATUS_LABEL[r?.status] || r?.status || 'Answered';
+  const on = String(r?.decided_at || '').slice(0, 10);
+  return { note, context: on ? `${verdict} on ${on}` : verdict };
+}
+
+/**
  * The log's rows, newest first: sent and received together, each with who for,
  * the team, the status, the outcome and the caller's own follow-up.
  */
@@ -189,7 +223,7 @@ export function logRows(read, teams = []) {
     uid: r.uid, side: r.side, when: String(r.created_at || '').slice(0, 10) || NOT_RECORDED,
     who: whoLine(r), person: personOf(r), team: teamLabelOf(r, teams),
     status: STATUS_LABEL[r.status] || r.status, statusKey: r.status, outcome: outcomeOf(r),
-    followUp: followUpLine(r.follow_up), row: r,
+    followUp: followUpLine(r.follow_up), decision: decisionLine(r), row: r,
   }));
 }
 

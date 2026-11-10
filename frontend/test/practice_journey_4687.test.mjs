@@ -54,7 +54,7 @@ test('Delivery: the empty-state button reveals the form and the review loop is r
   api.createMyAdvisorDeliverable = async (b) => { calls.push(b); return {}; };
   const m = await mountContracts(React.createElement(DeliveryZone), '/practice/delivery');
   await m.flush();
-  assert.ok(m.text().includes('Sessions you have held'), 'review loop present');
+  assert.ok(m.text().includes('Post-session reviews'), 'review loop present');
   assert.ok(m.text().includes('Held call'));
   assert.ok(m.text().includes('No review'));
   assert.ok(!m.text().includes('Add as v1'));

@@ -244,7 +244,7 @@ export default function PrivacyWorkspace({ dsr, unreadable, onReread, send, chil
                   </p>
                 )}
                 <p className="text-[11.5px] text-axal-faint dark:text-gray-400">
-                  Due date = received + {dsr.clock_days || 30} days, as the product counts it. Shown as a date so no one has to do the arithmetic.
+                  Due date: {dsr.clock?.label ? dsr.clock.label.charAt(0).toLowerCase() + dsr.clock.label.slice(1) : 'the statutory clock from receipt'}, as the product counts it. A request is overdue from the moment that day ends. Shown as a date so no one has to do the arithmetic.
                 </p>
               </section>
               {row ? (

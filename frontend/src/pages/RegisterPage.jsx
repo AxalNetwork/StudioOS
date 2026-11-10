@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
-import { clearPendingPricingNext, storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
+import { clearPendingPricingNext, destinationArea, storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
 import { Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
@@ -132,6 +132,8 @@ export default function RegisterPage() {
   };
 
   const heading = registerHeading(lane, planIntent ? selection : null);
+  // #4579 (D4579): a kept destination in a named area (Grow) is said out loud, with the account it needs.
+  const destination = destinationArea(nextPath);
 
   // Task #1 — lane → account role. The marketing site's audience lanes map
   // onto the worker's CHECK-constrained roles (`lp` folds into investor, so
@@ -340,6 +342,11 @@ export default function RegisterPage() {
               <p className="text-sm text-gray-600 mb-2">{heading.desc}</p>
               {/* #4578: the steps after this page, so "create an account" is not read as membership. */}
               <p className="text-xs text-gray-500 mb-4" data-testid="register-membership-steps">{MEMBERSHIP_STEPS}</p>
+              {destination && (
+                <p className="text-sm text-gray-700 mb-4" data-testid="register-destination">
+                  {`Create an account to continue to ${destination.name}. ${destination.what} ${destination.who} Once your account is set up, you return there.`}
+                </p>
+              )}
 
               <RegistrationPlanBlock intent={planIntent} lane={lane} onSelection={setSelection} />
 
@@ -435,7 +442,7 @@ export default function RegisterPage() {
               </form>
 
               <p className="text-xs text-gray-600 text-center mt-4">
-                Already have an account? <Link to="/login" className="text-violet-600 hover:underline font-medium">Sign in</Link>
+                Already have an account? <Link to={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : '/login'} className="text-violet-600 hover:underline font-medium">Sign in</Link>
               </p>
             </>
           )}

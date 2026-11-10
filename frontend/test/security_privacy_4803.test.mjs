@@ -6,7 +6,7 @@
  *   - a mounted journey: choose a request, read its detail, open Record
  *     outcome (the dialog's own rules are in `admin_ops_d4675.test.mjs`).
  *
- * The rules under test: the due date is a date (received + 30 days, from the
+ * The rules under test: the due date is a date (one calendar month from receipt, D4675, from the
  * server), an unknown clock is Unknown and never "0 days"; a figure whose read
  * did not answer is Unavailable, not 0; Withdrawn is the requester's act;
  * closing records a decision and erases nothing.
@@ -41,7 +41,7 @@ const CLOSED = (over = {}) => ({
   closed_at: '2026-09-20 12:00:00', closed_by: 'ops@axal.vc', close_reason: 'records purged, ticket DSR-14', ...over,
 });
 const DSR = (over = {}) => ({
-  available: true, clock_days: 30, kinds: [], by_branch: [], ledger_available: true,
+  available: true, clock: { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' }, kinds: [], by_branch: [], ledger_available: true,
   rows: [OPEN()],
   recent: RECENT([CLOSED(), CLOSED({ id: 29, outcome: 'withdrawn', closed_by: null, close_reason: null, closed_at: '2026-10-01 09:00:00' })]),
   ...over,
@@ -133,7 +133,9 @@ test('the workspace: four figures, the table with dates, the rule, and phone car
   assert.match(t, /next due Thu 19 Nov 2026/);
   assert.match(t, /1 closed by HQ · 1 withdrawn/);
   assert.match(t, /DSR-0031/);
-  assert.match(t, /Due date = received \+ 30 days/);
+  // D4675 part 2: the rule is named from the payload, and says when overdue starts.
+  assert.match(t, /Due date: one calendar month from receipt, to the end of that UTC day/);
+  assert.match(t, /A request is overdue from the moment that day ends\./);
   assert.equal((out.match(/data-state="measured_zero"/g) || []).length >= 2, true, 'a real zero (due soon, overdue) is not drawn as one');
 });
 

@@ -20,9 +20,11 @@ import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
 import { ensureCohortGuidanceSchema } from '../services/cohortGuidanceSchema';
 import { founderAdvisorAccess, optedOutFounderIds, setFounderVisibility, syncCohortAdvisorNotices } from '../services/cohortAdvisorAccess';
 import {
-  guidanceCounts, oldestOpenHours, collisions, withinDays, guidanceStatus, parseGuidanceWeek,
-  GUIDANCE_WEEK_FALLBACK_MAX, type GuidanceRow, type CalendarItem,
+  guidanceCounts, oldestOpenHours, activeOrUpcoming, collapseSessions, collisionDetails,
+  guidanceStatus, parseGuidanceWeek, GUIDANCE_WEEK_FALLBACK_MAX,
+  type BookingRow, type GuidanceRow, type CalendarItem,
 } from './_advisor_cohort_helpers';
+import { COHORT_TZ } from '../services/cohortTiming';
 import { pageFacts, pageWindow } from '../services/listPage';
 import {
   THINKING_PAGE, myAdvisor,
@@ -829,31 +831,50 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     }>();
     if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
 
-    const items: CalendarItem[] = [];
+    // D4813 package 3: EACH HALF IS READ ON ITS OWN, and a failure in one is a
+    // partial calendar, not a failed one. A Lab outage used to blank the
+    // advisor's own sessions too, and a bookings failure blanked the Lab's
+    // deadlines — the page had nothing to say but "could not be read". Now
+    // `sources` says which half answered and the page draws what it has.
+    const labItems: CalendarItem[] = [];
+    let labDates: 'ok' | 'not_recorded' | 'error';
+    let weekRows: Array<{ week_number: number; unlock_at: string; deadline_at: string }> = [];
 
     // The Lab's half. A cycle predating migration 156 has no windows at all,
     // and `windows_recorded: false` is the honest answer for it — the same rule
     // the weeks route states. Rendering an empty calendar would say the batch
     // has no obligations, which is the one thing this page must not claim.
-    const windows = await c.env.DB.prepare(
-      `SELECT week_number, unlock_at, deadline_at FROM week_windows
-        WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
-    ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
-    const weekRows = windows.results || [];
+    try {
+      const windows = await c.env.DB.prepare(
+        `SELECT week_number, unlock_at, deadline_at FROM week_windows
+          WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
+      ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
+      weekRows = windows.results || [];
+      labDates = weekRows.length ? 'ok' : 'not_recorded';
+    } catch (e) {
+      console.error('[advisors] cohort calendar windows read failed:', (e as Error).message);
+      labDates = 'error';
+    }
+    // The UID carries the cycle id (D4813 package 3): `week:2:unlock` is the
+    // same string in every cohort, so an export keyed on the ref made week 2
+    // of March and week 2 of April one calendar entry that each import
+    // overwrote. The ref stays as it was — the Overview keys on it.
     for (const w of weekRows) {
-      items.push({
-        kind: 'cohort', title: `Week ${w.week_number} opens`,
+      labItems.push({
+        kind: 'cohort', type: 'week_opens', title: `Week ${w.week_number} opens`,
         starts_at: w.unlock_at, ends_at: null, ref: `week:${w.week_number}:unlock`,
+        uid: `cohort-${cycleId}-week-${w.week_number}-opens`, week_number: w.week_number,
       });
-      items.push({
-        kind: 'cohort', title: `Week ${w.week_number} deliverables due`,
+      labItems.push({
+        kind: 'cohort', type: 'deadline', title: `Week ${w.week_number} deliverables due`,
         starts_at: w.deadline_at, ends_at: null, ref: `week:${w.week_number}:deadline`,
+        uid: `cohort-${cycleId}-week-${w.week_number}-due`, week_number: w.week_number,
       });
     }
     if (cycle.end_at) {
-      items.push({
-        kind: 'demo_day', title: 'Demo Day', starts_at: cycle.end_at, ends_at: null,
-        ref: `cycle:${cycleId}:end`,
+      labItems.push({
+        kind: 'demo_day', type: 'demo_day', title: 'Demo Day', starts_at: cycle.end_at, ends_at: null,
+        ref: `cycle:${cycleId}:end`, uid: `cohort-${cycleId}-demo-day`,
       });
     }
 
@@ -873,50 +894,70 @@ advisors.get('/me/cohort/:cycleId/calendar', async (c) => {
     //
     // D4813: FROM NOW ON, in SQL. The read used to take the advisor's first 200
     // bookings ever, oldest first, and only then keep the next 14 days — so an
-    // advisor with 200 past sessions saw no upcoming ones at all. The window
-    // filter below (`withinDays`) still decides what is shown; this only stops
-    // history from spending the cap. `sessions_truncated` says when the cap
-    // was still reached.
-    const me = await myAdvisor(c.env, user as User);
-    const booked = me ? await c.env.DB.prepare(
-      `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
-              b.topic AS topic, u.name AS founder_name
-         FROM advisor_bookings b
-         JOIN advisor_office_hour_slots s ON s.id = b.slot_id
-         LEFT JOIN users u ON u.id = b.founder_user_id
-        WHERE s.advisor_id = ? AND s.is_cancelled = 0
-          AND b.status IN ('pending', 'confirmed')
-          AND datetime(s.starts_at) >= datetime(?)
-        ORDER BY s.starts_at ASC
-        LIMIT 200`
-    ).bind(me.id, nowIso()).all<{
-      slot_id: number; starts_at: string; ends_at: string;
-      topic: string | null; founder_name: string | null;
-    }>() : { results: [] as Array<{
-      slot_id: number; starts_at: string; ends_at: string;
-      topic: string | null; founder_name: string | null;
-    }> };
-    for (const s of booked.results || []) {
-      items.push({
-        kind: 'client',
-        title: s.topic || (s.founder_name ? `Session with ${s.founder_name}` : 'Booked session'),
-        starts_at: s.starts_at, ends_at: s.ends_at, ref: `slot:${s.slot_id}`,
-      });
-    }
-
+    // advisor with 200 past sessions saw no upcoming ones at all. History does
+    // not spend the cap; `sessions_truncated` says when the cap was reached.
+    //
+    // D4813 package 3: "from now on" is by END, not start. A session that began
+    // before now and has not ended is still on — dropping it at its start
+    // minute also dropped every clash it was part of. And the rows are one per
+    // BOOKING, so a group session comes back once per founder;
+    // `collapseSessions` makes each slot one event with its participants.
     const now = nowIso();
-    const upcoming = withinDays(items, now, 14);
-    const clashes = collisions(upcoming);
+    let sessionsSource: 'ok' | 'no_profile' | 'error' = 'ok';
+    let bookingRows: BookingRow[] = [];
+    try {
+      const me = await myAdvisor(c.env, user as User);
+      if (!me) {
+        sessionsSource = 'no_profile';
+      } else {
+        const booked = await c.env.DB.prepare(
+          `SELECT s.id AS slot_id, s.starts_at AS starts_at, s.ends_at AS ends_at,
+                  s.capacity AS capacity, b.topic AS topic, b.status AS status,
+                  u.name AS founder_name
+             FROM advisor_bookings b
+             JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+             LEFT JOIN users u ON u.id = b.founder_user_id
+            WHERE s.advisor_id = ? AND s.is_cancelled = 0
+              AND b.status IN ('pending', 'confirmed')
+              AND datetime(s.ends_at) > datetime(?)
+            ORDER BY s.starts_at ASC, s.id ASC, b.id ASC
+            LIMIT 200`
+        ).bind(me.id, now).all<BookingRow>();
+        bookingRows = booked.results || [];
+      }
+    } catch (e) {
+      console.error('[advisors] cohort calendar sessions read failed:', (e as Error).message);
+      sessionsSource = 'error';
+    }
+    const sessions = activeOrUpcoming(collapseSessions(bookingRows), now, 3660);
+
+    // `items` is the next fourteen days (the Overview and the agenda);
+    // `events` is every Lab date of the cycle plus every session read, so the
+    // month and week views can page through the cohort. Conflicts are checked
+    // over `events`: a clash three weeks out is still one.
+    const upcoming = activeOrUpcoming([...labItems, ...sessions], now, 14);
+    const events = [...labItems, ...sessions]
+      .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.ref.localeCompare(b.ref));
+    const clashes = collisionDetails(events, now);
+    const readFailed = labDates === 'error' || sessionsSource === 'error';
     return c.json({
       cohort_cycle_id: cycleId,
-      windows_recorded: weekRows.length > 0,
-      sessions_truncated: (booked.results || []).length >= 200,
+      // Dates are the Lab's and are shown in its zone, by name.
+      timezone: COHORT_TZ,
+      windows_recorded: labDates === 'ok',
+      sources: { lab_dates: labDates, sessions: sessionsSource },
+      partial: labDates !== 'ok' || sessionsSource === 'error',
+      sessions_truncated: bookingRows.length >= 200,
       items: upcoming,
-      collisions: clashes.map(([a, b]) => ({ a: upcoming[a].ref, b: upcoming[b].ref })),
+      events,
+      collisions: clashes,
+      // #3871: a half that FAILED to read leaves its counts unknown — `null`,
+      // never a number that undercounts. (Windows that were read and are
+      // simply not recorded are a real zero for the Lab's half.)
       counts: {
-        next_14_days: upcoming.length,
-        cohort_obligations: upcoming.filter((i) => i.kind !== 'client').length,
-        collisions: clashes.length,
+        next_14_days: readFailed ? null : upcoming.length,
+        cohort_obligations: labDates === 'error' ? null : upcoming.filter((i) => i.kind !== 'client').length,
+        collisions: readFailed ? null : clashes.length,
         // Nothing stores a session brief, so this is not a zero.
         missing_prep: null,
       },
@@ -1345,6 +1386,355 @@ advisors.delete('/admin/cohort-assignments/:id', async (c) => {
       console.error('[advisors] cohort end notices failed:', (e as Error).message);
     }
     return c.json({ ok: true, id: row.id, is_active: false, unassigned_at: now, founders_notified: notified });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D4813 (#4813, package 4) — one founder's detail, and the cohort's outcomes.
+//
+// Both sit behind the same gate as every cohort read (`requireOwnCohort`:
+// the Advisor licence now, and an active assignment), and both drop a founder
+// who opted out of this advisor (`noticeThenOptOuts`). The pure rules live in
+// `services/cohortFounderView.ts`; it is imported where it is used so this
+// block stays one additive hunk.
+// ---------------------------------------------------------------------------
+
+/**
+ * Cohorts › Founders › one founder (board C4): their four weeks, the
+ * deliverable counts, this advisor's guidance and the founder's questions to
+ * them, this advisor's sessions with them, and what the founder did that
+ * something recorded.
+ *
+ * A FOUNDER HIDDEN FROM THIS ADVISOR DOES NOT EXIST HERE. Not in the cohort,
+ * and opted out of this advisor, answer the same 404 with the same words, so
+ * the answer never tells an advisor that a hidden founder is enrolled.
+ *
+ * ONLY WHAT FOUNDERS ALREADY SHOWS about the person: id, name and email. No
+ * venture, phone, address or account field is read. The Lab stores a
+ * done/required COUNT per week, not the submitted items, so `evidence` says
+ * `items_recorded: false` and carries no item. Drafts are not returned (a
+ * draft never reached the founder), nor another advisor's guidance or
+ * sessions, nor who at the Lab decided a week (`decided_by`).
+ */
+advisors.get('/me/cohort/:cycleId/founders/:userId', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    await ensureCohortGuidanceSchema(c.env);
+    const cycleId = Number(c.req.param('cycleId'));
+    const refused = await requireOwnCohort(c, user as User, cycleId);
+    if (refused) return refused;
+    const founderId = Number(c.req.param('userId'));
+    if (!Number.isInteger(founderId) || founderId <= 0) {
+      return c.json({ detail: 'userId must be a user id' }, 400);
+    }
+    const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
+    const person = await c.env.DB.prepare(
+      `SELECT w.user_id AS user_id, u.name AS name, u.email AS email
+         FROM company_week_status w
+         LEFT JOIN users u ON u.id = w.user_id
+        WHERE w.cohort_cycle_id = ? AND w.user_id = ?
+        LIMIT 1`
+    ).bind(cycleId, founderId).first<{ user_id: number; name: string | null; email: string | null }>();
+    if (!person || hidden.has(founderId)) {
+      return refuse(c, 404, {
+        code: 'cohort_founder_not_visible',
+        message: 'No founder with that id in this cohort is visible to you.',
+      });
+    }
+    const V = await import('../services/cohortFounderView');
+    const cycle = await c.env.DB.prepare(
+      'SELECT year, month, start_at, end_at, status FROM cohort_cycles WHERE id = ?'
+    ).bind(cycleId).first<{ year: number; month: number; start_at: string; end_at: string; status: string }>();
+
+    // The Lab's half: windows and this founder's week rows.
+    let milestones: Record<string, unknown>;
+    try {
+      const windows = await c.env.DB.prepare(
+        `SELECT week_number, unlock_at, deadline_at FROM week_windows
+          WHERE cohort_cycle_id = ? ORDER BY week_number ASC`
+      ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
+      const rows = await c.env.DB.prepare(
+        `SELECT week_number, status, deliverables_done, deliverables_required,
+                grace_until, grace_reason, decided_at, decision_reason
+           FROM company_week_status
+          WHERE cohort_cycle_id = ? AND user_id = ?
+          ORDER BY week_number ASC`
+      ).bind(cycleId, founderId).all<any>();
+      const weeks = V.milestoneTimeline(windows.results || [], rows.results || []);
+      const now = Date.now();
+      let current: number | null = null;
+      for (const w of windows.results || []) if (new Date(w.unlock_at).getTime() <= now) current = w.week_number;
+      milestones = {
+        available: true,
+        windows_recorded: (windows.results || []).length > 0,
+        current_week: current,
+        snapshots_recorded: false,
+        weeks,
+      };
+    } catch (e) {
+      console.error('[advisors] founder milestones read failed:', (e as Error).message);
+      milestones = { available: false, detail: 'The Lab’s week record could not be read.' };
+    }
+
+    // This advisor's guidance the founder could read (published, any week,
+    // retired marked), and the founder's own questions to this advisor.
+    let guidance: Record<string, unknown>;
+    let questions: Array<{ uid: string; posted_at: string | null; answered_at: string | null }> = [];
+    let actions: Array<{ guidance_uid: string; acted_at: string | null }> = [];
+    try {
+      const g = await c.env.DB.prepare(
+        `SELECT uid, asked_by_user_id, title, body, answer, answered_at, week_number,
+                posted_at, retired_at
+           FROM cohort_guidance
+          WHERE cohort_cycle_id = ? AND advisor_user_id = ? AND COALESCE(is_draft, 0) = 0
+            AND (asked_by_user_id IS NULL OR asked_by_user_id = ?)
+          ORDER BY posted_at DESC, id DESC
+          LIMIT ?`
+      ).bind(cycleId, user.id, founderId, V.DETAIL_ROW_CAP + 1).all<{
+        uid: string; asked_by_user_id: number | null; title: string | null; body: string;
+        answer: string | null; answered_at: string | null; week_number: number | null;
+        posted_at: string; retired_at: string | null;
+      }>();
+      const acks = await c.env.DB.prepare(
+        `SELECT g.uid AS guidance_uid, k.acted_at AS acted_at
+           FROM cohort_guidance_acks k
+           JOIN cohort_guidance g ON g.id = k.guidance_id
+          WHERE g.cohort_cycle_id = ? AND g.advisor_user_id = ? AND k.founder_user_id = ?`
+      ).bind(cycleId, user.id, founderId).all<{ guidance_uid: string; acted_at: string | null }>();
+      actions = acks.results || [];
+      const actedBy = new Map(actions.map((a) => [a.guidance_uid, a.acted_at]));
+      const all = g.results || [];
+      const items = all.slice(0, V.DETAIL_ROW_CAP).map((r) => ({
+        uid: r.uid,
+        kind: r.asked_by_user_id == null ? 'broadcast' : 'question',
+        title: r.title ?? null,
+        body: r.body,
+        answer: r.answer ?? null,
+        answered_at: r.answered_at ?? null,
+        week_number: r.week_number ?? null,
+        posted_at: r.posted_at,
+        retired_at: r.retired_at ?? null,
+        acted_at: actedBy.get(r.uid) ?? null,
+      }));
+      questions = all.filter((r) => Number(r.asked_by_user_id) === founderId)
+        .map((r) => ({ uid: r.uid, posted_at: r.posted_at, answered_at: r.answered_at }));
+      guidance = { available: true, truncated: all.length > V.DETAIL_ROW_CAP, acknowledgements_recorded: false, items };
+    } catch (e) {
+      console.error('[advisors] founder guidance read failed:', (e as Error).message);
+      guidance = { available: false, detail: 'Your guidance for this founder could not be read.' };
+    }
+
+    // This advisor's sessions with the founder (the advisor PROFILE id, as the
+    // calendar read explains). No notes, no price, no other advisor's.
+    let sessions: Record<string, unknown>;
+    let bookings: Array<{ uid: string; created_at: string | null; status: string | null }> = [];
+    try {
+      const me = await myAdvisor(c.env, user as User);
+      if (!me) {
+        sessions = { available: true, profile: false, truncated: false, items: [] };
+      } else {
+        const b = await c.env.DB.prepare(
+          `SELECT b.uid AS uid, b.status AS status, b.topic AS topic, b.created_at AS created_at,
+                  s.starts_at AS starts_at, s.ends_at AS ends_at
+             FROM advisor_bookings b
+             JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+            WHERE s.advisor_id = ? AND b.founder_user_id = ?
+            ORDER BY s.starts_at DESC
+            LIMIT ?`
+        ).bind(me.id, founderId, V.DETAIL_ROW_CAP + 1).all<{
+          uid: string; status: string | null; topic: string | null; created_at: string | null;
+          starts_at: string; ends_at: string;
+        }>();
+        const all = b.results || [];
+        bookings = all.map((r) => ({ uid: r.uid, created_at: r.created_at, status: r.status }));
+        sessions = {
+          available: true,
+          profile: true,
+          truncated: all.length > V.DETAIL_ROW_CAP,
+          items: all.slice(0, V.DETAIL_ROW_CAP).map((r) => ({
+            uid: r.uid, status: r.status, topic: r.topic ?? null, starts_at: r.starts_at, ends_at: r.ends_at,
+          })),
+        };
+      }
+    } catch (e) {
+      console.error('[advisors] founder sessions read failed:', (e as Error).message);
+      sessions = { available: false, detail: 'Your sessions with this founder could not be read.' };
+    }
+
+    const activity = V.founderActivity({ questions, actions, bookings });
+    return c.json({
+      cohort_cycle_id: cycleId,
+      source: 'spinout_lab',
+      reported_at: nowIso(),
+      founder: { user_id: person.user_id, name: person.name ?? null, email: person.email ?? null },
+      cycle: cycle || null,
+      milestones,
+      evidence: { items_recorded: false },
+      guidance,
+      sessions,
+      activity: {
+        // A failed guidance or sessions read leaves its kinds out; `complete` says so.
+        complete: guidance.available === true && sessions.available === true,
+        truncated: activity.truncated,
+        recorded_kinds: ['question_asked', 'guidance_acted_on', 'session_booked'],
+        items: activity.items,
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * Cohorts › Outcomes for the selected cohort (board C10), each figure
+ * computed here from the store that records it, with its definition, its
+ * source and when it was read.
+ *
+ * OVER THE FOUNDERS VISIBLE TO THIS ADVISOR, except the enrolled count. A
+ * per-week breakdown that included a founder who opted out would let an
+ * advisor recover that founder's status by subtracting the board, so week
+ * completion, graduates and sessions count only founders who share their
+ * progress with this advisor; `participants.value` (enrolled) is the one
+ * whole-cohort count, as C11's "6 are enrolled; none have shared" draws it.
+ *
+ * NOT THE PROGRAMME. The public company-level figures (`/spinout-lab/stats`,
+ * `/cohort`, `/graduates`) are a different scope, read by the page on their
+ * own, and nothing from them is mixed in here.
+ */
+advisors.get('/me/cohort/:cycleId/outcomes', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    await ensureAdvisorStoresSchema(c.env);
+    const cycleId = Number(c.req.param('cycleId'));
+    const refused = await requireOwnCohort(c, user as User, cycleId);
+    if (refused) return refused;
+    const cycle = await c.env.DB.prepare(
+      'SELECT year, month, start_at, end_at, status FROM cohort_cycles WHERE id = ?'
+    ).bind(cycleId).first<{ year: number; month: number; start_at: string; end_at: string; status: string }>();
+    if (!cycle) return c.json({ detail: 'No such cohort cycle' }, 404);
+    const hidden = await noticeThenOptOuts(c.env, user.id, cycleId);
+    const V = await import('../services/cohortFounderView');
+    const CAP = V.OUTCOME_ROW_CAP;
+    const reportedAt = nowIso();
+    const SOURCE_WEEKS = 'company_week_status (the Lab’s week record)';
+
+    let visible: number[] = [];
+    let participants: Record<string, unknown>;
+    const PART_DEF = 'Founders the Lab has a week record for in this cohort. Visible counts those who share their progress with you.';
+    try {
+      const r = await c.env.DB.prepare(
+        'SELECT DISTINCT user_id FROM company_week_status WHERE cohort_cycle_id = ? ORDER BY user_id ASC LIMIT ?'
+      ).bind(cycleId, CAP + 1).all<{ user_id: number }>();
+      const ids = (r.results || []).map((x) => Number(x.user_id));
+      const truncated = ids.length > CAP;
+      const kept = ids.slice(0, CAP);
+      visible = kept.filter((id) => !hidden.has(id));
+      participants = {
+        ...V.countMetric(kept.length, { truncated }),
+        visible: V.countMetric(visible.length, { truncated }),
+        definition: PART_DEF,
+        source: SOURCE_WEEKS,
+      };
+    } catch (e) {
+      console.error('[advisors] outcomes participants read failed:', (e as Error).message);
+      participants = { ...V.countMetric(null), visible: V.countMetric(null), definition: PART_DEF, source: SOURCE_WEEKS };
+    }
+    const known = participants.available === true;
+    const capped = participants.truncated === true;
+
+    let weekCompletion: Record<string, unknown>;
+    const WEEK_DEF = 'A week is complete for a founder when the Lab records it passed. Grace, failed and pending are the Lab’s own statuses; a visible founder with no row for the week is not assessed, never counted as not passed.';
+    try {
+      if (!known) throw new Error('participants unread');
+      const windows = await c.env.DB.prepare(
+        'SELECT week_number, unlock_at, deadline_at FROM week_windows WHERE cohort_cycle_id = ? ORDER BY week_number ASC'
+      ).bind(cycleId).all<{ week_number: number; unlock_at: string; deadline_at: string }>();
+      const ROWS = CAP * 4;
+      const rows = await c.env.DB.prepare(
+        `SELECT user_id, week_number, status FROM company_week_status
+          WHERE cohort_cycle_id = ? ORDER BY user_id ASC, week_number ASC LIMIT ?`
+      ).bind(cycleId, ROWS + 1).all<{ user_id: number; week_number: number; status: string | null }>();
+      const all = rows.results || [];
+      weekCompletion = {
+        available: true,
+        truncated: all.length > ROWS || capped,
+        windows_recorded: (windows.results || []).length > 0,
+        weeks: V.weekCompletion(windows.results || [], all.slice(0, ROWS), visible),
+        definition: WEEK_DEF,
+        source: SOURCE_WEEKS,
+      };
+    } catch (e) {
+      console.error('[advisors] outcomes weeks read failed:', (e as Error).message);
+      weekCompletion = { available: false, truncated: false, weeks: [], definition: WEEK_DEF, source: SOURCE_WEEKS };
+    }
+
+    // D4659's one graduation rule (the view `spinout_lab_graduates`), for
+    // founders of this cohort who graduated on or after it began.
+    let graduates: Record<string, unknown>;
+    const GRAD_DEF = 'Visible founders of this cohort the Lab records as graduates (every required week 1 to 4 deliverable, or an issued certificate), on or after the cohort began.';
+    const GRAD_SRC = 'spinout_lab_graduates (D4659)';
+    try {
+      if (!known) throw new Error('participants unread');
+      const r = await c.env.DB.prepare(
+        `SELECT DISTINCT w.user_id AS user_id
+           FROM company_week_status w
+           JOIN spinout_lab_graduates g ON g.user_id = w.user_id
+          WHERE w.cohort_cycle_id = ? AND datetime(g.graduated_at) >= datetime(?)
+          LIMIT ?`
+      ).bind(cycleId, cycle.start_at, CAP + 1).all<{ user_id: number }>();
+      const vis = new Set(visible);
+      const ids = (r.results || []).map((x) => Number(x.user_id));
+      graduates = {
+        ...V.countMetric(ids.filter((id) => vis.has(id)).length, { truncated: ids.length > CAP || capped }),
+        definition: GRAD_DEF,
+        source: GRAD_SRC,
+      };
+    } catch (e) {
+      console.error('[advisors] outcomes graduates read failed:', (e as Error).message);
+      graduates = { ...V.countMetric(null), definition: GRAD_DEF, source: GRAD_SRC };
+    }
+
+    // This advisor's sessions with visible founders of this cohort, between
+    // its start and Demo Day. "Held" is a booking marked completed.
+    let sessions: Record<string, unknown>;
+    const SESS_DEF = 'Your sessions with visible founders of this cohort that start between its first day and Demo Day. Held means the booking was marked completed; booked means pending or confirmed.';
+    const SESS_SRC = 'advisor_bookings (your sessions)';
+    try {
+      if (!known) throw new Error('participants unread');
+      const me = await myAdvisor(c.env, user as User);
+      const rows = me ? await c.env.DB.prepare(
+        `SELECT b.founder_user_id AS founder_user_id, b.status AS status
+           FROM advisor_bookings b
+           JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE s.advisor_id = ?
+            AND datetime(s.starts_at) >= datetime(?) AND datetime(s.starts_at) <= datetime(?)
+            AND b.founder_user_id IN (SELECT user_id FROM company_week_status WHERE cohort_cycle_id = ?)
+          LIMIT ?`
+      ).bind(me.id, cycle.start_at, cycle.end_at, cycleId, CAP + 1).all<{ founder_user_id: number; status: string | null }>()
+        : { results: [] as Array<{ founder_user_id: number; status: string | null }> };
+      const all = rows.results || [];
+      const truncated = all.length > CAP || capped;
+      const vis = new Set(visible);
+      const kept = all.slice(0, CAP).filter((r) => vis.has(Number(r.founder_user_id)));
+      sessions = {
+        ...V.countMetric(kept.filter((r) => r.status === 'completed').length, { truncated }),
+        booked: V.countMetric(kept.filter((r) => r.status === 'pending' || r.status === 'confirmed').length, { truncated }),
+        profile: Boolean(me),
+        definition: SESS_DEF,
+        source: SESS_SRC,
+      };
+    } catch (e) {
+      console.error('[advisors] outcomes sessions read failed:', (e as Error).message);
+      sessions = { ...V.countMetric(null), booked: V.countMetric(null), definition: SESS_DEF, source: SESS_SRC };
+    }
+
+    return c.json({
+      cohort_cycle_id: cycleId,
+      scope: 'cohort',
+      source: 'spinout_lab',
+      reported_at: reportedAt,
+      cycle,
+      metrics: { participants, week_completion: weekCompletion, graduates, sessions },
+    });
   } catch (e) { return mapError(c, e); }
 });
 

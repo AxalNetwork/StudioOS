@@ -20,6 +20,8 @@
  */
 
 export const NUM = 'font-mono tabular-nums';
+/** D4812 part 7 (FA-09): a text button or link that is still a 44px target on a phone. */
+export const TAP_LINK = 'text-[12.5px] font-semibold text-axal-violet-deep underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center';
 const SURFACE = 'rounded-axal-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const SUNKEN = 'border-b border-axal-hairline bg-[#faf9fc] dark:border-gray-800 dark:bg-gray-950/40';
 export const TH = 'text-[9.5px] font-extrabold uppercase tracking-[.09em] text-axal-muted dark:text-gray-400';

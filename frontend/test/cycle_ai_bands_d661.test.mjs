@@ -58,7 +58,8 @@ test('a founder\'s bare /build/team is the Team workspace, and the Grow landing 
   const team = app.match(/<Route path="\/build\/team"[^\n]*/)?.[0] || '';
   assert.match(team, /guard\(\['admin', 'founder'\], founderWorkspace\('grow', founderEditor\(<FounderTeamPage \/>\)\)\)/);
   assert.doesNotMatch(team, /founderGrowLanding/, 'the bare route branches on a landing it no longer has');
-  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/);
+  // #4579: signed out, /grow goes through the guard itself, so sign-in keeps next=/grow.
+  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding \|\| !user\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/);
 });
 
 /** Each band, on the module whose read it explains. */

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { capitalRelationshipsApi } from '../../../lib/api/capitalRelationships';
+import { raiseReadState, raiseToolRefusal } from '../../../lib/raiseErrors.js';
 import { Unreadable } from '../../../ui';
 import { useProspects } from './CapRelPipeline';
-import { HOME_PATH, MOVED, NOT_YET, TABS, centsText, needsYou, overviewFigures, tabSearch } from './capRelModel';
+import { HOME_PATH, MOVED, NOT_YET, REFUSED_LINE, ROUND_REFUSED_LINE, TABS, centsText, needsYou, overviewFigures, tabSearch } from './capRelModel';
 
 /**
  * D1192 (#3126) — Capital relationships' Overview blocks (CRL1, CRL19 in the
@@ -44,7 +45,7 @@ function RoundBlock({ projectId }) {
     setRead({ status: 'loading', data: null });
     Promise.resolve().then(() => capitalRelationshipsApi.commitments(projectId))
       .then((data) => { if (alive) setRead({ status: 'ready', data }); })
-      .catch(() => { if (alive) setRead({ status: 'unreadable', data: null }); });
+      .catch((error) => { if (alive) setRead({ status: raiseReadState(error), data: null }); });
     return () => { alive = false; };
   }, [projectId, n]);
   const d = read.data;
@@ -55,6 +56,7 @@ function RoundBlock({ projectId }) {
       <h3 className={H3}>The round at a glance</h3>
       {read.status === 'loading' ? <div className="h-16 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" data-testid="caprel-ov-round-loading" /> : null}
       {read.status === 'unreadable' ? <Unreadable what="Your commitments" claim="This is not a claim that nobody has committed." onRetry={() => setN((x) => x + 1)} /> : null}
+      {read.status === 'refused' ? <p className={`m-0 text-[12.5px] ${INK}`} data-testid="caprel-ov-round-refused">{ROUND_REFUSED_LINE}</p> : null}
       {d ? (
         <div className="flex flex-col gap-1.5">
           <p className={`m-0 text-[22px] font-extrabold ${INK} font-mono tabular-nums`} data-testid="caprel-ov-counted">
@@ -73,12 +75,29 @@ function RoundBlock({ projectId }) {
 }
 
 /** Overview's blocks, under its tab bar. */
-export function CapRelOverviewBlocks({ projectId, search = '', today }) {
+export function CapRelOverviewBlocks({ projectId, search = '', today, onRefused = null }) {
   const read = useProspects(projectId);
   const f = read.items ? overviewFigures(read.items, today) : null;
   const needs = f ? needsYou(f) : [];
   const max = f ? Math.max(1, ...f.byStage.map((s) => s.n)) : 1;
   const failed = read.status === 'unreadable';
+  /**
+   * D5079 (#5079): the prospects read is this tool's authoritative read. When
+   * it is refused, the page around these blocks must stop drawing the
+   * pipeline's own data — its card, its tables, Eadwyn's proposals and
+   * Evidence — rather than show them empty under a refusal.
+   */
+  const refused = read.status === 'refused';
+  useEffect(() => { onRefused?.(raiseToolRefusal(refused, 'this venture’s capital relationships')); }, [onRefused, refused]);
+  useEffect(() => () => onRefused?.(null), [onRefused]);
+  if (refused) {
+    return (
+      <div className="flex flex-col gap-3.5" data-testid="caprel-overview">
+        <p className={`m-0 rounded-xl border border-axal-hairline bg-axal-ground px-4 py-3 text-[13px] ${INK} dark:border-gray-800 dark:bg-gray-900`}
+          role="status" data-testid="caprel-overview-refused">{REFUSED_LINE}</p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3.5" data-testid="caprel-overview">
       <div className="grid gap-3.5 lg:grid-cols-3">

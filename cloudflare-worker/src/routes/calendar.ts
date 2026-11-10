@@ -54,6 +54,7 @@ import {
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, FEED_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
+  personalWindowRefusal, PERSONAL_WINDOW_MAX_DAYS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -219,6 +220,12 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
       scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
   }
+  // D5203 (#5203): the member's own read is bounded like the staff scope's.
+  // An empty or reversed window, or one wider than PERSONAL_WINDOW_MAX_DAYS, is
+  // refused rather than read from every source.
+  const windowRefusal = personalWindowRefusal(fromDt.toISOString(), toDt.toISOString());
+  if (windowRefusal === 'invalid_window') return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
+  if (windowRefusal) return refuse(c, 400, { code: 'window_too_wide', message: `A calendar window can span at most ${PERSONAL_WINDOW_MAX_DAYS} days. Narrow the dates.` });
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
   // nothing in the response could say which one. `sources` reports every kind
@@ -246,6 +253,34 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
+  /**
+   * D5204 (#5204) — COVERAGE IS THE SERVER'S. The page built "26 of 28 sources answered" from its own
+   * `KINDS.length`, a constant in the frontend. That denominator counted sources the member had hidden, sources
+   * their role never had, providers they have not connected, and anything a later registry adds that the page
+   * has not been rebuilt for — so the sentence could be wrong in four ways at once, and a new source changed it
+   * only after a frontend edit.
+   *
+   * It is derived here, from the set actually attempted:
+   *   attempted  the sources this read asked for (hidden ones are not asked, and are counted in `hidden`)
+   *   answered   of those, the ones that answered
+   *   failed     of those, the ones that did not
+   *   hidden     how many the member has hidden, so the page can say the read was deliberately narrower
+   *   complete   every attempted source answered and none stopped at its page cap
+   *   truncated_kinds  the sources that answered in part
+   * A provider with no connection is in none of them: it was never a source (`NoSource`), and it is not a
+   * failure. `attempted` is `answered + failed` by construction.
+   */
+  const truncatedKinds = sources.filter((s) => s.truncated).map((s) => s.kind);
+  const answeredCount = sources.filter((s) => s.ok).length;
+  const failedCount = sources.filter((s) => !s.ok).length;
+  const coverage = {
+    attempted: sources.length,
+    answered: answeredCount,
+    failed: failedCount,
+    hidden: hidden.length,
+    complete: failedCount === 0 && truncatedKinds.length === 0,
+    ...(truncatedKinds.length ? { truncated_kinds: truncatedKinds } : {}),
+  };
   return c.json({
     items,
     from: fromDt.toISOString(),
@@ -254,6 +289,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     // D1484: each source's family, module and label from the registry, so the legend names what it read.
     sources: sources.map((s) => { const src = SOURCES[s.kind]; return src ? { ...s, family: src.family, module: src.module, label: src.label } : s; }),
     hidden,
+    coverage,
   });
 }));
 
@@ -315,6 +351,8 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
   if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
+  // D5203 (#5203): an empty or reversed window is refused, never read as an empty file.
+  if (toDt.getTime() <= fromDt.getTime()) return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
   // D1033 — `kinds` narrows the file as it narrows `/events`, so
   // `?kinds=event_ticket,event_hosted` is "my events" alone. A kind the
   // aggregator does not know is refused rather than read as an empty file.

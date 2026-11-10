@@ -153,6 +153,8 @@ export default function PartnerPipelineAnalyticsZone() {
   const windowLabel = WINDOWS[windowOf(view)];
   const p = d?.pipeline || null;
   const f = d?.forecast || null;
+  // How many open quotes the forecast is over (D4838): none is "nothing open to forecast", never $0.
+  const forecastOpen = Array.isArray(f?.by_stage) ? f.by_stage.reduce((n, s) => n + (Number(s?.count) || 0), 0) : 0;
   const shapes = useMemo(() => (Array.isArray(d?.by_shape) ? d.by_shape : []), [d]);
   const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter : []), [d]);
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
@@ -246,11 +248,13 @@ export default function PartnerPipelineAnalyticsZone() {
             />
             {/* NOT NARROWED BY THE CHIP, and the note says so rather than
                 letting a reader assume the window applies to it. */}
+            {/* D4838: ZERO ONLY OVER A POPULATION. The Worker always sends a forecast object, so `!f` never fired and
+                a firm with nothing open read "$0" over "$0 open". The population is the open quotes it counted. */}
             <AnalyticsTile
               label="Weighted forecast"
-              value={f ? moneyDollars(f.weighted_value) : ''}
-              nr={!f}
-              note={f
+              value={forecastOpen ? moneyDollars(f.weighted_value) : ''}
+              nr={!forecastOpen}
+              note={forecastOpen
                 ? `${moneyDollars(f.unweighted_value)} open · every window`
                 : 'nothing open to forecast'}
             />

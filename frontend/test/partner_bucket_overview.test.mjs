@@ -90,7 +90,9 @@ test('PartnerBucketRoutes renders an overview grid at each bucket root', () => {
   // the title is now the bucket's tagline, because that is what every canvas
   // draws as the h1 (P3 "Win the work" over `/pipeline`). The label survives in
   // the crumb, so the root no longer says "Pipeline" twice.
-  assert.match(bucketRoutes, /title=\{isRoot \? bucketTitle\(bucket\) : undefined\}/,
+  // D4838 (#4838): the one exception is Pipeline's first run, which the v2 canvas (PP01) titles by what to do,
+  // "Set up your pipeline"; every other root, and a populated Pipeline, still titles itself from the bucket.
+  assert.match(bucketRoutes, /title=\{firstRun \? 'Set up your pipeline' : \(isRoot \? bucketTitle\(bucket\) : undefined\)\}/,
     'the root must title itself from the bucket, not the first zone');
   assert.doesNotMatch(bucketRoutes, /title=\{isRoot \? ['"`]/,
     'a root title must be derived from the bucket, never a hardcoded string');
