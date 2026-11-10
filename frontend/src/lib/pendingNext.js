@@ -137,7 +137,10 @@ export function pendingNextRedirected() {
  * else to a bare `/login`, as before; an area joins this list when its deep links (a course, a lesson, a webinar) are
  * shared and must survive sign-in.
  */
-export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning']);
+export const RETURN_AFTER_LOGIN_PREFIXES = Object.freeze(['/learning', '/grow']);
+
+const underPrefix = (pathname, prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+const pathOf = (p) => String(p || '').split(/[?#]/)[0];
 
 /**
  * Where the route guard sends a signed-out visitor: `/login?next=<the page they asked for>` for an area that keeps its
@@ -151,4 +154,84 @@ export function loginRedirectFor(location) {
   const kept = RETURN_AFTER_LOGIN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   const safe = kept ? sanitizeNextPath(here) : null;
   return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
+}
+
+// ---------------------------------------------------------------------------
+// #4579 (D4579) — Grow keeps its destination, and says where sign-in leads.
+// ---------------------------------------------------------------------------
+
+/**
+ * The areas a kept destination can name on the sign-in and sign-up pages. Each says what the area is and who it is
+ * for, so a visitor knows why they are asked to sign in and what account they will need. A destination outside these
+ * keeps the generic pages.
+ */
+const DESTINATION_AREAS = Object.freeze([
+  {
+    prefix: '/grow',
+    name: 'Grow',
+    what: 'Grow is the founder workspace for focus, hiring, customers, partnerships and investor updates.',
+    // The reporting desk is the one part of Grow an advisor or operating partner can read (App.jsx's routes).
+    who: (pathname) => (/^\/grow\/reporting(\/|$)/.test(pathname) && !/\/edit$/.test(pathname)
+      ? 'You need a founder, advisor or operating partner account.'
+      : 'You need a founder account.'),
+  },
+]);
+
+/**
+ * `{ name, what, who }` for a destination inside a named area, or null. `next` is checked like every kept path
+ * (`sanitizeNextPath`), so an unsafe value never names an area.
+ */
+export function destinationArea(next) {
+  const p = sanitizeNextPath(next);
+  if (!p) return null;
+  const pathname = pathOf(p);
+  const area = DESTINATION_AREAS.find((a) => underPrefix(pathname, a.prefix));
+  return area ? { name: area.name, what: area.what, who: area.who(pathname) } : null;
+}
+
+/**
+ * What the sign-in page shows for a kept destination (#4579): its area, and a sign-up link that keeps the same
+ * destination. Null for a direct visit or an unsafe `next`, which keep the generic page.
+ */
+export function signInContextFor(next) {
+  const area = destinationArea(next);
+  return area ? { area, registerHref: `/register?next=${encodeURIComponent(sanitizeNextPath(next))}` } : null;
+}
+
+/**
+ * Destinations that need a finished account. An invitation link stays reachable while the account is still being set
+ * up (RequireAuth exempts the pending target from its setup gates); a Grow page does not, because it needs the
+ * founder account setup creates. So setup runs first, and the destination is kept until it finishes.
+ */
+export const SETUP_BEFORE_DESTINATION_PREFIXES = Object.freeze(['/grow']);
+
+export function destinationNeedsSetup(path) {
+  const p = sanitizeNextPath(path);
+  return !!p && SETUP_BEFORE_DESTINATION_PREFIXES.some((prefix) => underPrefix(pathOf(p), prefix));
+}
+
+const AFTER_SETUP_KEY = 'gvpn:after-setup';
+
+/** Keep `path` until account setup finishes. Only a destination that needs setup, and only a safe one. */
+export function keepThroughSetup(path) {
+  if (!destinationNeedsSetup(path)) return;
+  safeWriteJSON(AFTER_SETUP_KEY, { path: sanitizeNextPath(path), ts: Date.now() });
+}
+
+/** The kept destination, or null (unsafe, outside a setup area, or older than the verification email's 24h). */
+export function destinationAfterSetup() {
+  const v = safeReadJSON(AFTER_SETUP_KEY, null);
+  if (!v || typeof v !== 'object') return null;
+  const p = destinationNeedsSetup(v.path) ? sanitizeNextPath(v.path) : null;
+  const fresh = Number.isFinite(v.ts) && Date.now() - v.ts <= TTL_MS;
+  if (!p || !fresh) {
+    safeRemove(AFTER_SETUP_KEY);
+    return null;
+  }
+  return p;
+}
+
+/** Used once: cleared as the visitor is sent there (or arrives some other way). */
+export function clearDestinationAfterSetup() {
+  safeRemove(AFTER_SETUP_KEY);
 }

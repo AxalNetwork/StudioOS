@@ -73,6 +73,26 @@ async function call(f: F, who: number, method: string, path: string, json?: unkn
   let body: any; try { body = JSON.parse(text); } catch { body = text; }
   return { status: res.status, body, text };
 }
+/**
+ * #4611 — AN EMPTY LOG, IN FULL, IN ONE PLACE.
+ *
+ * The log carries its page and its whole-scope figures now, so a `deepEqual`
+ * against it names ten fields rather than three. Three assertions here and one
+ * in `relationships_d1356.test.ts` spelled the old three out by hand, and
+ * `deepEqual` is the right operator for every one of them: the claim is that a
+ * member on neither side reads NOTHING — not "nothing among these three keys"
+ * — so a looser compare would pass while a new field leaked a count.
+ *
+ * Every number is zero because the SCOPE is empty for that caller, not because
+ * the page is. `totals` comes from its own aggregate over the whole filtered
+ * log, which is the distinction #4611 exists to draw.
+ */
+const EMPTY_LOG = {
+  sent: [], received: [], follow_ups_due: 0,
+  totals: { sent: 0, received: 0, sent_pending: 0, received_pending: 0 },
+  page_size: 0, has_more: false, next_cursor: null, limit: 200,
+};
+
 const R = '/api/relationships';
 const shareAll = (f: F, who: number) => call(f, who, 'PUT', `${R}/sharing`, { share: true });
 async function ask(f: F, extra: Record<string, unknown> = {}) {
@@ -104,7 +124,7 @@ test('the context note is the asker\'s, read by the two people on the request on
     assert.equal((await call(f, 4, 'GET', `${R}/intro-requests`)).body.sent[0].context_note, 'Ada is raising a seed fund; Acme is a fit.');
     for (const who of [3, 5, 6]) {
       const r = await call(f, who, 'GET', `${R}/intro-requests`);
-      assert.deepEqual(r.body, { sent: [], received: [], follow_ups_due: 0 }, `${who} reads nothing of it`);
+      assert.deepEqual(r.body, EMPTY_LOG, `${who} reads nothing of it`);
       assert.ok(!r.text.includes('seed fund'));
     }
     assert.equal(received.uid, uid);
@@ -261,7 +281,7 @@ test('the log filters by the caller\'s own teams and by status; another team or 
       const r = await call(f, 4, 'GET', `${R}/intro-requests?team=${encodeURIComponent(team)}`);
       assert.deepEqual([r.status, r.body.detail], [404, 'Not found.'], `${team}: not one of mine, in the words of nothing`);
     }
-    assert.deepEqual((await call(f, 3, 'GET', `${R}/intro-requests?team=project:3`)).body, { sent: [], received: [], follow_ups_due: 0 });
+    assert.deepEqual((await call(f, 3, 'GET', `${R}/intro-requests?team=project:3`)).body, EMPTY_LOG);
   } finally { f.close(); }
 });
 
@@ -270,7 +290,7 @@ test('KEY: a member who never shared is in no request, no log row and no count; 
   try {
     // Nobody shared: no request can exist, so every read is empty and every step is not found.
     for (const who of [2, 3, 4, 5, 6]) {
-      assert.deepEqual((await call(f, who, 'GET', `${R}/intro-requests`)).body, { sent: [], received: [], follow_ups_due: 0 });
+      assert.deepEqual((await call(f, who, 'GET', `${R}/intro-requests`)).body, EMPTY_LOG);
       assert.equal((await call(f, who, 'POST', `${R}/intro-request`, { teammate: 2, ref: 21 })).status, 404);
     }
     await shareAll(f, 2);

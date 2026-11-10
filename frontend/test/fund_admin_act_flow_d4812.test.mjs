@@ -149,7 +149,7 @@ test('an Admin act (a bank match) asks no code; a Worker refusal stays at Confir
     assert.match(m.text('match-flow-m-1-steps'), /Authenticate · not required/);
     await m.click('match-flow-m-1-continue');
     assert.ok(!m.by('match-flow-m-1-confirm-code'));
-    assert.equal(m.text('match-flow-m-1-confirm-submit'), 'Confirm $50,000.00 match');
+    assert.equal(m.text('match-flow-m-1-confirm-submit'), 'Confirm match and record $50,000.00 receipt');
     await m.submit('match-flow-m-1-confirm');
     assert.equal(m.text('match-flow-m-1-confirm-error'), 'This line was paid by another transaction.');
     assert.ok(!m.by('match-flow-m-1-done'), 'no receipt for a refused act');

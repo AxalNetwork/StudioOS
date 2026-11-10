@@ -755,7 +755,7 @@ test('mounted: keyboard — Tab and Shift+Tab wrap inside the dialog, Esc closes
 const OVERVIEW = () => ({
   audit: { total: 1 }, impersonations: { available: true, active: 1, recent: [] },
   sessions: { available: true, active: 4, token_hours: 24 }, mfa: { admins_total: 2, admins_with_mfa: 0 },
-  kyc: {}, kyc_not_recorded: [], dsr: { clock_days: 30, kinds: [], rows: [], by_branch: [], branches: { bound: 0, reason: 'r' } },
+  kyc: {}, kyc_not_recorded: [], dsr: { clock: { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' }, kinds: [], rows: [], by_branch: [], branches: { bound: 0, reason: 'r' } },
   security_events: { available: true, today: 0, failed_signins_24h: 0, retention_days: 400, not_counted: [] },
   ai_safety: { window_days: 7, verdicts: { available: false, reason: 'r' }, enforcement: { available: false, reason: 'r' }, guard: { available: false, reason: 'r' }, token_anomalies: { available: false, reason: 'r' }, not_counted: [] },
   sanctions: { available: false, reason: 'r' }, backup_dr: { backup: { available: false, reason: 'r' }, drill: { available: false, reason: 'r' }, not_recorded: [] },

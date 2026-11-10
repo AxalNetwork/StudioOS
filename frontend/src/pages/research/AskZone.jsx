@@ -15,7 +15,7 @@ import { railPressHeaders } from '../../lib/railPage.js';
 import { RETRIEVAL_UNAVAILABLE } from './askOutcome.js';
 import {
   ASK_STATES, CITATION_AVAILABILITY, HISTORY_TABS, answerWithCitations, answerabilityOf, askStateOf,
-  citationAvailability, indexStateOf, tokensRefusal,
+  citationAvailability, indexStateOf, tokensRefusal, splitCitations, referenceNote, REFERENCE_LIMIT,
 } from './researchStates.js';
 import { openAddTokens } from '../../lib/aiTokens.js';
 import Sheet from '../../ui/Sheet.jsx';
@@ -57,7 +57,9 @@ const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
  * knows the role — decides what the row says, and this page renders whatever it
  * is handed. See `workspaces/zoneActionsByRole.js`.
  */
-const SCOPES = new Set(['session', 'all', 'saved']);
+// #4610: four scopes, four server reads. `discarded` joined them — it was a
+// client-side filter over `all`'s window and so could not see past it.
+const SCOPES = new Set(['session', 'all', 'saved', 'discarded']);
 
 /**
  * The stat strip, per licence, because the four artboards ask for DIFFERENT
@@ -90,25 +92,43 @@ const SCOPES = new Set(['session', 'all', 'saved']);
 const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const answeredOf = (rows) => rows.filter((t) => t.reason === 'answered');
 
+/**
+ * #4610 — EVERY TILE THAT READS `totals` GOES THROUGH `UNREADABLE` FIRST.
+ *
+ * `totals` is null when the history read failed, and these tiles used to run
+ * against a zero-filled fallback instead — so a failed read printed "0
+ * questions asked" and a spend of nothing. `t()` is the one place that decides
+ * what an unread figure looks like, so a tile cannot be added that forgets.
+ *
+ * The figures themselves now cover the WHOLE selected scope rather than the
+ * page, so "Questions asked" is the reader's history and not the first two
+ * hundred rows of it.
+ */
+const UNREADABLE = 'Unreadable';
+/** What every `totals` note says when the history could not be read. */
+const NOT_READ = 'the history could not be read; that is not a count of zero';
+
 const ASK_STRIP = {
   advisor: [
-    { label: 'Indexed documents', value: (x) => x.indexed, note: (x) => `of ${x.docs} in your library` },
-    { label: 'Answered', value: (x) => `${x.totals.answered} of ${x.totals.asked}`, note: () => 'each with its citations' },
-    { label: 'No source', value: (x) => x.totals.no_source, note: (x) => (x.totals.retrieval_unavailable ? `returned empty, charged nothing · ${x.totals.retrieval_unavailable} could not search` : 'returned empty, charged nothing') },
-    { label: 'Session spend', value: (x) => formatCost(x.totals.cost_usd), note: () => 'shown before each question, not only after' },
+    { label: 'Indexed documents', value: (x) => (x.indexed == null ? UNREADABLE : x.indexed), note: (x) => (x.indexed == null ? 'your library could not be read' : `of ${x.docs} in your library`) },
+    { label: 'Answered', value: (x) => (x.totals ? `${x.totals.answered} of ${x.totals.asked}` : UNREADABLE), note: (x) => (x.totals ? 'each with its citations' : NOT_READ) },
+    { label: 'No source', value: (x) => (x.totals ? x.totals.no_source : UNREADABLE), note: (x) => (!x.totals ? NOT_READ : x.totals.retrieval_unavailable ? `returned empty, charged nothing · ${x.totals.retrieval_unavailable} could not search` : 'returned empty, charged nothing') },
+    { label: 'Session spend', value: (x) => (x.totals ? formatCost(x.totals.cost_usd) : UNREADABLE), note: (x) => (x.totals ? 'the whole selected scope, shown before each question, not only after' : NOT_READ) },
   ],
   founder: [
-    { label: 'Questions asked', value: (x) => x.totals.asked, note: (x) => `${x.totals.no_source} came back with no source${x.totals.retrieval_unavailable ? `, ${x.totals.retrieval_unavailable} could not search` : ''}` },
-    { label: 'Answers kept', value: (x) => x.totals.saved, note: () => 'kept from the ops row, one at a time' },
+    { label: 'Questions asked', value: (x) => (x.totals ? x.totals.asked : UNREADABLE), note: (x) => (x.totals ? `${x.totals.no_source} came back with no source${x.totals.retrieval_unavailable ? `, ${x.totals.retrieval_unavailable} could not search` : ''}` : NOT_READ) },
+    { label: 'Answers kept', value: (x) => (x.totals ? x.totals.saved : UNREADABLE), note: (x) => (x.totals ? 'kept from the ops row, one at a time' : NOT_READ) },
     {
       label: 'First-pass cost',
       value: (x) => { const m = mean(answeredOf(x.rows).filter((t) => !t.cached).map((t) => t.cost_usd)); return m == null ? null : formatCost(m); },
-      note: () => 'mean over this view’s answered questions',
+      // Over the rows LOADED, which is what a per-row mean can be computed
+      // from: the Worker's totals carry a sum, not each answer's own cost.
+      note: (x) => `mean over the ${x.pageSize} answered questions loaded${x.hasMore ? ' so far' : ''}`,
     },
     {
       label: 'Follow-up cost',
       value: (x) => { const m = mean(answeredOf(x.rows).filter((t) => t.cached).map((t) => t.cost_usd)); return m == null ? null : formatCost(m); },
-      note: () => 'mean over answers billed from cache',
+      note: (x) => `mean over the cached answers among the ${x.pageSize} loaded${x.hasMore ? ' so far' : ''}`,
     },
   ],
 };
@@ -119,11 +139,20 @@ const ASK_STRIP = {
 ASK_STRIP.partner = ASK_STRIP.advisor;
 ASK_STRIP.investor = ASK_STRIP.founder;
 
-/** The four chips, as predicates over whichever slice the scope returned. */
+/**
+ * The chips that NARROW the rows a scope returned, as predicates.
+ *
+ * #4610 — `discarded` LEFT THIS TABLE AND BECAME A SCOPE. Archived was
+ * `scopeFor('discarded') === 'all'` plus a client-side filter, so it searched
+ * only the rows `all` had returned — the newest two hundred. A reader who
+ * archived an answer and then asked two hundred more questions could not reach
+ * it from the one tab that exists to find archived answers. It is a server
+ * scope now, with its own statement and its own totals, so the tab reads
+ * exactly the archived answers and pages through all of them.
+ */
 const NARROW = {
   cited: (t) => (t.citations || []).length > 0,
   unanswered: (t) => t.reason !== 'answered',
-  discarded: (t) => t.discarded === true,
 };
 
 /**
@@ -132,7 +161,7 @@ const NARROW = {
  * two: it means the same thing over a session and over the whole history, and
  * the scope beside it decides which.
  */
-const scopeFor = (view) => (view === 'discarded' ? 'all' : SCOPES.has(view) ? view : 'session');
+const scopeFor = (view) => (SCOPES.has(view) ? view : 'session');
 
 /** This zone, as the profiles' option inventories name it (`lib/railOptions`). */
 const ZONE_FILE = 'pages/research/AskZone.jsx';
@@ -146,6 +175,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   const askOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'ask' });
   useRailOption(busy ? askOption?.key : null, askOption?.label);
   const [error, setError] = useState('');
+  // D4613: what the live region last said about a question (sent, answered).
+  // Errors are announced by their own alert; this is the polite channel.
+  const [announce, setAnnounce] = useState('');
   // D3701 part 4: a 402 from Ask is a budget stop, drawn as RS-11's card.
   const [tokens, setTokens] = useState(null);
   const [lib, setLib] = useState({ loading: true, error: '', payload: null });
@@ -191,6 +223,43 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     }
   }, []);
 
+  /**
+   * #4610 — the rest of the history, appended.
+   *
+   * The scope's `totals` do not move: they were never the page's. A thread
+   * (`order: 'asc'`) reads oldest-first on screen while being paged
+   * newest-first from the store, so an older page goes BEFORE the rows already
+   * shown; every other scope is a newest-first log and an older page goes
+   * after. The Worker says which through `order`, so the page does not have to
+   * know each scope's direction.
+   */
+  const [olderFailed, setOlderFailed] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadOlder = async () => {
+    const cursor = thread.payload?.next_cursor;
+    if (!cursor || loadingOlder) return;
+    setLoadingOlder(true); setOlderFailed(false);
+    try {
+      const more = await api.research.askSessions(scope, sessionUid || undefined, { cursor });
+      setThread((c) => {
+        if (!c.payload) return c;
+        const older = Array.isArray(more?.items) ? more.items : [];
+        return {
+          ...c,
+          payload: {
+            ...c.payload,
+            items: c.payload.order === 'asc' ? [...older, ...(c.payload.items || [])] : [...(c.payload.items || []), ...older],
+            has_more: more?.has_more === true,
+            next_cursor: more?.next_cursor || null,
+          },
+        };
+      });
+    } catch {
+      // The rows already read stay on screen; only the attempt to extend failed.
+      setOlderFailed(true);
+    } finally { setLoadingOlder(false); }
+  };
+
   useEffect(() => { loadLib(); }, [loadLib]);
   // The scope is what changes the READ. A narrowing chip must not refetch —
   // clicking `Cited` on a long history and watching the page reload it is the
@@ -210,11 +279,12 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     e.preventDefault();
     const q = question.trim();
     if (!q) return;
-    setBusy(true); setError(''); setTokens(null);
+    setBusy(true); setError(''); setTokens(null); setAnnounce('Reading your library…');
     try {
       // D778 part 11: the press names its profile's option on the run (founder's by default).
       const r = await api.research.ask(q, sessionUid, railPressHeaders(askOption?.key ?? 'ask:library'));
       setQuestion('');
+      setAnnounce(r?.reason === 'answered' ? 'Answer added to this session.' : 'Your question was recorded without an answer. The reason is shown in this session.');
       // Back to the session view: a reader who asks a question while looking at
       // `All history` has just added to a thread they cannot see, and leaving
       // them there would make the answer look lost.
@@ -222,6 +292,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
       await loadThread('session', r?.session_uid || '');
     } catch (err) {
       const stop = tokensRefusal(err);
+      setAnnounce('');
       if (stop) setTokens(stop);
       else setError(err?.message || 'That question could not be answered right now.');
     } finally { setBusy(false); }
@@ -258,15 +329,36 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
   };
 
   const payload = lib.payload;
-  const indexed = payload?.indexed ?? 0;
+  // #4610: null, never 0, until the library read succeeds. `?? 0` made a failed
+  // read say "no answerable documents" — and it is this value the "Nothing to
+  // ask yet" empty state is gated on, so a failed read was presented as an
+  // empty library. `answerable` is the Worker's `in_ask` count, which is what
+  // "answerable" means on the rows beside it.
+  const indexed = payload?.answerable ?? null;
   const items = Array.isArray(payload?.items) ? payload.items : [];
   // D3701 RS-07C: only a library read that succeeded can show that a cited
   // document is gone. Null while it loads or when it failed.
   const libraryUids = useMemo(() => (payload ? new Set(items.map((d) => d.uid)) : null), [payload, items]);
+  // D4613: each listed document's current index run, so a citation can say its
+  // document was re-indexed after the answer read it.
+  const libraryRevisions = useMemo(() => (payload ? new Map(items.map((d) => [d.uid, d.indexed_at || null])) : null), [payload, items]);
 
   const all = useMemo(() => thread.payload?.items || [], [thread.payload]);
   const visible = useMemo(() => (NARROW[view] ? all.filter(NARROW[view]) : all), [all, view]);
-  const totals = thread.payload?.totals || { asked: 0, answered: 0, no_source: 0, cost_usd: 0 };
+  /**
+   * #4610 — THE SCOPE'S TOTALS, AND NULL WHEN NOTHING WAS READ.
+   *
+   * This was `|| { asked: 0, answered: 0, no_source: 0, cost_usd: 0 }`: a
+   * failed history read became four zeroes and a spend of nothing, under tiles
+   * that print real figures when it works. The object was also missing
+   * `retrieval_unavailable`, which one tile reads, so that tile rendered
+   * undefined on the fallback path.
+   *
+   * The Worker's `totals` now covers the WHOLE selected scope rather than the
+   * page, so these figures no longer stop moving at two hundred.
+   */
+  const totals = thread.payload?.totals || null;
+  const hasMore = thread.payload?.has_more === true;
 
   // The per-1M rates for the task this page actually runs. `research_ask` is the
   // join key; `routes` names the model and `prices` holds its rate, both from
@@ -276,7 +368,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
   const strip = ASK_STRIP[role] || [];
   const ready = Boolean(payload && thread.payload);
-  const ctx = { indexed, docs: items.length, totals, rows: all };
+  const ctx = { indexed, docs: items.length, totals, rows: all, pageSize: all.length, hasMore };
 
   const libRows = items.map((d) => {
     const ix = indexStateOf(d);
@@ -307,7 +399,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
           role={role}
           className="mb-3"
           filters={zoneFilters ? zoneFilters({ value: view, onChange: setView }) : []}
-          actions={zoneActions(visible, { newSession, savedAnswers: () => setView('saved') })}
+          /* #4610 (S1's live-UI note): the management row is hidden when there
+             is nothing to manage. `Export` over an empty history produces a
+             file of headers, and `Clear history` offers to clear nothing —
+             both are controls that cannot act, which is the same rule the
+             Library applies to a client's document. With rows they are back,
+             unchanged. */
+          actions={visible.length ? zoneActions(visible, { newSession, savedAnswers: () => setView('saved') }) : []}
         />
       )}
       <ZoneHeading
@@ -351,30 +449,67 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
         loading={lib.loading}
         error={lib.error}
         onRetry={loadLib}
-        isEmpty={!lib.loading && !lib.error && indexed === 0}
+        /**
+         * #4610 — EXISTING HISTORY SURVIVES THE LAST ANSWERABLE DOCUMENT.
+         *
+         * The gate was `indexed === 0`, which replaced the WHOLE body —
+         * composer, thread, tabs and all — the moment nothing was answerable.
+         * So a reader who removed their last document, or whose index went
+         * `failed`, lost the answers they had already been given: months of
+         * history behind a card saying "Nothing to ask yet", about a library
+         * rather than about the history it was hiding. `indexed` was also
+         * `?? 0`, so a FAILED library read did the same thing — the one case
+         * where the card's own sentence ("Add a document") is advice to act on
+         * a false premise.
+         *
+         * The empty state is now for a reader with no answerable documents AND
+         * no history: genuinely nothing to show. With history, the thread
+         * renders and the composer's own disabled state says why a new question
+         * cannot be asked, which is the honest division — one is a library
+         * fact, the other is a record.
+         *
+         * `indexed == null` (unread) is not zero and does not reach here.
+         */
+        isEmpty={!lib.loading && !lib.error && indexed === 0 && all.length === 0 && !thread.loading && !thread.error}
         empty={(
           <NothingYet
             title="Nothing to ask yet"
             body="Ask answers only from your own documents, so it needs at least one that has been read. Add a document to the library and it becomes answerable here."
             action={(
               <p className="text-[12px]">
-                <Link to="/research/library" className="text-axal-violet underline">Open your library →</Link>
+                <Link to="/research/library" className="font-bold text-axal-violet underline">Add evidence →</Link>
+                {' '}<Link to="/research/library" className="text-axal-violet underline">Open Library</Link>
               </p>
             )}
           />
         )}
       >
         <Card className="p-4">
-          <form onSubmit={ask}>
+          {/* D4613: the label stays on screen (the placeholder is only an
+              example), the help and any error are tied to the field, and the
+              form says when it is busy. Ctrl+Enter or ⌘+Enter sends from the
+              field; Tab reaches the Ask button as before. */}
+          <form onSubmit={ask} aria-busy={busy || undefined} aria-label="Ask your library" data-testid="ask-form">
             <label htmlFor="ask-question" className="mb-1.5 block text-[12.5px] font-bold text-axal-ink dark:text-gray-100">What do you want to know?</label>
             <textarea
               id="ask-question"
               rows={3}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !busy && question.trim()) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              aria-describedby={error ? 'ask-question-help ask-question-error' : 'ask-question-help'}
+              aria-invalid={error ? true : undefined}
               className={inputClass}
               placeholder="Ask across the library — e.g. “which SOWs cap revisions?”"
             />
+            <p id="ask-question-help" className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+              Answers come only from documents in your library that Ask can read. Press Ctrl+Enter (⌘+Enter on a Mac) to ask.
+            </p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <button type="submit" className={buttonClass} disabled={busy || !question.trim()}>
                 {busy ? 'Reading your library…' : 'Ask'}
@@ -391,8 +526,9 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
                   last question: {formatCost(all[all.length - 1]?.cost_usd ?? 0)}
                 </span>
               )}
-              {error && <span className="text-[12px] text-gray-700 dark:text-gray-300">{error}</span>}
+              {error && <span id="ask-question-error" role="alert" data-testid="ask-error" className="text-[12px] text-gray-700 dark:text-gray-300">{error}</span>}
             </div>
+            <p role="status" aria-live="polite" className="sr-only" data-testid="ask-status">{announce}</p>
           </form>
         </Card>
 
@@ -415,6 +551,17 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             reader can see that the unanswered question cost nothing. */}
         {/* D3701 RS-07: the history tabs. They set the same view the toolbar's
             chips set, so the two cannot disagree. */}
+        {/* #4610: the rest of the selected scope, reachable. Without this the
+            cursor the Worker returns has no reader and a reader with more than
+            one page of history cannot see past the first. */}
+        {hasMore ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="ask-history-more">
+            <button type="button" className={buttonClass} disabled={loadingOlder} onClick={loadOlder} data-testid="ask-history-load-older">
+              {loadingOlder ? 'Loading…' : `Load older (${all.length}${totals ? ` of ${totals.asked}` : ''} loaded)`}
+            </button>
+            {olderFailed ? <span role="alert" className="text-[12px] text-gray-700 dark:text-gray-300">That page could not be read. The answers already loaded are unaffected.</span> : null}
+          </div>
+        ) : null}
         <div role="tablist" aria-label="History" className="flex flex-wrap gap-1.5" data-testid="ask-history-tabs">
           {HISTORY_TABS.map((tab) => (
             <button key={tab.view} type="button" role="tab" aria-selected={view === tab.view}
@@ -434,12 +581,21 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
           </Card>
         ) : null}
 
-        {!thread.loading && !thread.error && visible.length === 0 && all.length > 0 ? (
+        {/* #4610: `all.length > 0` was the guard because every tab was a
+            narrowing of one read, so "nothing here" could only mean "nothing
+            among the rows in hand". `saved` and `discarded` are server SCOPES
+            now, and an empty scope is an empty READ — `all` is itself zero —
+            so the guard admits those two, or the Archived tab with nothing
+            archived would render no body at all. */}
+        {!thread.loading && !thread.error && visible.length === 0
+          && (all.length > 0 || view === 'discarded' || view === 'saved') ? (
           <Card className="border-dashed p-4">
             <p className="text-[12.5px] leading-relaxed text-gray-700 dark:text-gray-300">
               {view === 'cited'
                 ? 'Every answer in this view already carries its citations, so this filter leaves nothing out.'
-                : view === 'discarded' ? 'No discarded answers.' : 'Nothing here went unanswered.'}
+                : view === 'discarded' ? 'No discarded answers.'
+                  : view === 'saved' ? 'No answers kept yet. Keep one from its own ops row.'
+                    : 'Nothing here went unanswered.'}
             </p>
           </Card>
         ) : null}
@@ -485,45 +641,71 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {(t.citations || []).length ? (
                   // D3701 RS-07: Sources used, each with its exact passage and
-                  // whether its document is still in the library.
+                  // whether its document is still in the library. D4613: the
+                  // sources the answer cites come first; passages it was given
+                  // and never cites are listed apart as retrieved context.
                   <div className="w-full" data-testid={`ask-sources-${t.uid}`}>
-                    <Eyebrow className="!text-[9px]">Sources used · {(t.citations || []).length}</Eyebrow>
-                    {phone ? (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={`ask-source-buttons-${t.uid}`}>
-                        {(t.citations || []).map((ct, i) => (
-                          <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
-                            onClick={() => setOpenCite({ t, i })}
-                            className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
-                            {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                    <ol className="mt-1.5 space-y-1.5">
-                        {(t.citations || []).map((ct, i) => {
-                          const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
-                          return (
-                            <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Pill tone="cite" className="!text-[9.5px]">
-                                  {ct.document_uid ? <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`}>{`[${ct.n || i + 1}] `}{ct.title}</Link> : <>{`[${ct.n || i + 1}] `}{ct.title}</>}
-                                  {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
-                                </Pill>
-                                {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
-                                {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
-                              </div>
-                              {ct.passage ? (
-                                <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
-                                  {ct.passage}{ct.passage_truncated ? '…' : ''}
-                                </blockquote>
-                              ) : (
-                                <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    )}
+                    {(() => {
+                      const note = referenceNote(t);
+                      return note ? (
+                        <p className="mb-1.5 rounded-[8px] border border-amber-200 bg-amber-50/60 px-2 py-1.5 text-[11.5px] text-gray-800 dark:border-amber-900 dark:bg-amber-950/25 dark:text-gray-200" data-testid={`ask-reference-note-${t.uid}`}>
+                          <span aria-hidden="true">! </span>{note.text}
+                        </p>
+                      ) : null;
+                    })()}
+                    {(() => {
+                      const groups = splitCitations(t);
+                      const sections = [
+                        { key: 'cited', items: groups.cited, label: `Sources cited · ${groups.cited.length}` },
+                        { key: 'retrieved', items: groups.retrieved, label: t.reason === 'answered' ? `Retrieved, not cited · ${groups.retrieved.length}` : `Passages retrieved · ${groups.retrieved.length}` },
+                      ].filter((g) => g.items.length);
+                      return sections.map((g) => (
+                        <section key={g.key} className="mt-1.5" aria-label={g.label} data-testid={`ask-sources-${g.key}-${t.uid}`}>
+                          <Eyebrow className="!text-[9px]">{g.label}</Eyebrow>
+                          {phone ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5" data-testid={g.key === 'cited' ? `ask-source-buttons-${t.uid}` : undefined}>
+                              {g.items.map(({ ct, i }) => (
+                                <button key={`${ct.title}-${ct.chunk}-${i}`} type="button" data-testid={`ask-source-open-${t.uid}-${i}`}
+                                  onClick={() => setOpenCite({ t, i })}
+                                  className="min-h-[44px] max-w-full truncate rounded-[10px] border border-axal-hairline px-3 text-left text-[12px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                                  {`[${ct.n || i + 1}] `}{ct.title || 'Untitled document'}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <ol className="mt-1.5 space-y-1.5">
+                              {g.items.map(({ ct, i }) => {
+                                const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids, libraryRevisions)];
+                                return (
+                                  <li key={`${ct.title}-${ct.chunk}-${i}`} className="rounded-[8px] border border-axal-hairline p-2 dark:border-gray-700">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Pill tone={g.key === 'cited' ? 'cite' : 'neutral'} className="!text-[9.5px]">
+                                        {`[${ct.n || i + 1}] `}{ct.title}
+                                        {ct.chunk != null ? ` · passage ${ct.chunk + 1}` : ''}
+                                      </Pill>
+                                      {ct.page != null ? <span className="text-[10px] text-gray-600 dark:text-gray-400">page {ct.page}</span> : null}
+                                      {avail ? <Pill tone={avail.tone} className="!text-[9.5px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
+                                      <button type="button" className="text-[11px] font-semibold text-axal-violet underline dark:text-violet-300"
+                                        data-testid={`ask-source-inspect-${t.uid}-${i}`} onClick={() => setOpenCite({ t, i })}>
+                                        Open passage<span className="sr-only">{` [${ct.n || i + 1}] ${ct.title || 'Untitled document'}`}</span>
+                                      </button>
+                                    </div>
+                                    {ct.passage ? (
+                                      <blockquote className="mt-1.5 border-l-2 border-violet-500 pl-2 text-[11.5px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid={`ask-passage-${t.uid}-${i}`}>
+                                        {ct.passage}{ct.passage_truncated ? '…' : ''}
+                                      </blockquote>
+                                    ) : (
+                                      <p className="mt-1 text-[10.5px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          )}
+                        </section>
+                      ));
+                    })()}
+                    {t.reason === 'answered' ? <p className="mt-1.5 text-[10.5px] text-gray-600 dark:text-gray-400">{REFERENCE_LIMIT}</p> : null}
                   </div>
                 ) : null}
                 {t.reason === 'no_source' ? <Unrecorded>No retrievable source</Unrecorded> : null}
@@ -589,7 +771,13 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
             cols="2.2fr 1fr 1fr .9fr 1.4fr"
             head={['Document', 'Kind', 'Added', 'Index state', 'In Ask']}
             rows={libRows}
-            note={`Ask reaches exactly the ${indexed} indexed ${indexed === 1 ? 'row' : 'rows'}. A document added but not yet indexed answers nothing, however relevant it looks on the shelf — which is why a question about it comes back empty rather than reaching for it.`}
+            /* #4610: `indexed` is null until the library read succeeds, so the
+               sentence says that rather than interpolating the word "null" —
+               which is what a `?? 0` fallback replaced with a confident zero
+               and a bare null now replaces with the literal. */
+            note={indexed == null
+              ? 'How many documents Ask can reach could not be read, so this table cannot say. That is a failed read of your library, not a library with nothing answerable in it.'
+              : `Ask reaches exactly the ${indexed} indexed ${indexed === 1 ? 'row' : 'rows'}. A document added but not yet indexed answers nothing, however relevant it looks on the shelf — which is why a question about it comes back empty rather than reaching for it.`}
           />
         )}
           </div>
@@ -612,20 +800,34 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
       {openCite ? (() => {
         const ct = openCite.t.citations?.[openCite.i] || {};
-        const avail = CITATION_AVAILABILITY[citationAvailability(ct, libraryUids)];
+        const availKey = citationAvailability(ct, libraryUids, libraryRevisions);
+        const avail = CITATION_AVAILABILITY[availKey];
         return (
-          <Sheet label="Source" eyebrow={`Source ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
+          <Sheet label="Source" eyebrow={`${ct.cited === true ? 'Cited source' : 'Retrieved passage'} ${ct.n || openCite.i + 1}`} title={ct.title || 'Untitled document'}
             onClose={() => setOpenCite(null)} phone="sheet" width={480} testId="ask-source-sheet">
             <p className="text-[12px] text-gray-600 dark:text-gray-400">
               {[ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(' · ') || 'Page not recorded'}
             </p>
+            {/* D4613: the index run the answer read, so the version is on record beside the passage. */}
+            <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="ask-source-sheet-revision">
+              {ct.revision ? `Indexed version read: ${String(ct.revision).slice(0, 16)}` : 'Indexed version not recorded for this answer'}
+            </p>
+            {ct.cited === true ? null : (
+              <p className="mt-1 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="ask-source-sheet-uncited">The answer does not cite this passage. It was retrieved as context, not offered as support.</p>
+            )}
             {avail ? <Pill tone={avail.tone} className="mt-2 !text-[10px]"><span aria-hidden="true">{avail.glyph}</span> {avail.label}</Pill> : null}
             {ct.passage ? (
               <blockquote className="mt-3 border-l-2 border-violet-500 pl-3 text-[13px] leading-relaxed text-gray-800 dark:text-gray-200" data-testid="ask-source-sheet-passage">
                 {ct.passage}{ct.passage_truncated ? '…' : ''}
               </blockquote>
             ) : <p className="mt-3 text-[12px] text-gray-600 dark:text-gray-400">Passage not recorded for this answer.</p>}
-            {ct.document_uid && citationAvailability(ct, libraryUids) !== 'gone' ? (
+            {availKey === 'changed' ? (
+              <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-changed">The document was indexed again after this answer. The passage above is the version the answer read; the document may now say something else.</p>
+            ) : null}
+            {availKey === 'gone' ? (
+              <p className="mt-2 text-[11.5px] text-gray-700 dark:text-gray-300" data-testid="ask-source-sheet-gone">The document is no longer in your library, so only the passage recorded with this answer remains.</p>
+            ) : null}
+            {ct.document_uid && availKey !== 'gone' ? (
               <Link to={`/research/library#document-${encodeURIComponent(ct.document_uid)}`} data-testid="ask-source-sheet-open"
                 className="mt-4 flex min-h-[44px] items-center justify-center rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink dark:border-gray-700 dark:text-gray-100">
                 Open in Library

@@ -407,6 +407,11 @@ test('POST /pipeline/metrics/snapshot: invalid metrics are refused and stored no
     CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, partner_id INTEGER, is_active INTEGER NOT NULL DEFAULT 1,
       jwt_min_iat INTEGER, name TEXT, email TEXT);
     INSERT INTO users (id, role, name, email) VALUES (1, 'admin', 'Root', 'root@example.test');
+    -- D4676 (#4676): a snapshot is recorded against a venture that exists. The
+    -- route used to store metrics for any deal id, real or not; it now asks the
+    -- venture's access rule first, and a venture that is not there is a 404.
+    CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, status TEXT, stage TEXT);
+    INSERT INTO projects (id, name, founder_id, status, stage) VALUES (1, 'Scored venture', NULL, 'active', 'idea');
   `);
   const e = env(db);
   const papp = new Hono<any>();

@@ -33,7 +33,7 @@ import {
   closeDsrRequest,
   loadDsrHistory,
   dsrDaysLeft,
-  DSR_CLOCK_DAYS,
+  DSR_CLOCK_RULE,
 } from '../src/services/dsrRequests';
 
 const root = process.cwd();
@@ -337,31 +337,29 @@ test('migration 272 enforces one OPEN request per subject, and admits three outc
 });
 
 test('the statutory clock counts DOWN from receipt, and an unknown stamp is not zero', () => {
-  // THIS ARITHMETIC HAD NEVER BEEN TESTED. It has driven the amber zone, the
-  // red "Nd overdue" and the "inside deadline pressure" headline since the
-  // Security page shipped. Inverting the subtraction turns every overdue
-  // request into one with weeks left — on the one screen where that is a
-  // compliance failure rather than a wrong number.
-  const day = 86400000;
-  const now = Date.parse('2026-09-19T12:00:00Z');
+  // THIS ARITHMETIC HAD NEVER BEEN TESTED until D4675. It drives the amber
+  // zone, the red "Nd overdue" and the Overview's deadline findings. Inverting
+  // the subtraction turns every overdue request into one with weeks left — on
+  // the one screen where that is a compliance failure rather than a wrong
+  // number. D4675 part 2 made the clock one calendar month (2026-11-10).
+  const at = (s: string) => Date.parse(s);
+  const received = at('2026-09-19T12:00:00Z'); // due by the end of 19 October
 
-  assert.equal(dsrDaysLeft(now, now), 30, 'a request made today does not have the full window');
-  assert.equal(dsrDaysLeft(now - 10 * day, now), 20);
-  assert.equal(dsrDaysLeft(now - 30 * day, now), 0, 'the deadline day itself must read 0, not 1 or -1');
-  assert.equal(dsrDaysLeft(now - 44 * day, now), -14, 'an overdue request must count NEGATIVE, not stop at 0');
+  assert.equal(dsrDaysLeft(received, received), 30, 'September 19 → October 19 is 30 calendar days');
+  assert.equal(dsrDaysLeft(received, at('2026-09-29T08:00:00Z')), 20);
+  assert.equal(dsrDaysLeft(received, at('2026-10-19T23:59:59Z')), 0, 'the due day itself reads 0, not 1 or -1');
+  assert.equal(dsrDaysLeft(received, at('2026-11-02T00:00:00Z')), -14, 'an overdue request must count NEGATIVE, not stop at 0');
 
   // The 14-day amber threshold the page reads (`days_left <= 14`), pinned from
-  // BOTH SIDES OF ITS ACTUAL EDGE. The first draft of this put the edge a day
-  // out — 15 days elapsed leaves 15, which is outside; 16 elapsed leaves 14,
-  // which is inside. A one-sided assertion would not have caught that, and
-  // getting the boundary wrong here is the whole failure mode.
-  assert.equal(dsrDaysLeft(now - 15 * day, now), 15, 'the boundary moved');
-  assert.ok(dsrDaysLeft(now - 15 * day, now)! > 14, '15 days in is not yet inside deadline pressure');
-  assert.ok(dsrDaysLeft(now - 16 * day, now)! <= 14, '16 days in must be inside deadline pressure');
+  // BOTH SIDES OF ITS ACTUAL EDGE: a one-sided assertion would not catch the
+  // boundary moving a day, and getting it wrong is the whole failure mode.
+  assert.equal(dsrDaysLeft(received, at('2026-10-04T12:00:00Z')), 15, 'the boundary moved');
+  assert.ok(dsrDaysLeft(received, at('2026-10-04T23:59:59Z'))! > 14, '15 days out is not yet inside deadline pressure');
+  assert.ok(dsrDaysLeft(received, at('2026-10-05T00:00:00Z'))! <= 14, '14 days out must be inside deadline pressure');
 
   // null, never 0 — an unknown clock is not a clock at its deadline.
-  assert.equal(dsrDaysLeft(NaN, now), null);
-  assert.equal(dsrDaysLeft(dsrParseFixture('not a date'), now), null);
+  assert.equal(dsrDaysLeft(NaN, received), null);
+  assert.equal(dsrDaysLeft(dsrParseFixture('not a date'), received), null);
 });
 
 /** Mirrors admin_security.ts's `parseSqlTs` so the null path is reached the same way. */
@@ -370,12 +368,14 @@ function dsrParseFixture(s: string): number {
   return Date.parse(iso);
 }
 
-test('the clock constant is defined once, and the route reads it from there', () => {
-  assert.equal(DSR_CLOCK_DAYS, 30);
-  // A second copy in the route is how the payload's `clock_days` and the
+test('the clock rule is defined once, and the route reads it from there', () => {
+  assert.equal(DSR_CLOCK_RULE, 'calendar_month');
+  // A second copy in the route is how the payload's named rule and the
   // arithmetic behind `days_left` come to disagree.
-  assert.doesNotMatch(SECURITY, /const DSR_CLOCK_DAYS\s*=/,
-    'DSR_CLOCK_DAYS is declared in the route again — one of the two copies will drift');
+  assert.doesNotMatch(SECURITY, /const DSR_CLOCK_(RULE|DAYS)\s*=/,
+    'the clock rule is declared in the route again — one of the two copies will drift');
+  assert.match(SECURITY, /clock: \{ rule: DSR_CLOCK_RULE, label: DSR_CLOCK_LABEL \}/,
+    'the payload no longer names the rule it counts by');
   // D4675: through `dsrStampMs`, the service's own UTC parse, so the parse is tested too.
   assert.match(SECURITY, /const requestedMs = dsrStampMs\(u\.deletion_requested_at\)/,
     'the route no longer parses the receipt stamp through the tested helper');

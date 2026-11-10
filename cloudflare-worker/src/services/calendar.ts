@@ -14,6 +14,7 @@
 import { cohortDateEvents, complianceDueEvents, complianceState, dealClosingEvents, interviewCallEvents, type ComplianceFacts } from './calendar/sourceReaders';
 import { contentPlannedEvents, publishSendEvents } from './calendar/growReaders';
 import { pageOnlyKinds } from './calendar/registry';
+import { runBounded } from './calendar/gatherPool';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { isSuperAdmin } from '../auth';
@@ -963,6 +964,35 @@ export interface CalendarSourceStatus {
 }
 
 /**
+ * D5203 (#5203) — HOW MANY SOURCES ARE READ AT ONCE.
+ *
+ * Axal's own sources are D1 reads; the connected calendars are network reads
+ * that can page four times and wait ten seconds a page. They run in separate
+ * lanes, each bounded, started together: a slow Google or Outlook read never
+ * holds a D1 source's slot, and at most LOCAL + NETWORK reads are ever in
+ * flight for one request (never one per source).
+ */
+export const CALENDAR_LOCAL_CONCURRENCY = 6;
+export const CALENDAR_NETWORK_CONCURRENCY = 2;
+/** The kinds whose readers call a provider over the network rather than D1. */
+export const NETWORK_KINDS: readonly CalendarEvent['kind'][] = ['external_google', 'external_microsoft'];
+
+/** D5203: one source's read, for the timing log. Kind, time, outcome and a count; never a payload. */
+export interface CalendarSourceTiming { kind: CalendarEvent['kind']; ms: number; ok: boolean; count: number }
+export interface CalendarGatherTiming { ms: number; sources: CalendarSourceTiming[] }
+
+export interface GatherOptions {
+  limits?: { local?: number; network?: number };
+  /** Where the timing goes; the default is one `console.info` line per gather. */
+  onTiming?: (timing: CalendarGatherTiming) => void;
+  now?: () => number;
+}
+
+function logTiming(timing: CalendarGatherTiming): void {
+  console.info('[calendar] gather timing', timing);
+}
+
+/**
  * ONE SOURCE FAILING USED TO BLANK THE WHOLE CALENDAR.
  *
  * The aggregator used to await readers in a row with no catch of its own, so
@@ -979,31 +1009,62 @@ export interface CalendarSourceStatus {
  *   · `fetchUserEvents` rethrows — an .ics feed or a push lookup that quietly
  *     dropped a source would write a wrong calendar into someone's client, or
  *     report an event as "not found" when the truth is that its source broke.
+ *
+ * D5203 (#5203): the sources are read in bounded parallel (`runBounded`, two
+ * lanes above), no longer one after another. Only the kinds asked for are
+ * read. The merge walks the outcomes in `readers` order, never finish order,
+ * and the sort is stable, so the answer is the one a serial read gave.
  */
 async function gather(
   env: Env, userId: number, _role: string, fromIso: string, toIso: string,
   kinds?: string[], opts: ReadOptions = {},
 ): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
-  const wanted = new Set<string>(kinds && kinds.length ? kinds : KNOWN_KINDS);
+  return gatherSources(READERS, env, userId, fromIso, toIso, kinds, opts);
+}
+
+/** `gather` over a given reader table: the production one, or a test's. Exported for tests. */
+export async function gatherSources(
+  readers: Readonly<Partial<Record<CalendarEvent['kind'], CalendarReader>>>,
+  env: Env, userId: number, fromIso: string, toIso: string,
+  kinds?: string[], opts: ReadOptions = {}, pool: GatherOptions = {},
+): Promise<{ events: CalendarEvent[]; sources: CalendarSourceStatus[] }> {
+  const now = pool.now || Date.now;
+  const started = now();
+  const order = Object.keys(readers) as CalendarEvent['kind'][];
+  const wanted = new Set<string>(kinds && kinds.length ? kinds : order);
+  const asked = order.filter((kind) => wanted.has(kind));
+  const network = asked.filter((kind) => NETWORK_KINDS.includes(kind));
+  const local = asked.filter((kind) => !NETWORK_KINDS.includes(kind));
+  const external = await import('./calendar/externalReaders');
+  const read = (kind: string) => readers[kind as CalendarEvent['kind']]!(env, userId, fromIso, toIso, opts) as Promise<CalendarEvent[] & { truncated?: boolean }>;
+  const [localOut, networkOut] = await Promise.all([
+    runBounded(local, pool.limits?.local ?? CALENDAR_LOCAL_CONCURRENCY, read, now),
+    runBounded(network, pool.limits?.network ?? CALENDAR_NETWORK_CONCURRENCY, read, now),
+  ]);
+  const byKind = new Map([...localOut, ...networkOut].map((o) => [o.kind, o]));
   const events: CalendarEvent[] = [];
   const sources: CalendarSourceStatus[] = [];
-  const external = await import('./calendar/externalReaders');
-  for (const kind of KNOWN_KINDS) {
-    if (!wanted.has(kind)) continue;
-    try {
-      const read = await READERS[kind](env, userId, fromIso, toIso, opts) as CalendarEvent[] & { truncated?: boolean };
-      events.push(...read);
-      sources.push({ kind, ok: true, error: null, ...(read.truncated ? { truncated: true as const } : {}) });
-    } catch (e) {
-      // D1485: a member with no Google or Outlook connection has no such source at all.
-      if (e instanceof external.NoSource) continue;
-      const error = e instanceof external.ExternalReadError ? e.code
-        : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
-      console.warn('[calendar] source failed', { kind, outcome: error });
-      sources.push({ kind, ok: false, error });
+  const timings: CalendarSourceTiming[] = [];
+  for (const kind of asked) {
+    const outcome = byKind.get(kind)!;
+    if (outcome.ok) {
+      const got = outcome.value;
+      events.push(...got);
+      sources.push({ kind, ok: true, error: null, ...(got.truncated ? { truncated: true as const } : {}) });
+      timings.push({ kind, ms: outcome.ms, ok: true, count: got.length });
+      continue;
     }
+    const e = outcome.error;
+    // D1485: a member with no Google or Outlook connection has no such source at all.
+    if (e instanceof external.NoSource) continue;
+    const error = e instanceof external.ExternalReadError ? e.code
+      : isMissingTableError(e) || isMissingColumnError(e) ? 'not_configured' : 'unreadable';
+    console.warn('[calendar] source failed', { kind, outcome: error });
+    sources.push({ kind, ok: false, error });
+    timings.push({ kind, ms: outcome.ms, ok: false, count: 0 });
   }
   events.sort((a, b) => a.start_at.localeCompare(b.start_at));
+  (pool.onTiming || logTiming)({ ms: now() - started, sources: timings });
   return { events, sources };
 }
 
@@ -1035,6 +1096,23 @@ export const SCOPED_SOURCE_LIMIT = 1000;
 export function validScopeWindow(from: string, to: string): boolean {
   const start = Date.parse(from), end = Date.parse(to);
   return Number.isFinite(start) && Number.isFinite(end) && end >= start && end - start <= 180 * 86_400_000;
+}
+
+/**
+ * D5203 (#5203) — the personal read's window, bounded like the staff scope's.
+ *
+ * `GET /calendar/events` for the member's own calendar had no ceiling, so a
+ * caller could ask every source for years at once. The page's widest view is
+ * Agenda's 90 days (Month ≤ 31, Week 7), so 180 days, the staff scope's own
+ * bound, leaves every view room and refuses the multi-year read. A window must
+ * also end after it starts: an empty or reversed one is refused, never read.
+ * Returns why the window is refused, or null when it may be read.
+ */
+export const PERSONAL_WINDOW_MAX_DAYS = 180;
+export function personalWindowRefusal(from: string, to: string): 'invalid_window' | 'window_too_wide' | null {
+  const start = Date.parse(from), end = Date.parse(to);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 'invalid_window';
+  return end - start > PERSONAL_WINDOW_MAX_DAYS * 86_400_000 ? 'window_too_wide' : null;
 }
 
 type ScopedRow = Record<string, any>;

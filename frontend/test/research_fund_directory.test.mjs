@@ -51,7 +51,8 @@ test('the directory is read from the Worker, and its rows are added to the priva
   assert.doesNotMatch(directory, /data\/fundDirectory\.json/, 'FundDirectory still reads the bundled catalog');
   assert.match(directory, /researchFundsApi\.list\(toParams\(query\)\)/);
   assert.match(page, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\}/);
-  assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null \}\)/);
+  // D4613: the directory uid travels with the add, so a repeat of it is one row.
+  assert.match(page, /fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\)/);
   // D593: the canvas's F0 names the button "Add to my funds".
   assert.match(directory, /'Add to my funds'/);
   // D1317: the fund's details open as the shared right-side Sheet; on a phone, a bottom sheet as before.

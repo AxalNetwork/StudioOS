@@ -258,6 +258,20 @@ test('actor, search, outcome and source narrow the read; LIKE wildcards are sear
   assert.deepEqual(authRefused.body.rows.map((x: any) => x.action), ['step_up.totp']);
 });
 
+test('D4699: rows at the same instant come back in one order, on every read', async () => {
+  const db = freshDb();
+  const at = sqlAt(3);
+  // Two stores and one second: the sort has no time to tell them apart, so the key decides.
+  for (let i = 0; i < 4; i += 1) audit(db, 'analytics_export', at, { report_type: `t${i}` });
+  for (let i = 0; i < 4; i += 1) securityEvent(db, 'gate', 'totp', 'refused', at, { detail: `t${i}`, ip: `203.0.113.${i}/32` });
+  const first = (await call(db, SUPER)).body.rows.map((r: any) => r.key);
+  const second = (await call(db, SUPER)).body.rows.map((r: any) => r.key);
+  assert.equal(first.length, 8);
+  assert.deepEqual(second, first, 'the same rows in a different order');
+  assert.deepEqual(first, [...first].sort().reverse(), 'ties are broken by key, highest first');
+  // Mutation checked: removing the key tie-break → the audit and security rows keep store order, not key order.
+});
+
 test('a value out of shape is a 400 naming its field, never a wider read', async () => {
   const db = freshDb();
   for (const [q, field] of [

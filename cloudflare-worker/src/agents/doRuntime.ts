@@ -97,6 +97,8 @@ export class ScopeCore {
     // a live entry the object failed to clear must not hold an agent forever.
     const a = await this.deps.admitRow(this.env, scope, t);
     if (!a.ok) return a;
+    // D4535: a planned attempt admitted before is answered, never sent again: its run already went out.
+    if (a.replayed) return a;
     await this.storage.put(`${LIVE}${a.run.uid}`, { run_uid: a.run.uid, agent_id: t.agentId, task_id: t.taskId, status: 'admitted' } satisfies LiveRun);
     try {
       await this.deps.enqueue(this.env, a.run.uid);
