@@ -627,7 +627,8 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
   // D4605: the span of vector ids this run may write is recorded BEFORE it
   // writes any, so a run interrupted half-way still leaves every id it wrote
   // nameable by the next re-index or a delete. The document stays in the
-  // state its caller set (pending), which the hourly sweep retries.
+  // state its caller set (pending). #5350's hourly recovery waits 60 minutes,
+  // reuses a live job, and retries the bounded job up to three attempts.
   const span = Math.max(Number(row.chunk_count) || 0, ...chunks.map((ch) => ch.idx + 1));
   await env.DB.prepare(
     `UPDATE research_documents SET chunk_count = ?, updated_at = datetime('now') WHERE id = ?`

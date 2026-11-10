@@ -394,13 +394,6 @@ export function DealCommitment({ deal, user, onChangeAmount, onShare }) {
             {own.status === 'ready' && <ProofDoor target={ownDealTarget(own.read, c.row, user)} onShare={(t) => onShare?.(t, own.read)} />}
           </>
         )}
-        {c.legacy?.length > 0 && (
-          <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700" data-testid="deal-my-legacy">
-            <span className={EYE}>No firm recorded</span>
-            {c.legacy.map((l) => <span key={l.uid} className="font-mono text-[12px] text-axal-ink dark:text-gray-100">{l.line}</span>)}
-            <span className={SUB}>{c.legacy[0].note}</span>
-          </div>
-        )}
         {c.history?.length > 0 && (
           <div className="flex flex-col gap-1 border-t border-axal-hairline pt-2 dark:border-gray-700">
             <span className={EYE}>Earlier</span>

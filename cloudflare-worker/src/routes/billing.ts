@@ -1611,6 +1611,10 @@ billing.post('/stripe/webhook', async (c) => {
     } catch (e: any) {
       console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
     }
+    // D5299 (#5299): the revenue ledger's row for this event, once. A failed write throws, so the receipt stays
+    // unfinished and the 503 below makes Stripe retry; a replay writes nothing new.
+    const { recordStripeFinancialEvent } = await import('../services/financialEvents');
+    await recordStripeFinancialEvent(c.env, event as Parameters<typeof recordStripeFinancialEvent>[1]);
     const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
       SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
       WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)

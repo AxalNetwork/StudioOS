@@ -28,6 +28,7 @@ const url = (u: string | null | undefined) => u ?? null;
 const sanitizeSlides = (cards: any[]) => cards.map((c) => sanitizeModel(c, url) as any);
 const slideProblems = (cards: any[]) => modelProblems(cards, url);
 import { makeD1 } from './_d1_sqlite.mjs';
+import { assetsForIcons, iconGeometryFromDisk } from './_icon_geometry.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { CONTRACTS } from '../src/contracts/index.ts';
 import { contractErrors } from '../src/contracts/validate.ts';
@@ -64,12 +65,13 @@ test('the icon set: open-licence, at least 1,000 icons, its licence recorded wit
   assert.equal(LICENCE_RECORD.id, 'lucide');
   assert.match(LICENCE_RECORD.copyright, /^Copyright \(c\) .*Lucide/);
   assert.match(LICENCE_RECORD.derived, /Feather \(MIT/);
-  const data = JSON.parse(readFileSync(new URL('../src/services/decks/iconSet.json', import.meta.url), 'utf8'));
-  assert.match(data.set.licence_text, /^ISC License/);
-  assert.match(data.set.licence_text, /Feather/, 'the Feather notice is kept');
+  // D4574 H3 (#4574): the licence text travels with the nodes in the set's asset.
+  const geo = iconGeometryFromDisk();
+  assert.match(geo.licence_text, /^ISC License/);
+  assert.match(geo.licence_text, /Feather/, 'the Feather notice is kept');
   // The record names the version it was written from; when the package is installed, they agree.
   const pkg = new URL('../../node_modules/lucide-react/package.json', import.meta.url);
-  if (existsSync(pkg)) assert.equal(JSON.parse(readFileSync(pkg, 'utf8')).license, data.set.spdx);
+  if (existsSync(pkg)) assert.equal(JSON.parse(readFileSync(pkg, 'utf8')).license, LICENCE_RECORD.spdx);
   assert.deepEqual(searchIcons('chart bar', 0, 5).names.every((n) => n.includes('chart') && n.includes('bar')), true);
   assert.equal(searchIcons('', 0, 500).names.length, 120, 'a page is at most 120');
 });
@@ -77,7 +79,8 @@ test('the icon set: open-licence, at least 1,000 icons, its licence recorded wit
 test('every SVG the library draws passes the sanitiser, and an unknown item draws nothing', () => {
   // Mutation checked: `checked` returning its input unsanitised and an icon node gaining an onload → would ship; the
   // sanitiser assert on every drawn item holds the gate.
-  for (const name of searchIcons('', 0, 120).names) assert.equal(sanitizeSvg(iconSvg(name)).ok, true, name);
+  const geo = iconGeometryFromDisk();
+  for (const name of searchIcons('', 0, 120).names) assert.equal(sanitizeSvg(iconSvg(geo, name)).ok, true, name);
   for (const [kind, list] of [['shape', SHAPES], ['divider', DIVIDERS], ['texture', TEXTURES]] as const) {
     assert.ok(list.length >= 6, `${kind}: ${list.length}`);
     for (const x of list) assert.equal(sanitizeSvg(decorSvg({ kind, ref: x.id, tone: 'accent' })).ok, true, `${kind}:${x.id}`);
@@ -85,7 +88,11 @@ test('every SVG the library draws passes the sanitiser, and an unknown item draw
   assert.equal(decorSvg({ kind: 'shape', ref: 'nope' }), null);
   assert.equal(decorSvg({ kind: 'texture', ref: 'noise', seed: 7 }), decorSvg({ kind: 'texture', ref: 'noise', seed: 7 }), 'a texture draws the same from its seed');
   assert.notEqual(decorSvg({ kind: 'texture', ref: 'noise', seed: 7 }), decorSvg({ kind: 'texture', ref: 'noise', seed: 8 }));
-  assert.match(iconSvg('house')!, /stroke="var\(--deck-ink\)"/, 'a theme tone, never a colour');
+  assert.match(iconSvg(geo, 'house')!, /stroke="var\(--deck-ink\)"/, 'a theme tone, never a colour');
+  // D4574 H3: without the geometry an icon draws nothing, so its caller can say the set could not be read.
+  assert.equal(iconSvg(null, 'house'), null, 'no geometry, no icon');
+  assert.equal(decorSvg({ kind: 'icon', ref: 'house' }), null, 'no geometry, no icon decor');
+  assert.ok(decorSvg({ kind: 'icon', ref: 'house' }, geo), 'with the geometry it draws');
 });
 
 test('decor: at most 16 per card; an icon\'s licence is recorded and travels with the block; an unknown item is dropped', () => {
@@ -106,7 +113,8 @@ test('decor: at most 16 per card; an icon\'s licence is recorded and travels wit
 
 test('the routes: the library with its licence, a page of icons with their SVG, the licence text; generate is Coming later', async () => {
   const { DB } = makeD1('CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);', "INSERT INTO users VALUES (2, 'm@example.invalid', 'Member', 'founder', 1);");
-  const env: any = { DB, JWT_SECRET: 'synthetic-d1541-only-not-a-real-credential'.repeat(2), ENVIRONMENT: 'development' };
+  // D4574 H3 (#4574): the icon nodes are a static asset, so the route needs the assets binding.
+  const env: any = { DB, JWT_SECRET: 'synthetic-d1541-only-not-a-real-credential'.repeat(2), ENVIRONMENT: 'development', ASSETS: assetsForIcons() };
   const app = new Hono<any>().route('/api/decks', deckElements);
   app.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   const jwt = await new SignJWT({ user_id: 2 }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));

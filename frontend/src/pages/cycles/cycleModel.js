@@ -82,7 +82,8 @@ export function cardView(card) {
  *   stack     rows: [{ label, parts: number[] }], tones: string[], bare?: boolean
  *   line      values: number[], target?, target_label?, plan?: number[], mark?: index, mark_label?, labels?: [{ at, label }]
  *   timeline  steps: [{ label, date, done }]
- *   tiles     items: [{ label, state: 'connected' | 'failing' | 'not_connected' }]
+ *   tiles     items: [{ label, state: 'connected' | 'failing' | 'disconnected' | 'not_connected' }]
+ *             (D5065: `disconnected` is mapped but no longer active.)
  *   dots      values: boolean[], label?
  *   rows      items: [{ label, value, tone?, note?, next?: { text, href } }]
  *   progress  items: [{ label, pct }]

@@ -27,7 +27,7 @@
  */
 import type { Env } from '../types';
 import { rebuildUsersRoleCheckForExploring } from '../util/usersRoleRebuild';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 // BOTH of these are per binding, not per module (#204). The boolean is the
 // obvious one; the in-flight promise is the one that bites harder, because a
@@ -85,14 +85,10 @@ export async function ensureExploringSchema(env: Env): Promise<void> {
     await env.DB.exec(
       "CREATE INDEX IF NOT EXISTS idx_explorer_needs_timeline ON explorer_needs(timeline_urgency)"
     );
-    // D1/SQLite rejects `ADD COLUMN IF NOT EXISTS` — guard individually so a
-    // pre-migrated DB (column already added by 148_explorer_needs.sql) just
-    // swallows the "duplicate column" error instead of aborting the boot.
-    try {
-      await env.DB.exec(
-        "ALTER TABLE user_role_review ADD COLUMN needs_assessment_completed INTEGER DEFAULT 0"
-      );
-    } catch { /* column already exists */ }
+    // Migration 148's column. #5343: asked first (`runSchemaBootstrap`), so a
+    // migrated database issues no ALTER; a real failure reaches the catch
+    // below, which logs it and leaves the schema unready for the next request.
+    await runSchemaBootstrap(env, ['ALTER TABLE user_role_review ADD COLUMN needs_assessment_completed INTEGER DEFAULT 0']);
     if (roleCheckOk) READY.set(key, true);
   } catch (e) {
     console.error('[boot] ensureExploringSchema failed:', (e as Error).message);
