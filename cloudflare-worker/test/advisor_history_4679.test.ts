@@ -388,6 +388,15 @@ test('a resolved refund row is reported as refunded, not owed', async () => {
   assert.equal(s.refunded.amount_cents, 5_000);
 });
 
+test('#5305: an unreadable refund store is null, never 0 owed', async () => {
+  const db = freshDb(); seedStates(db);
+  db.exec('DROP TABLE advisory_refunds_due');
+  const s = (await call(env(db), 'GET', '/me/ledger', ada)).body.states;
+  assert.equal(s.refunds_owed, null);
+  assert.equal(s.refunded, null);
+  assert.equal(s.collected.gross_cents, 25_000, 'the rest of the report stands');
+});
+
 test('paid-out money comes from paid payouts only, in the window', async () => {
   const db = freshDb(); seedStates(db);
   const p = db.prepare(`INSERT INTO advisor_payouts (uid, advisor_id, amount_cents, state, paid_at, created_at)

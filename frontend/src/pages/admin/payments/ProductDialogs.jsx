@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../../../lib/api';
 import { adminPaymentsApi } from '../../../lib/api/adminPayments';
-import { kindWord, priceText } from './payModel';
+import { amountText, kindWord, priceText } from './payModel';
 import {
   CHANGE_REASON_MIN, KINDS, PLAN_FAMILIES, RECORDED, REASON_MAX, STEP_UP_NEXT,
   centsOf, idempotencyKey, membersOn, monthlyOf, planClash, pricePreview, reasonProblem, refusalOf,
@@ -253,7 +253,7 @@ export function AddPriceDialog({ product, onClose, onDone }) {
   const [currency, setCurrency] = useState('usd');
   const [billing, setBilling] = useState(isPlan ? 'month' : 'once');
   const [reason, setReason] = useState('');
-  const cents = centsOf(amount);
+  const cents = centsOf(amount, currency);
   const preview = pricePreview({ cents, currency, billing, isPlan, monthly: monthlyOf(product) });
   const problems = [cents == null && 'Enter an amount, such as 204.00.', reasonProblem(reason)].filter(Boolean);
   const body = { currency, unit_amount: cents, type: billing === 'once' ? 'one_time' : 'recurring', ...(billing === 'once' ? {} : { interval: billing }), reason: reason.trim() };
@@ -297,9 +297,9 @@ export function ChangePriceDialog({ product, price, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const [key] = useState(idempotencyKey);
   const members = useMembers();
-  const cents = centsOf(amount);
+  const cents = centsOf(amount, price.currency);
   const per = price.interval ? ((price.interval_count ?? 1) === 1 ? ` / ${price.interval}` : ` every ${price.interval_count} ${price.interval}s`) : '';
-  const newText = cents == null ? null : `${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${String(price.currency).toUpperCase()}${per}`;
+  const newText = cents == null ? null : `${amountText({ unit_amount: cents, currency: price.currency })}${per}`;
   const problems = [
     (cents == null || cents <= 0) && 'Enter the new amount, above zero.',
     cents === price.unit_amount && 'That is the price it has now.',

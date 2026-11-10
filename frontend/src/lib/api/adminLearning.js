@@ -71,6 +71,8 @@ export const adminLearningApi = {
   migrateVideoToStream: (uid) => request('/admin/learning/stream/migrations', { method: 'POST', body: body({ item_uid: uid }) }),
 
   listCourses: () => request('/admin/learning/courses'),
+  // D4650 (#4650, part 4): the catalogue's coverage of the founder, investor, advisor and partner journeys.
+  coverage: () => request('/admin/learning/coverage'),
   createCourse: (b) => request('/admin/learning/courses', { method: 'POST', body: body(b) }),
   getCourse: (uid) => request(`/admin/learning/courses/${enc(uid)}`),
   updateCourse: (uid, b) => request(`/admin/learning/courses/${enc(uid)}`, { method: 'PATCH', body: body(b) }),

@@ -47,6 +47,7 @@ import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTi
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
 import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, namedModelCheck, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
 import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1327,11 +1328,15 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 // ---------------------------------------------------------------------------
 let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 const LOG_PAGE_INDEX_493 = 'CREATE INDEX IF NOT EXISTS idx_ai_usage_user_page_created ON ai_usage_logs(user_id, rail_page, created_at)';
-/** Migration 493's columns (D762), in its order. */
-const LOG_COLUMNS_493: ReadonlyArray<readonly [string, string]> = [
-  ['charged_microusd', 'INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0)'],
-  ['reservation_uid', 'TEXT'], ['rail_page', 'TEXT'], ['rail_option', 'TEXT'], ['record_ref', 'TEXT'],
-  ['guard_for', 'INTEGER'], ['units_json', 'TEXT'],
+/** Migration 493's columns (D762), in its order; literal, so the schema guards read each one. */
+const LOG_COLUMNS_493: readonly string[] = [
+  'ALTER TABLE ai_usage_logs ADD COLUMN charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0)',
+  'ALTER TABLE ai_usage_logs ADD COLUMN reservation_uid TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN rail_page TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN rail_option TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN record_ref TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN guard_for INTEGER',
+  'ALTER TABLE ai_usage_logs ADD COLUMN units_json TEXT',
 ];
 async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
@@ -1355,17 +1360,16 @@ async function ensureLogSchema(env: Env): Promise<void> {
  * column the table lacks; production has 493 before this Worker deploys.
  */
 async function addLogColumns493(env: Env): Promise<void> {
-  const cols = await env.DB.prepare('PRAGMA table_info(ai_usage_logs)').all<{ name: string }>();
-  const have = new Set((cols.results ?? []).map((c) => c.name));
-  for (const [name, type] of LOG_COLUMNS_493) {
-    if (!have.has(name)) await env.DB.exec(`ALTER TABLE ai_usage_logs ADD COLUMN ${name} ${type}`);
-  }
-  // Migration 712's column (D1496 part 2): the agent a run was for.
-  if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
-  // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
-  if (!have.has('skill_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER');
-  if (!have.has('skill_version')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER');
-  await env.DB.exec(LOG_PAGE_INDEX_493);
+  // #5343: through `runSchemaBootstrap`, which reads the table's columns and skips those it has.
+  await runSchemaBootstrap(env, [
+    ...LOG_COLUMNS_493,
+    // Migration 712's column (D1496 part 2): the agent a run was for.
+    'ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER',
+    // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
+    'ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER',
+    'ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER',
+    LOG_PAGE_INDEX_493,
+  ]);
 }
 
 export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef' | 'agentId'>;

@@ -72,7 +72,15 @@ export async function readExamAttempts(uid) {
 /** Start an attempt, or resume the open one: `{ uid, started_at, deadline, questions }`, no answer in it. */
 export async function startExamAttempt(uid) {
   const reply = await learningApi.startExam(uid);
-  return { ...rowOf(reply, 'attempt', 'The attempt'), questions: listOf(reply, 'questions', 'The questions') };
+  // D5356 part 2: the choices saved on the server for this open attempt, or null.
+  const draft = reply?.draft && typeof reply.draft === 'object' ? reply.draft : null;
+  return { ...rowOf(reply, 'attempt', 'The attempt'), questions: listOf(reply, 'questions', 'The questions'), draft };
+}
+
+/** D5356 part 2: save an open attempt's choices (`{ [questionUid]: [index, …] }`) at `revision`. Resolves to the saved draft. */
+export async function saveExamDraft(uid, attemptUid, answers, revision) {
+  const reply = await learningApi.saveExamAnswers(uid, attemptUid, answers, revision);
+  return rowOf(reply, 'draft', 'The saved choices');
 }
 
 /** Submit an attempt's answers (`{ [questionUid]: [index, …] }`). Resolves to the graded attempt, with the counts. */
