@@ -64,7 +64,7 @@ test('a reload or a closed tab: beforeunload asks, with the message', () => {
   assert.equal(ev.returnValue, LEAVE_MESSAGE);
 });
 
-test('a link or navigate(): push, replace and go ask first, and only then go through', () => {
+test('a link or path navigate(): push and replace ask first, and only then go through', () => {
   const win = fakeWindow(); const navigator = navigatorOf(); const answers = [false, true]; const asked = [];
   const guard = createLeaveGuard({ win, navigator, confirmLeave: (m) => { asked.push(m); return answers.shift(); } });
   guard.set(true);
@@ -74,6 +74,21 @@ test('a link or navigate(): push, replace and go ask first, and only then go thr
   navigator.replace('/x');
   assert.deepEqual(navigator.calls, [['replace', '/x']], 'accepted: it goes through');
   assert.deepEqual(asked, [LEAVE_MESSAGE, LEAVE_MESSAGE]);
+});
+
+test('numeric navigate(): go is guarded once by its popstate, not once before and once after', () => {
+  const win = fakeWindow(5); const navigator = navigatorOf(); const asked = [];
+  installLeaveGate(win);
+  const guard = createLeaveGuard({ win, navigator, confirmLeave: (m) => { asked.push(m); return true; } });
+  guard.set(true);
+
+  navigator.go(-1);
+  assert.deepEqual(navigator.calls, [['go', -1]], 'the router starts the history move');
+  assert.deepEqual(asked, [], 'go itself is not a second confirmation door');
+
+  win.history.state = { idx: 4 };
+  win.dispatchEvent(new win.PopStateEvent('popstate', { state: { idx: 4 } }));
+  assert.deepEqual(asked, [LEAVE_MESSAGE], 'the resulting popstate asks exactly once');
 });
 
 test('Back, declined: the router never sees it and the history is walked back by the distance it moved', () => {

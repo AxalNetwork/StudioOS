@@ -12,18 +12,25 @@
  * is_variant = 1 → a named draft variant shown only in the compare view.
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
+/** #5343: what a genuinely failed bootstrap throws (no table, no room); never remembered as ready. */
+export const CAPTABLE_SCHEMA_NOT_READY = 'captable_schema_not_ready';
+
+/**
+ * #5343 (#4568 R2-04): asked first (`runSchemaBootstrap`), so an up-to-date
+ * database issues no ALTER. Before, the ALTER ran blind and every error was
+ * swallowed, a missing table included, and the binding was marked ready.
+ */
 export async function ensureCapTableVariantColumn(env: Env): Promise<void> {
   if (READY.get(bindingKey(env))) return;
   try {
-    await env.DB.prepare(
-      'ALTER TABLE cap_table_scenarios ADD COLUMN is_variant INTEGER NOT NULL DEFAULT 0',
-    ).run();
+    await runSchemaBootstrap(env, ['ALTER TABLE cap_table_scenarios ADD COLUMN is_variant INTEGER NOT NULL DEFAULT 0']);
   } catch {
-    /* column already exists, or the table isn't created yet — both safe to ignore */
+    console.error('[captable] schema_not_ready');
+    throw new Error(CAPTABLE_SCHEMA_NOT_READY);
   }
   READY.set(bindingKey(env), true);
 }

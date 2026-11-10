@@ -42,6 +42,7 @@ function world() {
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql'));
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
   db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611100853_skill_case_source_identity.sql')); // D5336: the source identity a seeded case came from
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, 'admin', 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super');
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin');

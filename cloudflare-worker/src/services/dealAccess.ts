@@ -90,7 +90,8 @@ export const seesStudioInternals = (a: DealAudience) => a === 'staff';
  * Whether the caller is exempt from the venture's NDA: the platform admin, or the venture's own founder. An
  * Operating Partner reads every deal (#2460 keeps them outside members, not studio staff), so they sign the NDA.
  */
-export const ndaExempt = (a: DealAudience, user: User) => user.role === 'admin' || a === 'owner';
+export const ndaExempt = (user: User, projectFounderId: number | null | undefined) =>
+  user.role === 'admin' || isDealOwner(user, projectFounderId);
 
 /*
  * D4631 part 2 — THE venture's NDA: one rule for every surface that reads it (the deal's sections and documents,

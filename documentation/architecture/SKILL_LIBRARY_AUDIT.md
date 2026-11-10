@@ -136,6 +136,13 @@ Findings:
    (`skillLibrarySeed.ts:111-113`). A source with two cases would seed one.
    The generator allows one case file per skill. Multi-case packaging needs a
    stable case identity first (#4532, #4588).
+   **Resolved by D5336 (#5336, 2026-11-10).** A case is identified by
+   `case_id` + `revision` where its source gives them (the #4588 scenarios),
+   and by the unchanged `<slug>#<sha12>` otherwise, through one helper
+   (`skillCaseIdentity.ts`). The generator embeds each scenario beside its
+   golden case under its own name, the seed records the identity on the row and
+   adds only cases whose identity no live case has, and the CI gate fails two
+   cases of one identity. The 52 scenarios import as stored cases.
 
 ## 7. Gates by scope
 
@@ -218,7 +225,7 @@ expect}))` until #4532/#4588 introduce a stable case id.
 | `source_only` | slug in source, not in D1 | seed (existing route, explicit Super Admin action) |
 | `persisted_only` | slug in D1 (`scope = 'hq'`), not in source | report; keep. Never delete or rename. |
 | `content_drift` | same slug, different `draft_hash` | report the differing fields (`diffParts`). A draft is never overwritten; a repair is a reviewed edit through `PATCH`, with the expected prior hash. |
-| `case_drift` | same slug, source case hash not among live case hashes | report. The seed will **not** add it: every library case has the same name, and the seed skips a same-named case (finding 5). A changed case goes in through the reviewed `PUT /:uid/cases`; a historical case is never edited. |
+| `case_drift` | same slug, source case hash not among live case hashes | report. The seed will **not** add it: every library case has the same name, and the seed skips a same-named case (finding 5). A changed case goes in through the reviewed `PUT /:uid/cases`; a historical case is never edited. *Since D5336: a source case is present when a live case has its identity and its content; the seed, run on a draft, adds a case whose identity no live case has, as a new row, and never edits or removes one.* |
 | `missing_case` | a skill with no live case | report; below the publish bar by construction |
 | `invalid_reference` | `checkLibrary` or `checkCase` refuses | fail CI with the code and message |
 | `duplicate_identity` | two sources or two rows for one identity | fail CI; D1 cannot hold it (`759_agent_skills.sql:48`) |
@@ -261,7 +268,7 @@ Findings 3 and 4 now have D5334 regressions.
 | Model-judged rubric | missing | #4531, after deterministic assertions |
 | CI command with per-file errors and a summary | partial (tests and `--check` exist) | #4532 |
 | Source ↔ D1 reconciliation | missing (contract above) | #4532 |
-| Stable case ids, multi-case sources | missing | #4532 / #4588 |
+| Stable case ids, multi-case sources | missing; built by D5336 (#5336) | #4532 / #4588 |
 | Release evidence | unclear | #4533 |
 | Campaign traversal past 20 skills | present (D4668) | — |
 | Frontend: library list, seed, published evals, campaigns | missing client methods | a UI session |

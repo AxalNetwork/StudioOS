@@ -267,6 +267,7 @@ test('D4631 · the venture\'s documents are behind its NDA for an investor, a pa
     db.exec(ddl('documents'));
     db.exec(ddl('pairwise_ndas'));
     db.exec(`INSERT INTO documents (project_id, title, doc_type, status) VALUES (10, 'Synthetic SAFE draft', 'safe', 'draft')`);
+    db.prepare("INSERT INTO account_licences (user_id, licence, source) VALUES (?, 'partner', 'test')").run(BOTH_OWN);
     for (const who of [BOTH_INVEST, OP]) {
       const r = await get(db, who, '/documents');
       assert.deepEqual([r.status, r.body?.error], [403, 'nda_required'], `${who}: told why, never an empty list`);

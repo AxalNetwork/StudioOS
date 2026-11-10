@@ -208,7 +208,13 @@ dashboard.get('/', async (c) => {
   // Build chain counts map
   const chains: Record<string, number> = { L1: 0, L2: 0, L3: 0 };
   for (const r of chainCounts as any[]) chains[`L${r.level}`] = r.n;
-  const networkReach = chains.L1 + chains.L2 + chains.L3;
+  const sourceReady = (label: string) => status.get(label) === 'ready';
+  const countFigure = (label: string, raw: unknown): number | null => {
+    if (!sourceReady(label)) return null;
+    const parsed = Number.parseInt(String(raw ?? 0), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const networkReach = sourceReady('chainCounts') ? chains.L1 + chains.L2 + chains.L3 : null;
 
   // AI score average across my matches
   const scoresArr = (scoresMine as any[]).map(s => s.score).filter((n): n is number => typeof n === 'number');
@@ -294,15 +300,15 @@ dashboard.get('/', async (c) => {
       return ((user as any).assistant_enabled ?? 0) ? 1 : 0;
     })() },
     quick_stats: {
-      month_earnings_cents: parseInt((monthEarnings as any)[0]?.c) || 0,
-      lifetime_earnings_cents: parseInt((lifetimeEarnings as any)[0]?.c) || 0,
-      compound_earnings_cents: parseInt((compoundEarnings as any)[0]?.c) || 0,
-      pending_payouts_cents: parseInt((pendingPayouts as any)[0]?.c) || 0,
-      active_syndicates: (syndicatesAll as any[]).length,
-      my_syndicates: (mySyndicateMemberships as any[]).length,
+      month_earnings_cents: countFigure('monthEarnings', (monthEarnings as any)[0]?.c),
+      lifetime_earnings_cents: countFigure('lifetimeEarnings', (lifetimeEarnings as any)[0]?.c),
+      compound_earnings_cents: countFigure('compoundEarnings', (compoundEarnings as any)[0]?.c),
+      pending_payouts_cents: countFigure('pendingPayouts', (pendingPayouts as any)[0]?.c),
+      active_syndicates: sourceReady('syndicatesAll') ? (syndicatesAll as any[]).length : null,
+      my_syndicates: sourceReady('mySyndicateMemberships') ? (mySyndicateMemberships as any[]).length : null,
       ai_score_avg: aiScoreAvg,
       network_reach: networkReach,
-      marketplace_available: parseInt((marketplaceCount as any)[0]?.n) || 0,
+      marketplace_available: countFigure('marketplaceCount', (marketplaceCount as any)[0]?.n),
     },
     proprietary_deal_flow: dealsMasked,
     proprietary_deal_flow_summary: proprietaryDealFlow,
