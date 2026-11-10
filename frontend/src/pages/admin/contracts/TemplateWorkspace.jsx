@@ -7,6 +7,8 @@ import { templateActions, templateLifecycle } from '../../../lib/contractLifecyc
 import { LifecycleBadge, SafetyOverlayBadge } from './LifecycleBadge';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, button, card, date } from './parts';
+import LegalReviewPanel, { LastReview } from './LegalReviewPanel';
+import { GoverningList } from './RelatedDocuments';
 
 /**
  * D4811 (#4811) part 10 — one template's workspace (board CT-07 for a
@@ -103,7 +105,8 @@ export default function TemplateWorkspace({ slug }) {
         {tab === 'overview' && <Overview t={t} badge={badge} actions={actions} />}
         {tab === 'document' && <DocumentTab t={t} />}
         {tab === 'versions' && <VersionsTab t={t} read={versions} />}
-        {tab === 'legal-review' && <div className={`${card} p-4 text-[12.5px]`}><Missing reason="The legal-review record (reviewer, type, jurisdiction, version reviewed, findings, sources, decision) is not built yet. It waits on who records counsel approval (D4811 question C). Restricted means counsel has not reviewed this template’s text." /></div>}
+        {/* D4811 part 16: the legal-review record (CT-08), bound to the reviewed text's hash. */}
+        {tab === 'legal-review' && <LegalReviewPanel kind="template" refId={t.slug} />}
         {tab === 'activity' && <ActivityTab read={versions} />}
         {tab === 'related' && <RelatedTab t={t} />}
       </div>
@@ -122,7 +125,7 @@ function Overview({ t, badge, actions }) {
     ['Merge fields', fields ? String(fields.length) : null, 'The merge fields could not be read.'],
     ['Last edited', date(t.updated_at) || null, 'Not recorded.'],
     ['Used by', usageLine(t), 'The usage count was not returned.'],
-    ['Last review', null, 'The legal-review record is not built yet (D4811 question C).'],
+    ['Last review', <LastReview kind="template" refId={t.slug} />, null],
   ];
   return <dl className={`${card} grid gap-x-4 gap-y-2 p-4 text-[12.5px] sm:grid-cols-[200px_minmax(0,1fr)]`}>
     {rows.map(([k, v, reason]) => <React.Fragment key={k}><dt className="text-axal-muted">{k}</dt><dd className="font-semibold">{v ?? <Missing reason={reason} />}</dd></React.Fragment>)}
@@ -133,7 +136,7 @@ function RelatedTab({ t }) {
   const line = usageLine(t);
   return <div className={`${card} space-y-2 p-4 text-[12.5px]`}>
     <p><b>Agreements:</b> {line ? <>{line}. {Number(t.usage_count) > 0 && <Link className="underline" to={`/admin/contracts?template=${encodeURIComponent(t.slug)}`}>Open them in Agreements</Link>}</> : <Missing reason="The usage count was not returned." />}</p>
-    <p><b>Governance records:</b> <Missing reason="Which governance records govern this template is recorded on each record's Related tab (D4811 part 8); it is not listed here yet." /></p>
+    <div><b>Governance records that govern it:</b> <GoverningList kind="template" refId={t.slug} /></div>
   </div>;
 }
 

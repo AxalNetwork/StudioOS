@@ -135,5 +135,7 @@ test('a former advisor lists no cohort and cannot edit guidance; the live adviso
   assert.equal((await f.call('/me/guidance/g-22', 22, 'PATCH', { body: 'Changed' })).status, 403);
   const kept = f.db.prepare("SELECT body FROM cohort_guidance WHERE uid = 'g-22'").get() as any;
   assert.equal(kept.body, 'Synthetic guidance');
-  assert.equal((await f.call('/me/guidance/g-21', 21, 'PATCH', { body: 'Changed' })).status, 200);
+  // D4813 (package 2): an edit of the words names the version it was made
+  // against, so two tabs never overwrite each other; the row starts at 1.
+  assert.equal((await f.call('/me/guidance/g-21', 21, 'PATCH', { body: 'Changed', version: 1 })).status, 200);
 });

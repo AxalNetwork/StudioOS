@@ -11,6 +11,7 @@ import {
 import {
   BTN, BTN_PRIMARY, BoardStrip, CARD, DrawerStep, DecisionDialog, FOOT, OwnerBox, PhoneBack, DialogField, DoneLine, EYE, Fact, Failed, Figure, H2, LINK, MONO, PAGE, PILL, Pager, SUB,
   TD, TH, Tile, nf, useBoardOwners, useLoad,
+  BoardBulkBar, BoardRowMore, PickAll, PickBox, copyBoardLink, pickedRow, useBoardPick,
 } from './boardParts';
 import Sheet from '../../../ui/Sheet.jsx';
 
@@ -176,7 +177,7 @@ function PitchDrawer({ uid, onClose, onDecided, own, step, from }) {
   );
 }
 
-function PitchTable({ tab, items, from, onPublish, own }) {
+function PitchTable({ tab, items, from, onPublish, own, pick, onCopy }) {
   const rows = pitchRows(items);
   const byUid = Object.fromEntries((items || []).map((p) => [p.uid, p]));
   const open = (r) => <Link className={LINK} to={`/admin/approvals/co-marketing/${encodeURIComponent(r.key)}`} state={{ from }} data-testid={`pitch-open-${r.key}`}>Open</Link>;
@@ -218,15 +219,17 @@ function PitchTable({ tab, items, from, onPublish, own }) {
     // D4814 (AP-10): Pitch · Partner · Format · Waiting · Owner · Review.
     return (
       <table className="w-full min-w-[880px]">
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-700">{['Pitch', 'Partner', 'Format', 'Waiting', 'Owner', 'Review'].map((c) => <th key={c} className={TH}>{c}</th>)}</tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><PickAll pick={pick} rows={rows} testId="pitches-pick-all" />{['Pitch', 'Partner', 'Format', 'Waiting', 'Owner', 'Review'].map((c) => <th key={c} className={TH}>{c}</th>)}<th className={TH}><span className="sr-only">More</span></th></tr></thead>
         <tbody>{rows.map((r) => (
-          <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`pitch-${r.key}`}>
+          <tr key={r.key} {...pickedRow(pick, r)} data-testid={`pitch-${r.key}`}>
+            <PickBox pick={pick} row={r} label={r.title} testId={`pitch-pick-${r.key}`} />
             <td className={TD}><b>{r.title}</b><div className={SUB}>{r.audience}</div></td>
             <td className={TD}>{r.partner}{r.submitter ? <div className={SUB}>{`Proposed by ${r.submitter}`}</div> : null}</td>
             <td className={TD}>{r.type}<div className={`${SUB} ${MONO}`}>{r.date}</div></td>
             <td className={TD}><span className={MONO}>{r.age || 'Age not recorded'}</span><UrgencyPill sla={slaOfBand(r.band)} /></td>
             <td className={TD}><OwnerCell row={own.asRow({ ...r, who: r.title })} callerId={own.callerId} onAssign={own.assign} prefix="pitch" /></td>
             <td className={TD}><Link className={`${BTN} sm:min-h-[30px]`} to={`/admin/approvals/co-marketing/${encodeURIComponent(r.key)}`} state={{ from }} data-testid={`pitch-open-${r.key}`}>Review →</Link></td>
+            <td className={TD}><BoardRowMore label={r.title} href={`/admin/approvals/co-marketing/${encodeURIComponent(r.key)}`} onAssign={() => own.assign([{ id: r.id, title: r.title }])} onCopy={onCopy} testId={`pitch-more-${r.key}`} /></td>
           </tr>
         ))}</tbody>
       </table>
@@ -279,6 +282,7 @@ export default function PitchBoard({ at }) {
   const reload = () => { for (const t of PITCH_TABS) states[t.key].reload(); if (page > 0) paged.reload(); };
   const decided = (line) => { setDone(line); setPublish(null); reload(); };
   const own = useBoardOwners('co-marketing', setDone);
+  const pick = useBoardPick(`${tab.key}|${page}`);
   const prop = states.proposed;
   const propRows = prop.status === 'ready' ? pitchRows(prop.reply?.items) : [];
   const approvedOldest = oldestApproved(states.approved.reply);
@@ -297,7 +301,8 @@ export default function PitchBoard({ at }) {
         : read.status === 'loading' ? <Skeleton.Text lines={4} />
           : (read.reply?.items || []).length ? (
             <section className={`${CARD} flex flex-col`} data-testid="pitches-table">
-              <div className="overflow-x-auto"><PitchTable tab={tab.key} items={read.reply.items} from={from} onPublish={setPublish} own={own} /></div>
+              <div className="relative overflow-x-auto"><PitchTable tab={tab.key} items={read.reply.items} from={from} onPublish={setPublish} own={own} pick={pick} onCopy={(href) => copyBoardLink(href, setDone)} /></div>
+              {tab.key === 'proposed' ? <BoardBulkBar pick={pick} rows={pitchRows(read.reply.items)} onAssign={(rows) => own.assign(rows.map((r) => ({ id: r.id, title: r.title })))} testId="pitches-bulk" /> : null}
               <Pager page={page} total={Number(read.reply.total || 0)} onPage={setPage} testId="pitches-pager" />
             </section>
           ) : <p className={`m-0 ${SUB}`} data-testid="pitches-empty">No pitch is in this state.</p>}
@@ -311,7 +316,7 @@ export default function PitchBoard({ at }) {
       </section>
       {publish ? <PitchDialog kind="publish" pitch={publish} onClose={() => setPublish(null)} onDone={decided} onStale={reload} /> : null}
       {at.item ? <PitchDrawer uid={at.item} onClose={() => navigate(from)} onDecided={decided} own={own} step={read.status === 'ready' ? boardStep(pitchRows(read.reply?.items), at.item) : null} from={from} /> : null}
-      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={own.finish} /> : null}
+      {own.assignFor ? <AssignDialog items={own.assignFor} inbox={own.inbox} callerId={own.callerId} onClose={own.close} onDone={(t) => { pick.clear(); own.finish(t); }} /> : null}
     </div>
   );
 }
