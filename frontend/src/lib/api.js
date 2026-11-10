@@ -3619,6 +3619,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.

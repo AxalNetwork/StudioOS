@@ -3,6 +3,7 @@ import { Unreadable } from '../../../ui';
 import StatusBadge, { ReadValue } from './StatusBadge.jsx';
 import AccessActionDialog from './AccessActions.jsx';
 import { scopeSentence } from './deploymentScope.jsx';
+import BranchSignOut from './BranchSignOut.jsx';
 import { BTN_DANGER, NotInstrumented as NI } from './ActionDialog.jsx';
 import {
   MIN_REASON, SESSION_BULK_LIMIT, SESSION_STATUS, accountName, describeSession, formatInZone, formatUtc, isoOf,
@@ -88,6 +89,7 @@ function ReachCard({ scope }) {
     ['Sign out account', 'Every session that account holds, on every device: its sign-in floor is raised. Which devices that reached is not listed.'],
     ['End support session', 'Ends the support session: its token is refused from its next request, and the record is closed so it can\'t be extended (D4669).'],
     ['Emergency re-authentication', 'Every HQ-held account; branch databases are not touched; you will be signed out too.'],
+    ['Sign out on branch deployments', 'Asks each bound branch to sign one person (by email) or every account out there. Each branch answers done, failed or unreachable; unreachable is never counted as done (D4669 part 2).'],
   ];
   return (
     <section aria-labelledby="access-reach-h" className={`${CARD} p-4`} data-testid="access-reach">
@@ -491,6 +493,9 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
         <ReachCard scope={loaded ? list.scope : undefined} />
         {emergencyCard}
       </div>
+
+      {/* D4669 part 2: reaching branches is its own act, sent on request. */}
+      {loaded && <BranchSignOut scope={list.scope} readOnly={readOnly} />}
 
       {dialog && (
         <AccessActionDialog

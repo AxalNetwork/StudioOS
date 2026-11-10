@@ -81,7 +81,10 @@ import {
 import { screeningSummary } from '../services/sanctions';
 import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
 import { branchBindings } from '../services/branches';
-import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
+import {
+  emergencyScope, deploymentOutcomes, signOutOnBranches, type BranchSignOutTarget,
+} from '../services/emergencyScope';
+import { EMERGENCY_REASON_MIN, EMERGENCY_OP_KEY_RE } from '../rpc/branchOps';
 import {
   HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
   dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
@@ -1657,6 +1660,133 @@ r.post('/impersonations/:id/end', async (c) => {
     // message no longer has to explain a token outliving its session.
     message: 'The support session is ended. Its token is refused from its next request, and it can no longer '
       + 'be extended. The account holder\'s own sessions are untouched.',
+    scope: emergencyScope(c.env),
+  });
+});
+
+/**
+ * POST /api/admin/security/branch-sign-out
+ *
+ * D4669 part 2 (#4669) — the owner's option B: HQ's emergency sign-out may
+ * reach branch deployments, ON REQUEST, and each branch reports its own
+ * outcome. The ordinary acts above are unchanged and still write this
+ * deployment only; this is the separate act an operator chooses when an
+ * incident spans branches.
+ *
+ * Body: `{ branches: 'all' | string[], target, reason, op_key }`, where
+ * `target` is `{ kind: 'all' }` (every account on each branch named),
+ * `{ kind: 'account', email }` (the person's account on each branch named, by
+ * email, because HQ's ids mean nothing in another database) or
+ * `{ kind: 'account', user_id }` (one account HQ found on ONE branch).
+ *
+ * THE SAME BAR AS SIGNING EVERYONE OUT HERE (TOTP, a recent step-up, the
+ * elevation), checked before any binding is touched. The branch checks the
+ * caller is HQ, the reason, the operator's name and the key itself.
+ *
+ * EACH BRANCH IS ITS OWN ROW, and only an answer counts:
+ *   done         the branch said it acted (with how many accounts, and
+ *                `replayed` when this act was already on its record);
+ *   failed       the branch refused before writing: nothing changed there;
+ *   unreachable  not bound, or no answer in time: whether it acted is not
+ *                known, and it NEVER counts as done.
+ * The act is `done` only when every branch named said done, `failed` when none
+ * did, and `partial` otherwise — said as partial, never rounded either way.
+ *
+ * ONE KEY PER OPERATOR REQUEST. The page makes it when the dialog opens and
+ * resends it on Try again, and each branch answers a key it already holds
+ * with that record. So retrying a branch that timed out cannot sign anyone
+ * out twice or write a second audit row there.
+ *
+ * GATES THAT STAY: `HQ_RPC_SECRET` must be set (409 otherwise, as for every
+ * secret-carrying branch call), and a branch without a binding is reported,
+ * not skipped.
+ */
+r.post('/branch-sign-out', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const { reason, body } = await reasonOf(c);
+  if (reason.length < EMERGENCY_REASON_MIN) {
+    return c.json({
+      error: `A reason of at least ${EMERGENCY_REASON_MIN} characters is required. It is stored here and on every branch reached.`,
+      code: 'reason_required',
+    }, 400);
+  }
+  const opKey = String(body?.op_key ?? '');
+  if (!EMERGENCY_OP_KEY_RE.test(opKey)) {
+    return c.json({ error: 'The request carries no operation key, so a retry could not be recognised. Reopen the dialog.', code: 'op_key_required' }, 400);
+  }
+
+  const t = (body?.target ?? {}) as Record<string, unknown>;
+  let target: BranchSignOutTarget;
+  if (t.kind === 'all') {
+    target = { kind: 'all' };
+  } else if (t.kind === 'account' && typeof t.email === 'string' && t.email.includes('@')) {
+    target = { kind: 'account', email: t.email.trim().toLowerCase().slice(0, 320) };
+  } else if (t.kind === 'account' && Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0) {
+    target = { kind: 'account', user_id: Number(t.user_id) };
+  } else {
+    return c.json({ error: 'Name the target: every account, or one account by email (or by its id on one branch).', code: 'invalid_target' }, 400);
+  }
+
+  const bound = (() => { try { return branchBindings(c.env).map((b) => b.code); } catch { return null; } })();
+  if (bound === null) {
+    return c.json({ error: 'Which branches are bound could not be read, so no branch was asked. Nothing changed.', code: 'branches_unreadable' }, 503);
+  }
+  let codes: string[];
+  if (body?.branches === 'all') {
+    codes = bound;
+  } else if (Array.isArray(body?.branches)) {
+    codes = [...new Set((body.branches as unknown[]).map((x) => String(x ?? '').trim().toLowerCase()).filter(Boolean))];
+  } else {
+    return c.json({ error: 'Name the branches: every bound branch, or a list of branch codes.', code: 'invalid_branches' }, 400);
+  }
+  if (codes.length === 0) {
+    return c.json({ error: 'No branch is bound here, so there is no branch to reach. Nothing changed.', code: 'no_branch' }, 409);
+  }
+  if ('user_id' in target && codes.length !== 1) {
+    return c.json({ error: 'An account id belongs to one branch. Name that one branch, or name the person by email.', code: 'invalid_target' }, 400);
+  }
+  if (!c.env.HQ_RPC_SECRET) {
+    return c.json({
+      error: 'HQ_RPC_SECRET is not set on this Worker, so a branch cannot tell this call from any other Worker in the account. '
+        + 'Set it, then try again. No branch was asked.',
+      code: 'hq_rpc_secret_unset',
+    }, 409);
+  }
+
+  const result = await signOutOnBranches(c.env, codes, {
+    secret: c.env.HQ_RPC_SECRET,
+    hq_actor_name: String((actor as { name?: string }).name || actor.email || 'Axal VC HQ').slice(0, 200),
+    reason,
+    op_key: opKey,
+    target,
+  });
+
+  // HQ's record of the act, after the outcome is known and whatever it is: an
+  // operator's request to sign people out of other deployments is recorded
+  // even when no branch answered. `logAdminAction` never throws, so its
+  // failure never turns a reported outcome into an error.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_branch_sign_out', {
+    reason,
+    op_key: opKey,
+    target_kind: target.kind,
+    ...('email' in target ? { target_email: target.email } : {}),
+    ...('user_id' in target ? { branch_user_id: target.user_id } : {}),
+    outcome: result.outcome,
+    branches: result.outcomes.map((o) => ({ code: o.deployment, outcome: o.outcome, affected: o.affected ?? null })),
+  });
+
+  const done = result.outcomes.filter((o) => o.outcome === 'done').length;
+  const message = result.outcome === 'done'
+    ? `Every branch asked (${done}) answered that it signed the ${target.kind === 'all' ? 'accounts' : 'account'} out.`
+    : result.outcome === 'partial'
+      ? `${done} of ${result.outcomes.length} branches answered that they acted. The others are listed with what is known; a branch that did not answer is not counted as done.`
+      : 'No branch answered that it acted. Each is listed with what is known.';
+  return c.json({
+    ok: result.outcome === 'done',
+    outcome: result.outcome,
+    op_key: opKey,
+    message,
+    outcomes: result.outcomes,
     scope: emergencyScope(c.env),
   });
 });
