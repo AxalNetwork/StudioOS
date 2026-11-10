@@ -18,7 +18,7 @@ const app = new Hono().route('/api/research/projects', projects);
 app.onError((error, c) => c.json({ detail: error.message }, error.message === 'Unauthorized' ? 401 : 500));
 const SECRET = 'unit-research-projects-0123456789012345678';
 const sql = (name: string) => readFileSync(new URL(`../sql/${name}`, import.meta.url), 'utf8');
-const MIGRATION = 'migrations/202611092036_research_projects.sql';
+const MIGRATION = 'migrations/202611092035_research_projects.sql';
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
