@@ -372,6 +372,7 @@ export const MORE_MENU = Object.freeze([
     { id: 'comments', label: 'Comments', adapter: 'comments' },
     // D1569 (#3816): the card's script in an AI voice, quoted first and saved only on Accept; never in the header or the rail.
     { id: 'voice', label: 'AI voice-over', ai: true, write: true },
+    { id: 'remove_card', label: 'Remove card…', write: true },
   ] },
   // D1370 (#3661, pd13 and pf1a): the preflight, free and read-only, between This card and the AI items.
   { id: 'before', label: 'Before you send', items: [

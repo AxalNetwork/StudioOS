@@ -1824,6 +1824,8 @@ const filingBody = (v) => ({
   kind: v.kind || null, jurisdiction: str(v.jurisdiction), due_date: str(v.due_date),
   for_holder_id: v.kind === '83b' ? str(v.for_holder_id) : null, state: v.state || null,
 });
+const filingIdempotencyKey = () => globalThis.crypto?.randomUUID?.()
+  ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const buildFiling = {
   key: 'filing', cta: 'Add filing', button: 'Add filing',
   title: 'Add filing',
@@ -1835,6 +1837,9 @@ const buildFiling = {
     jurisdiction: { options: [...readChips(read, 'jurisdiction'), { value: '', label: 'Other' }], def: 0 },
     for_holder_id: { options: readChips(read, 'for_holder_id') },
   })),
+  // D5306: one key for this open form. An ambiguous network retry reuses it;
+  // closing and opening a new form mints a new filing identity.
+  makeMemory: () => ({ idempotencyKey: filingIdempotencyKey() }),
   // Proof is the new step's own Upload proof (D690 decision 13), sent once the filing exists.
   // D4600: `memory` lives as long as the open form. Once the filing exists its id is kept there,
   // so a failed upload is retried against that filing and never creates a second one.
@@ -1844,7 +1849,8 @@ const buildFiling = {
     if (memory.filing && !hasFile) {
       throw partialFiling(memory.filing, 'Choose the proof file to upload, or close this form: the filing is already added.');
     }
-    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v));
+    memory.idempotencyKey ||= filingIdempotencyKey();
+    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v), memory.idempotencyKey);
     if (made?.id && hasFile) {
       const body = new FormData();
       body.append('file', file);

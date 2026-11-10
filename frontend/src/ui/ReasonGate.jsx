@@ -6,7 +6,7 @@ import Lightbox from './Lightbox';
 import {
   END_ACCESS, END_BODY, END_FAILED, END_TITLE, EVERY_OPEN, FIELD_LABEL, FOUNDER_SEES, OPEN_LABEL, OPENING, PLACEHOLDER,
   PREVIEW_LINE, REASON_CHIPS, accessWord, bannerLine, countdown, gateQuestion, reasonCheck, refusalView, ruleLine,
-} from './reasonGate';
+} from './reasonGate.js';
 
 /**
  * D1463 (#3713, boards RR00–RR22): the one gate an admin meets before reading

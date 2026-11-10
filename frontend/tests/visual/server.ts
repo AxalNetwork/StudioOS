@@ -108,6 +108,14 @@ for (const theme of THEMES) {
   }
 }
 
+// A separate deck for destructive draft tests. Its saved version never changes.
+const draftRecovery = { projectId: 190, deckId: 1090 };
+db.prepare('INSERT INTO projects (id, name, founder_id) VALUES (?, ?, ?)').run(draftRecovery.projectId, 'Synthetic draft recovery', venture.founderId);
+db.prepare('INSERT INTO pitch_decks (id, project_id, version, title, slides, is_current, created_by, created_at, theme_json) VALUES (?, ?, 1, ?, ?, 1, ?, ?, ?)')
+  .run(draftRecovery.deckId, draftRecovery.projectId, 'Synthetic draft recovery', JSON.stringify(STRUCTURES.slice(0, 2).map((structure, i) => ({
+    ...structureCard(structure, i + 1), uid: i === 0 ? 'draft-one' : 'draft-two', title: i === 0 ? 'Synthetic first card' : 'Synthetic second card',
+  }))), venture.founderUserId, SAVED_AT, JSON.stringify({ kind: 'neutral_light', background: null }));
+
 /** One call to the real Worker, as the browser would make it. */
 async function api(method: string, path: string, body?: unknown) {
   const res = await worker.fetch(new Request(`${ORIGIN}${path}`, {
@@ -129,7 +137,7 @@ db.prepare('UPDATE pitch_decks SET created_at = ? WHERE project_id = ?').run(SAV
 const oneClick = { projectId: ONE_CLICK.projectId, deckId: accepted.deck.id, cards: accepted.deck.slides.length, theme: 'neutral_light', aspect: '16:9' };
 
 const me = await api('GET', '/api/auth/me').catch(() => null);
-const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick };
+const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery };
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',

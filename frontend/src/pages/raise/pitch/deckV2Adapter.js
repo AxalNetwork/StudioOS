@@ -264,7 +264,10 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
  * generate, icons: { total, offset, items } }`.
  */
-export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
+// D4574 H3 (#4574): the icon nodes are a static asset the Worker reads, so a
+// page of icons can come back `unreadable`. It is passed on, never flattened
+// to an empty list: the panel says the set could not be read.
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null, unreadable: page?.unreadable === true, reason: page?.reason ?? null } })), SURFACES.elementsLibrary.issue);
 /**
  * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
  * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
