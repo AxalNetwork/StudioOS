@@ -21,6 +21,7 @@
 import { toUtcInstant } from '../../lib/notices';
 import { archetypeMeta, archetypeAudienceFromRole, humanize } from '../../lib/assessmentMeta';
 import { TIER_PLANS } from '../../components/PaywallModal';
+import { formatMinorOrCount } from '../../lib/money.js';
 
 // ---------------------------------------------------------------------------
 // Dates and money
@@ -64,12 +65,8 @@ export function money(cents, currency) {
   const n = Number(cents);
   if (cents === null || cents === undefined || cents === '' || !Number.isFinite(n)) return null;
   const code = String(currency || '').trim().toUpperCase();
-  if (!/^[A-Z]{3}$/.test(code)) return `${(n / 100).toFixed(2)} (currency not recorded)`;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: code }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a missing or unlisted code names the stored count.
+  return formatMinorOrCount(n, code, { locale: 'en-GB' });
 }
 
 // ---------------------------------------------------------------------------

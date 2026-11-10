@@ -422,19 +422,26 @@ async function mustHaves(env: Env, projectId: number): Promise<any[]> {
 
 async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads a must-have row.
-  // `missing` is the first must-have not done, in read order: the card's "Complete <title>".
-  const counts = await env.DB.prepare(
-    `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN delivery_status = 'Done' THEN 1 ELSE 0 END), 0) AS done,
+  // #4603 part 3: one scan of the must-haves, grouped by state, hypothesis and month of completion (a Done
+  // must-have's, when dated), gives the counts, the burn-up and the Hypothesis filter's options; each group's
+  // claim is looked up once. `missing` is the first must-have not done, in read order (the card's
+  // "Complete <title>"): an uncorrelated subquery, walked in `(project_id, sort_order)` order.
+  const groups = rows(await env.DB.prepare(
+    `SELECT g.status, g.hypothesis_id, h.claim AS test_hypothesis, g.month, g.n,
             (SELECT title FROM mvp_features WHERE project_id = ? AND is_must_have = 1 AND delivery_status IS NOT 'Done' ORDER BY sort_order, id LIMIT 1) AS missing
-       FROM mvp_features WHERE project_id = ? AND is_must_have = 1`,
-  ).bind(p.id, p.id).first<{ total: number; done: number; missing: string | null }>();
-  const total = number(counts?.total), doneCount = number(counts?.done), missing = counts?.missing ?? null;
-  // Done must-haves per month of completion: one row per month, not per must-have.
-  const history = new Map(rows(await env.DB.prepare(
-    `SELECT substr(done_at, 1, 7) AS month, COUNT(*) AS n FROM mvp_features
-      WHERE project_id = ? AND is_must_have = 1 AND delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> ''
-      GROUP BY substr(done_at, 1, 7)`,
-  ).bind(p.id).all<{ month: string; n: number }>()).map(r => [String(r.month), number(r.n)]));
+       FROM (SELECT delivery_status AS status, hypothesis_id,
+                    CASE WHEN delivery_status = 'Done' AND done_at IS NOT NULL AND done_at <> '' THEN substr(done_at, 1, 7) END AS month,
+                    COUNT(*) AS n
+               FROM mvp_features WHERE project_id = ? AND is_must_have = 1
+              GROUP BY delivery_status, hypothesis_id, month) g
+       LEFT JOIN hypotheses h ON h.id = g.hypothesis_id AND h.project_id = ?`,
+  ).bind(p.id, p.id, p.id).all<{ status: string; hypothesis_id: unknown; test_hypothesis: string | null; month: string | null; n: number; missing: string | null }>());
+  const total = groups.reduce((t, g) => t + number(g.n), 0);
+  const doneCount = groups.filter(g => g.status === 'Done').reduce((t, g) => t + number(g.n), 0);
+  const missing = groups[0]?.missing ?? null;
+  // Done must-haves per month of completion.
+  const history = new Map<string, number>();
+  for (const g of groups) if (g.month != null) history.set(String(g.month), (history.get(String(g.month)) ?? 0) + number(g.n));
   const points = [...history.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   let cumulative = 0;
   const dated: Array<{ date: string; value: number | null; label: string }> = points.map(([month, n]) => ({ date: `${month}-01`, value: (cumulative += n), label: month }));
@@ -455,12 +462,8 @@ async function prototype(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
       const read = await sqlPage(env, MUST_COLS, MUST_FROM, sql, p.id, total);
       mustRows = read.found.map(mustRow);
       paged = read.paged;
-      // The filter offers every must-have's hypothesis, not the page's: one row per distinct hypothesis.
-      hypotheses = mustHypothesisOptions(rows(await env.DB.prepare(
-        `SELECT DISTINCT f.hypothesis_id, h.claim AS test_hypothesis
-           FROM mvp_features f LEFT JOIN hypotheses h ON h.id = f.hypothesis_id AND h.project_id = f.project_id
-          WHERE f.project_id = ? AND f.is_must_have = 1`,
-      ).bind(p.id).all<any>()));
+      // The filter offers every must-have's hypothesis, not the page's: the groups above carry each one.
+      hypotheses = mustHypothesisOptions(groups);
     } else {
       const all = await mustHaves(env, p.id);
       mustRows = all.map(mustRow);
@@ -603,14 +606,22 @@ async function roadmapKpiWords(env: Env, projectId: number, posthogNamed: boolea
 
 async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FULL): Promise<ModuleRead> {
   // #4603 part 2b: the card and facts are aggregates; neither the overview nor the card reads an item row.
-  // One row per stored column value: the Now/Next/Later/Done counts, the total, and whether any item names a PostHog KPI.
-  const byColumn = rows(await env.DB.prepare(
-    `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
-       FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
-  ).bind(p.id).all<{ kanban_status: string; n: number; posthog: number }>());
+  // The overview: one row per stored column value, with the Now/Next/Later/Done counts, the total, and whether any
+  // item names a PostHog KPI. #4603 part 3: the module page also needs every Theme and KPI for its filters, so it
+  // groups the one scan by column, theme and KPI instead of scanning again for them (one row per combination).
+  type Group = { kanban_status: string; feedback_theme?: unknown; kpi_key?: unknown; n: number; posthog?: number };
+  const byColumn: Group[] = opts.rows
+    ? rows(await env.DB.prepare(
+      `SELECT kanban_status, feedback_theme, kpi_key, COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?
+        GROUP BY kanban_status, feedback_theme, kpi_key`,
+    ).bind(p.id).all<Group>())
+    : rows(await env.DB.prepare(
+      `SELECT kanban_status, COUNT(*) AS n, MAX(CASE WHEN substr(kpi_key, 1, 8) = 'posthog-' THEN 1 ELSE 0 END) AS posthog
+         FROM roadmap_okrs WHERE project_id = ? GROUP BY kanban_status`,
+    ).bind(p.id).all<Group>());
   const itemCount = byColumn.reduce((t, r) => t + number(r.n), 0);
   const buckets = ROADMAP_COLUMNS.map(s => byColumn.filter(r => r.kanban_status === s).reduce((t, r) => t + number(r.n), 0));
-  const posthogNamed = byColumn.some(r => number(r.posthog) === 1);
+  const posthogNamed = byColumn.some(r => (opts.rows ? isPosthogKpi(r.kpi_key) : number(r.posthog) === 1));
   // Items shipped per month: each month's distinct items moved to Done, one row per month.
   const months = new Map(rows(await env.DB.prepare(
     `SELECT substr(m.moved_at, 1, 7) AS month, COUNT(DISTINCT m.okr_id) AS n FROM okr_column_moves m
@@ -632,14 +643,10 @@ async function roadmap(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
       const read = await sqlPage(env, ROADMAP_COLS, ROADMAP_FROM, sql, p.id, itemCount);
       itemRows = read.found.map(i => roadmapRow(i, kpiWords));
       paged = read.paged;
-      // The Theme and KPI filters offer every item's values, not the page's: one row per distinct value.
-      const values = rows(await env.DB.prepare(
-        `SELECT 'theme' AS key, feedback_theme AS value FROM roadmap_okrs WHERE project_id = ? AND feedback_theme IS NOT NULL GROUP BY feedback_theme
-         UNION ALL
-         SELECT 'kpi' AS key, kpi_key AS value FROM roadmap_okrs WHERE project_id = ? AND kpi_key IS NOT NULL GROUP BY kpi_key`,
-      ).bind(p.id, p.id).all<{ key: string; value: unknown }>());
-      const of = (key: string) => optionsOf(values.filter(v => v.key === key).map((v, at) => record(at, {}, { [key]: v.value as any })), key);
-      themes = of('theme'); kpis = of('kpi');
+      // The Theme and KPI filters offer every item's values, not the page's: the groups above carry each one.
+      const of = (key: 'theme' | 'kpi', column: 'feedback_theme' | 'kpi_key') =>
+        optionsOf(byColumn.filter(g => g[column] != null).map((g, at) => record(at, {}, { [key]: g[column] as any })), key);
+      themes = of('theme', 'feedback_theme'); kpis = of('kpi', 'kpi_key');
     } else {
       itemRows = (await roadmapItems(env, p.id)).map(i => roadmapRow(i, kpiWords));
       themes = optionsOf(itemRows, 'theme'); kpis = optionsOf(itemRows, 'kpi');
@@ -719,7 +726,8 @@ async function roadmapGithub(env: Env, p: Project) {
  * a variant), marked Modelled. Null with neither, or no value.
  */
 async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; source: 'record' | 'model' | null }> {
-  const cap = await readCapTable(env, p.id);
+  // #4603 part 3: Today's figures only, so a lean read (no holder kinds, no close uids, the model only as the fallback).
+  const cap = await readCapTable(env, p.id, { lean: true });
   if (cap.source === 'record') {
     const total = cap.today.totals.shares_outstanding;
     const pool = (cap.start.start.pool_shares ?? 0) + cap.start.start.holders.filter(h => h.type === 'options').reduce((n, h) => n + h.shares, 0);

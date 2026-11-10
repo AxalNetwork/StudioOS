@@ -6,6 +6,7 @@ import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { exportView } from '../../lib/csvExport';
+import { lastCompletedQuarterEnd } from '../../lib/reportingPeriod';
 import './investorPortfolioCanvas.css';
 import './investorPortfolioPositions.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
@@ -394,15 +395,15 @@ function AlertsSection({ rows, unavailable }) {
  * takes `as_of` and the route cuts the flows AND the marks at the date, so the
  * figures are the quarter's own: the book's figures, traced to the positions.
  */
-function lastQuarterEnd() {
-  const now = new Date();
-  const quarterEndMonth = Math.floor((now.getMonth() - 1) / 3) * 3; // the month a quarter last ended in
-  const end = new Date(now.getFullYear(), quarterEndMonth, 0);
-  return end.toISOString().slice(0, 10);
-}
+// D4647 (#4647): the default is the last COMPLETED quarter's last day, on the
+// viewer's own calendar. The arithmetic here was a whole quarter early in
+// January, April, July and October, and a day early in every zone east of UTC;
+// `lib/reportingPeriod.js` has the rule and why. It only chooses the default
+// date and passes it on as `as_of`: how the Worker cuts flows and marks at that
+// date is #4644's rule, not this page's.
 
 function QuarterEndExport() {
-  const [asOf, setAsOf] = useState(lastQuarterEnd());
+  const [asOf, setAsOf] = useState(lastCompletedQuarterEnd());
   const [state, setState] = useState(null); // null | 'loading' | payload | 'error'
   const read = async () => {
     setState('loading');

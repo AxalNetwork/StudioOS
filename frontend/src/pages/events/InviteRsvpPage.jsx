@@ -11,15 +11,12 @@ import { eventsPublic, events } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuthSync';
 import { reportError } from '../../lib/log';
 import { loadTurnstile } from '../../lib/turnstile';
+import { formatEventPrice } from '../../lib/money';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
-function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(amt);
-  } catch { return `$${amt.toFixed(2)}`; }
-}
+// D5373: the event's own currency, at that currency's own decimals.
+const formatMoney = formatEventPrice;
 
 function formatDate(iso) {
   if (!iso) return '';

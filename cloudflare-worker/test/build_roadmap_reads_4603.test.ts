@@ -98,7 +98,7 @@ test('1. the SQL page answers exactly what the in-memory path answers, and offer
   assert.ok(checked > 300, `${checked} queries compared`);
   // Mutation checked: the options built from the SQL page's rows (not every item) → a Later-only page offers fewer themes.
   const sqlPath = await page(varied, '&filter=column%3Alater'), memoryPath = await page(varied, '&q=synthetic');
-  assert.ok(sqlPath.log.some((s) => /^SELECT 'theme' AS key/.test(s.sql)), 'the filtered page is the SQL path');
+  assert.ok(sqlPath.log.some((s) => /^SELECT COUNT\(\*\) AS n FROM roadmap_okrs o/.test(s.sql)), 'the filtered page is the SQL path (it counts its filter)');
   for (const key of ['theme', 'kpi']) assert.deepEqual(optionsOf(sqlPath.body, key), optionsOf(memoryPath.body, key), key);
   assert.deepEqual(optionsOf(sqlPath.body, 'theme').map((o: any) => o.value), ['Billing', 'Onboarding', 'onboarding', 'Équipe theme']);
   assert.deepEqual(optionsOf(sqlPath.body, 'kpi').map((o: any) => o.value), ['custom-x', 'custom-y', 'posthog-abc', 'posthog-zzz']);

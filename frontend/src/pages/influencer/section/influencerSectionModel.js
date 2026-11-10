@@ -21,6 +21,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { formatMinorOrCount } from '../../../lib/money.js';
 
 export { NOT_RECORDED };
 export const UNREADABLE = 'Unreadable';
@@ -145,11 +146,8 @@ export function money(cents, currency) {
   const n = cents === null || cents === undefined || cents === '' ? NaN : Number(cents);
   const cur = String(currency || '').toUpperCase();
   if (!Number.isFinite(n) || !/^[A-Z]{3}$/.test(cur)) return NOT_RECORDED;
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, minimumFractionDigits: 2 }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(2)} ${cur}`;
-  }
+  // D5373: at the currency's own decimals ($1,236.00, ¥1,236, KWD 1.236); an unlisted code names the stored count.
+  return formatMinorOrCount(n, cur, { locale: 'en-US' });
 }
 
 /**

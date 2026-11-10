@@ -21,6 +21,7 @@
 // browser never formats money.
 
 import { safeHref } from './cycleModel.js';
+import { plainAmount } from '../../lib/money.js';
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const sentence = (t) => { const s = String(t || '').trim(); return !s ? '' : /[.!?]$/.test(s) ? s : `${s}.`; };
@@ -230,7 +231,9 @@ export function amountWord(p) {
   const cents = posInt(p?.amount_cents);
   if (!cents) return null;
   const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
-  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+  // D5373: at the currency's own decimals (1,200 USD, 12,000 JPY, 1.250 KWD); a finding's currency column defaults to 'usd'.
+  const code = String(p.currency || 'usd').toUpperCase();
+  return `${plainAmount(cents, code, { trimWhole: true }) ?? `${cents} minor units`} ${code}${period}`;
 }
 
 /** `{ what, detail }` for a finding kind, or null for any other kind. */

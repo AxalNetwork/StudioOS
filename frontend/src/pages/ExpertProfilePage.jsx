@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { safeReadJSON } from '../lib/storage';
 import { NotRecorded } from './wellbeing/WellbeingParts';
 import { SERVICE_GAP } from './wellbeing/WellbeingBookPage';
+import { formatMinorOrCount } from '../lib/money';
 
 /**
  * /wellbeing/expert/:uid — an expert's public profile, and a card that sends a
@@ -75,7 +76,7 @@ export function ServicesPanel({ services }) {
           </div>
           <div className="text-right font-semibold text-slate-900 dark:text-white">
             {s.price_cents > 0
-              ? `${(s.price_cents / 100).toLocaleString(undefined, { style: 'currency', currency: (s.currency || 'usd').toUpperCase() })}`
+              ? formatMinorOrCount(s.price_cents, (s.currency || 'usd').toUpperCase())
               : 'Free'}
           </div>
         </div>
