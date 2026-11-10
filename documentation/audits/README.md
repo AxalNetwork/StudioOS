@@ -63,6 +63,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `DOCS_VISIBILITY_AUDIT.md` | Help Center coverage. |
 | `MIGRATION_LFS_AUDIT.md` | Git LFS migration. |
 | `PORTFOLIO_UX_AUDIT_2026-11-09.md`, `portfolio-ux-2026-11-09/` | #4816: the investor Portfolio's screens, journeys and states captured from the current build with synthetic data, findings graded against the evidence, the proposed information architecture and state model, and the gaps in the Portfolio v2 canvas (D4817). The folder holds the capture script, its fixtures and the screenshots. |
+| `LEARNING_COVERAGE_2026-11-10.md` | #4650 part 4: the Learning curriculum coverage record. Coverage of the founder, investor, advisor and partner journeys is unknown until a Super Admin opens it in the studio, because no agent read production; it explains how to read the four states (D4650). |
 
 ## Adding one
 
