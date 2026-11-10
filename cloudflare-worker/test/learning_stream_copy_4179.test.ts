@@ -251,6 +251,18 @@ test('the content table reads Copying…, Verified and Copy failed with the rout
   assert.deepEqual(listed.find((i: any) => i.uid === 'vid-1').stream_copy, { state: 'failed', stream_uid: COPY, error_code: 'ERR_SYNTH', error_message: 'Synthetic failure.' });
 });
 
+test('D4649: a copy table that cannot be read is "unreadable" on each uploaded file, never "none"', async () => {
+  const f = fixture();
+  await copy(f);
+  // The copies can no longer be read. "none" here would offer Copy to Stream for a file already copying.
+  f.db.exec('DROP TABLE learning_stream_videos');
+  const listed = (await call(f, SUPER, 'GET', '/api/admin/learning/items')).body.items;
+  assert.deepEqual(listed.find((i: any) => i.uid === 'vid-1').stream_copy, { state: 'unreadable' });
+  assert.deepEqual(listed.find((i: any) => i.uid === 'vid-2').stream_copy, { state: 'unreadable' });
+  assert.equal('stream_copy' in listed.find((i: any) => i.uid === 'vid-link'), false, 'a link carries no copy state');
+  // Mutation checked: `copyStates` returning its empty map from the catch → both read { state: 'none' }.
+});
+
 // ─────────────────────────────────────────────── the sweep
 
 test('the sweep never deletes an unverified copy’s object, even one no item plays', async () => {
