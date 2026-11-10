@@ -12,6 +12,8 @@
  * one to the other's formatter is off by a hundred in whichever direction
  * hurts, so they are named for what they take.
  */
+
+import { formatMinorOrCount } from '../../lib/money.js';
 const isNum = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
 
 /** A REAL-dollar column (`quotes.price`, `founder_needs.budget_*`). */
@@ -29,15 +31,9 @@ export function moneyCents(cents, currency = 'USD') {
   if (!isNum(cents)) return null;
   const n = Number(cents);
   const code = String(currency || 'USD').toUpperCase();
-  const digits = n % 100 === 0 ? 0 : 2;
-  try {
-    // Intl puts a no-break space between a code and the amount ("CHF 123.45").
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency', currency: code, minimumFractionDigits: digits, maximumFractionDigits: 2,
-    }).format(n / 100).replace(/\u00a0/g, ' ');
-  } catch {
-    return `${code} ${(n / 100).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: 2 })}`;
-  }
+  // D5373: at the currency's own decimals; a code that is not a listed currency names the stored count.
+  // Intl puts a no-break space between a code and the amount ("CHF 123.45").
+  return formatMinorOrCount(n, code, { locale: 'en-US', trimWhole: true }).replace(/\u00a0/g, ' ');
 }
 
 /** An integer-cents column that is always US dollars. */

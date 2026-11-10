@@ -1,11 +1,13 @@
+import { formatMinor } from '../../lib/money.js';
+
 /** D1149: amounts carry the deal's denomination; a missing figure stays missing. */
 export function dealMoney(value, currency = 'USD', cents = false) {
   if (value == null || value === '' || !Number.isFinite(Number(value))) return null;
   if (!/^[A-Z]{3}$/.test(currency)) return null;
+  // D5373: a count of the deal currency's minor units is shown at that currency's own decimals (JPY none, KWD three).
+  if (cents) return formatMinor(Number(value), currency, { locale: 'en-US' });
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency,
-      minimumFractionDigits: cents ? 2 : 0, ...(cents ? { maximumFractionDigits: 2 } : {}),
-    }).format(Number(value) / (cents ? 100 : 1));
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 0 }).format(Number(value));
   } catch { return null; }
 }
 /**

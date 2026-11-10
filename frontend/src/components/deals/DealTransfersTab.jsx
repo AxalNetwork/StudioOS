@@ -100,7 +100,7 @@ export function RecordTransferForm({ dealId, onClose, onRecorded, initialRefusal
 
   const submit = async (e) => {
     e?.preventDefault?.();
-    const cents = amountToCents(amount);
+    const cents = amountToCents(amount, currency);
     if (!Number.isFinite(cents)) { setRefusal(transferRefusal({ code: 'transfer_amount_invalid' })); return; }
     setSaving(true); setRefusal(null);
     try {

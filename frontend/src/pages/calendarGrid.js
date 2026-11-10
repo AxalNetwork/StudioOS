@@ -7,7 +7,7 @@
  * Everything here reads the page's one list (`inRange`); nothing counts a second
  * list, and a count the read did not give is never a 0.
  */
-import { FAMILIES, LAYERS } from './calendarViews';
+import { EXPLORER_KINDS, FAMILIES, LAYERS } from './calendarViews';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -203,9 +203,14 @@ export function moveFocus(index, key, len, rowLen = 7) {
  * The Kinds filter (CAL6), and the Explorer's calendar (CAL14)
  * ------------------------------------------------------------------ */
 
-/** The families a profile's calendar carries: an Explorer's is Events and From other calendars (CAL14). */
+/**
+ * The families a profile's calendar carries, each with the kinds it may read. An Explorer's is their events and
+ * their other calendars (CAL14): `EXPLORER_KINDS`, grouped by the registry's families (D5205).
+ */
 export function familiesFor(role) {
-  if (role === 'exploring') return FAMILIES.filter((f) => ['events', 'other'].includes(f.key));
+  if (role === 'exploring') {
+    return FAMILIES.map((f) => ({ ...f, kinds: f.kinds.filter((k) => EXPLORER_KINDS.includes(k)) })).filter((f) => f.kinds.length);
+  }
   return FAMILIES;
 }
 export const kindsOfFamilies = (families) => families.flatMap((f) => f.kinds);

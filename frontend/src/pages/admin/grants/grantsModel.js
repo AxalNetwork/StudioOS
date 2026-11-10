@@ -21,6 +21,7 @@
  */
 import { PROGRAMS, statusWord, kindWord } from '../../../lib/programGrants.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { currencyCode, formatMinorOrCount, parseMinor, toMajorString } from '../../../lib/money';
 
 export const GRANTS_PATH = '/admin/licences/programs';
 export const REQUESTS_PATH = `${GRANTS_PATH}/requests`;
@@ -71,9 +72,8 @@ export const dayCount = (n) => (n == null ? NOT_RECORDED : `${n} ${n === 1 ? 'da
 /** Money from cents and a currency, never a guessed currency. */
 export function money(cents, currency) {
   if (cents == null || currency == null) return null;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency: String(currency).toUpperCase(), maximumFractionDigits: Number(cents) % 100 ? 2 : 0 }).format(Number(cents) / 100);
-  } catch { return `${(Number(cents) / 100).toLocaleString('en-US')} ${currency}`; }
+  // D5373: at the currency's own decimals (¥1,235, KWD 1.235); a code that is not a listed one names the stored count.
+  return formatMinorOrCount(Number(cents), String(currency).toUpperCase(), { locale: 'en-GB', trimWhole: true });
 }
 const pct = (bps) => `${(Number(bps) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 
@@ -106,7 +106,7 @@ export function termWord(key, value, terms = {}) {
   switch (t.kind) {
     case 'date': return dayWord(value) || NOT_RECORDED;
     case 'flag': return Number(value) === 1 ? 'On' : 'Off';
-    case 'cents': return money(value, terms.currency) || `${(Number(value) / 100).toLocaleString('en-US')} (currency not recorded)`;
+    case 'cents': return money(value, terms.currency) || formatMinorOrCount(value, null);
     case 'bps': return pct(value);
     case 'enum': return t.values[value] || String(value);
     default: return Number(value).toLocaleString('en-US');
@@ -427,22 +427,31 @@ export function termKeysFor(defaults) {
   return TERM_ORDER.filter((k) => applies.has(k));
 }
 
-/** A term's form value → what the Worker takes (null clears it). */
-export function termInput(key, raw) {
+/**
+ * A term's form value → what the Worker takes (null clears it). A money term is typed in the grant's own `currency`
+ * (D5373): 2000 is 200000 in EUR, 2000 in JPY, 2000000 in KWD. With no usable currency the text is the stored count
+ * itself, the same count `termField` showed, so an untouched field round-trips unchanged and is never rescaled.
+ */
+export function termInput(key, raw, currency) {
   const t = TERMS[key];
   if (raw === '' || raw == null) return null;
   if (t.kind === 'flag') return raw === true || raw === 1 || raw === '1' ? 1 : 0;
-  if (t.kind === 'cents') { const n = Math.round(Number(raw) * 100); return Number.isFinite(n) ? n : raw; }
+  if (t.kind === 'cents') {
+    if (!currencyCode(String(currency ?? '').toUpperCase())) { const n = Number(raw); return Number.isSafeInteger(n) ? n : raw; }
+    const r = parseMinor(String(raw), String(currency).toUpperCase());
+    return r.ok ? r.minor : raw;
+  }
   if (t.kind === 'bps') { const n = Math.round(Number(raw) * 100); return Number.isFinite(n) ? n : raw; }
   if (t.kind === 'count') { const n = Number(raw); return Number.isFinite(n) ? n : raw; }
   if (t.kind === 'currency') return String(raw).toUpperCase();
   return raw;
 }
-/** A stored term → the form's value. */
-export function termField(key, value) {
+/** A stored term → the form's value; a money term is shown in the grant's own `currency` (D5373). */
+export function termField(key, value, currency) {
   const t = TERMS[key];
   if (value == null) return '';
-  if (t.kind === 'cents' || t.kind === 'bps') return String(Number(value) / 100);
+  if (t.kind === 'cents') return toMajorString(value, String(currency ?? '').toUpperCase()) ?? String(value);
+  if (t.kind === 'bps') return String(Number(value) / 100);
   if (t.kind === 'flag') return Number(value) === 1 ? '1' : '0';
   return String(value);
 }
@@ -451,7 +460,7 @@ export function termField(key, value) {
 export function termsPayload(keys, form, start) {
   const out = {};
   for (const k of keys) {
-    const v = termInput(k, form[k]);
+    const v = termInput(k, form[k], form.currency ?? start.currency);
     if ((v ?? null) !== (start[k] ?? null)) out[k] = v;
   }
   return out;
