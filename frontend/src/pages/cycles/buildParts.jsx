@@ -15,7 +15,7 @@
  * "could not be read" with Retry; the module and the other parts stay drawn.
  */
 import { Component } from 'react';
-import { Unreadable } from '../../ui';
+import { Unreadable } from '../../ui/Honesty.jsx';
 import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
 import FoundingTeamFromCode from './FoundingTeamFromCode';
@@ -27,6 +27,10 @@ import HostingFromVercel from './HostingFromVercel';
 import { RoadmapFromGoogle, SolutionDesignFromGoogle } from './BuildFromGoogle';
 import RunsOnFromVercel from './RunsOnFromVercel';
 import { OperatingPosthog, PrototypePosthog, RoadmapPosthog } from './BuildPosthog';
+import MvpFromVercel from './MvpFromVercel';
+import RoadmapFromVercel from './RoadmapFromVercel';
+import CompanyFromVercel from './CompanyFromVercel';
+import FromLovable from './FromLovable';
 
 export const BUILD_PARTS = Object.freeze({
   'solution-design': [
@@ -43,9 +47,9 @@ export const BUILD_PARTS = Object.freeze({
     // D782 (#2112): pull request states and release checks, anchored at #from-github.
     ['github', (data) => <MvpFromGithub github={data?.parts?.github} />],
     // VC2: the Live strip and each must-have's preview: #2963 (D1098), MvpFromVercel, #from-vercel.
-    ['vercel', null],
+    ['vercel', (data, ctx) => <MvpFromVercel vercel={data?.parts?.vercel} reload={ctx.reload} />],
     // LV7: From Lovable under From GitHub: #2948 (D1083), FromLovable, #from-lovable.
-    ['lovable', null],
+    ['lovable', (data, ctx) => <FromLovable part={data?.parts?.lovable} cycle="build" projectId={ctx.projectId} onRetry={ctx.reload} />],
     // NT3: a must-have database as facts (D1088, #2953), anchored at #from-notion.
     ['notion', (_data, ctx) => <FromNotion section="build" module="prototype_mvp" projectId={ctx.projectId} />],
     // PH5: activation, flag links and Mark Done from PostHog (D1606, #3731), anchored at #from-posthog.
@@ -53,7 +57,7 @@ export const BUILD_PARTS = Object.freeze({
   ],
   'product-roadmap': [
     // VC3: the Deploys strip sits ABOVE GitHub's Releases strip: #2963 (D1098), RoadmapFromVercel, #from-vercel.
-    ['vercel', null],
+    ['vercel', (data, ctx) => <RoadmapFromVercel vercel={data?.parts?.vercel} reload={ctx.reload} />],
     // D782 (#2111): milestones and releases from GitHub, anchored at #from-github.
     ['github', (data) => <RoadmapFromGithub github={data?.parts?.github} />],
     // GW3/GW4: a mapped roadmap Sheet's rows and its Map columns (D1093, #2958), anchored at #from-google.
@@ -78,7 +82,7 @@ export const BUILD_PARTS = Object.freeze({
   'company-creation': [
     ['github', (data, ctx) => <CompanyFromCode part={data?.parts?.github} projectId={ctx.projectId} reload={ctx.reload} />],
     // VC4b and VC4d "Where production runs" and the Accept dialog: #2964 (D1099), CompanyFromVercel, #from-vercel.
-    ['vercel', null],
+    ['vercel', (data, ctx) => <CompanyFromVercel part={data?.parts?.vercel} projectId={ctx.projectId} reload={ctx.reload} />],
   ],
 });
 
