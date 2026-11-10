@@ -220,7 +220,7 @@ test('D4629: a failed bounded read reports unavailable coverage, never an empty 
   await recordVerdictChanges(env, 80, [state(1, 'unproven', 'testing')]);
   const prepare = env.DB.prepare.bind(env.DB);
   env.DB.prepare = (sql: string) => {
-    if (sql.includes('SELECT id, hypothesis_id, verdict, lane, observed_at FROM (')) throw new Error('history read failed');
+    if (sql.includes('SELECT id, hypothesis_id, verdict, lane, observed_at, methodology_version, method_change FROM (')) throw new Error('history read failed');
     return prepare(sql);
   };
   const h = await loadVerdictHistory(env, 80, { claimIds: [1] });

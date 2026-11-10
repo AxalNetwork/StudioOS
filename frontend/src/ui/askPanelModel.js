@@ -142,6 +142,20 @@ export const RUN_CHIPS = Object.freeze(
  * an upload, a form), so its chip puts the words in the composer as a typed
  * question: it never claims to run the page's control.
  */
+/**
+ * D5034 part 4 (#5034) — a page's own prompts, as Ask chips that fill the
+ * composer with their words (never run chips): the member reads, edits and
+ * sends. Keys are `prompt:<n>`, so they never collide with an option's key or
+ * a run chip. Drawn before the page's options; `panelChips` keeps the six cap.
+ */
+export function promptOptions(prompts) {
+  if (!Array.isArray(prompts)) return [];
+  return prompts
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean)
+    .map((label, i) => ({ key: `prompt:${i + 1}`, label }));
+}
+
 export function panelChips(options) {
   if (!Array.isArray(options)) return [];
   const seen = new Set();

@@ -56,6 +56,7 @@ function world(o: { events?: boolean } = {}) {
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
   db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   if (o.events !== false) db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
