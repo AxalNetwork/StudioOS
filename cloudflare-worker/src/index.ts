@@ -2613,9 +2613,10 @@ export default {
         try {
           const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
           const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
-          if (b.scanned) {
-            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped}`);
-            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped}`);
+          // D5360: the same tick pays lost graduation bonuses; a tick that only paid bonuses is logged too.
+          if (b.scanned || b.bonus.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid} bonus_skipped=${b.bonus.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid}`);
           }
         } catch (e) {
           taskFailed('certificate backfill tick', e);

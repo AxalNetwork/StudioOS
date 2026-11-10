@@ -21,6 +21,7 @@ export const TEAM_PARTS = [
   'MoveAccountAction.jsx',
   'UnbindAdminAction.jsx',
   'governedAction.js',
+  'actionFocus.js',
   'ActionNotice.jsx',
   'teamInvalidation.js',
 ];

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { Card, Lightbox, Pill } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
-  SaveNote, StatedLimit, Unrecorded, ZoneHeading, buttonClass, ghostButtonClass, inputClass, money,
+  SaveNote, StatedLimit, Unrecorded, ZoneHeading, buttonClass, ghostButtonClass, inputClass, isLicenceSentence,
+  money, zoneError,
 } from '../expertise/kit';
 import {
   BILLING_STATE, PAYOUT_STATE_LABEL, PAYOUT_TONE, customWindow, draftFitsPeriod, earningsCards,
@@ -193,7 +194,7 @@ export default function EarningsZone() {
       setLedger({ loading: false, error: '', data, unavailable: false });
     } catch (e) {
       if (!ledgerTicket.current.isCurrent(t)) return;
-      setLedger({ loading: false, error: e?.message || 'This period could not be read.', data: null, unavailable: noAdvisorProfile(e) });
+      setLedger({ loading: false, error: zoneError(e, e?.message || 'This period could not be read.', 'practice'), data: null, unavailable: noAdvisorProfile(e) });
     }
   }, []);
 
@@ -527,6 +528,13 @@ export default function EarningsZone() {
         </SourceState>
       ) : ledger.loading ? (
         <SourceState kind="loading" source="Earnings" testid="earnings-loading" />
+      ) : isLicenceSentence(ledger.error) ? (
+        // #5363: the coded licence refusal is not a failed read; reading
+        // again cannot change it, so it says what it needs and offers no retry.
+        <p className="rounded-[10px] border border-axal-hairline px-3 py-2.5 text-[12px] font-semibold dark:border-gray-700 dark:text-gray-200"
+          role="status" data-testid="earnings-licence-required">
+          {ledger.error}
+        </p>
       ) : ledger.error ? (
         <SourceState kind="unreadable" source={`Earnings for ${window_.label}`} onRetry={() => loadLedger(window_)} testid="earnings-unreadable">
           No figure is shown rather than a zero.

@@ -307,6 +307,21 @@ test('mounted: no advisor profile is "Earnings unavailable" with a Learn why, an
   } finally { await m.close(); }
 });
 
+test('mounted: the coded licence refusal (#5363) says what it needs, with no Try again and no figure', async () => {
+  // Mutation checked: the catch without zoneError → the generic unreadable box with Try again shows.
+  const m = await mount(async (c) => {
+    if (c.path.startsWith('/api/advisors/me/')) return json({ detail: 'Advisor licence required', code: 'advisor_licence_required' }, 403);
+    return json({});
+  });
+  try {
+    const box = m.byTestId('earnings-licence-required');
+    assert.ok(box, 'the licence sentence is shown');
+    assert.match(m.textOf(box), /Practice needs the Advisor licence on this account\./);
+    assert.equal(m.byTestId('earnings-unreadable'), undefined);
+    assert.doesNotMatch(m.text(), /\$\d/);
+  } finally { await m.close(); }
+});
+
 // ─────────────────────────────────────────────────────────────── phone row
 
 test('the Practice section row: Overview first, the canvas’s order, one line that scrolls on a phone', () => {
