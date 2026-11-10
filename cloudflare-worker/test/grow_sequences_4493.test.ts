@@ -76,6 +76,13 @@ async function enrol(f: any, uid: string, contacts = [{ uid: ALICE, time_zone: '
   assert.equal(r.status, 200, JSON.stringify(r.body));
   return r.body;
 }
+const ctx = { waitUntil() {}, passThroughOnException() {} } as any;
+const fetchOptout = (f: any, token: string, init: RequestInit = {}) => app.fetch(new Request(`http://t/api/grow/optout/${token}`, init), f.env, ctx);
+const optoutCounts = (f: any) => ({
+  suppressions: f.db.prepare('SELECT COUNT(*) AS n FROM venture_suppressions').get().n,
+  stopped: f.db.prepare("SELECT COUNT(*) AS n FROM outreach_enrolments WHERE state <> 'active'").get().n,
+  logs: f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'grow.sequence.optout'").get().n,
+});
 const rowFor = async (f: any, now?: Date) => (await dueSteps(f.env, PA, now ? { now } : {})).rows.find((r) => r.contact_uid === ALICE)!;
 
 test('a step without consent is blocked with its reason; with consent it is due', async () => {
@@ -197,25 +204,71 @@ test('the draft endpoint writes a composer draft with the opt-out line and never
 });
 
 test('the opt-out token records a suppression and stops the sequence; a forged token is 404; nothing is revealed', async () => {
-  // Mutation checked: accepting any well-formed signature in readOptoutToken turns the forged call into 200.
+  // Mutation checked: accepting any well-formed signature in readOptoutToken turns the forged calls into 200.
   const f = fixture(); openQuiet(f);
   const uid = await sequence(f); await enrol(f, uid); consent(f, 11, 'email');
   const token = await optoutToken(f.env, ALICE);
   const forged = `${ALICE}.${token.slice(33).replace(/^./, (ch) => (ch === '0' ? '1' : '0'))}`;
   for (const bad of [forged, `${BOB}.${token.slice(33)}`, 'not-a-token']) {
-    const r = await call(f, null, 'GET', `/api/grow/optout/${bad}`);
-    assert.equal(r.status, 404, bad);
+    for (const method of ['GET', 'POST']) assert.equal((await call(f, null, method, `/api/grow/optout/${bad}`)).status, 404, `${method} ${bad}`);
   }
   assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM venture_suppressions').get().n, 0);
-  const ok = await call(f, null, 'GET', `/api/grow/optout/${token}`);
+  const ok = await call(f, null, 'POST', `/api/grow/optout/${token}`);
   assert.equal(ok.status, 200);
   assert.doesNotMatch(ok.text, /@|alice|Alice|Kestrel/i);
   const row = f.db.prepare('SELECT project_id, address_hash, reason FROM venture_suppressions').get();
   assert.deepEqual({ ...row }, { project_id: PA, address_hash: await suppressionHash(f.env, PA, 'alice@example.test'), reason: 'opted_out' });
   assert.equal(f.db.prepare('SELECT state FROM outreach_enrolments').get().state, 'stopped_optout');
   assert.equal((await rowFor(f)).state, 'stopped_optout');
-  const html = await app.fetch(new Request(`http://t/api/grow/optout/${token}`, { headers: { accept: 'text/html' } }), f.env, { waitUntil() {}, passThroughOnException() {} } as any);
-  assert.equal(html.status, 200); assert.doesNotMatch(await html.text(), /@|Alice|Kestrel/);
+  // D5333: idempotent. A second press, here as the page's HTML form, adds no suppression and answers the same sentence.
+  const html = await fetchOptout(f, token, { method: 'POST', headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' }, body: '' });
+  assert.equal(html.status, 200);
+  const page = await html.text();
+  assert.match(page, /You are unsubscribed\./); assert.doesNotMatch(page, /@|Alice|Kestrel/);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM venture_suppressions').get().n, 1);
+});
+
+test('D5333: opening the opt-out link writes nothing; it serves one button that posts back', async () => {
+  // Mutation checked: calling recordOptout from the GET handler changes the counts below and fails this test.
+  const f = fixture(); openQuiet(f);
+  const uid = await sequence(f); await enrol(f, uid); consent(f, 11, 'email');
+  const token = await optoutToken(f.env, ALICE);
+  const before = optoutCounts(f);
+  assert.deepEqual(before, { suppressions: 0, stopped: 0, logs: 0 });
+  const page = await fetchOptout(f, token, { headers: { accept: 'text/html,application/xhtml+xml' } });
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  const html = await page.text();
+  assert.match(html, /<form method="post"><button type="submit"[^>]*>Stop these emails<\/button><\/form>/);
+  assert.doesNotMatch(html, /<script|action=/, 'no script; the form posts to the URL it was served from');
+  assert.doesNotMatch(html, /@|Alice|Kestrel|unsubscribed/i);
+  const json = await call(f, null, 'GET', `/api/grow/optout/${token}`);
+  assert.equal(json.status, 200); assert.equal(json.body.method, 'POST');
+  assert.deepEqual(optoutCounts(f), before, 'a prefetch changes nothing');
+  assert.equal((await rowFor(f)).state, 'due');
+  // A valid signature for a contact that is gone is 404 on the GET too.
+  f.db.prepare('DELETE FROM outreach_enrolments').run(); f.db.prepare('DELETE FROM contacts WHERE id = 11').run();
+  assert.equal((await fetchOptout(f, token)).status, 404);
+});
+
+test('D5333: a mail client’s RFC 8058 one-click POST records the opt-out with no session and no CSRF token', async () => {
+  const { csrfMiddleware } = await import('../src/middleware/csrf.ts');
+  const f = fixture(); openQuiet(f);
+  const uid = await sequence(f); await enrol(f, uid); consent(f, 11, 'email');
+  const token = await optoutToken(f.env, ALICE);
+  // The CSRF middleware in front, and an ambient auth cookie, as a signed-in browser would carry.
+  // Mutation checked: removing the /api/grow/optout/ exemption from csrf.ts turns this into a 403.
+  const guarded = new Hono<any>().use('*', csrfMiddleware()).route('/api/grow/optout', optoutRouter);
+  const res = await guarded.fetch(new Request(`http://t/api/grow/optout/${token}`, {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: 'studioos_auth=x.y.z' }, body: 'List-Unsubscribe=One-Click',
+  }), f.env, ctx);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  assert.doesNotMatch(text, /@|alice|Kestrel/i);
+  assert.deepEqual(optoutCounts(f), { suppressions: 1, stopped: 1, logs: 1 });
+  // Another POST path is still CSRF-checked.
+  const other = new Hono<any>().use('*', csrfMiddleware()).post('/api/grow/sequences', (c) => c.json({ ok: true }));
+  assert.equal((await other.fetch(new Request('http://t/api/grow/sequences', { method: 'POST', headers: { cookie: 'studioos_auth=x.y.z' } }), f.env, ctx)).status, 403);
 });
 
 test('another venture’s sequence is 404, and its contacts cannot be enrolled', async () => {
@@ -288,12 +341,20 @@ test('the pressed send (D1340) re-checks a sequence draft, keeps its opt-out lin
   const ok = await press(d.body);
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   assert.equal(sends.length, 1); assert.equal(sends[0].to, 'alice@example.test'); assert.equal(sends[0].attachments, undefined);
+  // D5333: the step carries its signed opt-out URL, and a MIME-built message (Gmail, SMTP) has both RFC 8058 headers.
+  // Mutation checked: dropping listUnsubscribe from the adapter call in mail_accounts.ts fails the first line.
+  assert.equal(sends[0].listUnsubscribe, d.required_line.replace('To stop these emails, open: ', ''));
+  const listed = buildMime(sends[0], 'id@example.test');
+  assert.ok(listed.includes(`\r\nList-Unsubscribe: <${sends[0].listUnsubscribe}>\r\n`), listed);
+  assert.ok(listed.includes('\r\nList-Unsubscribe-Post: List-Unsubscribe=One-Click\r\n'));
   assert.equal(f.db.prepare('SELECT state FROM outreach_enrolments WHERE uid = ?').get(r.enrolment_uid).state, 'done');
   assert.equal((await press(d.body)).status, 409, 'the same step is not sent twice');
   assert.equal(sends.length, 1);
   // A voice note is a multipart attachment; plain mail is unchanged.
   const plain = buildMime({ from: 'a@example.test', fromName: null, to: 'b@example.test', subject: 'S', body: 'B' }, 'id@example.test');
   assert.match(plain, /Content-Type: text\/plain; charset=UTF-8/); assert.doesNotMatch(plain, /multipart/);
+  assert.doesNotMatch(plain, /List-Unsubscribe/, 'mail that is not a sequence step carries no unsubscribe header');
+  assert.doesNotMatch(buildMime({ from: 'a@example.test', fromName: null, to: 'b@example.test', subject: 'S', body: 'B', listUnsubscribe: 'https://x.test/a\r\nBcc: c@example.test' }, 'id@example.test'), /List-Unsubscribe|Bcc/, 'a URL that could break a header is never set');
   const withNote = buildMime({ from: 'a@example.test', fromName: null, to: 'b@example.test', subject: 'S', body: 'B', attachments: [{ filename: 'voice-note.webm', mime: 'audio/webm', bytes: new Uint8Array([1, 2, 3]) }] }, 'id@example.test');
   assert.match(withNote, /multipart\/mixed; boundary="axal-[0-9a-f]{32}"/); assert.match(withNote, /filename="voice-note\.webm"/); assert.match(withNote, /AQID/);
 });

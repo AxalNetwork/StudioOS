@@ -43,6 +43,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { escapeRe } from './_escapeRe.mjs';
+import { KINDS, PUSHABLE_KINDS } from '../src/pages/calendarViews.js';
+import { SOURCES } from '../../cloudflare-worker/src/services/calendar/registry.ts';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 
@@ -81,10 +83,8 @@ for (const [name, slice] of [['TEMPLATE', TEMPLATE], ['SCRIPT', SCRIPT], ['KINDS
 const canvasKinds = [...KINDS_BLOCK.matchAll(/\{\s*id:'(\w+)',\s*label:'([^']+)',\s*src:'([^']+)',\s*hue:'(#[0-9a-f]{6})',\s*dHue:'(#[0-9a-f]{6})',\s*shape:'([^']*)'\s*\}/g)]
   .map((m) => ({ id: m[1], label: m[2], src: m[3], hue: m[4], dHue: m[5], shape: m[6] }));
 
-/** The page's kind table, likewise. */
-const pageKinds = [...(codeOnly(pageRaw).match(/const KINDS = \[([\s\S]*?)\n\];/)?.[1] || '')
-  .matchAll(/\{ id: '(\w+)', label: '([^']+)', from: '([^']+)' \}/g)]
-  .map((m) => ({ id: m[1], label: m[2], from: m[3] }));
+/** The page's kinds: D5205 (#5205) builds them from the Worker registry, so they are imported, not parsed. */
+const pageKinds = KINDS.map((k) => ({ id: k.id, label: k.label, from: k.from }));
 
 test('the canvas and the page were both parsed, so a silent zero-match cannot pass', () => {
   assert.equal(canvasKinds.length, 5, 'the canvas kind table no longer parses as five entries');
@@ -213,10 +213,11 @@ test('D1033: the two My events kinds are derived in the same idiom, apart from e
 
 test('push is drawn for exactly the kinds the route accepts', () => {
   const routeSet = route.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
-  const pageSet = page.match(/const PUSHABLE_KINDS = new Set\(\[([\s\S]*?)\]\);/)?.[1] || '';
   const ids = (s) => [...s.matchAll(/'(\w+)'/g)].map((m) => m[1]).sort();
   assert.equal(ids(routeSet).length, 6, 'the route PUSHABLE_KINDS set did not parse');
-  assert.deepEqual(ids(pageSet), ids(routeSet),
+  // D5205 (#5205): the page's set is the registry's `pushable`, imported, not a list in the page.
+  assert.doesNotMatch(page, /const PUSHABLE_KINDS = new Set/, 'the page keeps its own push list again');
+  assert.deepEqual([...PUSHABLE_KINDS].sort(), ids(routeSet),
     '/calendar draws a push control the route would refuse, or hides one it would accept');
 
   // The canvas draws push on a Calendly event; the route refuses it. The page
@@ -331,7 +332,8 @@ test('the rail carries the three promises and the source legend', () => {
   assert.match(page, /<span className="cal-mono">\{moduleOf\[k\.id\] \|\| k\.from\}<\/span>/, 'the legend no longer names each kind\'s source');
   assert.match(page, /sources\.filter\(\(s\) => s\?\.kind && s\.module\)\.map\(\(s\) => \[s\.kind, s\.module\]\)/, 'the module comes from the read');
   for (const k of pageKinds) {
-    assert.ok(page.includes(`from: '${k.from}'`), `${k.id} lost its source`);
+    // D5205: `from` is the registry's module, the same words the read sends.
+    assert.equal(k.from, SOURCES[k.id].module, `${k.id} lost its source`);
     assert.doesNotMatch(k.from, /^[a-z]+(?:_[a-z]+)+$/, `${k.id}'s legend shows a table name`);
   }
   const tables = new Set([...service.matchAll(/FROM (\w+)/g)].map((m) => m[1]));
@@ -432,12 +434,12 @@ test('the explainer above the agenda names only sources that exist', () => {
     assert.ok(!entry.toLowerCase().includes(claim),
       `the calendar explainer still promises "${claim}", which this page has no source for`);
   }
-  // And every source it does name is one of the six.
-  assert.match(entry, /events you keep there are not read back in/i,
-    'the explainer no longer says the sync is one-way');
-  const externalReader = service.includes("kind: 'google_external'") || service.includes("kind: 'microsoft_external'");
-  assert.equal(externalReader, false,
-    'the worker now emits external events — the explainer may say so again, and a chip is owed');
+  // D5205 (#5205): it said "One agenda, six sources" while the page read thirty-two, and that Google events "are
+  // not read back in" after D1485 began reading them. It names no number of sources and no subset of them now.
+  assert.doesNotMatch(entry, /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+sources\b/i,
+    'the explainer counts the sources in prose again');
+  assert.ok(SOURCES.external_google, 'the registry no longer reads Google events — revisit this sentence');
+  assert.doesNotMatch(entry, /not read back in/i, 'the explainer says connected calendars are not read, and they are');
 });
 
 test('the explainer sits outside the header row, so the canvas actions stay beside the title', () => {
