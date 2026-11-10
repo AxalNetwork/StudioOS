@@ -64,7 +64,7 @@ import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import PlatformOverview, { VersionContext } from './PlatformOverview';
-import { channelState, keyLevel, webhookHealth, KEY_LEVEL } from './platformOverviewModel';
+import { channelState, keyLevel, webhookHealth, KEY_LEVEL, keyExpiry, keyExpiryText, keyLastUsedText, KEY_EXPIRY_WARN_DAYS } from './platformOverviewModel';
 import { platformBuildApi } from '../../lib/api/platformBuild.js';
 import { GUIDE_PREFIX } from '../../lib/integrationKeys';
 
@@ -638,8 +638,35 @@ export function keyDateLine(item) {
   }
 }
 
+/** A key's expiry tone: past is red, inside the warning window amber, otherwise quiet. */
+const EXPIRY_TONE = {
+  Expired: 'text-red-700 dark:text-red-300 font-bold',
+  Expiring: 'text-amber-800 dark:text-amber-300 font-bold',
+  Valid: 'text-axal-faint',
+  'Not recorded': 'text-axal-faint',
+};
+
+/**
+ * D5304 — a held key's expiry and last use. A value the platform has not
+ * recorded reads "Not recorded", never a date and never 0 days; columns that
+ * could not be read read Unreadable.
+ */
+function KeyStamps({ k, now, stampsAvailable }) {
+  if (!stampsAvailable) {
+    return <div className="mt-0.5 text-[10px] text-axal-faint" data-testid={`hq-key-stamps-${k.provider_key}`}>Expiry Unreadable · Last used Unreadable</div>;
+  }
+  const exp = keyExpiry(k, now);
+  return (
+    <div className="mt-0.5 font-mono text-[10px] text-axal-faint" data-testid={`hq-key-stamps-${k.provider_key}`}>
+      <span data-testid={`hq-key-expiry-${k.provider_key}`} data-state={exp.state} className={EXPIRY_TONE[exp.state]}>Expiry {keyExpiryText(k, now)}</span>
+      {' · '}
+      <span data-testid={`hq-key-last-used-${k.provider_key}`}>Last used {keyLastUsedText(k)}</span>
+    </div>
+  );
+}
+
 /** H16 P1 — where each managed key lives, and when it was last set. No key material. */
-export function IntegrationKeysPanel({ loading, unreadable, keys }) {
+export function IntegrationKeysPanel({ loading, unreadable, keys, now = new Date() }) {
   let body;
   if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the keys…</p>;
   else if (unreadable) body = <Absent reason="The platform summary could not be read." />;
@@ -668,6 +695,7 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
                 </div>
                 {date && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{date}</div>}
+                {(k.state === 'env' || k.state === 'db') && <KeyStamps k={k} now={now} stampsAvailable={keys.stamps_available !== false} />}
                 <div className="mt-0.5 text-[10px] font-semibold text-axal-faint" data-testid={`hq-key-level-${k.provider_key}`}>{keyLevel(k.provider_key)}</div>
               </li>
             );
@@ -676,6 +704,7 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
         <details className="mt-2">
           <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 dark:text-emerald-300">How this is measured</summary>
           <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
+          {keys.stamps_reason && <p className="mt-1 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-keys-stamps-basis">{keys.stamps_reason} A key within {KEY_EXPIRY_WARN_DAYS} days of its expiry joins Needs attention.</p>}
           {keys.notes.map((n) => (
             <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
           ))}
@@ -692,7 +721,8 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
       {body}
       <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-keys-no-reveal">
         No screen reveals a saved key: once saved it is write-only, so no masked secret is drawn and nothing here
-        re-hides after thirty seconds. Nothing stores when a key expires, so none is drawn as expired.
+        re-hides after thirty seconds. An expiry is drawn only where the provider reported one; a key without one is
+        Not recorded, never drawn as expired.
       </p>
       <Link to="/admin/integration-keys" className={CONSOLE_LINK} data-testid="hq-h16-link-keys">
         <ConsoleLinkBody
