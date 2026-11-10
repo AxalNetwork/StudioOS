@@ -7,13 +7,17 @@
  * A program with no reference price reads "Not recorded", never free or 0.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { formatMinorOrCount, parseMinor, plainAmount } from '../../../lib/money';
 
 export { NOT_RECORDED };
 
 /** Whole cents as money a person reads; null is "Not recorded". */
 export function money(cents, currency) {
   if (cents === null || cents === undefined) return NOT_RECORDED;
-  return `${currency || ''} ${(Number(cents) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`.trim();
+  // D5373: at the currency's own decimals ("EUR 12,000.00", "JPY 12,000", "KWD 12.000"); an unusable code names the count.
+  const cur = currency ? String(currency).toUpperCase() : '';
+  const plain = plainAmount(Number(cents), cur);
+  return plain === null ? formatMinorOrCount(Number(cents), cur) ?? NOT_RECORDED : `${cur} ${plain}`;
 }
 
 /** An index in millionths as a multiplier; unknown is "Not recorded". */
@@ -39,13 +43,13 @@ export function pricingLine(row) {
   };
 }
 
-/** Money typed in currency units ("12000.50") as whole cents; null for blank, NaN when not money. */
-export function centsOf(text) {
+/** Money typed in the currency's units ("12000.50") as whole minor units of THAT currency (D5373); null for blank, NaN when not money for it. */
+export function centsOf(text, currency) {
   const s = String(text ?? '').trim();
   if (!s) return null;
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return Number.NaN;
-  const [w, f = ''] = s.split('.');
-  return Number(w) * 100 + Number((f + '00').slice(0, 2));
+  if (!/^\d+(\.\d+)?$/.test(s)) return Number.NaN;
+  const r = parseMinor(s, String(currency ?? '').toUpperCase());
+  return r.ok ? r.minor : Number.NaN;
 }
 
 export const PRICE_MODES = Object.freeze({
@@ -60,7 +64,7 @@ export const PRICE_MODES = Object.freeze({
  * `override` send `pricing` and drop `fee_cents` from the terms, so the two
  * never disagree. Returns `{ ok, pricing, dropFee }` or `{ ok: false, error }`.
  */
-export function buildPricing({ mode, rec, form, snapshotUid }) {
+export function buildPricing({ mode, rec, form, snapshotUid, currency }) {
   if (!mode || mode === 'terms') return { ok: true, pricing: null, dropFee: false };
   const dates = {
     ...(form?.effective_from ? { effective_from: form.effective_from } : {}),
@@ -72,7 +76,7 @@ export function buildPricing({ mode, rec, form, snapshotUid }) {
     if (!rec?.available) return { ok: false, error: 'There is no recommended price to accept. Override it with a reason, or keep the fee in the terms.' };
     return { ok: true, pricing: { ...snap, ...dates }, dropFee: true };
   }
-  const fee = centsOf(form?.fee);
+  const fee = centsOf(form?.fee, currency ?? rec?.currency);
   if (fee === null || Number.isNaN(fee)) return { ok: false, error: 'Give the price, like 12000 or 12000.50.' };
   const why = String(form?.override_reason ?? '').trim();
   if (why.length < 3) return { ok: false, error: 'Say why the price differs from the recommendation.' };

@@ -1,3 +1,4 @@
+import { parseMinor, toMajorString } from './money';
 // D4694 (#4694) — Step 4's core terms form (fee, term, shares, dates), as pure
 // functions so the rules can be tested without a page.
 //
@@ -29,7 +30,8 @@ export function coreFormFrom(licence) {
   const text = (v) => (v === null || v === undefined ? '' : String(v));
   return {
     term_years: text(l.term_years),
-    annual_fee: l.annual_fee_cents === null || l.annual_fee_cents === undefined ? '' : String(Math.round(Number(l.annual_fee_cents)) / 100),
+    // D5373: the fee is shown in the licence's own currency (the column is NOT NULL DEFAULT 'EUR', as the field below).
+    annual_fee: l.annual_fee_cents === null || l.annual_fee_cents === undefined ? '' : (toMajorString(l.annual_fee_cents, l.currency || 'EUR') ?? String(l.annual_fee_cents)).replace(/\.0+$/, ''),
     currency: l.currency || 'EUR',
     revenue_share_bps: text(l.revenue_share_bps),
     token_split_bps: text(l.token_split_bps),
@@ -90,8 +92,14 @@ export function buildCoreSave({ form, base, revision, reason }) {
     if (k === 'starts_on' || k === 'renews_on') { body[key] = String(form[k]).trim() || null; continue; }
     const n = parseNumber(form[k]);
     if (!n.ok) { errors[k] = n.message; continue; }
-    // The fee is typed in currency units and travels in whole cents.
-    body[key] = k === 'annual_fee' && n.value !== null ? Math.round(n.value * 100) : n.value;
+    // The fee is typed in currency units and travels in whole minor units of THAT currency (D5373): ¥12,000 is 12000.
+    if (k === 'annual_fee' && n.value !== null) {
+      const fee = parseMinor(String(form[k]), String(form.currency).trim().toUpperCase());
+      if (!fee.ok) { errors[k] = fee.message; continue; }
+      body[key] = fee.minor;
+    } else {
+      body[key] = n.value;
+    }
   }
   const why = String(reason ?? '').trim();
   if (!why) errors.reason = 'Say why these terms are changing. It is kept in the licence\'s history.';

@@ -34,8 +34,8 @@ test('the model: unknown is "Not recorded", money and rates read as a person rea
   assert.equal(figure(650, 'bps'), '6.5%');
   assert.equal(difference(null, 5, 'cents', 'EUR'), null);
   assert.equal(difference(4_750_000, 1_000_000, 'cents', 'EUR'), `+EUR ${(37500).toLocaleString()}`);
-  assert.equal(centsFrom('42000.5'), 4_200_050);
-  assert.ok(Number.isNaN(centsFrom('42,000')));
+  assert.equal(centsFrom('42000.5', 'EUR'), 4_200_050);
+  assert.ok(Number.isNaN(centsFrom('42,000', 'EUR')));
   const f = freshness(VIEW.countries[0]);
   assert.equal(f.label, 'Oldest input as of 2023-12-31');
   assert.deepEqual(f.provisional, ['startup_ecosystem']);

@@ -29,12 +29,22 @@
  * leaves out, uses today's text unchanged. Nothing here calls a model: the run
  * still calls aiRouter's `run()` once, through `agentRun.ts`, with its safety,
  * holds and usage ledger.
+ *
+ * PARITY WITH THE LEGACY LOADER (#5340). The switched-on text ends with
+ * `NO_INVENTED_FIGURE_RULE`, the same constant that closes `skillPrompt()`,
+ * as Axal's own words after the skill's data blocks. The price counts what the
+ * selected runtime sends: `agentQuote` and the per-run ceiling (`agentRun.ts`)
+ * quote the loaded text, and the D4121 estimate (`runCost.ts`) counts
+ * `sdkEstimateText` for each pin; with the switch off all three are unchanged.
  */
 import type { Env } from '../../types';
-import { legacyRuntime, buildRunManifest, type ResourceProvider, type RunSkillManifest, type SkillRuntime } from './skillRunManifest';
+import {
+  PUBLISHED_SKILL_PATH, bodyOf, buildRunManifest, legacyRuntime, stepsOf,
+  type AuthorizedSkill, type ManifestResource, type ResourceProvider, type RunSkillManifest, type SkillRuntime,
+} from './skillRunManifest';
 import { CLOUDFLARE_SKILLS_SDK, sdkRuntime, sdkUnusable, type SkillsSdk } from './skillsSdk';
-import { skillPrompt } from './skillEval';
-import type { SkillRow, VersionRow } from './skillLinks';
+import { NO_INVENTED_FIGURE_RULE, skillPrompt } from './skillEval';
+import { versionTools, type SkillRow, type VersionRow } from './skillLinks';
 
 export type SkillEngine = 'cloudflare_sdk' | 'legacy';
 export type SkillFallback = 'sdk_version_unsupported' | 'sdk_surface_changed' | 'sdk_error' | 'sdk_catalog_mismatch';
@@ -94,21 +104,70 @@ export async function skillTextForRun(
     const act = await rt.activate(s.name);
     // D1 refuses the skill now (grant, rule book, role, pin, agent state changed since the gate): no model call.
     if (!act.ok) return { ok: false, code: 'skill_unavailable' };
-    const files: string[] = [];
-    let used = 0;
-    for (const r of s.resources) {
-      const got = await rt.readResource(r.id);
-      if (!got.ok) {
-        // A refused read is either D1 refusing now (fail closed) or a file the store no longer has (left out).
-        if (!(await m.recheck(s))) return { ok: false, code: 'skill_unavailable' };
-        continue;
-      }
-      if (used + got.text.length > RUN_FILES_MAX_CHARS) continue;
-      used += got.text.length;
-      files.push(got.text);
-    }
-    return { ok: true, text: [rt.cataloguePrompt(), act.text, ...files].filter(Boolean).join('\n\n'), runtime: 'cloudflare_sdk', fallback: null };
+    const text = await sdkText(rt, m, s, act.text);
+    return text == null ? { ok: false, code: 'skill_unavailable' } : { ok: true, text, runtime: 'cloudflare_sdk', fallback: null };
   } catch {
     return today('sdk_error');
   }
+}
+
+/** The switched-on text after activation: catalogue, activation, the files up to the cap, then the closing rule. Null when D1 now refuses. */
+async function sdkText(rt: SkillRuntime, m: RunSkillManifest, s: AuthorizedSkill, activation: string): Promise<string | null> {
+  const files: string[] = [];
+  let used = 0;
+  for (const r of s.resources) {
+    const got = await rt.readResource(r.id);
+    if (!got.ok) {
+      // A refused read is either D1 refusing now (fail closed) or a file the store no longer has (left out).
+      if (!(await m.recheck(s))) return null;
+      continue;
+    }
+    if (used + got.text.length > RUN_FILES_MAX_CHARS) continue;
+    used += got.text.length;
+    files.push(got.text);
+  }
+  return [rt.cataloguePrompt(), activation, ...files, NO_INVENTED_FIGURE_RULE].filter(Boolean).join('\n\n');
+}
+
+/** A pinned version with its skill's identity, as the D4121 estimate reads it. */
+export type EstimatePin = { skill: Pick<SkillRow, 'id' | 'uid' | 'scope' | 'company_id' | 'slug'>; version: VersionRow };
+
+/**
+ * D4121 with the switch on (#5340): the text the SDK path would add to a run
+ * of `pins[index]`, over a manifest of every pin as given. It is an upper
+ * bound of a real run's: every pin is in the catalogue, each with its whole
+ * allow-list, and the version's stored SKILL.md is its file, capped as a run
+ * caps it. No D1 read. Null when the pin's steps cannot be used or the SDK
+ * cannot be (a run then sends today's text, so the estimate counts that).
+ */
+export async function sdkEstimateText(pins: readonly EstimatePin[], index: number, sdk: unknown = CLOUDFLARE_SKILLS_SDK): Promise<string | null> {
+  const ordered: AuthorizedSkill[] = [];
+  let target: AuthorizedSkill | null = null;
+  const sorted = pins.map((p, i) => ({ p, i })).sort((a, b) => (a.p.skill.scope === b.p.skill.scope ? a.p.skill.id - b.p.skill.id : a.p.skill.scope === 'hq' ? -1 : 1));
+  for (const { p, i } of sorted) {
+    const steps = stepsOf(p.version);
+    if (!steps) { if (i === index) return null; continue; }
+    const tenant = p.skill.scope === 'hq' ? 'hq' : `company:${p.skill.company_id}`;
+    // A run's resource id is an HMAC of the same length; the estimate's only has to be as long.
+    const resources: ManifestResource[] = [{ id: `skr_${String(i).padStart(32, '0')}`, path: PUBLISHED_SKILL_PATH, kind: 'reference', content: p.version.skill_md ?? '' }];
+    const s: AuthorizedSkill = {
+      uid: p.skill.uid, skillId: p.skill.id, version: Number(p.version.version), scope: p.skill.scope, tenant, name: p.skill.slug,
+      description: (p.version.purpose ?? '').replace(/\s+/g, ' ').trim(), body: bodyOf(p.version, steps), legacyText: skillPrompt(p.version),
+      tools: Object.freeze(versionTools(p.version)), resources: Object.freeze(resources),
+    };
+    ordered.push(s);
+    if (i === index) target = s;
+  }
+  if (!target) return null;
+  const visible = ordered.filter((s, k) => ordered.findIndex((x) => x.name === s.name) === k);
+  if (!visible.includes(target)) return null;
+  const index_ = new Map<string, { skill: AuthorizedSkill; resource: ManifestResource }>();
+  for (const s of visible) for (const r of s.resources) index_.set(r.id, { skill: s, resource: r });
+  const m: RunSkillManifest = { agentId: 0, ordered, visible, excluded: [], resources: index_, recheck: async () => true };
+  try {
+    const choice = await skillRuntimeFor(m, { engine: 'cloudflare_sdk', sdk });
+    if (choice.runtime.kind !== 'cloudflare_sdk') return null;
+    const act = await choice.runtime.activate(target.name);
+    return act.ok ? await sdkText(choice.runtime, m, target, act.text) : null;
+  } catch { return null; }
 }
