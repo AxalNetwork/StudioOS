@@ -242,7 +242,7 @@ test('mounted public read, existing catalogue and resolver accessor agree; no pr
     const before = f.db.prepare('SELECT total_changes() AS n').get()!.n;
     const response = await f.read(); const body: any = await response.json();
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get('cache-control'), 'public, max-age=300, s-maxage=300');
+    assert.equal(response.headers.get('cache-control'), 'public, max-age=60, s-maxage=60, stale-while-revalidate=60');
     for (const row of body.plans) {
       const key = row.catalogue?.key;
       assert.deepEqual(Object.fromEntries(Object.keys(storageFields(key)).map((k) => [k, row[k]])), storageFields(key));
