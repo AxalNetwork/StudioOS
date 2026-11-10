@@ -4575,17 +4575,22 @@ export const api = {
     request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePartnerProof: (id) =>
     request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the firm hands the link over by whatever channel it already
-  // has with the client, and no later read returns it.
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
   requestPartnerProofConsent: (id, data) =>
     request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
   // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
   // is the token holder's alone, which is what makes the record worth anything.
   withdrawPartnerProofConsent: (id, consentId) =>
     request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
-  // The client's own answer. Unauthenticated on purpose — the token is the
-  // credential, and the counterparty on an engagement is often not a user here.
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToPartnerProofConsent: (token, data) =>
     request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 

@@ -86,7 +86,8 @@ export function PlanSheet({ subject: given = null, picker = false, onDone, onClo
   const choosing = picker && !subject;
   const webinar = subject?.kind === 'webinar';
   const save = async () => {
-    const out = planBody(subject, form);
+    // The sheet's own clock decides what has passed, as it does for the default start.
+    const out = planBody(subject, form, now.getTime());
     if (out.error) { setError(out.error); return; }
     setBusy(true); setError('');
     try { const r = await createPlan(out.body); onDone?.(r?.item || null); }

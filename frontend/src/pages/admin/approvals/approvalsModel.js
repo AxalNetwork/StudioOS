@@ -94,7 +94,8 @@ export const HQ_LANES = [
   { key: 'ai_runs', label: 'Held AI runs', door: 'Platform › AI allowances' },
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
-  { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
+  // D5302: HQ's proposal queue is built (D964), and the Worker's lane is decided there and keeps its history.
+  { key: 'proposals', label: 'Program proposals', door: 'Programs › Proposals' },
   { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
