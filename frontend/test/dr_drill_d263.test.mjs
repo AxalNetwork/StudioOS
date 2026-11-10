@@ -238,7 +238,9 @@ test('D263 drill: a marker that cannot be written never changes the exit code', 
 });
 
 test('D263 drill: the script and its workflow no longer carry the four defects', () => {
-  const code = SRC.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  // D5337: the drill's fetch, verify, import and compare live in dr-restore-lib.sh, so it is read too.
+  const LIB = readFileSync(resolve(process.cwd(), 'scripts/dr-restore-lib.sh'), 'utf8');
+  const code = `${SRC}\n${LIB}`.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
   assert.doesNotMatch(code, /wrangler r2 object list/, 'a subcommand wrangler does not have');
   assert.doesNotMatch(code, /wrangler r2[^\n]*2>\/dev\/null/, 'wrangler\'s own error thrown away');
   assert.doesNotMatch(code, /npm run test:drift/, 'step 4c ran the whole repo suite against nothing restored');
