@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import advisors from '../src/routes/advisors.ts';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
-const JWT_SECRET = 'test-secret-for-practice-earnings-4834';
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
 const ADVISOR_USER = 90;
 const OTHER_ADVISOR_USER = 91;
