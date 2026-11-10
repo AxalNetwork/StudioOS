@@ -112,6 +112,25 @@ function offersBoard(env, spy = []) {
 }
 const sectionOf = (board, slug) => board.sections.find((s) => s.slug === slug);
 
+test('#4835: catalogue pages are stable and search finds a match outside the first page', async () => {
+  const db = fixture();
+  const insert = db.prepare('INSERT INTO service_offerings (id, owner_user_id, title, is_active) VALUES (?, ?, ?, 1)');
+  for (let id = 1; id <= 201; id++) insert.run(id, PARTNER, id === 1 ? 'Rare match' : 'Ordinary offer');
+  const env = envOf(db);
+  const list = async (query) => (await ask(services, env, 'GET', `/offerings?mine=1&${query}`, PARTNER)).body;
+  const first = await list('page=1');
+  assert.equal(first.items.length, 200);
+  assert.equal(first.total, 201);
+  assert.equal(first.has_more, true);
+  assert.equal(first.measures_scope, 'page');
+  const next = await list('page=2');
+  assert.deepEqual(next.items.map((item) => item.id), [1]);
+  assert.equal(next.has_more, false);
+  const searched = await list('q=RARE');
+  assert.equal(searched.total, 1);
+  assert.deepEqual(searched.items.map((item) => item.id), [1]);
+});
+
 // ── 1. root and destination reconcile ───────────────────────────────────────
 
 test('the Offers root reads the firm’s own perk submissions, and reconciles with Perk deals', async () => {

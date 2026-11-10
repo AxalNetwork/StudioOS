@@ -135,6 +135,17 @@ services.get('/offerings', async (c) => {
     }
   }
   if (category) { where += ' AND o.category = ?'; params.push(category); }
+  if (q) {
+    where += " AND (instr(lower(o.title), ?) > 0 OR instr(lower(COALESCE(o.summary, '')), ?) > 0)";
+    params.push(q, q);
+  }
+  const rawPage = Number(c.req.query('page') ?? 1);
+  const pageSize = 200;
+  if (!Number.isSafeInteger(rawPage) || rawPage < 1 || rawPage > Math.floor(Number.MAX_SAFE_INTEGER / pageSize)) {
+    return c.json({ detail: 'Invalid page' }, 400);
+  }
+  const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM service_offerings o WHERE ${where}`)
+    .bind(...params).first<{ n: number }>();
   // `sold` COMES FROM THE ENGAGEMENT TABLE, NOT FROM A COUNTER ON THE ROW. A
   // stored count drifts the moment an engagement is deleted; a correlated count
   // cannot. `service_engagements` (migration 034) carries `offering_id` and has
@@ -159,18 +170,17 @@ services.get('/offerings', async (c) => {
                 AND se.status = 'paid') AS paid,
             (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
                 AND se.status = 'cancelled') AS cancelled
-       FROM service_offerings o WHERE ${where} ORDER BY o.created_at DESC LIMIT 200`,
-  ).bind(...params).all<Offering>();
-  let items: SerializedOffering[] = (rows.results || []).map(serialize);
-  if (q) {
-    items = items.filter((o) =>
-      (o.title || '').toLowerCase().includes(q) ||
-      (o.summary || '').toLowerCase().includes(q));
-  }
+       FROM service_offerings o WHERE ${where} ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?`,
+  ).bind(...params, pageSize, (rawPage - 1) * pageSize).all<Offering>();
+  const items = (rows.results || []).map(serialize);
   return c.json({
     items,
-    // Summed from the rows served, so the strip and the table cannot disagree.
-    // Over the whole result when no search term narrowed it.
+    page: rawPage,
+    page_size: pageSize,
+    total: Number(total?.n ?? 0),
+    has_more: rawPage * pageSize < Number(total?.n ?? 0),
+    measures_scope: 'page',
+    // This rollup covers only the offerings returned in this response.
     measures: sumRequestMeasures(items),
     measures_basis: REQUEST_MEASURE_BASIS,
     measures_note: REQUEST_MEASURE_NOTE,

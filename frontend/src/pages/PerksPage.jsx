@@ -847,7 +847,13 @@ const pct = (r) => `${Math.round(Number(r) * 100)}%`;
  */
 function ListingPerformance({ rows, onChanged }) {
   const first = rows.find((p) => p.status === 'live') || rows[0];
-  const [uid, setUid] = useState(first.uid);
+  const [selectedUid, setUid] = useState(first.uid);
+  const listing = rows.find((p) => p.uid === selectedUid) || first;
+  return <ListingPerformanceDetail key={listing.uid} {...{ rows, listing, setUid, onChanged }} />;
+}
+
+function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
+  const uid = listing.uid;
   const [stats, setStats] = useState(null);
   const [claims, setClaims] = useState(null);
   const [readErr, setReadErr] = useState('');
@@ -855,15 +861,27 @@ function ListingPerformance({ rows, onChanged }) {
   const [cap, setCap] = useState('');
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
-  const listing = rows.find((p) => p.uid === uid) || first;
+  const request = React.useRef(0);
 
   const load = useCallback(() => {
+    const generation = ++request.current;
     setReadErr('');
     Promise.all([api.perkStats(uid), api.perkClaimsForListing(uid)])
-      .then(([s, c]) => { setStats(s); setClaims(c); })
-      .catch((e) => { reportError('perk_performance_failed', e); setReadErr(e?.message || 'Could not read this listing.'); });
+      .then(([s, c]) => {
+        if (generation !== request.current) return;
+        setStats(s);
+        setClaims(c);
+      })
+      .catch((e) => {
+        if (generation !== request.current) return;
+        reportError('perk_performance_failed', e);
+        setReadErr(e?.message || 'Could not read this listing.');
+      });
   }, [uid]);
-  useEffect(() => { setStats(null); setClaims(null); setNote(null); load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { request.current++; };
+  }, [load]);
 
   async function redeem(body) {
     setBusy(true); setNote(null);
