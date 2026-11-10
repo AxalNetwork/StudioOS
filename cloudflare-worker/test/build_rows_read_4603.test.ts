@@ -9,9 +9,9 @@
  *   2. on the local D1 the Build overview and every module page answer exactly
  *      what they answer on node:sqlite, with the same statements and rows
  *      returned, and every statement reports the rows it read;
- *   3. recorded, not endorsed: a module page paged in SQL returns a page but
- *      still scans the venture's rows several times (aggregates, the sorted
- *      page, its count), so it reads more D1 rows than the old full read.
+ *   3. part 3, item 1: the Prototype and Roadmap pages and the overview stay
+ *      within the rows-read budgets measured after their aggregates were
+ *      folded into one grouped scan each (D4603).
  *
  * Local engine numbers, not production D1's. Every row is synthetic.
  *
@@ -58,9 +58,24 @@ test('2. on the local D1 every Build read answers exactly as on node:sqlite, and
   }
 }, { timeout: 300000 });
 
-test('3. recorded, not endorsed: a page paged in SQL reads more D1 rows than it returns', async () => {
-  // At 100 records the Prototype page returns 30 rows and scans the 100 features several times (D4603 part 3).
-  const r = await h.get(`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`);
-  assert.ok(r.rows <= 35, `${r.rows} rows returned`);
-  assert.ok(r.rowsRead! > 4 * 100, `${r.rowsRead} rows read: the aggregates, the sorted page and its options each scan the venture's features`);
+/**
+ * #4603 part 3, item 1: budgets from the measurement (D4603), at this venture's size. Rows read at
+ * 100 records after the fix; before it the two pages read 558 and 684 and the overview 1,408.
+ */
+const BUDGET: Array<[string, number]> = [
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1307],
+  [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 307],
+  [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
+  [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 308],
+  [`/api/cycles/build/modules/product-roadmap?filter=column%3Anow&project=${PROJECT}`, 507],
+];
+
+test('3. the Prototype and Roadmap pages and the overview stay within their rows-read budgets', async () => {
+  // Mutation checked: the aggregates scanned separately again → the Prototype page is over; either grouped-scan
+  // index dropped (migration 202611092153) → its page is over; the Roadmap options read separately → over.
+  for (const [path, budget] of BUDGET) {
+    const r = await h.get(path);
+    assert.equal(r.status, 200, path);
+    assert.ok(r.rowsRead! <= budget, `${path}: ${r.rowsRead} rows read, budget ${budget}`);
+  }
 }, { timeout: 300000 });

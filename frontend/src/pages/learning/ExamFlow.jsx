@@ -5,6 +5,8 @@ import { Card, Pill, Stat, StatGrid, Unrecorded } from '../../ui';
 import { LearningLoading, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
 import { DRAFT_WORDS } from './learningDrafts';
 import { useLearningDraft } from './useLearningDraft';
+import { startFrom, useServerExamDraft } from './examServerDraft';
+import { saveExamDraft } from './assessmentReads';
 import { NOT_LIVE, attemptsLeft as attemptsLeftOf, byPosition, formatClock, formatDay, minutesLabel } from './learningModel';
 import {
   answerIndexes, attemptOutcome, attemptSecondsLeft, isLearningPath, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
@@ -56,7 +58,7 @@ const SECONDARY = `${BUTTON} border border-axal-hairline text-axal-ink hover:bor
 export default function ExamFlow({
   status, exam, attempts = [], attemptsLeft, attemptsStatus = 'ready', onRetryAttempts,
   attempt, result, now, onStart, onSubmit, busy = false, error = '', errorCode = '', errorUnreadable = false,
-  reason = NOT_LIVE.exams, onRetry,
+  reason = NOT_LIVE.exams, onRetry, saveDraft = saveExamDraft,
 }) {
   const clock = useClock(now, Boolean(attempt));
   const block = stateBlock({
@@ -78,7 +80,7 @@ export default function ExamFlow({
       {step === 'intro' && (
         <ExamIntro exam={exam} attempts={attempts} left={left} attemptsStatus={attemptsStatus} onRetryAttempts={onRetryAttempts} onStart={onStart} busy={busy} />
       )}
-      {step === 'taking' && <ExamTaking key={attempt.uid || 'attempt'} exam={exam} attempt={attempt} clock={clock} onSubmit={onSubmit} busy={busy} />}
+      {step === 'taking' && <ExamTaking key={attempt.uid || 'attempt'} exam={exam} attempt={attempt} clock={clock} onSubmit={onSubmit} busy={busy} saveDraft={saveDraft} />}
       {step === 'result' && (
         <ExamResult exam={exam} attempts={attempts} left={left} attemptsStatus={attemptsStatus} onRetryAttempts={onRetryAttempts} result={result} onStart={onStart} busy={busy} />
       )}
@@ -192,14 +194,18 @@ export function restoredAnswers(saved, questions) {
   return out;
 }
 
-function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
+function ExamTaking({ exam, attempt, clock, onSubmit, busy, saveDraft = saveExamDraft }) {
   const [index, setIndex] = useState(0);
   // #4646: this learner's choices for THIS attempt come back after a refresh, a closed tab or a lost connection, kept on
   // this device under the attempt's own uid. The server still owns the clock and the submission; resuming reuses the
   // open attempt and consumes no allowance.
   const saved = useLearningDraft({ kind: 'exam', uid: exam?.uid, attempt: attempt?.uid });
-  const [answers, setAnswers] = useState(() => restoredAnswers(saved.initial, attempt?.questions));
+  // D5356 part 2: the choices are also held on the server; a resume opens with the newer of the two copies.
+  const [answers, setAnswers] = useState(() => startFrom({
+    device: restoredAnswers(saved.initial, attempt?.questions), deviceAt: saved.initialAt, server: attempt?.draft, questions: attempt?.questions,
+  }).answers);
   useEffect(() => { saved.write(answers); }, [answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const server = useServerExamDraft({ examUid: exam?.uid, attempt, questions: attempt?.questions, answers, save: saveDraft });
   // Once the server has the attempt's answers, the copy on the device goes.
   useEffect(() => { if (attempt?.submitted_at) saved.clear(); }, [attempt?.submitted_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [review, setReview] = useState(false);
@@ -264,7 +270,9 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
     <Card padding="none" className="min-w-0 max-w-[760px]" data-testid="exam-taking">
       <div className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-2.5 dark:border-gray-800">
         <span className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">Question {at + 1} of {total} · {answered} answered</span>
-        {saved.state !== 'none' && (
+        {server.state !== 'idle' ? (
+          <span role="status" className={`text-[11.5px] ${server.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint dark:text-gray-500'}`} data-testid="exam-server-state" data-state={server.state}>{server.words}</span>
+        ) : saved.state !== 'none' && (
           <span role="status" className={`text-[11.5px] ${saved.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint dark:text-gray-500'}`} data-testid="exam-draft-state" data-state={saved.state}>{DRAFT_WORDS[saved.state]}</span>
         )}
         <span className={`inline-flex items-center gap-1 text-[13px] font-semibold tabular-nums ${left === 0 ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="text-exam-clock">

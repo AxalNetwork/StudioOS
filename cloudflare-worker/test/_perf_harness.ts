@@ -106,27 +106,27 @@ export async function harness() {
     return tokens.get(id)!;
   };
 
-  /** One request: its status, every statement it ran (its `waitUntil` work included), by category, and its wall time in ms. */
-  async function request(flow: { who: number | null; path: string }, opts: { freshLimits?: boolean } = {}) {
+  /** One request: its status, headers and body size, every statement it ran (its `waitUntil` work included), by category, and its wall time in ms. */
+  async function request(flow: { who: number | null; path: string; headers?: Record<string, string> }, opts: { freshLimits?: boolean } = {}) {
     log = [];
     // A timing loop sends hundreds of requests a minute for one account; the rate limiter rightly answers 429.
     // `freshLimits` gives each request an empty limiter store, so a sample measures the flow, not the refusal.
     if (opts.freshLimits) env.RATE_LIMITS = memKV();
     const pending: Promise<unknown>[] = [];
     const ctx: any = { waitUntil: (p: Promise<unknown>) => { pending.push(p); }, passThroughOnException() {} };
-    const headers: Record<string, string> = flow.who ? { Authorization: `Bearer ${await tokenOf(flow.who)}` } : {};
+    const headers: Record<string, string> = { ...(flow.headers ?? {}), ...(flow.who ? { Authorization: `Bearer ${await tokenOf(flow.who)}` } : {}) };
     const quiet = [console.log, console.info, console.warn, console.error];
     console.log = console.info = console.warn = console.error = () => {};
     try {
       const t0 = performance.now();
       const res = await worker.fetch(new Request(`https://axal.vc${flow.path}`, { headers }), env, ctx);
-      await res.arrayBuffer();
+      const bytes = (await res.arrayBuffer()).byteLength;
       const ms = performance.now() - t0;
       await Promise.allSettled(pending);
       const statements = [...log];
       const count = { auth: 0, telemetry: 0, route: 0 } as Record<Category, number>;
       for (const s of statements) count[categoryOf(s)] += 1;
-      return { status: res.status, ms, total: statements.length, ...count, statements };
+      return { status: res.status, headers: res.headers, bytes, ms, total: statements.length, ...count, statements };
     } finally {
       [console.log, console.info, console.warn, console.error] = quiet;
     }

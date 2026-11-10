@@ -17,7 +17,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { withDeadline } from '../util/deadline';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const SKIP_PREFIXES = ['/api/health', '/api/monitoring/'];
 const STAMP_DEADLINE_MS = 2_000;
@@ -32,10 +32,27 @@ const LAST_ACTIVE_COLUMN_READY = new WeakMap<object, boolean>();
 // middleware having already run. It is idempotent and cached per binding in a
 // WeakMap rather than a module-level boolean — the D95/#204 shape — so a second
 // caller costs one map lookup.
+//
+// #5343 (#4568 R2-04): the statements go through `runSchemaBootstrap`, which
+// reads `users`' columns once per binding and issues no ALTER when the column
+// is there (production: migration 049). `users` is at D1's 100-column limit,
+// where a blind ALTER of an existing column fails "too many columns" on every
+// fresh isolate. A genuine failure (no `users` table) throws
+// `last_active_schema_not_ready` and is not remembered, so the next call tries
+// again: the middleware logs and skips the stamp; HQ's Team read answers 503.
+export const LAST_ACTIVE_SCHEMA: readonly string[] = Object.freeze([
+  'ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP',
+  'CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)',
+]);
+export const LAST_ACTIVE_NOT_READY = 'last_active_schema_not_ready';
 export async function ensureLastActiveColumn(env: Env): Promise<void> {
   if (LAST_ACTIVE_COLUMN_READY.get(bindingKey(env))) return;
-  try { await env.DB.prepare(`ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP`).run(); } catch {}
-  try { await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_users_last_active ON users(last_active_at)`).run(); } catch {}
+  try {
+    await runSchemaBootstrap(env, LAST_ACTIVE_SCHEMA);
+  } catch {
+    console.error('[lastActive] schema_not_ready');
+    throw new Error(LAST_ACTIVE_NOT_READY);
+  }
   LAST_ACTIVE_COLUMN_READY.set(bindingKey(env), true);
 }
 

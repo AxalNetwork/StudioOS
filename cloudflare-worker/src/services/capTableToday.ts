@@ -253,17 +253,26 @@ export type CapTableRead =
  * The one cap table reader for the deck, Build, the Raise card and Mercury.
  * Today comes from the record whenever the record holds shares; otherwise
  * the saved model is read, marked `modelled`. A failed read throws.
+ *
+ * `lean` (#4603 part 3) is for a reader of Today's figures only (Build's
+ * option pool): the same `source`, `start` and `today`, without the record's
+ * labels, and `model` null whenever the record gives Today.
  */
-export async function readCapTable(env: Env, projectId: number): Promise<CapTableRead> {
+export async function readCapTable(env: Env, projectId: number, opts: { lean?: boolean } = {}): Promise<CapTableRead> {
   let start: Start;
   try {
-    start = startFromRecord(await readRecord(env, projectId));
+    // #4603 part 3 (D4603): a lean read leaves out the record's labels (holder kinds, close uids), which `startFromRecord` never reads.
+    start = startFromRecord(await readRecord(env, projectId, opts.lean ? { holderKinds: false, closeUids: false } : {}));
   } catch (e) {
     if (!isNoRecordTable(e)) throw e;
     start = { available: false, reason: 'nothing_recorded', sentence: 'No issuance of shares is on record yet.' };
   }
-  const row = await canonicalModel(env, projectId);
-  const model = row ? { uid: String(row.uid ?? ''), inputs: parse<Inputs>(row.inputs_json), result: parse<SimulateResult>(row.result_json) } : null;
+  const readModel = async () => {
+    const row = await canonicalModel(env, projectId);
+    return row ? { uid: String(row.uid ?? ''), inputs: parse<Inputs>(row.inputs_json), result: parse<SimulateResult>(row.result_json) } : null;
+  };
+  // A lean read reads the model only when the record cannot give Today; a full read always does, for the model's planned rounds.
+  const model = opts.lean ? null : await readModel();
   if (start.available) {
     const today = simulate(inputsFrom(start));
     if (!('errors' in today && today.errors)) {
@@ -271,6 +280,7 @@ export async function readCapTable(env: Env, projectId: number): Promise<CapTabl
     }
   }
   const reason = start.available ? 'record_unavailable' : start.reason;
-  if (model) return { source: 'model', modelled: true, model, record_reason: reason };
+  const fallback = opts.lean ? await readModel() : model;
+  if (fallback) return { source: 'model', modelled: true, model: fallback, record_reason: reason };
   return { source: 'none', modelled: false, record_reason: reason };
 }

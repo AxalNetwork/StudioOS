@@ -199,13 +199,24 @@ export async function readOptoutToken(env: Env, token: unknown): Promise<string 
 export function optoutBase(env: Env) {
   return String((env as any).PUBLIC_BASE_URL || (env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
 }
+/** D5333: the page that asks before it records, and the RFC 8058 one-click POST target. */
+export async function optoutUrl(env: Env, contactUid: string) {
+  return `${optoutBase(env)}/api/grow/optout/${await optoutToken(env, contactUid)}`;
+}
 export async function optoutLine(env: Env, contactUid: string) {
-  return `To stop these emails, open: ${optoutBase(env)}/api/grow/optout/${await optoutToken(env, contactUid)}`;
+  return `To stop these emails, open: ${await optoutUrl(env, contactUid)}`;
+}
+
+const optoutContact = (env: Env, contactUid: string) =>
+  env.DB.prepare("SELECT id, project_id, email FROM contacts WHERE uid = ? AND audience = 'customer'").bind(contactUid).first<{ id: number; project_id: number; email: string }>();
+/** D5333: whether a token names a customer contact, read only; the opt-out page's GET writes nothing. */
+export async function optoutKnown(env: Env, contactUid: string): Promise<boolean> {
+  return !!(await optoutContact(env, contactUid));
 }
 
 /** Records the opt-out. Answers false for a token naming no customer contact; never says which venture or address. */
 export async function recordOptout(env: Env, contactUid: string): Promise<boolean> {
-  const c = await env.DB.prepare("SELECT id, project_id, email FROM contacts WHERE uid = ? AND audience = 'customer'").bind(contactUid).first<{ id: number; project_id: number; email: string }>();
+  const c = await optoutContact(env, contactUid);
   if (!c) return false;
   let hash: string;
   try { hash = await suppressionHash(env, c.project_id, prospectEmail(c.email)); } catch { return false; }
@@ -236,8 +247,8 @@ export async function sequenceSendGate(env: Env, user: User, draftUid: string | 
   if (!d || d.intent !== SEQUENCE_INTENT) return null;
   const m = PERSON.exec(d.person_ref);
   if (!m) throw new SequenceRefused(409, 'This sequence draft no longer names a step.', undefined, 'sequence_stale');
-  const e = await env.DB.prepare(`SELECT e.uid, s.project_id, c.email FROM outreach_enrolments e JOIN outreach_sequences s ON s.id = e.sequence_id
-    JOIN contacts c ON c.id = e.contact_id WHERE e.uid = ? AND c.project_id = s.project_id`).bind(m[1]).first<{ uid: string; project_id: number; email: string }>();
+  const e = await env.DB.prepare(`SELECT e.uid, s.project_id, c.uid AS contact_uid, c.email FROM outreach_enrolments e JOIN outreach_sequences s ON s.id = e.sequence_id
+    JOIN contacts c ON c.id = e.contact_id WHERE e.uid = ? AND c.project_id = s.project_id`).bind(m[1]).first<{ uid: string; project_id: number; contact_uid: string; email: string }>();
   if (!e) throw new SequenceRefused(409, 'This sequence step is no longer open.', undefined, 'sequence_stale');
   const p = await env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(e.project_id).first<{ id: number; founder_id: number | null }>();
   if (!p || !(await canAccessProject(env, user, p, { write: true }))) throw new SequenceRefused(404, 'Draft not found.', undefined, 'draft_not_found');
@@ -246,7 +257,8 @@ export async function sequenceSendGate(env: Env, user: User, draftUid: string | 
   if (!row || row.state !== 'due' || row.position !== Number(m[2])) throw new SequenceRefused(409, row?.reason ? `Not sent: ${row.reason}` : 'This step is not due now.', undefined, 'sequence_not_due');
   if (to !== String(e.email).trim().toLowerCase()) throw new SequenceRefused(400, 'A sequence step goes only to that prospect’s recorded address.', 'to', 'sequence_recipient');
   if (!d.required_line || !body.includes(d.required_line)) throw new SequenceRefused(400, 'Keep the opt-out link in this message.', 'body', 'optout_required');
-  return { enrolmentUid: e.uid, position: Number(m[2]), attachmentKey: d.attachment_key, projectId: e.project_id };
+  // D5333: the List-Unsubscribe target (RFC 8058), the same signed URL the body's line names.
+  return { enrolmentUid: e.uid, position: Number(m[2]), attachmentKey: d.attachment_key, projectId: e.project_id, listUnsubscribe: await optoutUrl(env, e.contact_uid) };
 }
 
 /** After the email has gone: the enrolment moves to its next step. A failure here leaves the send accepted. */

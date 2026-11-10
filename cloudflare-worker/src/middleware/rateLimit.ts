@@ -8,6 +8,8 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+// D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
+import { redactPath } from '../util/pathRedaction';
 
 // A KV round trip that has not answered in this long is treated exactly like a
 // KV error. Two seconds is far above a healthy bump (single-digit ms) and far
@@ -716,7 +718,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         if (closesDoor) {
           const named = (stalled ? matching.slice(i).find((r) => r.failClosed) : b)!;
           await logBlock(env, ctx, {
-            user_id: userId, endpoint: path, bucket: named.name, count: -1, blocked: true,
+            user_id: userId, endpoint: redactPath(path), bucket: named.name, count: -1, blocked: true,
           });
           c.header('Retry-After', '30');
           c.header('X-RateLimit-Bucket', named.name);
@@ -733,7 +735,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
 
       if (count > b.limit) {
         await logBlock(env, ctx, {
-          user_id: userId, endpoint: path, bucket: b.name, count, blocked: true,
+          user_id: userId, endpoint: redactPath(path), bucket: b.name, count, blocked: true,
         });
         const retryAfter = b.windowSec >= 3600 ? 3600 : 60;
         c.header('Retry-After', String(retryAfter));

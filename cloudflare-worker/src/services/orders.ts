@@ -26,6 +26,7 @@ import { canRedeemPromo, reservePromo, type Refusal } from './promoRedemption';
 import { sendBrandedInvoiceEmail } from './email';
 import { AXAL_ENTITIES } from './legalDocFormat';
 import { bindingKey } from '../util/schemaBootstrap';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 // ---------------------------------------------------------------------------
 // Money helpers.
@@ -636,8 +637,7 @@ export function tokenPackLineWords(cents: number): string {
 export const TOKEN_PACK_INVOICE_NOTE = 'Tokens never expire. VAT, where it applies, is not part of the tokens.';
 
 function formatMoneyCents(cents: number, currency: string): string {
-  const cur = (currency || 'usd').toUpperCase();
-  return `${(cents / 100).toFixed(2)} ${cur}`;
+  return suffixAmount(cents, (currency || 'usd').toUpperCase()) ?? '';
 }
 
 export async function renderOrderInvoicePdf(env: Env, orderRef: string): Promise<Uint8Array> {

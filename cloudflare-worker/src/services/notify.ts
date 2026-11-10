@@ -30,7 +30,7 @@ import type { Env } from '../types';
 import { stripTrailingSlashes } from '../util/url';
 import { getUserSettings, isInQuietHours } from './userSettings';
 import { effectiveChannels } from './notificationPolicy';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { renderWeeklyDigest } from './email/canvasTransactional';
 
 export type NotifyChannel = 'in_app' | 'email' | 'slack';
@@ -73,7 +73,15 @@ export interface NotifyArgs {
 }
 
 const INBOX_MIGRATED = new WeakMap<object, boolean>();
-async function ensureInbox(env: Env): Promise<boolean> {
+/** Migration 053's inbox columns, for a database that never ran it (#5343). */
+export const INBOX_COLUMNS: readonly string[] = Object.freeze([
+  `ALTER TABLE notifications_inbox ADD COLUMN category TEXT`,
+  `ALTER TABLE notifications_inbox ADD COLUMN severity TEXT DEFAULT 'info'`,
+  `ALTER TABLE notifications_inbox ADD COLUMN cta_url TEXT`,
+  `ALTER TABLE notifications_inbox ADD COLUMN template_key TEXT`,
+]);
+/** Exported for #5343's runtime-DDL test. */
+export async function ensureInbox(env: Env): Promise<boolean> {
   if (INBOX_MIGRATED.get(bindingKey(env))) return true;
   try {
     await env.DB.prepare(
@@ -94,16 +102,11 @@ async function ensureInbox(env: Env): Promise<boolean> {
       `CREATE INDEX IF NOT EXISTS idx_inbox_user_unread
          ON notifications_inbox(user_id, read_at, created_at)`,
     ).run();
-    // Task #2 (IB) — spec columns. Idempotent ALTERs so dev/preview D1
-    // that never ran migration 053 still serves new writes & reads.
-    for (const ddl of [
-      `ALTER TABLE notifications_inbox ADD COLUMN category TEXT`,
-      `ALTER TABLE notifications_inbox ADD COLUMN severity TEXT DEFAULT 'info'`,
-      `ALTER TABLE notifications_inbox ADD COLUMN cta_url TEXT`,
-      `ALTER TABLE notifications_inbox ADD COLUMN template_key TEXT`,
-    ]) {
-      try { await env.DB.prepare(ddl).run(); } catch { /* already-exists is fine */ }
-    }
+    // Task #2 (IB) — spec columns, for a dev/preview D1 that never ran
+    // migration 053. #5343: asked first (`runSchemaBootstrap`), so an
+    // up-to-date database issues no ALTER; a real failure reaches the catch
+    // below, which leaves the flag unset and fails the caller closed.
+    await runSchemaBootstrap(env, INBOX_COLUMNS);
     // Task #14 — outbox for digest + quiet-hours buffering (mirrors
     // sql/migrations/013_notifications_digest.sql so dev/preview that
     // never run wrangler d1 execute still work).
@@ -130,7 +133,7 @@ async function ensureInbox(env: Env): Promise<boolean> {
     INBOX_MIGRATED.set(bindingKey(env), true);
     return true;
   } catch (e) {
-    console.error('[notify] inbox migration failed', e);
+    console.error('[notify] schema_not_ready', (e as Error)?.message ?? '');
     return false;
   }
 }
