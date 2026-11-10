@@ -20,9 +20,22 @@ export const VERDICTS = Object.freeze(['pr_failure', 'inherited_main_failure', '
 
 /** Jobs whose failure is only a summary of others: the gate reports the suite parts. */
 const SUMMARY_JOBS = new Set(['test:drift (full suite)']);
-const failedNames = (jobs) => [...new Set((jobs || [])
+/**
+ * A job name as it may appear in the summary: letters, digits, spaces and `( ) - _ : . / ↔`, at most 100 characters.
+ * Job names come from the workflow file, which a pull request can change, so anything else is dropped rather than
+ * written into the job summary (CodeQL: network data written to a file).
+ */
+export const safeJobName = (v) => {
+  const s = String(v ?? '');
+  return s.length <= 100 && /^[\p{L}\p{N} ()\-_:./↔]+$/u.test(s) ? s : '';
+};
+/** Only a github.com page reaches the summary as a link. */
+export const safeGithubUrl = (v) => (typeof v === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(issues|actions\/runs)\/\d+$/.test(v) ? v : null);
+/** A PR job whose name is not shown still counts as the PR's own failure, never as inherited. */
+export const UNSHOWN_JOB = '(a job whose name is not shown)';
+const failedNames = (jobs, unsafe = '') => [...new Set((jobs || [])
   .filter((j) => j && (j.conclusion === 'failure' || j.conclusion === 'timed_out'))
-  .map((j) => String(j.name || ''))
+  .map((j) => safeJobName(j.name) || unsafe)
   .filter((n) => n && !SUMMARY_JOBS.has(n)))].sort();
 
 /**
@@ -31,7 +44,7 @@ const failedNames = (jobs) => [...new Set((jobs || [])
  * @param incident  the open `[alert] main is red` issue's URL, if any
  */
 export function classify({ pr, main, incident = null }) {
-  const prFailed = failedNames(pr);
+  const prFailed = failedNames(pr, UNSHOWN_JOB);
   if (!prFailed.length) return { verdict: 'pr_failure', prFailed, mainFailed: [], own: [], shared: [], incident, reason: 'No failed part was found on this PR run; read its own log.' };
   const usable = main && Array.isArray(main.jobs) && (main.conclusion === 'failure' || main.conclusion === 'timed_out' || main.conclusion === 'success');
   if (!usable) {
@@ -50,13 +63,15 @@ export function classify({ pr, main, incident = null }) {
 }
 
 /** The job summary, in Markdown. Links come from the API, never from a commit message or a PR body. */
-export function summary(result, { mainRunUrl = null } = {}) {
+export function summary(result, { mainRunUrl: rawRunUrl = null } = {}) {
+  const mainRunUrl = safeGithubUrl(rawRunUrl);
+  const incident = safeGithubUrl(result.incident);
   const lines = [`### CI failure: \`${result.verdict}\` (D5398)`, '', result.reason, ''];
   if (result.shared.length) lines.push(`Failing on main too: ${result.shared.map((n) => `\`${n}\``).join(', ')}`);
   if (result.own.length) lines.push(`This PR's own: ${result.own.map((n) => `\`${n}\``).join(', ')}`);
   if (mainRunUrl) lines.push(`Main's latest CI run: ${mainRunUrl}`);
   if (result.verdict === 'inherited_main_failure') {
-    lines.push(result.incident ? `The red-main incident and its one repair: ${result.incident}` : 'No `[alert] main is red` issue is open yet; it opens within 15 minutes.');
+    lines.push(incident ? `The red-main incident and its one repair: ${incident}` : 'No `[alert] main is red` issue is open yet; it opens within 15 minutes.');
     lines.push('', 'A part failing on both can still hide a PR-only failure inside it: once main is green, this PR\'s own tests in those parts still count.');
   }
   return lines.join('\n');

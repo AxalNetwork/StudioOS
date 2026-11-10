@@ -95,3 +95,18 @@ test('the red-main and queue protocol is where every agent reads it', () => {
   assert.match(read('CLAUDE.md'), /YYYYMMDDHHMM_<issue>_<slug>\.sql/);
   assert.match(read('AGENTS.md'), /YYYYMMDDHHMM_<issue>_<slug>\.sql/);
 });
+
+test('only safe job names and github.com links reach the job summary (CodeQL: network data written to a file)', async () => {
+  const { safeJobName, safeGithubUrl } = await import('../../scripts/lib/ciClassify.mjs');
+  assert.equal(safeJobName('suite (worker-1-of-6)'), 'suite (worker-1-of-6)');
+  assert.equal(safeJobName('api ↔ worker drift'), 'api ↔ worker drift');
+  for (const bad of ['x\n## injected', '<img src=x>', '[a](https://evil.example)', 'a'.repeat(101), '`code`']) assert.equal(safeJobName(bad), '', bad);
+  assert.equal(safeGithubUrl('https://github.com/o/r/issues/12'), 'https://github.com/o/r/issues/12');
+  assert.equal(safeGithubUrl('https://github.com/o/r/actions/runs/42'), 'https://github.com/o/r/actions/runs/42');
+  for (const bad of ['https://evil.example/o/r/issues/1', 'javascript:alert(1)', 'https://github.com/o/r/issues/1)\n# x', null]) assert.equal(safeGithubUrl(bad), null, String(bad));
+  const r = classify({ pr: [job('x\n## injected', 'failure'), job(W1, 'failure')], main: { conclusion: 'failure', jobs: [job(W1, 'failure')] }, incident: 'https://evil.example/x' });
+  const text = summary(r, { mainRunUrl: 'javascript:alert(1)' });
+  assert.ok(!text.includes('injected') && !text.includes('evil.example') && !text.includes('javascript:'), text);
+  assert.equal(r.verdict, 'pr_failure', 'a job whose name is not shown is never called inherited');
+  assert.deepEqual(r.own, ['(a job whose name is not shown)']);
+});
