@@ -102,6 +102,13 @@ function planInScope(promo: PromoRow, product: { metadata?: Record<string, strin
 export type AutoOffer = { offer: OfferRow; promo: PromoRow; discountCents: number };
 export type OfferSkip = 'paused' | 'ended' | 'budget_used' | 'terms_budget_used' | 'currency' | 'code_refused' | 'plan_not_in_offer';
 
+/** Recover the automatic offer a checkout reference already reserved. */
+export async function heldAutoOffer(env: Env, promoId: string, unitAmount: number): Promise<AutoOffer | null> {
+  const offer = await env.DB.prepare('SELECT * FROM influencer_offers WHERE promo_id = ? ORDER BY id LIMIT 1').bind(promoId).first<OfferRow>();
+  const promo = offer ? await getPromoById(env, promoId) : null;
+  return offer && promo ? { offer, promo, discountCents: computeDiscount(promo, unitAmount).discountCents } : null;
+}
+
 /**
  * The offer checkout applies for this member and price, or null. `skipped`
  * says why each of the influencer's offers was not applied, for the tests and
