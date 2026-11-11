@@ -373,53 +373,99 @@ export interface ReadTracking {
   available: boolean;
   /** Why not, in the repo's honesty vocabulary. Null when available. */
   reason: string | null;
+  /**
+   * #5314 part 1: when the client-open route began recording (migration
+   * `202611110731_5314`). Absent where availability is only inferred from a
+   * recorded open. A deliverable sent before it was never openable here.
+   */
+  since?: string;
 }
 
 export const READ_TRACKING_UNAVAILABLE_REASON =
   'Not recorded: nothing in this product records that a client opened a deliverable or read a report, so a deliverable sent and not opened says nothing about the client.';
 
 /**
- * Whether this build instruments deliverable opens. `engagement_deliverables.
- * opened_at` is the client's to set (migration 208:160) and no client-side
- * surface writes it. Flip this only together with that surface; until then
- * availability is inferred from the data, below.
+ * Whether this build instruments deliverable opens unconditionally. Since
+ * #5314 part 1 opens ARE recorded — `POST /api/client/deliverables/:uid/open`
+ * (routes/client_deliverables.ts) — but only from the moment migration
+ * `202611110731_5314` wrote into `delivery_read_instrumentation`;
+ * `deliverableReadsSince` reads that moment and `readTrackingFor` takes it as
+ * `since`. This flag stays false so a database without the migration keeps
+ * the inferred answer below.
  */
 export const DELIVERABLE_READ_INSTRUMENTED = false;
 
 /**
+ * #5314 part 1: when client opens began to be recorded, or null when the
+ * instrument is absent or unreadable — which keeps every sent deliverable
+ * "Not recorded" rather than "Never opened".
+ */
+export async function deliverableReadsSince(env: Env): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare('SELECT started_at FROM delivery_read_instrumentation WHERE id = 1')
+      .first<{ started_at: string | null }>();
+    return row?.started_at ? String(row.started_at) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * ONE answer to "can we see opens?", used by Deliverables, Health, the Board
- * and the report draft. Available when the build is instrumented, or when any
- * deliverable in the book carries an `opened_at` — a recorded open is proof the
- * instrument exists. Otherwise every sent deliverable would read "unopened", a
- * claim about the CLIENT that is really a claim about OUR missing instrument.
+ * and the report draft. Available when opens are recorded from a moment
+ * (`since`), when the build is instrumented, or when any deliverable in the
+ * book carries an `opened_at` — a recorded open is proof the instrument exists.
+ * Otherwise every sent deliverable would read "unopened", a claim about the
+ * CLIENT that is really a claim about OUR missing instrument.
  */
 export function readTrackingFor(
   deliverables: Array<{ opened_at?: string | null }>,
   instrumented: boolean = DELIVERABLE_READ_INSTRUMENTED,
+  since: string | null = null,
 ): ReadTracking {
+  if (since) return { available: true, reason: null, since };
   const proven = deliverables.some((d) => Boolean(d.opened_at));
   return instrumented || proven
     ? { available: true, reason: null }
     : { available: false, reason: READ_TRACKING_UNAVAILABLE_REASON };
 }
 
+/**
+ * Could the client have opened THIS deliverable through the platform? Where
+ * opens are recorded from a moment (`since`), the open is recorded when the
+ * client follows the shared link, so only a deliverable sent from that moment
+ * on, with a link to follow, can be called unopened. One with no link, or sent
+ * before the route existed, is "Not recorded", never "Never opened".
+ */
+export function openObservable(
+  d: { sent_at?: string | null; link_url?: string | null },
+  tracking: ReadTracking,
+): boolean {
+  if (!tracking.available || !d.sent_at) return false;
+  if (!tracking.since) return true;
+  if (!d.link_url) return false;
+  const sent = Date.parse(String(d.sent_at).replace(' ', 'T'));
+  const since = Date.parse(String(tracking.since).replace(' ', 'T'));
+  return Number.isFinite(sent) && Number.isFinite(since) && sent >= since;
+}
+
 /** Sent and not opened — or NULL when opens cannot be observed. Never 0 by default. */
 export function unopenedCountFor(
-  deliverables: Array<{ sent_at?: string | null; opened_at?: string | null }>,
+  deliverables: Array<{ sent_at?: string | null; opened_at?: string | null; link_url?: string | null }>,
   tracking: ReadTracking,
 ): number | null {
   if (!tracking.available) return null;
-  return deliverables.filter((d) => d.sent_at && !d.opened_at).length;
+  return deliverables.filter((d) => !d.opened_at && openObservable(d, tracking)).length;
 }
 
-/** One deliverable's read state; `not_recorded` when opens cannot be observed. */
+/** One deliverable's read state; `not_recorded` when its open cannot be observed. */
 export function readStateFor(
-  d: { sent_at?: string | null; opened_at?: string | null },
+  d: { sent_at?: string | null; opened_at?: string | null; link_url?: string | null },
   tracking: ReadTracking,
 ): 'not_sent' | 'opened' | 'unopened' | 'not_recorded' {
   if (!d.sent_at) return 'not_sent';
   if (d.opened_at) return 'opened';
-  return tracking.available ? 'unopened' : 'not_recorded';
+  return openObservable(d, tracking) ? 'unopened' : 'not_recorded';
 }
 
 // ---------------------------------------------------------------------------
