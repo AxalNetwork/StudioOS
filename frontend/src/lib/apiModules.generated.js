@@ -147,6 +147,7 @@ export * from './api/deckVoice.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
+export * from './api/eventCovers.js';
 export * from './api/eventRecommendations.js';
 export * from './api/eventSyndication.js';
 export * from './api/fills.js';
