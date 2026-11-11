@@ -279,7 +279,7 @@ export default function EarningsZone() {
     // 0 — the CSV must not assert a price, rate or fee nobody recorded.
     const rows = lines?.items || [];
     const cell = (v) => (v == null ? '' : `"${String(v).replace(/"/g, '""')}"`);
-    const cents = (v) => toMajorString(v, L?.currency) ?? '';
+    const cents = (v) => v == null ? '' : toMajorString(v, L?.currency) ?? '';
     const out = [
       ['Client', 'Session', 'Date', 'Price', 'Billing state', 'Recorded collected', 'Platform rate', 'Platform fee', 'Net'].join(','),
       ...rows.map((r) => [
@@ -311,7 +311,7 @@ export default function EarningsZone() {
       // reader's chosen window are different spans.
       const year = Number(String(window_.key || window_.from || '').slice(0, 4)) || new Date().getFullYear();
       const s = await api.getMyAdvisorTaxSummary(year);
-      const cents = (v) => toMajorString(v, s.currency) ?? '';
+      const cents = (v) => v == null ? '' : toMajorString(v, s.currency) ?? '';
       const out = [
         ['Field', 'Value'].join(','),
         ['Year', s.year].join(','),
