@@ -38,6 +38,7 @@ test('project slugs: the same slug in two companies, refused twice in one compan
   // Mutations checked: the per-scope partial indexes replaced by one global unique index (migration); slugHolder
   // ignoring the scope.
   const db = fixture(); const env = envOf(db);
+  db.prepare("UPDATE user_company_links SET role_in_company = 'Admin' WHERE company_id = ? AND user_id = ?").run(SOUTH, ADA);
   const inSouth = await call(env, ADA, 'PUT', `/api/projects/${DOCK}/slug`, { slug: 'venture' });
   assert.equal(inSouth.status, 200, inSouth.text);
   assert.deepEqual(inSouth.body, { slug: 'venture', path: '/c/co-south/p/venture', previous_slug: null });
