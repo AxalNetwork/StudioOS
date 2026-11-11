@@ -372,9 +372,9 @@ research.post('/documents/:uid/reindex', async (c) => {
   try {
     await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
   } catch {
-    // The hourly sweep walks `index_state` past a watermark and will catch it,
-    // which is why the upload path swallows this too. The row is already
-    // 'pending', so the page reports the truth either way.
+    // #5350's hourly recovery picks up a pending row after 60 minutes when no
+    // live job exists. The row is already 'pending', so the page reports the
+    // truth while that bounded retry waits.
   }
   const fresh = await ownDoc(c.env, user.id, doc.uid);
   return c.json({ item: fresh ? dto(fresh) : null });
@@ -441,7 +441,9 @@ research.post('/documents', async (c) => {
   // useful (listed, downloadable) while `index_state` is 'pending'.
   const id = (ins as any).meta?.last_row_id;
   if (id) {
-    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch { /* the hourly sweep will catch it */ }
+    // A failed producer write leaves the row pending; #5350's hourly recovery
+    // enqueues it after 60 minutes when no live job exists.
+    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch {}
   }
 
   await noteStorageLanded(c.env, storage);

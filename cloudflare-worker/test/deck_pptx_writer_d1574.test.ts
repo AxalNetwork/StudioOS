@@ -29,6 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { CLEAR_PNG, FIT_FLOOR, blockRect, fitParagraphs, readingOrder, setHeight, writeEditableDeck } from '../src/services/decks/pptxEditable.ts';
+import { iconGeometryFromDisk } from './_icon_geometry.ts';
 import { NATIVE_CHART_TYPES, chartPlan, seriesPoints } from '../src/services/decks/pptxChart.ts';
 import { boxOf } from '../src/services/decks/designSystem.ts';
 import { writeOdp } from '../src/services/decks/odp.ts';
@@ -195,8 +196,11 @@ test('4b. text stays inside its area: a long paragraph is set smaller until it f
 test('4c. an icon is SVG with a PNG fallback, in its tone’s colour, never a CSS variable', async () => {
   // Mutation checked: the tone left as var(--deck-…) → the colour check fails; the PNG fallback dropped → the blip check fails.
   const card = { title: 'x', blocks: [TRACTION.blocks[0]], decor: [{ id: 'd1', kind: 'icon', ref: 'rocket', tone: 'accent', at: { x: 1600, y: 96, w: 160, h: 160 } }] };
-  const out = await write([card]);
-  assert.deepEqual(out.decor, { shapes: 0, svg: 1 });
+  // D4574 H3 (#4574): the icon's nodes are a static asset now, so the writer is given them.
+  const out = await write([card], { icons: iconGeometryFromDisk() });
+  assert.deepEqual(out.decor, { shapes: 0, svg: 1, not_drawn: 0 });
+  // Without them the icon is not drawn, and the report counts it rather than dropping it.
+  assert.deepEqual((await write([card])).decor, { shapes: 0, svg: 0, not_drawn: 1 });
   const parts = unzip(out.bytes);
   const svg = [...parts.keys()].find((k) => k.endsWith('.svg'))!;
   const body = txt(parts, svg);

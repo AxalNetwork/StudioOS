@@ -110,6 +110,27 @@ test('A4: the download route answers every refusal with the same 403, streams on
   assert.equal(bodies.size, 1, 'replayed, tampered and malformed tokens are indistinguishable to the caller');
 });
 
+test('A5: production requires the token store at issuance and consumption', async () => {
+  const env = { JWT_SECRET: SECRET, ENVIRONMENT: 'production' };
+  const opts = { key: 'synthetic/doc.pdf', audience: 'test', ttlSec: 30 };
+  await assert.rejects(mintDownloadToken(env, opts), /Signed downloads are unavailable/);
+  const store = kv();
+  let expiry: number | undefined;
+  const put = async (key: string, value: string, options?: KVNamespacePutOptions) => {
+    expiry = options?.expirationTtl;
+    await store.put(key, value);
+  };
+  const bound = { ...env, TOKENS: { ...store, put } } as unknown as Parameters<typeof mintDownloadToken>[0];
+  const { token } = await mintDownloadToken(bound, opts);
+  assert.equal(expiry, 60);
+  assert.deepEqual(await verifyAndConsumeToken(env, token), { error: 'invalid' });
+  assert.equal('key' in await verifyAndConsumeToken(bound, token), true);
+  const broken = { ...bound, TOKENS: { ...bound.TOKENS!, put: async () => { throw new Error('store unavailable'); } } };
+  await assert.rejects(mintDownloadToken(broken, opts), /Signed downloads are unavailable/);
+  const preview = { ...env, ENVIRONMENT: 'preview' };
+  assert.ok((await mintDownloadToken(preview, opts)).token);
+});
+
 // ── B · the Access middleware ────────────────────────────────────────────────
 
 async function accessApp(env: Record<string, unknown>) {

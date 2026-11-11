@@ -2624,3 +2624,10 @@ Three more board sets from the owner's Claude Design canvas "Axal VC – platfor
 - **`Licences and Contracts v2 Addendum Page.dc.html`**, **`Licences and Contracts v2 Addendum · Boards.dc.html`**: boards L23 to L40 and CT-17 to CT-20 (#5303; addendum sections in D4819 and D4811). Extends the Licences v2 and Contracts v2 canvases rather than forking them.
 
 None is built yet. Ventures, people, investors and amounts are sample content, except the addendum's package names, programs, base fees and guidance ranges, which are the seeded ones; each decision lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Admin › Deals (#5459)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10 and revised the same day for the owner's two amendments, as a page plus its boards under the names Claude Design gave them:
+- **`Administrator Deal Preparation Page.dc.html`**, **`Administrator Deal Preparation · Boards.dc.html`**: sections ADPW-00 to ADPW-26, 56 frames (D5459). The Admin profile's **Deals** workspace at `/admin/deals`; the investor Deals redesign stays `Deals v2` (D4815).
+
+Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.

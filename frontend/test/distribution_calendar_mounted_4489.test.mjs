@@ -7,7 +7,30 @@ import PostPreview from '../src/pages/cycles/distribution/PostPreview.jsx';
 import { readFileSync } from 'node:fs';
 import { mountContracts } from './_contracts_dom.mjs';
 import { CalendarWeek } from '../src/pages/cycles/distribution/CalendarTab.jsx';
+import PieceSheet from '../src/pages/cycles/distribution/PieceSheet.jsx';
+import { ProposalCard } from '../src/pages/cycles/distribution/WaitingForYou.jsx';
 const h = React.createElement;
+
+test('Repurpose is a writer-only Calendar action when AI is on', () => {
+  const props = {
+    piece: { uid: 'plan', title: 'Launch', status: 'planned', planned_on: '2026-11-10', channel_uid: 'linkedin' },
+    projectId: 7, channels: [{ uid: 'linkedin' }, { uid: 'x', name: 'X thread' }],
+    destinations: [], canEdit: true,
+  };
+  assert.match(renderToStaticMarkup(h(PieceSheet, props)), />Repurpose<\/button>/);
+  assert.doesNotMatch(renderToStaticMarkup(h(PieceSheet, { ...props, canEdit: false })), />Repurpose<\/button>/);
+  assert.doesNotMatch(renderToStaticMarkup(h(PieceSheet, { ...props, aiOff: true })), />Repurpose<\/button>/);
+});
+
+test('Repurpose post proposals name the channel and offer individual decisions', () => {
+  const html = renderToStaticMarkup(h(ProposalCard, {
+    proposal: { uid: 'proposal', payload: { kind: 'post', piece_uid: 'plan', text: 'Draft copy' } },
+    channelName: 'X thread',
+  }));
+  assert.match(html, /Repurpose · X thread · draft/);
+  for (const label of ['Accept', 'Edit', 'Discard']) assert.ok(html.includes(`>${label}</button>`));
+  assert.doesNotMatch(html, /Fill/);
+});
 test('Overview reads an inclusive Monday-Sunday week and shows the real pieces', async () => {
   const calls = [];
   const m = await mountContracts(h(CalendarWeek, { projectId: 7, api: { pieces: async (...args) => { calls.push(args); return { pieces: [{ uid: 'a', title: 'Customer story', planned_on: '2026-11-05', status: 'scheduled' }] }; } } }));

@@ -11,7 +11,7 @@ import { dayKey, monthGrid, weekGrid, dayPieces, pieceStatus } from './calendarM
 import PieceSheet from './PieceSheet';
 import PostPreview from './PostPreview';
 
-export default function CalendarTab({ projectId, api = growCalendar }) {
+export default function CalendarTab({ projectId, api = growCalendar, aiOff = false }) {
   const compact = usePhoneWidth('(max-width: 1023px)');
   const [options, setOptions] = useState({ state: 'loading', channels: [], campaigns: [] });
   const { channels, campaigns } = options;
@@ -58,7 +58,7 @@ export default function CalendarTab({ projectId, api = growCalendar }) {
         </div>; })}
       </div></div><aside className="min-w-0 rounded-xl border bg-white p-4 dark:border-gray-700 dark:bg-gray-900">{selected ? <><h3>{selected.title} · {selected.channel_name || 'No channel'}</h3><PostPreview platform={selected.channel_name || selected.channel_kind} /></> : <p>Select a piece to preview it.</p>}<p>Notion-planned pieces show as Planned, never as Sent.</p></aside></div>
     </>}
-    {selected && !dialog && <PieceSheet piece={selected} projectId={projectId} onClose={() => setSelected(null)} onEdit={() => setDialog({ kind: 'edit', item: selected })} onTime={(time) => api.time(projectId, selected.uid, time).then(done)} canEdit={read.canEdit} canPublish={places.canPublish} destinations={places.rows} destinationsState={places.state} />}
+    {selected && !dialog && <PieceSheet key={selected.uid} piece={selected} projectId={projectId} aiOff={aiOff} channels={channels} onRepurposed={done} onClose={() => setSelected(null)} onEdit={() => setDialog({ kind: 'edit', item: selected })} onTime={(time) => api.time(projectId, selected.uid, time).then(done)} canEdit={read.canEdit} canPublish={places.canPublish} destinations={places.rows} destinationsState={places.state} />}
     {(dialog?.kind === 'add' || dialog?.kind === 'edit') && <PieceDialog item={dialog.item} channels={channels} onClose={() => setDialog(null)} onSave={(b) => (dialog.item ? cyclesWrite.grow.contentUpdate(projectId, dialog.item.uid, b) : cyclesWrite.grow.content(projectId, b)).then(done)} />}
     {selected && read.canEdit && <button onClick={() => setDialog({ kind: 'delete', item: selected })}>Delete piece</button>}
     {dialog?.kind === 'delete' && <DeleteDialog item={dialog.item} onClose={() => setDialog(null)} onConfirm={() => cyclesWrite.grow.contentDelete(projectId, dialog.item.uid).then(done)} />}

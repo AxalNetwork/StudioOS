@@ -729,6 +729,9 @@ export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose 
   const v = library?.available ? library.value : null;
   const full = count >= DECOR_MAX;
   const list = !v ? [] : segment === 'icons' ? (v.icons?.items || []) : (v[segment] || []);
+  // D4574 H3 (#4574): the icon nodes live in a static asset the Worker reads.
+  // Where that read failed the panel says so; an empty grid would read as "no icons".
+  const iconsUnread = segment === 'icons' && v?.icons?.unreadable === true;
   return (
     <section className="flex w-full max-w-[300px] flex-col gap-2 rounded-[12px] border border-axal-hairline bg-white p-3 text-axal-ink shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
       aria-label="Elements library" data-testid="pitch-decor-panel">
@@ -750,6 +753,7 @@ export function DecorPanel({ library, count, snapped, onPick, onSearch, onClose 
       ) : null}
       {!library ? <span className={MUTED}>Reading the library…</span>
         : !v ? <span className={MUTED} data-testid="pitch-decor-unread">{library.unreadable ? 'The library could not be read.' : 'Not switched on yet.'}</span>
+          : iconsUnread ? <span className={MUTED} data-testid="pitch-decor-icons-unread">{v.icons?.reason || 'The icon set could not be read.'}</span>
           : (
             <div className="grid grid-cols-5 gap-1.5" data-testid="pitch-decor-grid">
               {list.map((x) => (
