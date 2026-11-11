@@ -38,6 +38,16 @@ export class RepoControl extends DurableObject<Env> {
       return { status: result.status, lease: result.lease };
     });
   }
+  private async client(injected?: GithubApi): Promise<GithubApi> {
+    const api = injected ?? await githubClient(this.env, async (input, init) => {
+      if (await this.off()) throw new Error('kill switch enabled');
+      return fetch(input, init);
+    });
+    return async (method, path, body) => {
+      if (await this.off()) throw new Error('kill switch enabled');
+      return api(method, path, body);
+    };
+  }
   private async pages(api: GithubApi, path: string, key?: string): Promise<unknown[]> {
     const result: unknown[] = [];
     for (let page = 1; page <= 10; page++) {
@@ -69,7 +79,7 @@ export class RepoControl extends DurableObject<Env> {
       await this.ctx.storage.put('last-delivery', { id: event.delivery, at: event.at });
       const sha = destroyedTarget(event);
       if (sha && !await this.off()) {
-        const api = injectedApi ?? await githubClient(this.env);
+        const api = await this.client(injectedApi);
         for (const workflow of WORKFLOWS) {
           const runs = await this.pages(api, `actions/workflows/${workflow}/runs?head_sha=${sha}&event=merge_group`, 'workflow_runs') as Run[];
           for (const run of runs) await this.cancel(api, run, sha, event.delivery);
@@ -81,7 +91,7 @@ export class RepoControl extends DurableObject<Env> {
   async reconcile(injectedApi?: GithubApi) {
     return this.ordered(async () => {
       if (await this.off()) { this.audit('reconcile-disabled', null, {}); return; }
-      const api = injectedApi ?? await githubClient(this.env);
+      const api = await this.client(injectedApi);
       const refs = await this.pages(api, 'git/matching-refs/heads/claim/') as { ref: string; object: { sha: string } }[];
       const mirrors: { issue: number; sha: string; message: string }[] = [];
       for (const ref of refs) {
