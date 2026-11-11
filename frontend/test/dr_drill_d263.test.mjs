@@ -175,7 +175,9 @@ function drill(env = {}) {
   env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
   fakeWrangler(dir);
-  writeFileSync(join(dir, 'curl'), '#!/bin/sh\nprintf "%s" "$HISTORY_LIST"\n', { mode: 0o755 });
+  // Real curl consumes the header passed through --header @-. Drain stdin
+  // before exiting so the writer cannot race the fake and hit SIGPIPE.
+  writeFileSync(join(dir, 'curl'), '#!/bin/sh\ncat >/dev/null\nprintf "%s" "$HISTORY_LIST"\n', { mode: 0o755 });
   writeFileSync(join(dir, 'calls.log'), '');
   const r = spawnSync('bash', [SCRIPT], {
     env: { PATH: `${dir}:${process.env.PATH}`, HOME: dir, BACKUP_BUCKET: 'studioos-backups', DR_DRILL_PREVIEW: '0',
@@ -224,7 +226,7 @@ test('D5317: retention prunes only older drill history objects after recording t
     result: ['drill-d1.json', 'drill-d1-history/unrelated.json', ...keys].reverse().map((key) => ({ key })),
   }) });
   assert.equal(r.status, 0, r.out);
-  assert.deepEqual(r.calls.filter((c) => c[0] === 'r2' && c[2] === 'delete').map((c) => c[3]), [`studioos-backups/${keys[12]}`]);
+  assert.deepEqual(r.calls.filter((c) => c[0] === 'r2' && c[2] === 'delete').map((c) => c[3]), [`studioos-backups/${keys[12]}`], r.out);
 });
 
 test('D263 drill: a failed restore exits 2, writes a failed marker naming the step, and still deletes the throwaway database', () => {
