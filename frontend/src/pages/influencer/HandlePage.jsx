@@ -5,6 +5,7 @@ import SitePage from '../../components/site/SitePage';
 import { setSuppressAuthRedirect } from '../../lib/api';
 import { publicHandlesApi } from '../../lib/api/publicHandles';
 import { keepFirstTouch, visitorId } from '../../lib/referralRef';
+import { subscribe as subscribeConsent } from '../../lib/cookieConsent';
 import { PRICE_UNREAD_LINE, priceText, usePlansRead } from '../../lib/planPrices';
 import { HANDLE_PLANS, disclosureOf, offerLines } from './influencerPublicModel';
 
@@ -37,14 +38,31 @@ export default function HandlePage() {
   useEffect(() => {
     if (!isHandle) return undefined;
     let live = true;
-    publicHandlesApi.read(handle, channel, visitorId())
+    let unsubscribe;
+    publicHandlesApi.read(handle, channel)
       .then((d) => {
         if (!live) return;
-        if (d?.state === 'live' && d.ref) keepFirstTouch(d.ref);
+        if (d?.state === 'live') {
+          let measuredId = null;
+          const applyConsent = () => {
+            if (d.ref) keepFirstTouch(d.ref);
+            const id = visitorId();
+            if (!id || id === measuredId) return;
+            measuredId = id;
+            // The public read is already complete. Measurement failure cannot
+            // hide the page or replace its data.
+            publicHandlesApi.read(handle, channel, id).catch(() => {});
+          };
+          unsubscribe = subscribeConsent(applyConsent);
+          applyConsent();
+        }
         setState({ status: 'ok', data: d });
       })
       .catch((e) => { if (live) setState({ status: e?.status === 404 ? 'unknown' : 'error' }); });
-    return () => { live = false; };
+    return () => {
+      live = false;
+      unsubscribe?.();
+    };
   }, [isHandle, handle, channel]);
 
   if (!isHandle) return <NotFoundPage />;
@@ -92,7 +110,7 @@ export default function HandlePage() {
               <div className="rounded-xl border border-violet-200 bg-violet-50 p-4" data-testid="handle-offer">
                 <p className="m-0 text-lg font-semibold text-[#18181b]">{offer.discount}</p>
                 <p className="m-0 mt-1 text-sm text-[#6b6577]">{`${offer.plans} · ${offer.who} · ${offer.ends}`}</p>
-                <p className="m-0 mt-2 text-xs text-[#6b6577]">Applied automatically at checkout when you join through this page.</p>
+                <p className="m-0 mt-2 text-xs text-[#6b6577]">Enable Marketing in Cookie preferences to carry this offer through to checkout.</p>
               </div>
             )}
 

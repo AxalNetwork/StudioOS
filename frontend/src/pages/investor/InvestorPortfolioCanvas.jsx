@@ -10,13 +10,11 @@ import { bucketForPath } from '../../workspaces/shellConfig';
 import './investorPortfolioCanvas.css';
 import { titleCase } from '../../lib/absence';
 import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
+import { kpiValue } from './InvestorPortfolioUpdates';
 
 const money = (value) => {
-  if (value == null) return '—';
-  const amount = Number(value);
-  if (Math.abs(amount) >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
-  if (Math.abs(amount) >= 1000) return `$${(amount / 1000).toFixed(0)}k`;
-  return `$${Math.round(amount).toLocaleString()}`;
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return 'Not recorded';
+  return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'code', minimumFractionDigits: 0 });
 };
 const multiple = (value) => (value == null ? '—' : `${Number(value).toFixed(2)}x`);
 const ownership = (value) => (value == null ? '—' : `${Number(value).toFixed(1)}%`);
@@ -28,8 +26,8 @@ function Skeleton() {
 
 export default function InvestorPortfolioCanvas() {
   const [state, setState] = useState({
-    loading: true, error: '', positions: [], analytics: null, health: null, updates: [], intros: [], compliance: null,
-    unavailable: { analytics: false, health: false, updates: false, intros: false, compliance: false },
+    loading: true, error: '', positions: [], analytics: null, health: null, updates: [], support: null, compliance: null,
+    unavailable: { analytics: false, health: false, updates: false, support: false, compliance: false },
   });
 
   const load = useCallback(async () => {
@@ -39,15 +37,15 @@ export default function InvestorPortfolioCanvas() {
       const optional = await Promise.allSettled([
         api.positionsAnalytics(),
         api.portfolioHealthList({}),
-        api.portfolioUpdatesList(),
-        api.listIntroductions(),
+        api.portfolioUpdatesLatest(),
+        api.portfolioSupportList(),
         api.positionsKpiCompliance(),
       ]);
       const value = (index, fallback) => optional[index].status === 'fulfilled' ? optional[index].value : fallback;
       const analyticsResult = value(0, null);
       const healthResult = value(1, null);
       const updatesResult = value(2, { items: [] });
-      const introsResult = value(3, { introductions: [] });
+      const supportResult = value(3, null);
       const complianceResult = value(4, null);
       setState({
         loading: false,
@@ -56,13 +54,13 @@ export default function InvestorPortfolioCanvas() {
         analytics: analyticsResult,
         health: healthResult,
         updates: Array.isArray(updatesResult?.items) ? updatesResult.items : [],
-        intros: Array.isArray(introsResult?.introductions) ? introsResult.introductions : [],
+        support: supportResult?.totals ?? null,
         compliance: complianceResult,
         unavailable: {
           analytics: optional[0].status === 'rejected',
           health: optional[1].status === 'rejected',
           updates: optional[2].status === 'rejected',
-          intros: optional[3].status === 'rejected',
+          support: optional[3].status === 'rejected',
           compliance: optional[4].status === 'rejected',
         },
       });
@@ -73,19 +71,24 @@ export default function InvestorPortfolioCanvas() {
 
   useEffect(() => { load(); }, [load]);
 
-  const reportedProjects = useMemo(
-    () => new Set((state.compliance?.companies || []).filter((item) => item.reported).map((item) => item.project_id)),
+  const reportingByProject = useMemo(
+    () => new Map((state.compliance?.companies || []).map((item) => [String(item.project_id), item.reported])),
     [state.compliance],
   );
   const rows = useMemo(() => state.positions.map((position) => {
     const health = state.health?.items?.find((item) => item.project_id === position.project_id);
-    return { ...position, health, reported: reportedProjects.has(position.project_id) };
-  }), [state.positions, state.health, reportedProjects]);
+    return { ...position, health, reported: reportingByProject.get(String(position.project_id)) };
+  }), [state.positions, state.health, reportingByProject]);
+  const units = new Map((state.compliance?.kpi_set || []).map((rule) => [rule.kpi_key, rule.unit]));
   const latestUpdate = state.updates[0];
+  const reportingPeriod = state.compliance?.population?.period ?? state.compliance?.period;
+  const reportingSummary = reportingPeriod && Number.isInteger(state.compliance?.reported_count) && Number.isInteger(state.compliance?.total_count)
+    ? `${state.compliance.reported_count} of ${state.compliance.total_count} portfolio companies reported for ${reportingPeriod}${state.compliance.period_in_progress ? ' (in progress)' : ''}`
+    : 'Reporting completion unavailable';
   const interventionCount = state.health?.totals?.intervention ?? rows.filter((row) => row.health?.intervention).length;
-  const acceptedIntros = state.intros.filter((item) => ['accepted', 'meeting_set'].includes(item.status)).length;
   const hasPartialFailure = Object.values(state.unavailable).some(Boolean);
   const statCards = [
+    { label: 'NAV · gross', value: state.unavailable.analytics ? 'Unavailable' : money(state.analytics?.nav), note: 'Residual value of the portfolio positions', delta: state.analytics?.as_of ? `As of ${state.analytics.as_of}` : 'Latest recorded marks and cost basis' },
     { label: 'TVPI · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.tvpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : 'Total value / paid-in', delta: 'Gross of fees and carry' },
     { label: 'MOIC · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.moic), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.paid_in)} invested`, delta: 'Marked value + realised' },
     { label: 'DPI', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.dpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.distributed)} realised`, delta: 'Cash returned' },
@@ -98,7 +101,7 @@ export default function InvestorPortfolioCanvas() {
       <header className="i4-heading">
         <div>
           <h1>Know how my investments are doing</h1>
-          <p>Your direct book — positions, founder-maintained records, and the work around each investment.</p>
+          <p>Portfolio positions visible to this investor account, with reporting and support for the companies you can access.</p>
           {/* D1413 (#3696 Q1): the same companies can sit in your account's Portfolio; each links to the other. */}
           <Link to={ACCOUNT_LINK.to} className="i4-primary-link" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
         </div>
@@ -130,7 +133,7 @@ export default function InvestorPortfolioCanvas() {
                   <td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{[row.project?.sector, row.project?.stage].filter(Boolean).join(' · ')}</small></td>
                   <td>{money(row.total_invested)}</td><td>{ownership(row.latest_ownership_pct)}</td><td>{money(row.fmv)}</td>
                   <td className={row.multiple != null && Number(row.multiple) < 1 ? 'i4-down' : 'i4-up'}>{multiple(row.multiple)}{row.unmarked && <small>At cost</small>}</td>
-                   <td>{state.unavailable.compliance
+                   <td>{state.unavailable.compliance || row.reported == null
                      ? <span className="i4-report">Unavailable</span>
                      : <span className={`i4-report ${row.reported ? 'is-current' : 'is-missing'}`}>{row.reported ? 'Current' : 'Due'}</span>}</td>
                 </tr>)}
@@ -141,13 +144,13 @@ export default function InvestorPortfolioCanvas() {
 
           <section className="i4-lower">
             <article className="i4-card i4-updates" id="portfolio-updates">
-               <div className="i4-section-head"><div><h2>Updates &amp; KPI collection</h2><p>{state.unavailable.updates ? 'Update source unavailable' : `${state.updates.length} founder-submitted update${state.updates.length === 1 ? '' : 's'} in this accessible book`}</p></div><Link to="/portfolio/updates" data-testid="link-investor-updates-detail">Open updates <ArrowUpRight size={13} /></Link></div>
-               {state.unavailable.updates ? <div className="i4-empty"><Inbox size={16} /> Founder updates are temporarily unavailable. No empty-reporting claim is being made.</div> : latestUpdate ? <div className="i4-update"><div className="i4-proposal">Founder update</div><h3>{latestUpdate.title}</h3><p>{latestUpdate.project?.name || `Startup ${latestUpdate.project_id}`}{latestUpdate.period ? ` · ${latestUpdate.period}` : ''}</p><div className="i4-kpis">{Object.entries(latestUpdate.kpis || {}).slice(0, 4).map(([key, value]) => <div key={key}><span>{label(key)}</span><b>{String(value)}</b></div>)}</div><Link to="/portfolio/updates" className="i4-primary-link" data-testid="link-review-latest-founder-update">Review source update</Link></div> : <div className="i4-empty"><Inbox size={16} /> No founder update is available yet. Incoming reports retain their source when published.</div>}
+               <div className="i4-section-head"><div><h2>Updates &amp; KPI collection</h2><p>{reportingSummary}</p></div><Link to="/portfolio/updates" data-testid="link-investor-updates-detail">Open updates <ArrowUpRight size={13} /></Link></div>
+               {state.unavailable.updates ? <div className="i4-empty"><Inbox size={16} /> Founder updates are temporarily unavailable. No empty-reporting claim is being made.</div> : latestUpdate ? <div className="i4-update"><div className="i4-proposal">Founder update</div><h3>{latestUpdate.title}</h3><p>{latestUpdate.project?.name || `Startup ${latestUpdate.project_id}`}{latestUpdate.period ? ` · ${latestUpdate.period}` : ''}</p><div className="i4-kpis">{Object.entries(latestUpdate.kpis || {}).slice(0, 4).map(([key, value]) => <div key={key}><span>{label(key)}</span><b>{kpiValue(key, value, units)}</b></div>)}</div><Link to="/portfolio/updates" className="i4-primary-link" data-testid="link-review-latest-founder-update">Review source update</Link></div> : <div className="i4-empty"><Inbox size={16} /> No founder update is available yet. Incoming reports retain their source when published.</div>}
                <div className="i4-health-line"><Activity size={14} /><span>{state.unavailable.health ? 'Health signals are temporarily unavailable.' : interventionCount ? `${interventionCount} position${interventionCount === 1 ? '' : 's'} need attention.` : 'No intervention flags in the latest health sweep.'}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
             </article>
             <article className="i4-card i4-value-add" id="portfolio-value-add">
             <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
-               <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? 'Unavailable' : state.intros.length}</strong></div>
+               <div className="i4-value-row"><UsersRound size={15} /><div><b>Support delivered</b><p>{state.support ? `${state.support.companies_supported} of ${state.support.companies_in_book} companies in the support ledger` : 'Support totals unavailable'}</p></div><strong>{state.support?.delivered ?? 'Unavailable'}</strong></div>
                <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? 'Unavailable' : (state.health?.totals?.green ?? 0)}</strong></div>
                <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{state.unavailable.health ? 'Health source unavailable' : 'Open the health register for reasons and source signals'}</p></div><strong>{state.unavailable.health ? 'Unavailable' : interventionCount}</strong></div>
               <p className="i4-seam-note">Support given is kept beside the position it serves. Founder-facing records remain distinct.</p>
@@ -181,7 +184,7 @@ export default function InvestorPortfolioCanvas() {
       ]}
       coverageNote="Updates and cap-table ownership stay linked to the company records they came from."
       unavailable={[
-        ['Estimated marks', 'No figure here is modelled. A position with no mark reads as absent rather than being carried at cost.'],
+        ['Valuation marks', 'A position without a recorded mark is carried at cost when its cost is known.'],
         ['Outbound', 'Nothing is sent to a founder from this page.'],
       ]}
       action={<Link to="/portfolio/performance" data-testid="link-rail-portfolio-performance">Open performance methodology <ArrowUpRight size={13} /></Link>}

@@ -15,7 +15,7 @@ files say how to act on it.
 | `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
 | `DATA_RETENTION.md` | Look up how long each deck store keeps its rows and R2 objects, what removes them, and the known gaps (D1508). |
 | `PROCESSING_AND_RETENTION_5510.md` | Trace Axal VC data collection, tentative processor/vendor inventory, erasure/retention evidence and pending legal/production verification without publishing secret or user data (#5510). |
-| `DECK_GRID.md` | Run deck builder v2, the Grid (D1547, #3792): switch off a model, refund a batch, unstick a batch, purge an image including a DMCA takedown. Says which steps have a route, which are SQL, and that none is tested on staging yet; `deck_grid_runbook_3792` keeps it true to the code. |
+| `DECK_GRID.md` | Run deck builder v2, the Grid (D1547, #3792): switch off a model, refund a batch, unstick a batch, purge an image including a DMCA takedown. Says which steps have a route, which are SQL, and that none is tested on staging yet; `deck_grid_runbook_3792` keeps the names true to the code and `deck_grid_runbook_d1547` runs the SQL. |
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
 | `SCHEMA_DRIFT.md` | What schema checks run before a deploy, what the post-deploy `schema-drift` job finds after it, and how a red result is escalated and corrected without silencing the check (#4591). |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |

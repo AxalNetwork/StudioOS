@@ -11,6 +11,7 @@
  *   · a Lab venture's read gives the Lab page's own figures.
  */
 import { MODULES as VALIDATE_MODULES } from '../src/services/cycleValidate.ts';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -49,6 +50,7 @@ function fixture() {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(MIG440);
+  applyAcceptRetryKeys(db); // D5352
   // D690 (#1692): the tracked list and Experiments' links read 460's stores.
   db.exec(sqlOf('460_validate_record_stores.sql'));
   // D693 (#1704): Verdict is the seventh card, over migration 464's decisions.

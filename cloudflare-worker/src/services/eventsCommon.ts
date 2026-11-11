@@ -43,6 +43,12 @@ export async function ensureUniqueEventSlug(
 
 const TRUTHY = (v: unknown): boolean => v === 1 || v === true || v === '1';
 
+/** A cover's recorded focal point or crops. Unparseable reads as not recorded, never as a default frame. */
+const coverJson = (raw: unknown): Record<string, unknown> | null => {
+  if (typeof raw !== 'string' || !raw) return null;
+  try { const v = JSON.parse(raw); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
+};
+
 /** A seat awaiting approval or payment does not grant access to the call. */
 export function hasConfirmedEventSeat(registration: any): boolean {
   return ['confirmed', 'attended'].includes(registration?.status)
@@ -71,6 +77,15 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJo
     summary: row.summary ?? null,
     description: row.description ?? null,
     cover_url: row.cover_url ?? null,
+    // #5309 (D5309, D3724 §gaps 8 and 11): what the cover shows, where it came
+    // from, and how to frame it. Public: alt text is read aloud to anyone, and
+    // the focal point and crops are how the card draws the image it already
+    // serves. A cover from before the migration has no recorded source, and
+    // `null` says exactly that rather than claiming "uploaded".
+    cover_alt: row.cover_alt ?? null,
+    cover_source: row.cover_source ?? null,
+    cover_focal: coverJson(row.cover_focal_json),
+    cover_crops: coverJson(row.cover_crops_json),
     topics: eventTopics(row.topics_json),
     starts_at: row.starts_at,
     ends_at: row.ends_at ?? null,

@@ -719,6 +719,22 @@ export function perkClaimsFrom(read) {
   };
 }
 
+/**
+ * D5313 (#5313): Perks' Participation, a core section of the generic shell. Claims and redemptions are recorded, in
+ * the claims read's window. That read counts claims, not members, so how many members took part is "Not recorded",
+ * never a 0 and never the claims count passed off as people.
+ */
+export const PERK_MEMBERS_UNRECORDED = 'The claims read counts claims, not members, so how many members took part is not recorded. It is not the same as nobody.';
+export function perkParticipationTiles(read) {
+  const claims = perkClaimsFrom(read);
+  return [
+    claims.state === 'ready'
+      ? { key: 'participation-claims', label: 'Claims', state: 'ready', value: claims.text, sub: PERK_WEEKS_LINE }
+      : { key: 'participation-claims', label: 'Claims', state: claims.state, reason: 'The claims could not be read. That is not the same as none.' },
+    { key: 'participation-members', label: 'Members taking part', state: 'placeholder', word: NOT_RECORDED, reason: PERK_MEMBERS_UNRECORDED },
+  ];
+}
+
 export const CREDITS_HELD_WAITS = 'Members’ balances are stored; the sum across members waits for the owner’s answer on which accounts it covers.';
 
 /** The Queue's filter (item 16): every state, the open one first. */
