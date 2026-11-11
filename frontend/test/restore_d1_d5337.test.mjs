@@ -329,7 +329,7 @@ test('independent: a recovery point is checked, decrypted with the owner\'s key 
   assert.ok(!r.out.includes(SENTINEL));
   assert.deepEqual(r.tmpLeft, [], 'the plaintext or the ciphertext outlived the run');
   // Nothing but the store, the owner's key and the fakes' own files sits beside the run.
-  assert.ok(!readdirSync(w.dir).some((f) => /backup\.sql|\.age$/.test(f)));
+  assert.ok(!readdirSync(w.dir).some((f) => /backup\.sql/.test(f) || /\.age$/.test(f)));
 });
 
 test('independent: no key, a wrong key, a tampered ciphertext or a missing point is refused before the target is touched', () => {
