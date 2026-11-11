@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { digest, render, MARKER } from '../../scripts/lib/ciDigest.mjs';
+import { digest, render } from '../../scripts/lib/ciDigest.mjs';
 import { VERDICTS } from '../../scripts/lib/ciClassify.mjs';
 import { publish, runDigest, main, pushesToGreen } from '../../scripts/ci-digest.mjs';
 const headSha='a'.repeat(40);
