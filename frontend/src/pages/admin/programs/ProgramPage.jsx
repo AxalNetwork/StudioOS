@@ -12,7 +12,7 @@
 // playbook, and the Super Admin's Edit and Publish), on parts 1, 5 and 6's
 // reads. Each header's status pill is part 1's registry's.
 import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { actionPrimary } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
@@ -24,7 +24,9 @@ import { InfluencerTabs, LearningTabs, PartnersTabs, PerksTabs } from './Program
 import { ApplicationsTab, InfluencersTab, OffersTab, PayoutsTab, SettingsTab } from './InfluencerPages';
 import { KEY as INFLUENCER_KEY, LANDING as INFLUENCER_LANDING } from './influencersModel';
 import { LearningOverview, LearningPeople } from './LearningPages';
-import { PerksOverview, PerksQueue } from './PerksPages';
+import { PerksOverview, PerksParticipation, PerksQueue } from './PerksPages';
+import { Availability, Modules, OnRegistry, Settings } from './ProgramShellSections';
+import { shellModules } from './genericProgramModel';
 import { InvitePartner, PartnersOverview, PartnersQueue, useQueueCount } from './ReferralPartners';
 import { ApproveDialog, EndTermsDialog, RuleDialog, SendDialog, TermsDialog } from './ReferralTermsDialogs';
 import { EndAccessDialog, GiveAccessDialog, InvestorOverview, NdaSendDialog, useInvestorReads } from './InvestorCohorts';
@@ -35,18 +37,34 @@ import { totalOf } from './programPagesModel';
 import { useLearningReads, usePerksReads } from './useProgramReads';
 import { AI_NATIVE_FOOT, INVESTOR_BANNER, NOT_RUNNING_YET, isReady, routeFor } from './programsModel';
 
-// D962 (#2795): How it runs reads part 1's playbook store, and Activity part 1's activity read.
+/**
+ * D5313 (#5313): Perks runs in the generic program shell (PG03a), the first of the nine built-in programs to move.
+ * The shell's six core sections, with Perks' screens where it has its own: Overview is its tiles, charts and credits
+ * above the shell's Capability modules; Playbook is How it runs (D962); Availability & grants, Participation and
+ * Settings are the shell's sections (`ProgramShellSections.jsx`), Participation on Perks' own claims; the Perk queue
+ * module is the Queue (D962), at `/queue` as MODULE_PATHS has it; History is the Activity read. Every address it had
+ * keeps its path. The registry read is the frame's, so a failed one marks only the sections that need it.
+ */
 function Perks({ tab, superAdmin }) {
   const reads = usePerksReads(tab);
   const detail = useProgramDetail('perks');
   const n = totalOf(reads.inReview);
   const queue = n !== null ? { text: n.toLocaleString('en-US'), amber: n > 0, title: 'Listings in review' } : null;
   return (
-    <ProgramFrame detail={detail} program="perks" superAdmin={superAdmin} tabs={<PerksTabs queue={queue} />}>
-      {tab === 'overview' ? <PerksOverview reads={reads} superAdmin={superAdmin} /> : null}
+    <ProgramFrame detail={detail} program="perks" superAdmin={superAdmin} status={registryStatus(detail)} tabs={<PerksTabs queue={queue} />}
+      actions={tab === 'queue' ? null : <Link to="/admin/programs/perks/queue" className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-perks-review">Review perk queue</Link>}>
+      {tab === 'overview' ? (
+        <>
+          <PerksOverview reads={reads} superAdmin={superAdmin} />
+          <Modules modules={shellModules('perks', detail.read)} />
+        </>
+      ) : null}
       {tab === 'how' ? <PlaybookEditor program="perks" superAdmin={superAdmin} detail={detail} testId="programs-perks-how" /> : null}
+      {tab === 'availability' ? <OnRegistry detail={detail}>{(data) => <Availability data={data} />}</OnRegistry> : null}
+      {tab === 'participation' ? <PerksParticipation reads={reads} /> : null}
       {tab === 'queue' ? <PerksQueue reads={reads} /> : null}
       {tab === 'activity' ? <ActivityTab program="perks" testId="programs-perks-activity" /> : null}
+      {tab === 'settings' ? <OnRegistry detail={detail}>{(data) => <Settings programKey="perks" program={data.program} superAdmin={superAdmin} onSaved={detail.reload} />}</OnRegistry> : null}
     </ProgramFrame>
   );
 }

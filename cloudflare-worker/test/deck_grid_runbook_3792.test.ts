@@ -78,7 +78,10 @@ test('#3792: the batch, step and hold states the runbook lists are the schema\'s
   has(RUNBOOK, "state IN ('queued', 'running', 'cancelling');", 'the hand fix only touches an active run');
   // Columns the SQL reads exist (an earlier draft used one that does not).
   for (const col of ['quote_microusd', 'reservation_uid', 'charged_microusd', 'started_at', 'settled_at', 'created_at']) has(batches, new RegExp(`\\b${col}\\b`), col);
-  assert.doesNotMatch(RUNBOOK, /ended_at/, 'deck_area_batches has no ended_at');
+  // A step row has ended_at. The batch table does not, so no statement that updates it may name the column.
+  for (const block of RUNBOOK.matchAll(/```sql\n([\s\S]*?)```/g)) {
+    if (/UPDATE\s+deck_area_batches/i.test(block[1])) assert.doesNotMatch(block[1], /ended_at/, 'deck_area_batches has no ended_at');
+  }
   // A tombstone takes only the two reasons the schema allows, and the runbook inserts one of them.
   const tomb = sql('722_deck_r2_tombstones.sql');
   has(tomb, "reason IN ('discarded', 'unkept_proposal')", 'tombstone reasons');
