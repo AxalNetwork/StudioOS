@@ -125,12 +125,11 @@ export default function ProjectDetail() {
     } catch (e) { showToast({ kind: 'error', msg: e.message }); }
   };
 
-  const isAdmin = user?.role === 'admin';
-  const isOwner = !!user?.founder_id && project && project.founder_id === user.founder_id;
-  // Task #1 — co-founders (and admin/partner managers) may edit project DATA;
-  // advisors/investors may not. perm.can_edit comes from GET /:id/members.
-  const canEdit = isAdmin || isOwner || !!perm?.can_edit;
-  const canDelete = isAdmin || isOwner;
+  // D5366: the server answer wins over a cached account role. This keeps an HQ
+  // admin without a company seat, and every support session, read-only even on
+  // a direct project URL.
+  const canEdit = !!perm?.can_edit;
+  const canDelete = !!perm?.can_manage;
   const tier = (user?.tier || user?.subscription_plan || 'free').toLowerCase();
   const isElevated = ['admin','partner','investor','advisor'].includes((user?.role || '').toLowerCase());
   const cbTierLocked = !isElevated && tier !== 'growth' && tier !== 'studio';

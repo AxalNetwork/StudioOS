@@ -4,7 +4,7 @@ import { holdsLicence } from '../services/accountLicences';
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
-import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from '../util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from '../util/authErrors';
 import { BRANCH_SUSPENDED } from '../util/branch';
 import { refusalBody } from '../util/refusal';
 
@@ -175,6 +175,7 @@ export function mapError(c: Context<{ Bindings: Env }>, e: any) {
   // a bare `{detail: 'step_up_required'}` would be the right number and still a
   // dead end. Same object as `app.onError` builds, from the same function.
   if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(e), 423);
+  if (msg === ADMIN_MFA_REQUIRED) return c.json(adminMfaRequiredBody(), 403);
   if (msg === BRANCH_SUSPENDED) return c.json(branchSuspendedBody(e), 423);
   if (msg === STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(e), 403);
 

@@ -65,6 +65,7 @@ represents a bug that reached production once:
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 | `plan-persona-prices.mjs` | D1430: offline Advisor/Operating Partner price requests on `plan_group`; missing products are `product_needed`. Same private `--catalog` export and audited action format as the Founder/Investor planners. |
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
+| `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
 
 ## The one rule that needed a linter
 

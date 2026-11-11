@@ -24,6 +24,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { currencyCode, formatMinorOrCount, toMajorString } from '../../../lib/money.js';
 import { documentWord } from './historyModel.js';
 import { BASIS_CHECK, day, dollars, money, shares } from './capTableModel.js';
 
@@ -55,10 +56,12 @@ export const instrumentHref = (uid, search = '') => `/raise/cap-table/instrument
 const bpsWord = (bps) => (num(bps) == null ? NOT_RECORDED : `${Math.round(bps) / 100}%`);
 
 /** A price per share, to the cent, or to four places under ten cents. */
-export function price(v) {
+export function price(v, currency = 'USD') {
   const n = num(v);
-  if (n == null) return NOT_RECORDED;
-  return `$${n.toFixed(n < 0.1 ? 4 : 2)}`;
+  const code = currencyCode(currency);
+  if (n == null || code == null) return NOT_RECORDED;
+  const digits = n < 0.1 ? 4 : 2;
+  return code === 'USD' ? `$${n.toFixed(digits)}` : `${n.toFixed(digits)} ${code}`;
 }
 
 function basisOf(terms) {
@@ -76,21 +79,21 @@ function convertedUids(record) {
 
 /** CT3: each SAFE and note on record, in the record's own units and words. */
 export function recordInstruments(record) {
-  const code = record?.currency?.code || 'USD';
   const converted = convertedUids(record);
   return (record?.instruments?.rows || []).map((r) => {
     const t = r.terms || {};
     const note = r.kind === 'note';
     const b = basisOf(t);
-    const cur = r.currency || code;
+    const cur = r.currency ?? (r.safe_issuance_uid ? null : 'USD');
+    const display = (minor) => formatMinorOrCount(minor, cur, { locale: 'en-US', trimWhole: true }) ?? NOT_RECORDED;
     return {
       uid: r.uid,
       holder: String(r.holder?.name || '').trim() || NOT_RECORDED,
       kind: note ? 'note' : 'safe',
       type: note ? 'Convertible note' : 'SAFE',
       amountCents: num(r.amount_cents),
-      amount: money(r.amount_cents, cur),
-      cap: num(t.cap_cents) > 0 ? money(t.cap_cents, cur) : NOT_RECORDED,
+      amount: display(r.amount_cents),
+      cap: num(t.cap_cents) > 0 ? display(t.cap_cents) : NOT_RECORDED,
       discount: bpsWord(t.discount_bps),
       basis: b.word,
       basisKey: b.key,
@@ -105,6 +108,7 @@ export function recordInstruments(record) {
       statusWord: converted.has(r.uid) ? 'Converted' : 'Outstanding',
       source: sourceLabel(r.source),
       cannotConvert: !(num(t.cap_cents) > 0) && num(t.discount_bps) == null,
+      currency: cur,
       raw: r,
     };
   });
@@ -262,9 +266,10 @@ export function instrumentView(inst, { today = null, sim = null } = {}) {
   let steps = null;
   if (c) {
     const lines = [];
-    const cap = num(t.cap_cents) > 0 ? t.cap_cents / 100 : null;
-    if (num(c.cap_price) != null && cap != null) lines.push(`Cap price = ${dollars(cap)} ÷ ${shares(Math.round(cap / c.cap_price))} shares = ${price(c.cap_price)}`);
-    if (num(c.discount_price) != null) lines.push(`Discount price = ${price(c.round_price)} × (1 − ${inst.discount}) = ${price(c.discount_price)}`);
+    const currency = inst.currency;
+    const cap = num(t.cap_cents) > 0 ? toMajorString(t.cap_cents, currency) : null;
+    if (num(c.cap_price) > 0 && cap != null) lines.push(`Cap price = ${money(t.cap_cents, currency)} ÷ ${shares(Math.round(Number(cap) / c.cap_price))} shares = ${price(c.cap_price, currency)}`);
+    if (num(c.discount_price) != null) lines.push(`Discount price = ${price(c.round_price, currency)} × (1 − ${inst.discount}) = ${price(c.discount_price, currency)}`);
     const won = c.binding === 'cap' ? 'cap' : c.binding === 'discount' ? 'discount' : 'round price';
     lines.push(`${c.binding === 'none' ? 'No cap or discount applies' : 'Lower price wins'}: ${won} → ${shares(c.shares)} shares → ${Number(c.pct_after_round).toFixed(2)}% after the round`);
     const interest = inst.kind === 'note' && num(c.accrued_interest) > 0
