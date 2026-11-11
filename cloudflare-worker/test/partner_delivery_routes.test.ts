@@ -138,6 +138,8 @@ function freshDb() {
   db.exec(migration('230_partner_capacity'));
   db.exec(migration('231_partner_internal_hours'));
   db.exec(migration('232_partner_engagement_health'));
+  // #5314 part 3: the revisions on health, caps, internal and client hours.
+  db.exec(migration('202611111141_5314_delivery_write_versions'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');

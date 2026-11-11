@@ -373,11 +373,6 @@
       "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
       "note": "A capability link: no sign-in by design; the signed token must agree with its stored row on venture and level, and its expiry, view limit and revocation hold. Forged, unstored, other-venture, cross-kind, spent and revoked tokens are refused 403/410 and log no open; only the owner mints or revokes."
     },
-    "GET /api/captable/record/:projectId": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "GET /api/captable/record/:projectId/closes/:closeUid": {
       "review": "record_without_ownership_check",
       "kind": "unclassified",

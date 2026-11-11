@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { EMPTY_DRAFT, blockedLine, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
-import { useMutations, useZoneRead } from './useZoneMutations';
+import { useMutations, useZoneRead, failureNote, stated } from './useZoneMutations';
+import { DeliveryNote } from './deliveryEdits';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -8,7 +9,7 @@ import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the three tiles it drew. The strip is the artboard's
   // own four now, and one of them has to draw an absence rather than a number.
-  Section, Field, SaveNote,
+  Section, Field,
   NoPartnerProfile, isNoPartnerProfile,
   inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
@@ -163,7 +164,7 @@ function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, not
           </button>
         </div>
       )}
-      <SaveNote note={note?.scope === `rep:${report.id}` ? note : null} />
+      <DeliveryNote note={note?.scope === `rep:${report.id}` ? note : null} />
     </div>
   );
 }
@@ -415,17 +416,27 @@ function Composer({ engagements, onSaved, onError, note, focusTick = 0, target =
               // now, so a second press while this one is out starts nothing and
               // the words sent are the words that were on screen.
               const sending = saveRequest(draft, { shipped, next_up: nextUp, blocked: blockedText });
-              const r = await runSave('save', async () => {
-                const saved = await api.savePartnerStatusReport(...sending);
-                await fill.afterSave(saved?.id);
-              });
-              if (r.skipped) return;
-              if (r.ok) await onSaved(); else onError(r.error);
+              // #5314 part 3: the draft's revision as composed (null: no report
+              // yet); Keep my edits sends the same words at the version now there.
+              const save = async (rev) => {
+                const r = await runSave('save', async () => {
+                  const saved = await api.savePartnerStatusReport(sending[0], sending[1], {
+                    ...sending[2],
+                    expected_revision: stated(rev, draft.existing ? Number(draft.existing.revision ?? 0) : null),
+                  });
+                  if (saved && saved.id != null) setDraft((dr) => ({ ...dr, existing: saved }));
+                  await fill.afterSave(saved?.id);
+                });
+                if (r.skipped) return;
+                if (r.ok) await onSaved();
+                else onError(r.error, { retry: save, reload: () => composeFor(draft.engagement_id, draft.period) });
+              };
+              await save(undefined);
             }}
           >
             {isSaving('save') ? 'Saving…' : 'Save draft'}
           </button>
-          <SaveNote note={note?.scope === 'compose' ? note : null} />
+          <DeliveryNote note={note?.scope === 'compose' ? note : null} />
         </div>
       )}
     </div>
@@ -463,11 +474,19 @@ export default function PartnerStatusReportsZone() {
     const r = await runMutation(key, fn);
     if (r.skipped) return false;
     if (!r.ok) {
-      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => run(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
       return false;
     }
     setNote({ ok: true, text: ok, scope });
     load();
+    if (fn.retried) fn.after?.();
     return true;
   }, [runMutation, load]);
 
@@ -686,9 +705,11 @@ export default function PartnerStatusReportsZone() {
               setNote({ ok: true, text: 'Draft saved.', scope: 'compose' });
               await load();
             }}
-            onError={(e) => setNote({
-              ok: false, text: e?.message || 'That did not save.', scope: 'compose',
-            })}
+            onError={(e, again) => setNote(failureNote(e, {
+              scope: 'compose', fallback: 'That did not save.',
+              reload: () => { setNote(null); load(); again?.reload?.(); },
+              retry: (now) => again?.retry?.(now),
+            }))}
           />
         )}
 
@@ -711,12 +732,12 @@ export default function PartnerStatusReportsZone() {
                 }}
                 onSend={(rep) => run(
                   `send:${rep.id}`,
-                  () => api.sendPartnerStatusReport(rep.id),
+                  (rev) => api.sendPartnerStatusReport(rep.id, stated(rev, rep.revision)),
                   'Marked sent.', `rep:${rep.id}`,
                 )}
                 onDelete={(rep) => run(
                   `discard:${rep.id}`,
-                  () => api.deletePartnerStatusReport(rep.id),
+                  (rev) => api.deletePartnerStatusReport(rep.id, stated(rev, rep.revision)),
                   'Draft discarded.', `rep:${rep.id}`,
                 )}
               />

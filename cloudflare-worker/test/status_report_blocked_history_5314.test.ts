@@ -107,7 +107,11 @@ function freshDb({ withNew = true } = {}) {
   `);
   db.exec(migration('208_partner_delivery_stores'));
   db.exec(migration('202611072115_delivery_revisions'));
+  db.exec(migration('230_partner_capacity'));
+  db.exec(migration('231_partner_internal_hours'));
   db.exec(migration('232_partner_engagement_health'));
+  // #5314 part 3: every Delivery store carries the revision a write states.
+  db.exec(migration('202611111141_5314_delivery_write_versions'));
   if (withNew) db.exec(migration(NEW_MIGRATION));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');

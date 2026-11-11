@@ -64,6 +64,7 @@ represents a bug that reached production once:
 | `changelog-gate.mjs` | A task PR that edits `CHANGELOG.md`. Every such PR added an entry at the top of the file and conflicted with every other open PR on the same lines, so the owner moved the file to Session 1 on 2026-10-19 (AGENTS.md). It diffs HEAD against its merge base with the PR's base branch and fails when `CHANGELOG.md` is in the list, unless `CHANGELOG_LABEL=true` (the PR carries the `changelog` label, which Session 1 puts on its own changelog PR). Its failure message gives the one command that puts the file back. A base that does not fetch or shares no history is a failure, never a pass. CI-only, in `changelog-gate.yml` with `fetch-depth: 0`, so it is not a `check-*.mjs`. |
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 | `plan-persona-prices.mjs` | D1430: offline Advisor/Operating Partner price requests on `plan_group`; missing products are `product_needed`. Same private `--catalog` export and audited action format as the Founder/Investor planners. |
+| `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
 
 ## The one rule that needed a linter
 

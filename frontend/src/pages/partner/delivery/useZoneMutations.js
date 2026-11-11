@@ -88,3 +88,39 @@ export function useMutations() {
 
 /** The values a draft is seeded from, as one comparable string. */
 export const signature = (...parts) => JSON.stringify(parts);
+
+/**
+ * #5314 part 3 (D4822) — every Delivery edit states the version it was read at.
+ *
+ * `stated(override, read)` is the `expected_revision` a write sends: the
+ * revision the row was read at, or `override` when "Keep my edits" retries a
+ * refused write at the version that is there now. `read` is null where the
+ * read found no row (an upsert's first save), which the Worker reads as
+ * "create it only while there is still none", and undefined where the read
+ * itself failed: nothing is then stated, and the Worker keeps its own guard.
+ */
+export const stated = (override, read) => (override === undefined ? read : override);
+
+/** A write refused because the record changed after it was read. */
+export const isDeliveryConflict = (e) => e?.status === 409 && e?.code === 'delivery_changed';
+
+/** The version the record is at now, from the refusal (null: it is gone). */
+export const currentVersionOf = (e) => {
+  const v = e?.data?.current_version ?? e?.data?.revision;
+  return v === undefined ? null : v;
+};
+
+export const CONFLICT_TEXT = 'Someone changed this after you opened it, so nothing was saved. Reload to see their version, or keep your edits and save over it.';
+
+/**
+ * The note a zone shows for a refused write. A conflict carries its two
+ * actions: Reload drops this edit and reads again; Keep my edits sends the
+ * same write again at the version that is there now.
+ */
+export function failureNote(error, { scope, fallback, reload, retry }) {
+  if (isDeliveryConflict(error)) {
+    const now = currentVersionOf(error);
+    return { ok: false, scope, text: CONFLICT_TEXT, conflict: { reload, keep: () => retry(now) } };
+  }
+  return { ok: false, scope, text: error?.message || fallback };
+}

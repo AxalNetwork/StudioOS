@@ -63,6 +63,7 @@ test('the composer uses the rule: gated responses, invalidated on every selectio
   assert.equal((zone.match(/gate\.current\.invalidate\(\);/g) || []).length, 2, 'engagement and period changes both retire the composition');
   assert.match(zone, /setDraft\(draftFrom\(r, asked\)\)/);
   assert.match(zone, /const sending = saveRequest\(draft, \{ shipped, next_up: nextUp, blocked: blockedText \}\);/);
-  assert.match(zone, /api\.savePartnerStatusReport\(\.\.\.sending\)/);
+  // #5314 part 3: the draft's own engagement, period and fields, plus the revision it was composed at.
+  assert.match(zone, /api\.savePartnerStatusReport\(sending\[0\], sending\[1\], \{\s*\.\.\.sending\[2\],/);
   assert.doesNotMatch(zone, /savePartnerStatusReport\(engagementId/, 'never the selector\'s engagement');
 });

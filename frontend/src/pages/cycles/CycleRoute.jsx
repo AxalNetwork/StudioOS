@@ -72,6 +72,7 @@ import { acceptSuggestions } from './validatePhone';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions';
 import FormLightbox from './FormLightbox';
 import { FillModule } from './FillRowsPanel';
+import ModuleWorkingHere from '../team/ModuleWorkingHere.jsx';
 import { fillRecordId, fillTable, fillTarget, moduleFillTarget } from '../../lib/fillForms.js';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth';
 import { editFor, formFor, formsFor } from './forms';
@@ -1407,7 +1408,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
         // D1321 (#3482): each Grow module's Publish to… in its header, on part 2's gate (D1333's `parts.publish`).
-        more={cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
+        more={<>{cycle === 'grow' && projectId ? <PublishTo part={module?.parts?.publish} projectId={projectId} module={slug} />
           // D1328 (#3489, AF1): the module's "Fill with Eadwyn", with its waiting row proposals (AF16).
           : moduleFill ? <FillModule key={`${slug}-${projectId}`} refresh={reload} target={moduleFill} projectId={projectId} moduleName={moduleName} aiOff={!fillsOn}
             onChanged={() => setReload((n) => n + 1)}
@@ -1415,6 +1416,8 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
               const i = forms.findIndex((f) => f.key === moduleFill.form);
               navigate(addHref(forms[i], i), { state: { under: `${location.pathname}${location.search}`, fillRow: { uid: p.uid, row: p.row, form: moduleFill.form } } });
             }} /> : null}
+          {projectId && slug && !narrativeAdmin && <ModuleWorkingHere key={`${projectId}:${slug}`} projectId={projectId} module={slug} moduleLabel={moduleName} readOnly={Boolean(supportOpen)} />}
+        </>}
       >
         {cycle === 'grow' && <PublishedFromHere part={module?.parts?.publish} />}
         {fillKind && projectId && (
