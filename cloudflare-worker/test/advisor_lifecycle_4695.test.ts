@@ -382,7 +382,7 @@ test('no path leaves an ended engagement with an active outcome', async () => {
   const ended = await f.ada('POST', `/me/engagements/${legacy.id}/advance`, { lane: 'ended' });
   assert.deepEqual([ended.body.lane, ended.body.outcome], ['ended', 'ended']);
   assert.deepEqual(f.rows("SELECT id FROM advisor_engagements WHERE lane = 'ended' AND outcome = 'active'"), []);
-  const decided = await f.ada('POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', expected_cycles: 1 });
+  const decided = await f.ada('POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', end_reason: 'other', expected_cycles: 1 });
   assert.deepEqual([decided.body.lane, decided.body.outcome], ['ended', 'ended']);
 });
 
@@ -446,7 +446,7 @@ test('a renewal racing itself counts one cycle: the loser is a replay, and a con
         VALUES ('rival-event', ?, 'renewed', 'signed', 'signed', 1, 2)`).run(e2.id);
     }
   };
-  const clash = await g.ada('POST', `/me/engagements/${e2.id}/renewal`, { decision: 'ended', expected_cycles: 1 });
+  const clash = await g.ada('POST', `/me/engagements/${e2.id}/renewal`, { decision: 'ended', end_reason: 'did_not_renew', expected_cycles: 1 });
   g.hooks.before = null;
   assert.deepEqual([clash.status, clash.body.code], [409, 'term_decided']);
   assert.deepEqual(g.row('SELECT lane, cycles, outcome FROM advisor_engagements WHERE id = ?', e2.id), { lane: 'signed', cycles: 2, outcome: 'renewed' });
