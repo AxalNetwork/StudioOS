@@ -31,7 +31,7 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn } from './columnCipher';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const BASE32_RE = /^[A-Z2-7]{16,64}$/;
 
@@ -52,17 +52,24 @@ async function ensureSchema(env: Env): Promise<void> {
     // them into the recovery flow.
     `ALTER TABLE users ADD COLUMN password_reset_required INTEGER NOT NULL DEFAULT 0`,
   ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); }
-    catch (e) {
-      const msg = (e as Error).message || '';
-      if (!/duplicate column|already exists/i.test(msg)) {
-        console.warn('[authTotp] schema stmt skipped:', msg);
-      }
-    }
+  // #5343 (#4568 R2-04): asked first (`runSchemaBootstrap`). `users` is at D1's
+  // 100-column limit, so the blind ALTER this replaces failed "too many columns"
+  // (not "duplicate column") on every fresh isolate, logged a warning, and the
+  // binding was marked ready anyway. A genuine failure now throws
+  // `auth_totp_schema_not_ready` and is not remembered; the caller's own error path answers it.
+  try {
+    await runSchemaBootstrap(env, stmts);
+  } catch {
+    console.error('[authTotp] schema_not_ready');
+    throw new Error(AUTH_TOTP_SCHEMA_NOT_READY);
   }
   MIGRATED.set(bindingKey(env), true);
 }
+
+/** #5343: what a genuinely failed bootstrap throws. */
+export const AUTH_TOTP_SCHEMA_NOT_READY = 'auth_totp_schema_not_ready';
+/** Exported for #5343's runtime-DDL test. */
+export const ensureAuthTotpSchema = (env: Env): Promise<void> => ensureSchema(env);
 
 export interface TotpRow {
   secret: string;            // decrypted base32

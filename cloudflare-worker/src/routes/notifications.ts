@@ -49,7 +49,7 @@ async function verifyUnsubscribeToken(env: Env, token: string): Promise<{ userId
 /**
  * D189 — THIS RECORDED NOTHING, AND THE LAZY ALTER IS WHY.
  *
- * It used to run `ALTER TABLE users ADD COLUMN marketing_unsubscribed_at`
+ * It used to add the `users.marketing_unsubscribed_at` column at runtime
  * inside `catch { /* idempotent *\/ }` and then UPDATE that column, on the
  * stated theory that "migration 053 may not have landed on dev/preview yet"
  * and the ALTER would self-heal it. Neither half held. `users` is at D1's
