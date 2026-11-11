@@ -9,7 +9,7 @@
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
-| `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
+| `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 
 ## The guards
 
