@@ -1,5 +1,5 @@
 // D5613: stable per-entry ledger files; duplicate keys and misplaced entries fail closed.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const entryFile = (name) => `${encodeURIComponent(name)}.json`;
@@ -49,8 +49,21 @@ export function writeSplit(dir, map, resolveFile = fileOf) {
   for (const [name, entries] of [...groups].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
     const path = join(dir, name);
     const bytes = `${JSON.stringify(Object.fromEntries(entries), null, 2)}\n`;
-    if (existsSync(path) && readFileSync(path, 'utf8') === bytes) continue;
-    writeFileSync(path, bytes); changed.push(path);
+    try {
+      if (readFileSync(path, 'utf8') === bytes) continue;
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    // Publish one complete entry at a time, without changing an existing inode.
+    const temporary = mkdtempSync(join(dir, '.split-ledger-'));
+    try {
+      const entry = join(temporary, 'entry');
+      writeFileSync(entry, bytes, { flag: 'wx' });
+      renameSync(entry, path);
+      changed.push(path);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
   }
   for (const name of readdirSync(dir).filter((f) => f.endsWith('.json'))) {
     if (groups.has(name)) continue;

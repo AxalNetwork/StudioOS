@@ -1,12 +1,26 @@
 // D5613: split IO integrity, no-op writes and SQL comparison without changing the rule.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync, rmSync, mkdirSync } from 'node:fs';
+import { linkSync, mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readSplit, writeSplit, entryFile } from './splitLedger.mjs';
 import { scan, compare, readBaseline, sqlLedgerFile } from '../check-sql-prepare.mjs';
 const scratch = () => mkdtempSync(join(tmpdir(), 'split-ledger-'));
+
+test('changed entries replace the published file atomically and leave prior snapshots intact', () => {
+  const dir = scratch();
+  try {
+    writeSplit(dir, { a: 1 });
+    const entry = join(dir, 'a.json');
+    const snapshot = join(dir, 'prior-snapshot');
+    linkSync(entry, snapshot);
+    assert.deepEqual(writeSplit(dir, { a: 2 }), [entry]);
+    assert.deepEqual(JSON.parse(readFileSync(entry, 'utf8')), { a: 2 });
+    assert.deepEqual(JSON.parse(readFileSync(snapshot, 'utf8')), { a: 1 });
+    assert.deepEqual(readdirSync(dir).sort(), ['a.json', 'prior-snapshot']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('round trip, default naming, unchanged bytes and mtimes; only changed groups are rewritten', () => {
   const dir = scratch();
