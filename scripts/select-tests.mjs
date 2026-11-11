@@ -35,6 +35,7 @@ export function importGraph(tests) {
     for (const match of src.matchAll(re)) {
       if (!match[1].startsWith('.')) continue;
       const path = posix.normalize(posix.join(posix.dirname(file), match[1]));
+      if (path.startsWith('../') || posix.isAbsolute(path)) continue;
       const dependency = [path, `${path}.mjs`, `${path}.js`, `${path}.jsx`, `${path}.ts`, `${path}.tsx`, `${path}/index.js`, `${path}/index.ts`].find((p) => existsSync(resolve(root, p))) || path;
       graph[file].push(dependency);
       if (/\.[cm]?[jt]sx?$/.test(dependency)) visit(dependency);
