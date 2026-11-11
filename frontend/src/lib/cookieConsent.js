@@ -19,7 +19,7 @@
 // gate itself on hasConsent(cat) (and re-check via subscribe()), and gets its
 // row when it does.
 
-import { safeReadJSON, safeWriteJSON, safeRemove } from './storage';
+import { safeReadJSON, safeWriteJSON, safeRemove } from './storage.js';
 
 const STORAGE_KEY = 'axal_cookie_consent_v1';
 
