@@ -148,3 +148,11 @@ test('GitHub App accepts its PKCS1 private key, limits token permissions and sig
  };
  const api=await githubClient(env,fetcher as typeof fetch);await api('GET','actions/runs?event=merge_group');assert.equal(count,2);
 });
+test('flipping the switch during a delivery stops all subsequent GitHub reads as well as writes',async()=>{
+ const {control,store}=controller();await control.setKillSwitch(false);let calls=0;
+ const api=async()=>{calls++;await control.setKillSwitch(true);return {workflow_runs:[run]};};
+ await assert.rejects(control.process(event,api),/kill switch/);
+ assert.equal(calls,1);
+ await control.process(event,async()=>{throw new Error('retry while disabled must not call GitHub');});
+ assert.equal(store.sql.exec("SELECT COUNT(*) AS n FROM audit WHERE kind='event'").one().n,1);store.db.close();
+});
