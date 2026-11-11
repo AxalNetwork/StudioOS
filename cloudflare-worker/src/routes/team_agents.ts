@@ -511,7 +511,10 @@ async function managed(c: C, user: User) {
   const a = await agentByUid(c.env, c.req.param('uid') ?? '');
   const s = a && await scopeOfAgent(c.env, a);
   if (!a || !s) return { refusal: say(c, 404, 'not_found', 'There is no such agent.') };
-  if (!(await managesAgents(c, s, user))) return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  if (!(await managesAgents(c, s, user))) {
+    if (!(await canRead(c.env, s, user))) return { refusal: say(c, 403, 'not_member', 'Only the team can see its agents.') };
+    return { refusal: say(c, 403, 'not_manager', 'Only the team’s editors can change who sponsors an agent.') };
+  }
   if (a.status === 'removed') return { refusal: say(c, 409, 'removed', 'This agent was removed.') };
   return { agent: a, scope: s };
 }
