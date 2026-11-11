@@ -2,14 +2,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutations, useZoneRead, signature } from './useZoneMutations';
 import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
-import { api } from '../../../lib/api';
+import { api, partnerDeliveryReviewsApi } from '../../../lib/api';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own now, and one of its tiles has to draw an absence rather than a number.
   Section, Field, SaveNote, NotComputable, SeamRead,
   NoPartnerProfile, isNoPartnerProfile,
-  inputClass, buttonClass, ghostButtonClass,
+  inputClass, buttonClass, ghostButtonClass, formatDay,
 } from '../kit';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
@@ -378,6 +378,66 @@ function BlockerEditor({ engagementId, pending, mutate }) {
   );
 }
 
+/**
+ * #5314 part 2: what the client said, each time it was recorded. Read from the
+ * append-only history; an unreadable read says Unreadable, and a score saved
+ * before the history was kept says earlier reviews are Not recorded.
+ */
+export function reviewHistoryView(read) {
+  if (!read) return { kind: 'loading' };
+  if (read.error || read.available === false) {
+    return { kind: 'unreadable', text: read.reason || 'Unreadable: the review history could not be read.' };
+  }
+  const items = Array.isArray(read.items) ? read.items : [];
+  return {
+    kind: items.length ? 'list' : 'empty',
+    items: items.map((r) => ({
+      key: r.id,
+      score: r.cleared ? 'Score cleared' : `${Number(r.satisfaction).toFixed(1)} / 5`,
+      source: r.source || null,
+      said: r.said_at || null,
+      recorded: r.recorded_at,
+      by: r.recorded_by_name || null,
+    })),
+    earlier: read.earlier_not_recorded ? (read.earlier_note || 'Not recorded: earlier reviews were not kept.') : null,
+  };
+}
+
+function ReviewHistory({ engagementId, seed }) {
+  const [read, setRead] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setRead(null);
+    partnerDeliveryReviewsApi.partnerEngagementReviews(engagementId)
+      .then((r) => { if (live) setRead(r || { available: false }); })
+      .catch(() => { if (live) setRead({ error: true }); });
+    return () => { live = false; };
+  }, [engagementId, seed]);
+  const view = reviewHistoryView(read);
+  if (view.kind === 'loading') return <p className="text-[12px] text-axal-faint">Reading the history…</p>;
+  if (view.kind === 'unreadable') return <p className="text-[12px] text-red-700 dark:text-red-300">{view.text}</p>;
+  return (
+    <div className="space-y-1">
+      {view.kind === 'empty' && !view.earlier && (
+        <p className="text-[12px] text-axal-faint">No client review recorded yet.</p>
+      )}
+      {view.kind === 'list' && (
+        <ul className="space-y-1 text-[12px] text-axal-muted">
+          {view.items.map((r) => (
+            <li key={r.key}>
+              <span className="font-bold tabular-nums">{r.score}</span>
+              {r.source && <> · {r.source}</>}
+              {r.said && <span className="text-axal-faint"> · said {formatDay(r.said)}</span>}
+              <span className="text-axal-faint"> · recorded {formatDay(r.recorded)}{r.by ? ` by ${r.by}` : ''}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {view.earlier && <p className="text-[11.5px] text-axal-faint">{view.earlier}</p>}
+    </div>
+  );
+}
+
 function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
   const [open, setOpen] = useState(false);
 
@@ -478,6 +538,17 @@ function HealthRow({ row, roster, pending, mutate, onSaveFacts, note }) {
                 busy={pending('facts')}
                 note={note?.scope === `facts:${row.engagement_id}` ? note : null}
                 onSave={(data) => onSaveFacts(row, data)}
+              />
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              Client review history
+            </div>
+            <div className="mt-1">
+              <ReviewHistory
+                engagementId={row.engagement_id}
+                seed={`${row.satisfaction ?? ''}|${row.satisfaction_source ?? ''}|${row.satisfaction_at ?? ''}`}
               />
             </div>
           </div>
