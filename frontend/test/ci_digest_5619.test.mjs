@@ -35,8 +35,8 @@ test('5000-character backtick detail remains fenced, truncated, and cannot escap
 test('flaky requires a successful job on the same head; unsafe strings and wrong-head artifact are refused',()=>{
  assert.equal(fixture('pr_failure',{attempts:[{headSha:'b'.repeat(40),jobs:[{name:jobs[0].name,conclusion:'success'}]}]}).failures[0].flaky,false);
  assert.equal(fixture('pr_failure',{attempts:[{headSha,jobs:[{name:jobs[0].name,conclusion:'success'}]}]}).failures[0].flaky,true);
- const d=fixture('pr_failure',{jobs:[{...jobs[0],name:'@owner <script>',html_url:'https://evil.example/x',steps:[{name:'```',conclusion:'failure'}]}]});
- assert.doesNotMatch(render(d),/@owner|<script>|evil\.example/);
+ const d=fixture('pr_failure',{jobs:[{...jobs[0],name:'@owner <SCRIPT>',html_url:'https://evil.example/x',steps:[{name:'```',conclusion:'failure'}]}]});
+ assert.doesNotMatch(render(d),/@owner|<script>|evil\.example/i);
  assert.equal(fixture('pr_failure',{artifact:{headSha:'b'.repeat(40),failures:[{job:jobs[0].name,excerpt:'wrong head'}]}}).failures[0].detail,null);
 });
 test('one existing marker is updated, no comment is created; unchanged digest does not write',async()=>{
