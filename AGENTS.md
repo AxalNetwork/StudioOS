@@ -207,6 +207,8 @@ applies to everything that is not a fix for a PR's own failure:
 The alert clears only once the queue is well below its thresholds, so wait for
 it to close.
 
+- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
+
 ### CHANGELOG.md is Session 1's
 
 A task PR never edits `CHANGELOG.md`, even when its issue says "CHANGELOG.md:
