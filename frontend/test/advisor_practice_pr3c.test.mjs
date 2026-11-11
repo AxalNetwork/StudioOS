@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const API = read('frontend/src/lib/api.js');
@@ -32,7 +33,8 @@ const G = codeOnly(GRANT);
 const ENGAGEMENTS = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
 const E = codeOnly(ENGAGEMENTS);
 const DELIVERY = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 
 // ---------------------------------------------------------------------------
 // One writer, and it is the client's
@@ -93,7 +95,7 @@ test('the link control offers accounts the API will accept, and never a typed id
   // The candidates come from this advisor's own bookings — the relationship the
   // worker checks — and they are a tolerated second source, so an advisor whose
   // bookings will not load still has a contract board.
-  assert.match(E, /api\.listMyAdvisorBookings\(\)\.catch\(\(\) => null\)/);
+  assert.match(E, /readEveryPage\(\(page\) => api\.listMyAdvisorBookings\(undefined, page\)\)\.catch\(\(\) => null\)/);
   assert.match(E, /b\.client_user_id/);
   // A SELECT, not an input: the set is closed.
   assert.match(E, /data-testid=\{`link-pr2-\$\{e\.id\}`\}/);

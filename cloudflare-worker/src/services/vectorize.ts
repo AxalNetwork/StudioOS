@@ -56,6 +56,37 @@ export interface SearchHit {
   owner_user_id?: number | null;
   /** Which chunk of a multi-chunk document this hit is, for a citation. */
   chunk?: number;
+  /**
+   * D4605: the chunk's whole text, for the answer model (`snippet` stays the
+   * short display preview). Absent on vectors written before it was stored.
+   */
+  passage?: string;
+  /** D4605: the index run that wrote this vector (`research_documents.indexed_at`). */
+  revision?: string | null;
+  /** D4605: where the chunk sits in its source, when the converter knows. */
+  page?: number | null;
+}
+
+/** D4605: why a search could not run — never reported as an empty result. */
+export type SearchFailure = 'unavailable' | 'embedding_failed' | 'query_failed';
+export type SearchOutcome = { ok: true; hits: SearchHit[] } | { ok: false; failure: SearchFailure };
+
+/**
+ * D4605: Vectorize allows 10 KiB of metadata per vector. A passage is kept
+ * whole up to this many UTF-8 bytes, so the preview, title and ids beside it
+ * still fit; `chunkMarkdown` caps a chunk at 4000 characters, which only a
+ * passage of mostly multi-byte script reaches.
+ */
+export const PASSAGE_MAX_BYTES = 8000;
+export function capBytes(text: string, max = PASSAGE_MAX_BYTES): string {
+  const enc = new TextEncoder();
+  if (enc.encode(text).length <= max) return text;
+  let lo = 0; let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (enc.encode(text.slice(0, mid)).length <= max) lo = mid; else hi = mid - 1;
+  }
+  return text.slice(0, lo);
 }
 
 function vectorId(type: EntityType, id: number) {
@@ -102,6 +133,12 @@ interface UpsertArgs {
   namespace?: string;
   /** Set for owner-private types; `searchSemantic` re-checks it. */
   ownerUserId?: number;
+  /** D4605: the whole chunk, stored beside the short preview for the answer model. */
+  passage?: string;
+  /** D4605: the index run writing this vector. */
+  revision?: string;
+  /** D4605: the chunk's page, when known. */
+  page?: number | null;
 }
 
 export async function upsertEntity(env: Env, args: UpsertArgs): Promise<boolean> {
@@ -121,6 +158,9 @@ export async function upsertEntity(env: Env, args: UpsertArgs): Promise<boolean>
     };
     if (args.ownerUserId != null) metadata.owner_user_id = args.ownerUserId;
     if (args.chunk != null) metadata.chunk = args.chunk;
+    if (args.passage) metadata.passage = capBytes(args.passage);
+    if (args.revision) metadata.revision = args.revision;
+    if (args.page != null && Number.isFinite(Number(args.page))) metadata.page = Number(args.page);
     const vec: Record<string, unknown> = {
       id: args.chunk == null ? vectorId(args.type, args.id) : chunkVectorId(args.type, args.id, args.chunk),
       values: vector,
@@ -229,9 +269,26 @@ export interface SearchOpts {
  * one forgotten line away from a cross-account leak.
  */
 export async function searchSemantic(env: Env, query: string, opts: SearchOpts = {}): Promise<SearchHit[]> {
-  if (!env.VECTORIZE) return [];
+  const out = await searchSemanticOutcome(env, query, opts);
+  return out.ok ? out.hits : [];
+}
+
+/**
+ * D4605: the same search, saying why it did not run. `searchSemantic` keeps
+ * its old contract (an empty list for any failure) for the directory callers;
+ * Ask uses this so that a missing index, a failed embedding and a failed query
+ * are never recorded as "the library has nothing on this".
+ */
+export async function searchSemanticOutcome(env: Env, query: string, opts: SearchOpts = {}): Promise<SearchOutcome> {
+  if (!env.VECTORIZE) {
+    console.error('[vectorize] search unavailable', { op: 'query', reason: 'binding_missing', type: opts.type ?? null });
+    return { ok: false, failure: 'unavailable' };
+  }
   const vector = await embedText(env, query);
-  if (!vector) return [];
+  if (!vector) {
+    console.error('[vectorize] search unavailable', { op: 'embed', type: opts.type ?? null });
+    return { ok: false, failure: 'embedding_failed' };
+  }
   try {
     const queryArgs: any = {
       topK: Math.max(1, Math.min(50, opts.topK ?? 10)),
@@ -241,7 +298,7 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
     if (opts.namespace) queryArgs.namespace = opts.namespace;
     const res: any = await env.VECTORIZE.query(vector, queryArgs);
     const matches = res?.matches || [];
-    return matches
+    const hits = matches
       .map((m: any) => ({
         id: m.id,
         type: (m.metadata?.type || m.id.split(':')[0]) as EntityType,
@@ -268,6 +325,9 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
           return fromId != null && fromId !== '' && Number.isFinite(Number(fromId))
             ? Number(fromId) : undefined;
         })(),
+        passage: typeof m.metadata?.passage === 'string' ? m.metadata.passage : undefined,
+        revision: m.metadata?.revision == null ? null : String(m.metadata.revision),
+        page: m.metadata?.page == null || !Number.isFinite(Number(m.metadata.page)) ? null : Number(m.metadata.page),
       }))
       .filter((h: SearchHit) => {
         // Layer 1 — the default is exclusion.
@@ -281,9 +341,11 @@ export async function searchSemantic(env: Env, query: string, opts: SearchOpts =
         }
         return true;
       });
+    return { ok: true, hits };
   } catch (e: any) {
-    console.error('vectorize.query failed:', e?.message);
-    return [];
+    // The operation and the error's own message, never the query text.
+    console.error('[vectorize] search unavailable', { op: 'query', type: opts.type ?? null, error: e?.message });
+    return { ok: false, failure: 'query_failed' };
   }
 }
 
@@ -558,7 +620,21 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
   await deleteChunkedEntity(env, 'research_doc', id, row.chunk_count);
 
   const namespace = researchNamespace(row.owner_user_id);
+  // D4605: this run's revision. Every vector it writes carries it, and it is
+  // written to `indexed_at` only once the run has finished, so Ask can tell a
+  // passage of the current index from one a previous or interrupted run left.
+  const revision = indexRevision();
+  // D4605: the span of vector ids this run may write is recorded BEFORE it
+  // writes any, so a run interrupted half-way still leaves every id it wrote
+  // nameable by the next re-index or a delete. The document stays in the
+  // state its caller set (pending). #5350's hourly recovery waits 60 minutes,
+  // reuses a live job, and retries the bounded job up to three attempts.
+  const span = Math.max(Number(row.chunk_count) || 0, ...chunks.map((ch) => ch.idx + 1));
+  await env.DB.prepare(
+    `UPDATE research_documents SET chunk_count = ?, updated_at = datetime('now') WHERE id = ?`
+  ).bind(span, id).run();
   let written = 0;
+  const failedChunks: number[] = [];
   for (const ch of chunks) {
     const ok = await upsertEntity(env, {
       type: 'research_doc',
@@ -567,22 +643,47 @@ async function indexResearchDocument(env: Env, id: number): Promise<boolean> {
       text: ch.text,
       title: row.title,
       url: `/research/library#${row.uid}`,
+      // The short preview a list shows; the passage is the whole chunk.
       snippet: ch.text,
+      passage: ch.text,
+      revision,
+      page: ch.page ?? null,
       namespace,
       ownerUserId: row.owner_user_id,
     });
-    if (ok) written += 1;
+    if (ok) written += 1; else failedChunks.push(ch.idx);
   }
 
-  if (!written) return fail('failed', 'The text was read but could not be indexed. This will be retried.');
-
+  if (!written) {
+    console.error('[research] index failed', { op: 'upsert', document_id: id, chunks: chunks.length });
+    return fail('failed', 'The text was read but could not be indexed. This will be retried.');
+  }
+  // D4605: a document is `indexed` only when every chunk is. Some written and
+  // some not is `partial`, says how much, and Ask still reads what was written.
+  // `chunk_count` names every vector id this run may have written, so a later
+  // re-index or a delete removes all of them.
+  const complete = written === chunks.length;
+  if (!complete) console.error('[research] index partial', { op: 'upsert', document_id: id, written, chunks: chunks.length });
   await env.DB.prepare(
     `UPDATE research_documents
-        SET index_state = 'indexed', index_note = NULL, chunk_count = ?,
-            indexed_at = datetime('now'), updated_at = datetime('now')
+        SET index_state = ?, index_note = ?, chunk_count = ?,
+            indexed_at = ?, updated_at = datetime('now')
       WHERE id = ?`
-  ).bind(written, id).run();
-  return true;
+  ).bind(
+    complete ? 'indexed' : 'partial',
+    complete ? null : `${written} of ${chunks.length} passages were indexed; the rest could not be written. Reindex to try again.`,
+    span, revision, id,
+  ).run();
+  return complete;
+}
+
+/**
+ * D4605: an index run's revision, in `datetime('now')`'s own shape so the
+ * column reads the same as before, with milliseconds so two runs in one
+ * second are still two revisions.
+ */
+export function indexRevision(now: Date = new Date()): string {
+  return now.toISOString().replace('T', ' ').replace('Z', '');
 }
 
 /**

@@ -21,6 +21,8 @@ import { renderedText } from './_renderedText.mjs';
 import CompaniesProjects from '../src/pages/account/companies/CompaniesProjects.jsx';
 import CompanySettingsTabs from '../src/pages/account/companies/CompanySettingsTabs.jsx';
 import CompanyGeneralForm from '../src/pages/account/companies/CompanyGeneralForm.jsx';
+import CompanySettingsAt from '../src/pages/account/companies/CompanySettingsAt.jsx';
+import { CURRENCY_CODES, changes, formOf } from '../src/pages/account/companies/generalFormModel.js';
 import PortfolioAddress, { portfolioTarget } from '../src/pages/account/companies/PortfolioAddress.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
@@ -32,7 +34,7 @@ import {
 import { accountPathFor } from '../src/pages/account/accountPhone.js';
 import { scopeFor, entryLabels } from '../src/lib/settingsScope.js';
 import { getActiveProject, resetActiveProjectForTests, selectProject, setActiveProject } from '../src/lib/activeProject.js';
-import { PROJECTS_UNREAD, selectionLabel, switcherProjects } from '../src/ui/CompanySwitcher.jsx';
+import { PROJECTS_UNREAD, selectionLabel, setReadState, switcherProjects } from '../src/ui/CompanySwitcher.jsx';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -121,7 +123,10 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
   const seen = [];
   globalThis.fetch = async (u, init = {}) => {
     let body = null;
-    try { body = init.body && typeof init.body === 'string' ? JSON.parse(init.body) : null; } catch { body = null; }
+    try {
+      if (init.body && typeof init.body === 'string') body = JSON.parse(init.body);
+      else if (init.body && typeof init.body.get === 'function' && init.body.get('fields')) body = JSON.parse(init.body.get('fields')); // D4961: the one save posts the fields as a form part
+    } catch { body = null; }
     seen.push({ call: `${(init.method || 'GET').toUpperCase()} ${new URL(String(u), 'http://x').pathname}`, body });
     return handle(String(u), init);
   };
@@ -153,6 +158,7 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
     of: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return textOf(n); },
     has: (id) => Boolean(byId(id)), count: (id) => all(id).length, prop: (id, k) => props(byId(id))?.[k],
     path: () => props(byId('where'))?.['data-path'],
+    submit: (id) => fire(id, 'onSubmit', { preventDefault() {} }),
     click: (id) => fire(id, 'onClick'), change: (id, v) => fire(id, 'onChange', { target: { value: v, checked: v } }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -360,6 +366,41 @@ test('PF6a, D4152: General says a failed company read with Try again, never an e
   } finally { await v.close(); }
 });
 
+// D4960: the General form draws what the server will accept (`viewer` on the company read), never what a cached role suggests.
+const VIEWER = {
+  editor: { member: true, can_edit: true, read_only: false, read_only_reason: null },
+  hq: { member: false, can_edit: false, read_only: true, read_only_reason: 'hq_access' },
+  support: { member: true, can_edit: false, read_only: true, read_only_reason: 'support_session' },
+};
+const generalOf = (viewer, members = COMPANY.members) => worker({ 'GET /api/company/nl': () => response({ ...COMPANY, members, viewer }) });
+
+test('D4960: an admin who holds no seat opens the settings URL and gets a read-only form that cannot save', async () => {
+  const v = await mount('admin', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.hq, COMPANY.members.filter((m) => m.user_id !== ME)) });
+  try {
+    // Mutation checked: `canEditCompany` back to `role === 'admin'` → the select is enabled and the line is gone.
+    assert.match(v.of('company-general-read-only'), /HQ reads this company; its members make the changes here/);
+    assert.equal(v.prop('general-default-currency', 'disabled'), true);
+    assert.equal(v.count('company-general-savebar'), 0);
+    assert.equal(v.prop('company-logo-replace', 'disabled'), true);
+    assert.deepEqual(v.writes(), []);
+  } finally { await v.close(); }
+});
+
+test('D4960: the server\'s answer wins over a cached admin role, both ways', async () => {
+  // An admin whose seat the server says can edit: enabled, no read-only line.
+  const seated = await mount('admin', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.editor) });
+  try {
+    assert.equal(seated.has('company-general-read-only'), false);
+    assert.equal(seated.prop('general-default-currency', 'disabled'), false);
+  } finally { await seated.close(); }
+  // A cached founder who is an Owner in the members list, but whom the server marks read-only: disabled.
+  const refused = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: generalOf(VIEWER.support) });
+  try {
+    assert.match(refused.of('company-general-read-only'), /A support session can read this company but cannot change it/);
+    assert.equal(refused.prop('general-default-currency', 'disabled'), true);
+  } finally { await refused.close(); }
+});
+
 test('PF5: signing out forgets the picked project; a company made or switched to elsewhere clears a project of another company', () => {
   assert.match(read('frontend/src/App.jsx'), /setActiveCompanyId\(null\);[\s\S]{0,400}clearActiveProject\(\);/);
   const src = read('frontend/src/ui/CompanySwitcher.jsx');
@@ -416,15 +457,15 @@ test('PF3: a standalone project offers Make it a company (Incorporate, prefilled
 
 // ---------------------------------------------------------------- PF6, PF8
 
-test('PF6a: Default currency reads "Coming later" through the seam (#3932), never USD; D4152: General shows no such row', async () => {
-  const out = await adapter.defaultCurrency('nl');
-  assert.deepEqual(out, { available: false, reason: 'Coming later', waitsOn: '#3932' });
+test('PF6a: Default currency is a General field (#4736), Not recorded and never a guessed USD; D4152: no "Coming later" row', async () => {
+  assert.equal(adapter.defaultCurrency, undefined, 'the #3932 stub is gone: General reads default_currency from the company');
   const v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }) });
   try {
     const form = v.of('company-general-form');
     assert.match(form, /Company name · required/);
     // D4152 §5–§7: no "Coming later" row, no internal path, no logo URL box.
-    assert.doesNotMatch(v.text(), /Coming later|Default currency|\/c\/|Logo URL|USD/);
+    assert.doesNotMatch(v.text(), /Coming later|\/c\/|Logo URL/);
+    assert.match(form, /Default currency/);
     assert.equal(v.count('company-general-savebar'), 0, 'nothing changed, so there is nothing to save');
   } finally { await v.close(); }
 });
@@ -533,7 +574,7 @@ test('house rules: no Fill, no Ask on Account, no every-project read, no lightbo
   // The seam imports only clients that exist; each is drift-checked against a mounted route.
   const seam = read(`${dir}/portfolioAdapter.js`);
   for (const m of seam.matchAll(/from '\.\.\/\.\.\/\.\.\/lib\/api\/([a-zA-Z]+)\.js'/g)) assert.ok(existsSync(`frontend/src/lib/api/${m[1]}.js`), m[1]);
-  assert.match(seam, /defaultCurrency = \(\/\* uid \*\/\) => Promise\.resolve\(unavailable\(CURRENCY_LATER, '#3932'\)\)/);
+  assert.doesNotMatch(seam, /CURRENCY_LATER|defaultCurrency/);
   // A failed read is "[Block] could not be read", alone, with Try again.
   assert.match(read(`${dir}/portfolioUi.jsx`), /\{what\} could not be read\. That is not the same as having none\./);
   // No bank link anywhere (owner Q7).
@@ -557,4 +598,63 @@ test('the rendered overview says "Not recorded" in muted grey, never red', async
   assert.match(html, /<span class="italic text-gray-500 dark:text-gray-400">Not recorded<\/span>/);
   assert.doesNotMatch(html, /red/);
   assert.equal(renderedText(html), 'Not recorded');
+});
+
+// ---------------------------------------------------------------- #4736: General's refusal and its default currency
+
+test('#4736: General for a company the member cannot open is the refusal with Back to Portfolio, no Try again; a 500 keeps the retry', async () => {
+  setReadState({ loading: false, failed: false });
+  const refused = await mount('founder', { url: '/account/portfolio/zz/settings', path: '/account/portfolio/:uid/settings', element: h(CompanySettingsAt) });
+  try {
+    assert.equal(refused.of('company-settings-not-yours'), 'This company is not yours to open.Back to Portfolio');
+    assert.equal(refused.count('company-settings-head'), 0, 'no tabs for a company that is not theirs');
+    assert.equal(refused.count('company-general-unread'), 0);
+    assert.equal(refused.count('company-general-form'), 0);
+    assert.doesNotMatch(refused.text(), /Try again|could not be read|not_found|HTTP/);
+  } finally { await refused.close(); }
+  const bare = await mount('founder', { url: '/account/portfolio/zz/settings', path: '/account/portfolio/:uid/settings', element: h(CompanyGeneralForm, { uid: 'zz' }) });
+  try { assert.equal(bare.has('company-settings-not-yours'), true, 'the form itself tells a 404 from a failure'); assert.equal(bare.count('company-general-unread'), 0); } finally { await bare.close(); }
+  const failed = await mount('founder', { url: '/account/portfolio/nl/settings', path: '/account/portfolio/:uid/settings', element: h(CompanySettingsAt), handle: worker({ 'GET /api/company/nl': () => response({ detail: 'boom' }, 500) }) });
+  try {
+    assert.match(failed.of('company-general-unread'), /Settings could not be read\..*Try again/);
+    assert.equal(failed.count('company-settings-not-yours'), 0);
+  } finally { await failed.close(); setReadState({ loading: true, failed: false }); }
+});
+
+test('#4736: General draws Default currency, Not recorded when the company has none, the stored code when it has one, and saves only a change', async () => {
+  let v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }) });
+  try {
+    assert.equal(v.prop('general-default-currency', 'value'), '');
+    assert.equal(v.prop('general-default-currency-none', 'value'), '', 'the empty choice is the unrecorded one, not a code');
+    assert.match(v.of('general-section-identity'), /Default currency.*Not recorded/s);
+    assert.equal(v.count('company-general-savebar'), 0);
+  } finally { await v.close(); }
+  v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: worker({ 'GET /api/company/nl': () => response({ ...COMPANY, default_currency: 'EUR' }) }) });
+  try {
+    assert.equal(v.prop('general-default-currency', 'value'), 'EUR');
+    assert.equal(v.count('company-general-savebar'), 0, 'an unchanged currency is not a change');
+    await v.change('general-default-currency', 'GBP');
+    await v.submit('company-general-form');
+    assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['POST /api/company/nl/settings', { default_currency: 'GBP' }]]);
+  } finally { await v.close(); }
+});
+
+test('#4736: formOf and changes carry default_currency; an unchanged one is not sent; CURRENCY_CODES is the Worker\'s list', () => {
+  assert.equal(formOf({ default_currency: 'EUR' }).default_currency, 'EUR');
+  assert.equal(formOf({ default_currency: null }).default_currency, '');
+  const row = { company_name: 'A', default_currency: 'EUR' };
+  assert.deepEqual(changes(formOf(row), row), {});
+  assert.deepEqual(changes({ ...formOf(row), default_currency: 'usd' }, row), { default_currency: 'USD' });
+  assert.deepEqual(changes({ ...formOf(row), default_currency: '' }, row), { default_currency: null }, 'cleared means null, never a guessed code');
+  assert.deepEqual(changes(formOf({ company_name: 'A' }), { company_name: 'A' }), {}, 'not recorded stays not recorded');
+  // D5029: the Worker's list is `lib/money.js`'s, which the Worker imports (services/currencies.ts builds its set from
+  // it), so the form's list is held to that one source and the Worker is held to taking it from there.
+  const worker = readFileSync('cloudflare-worker/src/services/currencies.ts', 'utf8');
+  assert.match(worker, /import \{ CURRENCY_CODES \} from '\.\.\/\.\.\/\.\.\/frontend\/src\/lib\/money\.js';/);
+  assert.match(worker, /ISO_4217_CODES: ReadonlySet<string> = new Set\(CURRENCY_CODES\)/);
+  const money = readFileSync('frontend/src/lib/money.js', 'utf8');
+  const listed = money.slice(money.indexOf('CURRENCY_CODES = Object.freeze(['), money.indexOf(']);'));
+  const codes = [...listed.matchAll(/'([A-Z]{3})'/g)].map((m) => m[1]);
+  assert.ok(codes.length > 100);
+  assert.deepEqual([...CURRENCY_CODES], codes);
 });

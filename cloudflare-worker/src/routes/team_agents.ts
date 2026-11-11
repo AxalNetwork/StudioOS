@@ -21,6 +21,8 @@
  *   GET    /:scope/:id/queue?role=&module=&option=&status=&cursor=&include=projects   the approvals queue (part 3, #3843)
  *   GET    /queue/:proposalUid                 one proposal and what the agent read for it
  *   POST   /queue/:proposalUid/decide          accept, edit or discard it once (manage, or the sponsor)
+ *   GET    /skills/inputs                      D4667: the first ten skills' input matrix: each input, its read and whether a reader is built
+ *   GET    /agents/:uid/skills/:slug/readiness?project=&from=&to=  D4667: the preflight for one skill, read as the agent's sponsor
  *
  * `:scope` is `company` (by uid) or `project` (by numeric id). Every route is
  * 404 `team_agents_off` unless `TEAM_AGENTS_ENABLED` is "true".
@@ -58,7 +60,8 @@ import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { agentQuote, agentRun, type AgentRefusal } from '../services/agents/agentRun';
 import { checkGrants, grantsView } from '../services/agents/agentTools';
-import { ATTACH_STATUS, checkSkillList, linkStatement } from '../services/agents/skillLinks';
+import { FIRST_TEN_SLUGS, inputMatrix, preflight } from '../services/agents/skillInputs';
+import { ATTACH_STATUS, checkSkillList, linkStatement, logSkillsChanged } from '../services/agents/skillLinks';
 import { configOf, customMcpEnabled, grantableTools } from '../integrations/customMcp';
 import type { IntegrationRow } from '../integrations/registry';
 import { isAdmin, mapError, newUid } from './_t13t14t15_helpers';
@@ -125,6 +128,21 @@ async function personOf(env: Env, userId: number | null): Promise<{ uid: string;
   return u ? { uid: u.uid, name: u.name } : null;
 }
 
+/**
+ * #4733: what the role reads, in words, from its effective rule book's `works_in` (the modules it works in). `null` when the
+ * book cannot be read, so the Team settings card shows "Not recorded" rather than a guess.
+ */
+export async function readsLineOf(env: Env, a: AgentRow): Promise<string | null> {
+  try {
+    const scope = await scopeOfAgent(env, a);
+    if (!scope) return null;
+    const { rules } = await effectiveBook(env, scope, a.role_key);
+    if (!Array.isArray(rules?.works_in)) return null;
+    if (!rules.works_in.length) return 'Works in no module';
+    return `Works in ${rules.works_in.map((k) => moduleOf(k)?.label ?? k).join(', ')}`;
+  } catch { return null; }
+}
+
 async function agentDto(env: Env, a: AgentRow) {
   const project = a.scope_kind === 'project'
     ? await env.DB.prepare('SELECT id, name FROM projects WHERE id = ?').bind(a.project_id).first<{ id: number; name: string }>()
@@ -154,6 +172,7 @@ async function agentDto(env: Env, a: AgentRow) {
     last_activity_at: await lastActivity(env, a.id),
     scope_kind: a.scope_kind,
     project: project ? { id: project.id, name: project.name } : null,
+    reads_line: await readsLineOf(env, a),
   };
 }
 
@@ -331,6 +350,44 @@ router.post('/queue/:proposalUid/decide', async (c) => {
       if (e instanceof NeverFillRefusal) return say(c, 422, 'never_fill', neverFillMessage(e.field), { field: e.field, discarded: e.discarded });
       throw e;
     }
+  } catch (e) { return mapError(c, e); }
+});
+
+// ── Skill readiness (D4667) ─────────────────────────────────────────────────
+// For the HQ flow (#4537) and discovery (#4538): what each of the first ten skills needs, and, for one agent and
+// one venture, which of it the readers can supply now. Statuses and reasons only: never a record's figures or text.
+
+router.get('/skills/inputs', async (c) => {
+  try {
+    await requireAuth(c);
+    return c.json({ skills: inputMatrix() });
+  } catch (e) { return mapError(c, e); }
+});
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+router.get('/agents/:uid/skills/:slug/readiness', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const a = await agentByUid(c.env, c.req.param('uid'));
+    const s = a && await scopeOfAgent(c.env, a);
+    if (!a || !s) return say(c, 404, 'not_found', 'There is no such agent.');
+    if (!(await canRead(c.env, s, user))) return say(c, 403, 'not_member', 'Only the team can see its agents.');
+    const slug = c.req.param('slug');
+    if (!FIRST_TEN_SLUGS.includes(slug)) return say(c, 404, 'unknown_skill', 'There is no such skill in the first ten.');
+    const from = c.req.query('from') || null;
+    const to = c.req.query('to') || null;
+    if ((from && !DAY_RE.test(from)) || (to && !DAY_RE.test(to)) || (from && to && from > to)) return say(c, 400, 'invalid_period', 'Give the period as two dates, YYYY-MM-DD, the first not after the second.');
+    // The venture: a project agent's own; a company agent's only when the project is the company's (the loop's rule).
+    let projectId: number | null = s.kind === 'project' ? s.id : null;
+    const asked = c.req.query('project');
+    if (s.kind === 'company' && asked) {
+      if (!/^[1-9][0-9]{0,15}$/.test(asked)) return say(c, 400, 'invalid_project', 'The project is a number.');
+      const p = await c.env.DB.prepare('SELECT id FROM projects WHERE id = ? AND company_id = ?').bind(Number(asked), s.id).first<{ id: number }>();
+      if (!p) return say(c, 404, 'project_not_in_company', 'The project is not this company\'s.');
+      projectId = p.id;
+    }
+    const r = await preflight(c.env, slug, { scope: s, agent: a, projectId, page: { from, to } });
+    return c.json({ readiness: r });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -577,7 +634,10 @@ router.delete('/agents/:uid', async (c) => {
   } catch (e) { return mapError(c, e); }
 });
 
-router.get('/:scope/:id/agents', async (c) => {
+router.get('/:scope/:id/agents', async (c, next) => {
+  // #4733: `/skills/<uid>/agents` also matches this pattern. A scope that is not a team belongs to the router mounted after this one.
+  const scopeKind = c.req.param('scope');
+  if (scopeKind !== 'company' && scopeKind !== 'project') return next();
   try {
     const user = await requireAuth(c);
     const s = await loadScope(c.env, c.req.param('scope'), c.req.param('id'));
@@ -752,7 +812,11 @@ router.post('/:scope/:id/agents', async (c) => {
     }
     const a = await c.env.DB.prepare('SELECT * FROM team_agents WHERE uid = ?').bind(uid).first<AgentRow>();
     await logEvent(c.env, a!.id, user.id, 'added', { role_key: role.key, persona_key: persona.key, model_id: b.model_id, monthly_cap_microusd: b.monthly_cap_microusd });
-    if (skillsChecked.wanted.length) await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+    if (skillsChecked.wanted.length) {
+      await c.env.DB.batch(skillsChecked.wanted.map((w) => linkStatement(c.env, a!.id, w.s.id, w.version, user.id)));
+      // D4534: the skills an agent was added with.
+      await logSkillsChanged(c.env, a!.id, user.id, { added: skillsChecked.wanted.map((w) => ({ uid: w.s.uid, version: w.version })), repinned: [], removed: [] });
+    }
     return c.json({ agent: await agentDto(c.env, a!) }, 201);
   } catch (e) { return mapError(c, e); }
 });

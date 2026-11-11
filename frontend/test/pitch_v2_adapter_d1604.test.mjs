@@ -185,7 +185,8 @@ test('D1523 (#3775): figures is swapped — it answers through deckFiguresApi.li
     deckFiguresApi.list = async () => { throw Object.assign(new Error('The figures could not be read.'), { status: 500 }); };
     const bad = await adapter.figures(7);
     assert.equal(bad.unreadable, true, 'anything else is unreadable');
-    assert.equal(bad.reason, 'The figures could not be read.');
+    // D5070 (#5376): a 5xx's own text is never shown; the adapter's fallback is.
+    assert.equal(bad.reason, 'could not be read');
     assert.doesNotMatch(adapter.shown(bad, (v) => String(v.counts?.linked ?? 0)), /^0$/, 'never "0 figures"');
   } finally { deckFiguresApi.list = real; }
   assert.equal(adapter.availability('figures'), null);
@@ -212,12 +213,12 @@ test('D1555 (#3802): consistency is swapped — the check read\'s `consistency`,
 
 test('the adapter keys each surface to the plan’s issue (§6.2)', () => {
   const want = {
-    grid: 3749, saveCard: 3751, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
+    grid: 3749, saveCard: 3751, saveDoc: 4596, discardDraft: 3751, draft: 3751, batch: 3753, cancelBatch: 3753, elementModels: 3754,
     areasQuote: 3764, areasGenerate: 3764, judge: 3783, history: 3767, narrativeOutline: 3768, instruct: 3773,
     stagePlan: 3774, figures: 3775, deckUsage: 3776, arrange: 3777, imageEdit: 3778, imageEditAi: 3778, imageVary: 3784, elementsLibrary: 3779,
     diagrams: 3780, ventureElements: 3781, templates: 3782, myTemplates: 3782, saveAsTemplate: 3782, typedTables: 3787,
     media: 3788, pasteCards: 3788, buttonClicks: 3788, presets: 3796, orgLocks: 3786, critique: 3799, remix: 3800, consistency: 3802, deckActions: 3808, replaceImages: 3808, outlineReorder: 3808,
-    brandLocks: 3819, pptxImport: 3819, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
+    brandLocks: 3819, pptxImport: 3819, importDocument: 3810, investorLinks: 3812, withdrawInvestorLink: 3812, comments: 3817, slideAnalytics: 3820,
     presence: 3824, cardStatus: 3826, rehearse: 3827, walkthrough: 3837, retryFailed: 3879, unseenBatches: 3879,
     markSeen: 3879, setDeckSource: 3881,
   };
@@ -310,7 +311,8 @@ test('through() is the swap: a value, a route that is still off, or unreadable, 
   const bad = await adapter.through(async () => { throw e500; }, 3749);
   assert.equal(bad.unreadable, true);
   assert.equal(bad.available, false);
-  assert.equal(bad.reason, 'The deck could not be read.');
+  // D5070 (#5376): a 5xx's own text is never shown; the adapter's fallback is.
+  assert.equal(bad.reason, 'could not be read');
 });
 
 test('the element picker: 8 groups, each item on main or on the seam, and the three owner marks', () => {
@@ -462,8 +464,9 @@ test('D1502 (#3753): batch and cancelBatch answer through deckBatchesApi; the st
     assert.deepEqual(await adapter.cancelBatch('run-1'), { available: true, value: { uid: 'run-1', state: 'cancelled' } });
     assert.deepEqual(asked, [['batch', 'run-1'], ['cancel', 'run-1']]);
     assert.equal(adapter.availability('batch'), null);
-    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403 }); };
-    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null });
+    // The Worker's refusal carries its code (deck_batches.ts `not_your_run`), so its sentence is kept (D5070 rule 2).
+    deckBatchesApi.cancel = async () => { throw Object.assign(new Error('Only the member who started this run can stop it.'), { status: 403, code: 'not_your_run' }); };
+    assert.deepEqual(await adapter.cancelBatch('run-1'), { available: false, unreadable: true, reason: 'Only the member who started this run can stop it.', issue: 3753, status: 403, data: null, code: 'not_your_run' });
   } finally { Object.assign(deckBatchesApi, real); }
   const { events, rest } = parseSse('event: snapshot\ndata: {"state":"running"}\n\nevent: step_done\ndata: {"seq":0}\n\nevent: area_busy\ndata: {"att');
   assert.deepEqual(events, [{ event: 'snapshot', data: { state: 'running' } }, { event: 'step_done', data: { seq: 0 } }]);

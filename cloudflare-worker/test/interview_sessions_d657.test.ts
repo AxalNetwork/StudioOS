@@ -25,6 +25,7 @@ import { blocksFor, billedMinutes, splitCost } from '../src/services/liveTranscr
 
 const JWT_SECRET = 'd657-fixture-only-signing-secret-0123456789';
 const MIGRATION = readFileSync(new URL('../sql/migrations/438_interview_sessions.sql', import.meta.url), 'utf8');
+const PROJECTION_OWNER_MIGRATION = readFileSync(new URL('../sql/migrations/202611062140_interview_transcript_projection_owner.sql', import.meta.url), 'utf8');
 const FOUNDER = 2;      // owns project 10
 const OTHER = 3;        // owns nothing here
 const LAB = 4;          // an admitted Spin-Out Lab member, role 'exploring', owns project 20
@@ -43,6 +44,8 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
     CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER);
     CREATE TABLE discovery_interviews (
       id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
+      interviewee_role TEXT, notes TEXT, hypotheses_json TEXT, pains_json TEXT,
+      featured INTEGER DEFAULT 0, validation_rating INTEGER, validation_comment TEXT, icp_fit TEXT,
       transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT,
       -- D685: the columns production carries (211, 440) that the session routes now write.
       interviewee_company TEXT, interview_date TEXT, quote_consent INTEGER,
@@ -52,11 +55,15 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
       sort_order INTEGER NOT NULL DEFAULT 0, retired_at TEXT);
   `);
   db.exec(MIGRATION);
+  db.exec(PROJECTION_OWNER_MIGRATION);
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // 447 adds submitted_via (an assistant's or a channel's session); 452 is D685's setup.
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(readFileSync(new URL('../sql/migrations/452_record_session_setup.sql', import.meta.url), 'utf8'));
   db.exec(readFileSync(new URL('../sql/migrations/453_interview_processing.sql', import.meta.url), 'utf8'));
+  // D4628 (#4628): setup_complete_at, so a retried setup call can tell "the row
+  // exists" from "its setup finished" and resume the missing work.
+  db.exec(readFileSync(new URL('../sql/migrations/202611071550_session_setup_complete.sql', import.meta.url), 'utf8'));
   // 449's call refs: every stop closes the ones attached to its session (#1583).
   db.exec(readFileSync(new URL('../sql/migrations/449_interview_channels.sql', import.meta.url), 'utf8')
     .split(';').filter((sql) => /interview_channel_refs|channel_threads \(/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
@@ -127,6 +134,34 @@ async function call(env: any, user: number, method: string, path: string, body?:
 
 const audioSession = (f: any, consent?: unknown, extra: Record<string, unknown> = {}, user = FOUNDER, interview = 1) =>
   call(f.env, user, 'POST', `/interviews/${interview}/sessions`, { channel: 'in_person', consent, ...extra });
+
+/**
+ * D4628 — makes the next statement whose SQL matches `pattern` throw once,
+ * as a D1 batch does when one of its statements fails (see `_d1_sqlite.mjs`
+ * `batch`: every statement runs inside one SAVEPOINT, so this one failing
+ * rolls the whole batch back, not just itself). Returns the restore
+ * function; callers always call it back, fault injected or not, so a timed
+ * out test never leaves the DB patched for the next one.
+ */
+function failOnce(env: any, pattern: RegExp) {
+  const real = env.DB.prepare.bind(env.DB);
+  let armed = true;
+  env.DB.prepare = (sql: string) => {
+    const stmt = real(sql);
+    if (armed && pattern.test(sql)) {
+      armed = false;
+      return {
+        bind: (...args: unknown[]) => {
+          const bound = stmt.bind(...args);
+          const fail = () => { throw new Error('D4628 fixture: forced failure'); };
+          return { ...bound, run: fail, runSync: fail };
+        },
+      };
+    }
+    return stmt;
+  };
+  return () => { env.DB.prepare = real; };
+}
 const putChunk = (f: any, id: number, seq: number, bytes = new Uint8Array(4000).fill(seq + 1), user = FOUNDER) =>
   call(f.env, user, 'PUT', `/sessions/${id}/chunks/${seq}`, bytes, { 'content-type': 'audio/webm' });
 
@@ -227,9 +262,12 @@ test('the final transcript replaces the live draft, and the interview’s transc
   assert.ok(segs.every((s: any) => s.source === 'final'), 'a live draft survived the final transcript');
   assert.equal(segs.length, 2, 'one passage per chunk');
   assert.ok(!segs.some((s: any) => s.text.includes('loose')));
-  const interview = f.db.prepare('SELECT transcript, transcribed_by_model FROM discovery_interviews WHERE id = 1').get();
+  const interview = f.db.prepare('SELECT transcript, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1').get();
   assert.equal(interview.transcript, segs.map((s: any) => s.text).join('\n'));
   assert.equal(interview.transcribed_by_model, '@cf/openai/whisper-large-v3-turbo');
+  assert.equal(interview.transcript_session_uid,
+    f.db.prepare('SELECT uid FROM interview_sessions WHERE id = ?').get(id).uid,
+    'the parent projection does not name its source session');
   const session = f.db.prepare('SELECT status, language, final_model FROM interview_sessions WHERE id = ?').get(id);
   assert.deepEqual({ ...session }, { status: 'transcribed', language: 'en', final_model: '@cf/openai/whisper-large-v3-turbo' });
   assert.equal(f.aiCalls.length, 2, 'each chunk is transcribed on its own');
@@ -237,6 +275,32 @@ test('the final transcript replaces the live draft, and the interview’s transc
   assert.equal(receipt.length, 1);
   assert.deepEqual([receipt[0].kind, receipt[0].outcome, receipt[0].audio_minutes], ['final', 'ok', 2]);
   assert.ok(receipt[0].cost_microusd > 0, 'a transcription must not cost zero');
+});
+
+test('D4626 migration claims an exact historical projection and never guesses independent text', () => {
+  const f = aiBudgetFixture();
+  f.db.exec(`CREATE TABLE discovery_interviews (
+    id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, interviewee_name TEXT NOT NULL,
+    transcript TEXT, transcribed_at TEXT, transcribed_by_model TEXT, updated_at TEXT
+  )`);
+  f.db.exec(MIGRATION);
+  f.db.exec(`
+    INSERT INTO discovery_interviews VALUES (1, 10, 'Exact', 'First line\nSecond line', 'then', 'model', 'then');
+    INSERT INTO discovery_interviews VALUES (2, 10, 'Independent', 'Written elsewhere', 'then', 'model', 'then');
+    INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel)
+      VALUES ('exact-session', 1, 10, 2, 'manual'), ('other-session', 2, 10, 2, 'manual');
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'First line' FROM interview_sessions WHERE uid = 'exact-session';
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'Second line' FROM interview_sessions WHERE uid = 'exact-session';
+    INSERT INTO interview_transcript_segments (session_id, source, text)
+      SELECT id, 'final', 'Different session text' FROM interview_sessions WHERE uid = 'other-session';
+  `);
+  f.db.exec(PROJECTION_OWNER_MIGRATION);
+  assert.equal(f.db.prepare('SELECT transcript_session_uid FROM discovery_interviews WHERE id = 1').get().transcript_session_uid,
+    'exact-session');
+  assert.equal(f.db.prepare('SELECT transcript_session_uid FROM discovery_interviews WHERE id = 2').get().transcript_session_uid,
+    null);
 });
 
 test('Nova-3 batch labels "Me" and the interviewee; an unlabelled passage is "Speaker ?" until assigned', async () => {
@@ -306,7 +370,7 @@ test('a model not offered is refused, and Whisper Tiny EN (unpriced) cannot be c
 
 // ── Deletion ─────────────────────────────────────────────────────────────────
 
-test('deleting a session removes its audio keys, its rows, and leaves an audit row', async () => {
+test('deleting a session removes its audio keys, rows and parent projection, then leaves an audit row', async () => {
   const f = fixture();
   const id = await recorded(f);
   await call(f.env, FOUNDER, 'POST', `/sessions/${id}/transcribe`, {});
@@ -322,10 +386,50 @@ test('deleting a session removes its audio keys, its rows, and leaves an audit r
     const col = t === 'interview_sessions' ? 'id' : 'session_id';
     assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE ${col} = ?`).get(id).n, 0, `${t} kept a row`);
   }
+  assert.deepEqual({ ...f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() }, { transcript: null, transcribed_at: null, transcribed_by_model: null, transcript_session_uid: null });
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${id}`)).status, 404, 'repeated delete should stay harmless');
   const audit = f.db.prepare("SELECT details, user_id, project_id FROM activity_logs WHERE action = 'interview_session_deleted'").get();
   assert.ok(audit, 'no audit row');
   assert.equal(JSON.parse(audit.details).audio_chunks, 2);
   assert.deepEqual([audit.user_id, audit.project_id], [FOUNDER, 10]);
+});
+
+test('deleting an older session preserves the newer projection; deleting its owner empties the discovery API', async () => {
+  const f = fixture();
+  const older = await recorded(f);
+  await call(f.env, FOUNDER, 'POST', `/sessions/${older}/transcribe`, {});
+  const olderText = f.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = 1').get().transcript;
+
+  const newer = await recorded(f);
+  f.setAi(() => ({ text: 'The newer session wins.', transcription_info: { language: 'en' },
+    segments: [{ start: 0, end: 1, text: 'The newer session wins.' }] }));
+  await call(f.env, FOUNDER, 'POST', `/sessions/${newer}/transcribe`, {});
+  const before = f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() as any;
+  assert.notEqual(before.transcript, olderText);
+  assert.equal(before.transcript_session_uid, f.db.prepare('SELECT uid FROM interview_sessions WHERE id = ?').get(newer).uid);
+
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${older}`)).status, 200);
+  assert.deepEqual({ ...f.db.prepare(
+    'SELECT transcript, transcribed_at, transcribed_by_model, transcript_session_uid FROM discovery_interviews WHERE id = 1',
+  ).get() }, { ...before }, 'deleting an older session erased the newer projection');
+
+  assert.equal((await call(f.env, FOUNDER, 'DELETE', `/sessions/${newer}`)).status, 200);
+  try { f.db.exec('ALTER TABLE projects ADD COLUMN company_id INTEGER'); } catch { /* present */ }
+  const { default: progress } = await import('../src/routes/progress.ts');
+  const papp = new Hono();
+  papp.route('/api/progress', progress as any);
+  const tok = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const response = await papp.request('/api/progress/discovery/10', { headers: { Authorization: `Bearer ${tok}` } }, f.env);
+  assert.equal(response.status, 200, await response.clone().text());
+  const interview = (await response.json() as any).interviews.find((row: any) => row.id === 1);
+  assert.deepEqual({ transcript: interview.transcript, transcribed_at: interview.transcribed_at,
+    transcribed_by_model: interview.transcribed_by_model },
+  { transcript: null, transcribed_at: null, transcribed_by_model: null });
 });
 
 // ── Spin-Out Lab ─────────────────────────────────────────────────────────────
@@ -752,6 +856,153 @@ test('D685 §5.1.1 (#1583): two Starts racing past the replay check make one int
   assert.equal(second.status, 200, JSON.stringify(second.body));
   assert.equal(second.body.session.id, first.body.session.id);
   assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Race'").get() as any).n, 1);
+  // D4628: the race's loser finishes the winner's setup rather than just
+  // echoing a row that might still be mid-setup; the committed session is
+  // actually complete, not merely "exists".
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(first.body.session.id).setup_complete_at);
+});
+
+test('D685 §5.1.1 (#1583): two Starts racing past the replay check on /interviews/:id/sessions also make one session', async () => {
+  const f = fixture();
+  const body = { channel: 'in_person', consent: { status: 'given', method: 'written' }, client_key: 'race-pi' };
+  const first = await audioSession(f, body.consent, { client_key: body.client_key });
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  const real = f.env.DB.prepare.bind(f.env.DB);
+  let blind = 1;
+  f.env.DB.prepare = (sql: string) => {
+    const stmt = real(sql);
+    if (blind > 0 && /client_key = \?/.test(sql) && /^SELECT/.test(sql.trim())) {
+      blind--;
+      return { bind: (...args: unknown[]) => ({ ...stmt.bind(...args), first: async () => null }) };
+    }
+    return stmt;
+  };
+  const second = await audioSession(f, body.consent, { client_key: body.client_key });
+  f.env.DB.prepare = real;
+  assert.equal(blind, 0, 'the replay read was raced');
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(second.body.session.id, first.body.session.id);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE client_key = ?').get(body.client_key) as any).n, 1);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(first.body.session.id).setup_complete_at);
+});
+
+// ── D4628 (#4628): a failure after the insert is visible, never a false "it worked"; a retry resumes it ──
+
+test("D4628: the setup call's failed activity-log write is not reported as success; the same client_key resumes and completes once", async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO hypotheses (id, project_id, code, claim) VALUES (71, 10, 'H1', 'Ops leads lose a day a week')");
+  const body = {
+    channel: 'in_person', interviewee: { name: 'Resumable' }, consent: { status: 'given', method: 'verbal' },
+    client_key: 'resume-1', points: [71],
+  };
+  const restore = failOnce(f.env, /INSERT INTO activity_logs/);
+  const failed = await setup(f, body);
+  restore();
+  // D4628: NOT a false 200/201 "it worked" — the write never landed, so the
+  // failure stays visible.
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id, uid FROM interview_sessions WHERE client_key = 'resume-1'").get() as any;
+  assert.ok(row, 'the insert itself (openOn) is a separate, earlier write and still landed');
+  assert.equal(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at, null,
+    'setup is not marked complete: the batch that would have landed its points too never committed');
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 0,
+    "the points write was in the SAME atomic batch as the failed one, so it did not land either — never a partial 'point landed, log did not'");
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Resumable'").get() as any).n, 1,
+    'exactly one interview — the failed batch never ran twice and openOn is not retried blindly');
+
+  // The same client_key, same submitted content, retried: finishes the
+  // missing work rather than creating a second interview/session.
+  const resumed = await setup(f, body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id, 'the SAME session, not a new one');
+  assert.deepEqual(resumed.body.points.map((p: any) => p.text), ['H1 · Ops leads lose a day a week']);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 1,
+    'the point landed exactly once on the resumed attempt');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM discovery_interviews WHERE interviewee_name = 'Resumable'").get() as any).n, 1,
+    'still exactly one interview after the resume');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_session_created'").get() as any).n, 1,
+    'the audit row lands exactly once, not once per attempt');
+
+  // A THIRD identical request: genuinely complete now, so it is the plain
+  // replay case again — answered without running finishSetup a second time.
+  const replay = await setup(f, body);
+  assert.equal(replay.status, 200);
+  assert.equal(replay.body.session.id, row.id);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_session_points WHERE session_id = ?').get(row.id) as any).n, 1,
+    'a genuinely completed replay never re-runs finishSetup: still exactly one point, not two');
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'interview_session_created'").get() as any).n, 1,
+    'and still exactly one audit row');
+});
+
+test('D5353: capture routes refuse an incomplete setup and become usable only after the same request resumes it', async () => {
+  const f = fixture();
+  const body = {
+    channel: 'in_person', interviewee: { name: 'Unfinished capture' }, consent: { status: 'given', method: 'written' },
+    client_key: 'unfinished-capture',
+  };
+  const restore = failOnce(f.env, /INSERT INTO activity_logs/);
+  const failed = await setup(f, body);
+  restore();
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id, setup_complete_at FROM interview_sessions WHERE client_key = 'unfinished-capture'").get() as any;
+  assert.equal(row.setup_complete_at, null);
+
+  const refused = [
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/start`),
+    await call(f.env, FOUNDER, 'PUT', `/sessions/${row.id}/chunks/0`, new Uint8Array(4000), { 'content-type': 'audio/webm' }),
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/bot`, { meeting_url: 'https://meet.google.com/abc-defg-hij' }),
+    await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/finish`, { last_seq: 0 }),
+  ];
+  for (const result of refused) {
+    assert.equal(result.status, 409, JSON.stringify(result.body));
+    assert.equal(result.body.detail, 'setup_incomplete');
+  }
+  assert.equal(f.r2Calls.put, 0, 'an incomplete session wrote audio');
+
+  const resumed = await setup(f, body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id);
+  assert.ok(resumed.body.session.setup_complete_at);
+  const started = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/start`);
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  const uploaded = await call(f.env, FOUNDER, 'PUT', `/sessions/${row.id}/chunks/0`, new Uint8Array(4000), { 'content-type': 'audio/webm' });
+  assert.equal(uploaded.status, 201, JSON.stringify(uploaded.body));
+  assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/stop`)).status, 200);
+  const finished = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/finish`, { last_seq: 0 });
+  assert.equal(finished.status, 202, JSON.stringify(finished.body));
+  const bot = await call(f.env, FOUNDER, 'POST', `/sessions/${row.id}/bot`, { meeting_url: 'https://meet.google.com/abc-defg-hij' });
+  assert.notEqual(bot.body?.detail, 'setup_incomplete', 'a completed setup remained behind the setup gate');
+});
+
+test('D4628: a failed pasted-transcript write on /interviews/:id/sessions is not reported as success; a retry lands the submitted text once, and holds the interview once', async () => {
+  const f = fixture();
+  const body = { channel: 'text', call_provider: 'paste', client_key: 'resume-text', messages: [{ author: 'Dana', text: 'We lose a day a week to invoicing.' }] };
+  const restore = failOnce(f.env, /INSERT INTO interview_transcript_segments/);
+  const failed = await call(f.env, FOUNDER, 'POST', '/interviews/1/sessions', body);
+  restore();
+  assert.equal(failed.status, 500, JSON.stringify(failed.body));
+  const row = f.db.prepare("SELECT id FROM interview_sessions WHERE client_key = 'resume-text'").get() as any;
+  assert.ok(row, 'the session row landed; the content write (replaceWithFinal) is what failed');
+  assert.equal(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at, null);
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_transcript_segments WHERE session_id = ?').get(row.id) as any).n, 0,
+    'the pasted text never landed — exactly the failure mode #4628 describes: submitted text absent');
+  assert.equal(interviewRow(f, 1).transcript, null);
+  assert.equal(interviewRow(f, 1).stage, null, 'not held: the move to done is part of the same unfinished setup');
+
+  const resumed = await call(f.env, FOUNDER, 'POST', '/interviews/1/sessions', body);
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.session.id, row.id);
+  assert.ok(f.db.prepare('SELECT setup_complete_at FROM interview_sessions WHERE id = ?').get(row.id).setup_complete_at);
+  const segs = f.db.prepare('SELECT text FROM interview_transcript_segments WHERE session_id = ?').all(row.id) as any[];
+  assert.deepEqual(segs.map((s) => s.text), ['We lose a day a week to invoicing.'], 'the submitted text landed exactly once, not lost and not duplicated');
+  assert.equal(interviewRow(f, 1).transcript, 'We lose a day a week to invoicing.');
+  assert.equal(interviewRow(f, 1).stage, 'done', 'held once setup actually finished');
+  assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM interview_sessions WHERE client_key = ?').get('resume-text') as any).n, 1);
+
+  // Read back through the ordinary route too: the digest/segment read agrees.
+  const read = await call(f.env, FOUNDER, 'GET', `/sessions/${row.id}`);
+  assert.deepEqual(read.body.segments.map((s: any) => s.text), ['We lose a day a week to invoicing.']);
 });
 
 test('D685: a text session records quote consent when a method is picked, and nothing when none is', async () => {

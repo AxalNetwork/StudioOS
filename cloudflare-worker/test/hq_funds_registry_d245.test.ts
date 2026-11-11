@@ -274,11 +274,24 @@ test('D245: HQ first, then each branch in its own state — an unreadable branch
   assert.deepEqual(r.body.branches_coverage.unreadable.sort(), ['de', 'es']);
 });
 
+test('D5041: an unreadable deployment registry says so on the funds read, and coverage is not complete', async () => {
+  const db = hqDb();
+  db.exec('DROP TABLE licence_deployments');
+  db.exec('CREATE VIEW licence_deployments AS SELECT * FROM nonexistent_table_5041');
+  const r = await funds(db, HOLDER, { BRANCH_FR: STUBS.BRANCH_FR });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.body.registry_available, false);
+  assert.match(String(r.body.registry_reason), /deployment registry/);
+  assert.equal(r.body.branches_coverage.complete, false);
+  const ok = await funds(hqDb(), HOLDER, { BRANCH_FR: STUBS.BRANCH_FR });
+  assert.equal(ok.body.registry_available, true);
+});
+
 test('D245: the payload carries no total across funds, and says why, with the currency not recorded', async () => {
   const db = hqDb();
   const r = await funds(db, HOLDER, STUBS);
   assert.deepEqual(Object.keys(r.body).sort(),
-    ['branches', 'branches_coverage', 'committed_unit', 'hq', 'not_recorded', 'open_in_branch', 'read_at', 'total'],
+    ['branches', 'branches_coverage', 'committed_unit', 'hq', 'not_recorded', 'open_in_branch', 'read_at', 'registry_available', 'total'],
     'a field appeared on the payload — a sum across funds would be one');
   assert.deepEqual(Object.keys(r.body.total).sort(), ['reason', 'shown']);
   assert.equal(r.body.total.shown, false);

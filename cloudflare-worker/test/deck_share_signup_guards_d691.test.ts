@@ -41,7 +41,8 @@ const SOLVED = 'solved-challenge-d691';
 const DECK = 5;
 const IP = '198.51.100.77';
 const EMAIL = 'deck.viewer.d691@example.test';
-const TABLES = ['users', 'activity_logs', 'onboarding_progress', 'pitch_decks', 'projects', 'pitch_deck_share_tokens'];
+// D4669 — `user_sessions`: the signup's session is bound to a row like every other sign-in.
+const TABLES = ['users', 'activity_logs', 'onboarding_progress', 'pitch_decks', 'projects', 'pitch_deck_share_tokens', 'user_sessions'];
 
 function b64url(bytes: Uint8Array): string {
   let s = '';
@@ -167,6 +168,8 @@ test('a solved challenge creates the user exactly as before', async () => {
   assert.deepEqual(u.map((x) => ({ ...x })), [{ email: EMAIL, role: 'investor', email_verified: 0 }]);
   assert.equal(count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'user_registered'`), 1);
   assert.equal(count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'turnstile_failed'`), 0);
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM user_sessions WHERE factor = 'deck_share'`), 1,
+    'the signup session has no row that could end it');
   // The existing-email refusal stays, behind a solved challenge.
   const again = await signup(env, { turnstileToken: SOLVED });
   assert.equal(again.status, 409);

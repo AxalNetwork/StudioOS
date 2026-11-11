@@ -2,6 +2,7 @@
 import type { Env, User } from '../types';
 import { ensureRoleProfile } from './ensureRoleProfile';
 import { seedObligations } from './trust';
+import { grantLicenceStatements, hasLifecycle, revokeLicenceStatements } from './userLicences';
 
 export const LICENCE_ORDER = ['founder', 'investor', 'advisor', 'partner'] as const;
 export type Licence = typeof LICENCE_ORDER[number];
@@ -13,17 +14,36 @@ type Principal = { id: number; role: string; licences?: readonly string[] };
 
 export async function heldLicences(db: D1Database, user: Pick<Principal, 'id' | 'role'>): Promise<Licence[]> {
   const primary = String(user.role || '').toLowerCase();
+  // D5058: ONE statement. Held grants come from `account_licences`; a primary licence (`users.role`) whose
+  // `licences` row is not in force (suspended, expired, terminated, proposed) comes back as `!<access key>` and is
+  // left out. A primary with no row (before D5058's backfill) is held as before.
   let rows: D1Result<{ licence: string }>;
   try { rows = await db.prepare(
-    'SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL',
-  ).bind(user.id).all<{ licence: string }>();
+    `SELECT licence FROM account_licences WHERE user_id = ? AND revoked_at IS NULL
+     UNION ALL
+     SELECT '!' || CASE licence_type WHEN 'operating_partner' THEN 'partner' ELSE licence_type END FROM licences
+      WHERE licence_family = 'user' AND holder_type = 'user' AND holder_id = ?
+        AND status NOT IN ('active', 'renewal_pending')`,
+  ).bind(user.id, String(user.id)).all<{ licence: string }>();
   } catch (error) {
     // A pre-migration database has no possible grants; preserve its primary
     // access. Other read failures propagate and never manufacture a grant.
     if (/no such table: (?:main\.)?account_licences/i.test(String(error))) return LICENCE_ORDER.filter(licence => licence === primary);
-    throw error;
+    // A database with D4472's table but not D5057/D5058's (only a test database): grants only, as before. It is
+    // retried on every call rather than remembered per binding, so a request costs the same statements whether or
+    // not it is the binding's first; production has both tables and runs the one statement above.
+    if (/no such table: (?:main\.)?licences/i.test(String(error))) {
+      try {
+        rows = await db.prepare('SELECT g.licence FROM account_licences g WHERE g.user_id = ? AND g.revoked_at IS NULL').bind(user.id).all<{ licence: string }>();
+      } catch (inner) {
+        if (/no such table: (?:main\.)?account_licences/i.test(String(inner))) return LICENCE_ORDER.filter(licence => licence === primary);
+        throw inner;
+      }
+    } else throw error;
   }
-  return LICENCE_ORDER.filter(licence => licence === primary || rows.results.some(row => row.licence === licence));
+  const results = rows.results || [];
+  const primaryWithheld = results.some(row => row.licence === `!${primary}`);
+  return LICENCE_ORDER.filter(licence => (licence === primary && !primaryWithheld) || results.some(row => row.licence === licence));
 }
 
 /** Auth hydrates licences once; primary-only objects remain usable by existing pure access predicates. */
@@ -37,7 +57,7 @@ export function holdsOnlyLicence(user: { role?: string | null; licences?: readon
 }
 
 export class LicenceRefusal extends Error {
-  code: 'invalid_licence' | 'invalid_retention' | 'not_found' | 'primary_licence';
+  code: 'invalid_licence' | 'invalid_retention' | 'not_found' | 'primary_licence' | 'licence_cannot_administer';
   status: 400 | 404 | 409;
   constructor(code: LicenceRefusal['code'], status: LicenceRefusal['status']) {
     super(code);
@@ -45,7 +65,9 @@ export class LicenceRefusal extends Error {
   }
 }
 type Change = { userId: number; licence: unknown; actorId: number; source: string;
-  retainPrimary?: boolean; appointmentStatements?: D1PreparedStatement[] };
+  retainPrimary?: boolean; appointmentStatements?: D1PreparedStatement[];
+  /** #4678: an extra predicate on the appointment's role write. When it is false the role does not change and the grant refuses with 409 `licence_cannot_administer`. */
+  appointmentGuard?: { licenceId: number; userId: number } };
 async function subject(db: D1Database, change: Change): Promise<User> {
   if (!isLicence(change.licence)) throw new LicenceRefusal('invalid_licence', 400);
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').bind(change.userId).first<User>();
@@ -81,13 +103,27 @@ export async function grantLicence(db: D1Database, change: Change): Promise<'gra
   ];
   // S1's explicit exception: preserve the old primary and appoint the admin
   // atomically. No route is allowed to run a second, separate role write.
-  if (change.retainPrimary) statements.push(db.prepare(`UPDATE users SET role = 'admin'
-    WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
-      WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)`)
-    .bind(userId, licence, userId, licence));
+  if (change.retainPrimary) {
+    const g = change.appointmentGuard;
+    // The guarded form adds one predicate: the appointing licence still administers users and the account is not bound elsewhere.
+    statements.push(g
+      ? db.prepare(`UPDATE users SET role = 'admin'
+        WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
+          WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)
+          AND EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND status <> 'terminated')
+          AND NOT EXISTS (SELECT 1 FROM licence_admins WHERE user_id = ? AND licence_id <> ?)`)
+        .bind(userId, licence, userId, licence, g.licenceId, g.userId, g.licenceId)
+      : db.prepare(`UPDATE users SET role = 'admin'
+        WHERE id = ? AND lower(role) = ? AND EXISTS (SELECT 1 FROM account_licences
+          WHERE user_id = ? AND licence = ? AND revoked_at IS NULL)`)
+        .bind(userId, licence, userId, licence));
+  }
   statements.push(...(change.appointmentStatements || []));
+  // D5058: the shared licence row follows the grant, in the same batch and guarded by it. Appended last, so the
+  // indexes read below are unchanged. An Admin appointment keeps the licence the person holds (#3704 D).
+  if (!change.retainPrimary && await hasLifecycle(db)) statements.push(...grantLicenceStatements({ DB: db } as Env, userId, String(licence), actorId, source));
   const result = await db.batch(statements);
-  if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal('primary_licence', 409);
+  if (change.retainPrimary && !result[2].meta.changes) throw new LicenceRefusal(change.appointmentGuard ? 'licence_cannot_administer' : 'primary_licence', 409);
   if (!result[0].meta.changes && !change.retainPrimary) return 'already_held';
   const env = { DB: db } as Env;
   await ensureRoleProfile(env, { ...user, role: licence } as User);
@@ -100,6 +136,7 @@ export async function revokeLicence(db: D1Database, change: Change): Promise<'re
   const user = await subject(db, change);
   if (String(user.role).toLowerCase() === change.licence) throw new LicenceRefusal('primary_licence', 409);
   const { userId, licence, actorId, source } = change;
+  const lifecycle = await hasLifecycle(db);
   const result = await db.batch([
     db.prepare(`UPDATE account_licences SET revoked_at = datetime('now'), revoked_by = ?
       WHERE user_id = ? AND licence = ? AND revoked_at IS NULL
@@ -107,6 +144,8 @@ export async function revokeLicence(db: D1Database, change: Change): Promise<'re
       .bind(actorId, userId, licence, userId, licence),
     db.prepare(`INSERT INTO account_licence_events (user_id, licence, action, actor_id, source)
       SELECT ?, ?, 'revoke', ?, ? WHERE changes() = 1`).bind(userId, licence, actorId, source),
+    // D5058: the shared licence row ends with the grant, guarded by the revoke having landed.
+    ...(lifecycle ? revokeLicenceStatements({ DB: db } as Env, userId, String(licence), actorId, source) : []),
   ]);
   return result[0].meta.changes ? 'revoked' : 'not_held';
 }

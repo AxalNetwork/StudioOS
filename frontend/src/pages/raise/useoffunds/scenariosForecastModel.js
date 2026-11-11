@@ -13,10 +13,12 @@
  * (#2455 owner question 1). No Capital score is drawn (owner question 2).
  */
 import { HOME_PATH, NOT_RECORDED, SECTIONS, afterRaiseView, dayText, money, monthsText, runwayTodayView, tabSearch } from './useOfFundsModel';
+import { majorToMinor, parseMinor } from '../../../lib/money.js';
 
 /* Addresses ------------------------------------------------------------- */
 
-export const FORECAST_PATH = `${HOME_PATH}/runway/forecast`;
+import { FORECAST_PATH, movedTo } from './useOfFundsPaths.js';
+export { FORECAST_PATH, movedTo };
 export const COMPARE_PATH = `${HOME_PATH}/scenarios/compare`;
 export const forecastPath = (search = '') => `${FORECAST_PATH}${tabSearch(search)}`;
 
@@ -30,16 +32,7 @@ export const MOVED = Object.freeze({
  * and hash kept, `?project=` as the tool's `?project_id=`, and `moved` naming
  * the notice.
  */
-export function movedTo(search = '', moved = 'capital-model') {
-  const q = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  if (q.has('project')) {
-    if (!q.has('project_id')) q.set('project_id', q.get('project'));
-    q.delete('project');
-  }
-  if (moved) q.set('moved', moved);
-  const out = q.toString();
-  return { pathname: FORECAST_PATH, search: out ? `?${out}` : '' };
-}
+// movedTo lives in useOfFundsPaths.js (#4574 H4) and is re-exported above.
 
 /** The moved notice's words for this address, or null. */
 export const movedNotice = (search = '') => MOVED[new URLSearchParams(String(search || '').replace(/^\?/, '')).get('moved')] || null;
@@ -82,7 +75,7 @@ export const DRIVERS = [
 ];
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
-const dollars = (v) => (isNum(v) ? money(Math.round(v * 100), 'usd') : null);
+const dollars = (v) => (isNum(v) ? money(majorToMinor(v, 'USD'), 'USD') : null);
 
 /** A driver's value as the page shows it, or null when it is empty. */
 export function driverText(kind, v) {
@@ -148,12 +141,13 @@ export function forecastSeries(read) {
   if (forecastGap(read)) return null;
   const months = Array.isArray(read?.computed?.months) ? read.computed.months : [];
   if (!months.length) return null;
-  return {
-    cash: months.map((m) => ({ month: `M${m.month}`, cents: Math.round(Number(m.cash) * 100) })),
-    revenue: months.map((m) => ({ month: `M${m.month}`, cents: Math.round(Number(m.revenue) * 100) })),
-    net: months.map((m) => ({ month: `M${m.month}`, cents: Math.round(Number(m.net) * 100) })),
+  const series = {
+    cash: months.map((m) => ({ month: `M${m.month}`, cents: majorToMinor(m.cash, 'USD') })),
+    revenue: months.map((m) => ({ month: `M${m.month}`, cents: majorToMinor(m.revenue, 'USD') })),
+    net: months.map((m) => ({ month: `M${m.month}`, cents: majorToMinor(m.net, 'USD') })),
     cashOut: months.findIndex((m) => Number(m.cash) <= 0),
   };
+  return [series.cash, series.revenue, series.net].some((points) => points.some((p) => p.cents == null)) ? null : series;
 }
 
 /** The sensitivity table: each driver's forecast runway at −20% to +20%; the 0% column is the forecast as set. */
@@ -223,8 +217,8 @@ export function scenarioCard(s) {
     id: s.id,
     name: s.name || 'Unnamed scenario',
     base: !!s.is_base,
-    raise: money(s.amount_to_raise_cents, s.currency),
-    currency: s.currency || 'USD',
+    raise: money(s.amount_to_raise_cents, s.currency ?? null),
+    currency: s.currency ?? null,
     split: SECTIONS.map((sec) => ({ key: sec.key, short: sec.short, label: sec.label, share: share(s, sec.key) })),
     splitKnown: SECTIONS.every((sec) => share(s, sec.key) != null),
     runway: after,
@@ -245,15 +239,19 @@ export function makeBaseView(s) {
 }
 
 /** The body for a scenario's Edit: only what is typed; an empty raise is not recorded, never 0. */
-export function scenarioBody(f) {
+export function scenarioBody(f, currency = 'USD') {
   const out = {};
   const name = String(f.name ?? '').trim();
   if (!name) return { error: 'Name the scenario.' };
   out.name = name.slice(0, 120);
-  const raise = String(f.raise ?? '').trim().replace(/[$,\s]/g, '');
+  const raise = String(f.raise ?? '').trim();
   if (raise === '') out.amount_to_raise_cents = null;
-  else if (!/^\d+(\.\d{1,2})?$/.test(raise)) return { error: 'Type the raise in whole dollars, such as 1500000.' };
-  else out.amount_to_raise_cents = Math.round(Number(raise) * 100);
+  else {
+    const code = typeof currency === 'string' ? currency.toUpperCase() : currency;
+    const parsed = parseMinor(code === 'USD' ? raise.replace(/^\$\s*/, '') : raise, code);
+    if (!parsed.ok) return { error: parsed.message };
+    out.amount_to_raise_cents = parsed.minor;
+  }
   const target = Number(f.target);
   if (!Number.isInteger(target) || target < 1 || target > 120) return { error: 'The target runway is 1 to 120 whole months.' };
   out.target_runway_months = target;
@@ -290,16 +288,16 @@ export function compareTable(read, viewer = {}) {
   const cols = scenarios.map((s) => ({ id: s.id, name: `${s.name || 'Unnamed scenario'}${s.is_base ? ' · base' : ''}` }));
   const cell = (text, reason = null) => ({ text: text ?? NOT_RECORDED, missing: text == null, reason: text == null ? reason : null });
   const rows = [
-    { key: 'raise', label: 'Raise', today: { text: 'No raise' }, cells: scenarios.map((s) => cell(money(s.amount_to_raise_cents, s.currency), 'No raise is recorded')) },
+    { key: 'raise', label: 'Raise', today: { text: 'No raise' }, cells: scenarios.map((s) => cell(money(s.amount_to_raise_cents, s.currency ?? null), 'No raise is recorded')) },
     ...SECTIONS.map((sec) => ({
       key: sec.key, label: sec.label, today: { text: '—' },
       cells: scenarios.map((s) => {
         const pct = share(s, sec.key);
-        return cell(pct != null && s.amount_to_raise_cents != null ? money(Math.round((s.amount_to_raise_cents * pct) / 100), s.currency) : null, 'The share or the raise is not recorded');
+        return cell(pct != null && s.amount_to_raise_cents != null ? money(Math.round((s.amount_to_raise_cents * pct) / 100), s.currency ?? null) : null, 'The share or the raise is not recorded');
       }),
     })),
     { key: 'burn', label: 'Planned burn', today: { text: today.burn ? `${today.burn} · burn today` : NOT_RECORDED, missing: !today.burn },
-      cells: scenarios.map((s) => cell(avgBurn(s) != null ? `${money(avgBurn(s), s.currency)} a month` : null, s?.model?.burn?.reason)) },
+      cells: scenarios.map((s) => cell(avgBurn(s) != null ? `${money(avgBurn(s), s.currency ?? null)} a month` : null, s?.model?.burn?.reason)) },
     { key: 'runway', label: 'Runway after the raise', today: { text: today.value ? `${today.value} · runway today` : NOT_RECORDED, missing: !today.value },
       cells: scenarios.map((s) => { const a = afterRaiseView(s); return cell(a.value, a.sub); }) },
     { key: 'cashout', label: 'Cash out', today: { text: '—' }, cells: scenarios.map((s) => cell(cashOutMonth(s), s?.model?.cashOut?.reason)) },

@@ -51,6 +51,7 @@ export function fixture({ monthMicro = 500_000_000 } = {}) {
   db.exec(mig('438_interview_sessions.sql'));
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(mig('452_record_session_setup.sql'));
+  db.exec(mig('202611071550_session_setup_complete.sql'));
   db.exec(mig('453_interview_processing.sql'));
   db.exec(mig('449_interview_channels.sql').split(';').filter((sql) => /interview_channel_refs|channel_threads \(/.test(sql) && /CREATE TABLE/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));
@@ -96,9 +97,11 @@ let serial = 0;
 export function seed(w: ReturnType<typeof fixture>, { kind = 'upload', ageDays = 31, chunks = 2, owner = FOUNDER, stage = 'done' as string | null } = {}) {
   const uid = `d877-${++serial}`;
   const ts = new Date(NOW.getTime() - ageDays * 86_400_000).toISOString().replace('T', ' ').slice(0, 19);
-  w.db.prepare(`INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, submitted_via, processing_stage, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 'transcribed', 'given', ?, ?, ?, ?)`)
-    .run(uid, INTERVIEW, PROJECT, owner, kind === 'recorder' ? 'in_person' : 'video', kind === 'upload' ? 'upload' : null, stage, ts, ts);
+  // D5353 (#5353): a seeded session stands for one whose setup finished, as
+  // migration 202611071550 stamped every existing row; the routes refuse one without it.
+  w.db.prepare(`INSERT INTO interview_sessions (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, submitted_via, processing_stage, created_at, updated_at, setup_complete_at)
+                VALUES (?, ?, ?, ?, ?, 'transcribed', 'given', ?, ?, ?, ?, ?)`)
+    .run(uid, INTERVIEW, PROJECT, owner, kind === 'recorder' ? 'in_person' : 'video', kind === 'upload' ? 'upload' : null, stage, ts, ts, ts);
   const id = Number((w.db.prepare('SELECT id FROM interview_sessions WHERE uid = ?').get(uid) as any).id);
   if (kind === 'zoom') {
     w.db.prepare(`INSERT INTO interview_channel_refs (uid, provider, external_ref, session_id, interview_id, user_id, status)

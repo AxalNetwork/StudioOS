@@ -190,16 +190,18 @@ test('nothing to charge is an error, never a free session', async () => {
 
 // ── The fee ────────────────────────────────────────────────────────────────
 
-test('the application fee is the ledger’s own cut, not a second computation', () => {
+test('the application fee is the booking’s stored snapshot, not a second computation', () => {
   // READ FROM THE SOURCE, because the call itself cannot run without a
-  // network. What matters is that the fee is `cutCents` applied to the rate
-  // the SETTING holds — two functions computing a platform fee is how a
-  // client is charged one number and an advisor shown another.
+  // network. #4679: the fee is the cut stamped on the line when it was priced,
+  // never today's setting — two computations of a platform fee is how a client
+  // is charged one number and an advisor shown another.
   const src = read(`${SRC}/services/advisorConnect.ts`);
   const fn = src.slice(src.indexOf('export async function chargeSession'));
   const body = fn.slice(0, fn.indexOf('\n}\n'));
-  assert.match(body, /await takeRate\(env\)/, 'the rate must come from the setting');
-  assert.match(body, /cutCents\(gross, rate\.bps\)/, 'the fee must be the ledger’s own cut');
+  assert.equal(/takeRate\(/.test(body), false, 'the charge must not read the current rate');
+  assert.equal(/cutCents\(/.test(body), false, 'the charge must not recompute the cut');
+  assert.match(body, /args\.feeSnapshot/, 'the fee must come from the stored snapshot');
+  assert.match(body, /FeeSnapshotMissing/, 'a missing snapshot is refused, not repaired');
   assert.match(body, /application_fee_amount: String\(fee\)/);
   assert.match(body, /'transfer_data\[destination\]'/, 'a destination charge, not a plain one');
   // NO SECOND ARITHMETIC. A literal percentage or a hand-rolled multiply here
@@ -219,7 +221,7 @@ test('the intent carries the rate it was charged at, and names the product', () 
   const src = read(`${SRC}/services/advisorConnect.ts`);
   // A dispute six months later is settled by what the processor recorded, not
   // by what the setting says then.
-  assert.match(src, /'metadata\[take_rate_bps\]': String\(rate\.bps\)/);
+  assert.match(src, /'metadata\[take_rate_bps\]': String\(bps\)/);
   // One Stripe platform account now carries connected accounts for two
   // products; without this they are indistinguishable in any reconciliation.
   assert.match(src, /'metadata\[axal_product\]': 'advisory'/);
@@ -368,11 +370,12 @@ test('no advisory surface renders a charge as accomplished fact', () => {
   // deployment that reads as live is the failure this whole flag exists to
   // prevent.
   const page = read(`${SRC}/../../frontend/src/pages/advisor/practice/EarningsZone.jsx`);
-  // The page branches on the mode rather than asserting one.
-  assert.match(page, /d\.settlement === 'none'/);
+  // The page branches on the mode rather than asserting one. #4834 (D4834):
+  // it reads `settlement` from the ledger response (`L`) now.
+  assert.match(page, /L\.settlement === 'none'/);
   assert.match(page, /Payments are running in/);
   // And the mode is RENDERED, so a reader in test mode is told it is test.
-  assert.match(page, /\{d\.settlement\}/);
+  assert.match(page, /\{L\.settlement\}/);
 
   // The worker never hard-codes the answer.
   const adv = read(`${SRC}/routes/advisors.ts`);
@@ -385,4 +388,26 @@ test('no advisory surface renders a charge as accomplished fact', () => {
   // comes to be described as live.
   assert.match(money, /from '\.\.\/util\/paymentMode'/);
   assert.match(money, /isProductionEnv\(env\) \? 'live' : 'test'/);
+});
+
+// D4703 (#4703) part 3: a charge that lands on a cancelled or missed booking.
+test('D4703: a charge on a cancelled booking is collected and recorded as owed back, once', async () => {
+  // Mutation checked: the refunds-due INSERT removed → no row; ON CONFLICT dropped → a redelivery fails.
+  const db = freshDb();
+  db.exec(readFileSync(`${SQL}/migrations/202611070915_advisory_refunds_due.sql`, 'utf8'));
+  const e = env(db);
+  db.prepare(`INSERT INTO advisor_bookings (uid, advisor_id, slot_id, amount_cents, billing_state, status)
+     VALUES ('b_c', 1, 7, 30000, 'billed', 'cancelled'), ('b_ok', 1, 8, 30000, 'billed', 'completed')`).run();
+  const pi = (uid: string, id: string) => ({ id, currency: 'usd', amount_received: 30_000, application_fee_amount: 4_500, metadata: { booking_uid: uid, take_rate_bps: '1500' } });
+  await markSessionCharged(e, pi('b_c', 'pi_c'));
+  await markSessionCharged(e, pi('b_ok', 'pi_ok'));
+  assert.equal((db.prepare("SELECT billing_state FROM advisor_bookings WHERE uid = 'b_c'").get() as any).billing_state, 'collected',
+    'the money was collected, and the booking says so');
+  const due = db.prepare('SELECT booking_uid, booking_status, payment_intent_id, amount_cents, currency, resolved_at FROM advisory_refunds_due').all().map((r: any) => ({ ...r }));
+  assert.deepEqual(due, [{ booking_uid: 'b_c', booking_status: 'cancelled', payment_intent_id: 'pi_c', amount_cents: 30000, currency: 'usd', resolved_at: null }],
+    'owed back for the cancelled booking only');
+  // A redelivery after billing_state was reset (a retry before the first write landed) still writes one row.
+  db.prepare("UPDATE advisor_bookings SET billing_state = 'billed' WHERE uid = 'b_c'").run();
+  await markSessionCharged(e, pi('b_c', 'pi_c'));
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM advisory_refunds_due').get() as any).n, 1);
 });

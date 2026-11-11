@@ -36,6 +36,8 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { isSentence, userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { newDeckFailure } from './pitchSafeErrors.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckActionsApi } from '../../../lib/api/deckActions.js';
@@ -55,6 +57,7 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
+import { deckImportsApi } from '../../../lib/api/deckImports.js';
 import { deckInstructApi } from '../../../lib/api/deckInstruct.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
 import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
@@ -87,6 +90,7 @@ export const unavailable = (issue, reason = NOT_ON) => Object.freeze({ available
 export const SURFACES = Object.freeze({
   grid: { issue: 3749, what: 'The 17 structures, divider drag and the 4:3 slide size' },
   saveCard: { issue: 3751, what: 'Autosave, one card at a time' },
+  saveDoc: { issue: 4596, what: 'Autosave of the cards kept, their order, the theme and the audience' },
   discardDraft: { issue: 3751, what: 'Discard the unsaved draft' },
   draft: { issue: 3751, what: 'Restore unsaved changes' },
   batch: { issue: 3753, what: 'Live build progress, per area' },
@@ -127,6 +131,7 @@ export const SURFACES = Object.freeze({
   outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
+  importDocument: { issue: 3810, what: 'Start from a document: paste, DOCX, PDF or a .pptx deck' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -163,8 +168,8 @@ export async function through(call, issue) {
     if (status === 404) return unavailable(issue);
     // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` on a
     // Worker without its binding) is still "Coming later", with the Worker's own sentence.
-    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
-    const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
+    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, isSentence(e?.message) ? e.message.trim() : NOT_ON);
+    const message = status === 402 ? newDeckFailure(e) : userFacingRaiseError(e, { fallback: 'could not be read', scope: 'raise:pitch:adapter' });
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
     return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
@@ -188,6 +193,7 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 // D1501 (#3751): wired. A card's working copy (`If-Match: <rev>`, 0 for its first), the draft read for
 // "Restore unsaved changes from …", and Discard.
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
+export const saveDoc = (deckId, body, rev) => through(() => deckDraftApi.saveDoc(deckId, body, rev), SURFACES.saveDoc.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
 // D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
@@ -260,7 +266,10 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
  * generate, icons: { total, offset, items } }`.
  */
-export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
+// D4574 H3 (#4574): the icon nodes are a static asset the Worker reads, so a
+// page of icons can come back `unreadable`. It is passed on, never flattened
+// to an empty list: the panel says the set could not be read.
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null, unreadable: page?.unreadable === true, reason: page?.reason ?? null } })), SURFACES.elementsLibrary.issue);
 /**
  * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
  * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
@@ -315,6 +324,8 @@ export const outlineReorder = off('outlineReorder');
 // The lock switches and Save as your layouts write through `deckBrandLocksApi` and `deckLayoutsApi`.
 export const brandLocks = (projectId) => through(() => deckBrandLocksApi.locks(projectId), SURFACES.brandLocks.issue);
 export const pptxImport = (projectId, file) => through(() => deckLayoutsApi.importTemplate(projectId, file), SURFACES.pptxImport.issue);
+// D1563 (#3810): Start from › Import a document — paste, DOCX and PDF to an outline, a .pptx to editable cards.
+export const importDocument = (projectId, input) => through(() => deckImportsApi.importDocument(projectId, input), SURFACES.importDocument.issue);
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);

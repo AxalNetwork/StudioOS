@@ -23,15 +23,17 @@ const inputCls = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm d
 
 /** The server's refusal as a sentence: the field it names, or the step-up it needs. */
 export function saveError(e) {
+  if (e?.code === 'terms_conflict') return 'These terms changed since you opened them, so nothing was saved. The current terms are loaded; check your change and save again.';
   if (e?.code === 'step_up_required') return 'Your step-up has lapsed. Confirm with your authenticator, then save again. Nothing was saved.';
   return e?.message || 'The terms could not be saved. Nothing was changed.';
 }
 
-function TermInput({ field, value, onChange, currency }) {
-  const id = `term-input-${field.key}`;
+// D4819: also the Terms section's amendment input, which names its own id and its error (`describedBy`).
+export function TermInput({ field, value, onChange, currency, id = `term-input-${field.key}`, describedBy, invalid }) {
+  const a11y = { 'aria-describedby': describedBy || undefined, 'aria-invalid': invalid ? true : undefined };
   if (field.type === 'enum') {
     return (
-      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label}>
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label} {...a11y}>
         <option value="">{NOT_RECORDED}</option>
         {field.values.map((v) => <option key={v} value={v}>{enumLabel(v)}</option>)}
       </select>
@@ -39,7 +41,7 @@ function TermInput({ field, value, onChange, currency }) {
   }
   if (field.type === 'bool') {
     return (
-      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label}>
+      <select id={id} className={inputCls} value={value} onChange={(e) => onChange(e.target.value)} aria-label={field.label} {...a11y}>
         <option value="">{NOT_RECORDED}</option>
         <option value="yes">Yes</option>
         <option value="no">No</option>
@@ -49,14 +51,14 @@ function TermInput({ field, value, onChange, currency }) {
   if (field.type === 'text') {
     return (
       <textarea id={id} rows={2} maxLength={field.max} className={inputCls} value={value}
-        placeholder={NOT_RECORDED} aria-label={field.label} onChange={(e) => onChange(e.target.value)} />
+        placeholder={NOT_RECORDED} aria-label={field.label} onChange={(e) => onChange(e.target.value)} {...a11y} />
     );
   }
   const unit = unitOf(field, currency);
   return (
     <div className="flex items-center gap-2">
       <input id={id} inputMode="decimal" className={inputCls} value={value} placeholder={NOT_RECORDED}
-        aria-label={field.label} onChange={(e) => onChange(e.target.value)} />
+        aria-label={field.label} onChange={(e) => onChange(e.target.value)} {...a11y} />
       {unit && <span className="shrink-0 text-[11px] text-gray-500">{unit}</span>}
     </div>
   );
@@ -64,14 +66,14 @@ function TermInput({ field, value, onChange, currency }) {
 
 /** The editor, given the stored schedule. Separate from the loader so a test can draw it. */
 export function TermsScheduleForm({ licence, stored, highlight, onSave }) {
-  const [form, setForm] = useState(() => initialForm(stored));
+  const [form, setForm] = useState(() => initialForm(stored, undefined, licence.currency));
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => { setForm(initialForm(stored)); }, [stored]);
+  useEffect(() => { setForm(initialForm(stored, undefined, licence.currency)); }, [stored, licence.currency]);
   useEffect(() => {
     if (!highlight) return;
     const el = typeof document !== 'undefined' ? document.getElementById(termRowId(highlight)) : null;
@@ -84,7 +86,7 @@ export function TermsScheduleForm({ licence, stored, highlight, onSave }) {
   async function save(e) {
     e?.preventDefault?.();
     setServerError('');
-    const built = buildSave(stored, form, reason);
+    const built = buildSave(stored, form, reason, undefined, licence.currency);
     if (!built.ok) { setErrors(built.errors); return; }
     setErrors({});
     setBusy(true);
@@ -145,9 +147,11 @@ export function TermsScheduleForm({ licence, stored, highlight, onSave }) {
 /** The section: loads the schedule, saves it, and tells the page so its history reloads. */
 export default function LicenceTermsSchedule({ licence, highlight, onSaved }) {
   const [stored, setStored] = useState(undefined);
+  // D4694 — another save got there first: the typed edits stay until the person chooses to load the current terms.
+  const [conflict, setConflict] = useState(false);
   const load = useCallback(() => {
     licenceTermsApi.get(licence.uid)
-      .then((r) => setStored({ terms: r?.terms || {}, sections: r?.sections || {} }))
+      .then((r) => setStored({ terms: r?.terms || {}, sections: r?.sections || {}, revision: Number(r?.revision ?? 0) }))
       .catch((e) => { reportError('licence_terms_schedule_load_failed', e); setStored(null); });
   }, [licence.uid]);
   useEffect(load, [load]);
@@ -155,11 +159,27 @@ export default function LicenceTermsSchedule({ licence, highlight, onSaved }) {
   if (stored === undefined) return <p className="text-sm text-gray-500">Loading…</p>;
   if (stored === null) return <p className="text-sm text-red-600">The terms schedule could not be read, so it cannot be edited here.</p>;
   return (
-    <TermsScheduleForm licence={licence} stored={stored} highlight={highlight}
-      onSave={async (body) => {
-        const r = await licenceTermsApi.save(licence.uid, body);
-        setStored({ terms: r?.terms || {}, sections: r?.sections || {} });
-        onSaved?.();
-      }} />
+    <>
+      <TermsScheduleForm licence={licence} stored={stored} highlight={highlight}
+        onSave={async (body) => {
+          try {
+            const r = await licenceTermsApi.save(licence.uid, body);
+            setConflict(false);
+            setStored({ terms: r?.terms || {}, sections: r?.sections || {}, revision: Number(r?.revision ?? 0) });
+            onSaved?.();
+          } catch (err) {
+            if (err?.code === 'terms_conflict') setConflict(true);
+            throw err;
+          }
+        }} />
+      {conflict && (
+        <p className="mt-2 text-[12px] text-amber-800" role="alert" data-testid="licence-terms-conflict">
+          Someone else saved these terms first, so nothing was saved.{' '}
+          <button type="button" className="underline" data-testid="licence-terms-reload"
+            onClick={() => { setConflict(false); load(); }}>Load the current terms</button>{' '}
+          (your unsaved edits are replaced).
+        </p>
+      )}
+    </>
   );
 }

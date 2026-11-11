@@ -9,6 +9,8 @@ export const createPlan = (body) => learningPlanApi.create(body);
 export const updatePlan = (uid, body) => learningPlanApi.update(uid, body);
 export const removePlan = (uid) => learningPlanApi.remove(uid);
 export const markPlanDone = (uid) => learningPlanApi.markDone(uid);
+/** D4650 (#4650): the member's next learning action and why ("Next for you" on My learning). */
+export const nextAction = () => learningPlanApi.next();
 
 /**
  * The picker's list for one kind: what the member may plan, each

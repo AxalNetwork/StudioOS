@@ -10,7 +10,10 @@ const STAGES = {
 const RESULT = {
   pass: 'text-emerald-700 dark:text-emerald-300', fail: 'text-red-700 dark:text-red-300',
   skipped: 'text-axal-muted dark:text-gray-400', running: 'text-amber-700 dark:text-amber-300',
+  unrecorded: 'text-amber-700 dark:text-amber-300',
 };
+// #4857: a failed check and a report that never arrived are different facts, in different words.
+const RESULT_WORD = { running: 'Running…', unrecorded: 'Not recorded' };
 const label = (s) => String(s).replaceAll('_', ' ');
 const field = 'mt-1 w-full rounded-lg border border-axal-hairline bg-axal-ground dark:bg-gray-950 dark:border-gray-700 px-3 py-2 text-sm text-axal-ink dark:text-white';
 const button = 'rounded-lg border border-axal-hairline px-3 py-2 text-xs font-bold dark:border-gray-600 hover:bg-axal-ground dark:hover:bg-gray-800 disabled:opacity-50';
@@ -24,8 +27,8 @@ export function DiagnosisTable({ diagnosis }) {
       <thead className="text-xs text-axal-muted dark:text-gray-300"><tr><th className="py-1 pr-3">Stage</th><th className="py-1 pr-3">Result</th><th className="py-1 pr-3">What it found</th><th className="py-1">Fix</th></tr></thead>
       <tbody>{diagnosis.rows.map((row) => <tr key={row.stage} className="border-t border-axal-hairline align-top dark:border-gray-700" data-stage={row.stage} data-result={row.result}>
         <td className="py-2 pr-3 font-bold">{STAGES[row.stage] || label(row.stage)}</td>
-        <td className={`py-2 pr-3 font-bold capitalize ${RESULT[row.result] || ''}`}>{row.result === 'running' ? 'Running…' : row.result}</td>
-        <td className="py-2 pr-3"><span className="font-mono text-xs">{row.code}</span>{Object.keys(row.facts || {}).length > 0 && <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-axal-muted dark:text-gray-300">{Object.entries(row.facts).map(([k, v]) => <React.Fragment key={k}><dt>{label(k)}</dt><dd className="font-mono">{String(v)}</dd></React.Fragment>)}</dl>}</td>
+        <td className={`py-2 pr-3 font-bold capitalize ${RESULT[row.result] || ''}`}>{RESULT_WORD[row.result] || row.result}{row.delivery === 'late' && <span className="block text-xs font-normal normal-case text-axal-muted dark:text-gray-300">Report arrived late, after {row.attempts || 1} failed {(row.attempts || 1) === 1 ? 'send' : 'sends'}. The result is the check’s own.</span>}</td>
+        <td className="py-2 pr-3">{row.result === 'unrecorded' && <span className="block text-xs">The report for this step did not arrive, so the console cannot say whether it passed. This is a reporting problem, not a failed check.</span>}<span className="font-mono text-xs">{row.code}</span>{Object.keys(row.facts || {}).length > 0 && <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-axal-muted dark:text-gray-300">{Object.entries(row.facts).map(([k, v]) => <React.Fragment key={k}><dt>{label(k)}</dt><dd className="font-mono">{String(v)}</dd></React.Fragment>)}</dl>}</td>
         <td className="py-2 text-xs">{row.fix || '—'}</td>
       </tr>)}</tbody>
     </table>
@@ -51,12 +54,12 @@ export default function MeetingBotDiagnosePanel() {
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [diagnosis?.id, diagnosis?.screenshot]);
   const start = async (event) => {
-    event.preventDefault(); setBusy(true); setError(''); setShot(null);
+    event?.preventDefault?.(); setBusy(true); setError(''); setShot(null);
     try { const result = await adminMeetingBotsApi.diagnose(link.trim()); setDiagnosis(result.diagnosis); }
     catch (e) { setError(e?.message === 'TOTP required' ? NEEDS_TOTP_SESSION : (e?.message || 'The diagnostic could not start.')); }
     finally { setBusy(false); }
   };
-  const stop = diagnosis?.stops_at;
+  const stop = diagnosis?.stops_at, unrecorded = diagnosis?.unrecorded || [];
   return <Card data-testid="meeting-bot-diagnose">
     <h2 className="font-bold">Diagnose Eadwyn AI</h2>
     <p className="mt-1 text-sm text-axal-muted dark:text-gray-300">Open a Google Meet or Zoom call you host, paste its link, and stay in the call to admit Eadwyn AI. Each stage runs in order and says where it stops. No session, consent or AI tokens are used, and no audio, names or page text are kept. A screenshot of the stopping point is kept for you only.</p>
@@ -66,7 +69,11 @@ export default function MeetingBotDiagnosePanel() {
     </form>
     {error && <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-300">{error}</p>}
     {diagnosis && <>
-      <p role="status" className="mt-4 text-sm font-bold">{!diagnosis.done ? 'Running… admit Eadwyn AI when it asks to join.' : stop ? `Stops at: ${STAGES[stop] || label(stop)}.` : 'Every stage passed.'}</p>
+      <p role="status" className="mt-4 text-sm font-bold">{!diagnosis.done ? 'Running… admit Eadwyn AI when it asks to join.' : stop ? `Stops at: ${STAGES[stop] || label(stop)}.` : unrecorded.length ? 'No stage failed, but not every result was recorded.' : 'Every stage passed.'}</p>
+      {diagnosis.done && unrecorded.length > 0 && <div role="alert" className="mt-2 text-sm text-amber-700 dark:text-amber-300" data-testid="diagnosis-delivery-failure">
+        <p>Not recorded: {unrecorded.map((u) => STAGES[u] || label(u)).join(', ')}. Eadwyn AI’s report for {unrecorded.length === 1 ? 'this step' : 'these steps'} did not reach the console, so {unrecorded.length === 1 ? 'it' : 'they'} may have passed or failed. That is a reporting problem, not a failed check.</p>
+        <button type="button" className={`${button} mt-2`} disabled={busy || !link.trim()} onClick={() => start()}>Try again</button>
+      </div>}
       <DiagnosisTable diagnosis={diagnosis} />
       {diagnosis.probe_bytes != null && <p className="mt-2 text-xs text-axal-muted dark:text-gray-300">The Worker received a {diagnosis.probe_bytes}-byte probe chunk (silence the length of the first frames) and kept only its size.</p>}
       {shot && <figure className="mt-4"><img src={shot} alt="The meeting page where Eadwyn AI stopped" className="max-w-full rounded-lg border border-axal-hairline dark:border-gray-700" /><figcaption className="mt-1 text-xs text-axal-muted dark:text-gray-300">The stopping point, visible to you only.</figcaption></figure>}

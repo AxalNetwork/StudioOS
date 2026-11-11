@@ -15,6 +15,7 @@ import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import { SpinoutReadiness } from './StudioActions';
 import { availability, cardStatus } from './deckV2Adapter';
 import TemplateImport from './TemplateImport';
+import DocumentImport from './DocumentImport';
 import { notDonePill } from './cardStatusModel';
 import { LATER, aiOffState } from './deckV2Model';
 import { AiOffBanner } from './DeckAsk';
@@ -50,7 +51,9 @@ import {
  *   Start from      Standard outline (New deck), Build a standard deck now
  *                   (the one-click, from your records: `OneClickBuild.jsx`),
  *                   Browse templates (the gallery, `TemplatesGallery.jsx`) and
- *                   Import a .pptx template, greyed "Coming later" (#3819).
+ *                   Import a .pptx template (#3819, `TemplateImport.jsx`) and
+ *                   Import a document (#3810, `DocumentImport.jsx`: paste,
+ *                   DOCX or PDF to an outline, a .pptx deck to its cards).
  *                   A reader gets no Start from: the deck card takes the row
  *   Data ready      `DataReady.jsx`: each area's share and "Add in … ›"
  *   Investor links  shared links, unique viewers, median time, views by
@@ -96,6 +99,8 @@ export const START_ITEMS = Object.freeze([
   // D1604 step 15: the gallery (`TemplatesGallery.jsx`). Its stage, audience and style filters wait on #3782 there.
   { id: 'templates', label: 'Browse templates ›', line: 'Start from a template, by stage and audience', to: TEMPLATES_PATH },
   { id: 'pptx', label: 'Import a .pptx template ›', line: 'Map your own layouts to The Grid', adapter: 'pptxImport' },
+  // D1563 (#3810): paste, DOCX and PDF to an outline; a .pptx deck to editable cards. Both land on the shared review.
+  { id: 'document', label: 'Import a document ›', line: 'Start from your own deck, plan or notes', adapter: 'importDocument' },
 ]);
 /** The deck card's ⋯, in its order; `write` items are a writer's. */
 export const DECK_CARD_MENU = Object.freeze([
@@ -325,7 +330,7 @@ export function DeckNotDone({ deckId }) {
   return <span className={`${PILL} border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200`} data-testid="pitch-studio-not-done">{line}</span>;
 }
 
-/** pd1's Start from: four ways to begin, the one-click among them. */
+/** pd1's Start from: five ways to begin, the one-click among them. */
 function StartFrom({ projectId, q }) {
   const [importing, setImporting] = useState(false);
   return (
@@ -336,10 +341,11 @@ function StartFrom({ projectId, q }) {
           if (it.id === 'fast') return projectId != null ? <OneClickBuild key={it.id} projectId={projectId} q={q} /> : null;
           const off = it.adapter ? availability(it.adapter) : null;
           // D1572 (#3819): pd30's import opens its sheet here, beside the other ways to begin.
-          if (it.id === 'pptx' && !off && projectId != null) {
+          // D1563 (#3810): "Import a document" opens its own sheet the same way.
+          if ((it.id === 'pptx' || it.id === 'document') && !off && projectId != null) {
             return (
               <li key={it.id} className="flex flex-col gap-0.5 border-t border-axal-hairline py-3 first:border-t-0 dark:border-gray-700" data-testid={`pitch-studio-start-${it.id}`}>
-                <button type="button" className={`text-left text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} onClick={() => setImporting(true)} data-testid={`pitch-studio-start-${it.id}-open`}>{it.label}</button>
+                <button type="button" className={`text-left text-[13.5px] font-bold ${INK} hover:text-axal-violet dark:hover:text-violet-300`} onClick={() => setImporting(it.id)} data-testid={`pitch-studio-start-${it.id}-open`}>{it.label}</button>
                 <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{it.line}</span>
               </li>
             );
@@ -363,7 +369,8 @@ function StartFrom({ projectId, q }) {
           );
         })}
       </ul>
-      {importing ? <TemplateImport projectId={projectId} onClose={() => setImporting(false)} /> : null}
+      {importing === 'pptx' ? <TemplateImport projectId={projectId} onClose={() => setImporting(false)} /> : null}
+      {importing === 'document' ? <DocumentImport projectId={projectId} q={q} onClose={() => setImporting(false)} /> : null}
     </section>
   );
 }

@@ -9,9 +9,11 @@
  * CSRF only matters for the cookie flow, because that's the only path the
  * browser will ambient-auth on a cross-site form POST. So this middleware:
  *   - Only runs for mutating verbs (POST/PUT/PATCH/DELETE).
- *   - Skips entirely if the request already carries `Authorization` (Bearer
- *     flow — the attacker would need to read & inject the token themselves,
- *     which CSRF can't help with).
+ *   - Skips if the request is authenticated by its `Authorization` Bearer
+ *     (the attacker would need to read & inject the token themselves, which
+ *     CSRF can't help with). D4669: "authenticated by" is `selectJwt`'s
+ *     choice, not the header's presence — a Bearer that loses to the cookie
+ *     does not exempt the cookie.
  *   - Skips if no `studioos_auth` cookie is present (request will 401 at the
  *     route's own auth check; no point CSRF-ing an unauth'd request).
  *   - Otherwise requires the `X-CSRF-Token` header to match the
@@ -28,6 +30,7 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { authCookieName, csrfCookieName } from '../util/branch';
+import { decodeJWT, pickAuthToken } from '../auth';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // The cookie names are per Worker: `studioos_auth` / `studioos_csrf` on HQ,
@@ -66,6 +69,21 @@ function readCookie(cookieHeader: string, name: string): string | null {
   return null;
 }
 
+/**
+ * Whether `getCurrentUser` would authenticate this request with the Bearer
+ * rather than the cookie: `selectJwt`'s precedence, decided by the same
+ * `pickAuthToken`, without `selectJwt`'s audit write (the route's own auth
+ * makes that one).
+ */
+async function bearerAuthenticates(env: Env, bearer: string, cookie: string): Promise<boolean> {
+  let b: { user_id?: number; impersonated_by?: number } | null = null;
+  let k: { user_id?: number } | null = null;
+  try { b = await decodeJWT(env, bearer); } catch { b = null; }
+  if (!b) return false;
+  try { k = await decodeJWT(env, cookie); } catch { k = null; }
+  return pickAuthToken({ bearer: b, cookie: k }) === 'bearer';
+}
+
 export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
   return async (c, next) => {
     if (SAFE_METHODS.has(c.req.method)) return next();
@@ -74,14 +92,25 @@ export function csrfMiddleware(): MiddlewareHandler<{ Bindings: Env }> {
     if (CSRF_PATH_EXEMPT.has(c.req.path)) return next();
     // D1312 — a Lovable page's sign-up form posts from another site; the token in the address is the authorisation.
     if (c.req.path.startsWith('/api/validate/lovable-signups/')) return next();
-
-    // Bearer flow: no ambient credentials → no CSRF concern.
-    const authHeader = c.req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) return next();
+    // D5333 — a sequence's opt-out POST, from its own page's form or a mail client's RFC 8058 one-click:
+    // the signed token in the address is the authorisation, as for the newsletter's one-click route.
+    if (c.req.path.startsWith('/api/grow/optout/')) return next();
 
     const cookieHeader = c.req.header('Cookie') || '';
     const authCookie = readCookie(cookieHeader, authCookieName(c.env));
     if (!authCookie) return next();
+
+    // Bearer flow: no ambient credentials → no CSRF concern — BUT ONLY WHEN
+    // THE BEARER IS WHAT AUTHENTICATES (D4669). `selectJwt` prefers the cookie
+    // whenever the Bearer is empty, undecodable or another identity's, and the
+    // check used to skip on the header's mere presence, so the request was
+    // authenticated by the ambient cookie with no CSRF check. The exemption
+    // now follows the same choice `getCurrentUser` makes (`bearerAuthenticates`).
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const bearer = authHeader.slice(7);
+      if (bearer && await bearerAuthenticates(c.env, bearer, authCookie)) return next();
+    }
 
     const csrfCookie = readCookie(cookieHeader, csrfCookieName(c.env));
     const csrfHeader = c.req.header(CSRF_HEADER);

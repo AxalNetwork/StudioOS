@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import useKeyedRead from '../../../hooks/useKeyedRead';
+import { useActiveCompany } from '../../../contexts/ActiveCompanyContext';
 import { partnerZoneActions } from '../../../workspaces/partnerZoneActions';
 import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
@@ -128,29 +130,31 @@ function shapeRead(s) {
 }
 
 export default function PartnerPipelineAnalyticsZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
   const [view, setView] = useState('quarter');
-
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const r = await api.quotesAnalytics(windowOf(view));
-      setState({ loading: false, error: '', data: r || null });
-    } catch (e) {
-      setState({ loading: false, error: e?.message || 'The pipeline analytics did not load.', data: null });
-    }
-  }, [view]);
+  const { company } = useActiveCompany();
+  // THE ANSWER BELONGS TO THE CHIP AND THE COMPANY IT WAS ASKED FOR (#4701).
+  // The read used to set state whenever its request settled, so pressing
+  // "Last quarter" then "Year to date" could leave the slower first answer on
+  // screen under the second chip. Keyed reads drop an answer whose period or
+  // company is no longer the one selected, and show loading — not the previous
+  // chip's figures — while the new one is on its way.
+  const read = useKeyedRead(`${view}|${company?.id ?? 'none'}`, () => api.quotesAnalytics(windowOf(view)));
+  const state = {
+    loading: read.status === 'loading',
+    error: read.status === 'unreadable' ? 'The pipeline analytics could not be read.' : '',
+    data: read.data || null,
+  };
+  const load = read.reload;
   // `view` IS A DEPENDENCY BECAUSE THE WINDOW IS THE WORKER'S. The chips do not
   // narrow rows on this page — there are no rows here, only aggregates — so a
-  // chip press has to re-read. An effect keyed on `[]` would leave every chip
-  // showing the first window's figures, which is the bug this zone's sibling
-  // `delivery/capacity` shipped with.
-  useEffect(() => { load(); }, [load]);
+  // chip press has to re-read.
 
   const d = state.data;
   const windowLabel = WINDOWS[windowOf(view)];
   const p = d?.pipeline || null;
   const f = d?.forecast || null;
+  // How many open quotes the forecast is over (D4838): none is "nothing open to forecast", never $0.
+  const forecastOpen = Array.isArray(f?.by_stage) ? f.by_stage.reduce((n, s) => n + (Number(s?.count) || 0), 0) : 0;
   const shapes = useMemo(() => (Array.isArray(d?.by_shape) ? d.by_shape : []), [d]);
   const quarters = useMemo(() => (Array.isArray(d?.by_quarter) ? d.by_quarter : []), [d]);
   const losses = useMemo(() => (Array.isArray(d?.loss_reasons) ? d.loss_reasons : []), [d]);
@@ -244,11 +248,13 @@ export default function PartnerPipelineAnalyticsZone() {
             />
             {/* NOT NARROWED BY THE CHIP, and the note says so rather than
                 letting a reader assume the window applies to it. */}
+            {/* D4838: ZERO ONLY OVER A POPULATION. The Worker always sends a forecast object, so `!f` never fired and
+                a firm with nothing open read "$0" over "$0 open". The population is the open quotes it counted. */}
             <AnalyticsTile
               label="Weighted forecast"
-              value={f ? moneyDollars(f.weighted_value) : ''}
-              nr={!f}
-              note={f
+              value={forecastOpen ? moneyDollars(f.weighted_value) : ''}
+              nr={!forecastOpen}
+              note={forecastOpen
                 ? `${moneyDollars(f.unweighted_value)} open · every window`
                 : 'nothing open to forecast'}
             />

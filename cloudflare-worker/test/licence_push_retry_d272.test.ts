@@ -26,6 +26,7 @@ import {
 import { applyLicenceCopy } from '../src/rpc/branchOps.ts';
 
 import { compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { licenceRoutesSource } from './_licenceRoutes.mjs';
 const MIGRATION_295 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/295_licence_push_pending.sql'), 'utf8');
 
 function coerce(a: any[]): any[] {
@@ -50,6 +51,7 @@ function hqDb() {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   d.exec(`
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY, uid TEXT, licence_ref TEXT, legal_entity_name TEXT, brand_name TEXT,
       registered_address TEXT, signatory_name TEXT, signatory_title TEXT, status TEXT,
       term_years INTEGER, annual_fee_cents INTEGER, currency TEXT,
@@ -178,14 +180,18 @@ test('D272: every licence change that alters the branch copy pushes it', () => {
   // The copy carries territories, seats, the commercial terms, the status and
   // the latest contract's template version. Each route that changes one of
   // them must push, or its branch keeps the old value until an unrelated
-  // transition happens to push. Read per handler: the push must follow the
-  // handler's own event, before its response.
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_licences.ts'), 'utf8');
+  // transition happens to push. Read per handler: the handler that writes the
+  // event must push before its response. D4707 moved some events AFTER the
+  // push (licence_events is immutable, so a row records the push's outcome
+  // when it is written), so the window is the whole handler up to the
+  // response, not only the text after the event.
+  const src = licenceRoutesSource();
   for (const event of ["'territory_changed'", "'seats_changed'", "'terms_changed'", "'contract_instantiated'", "'reinstated', admin.id, { notice_uid"]) {
     const at = src.indexOf(event);
     assert.ok(at > 0, `no ${event} event`);
-    const tail = src.slice(at, src.indexOf('return c.json(', at));
-    assert.match(tail, /pushLicenceToBranch\(c\.env, licence\.id\)/, `${event} changes the branch copy and does not push it`);
+    const handler = src.slice(src.lastIndexOf('\nr.', at), src.indexOf('return c.json(', at));
+    assert.match(handler, /^\nr\.(post|put|patch)\(/, `${event}: the handler that writes it was not found`);
+    assert.match(handler, /pushLicenceToBranch\(c\.env, licence\.id\)/, `${event} changes the branch copy and does not push it`);
   }
 });
 

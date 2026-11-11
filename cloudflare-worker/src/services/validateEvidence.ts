@@ -7,7 +7,8 @@
  *     440): one item per interview that names the linked theme, by the read's
  *     own phrase rule (`resolvePhrase`);
  *   - `hypothesis_evidence_links` (migration 460): an interview, a demand
- *     record, a KPI labelled with its latest value in `project_metrics`, or an
+ *     record, a KPI labelled with its latest value in `project_metrics`, a tracked
+ *     PostHog metric (`posthog-<uid>`, D4585) with its latest connector value, or an
  *     experiment with its result.
  *
  * IDS. Each item's `id` names its link, so it is unique across the venture
@@ -30,6 +31,7 @@
 import type { Env } from '../types';
 import { loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings } from './painGroups';
 import { KPI_KEYS, latestKpis, type KpiKey } from './validateWriters';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export type EvidenceItemFull = {
   id: string;
@@ -41,6 +43,11 @@ export type EvidenceItemFull = {
   direction: 'supports' | 'contradicts';
   date: string | null;
   hypothesis_id: number;
+  /**
+   * Experiments only (D4586 § 4): whether the experiment has an observed result. Planned, running,
+   * or done with no result recorded is `false`: kept as context, never counted as a result.
+   */
+  observed?: boolean;
 };
 
 export type EvidenceCtx = { env: Env; projectId: number };
@@ -53,11 +60,31 @@ export const KPI_LABEL: Record<KpiKey, string> = {
   new_users: 'New users', net_burn: 'Net burn', cash_balance: 'Cash balance', headcount: 'Headcount',
   nrr_pct: 'NRR', paying_accounts: 'Paying accounts',
 };
+export const POSTHOG_ROLE: Record<string, string> = {
+  active_users: 'Active users', new_users: 'New users', activation: 'Activation', retention: 'Retention',
+  conversion: 'Conversion', sessions: 'Sessions', other: 'PostHog metric',
+};
 const SIGNAL_KIND: Record<string, string> = {
   loi: 'Letter of intent', pre_sale: 'Pre-sale', waitlist: 'Waitlist sign-up', need_to_have: 'Need-to-have mention', would_pay: 'Would pay',
 };
 const money = (cents: number | null, currency: string | null) =>
-  cents == null ? null : `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(currency || 'usd').toUpperCase()}`;
+  cents == null ? null : suffixAmount(cents, String(currency || 'usd').toUpperCase(), { trimWhole: true });
+
+/** D4586 § 4: an experiment supplies an observed result only once a result is recorded, whatever its status. */
+export const experimentObserved = (result: string | null | undefined) => typeof result === 'string' && result.trim() !== '';
+
+const STATUS_WORD: Record<string, string> = { planned: 'Planned', running: 'Running', done: 'Done' };
+
+/**
+ * D4586 § 4: an experiment's evidence word. Its result when one is recorded; otherwise its status
+ * and that no result is in, so a done experiment never reads as a finding: "Done · no result
+ * recorded", "Running · no result yet".
+ */
+export function experimentWord(status: string | null | undefined, result: string | null | undefined): string {
+  if (experimentObserved(result)) return String(result).trim();
+  const s = String(status ?? '');
+  return s === 'done' ? 'Done · no result recorded' : `${STATUS_WORD[s] ?? 'Status not recorded'} · no result yet`;
+}
 
 /** Every evidence item on the venture's claims, or on one claim. */
 export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: number } = {}): Promise<EvidenceItemFull[]> {
@@ -114,8 +141,22 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
   const kpis = ev.some((e) => e.kind === 'metric') ? await latestKpis(env, projectId) : new Map();
   for (const e of ev) {
     let label: string | null = null;
+    let observed: boolean | undefined;
     let date: string | null = e.created_at ? String(e.created_at).slice(0, 10) : null;
-    if (e.kind === 'metric') {
+    if (e.kind === 'metric' && e.ref_id.startsWith('posthog-')) {
+      // D4585 (#4585): a tracked PostHog metric, as `addEvidence` accepts it (D1605): its name, its latest value from
+      // the connector's facts, and that value's date. A metric no longer tracked is left out, as a missing record is;
+      // one tracked with no value now reads "Not recorded", never 0.
+      const m = await env.DB.prepare('SELECT uid, insight_name, role, unit FROM posthog_tracked_metrics WHERE uid = ? AND project_id = ?')
+        .bind(e.ref_id.slice('posthog-'.length), projectId).first<{ uid: string; insight_name: string | null; role: string; unit: string }>();
+      if (!m) continue;
+      const f = await env.DB.prepare(
+        "SELECT value, as_of FROM posthog_metric_facts WHERE project_id = ? AND kind = 'metric' AND fact_key = ? AND value IS NOT NULL ORDER BY as_of DESC, id DESC LIMIT 1",
+      ).bind(projectId, `metric:${m.uid}`).first<{ value: number | null; as_of: string | null }>();
+      const name = `${m.insight_name || POSTHOG_ROLE[m.role] || 'PostHog metric'} (PostHog)`;
+      label = f?.value != null ? `${name} · ${Number(f.value).toLocaleString('en-US', { maximumFractionDigits: 2 })}${m.unit === 'pct' ? '%' : ''}` : `${name} · Not recorded`;
+      date = f?.as_of ? String(f.as_of).slice(0, 10) : date;
+    } else if (e.kind === 'metric') {
       const k = e.ref_id as KpiKey;
       if (!(KPI_KEYS as readonly string[]).includes(k)) continue;
       const v = kpis.get(k);
@@ -126,7 +167,8 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
         'SELECT title, status, result FROM hypothesis_experiments WHERE id = ? AND project_id = ?',
       ).bind(Number(e.ref_id), projectId).first<{ title: string; status: string; result: string | null }>() : null;
       if (!x) continue;
-      label = `${x.title} · ${x.result || x.status}`;
+      observed = experimentObserved(x.result);
+      label = `${x.title} · ${experimentWord(x.status, x.result)}`;
     } else if (e.kind === 'signal') {
       const m = /^(signal|revenue|waitlist)-([1-9][0-9]{0,9})$/.exec(e.ref_id);
       if (!m) continue;
@@ -161,6 +203,7 @@ export async function evidenceFor(ctx: EvidenceCtx, opts: { hypothesisId?: numbe
     out.push({
       id: `evidence-${e.id}`, link: `evidence-${e.id}`, kind: e.kind as EvidenceItemFull['kind'], ref_id: e.ref_id,
       label: label as string, strength: strengthOf(e.strength), direction: dirOf(e.direction), date, hypothesis_id: Number(e.hypothesis_id),
+      ...(observed === undefined ? {} : { observed }),
     });
   }
   return out;

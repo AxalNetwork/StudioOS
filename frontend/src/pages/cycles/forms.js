@@ -726,9 +726,15 @@ const splitCheck = (v) => {
   if (v.runway === 'custom' && !(wholeOf(v.runway_months) >= 1 && wholeOf(v.runway_months) <= 120)) e.runway_months = 'Runway is a whole number of months from 1 to 120.';
   return e;
 };
+/**
+ * D5069: the Base revision the form opened at, by venture. Save split sends it back, so a split
+ * saved from a form opened before another save is refused (409 `changed_since_open`), not applied over it.
+ */
+const splitRevision = new Map();
 /** The stored split, so the form opens with it every time (decision 9). */
 const splitOptions = (w, projectId) => raiseOptions(w, projectId, 'use-of-funds').then((r) => {
   const out = {};
+  if (Number.isSafeInteger(r?.revision)) splitRevision.set(String(projectId), r.revision); else splitRevision.delete(String(projectId));
   const stored = new Map((Array.isArray(r?.sections) ? r.sections : []).map((s) => [String(s?.value), s]));
   for (const [key] of FUND_SECTIONS) {
     const s = stored.get(key);
@@ -759,7 +765,10 @@ const useOfFunds = {
     })),
     runway_months: v.runway === 'custom' ? wholeOf(v.runway_months) : Number(v.runway || 24),
   }),
-  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, useOfFunds.toBody(v)),
+  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, {
+    ...useOfFunds.toBody(v),
+    ...(splitRevision.has(String(projectId)) ? { expected_revision: splitRevision.get(String(projectId)) } : {}),
+  }),
 };
 
 /** The stages, stored as #1700 stores them: Identified is `to_contact`. */
@@ -1815,6 +1824,8 @@ const filingBody = (v) => ({
   kind: v.kind || null, jurisdiction: str(v.jurisdiction), due_date: str(v.due_date),
   for_holder_id: v.kind === '83b' ? str(v.for_holder_id) : null, state: v.state || null,
 });
+const filingIdempotencyKey = () => globalThis.crypto?.randomUUID?.()
+  ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const buildFiling = {
   key: 'filing', cta: 'Add filing', button: 'Add filing',
   title: 'Add filing',
@@ -1826,19 +1837,40 @@ const buildFiling = {
     jurisdiction: { options: [...readChips(read, 'jurisdiction'), { value: '', label: 'Other' }], def: 0 },
     for_holder_id: { options: readChips(read, 'for_holder_id') },
   })),
+  // D5306: one key for this open form. An ambiguous network retry reuses it;
+  // closing and opening a new form mints a new filing identity.
+  makeMemory: () => ({ idempotencyKey: filingIdempotencyKey() }),
   // Proof is the new step's own Upload proof (D690 decision 13), sent once the filing exists.
-  async submit(w, projectId, v) {
-    const made = await w.build.formationStep(projectId, buildFiling.toBody(v));
+  // D4600: `memory` lives as long as the open form. Once the filing exists its id is kept there,
+  // so a failed upload is retried against that filing and never creates a second one.
+  async submit(w, projectId, v, memory = {}) {
     const file = v.proof;
-    if (made?.id && file && typeof file === 'object' && typeof file.name === 'string') {
+    const hasFile = !!file && typeof file === 'object' && typeof file.name === 'string';
+    if (memory.filing && !hasFile) {
+      throw partialFiling(memory.filing, 'Choose the proof file to upload, or close this form: the filing is already added.');
+    }
+    memory.idempotencyKey ||= filingIdempotencyKey();
+    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v), memory.idempotencyKey);
+    if (made?.id && hasFile) {
       const body = new FormData();
       body.append('file', file);
       try { await w.recordAction('build', projectId, 'company-creation', `step-${made.id}`, 'upload-proof', body); }
-      catch (error) { throw new Error(`The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}`); }
+      catch (error) {
+        memory.filing = made;
+        throw partialFiling(made, `The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}. Press ${PROOF_RETRY} to try the upload again. The filing is not added twice.`);
+      }
     }
     return made;
   },
 };
+
+/** D4600: the label the Add filing button takes once only the proof upload is left. */
+const PROOF_RETRY = 'Retry proof upload';
+/**
+ * A write that half succeeded: the record exists and one follow-up failed. The form reads
+ * `partial` to refresh its page, to freeze everything but `only`, and to relabel its button.
+ */
+const partialFiling = (made, message) => Object.assign(new Error(message), { partial: { result: made, cta: PROOF_RETRY, only: 'proof' } });
 
 const SYSTEM = [{ value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting' }, { value: 'payroll', label: 'Payroll' }, { value: 'crm', label: 'CRM' }, { value: 'workspace', label: 'Workspace' }];
 const SYNC = [{ value: 'live', label: 'Live' }, { value: 'hourly', label: 'Hourly' }, { value: 'daily', label: 'Daily' }, { value: 'manual', label: 'Manual' }];

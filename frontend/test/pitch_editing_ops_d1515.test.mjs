@@ -227,7 +227,7 @@ test('2. autosave: a 409 stops sending and holds both versions; Keep mine sends 
   b.base([cardOf('c1', 'One')]);
   b.edit({ cards: [cardOf('c1', 'Mine')] });
   await t.advance(IDLE_MS);
-  assert.equal(b.resolve('theirs').title, 'Their words');
+  assert.equal(b.resolve('theirs').theirs.title, 'Their words');
   b.edit({ cards: [theirs] });
   assert.equal(b.pending(), 0, 'theirs is what the Worker holds');
 });

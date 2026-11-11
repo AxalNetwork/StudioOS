@@ -3,12 +3,16 @@ import { Download, Eye, FileText, Loader2, Trash2 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { templateState } from '../../../lib/templateCatalogModel';
+import { templateActions, templateLifecycle } from '../../../lib/contractLifecycle';
+import { LifecycleBadge, SafetyBanner, SafetyOverlayBadge } from './LifecycleBadge';
 import { mapOffset, pairAnchors, sourceAnchors } from '../../../lib/paneSync';
+import { editorStoredFormat } from '../../../lib/templateFormatState';
 import PaperPreview, { paperRequest } from '../../../components/PaperPreview';
 import { Pill } from '../../../ui';
 import { input } from './parts';
 import useRecordCrumb from '../useRecordCrumb';
 import PublishDialog, { PublishResult } from './PublishDialog';
+import { isSuperAdminUser } from '../../../lib/shellRole';
 import DraftPages from './DraftPages';
 import VersionCompare from './VersionCompare';
 
@@ -110,12 +114,13 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
   useRecordCrumb(saved ? (saved.title || slug) : null, 'template', saved ? slug : null);
 
   const take = useCallback((t) => {
+    const format = editorStoredFormat(t);
     setSaved(t);
     setTitle(t.title || '');
     setCategory(t.category || layers?.[0]?.[0] || 'gp');
     setBody(t.body_md || '');
-    setKind(t.doc_kind ?? null);
-    setParty(t.axal_party ?? null);
+    setKind(format.kind);
+    setParty(format.party);
   }, [layers]);
 
   const load = useCallback(async (target, alive = () => true) => {
@@ -243,6 +248,11 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
   const publishedVersion = publishedOverride !== undefined ? publishedOverride
     : Number.isInteger(row?.published_version) ? row.published_version : saved?.published_version ?? null;
   const stub = saved ? templateState({ ...(row || {}), ...saved, published_version: publishedVersion }).stub : false;
+  // D4811: the lifecycle and the overlays. While restricted or incomplete,
+  // Publish is not rendered (Withdraw still is), and the banner says why.
+  const gated = saved ? { ...(row || {}), ...saved, published_version: publishedVersion } : null;
+  const actions = gated ? templateActions(gated) : null;
+  const lifecycle = gated ? templateLifecycle(gated) : null;
   const published = (done) => {
     setDialog(null);
     if (done.mode === 'withdraw') {
@@ -257,11 +267,15 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
 
   let publishSlot = null;
   if (authoring && !isNew && saved) {
-    if (stub) {
+    if (stub || !actions.canPublish) {
+      // D4811: incomplete (a stub) or restricted — no Publish; a recorded publication can still be withdrawn.
       publishSlot = result?.mode === 'withdraw' ? <span className={`text-[12.5px] ${muted}`}>Publication withdrawn.</span>
         : publishedVersion != null
           ? <button type="button" className={secondary} onClick={() => setDialog('withdraw')} data-testid="template-withdraw">Withdraw published v{publishedVersion}</button>
-          : <span className={`text-[12.5px] ${muted}`}>No body in the store yet.</span>;
+          : null;
+    } else if (!isSuperAdminUser(user) && (unsaved || publishedVersion !== V)) {
+      // D4811 part 15 (CT-16): publishing (Activate) is the Super Admin's alone; the Worker refuses anyone else.
+      publishSlot = <span className={`text-[12.5px] ${muted}`} data-testid="template-publish-super-admin">Only the Super Admin publishes a template.</span>;
     } else if (unsaved) {
       publishSlot = <button type="button" className={primary} disabled data-testid="template-publish-one">Publish v{V + 1}</button>;
     } else if (publishedVersion === V) {
@@ -369,6 +383,8 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
           {' › '}
           {isNew ? <b className="text-[#18181b] dark:text-[#f4f3f7]">New template</b>
             : <><b className="text-[#18181b] dark:text-[#f4f3f7]">{crumbTitle}</b>{unsaved ? ` · v${V + 1} draft` : ` · v${V}`}</>}
+          {lifecycle && <span className="ml-2 inline-flex flex-wrap gap-1 align-middle"><LifecycleBadge badge={lifecycle} />
+            {actions.overlays.map(k => <SafetyOverlayBadge key={k} kind={k} />)}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {!isNew && (
@@ -383,7 +399,8 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
           {publishSlot}
         </div>
       </div>
-      {authoring && !isNew && !stub && unsaved && saved && (
+      {actions?.banner && <div className="mt-2"><SafetyBanner banner={actions.banner} unavailable={actions.unavailable} /></div>}
+      {authoring && !isNew && !stub && actions?.canPublish && unsaved && saved && (
         <p className={`mt-1 text-right text-[12px] ${muted}`}>Save first: Publish records the saved version.</p>
       )}
       {confirmLeave && (
@@ -571,7 +588,7 @@ export default function TemplateEditor({ slug: openedSlug, isNew: openedNew, row
 
       {dialog && (
         <PublishDialog mode={dialog} slug={slug} title={saved?.title || slug}
-          version={dialog === 'withdraw' ? publishedVersion : V}
+          version={dialog === 'withdraw' ? publishedVersion : V} usageCount={row?.usage_count}
           onDone={published} onClose={() => setDialog(null)} />
       )}
     </div>

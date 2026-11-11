@@ -128,7 +128,7 @@ test('AF18: the advisor fills their own service; another advisor, an investor an
   assert.deepEqual([support.status, support.body.can_fill, support.body.fields.some((x: any) => x.trigger)], [200, false, false]);
 });
 
-test('AF19: Done and Next come from the engagement record at no AI tokens; a sent report and the client read marks only', async () => {
+test('AF19: Done and Next come from the engagement record at no AI tokens; a sent report and the client read marks only (#4673: the client, a sent one only)', async () => {
   const f = fixture();
   const draft = await f.sheet(31, { page: REPORTING, form: 'status-report', record: 411 });
   assert.equal(draft.status, 200);
@@ -141,7 +141,9 @@ test('AF19: Done and Next come from the engagement record at no AI tokens; a sen
   assert.deepEqual([run.status, run.body.error], [400, 'nothing_to_fill'], 'no model is run for the engagement record');
   const sent = await f.sheet(31, { page: REPORTING, form: 'status-report', record: 412 });
   assert.deepEqual([sent.status, sent.body.can_fill], [200, false], 'a sent report is a record of what the client received');
-  const client = await f.sheet(11, { page: REPORTING, form: 'status-report', record: 411 });
+  // #4673: the client reads a report only once it is sent. The unsent draft (411) is the firm's.
+  assert.equal((await f.sheet(11, { page: REPORTING, form: 'status-report', record: 411 })).status, 403, 'an unsent report is not the client\'s to read');
+  const client = await f.sheet(11, { page: REPORTING, form: 'status-report', record: 412 });
   assert.deepEqual([client.status, client.body.can_fill, byField(client.body).shipped.waiting], [200, false, []]);
   assert.equal((await f.sheet(32, { page: REPORTING, form: 'status-report', record: 411 })).status, 403);
   const add = await f.sheet(31, { page: REPORTING, form: 'status-report', parent: 401 });

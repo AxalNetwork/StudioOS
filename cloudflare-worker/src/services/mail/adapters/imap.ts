@@ -15,6 +15,8 @@
  */
 import type { Env } from '../../../types';
 import { buildMime } from './mime';
+import { guardHost, type Resolver } from '../../../integrations/customMcp';
+import { publicResolver } from '../../webFetch';
 import { AdapterError, type Creds, type ImapCreds, type MailAdapter, type Tls } from './types';
 
 export type Socket = {
@@ -25,7 +27,17 @@ export type Socket = {
 };
 export type Connect = (address: { hostname: string; port: number }, options: { secureTransport: 'on' | 'starttls'; allowHalfOpen: boolean }) => Socket;
 
-export const socketDeps: { connect: Connect | null; timeoutMs: number } = { connect: null, timeoutMs: 15000 };
+export const socketDeps: { connect: Connect | null; timeoutMs: number; resolve: Resolver | null } = { connect: null, timeoutMs: 15000, resolve: null };
+
+/**
+ * #4572 follow-up: the host's every address must be public before a socket opens. `checkSettings` reads the
+ * name only, so a public name pointing at a private, loopback or metadata address would pass it.
+ */
+async function publicMailHost(host: string, what: string): Promise<void> {
+  const verdict = await guardHost(host, socketDeps.resolve ?? publicResolver());
+  if (verdict === 'host_unresolved') throw unreachable();
+  if (verdict !== 'ok') throw refused(`The ${what} server must be on the public internet. Nothing was connected.`);
+}
 
 async function connector(): Promise<Connect> {
   if (socketDeps.connect) return socketDeps.connect;
@@ -36,6 +48,7 @@ async function connector(): Promise<Connect> {
 const HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 const refused = (sentence: string) => new AdapterError('refused', sentence);
 const unreachable = () => new AdapterError('unreachable', 'The mail server could not be reached. Check the host and port, then try again.');
+const uncertain = () => new AdapterError('uncertain', 'The mail server may or may not have taken the email. Check your Sent folder before sending it again.');
 const authFailed = () => new AdapterError('auth_failed', 'The mail server refused the username or app password. Check them, then connect again.');
 
 /** The settings, checked before any socket opens. Port 25 is refused in words. */
@@ -120,7 +133,12 @@ async function expect(c: Conversation, ok: number[]) {
 
 const b64 = (s: string) => { let bin = ''; for (const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b); return btoa(bin); };
 
-async function smtp<T>(creds: ImapCreds, act: (c: Conversation) => Promise<T>): Promise<T> {
+/** Set by `act` at the point of no return: the message payload is on the wire and the server's answer is the only proof. */
+type Past = { payloadWritten: boolean };
+
+async function smtp<T>(creds: ImapCreds, act: (c: Conversation, past: Past) => Promise<T>): Promise<T> {
+  const past: Past = { payloadWritten: false };
+  await publicMailHost(creds.smtp_host, 'sending');
   const connect = await connector();
   let c: Conversation;
   try { c = new Conversation(connect({ hostname: creds.smtp_host, port: creds.smtp_port }, { secureTransport: creds.smtp_tls === 'tls' ? 'on' : 'starttls', allowHalfOpen: false })); }
@@ -138,17 +156,20 @@ async function smtp<T>(creds: ImapCreds, act: (c: Conversation) => Promise<T>): 
     }
     await c.send(`AUTH PLAIN ${b64(`\0${creds.username}\0${creds.password}`)}`);
     await expect(c, [235]);
-    const out = await act(c);
-    await c.send('QUIT');
+    const out = await act(c, past);
+    // D4665: final DATA acceptance (RFC 5321 §6.1) already transferred responsibility to the server; QUIT is courtesy.
+    try { await c.send('QUIT'); } catch { /* cleanup only: the answer to the message is already in `out` */ }
     return out;
   } catch (e) {
-    throw e instanceof AdapterError ? e : unreachable();
+    if (e instanceof AdapterError) throw e;
+    throw past.payloadWritten ? uncertain() : unreachable();
   } finally { await c.close(); }
 }
 
 const quote = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 async function imapLogin(creds: ImapCreds): Promise<void> {
+  await publicMailHost(creds.imap_host, 'reading');
   const connect = await connector();
   let c: Conversation;
   try { c = new Conversation(connect({ hostname: creds.imap_host, port: creds.imap_port }, { secureTransport: creds.imap_tls === 'tls' ? 'on' : 'starttls', allowHalfOpen: false })); }
@@ -185,7 +206,7 @@ export const imapAdapter: MailAdapter = {
   async send(_env: Env, creds: Creds, msg) {
     const c = imapOf(creds);
     const messageId = `${crypto.randomUUID()}@axal.vc`;
-    await smtp(c, async (s) => {
+    await smtp(c, async (s, past) => {
       await s.send(`MAIL FROM:<${msg.from}>`);
       await expect(s, [250]);
       await s.send(`RCPT TO:<${msg.to}>`);
@@ -193,8 +214,12 @@ export const imapAdapter: MailAdapter = {
       await s.send('DATA');
       await expect(s, [354]);
       // The body is base64, so no line can be a lone "." and end DATA early.
+      past.payloadWritten = true;
       await s.send(`${buildMime(msg, messageId)}\r\n.`);
-      await expect(s, [250]);
+      // A refusal (4xx/5xx) is the server saying it did not take the message; a lost answer is not.
+      let done: { code: number };
+      try { done = await reply(s); } catch { throw uncertain(); }
+      if (done.code !== 250) throw unreachable();
     });
     return { messageId };
   },

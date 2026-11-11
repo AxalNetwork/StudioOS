@@ -15,6 +15,17 @@ of a roster, transcript, credential or signed callback.
 - `canary`: Super Admins only, hydrated through the existing elevation check.
 - `on`: eligible founders, with the same consent, ownership and budget gates.
 
+**Teams has its own switch** (D1451, #5297). `MEETING_BOT_TEAMS` is also a
+var, not a secret, and ships `off` in `[vars]`, `[env.production.vars]` and
+preview. Only the exact value `on` lets the bot take a Teams link; missing or
+anything else is off. While it is off, `GET /api/founder/validate/meetings/bot`
+reports `platforms.teams: false` (Zoom and Meet keep their own answers), and a
+send with a Teams link answers `503 bot_unavailable` before any `meeting_bots`
+row or token hold. It narrows `MEETING_BOT`, never widens it: with
+`MEETING_BOT` `off` Teams is off too, and under `canary` it still reaches Super
+Admins only. It stays `off` until the bot's Teams page driver (D1451 part 2)
+and the live check in §4 pass; the owner turns it on in its own PR.
+
 B1 (#2579) owns these checks on both immediate and scheduled runs. Changing
 the var alone does not install the control plane or runtime. It also does
 not prove that an already running bot has left; §6 requires Stop separately.
@@ -123,6 +134,16 @@ must permit the guest to request admission and admit Eadwyn AI from the
 lobby. Tenant policies can refuse guest access. Do not grant a Graph
 application recording permission as an assumed prerequisite for this path.
 
+The join path is the browser guest (D1451, owner Q1 = C). The Graph
+Communications media bot (Azure Bot registration, tenant admin consent,
+Windows media hosting) is not built; it is decided after a month of blocked
+counts once Teams is on. The live check uses a separate Microsoft 365 trial or
+developer tenant plus one Teams free link (Q2 = B), so anonymous join and
+`BlockDetectedBots` can be toggled without touching a real tenant. Meeting
+links are accepted on `teams.microsoft.com`, `teams.cloud.microsoft` (both
+work or school) and `teams.live.com` (Teams free), `https` only. Until
+`MEETING_BOT_TEAMS` is `on` (§1), the bot takes no Teams link.
+
 ## 4. Live check: repeat on Zoom, Google Meet and Teams
 
 Use a consenting host and another participant in a dedicated test meeting,
@@ -207,8 +228,11 @@ consent, AI tokens, notice or recording. It works with `MEETING_BOT = "off"`.
   stopping point is stored in `FILES` and shown only to the Super Admin who
   started the check; never post it, the link or anything it shows on #1008.
 - **On #1008,** post the platform, the row it stops at and its code, and the
-  owner step its fix names. A container that goes quiet shows its rows as
-  `never_reported` after ten minutes.
+  owner step its fix names. A report that never arrives shows its rows as
+  **Not recorded** (code `never_reported`) after ten minutes. That is a
+  reporting gap, not a failed check: the container sends every stage again with
+  each later report and once more after the check ends (D4857), so press Try
+  again, and read the host's log for `diagnose_delivery_failed`.
 
 ## 5. Failure codes and operator response
 

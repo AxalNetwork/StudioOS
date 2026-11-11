@@ -92,6 +92,12 @@ function freshDb() {
       name TEXT NOT NULL, company TEXT, email TEXT UNIQUE NOT NULL,
       specialization TEXT, status TEXT NOT NULL DEFAULT 'active'
     );
+    -- #4673: an engagement's founder_id is a FOUNDER PROFILE (founders.id), and the client's name is
+    -- read from it. These fixtures keep the founder's id equal to the user's (FOUNDER_USER) on purpose;
+    -- partner_delivery_report_access_4673.test.ts proves the two apart.
+    CREATE TABLE founders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, name TEXT NOT NULL, email TEXT
+    );
     CREATE TABLE founder_needs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       project_id INTEGER NOT NULL, founder_id INTEGER NOT NULL,
@@ -123,6 +129,7 @@ function freshDb() {
     );
   `);
   db.exec(migration('208_partner_delivery_stores'));
+  db.exec(migration('202611072115_delivery_revisions'));
   // APPLIED, NOT MIRRORED. The two capacity stores are read by `/capacity` and
   // written by its two `PUT`s, so the harness runs their migration files for
   // the same reason it runs 208's: a hand-copied DDL that drifts from the file
@@ -137,6 +144,7 @@ function freshDb() {
   u.run(THEIRS_USER, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(THEIR_STAFF, 'partner', 2, 'Robin', 'robin@example.com');
   u.run(FOUNDER_USER, 'founder', null, 'Fran', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER_USER, 'Fran', 'fran@example.com');
 
   const p = db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)');
   p.run(1, 'p-1', 'Ours', 'ours@example.com');
@@ -313,11 +321,13 @@ test('the median time to open is refused outright, with the reason', async () =>
   });
   const r = (await call(e, 'GET', '/deliverables', ours)).body;
   assert.equal(r.sent_count, 1);
-  assert.equal(r.unopened_count, 1);
+  // #4690: NULL, not 1 and not 0 — nothing records opens, so there is no count.
+  assert.equal(r.unopened_count, null);
+  assert.equal(r.read_tracking.available, false);
   // A median over a column nobody writes is a number about our own silence.
   assert.equal(r.median_days_to_open, null);
   assert.match(r.median_days_to_open_note, /client's to set/i);
-  // And the unopened count is framed as OUR gap, not the client's behaviour.
+  // And the unopened note is framed as OUR gap, not the client's behaviour.
   assert.match(r.unopened_note, /we do not know/i);
 });
 
@@ -328,18 +338,23 @@ test('an unsent deliverable is not counted as unopened', async () => {
   assert.equal(r.sent_count, 0);
   // Never sent is a different state from sent-and-unopened, and only the second
   // is the expensive one the zone is about.
-  assert.equal(r.unopened_count, 0);
+  assert.equal(r.unopened_count, null);
   assert.equal(r.items[0].is_unopened, false);
+  assert.equal(r.items[0].read_state, 'not_sent');
 });
 
-test('an unopened deliverable moves health to at risk', async () => {
+test('a sent deliverable with unobservable reads does NOT move health (#4690)', async () => {
   const e = env(freshDb());
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/deliverables`, ours, {
     title: 'Spec', sent_at: past(20),
   });
   const row = (await call(e, 'GET', '/health', ours)).body.items[0];
-  assert.equal(row.deliverables_unopened, 1);
-  assert.equal(row.health, 'at_risk');
+  // Not recorded, not 1 and not 0 — and never a reason or a risk.
+  assert.equal(row.deliverables_unopened, null);
+  assert.equal(row.deliverables_sent, 1);
+  assert.equal(row.health, 'on_track');
+  assert.ok(!row.health_reasons.some((x: string) => /opened/.test(x)), 'a read finding came from missing instrumentation');
+  assert.equal(row.health_unavailable_inputs[0].input, 'deliverable_reads');
 });
 
 /**
@@ -524,7 +539,7 @@ test('with no cap stated, nothing is over anything and the response says why', a
   const r = (await call(e, 'GET', '/capacity', ours)).body;
   assert.equal(r.cap_hours, null);
   assert.equal(r.cap_source, null);
-  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.match(r.cap_note, /Capacity limits not set/i); // D4822: canvas copy
   assert.equal(r.over_committed_count, null);
   assert.equal(r.people.length, 1);
   assert.equal(r.people[0].hours, 62);
@@ -544,7 +559,10 @@ test('with no cap stated, nothing is over anything and the response says why', a
 test('a stated cap is the firm’s number, and clearing it restores the refusal', async () => {
   const db = freshDb();
   const e = env(db);
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 44 });
+  // #4690: hours are logged per MONTH and the cap is stated per WEEK, so 200 h
+  // in a month is over 38 h/week (at most 38 x 31 / 7 = 168.3 h) and under
+  // 50 h/week (at least 50 x 28 / 7 = 200 h) in every month of the year.
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 200 });
 
   const set = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 38, note: 'four days, one for internal' });
   assert.equal(set.status, 200);
@@ -575,7 +593,7 @@ test('a stated cap is the firm’s number, and clearing it restores the refusal'
   assert.equal(r.cap_hours, null);
   assert.equal(r.over_committed_count, null);
   assert.equal(r.people[0].over_committed, null);
-  assert.match(r.cap_note, /no capacity cap is recorded/i);
+  assert.match(r.cap_note, /Capacity limits not set/i); // D4822: canvas copy
   assert.equal(
     db.prepare('SELECT COUNT(*) AS c FROM partner_capacity').get().c, 0,
     'clearing wrote a row instead of removing one',
@@ -606,7 +624,9 @@ test('a cap is refused for a person outside the firm, and for an impossible week
 test('internal hours are stated, not inferred, and they change who is over cap', async () => {
   const db = freshDb();
   const e = env(db);
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 36 });
+  // #4690: monthly hours against a weekly cap scaled to the month — 40 h/week is
+  // between 160 h (February) and 177.15 h (a 31-day month).
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${nowPeriod()}`, ours, { hours: 150 });
   await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 });
 
   let r = (await call(e, 'GET', '/capacity', ours)).body;
@@ -614,20 +634,20 @@ test('internal hours are stated, not inferred, and they change who is over cap',
   // spends no time on the firm — the one thing that is certainly false.
   assert.equal(r.people[0].internal_hours, null);
   assert.equal(r.internal_hours_total, null);
-  assert.equal(r.people[0].total_hours, 36);
+  assert.equal(r.people[0].total_hours, 150);
   assert.equal(r.people[0].over_committed, false);
 
   const put = await call(e, 'PUT', '/capacity/internal-hours', ours, {
-    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 7, note: 'recruiting',
+    person_user_id: OUR_STAFF, period: nowPeriod(), hours: 30, note: 'recruiting',
   });
   assert.equal(put.status, 200);
   r = (await call(e, 'GET', '/capacity', ours)).body;
-  assert.equal(r.people[0].internal_hours, 7);
+  assert.equal(r.people[0].internal_hours, 30);
   assert.equal(r.people[0].internal_note, 'recruiting');
-  assert.equal(r.internal_hours_total, 7);
-  // 36 + 7 crosses a cap 36 alone did not. The billable book called this week
-  // safe; the whole week is not.
-  assert.equal(r.people[0].total_hours, 43);
+  assert.equal(r.internal_hours_total, 30);
+  // 150 + 30 crosses a cap 150 alone did not. The billable book called this
+  // month safe; the whole month is not.
+  assert.equal(r.people[0].total_hours, 180);
   assert.equal(r.people[0].over_committed, true);
 
   // ZERO IS A STATEMENT AND SURVIVES AS ONE.
@@ -824,7 +844,7 @@ test('a draft is composed from the record, and blockers are read not stored', as
   // The sentence that makes the editorial call visible to the author.
   assert.match(draft.blocked_note, /without treating it as an excuse|say so plainly/i);
 
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Spec v2 went out.', next_up: 'Cutover.',
   });
   // Nothing about the blocker is copied into the row — a prose copy would go
@@ -836,7 +856,7 @@ test('a draft is composed from the record, and blockers are read not stored', as
 test('a sent report cannot be edited, re-sent or deleted', async () => {
   const e = env(freshDb());
   const p = nowPeriod();
-  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Spec v2 went out.',
   });
   const sent = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
@@ -846,12 +866,16 @@ test('a sent report cannot be edited, re-sent or deleted', async () => {
 
   // A record of what a client already received. Editing it in place would make
   // our record disagree with theirs with no trace of the difference.
-  const edit = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const edit = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'Actually something else.',
   });
   assert.equal(edit.status, 409);
+  // D4682: the same person retrying gets the record that exists, unchanged;
+  // it is not a second send and it does not move the time.
   const resend = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
-  assert.equal(resend.status, 409);
+  assert.equal(resend.status, 200);
+  assert.equal(resend.body.already_sent, true);
+  assert.equal(resend.body.sent_at, sent.body.sent_at);
   const gone = await call(e, 'DELETE', `/status-reports/${saved.body.id}`, ours);
   assert.equal(gone.status, 409);
 });
@@ -859,11 +883,11 @@ test('a sent report cannot be edited, re-sent or deleted', async () => {
 test('an empty report cannot be sent', async () => {
   const e = env(freshDb());
   const p = nowPeriod();
-  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  const saved = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: 'x',
   });
   // Clear it back to empty, then try to send.
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p,
     shipped: null, next_up: null,
   });
   const r = await call(e, 'POST', `/status-reports/${saved.body.id}/send`, ours);
@@ -872,7 +896,7 @@ test('an empty report cannot be sent', async () => {
 
 test('the reports read says nothing is delivered', async () => {
   const e = env(freshDb());
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, { engagement_id: OUR_ENGAGEMENT, period: nowPeriod(),
     shipped: 'x',
   });
   const r = (await call(e, 'GET', '/status-reports', ours)).body;
@@ -896,7 +920,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
   const db = freshDb();
   const e = env(db);
   const p = nowPeriod();
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
 
   let r = (await call(e, 'GET', '/status-reports', ours)).body;
   assert.equal(r.period, p, 'the listing does not say which cycle it is');
@@ -926,7 +950,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
 
   // SENT THIS CYCLE COUNTS THE CYCLE, not every report ever sent — so an
   // earlier period's sent report is in `sent_count` and out of this tile.
-  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, {
+  const older = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/2024-01`, ours, { engagement_id: OUR_ENGAGEMENT, period: '2024-01',
     shipped: 'last year',
   });
   await call(e, 'POST', `/status-reports/${older.body.id}/send`, ours);
@@ -941,7 +965,7 @@ test('the reports listing carries the cycle and each report’s live blockers', 
 
 test('a read time is refused rather than timed from our own send', async () => {
   const e = env(freshDb());
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, {
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${nowPeriod()}`, ours, { engagement_id: OUR_ENGAGEMENT, period: nowPeriod(),
     shipped: 'x',
   });
   const r = (await call(e, 'GET', '/status-reports', ours)).body;
@@ -955,7 +979,7 @@ test('another firm’s blockers never reach this firm’s report feed', async ()
   const db = freshDb();
   const e = env(db);
   const p = nowPeriod();
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
   await call(e, 'POST', `/engagements/${THEIR_ENGAGEMENT}/blockers`, theirs, {
     side: 'client', summary: 'Theirs, not ours',
   });
@@ -1026,7 +1050,7 @@ test('a read writes nothing', async () => {
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/deliverables`, ours, { title: 'z', sent_at: past(2) });
   await call(e, 'POST', `/engagements/${OUR_ENGAGEMENT}/seats`, ours, { holder_user_id: OUR_STAFF });
   await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/${p}`, ours, { hours: 8 });
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { shipped: 'x' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/status-reports/${p}`, ours, { engagement_id: OUR_ENGAGEMENT, period: p, shipped: 'x' });
 
   const snapshot = () => JSON.stringify([
     db.prepare('SELECT * FROM engagement_milestones ORDER BY id').all(),
@@ -1071,4 +1095,15 @@ test('no route writes a value it computes', () => {
     assert.ok(!named.has(derived),
       `a write names \`${derived}\` — it is derived or the client's, and must not be written here`);
   }
+});
+
+// D4822 (#4822, part 2): with no live engagement there is nothing to refuse to average, so no sentence —
+// "0 of 0 engagements have no score" is commentary on nothing.
+test('a firm whose engagements are all cancelled gets no satisfaction note, not a 0-of-0 sentence', async () => {
+  const db = freshDb();
+  db.prepare(`UPDATE engagements SET cancelled_at = '2026-10-01' WHERE partner_id = 1`).run();
+  const r = (await call(env(db), 'GET', '/health', ours)).body;
+  assert.equal(r.satisfaction_avg, null);
+  assert.equal(r.satisfaction_unscored_count, 0);
+  assert.equal(r.satisfaction_note, null, 'a sentence about zero engagements was written');
 });

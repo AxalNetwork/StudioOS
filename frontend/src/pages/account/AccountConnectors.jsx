@@ -118,7 +118,7 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   if (act === 'connected') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></span>;
   if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`}>Notify me</button>;
   if (act === 'joined') corner = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={`${BTN.link} relative z-10`} title="Click to stop the notice">We&apos;ll tell you</button>;
-  if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
+  if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable || p.connectionUnreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   return (
     <article className={`${TONE_CLS} relative flex h-full flex-col gap-2 p-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40`} data-testid={`connector-card-${p.key}`} data-action={act}>
       <div className="flex min-h-[46px] items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
@@ -232,7 +232,7 @@ function actionPill(p, act) {
   if (act === 'connected') return { label: 'Connected', tone: 'ok' };
   if (act === 'notify') return { label: 'Notify me', tone: 'info' };
   if (act === 'joined') return { label: "We'll tell you", tone: 'neutral' };
-  return { label: p.unreadable ? 'Status unreadable' : 'Not set up here', tone: 'neutral' };
+  return { label: p.unreadable || p.connectionUnreadable ? 'Status unreadable' : 'Not set up here', tone: 'neutral' };
 }
 
 /** The catalogue's state, said once, where a section cannot draw rows. */

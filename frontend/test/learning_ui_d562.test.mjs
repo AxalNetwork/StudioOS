@@ -37,7 +37,7 @@ import {
 } from '../src/pages/learning/learningModel.js';
 import { webinarRow } from '../src/pages/learning/webinarModel.js';
 import { readArticles, readEvents, readPublications } from '../src/pages/learning/learningReads.js';
-import LearningPage, { adminLinks, LearningSubPage } from '../src/pages/learning/LearningPage.jsx';
+import LearningPage, { adminLinks, LearningSubPage, learnerLinks } from '../src/pages/learning/LearningPage.jsx';
 import { ArticleList, EventList, LearningHomeView, PublicationList, homeCoverage } from '../src/pages/learning/LearningHome.jsx';
 import CourseOutline from '../src/pages/learning/CourseOutline.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
@@ -520,6 +520,26 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
   const program = page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' });
   assert.match(program, /data-testid="program-learners"/);
   assert.match(flat(program), /Read only · Assigned admin · Program not recorded/);
+});
+
+test('#4742: My learning and My learning plan reach every profile the gate admits, not only an admin', () => {
+  assert.deepEqual(learnerLinks(true), [], 'a gated profile gets neither link');
+  assert.deepEqual(learnerLinks(false), [{ to: '/learning/me', label: 'My learning' }, { to: '/learning/plan', label: 'My learning plan' }]);
+  for (const role of ['founder', 'investor', 'partner', 'advisor']) {
+    const home = page('/learning', '/learning', { view: 'home', user: { role }, activeRole: role });
+    assert.match(home, /href="\/learning\/me"/, `${role} sees My learning`);
+    assert.match(home, /href="\/learning\/plan"/, `${role} sees My learning plan`);
+    assert.doesNotMatch(home, /href="\/learning\/studio"/, `${role} sees no Studio link`);
+    assert.doesNotMatch(home, /href="\/learning\/programs"/, `${role} sees no admin Programs link`);
+  }
+  // An admin (not Super) keeps "Programs assigned to you", gets the same learner links, and still no Studio.
+  const admin = page('/learning', '/learning', { view: 'home', user: ADMIN, activeRole: 'admin' });
+  assert.match(admin, /href="\/learning\/me"/);
+  assert.match(admin, /href="\/learning\/plan"/);
+  assert.match(admin, /href="\/learning\/programs"/);
+  assert.doesNotMatch(admin, /href="\/learning\/studio"/);
+  // Mutation checked: drop `links` on ProgressStrip's own call → the founder/investor assertions above fail.
+  assert.match(read('frontend/src/pages/learning/LearningHome.jsx'), /<ProgressStrip state=\{stats\} onRetry=\{onRetry\.stats\} links=\{learnerLinks\} \/>/);
 });
 
 test('Learning home, member, studio and gated subpages have no AI rail', () => {

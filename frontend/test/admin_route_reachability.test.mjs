@@ -319,6 +319,15 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D5039 (#5039): Revenue v2's parts hold the doors to the Billing tab and to one
+  // dispute (`/admin/revenue/disputes/:disputeId`), from Billing exceptions and Needs attention.
+  ['frontend/src/pages/hq/RevenuePage.jsx', [
+    'frontend/src/pages/hq/revenue/BillingExceptions.jsx',
+    'frontend/src/pages/hq/revenue/ExecutiveSummary.jsx',
+  ]],
+  // D4819 (#4819): the licence ledger's table holds the doors to one licence
+  // (`/admin/licences/:uid`) and to its sections (`/admin/licences/:uid/:section`).
+  ['frontend/src/pages/admin/AdminLicences.jsx', ['frontend/src/pages/admin/licences/LedgerTable.jsx']],
   // D1046 (#2894): the Approvals lane boards draw their tabs and the doors to
   // one item (`/admin/approvals/<board>/:item`) from the files beside them.
   ['frontend/src/pages/admin/approvals/LaneBoards.jsx', [

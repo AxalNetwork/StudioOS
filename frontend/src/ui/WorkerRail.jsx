@@ -2,7 +2,7 @@ import { Fragment, useCallback, useContext, useEffect, useId, useReducer, useRef
 import { NO_PLAN_LINE, dayCapped, noPlan } from '../lib/planAllowance';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
-import { UNSAFE_LocationContext } from 'react-router-dom';
+import { UNSAFE_LocationContext, UNSAFE_NavigationContext } from 'react-router-dom';
 import useAiBudget from '../hooks/useAiBudget';
 import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, aiTokenState, microMoney, usageMoney } from '../lib/aiTokens';
 import useAiSpend from '../hooks/useAiSpend';
@@ -18,13 +18,15 @@ import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent, askPanelEvent, useAskPanel, useAskRail } from './eadwynPanel.js';
 import AskPanel from './AskPanel.jsx';
+import { PageAsk } from './AskButton.jsx';
 import { askDock, askLayout, askServes } from './askPanelModel.js';
 import HeaderAsk, { useHeaderCarriesAsk } from './HeaderAsk.jsx';
 import { activeSupportSession } from '../lib/supportSession.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
-import { FOUNDER_RECORD_OFF } from './reasonGate';
+import RailSteps from './RailSteps.jsx';
+import { FOUNDER_RECORD_OFF } from './reasonGate.js';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -32,6 +34,7 @@ import { budgetReadable } from '../pages/account/usageModel';
 import './workerRail.css';
 import { clearRailPage, setRailPage } from '../lib/railPage.js';
 import { closeSheets, useSheetOpen } from './sheetStore.js';
+import { RAIL_PINNED_KEY, isPinned, railCollapsed, withPin } from './railOperations.js';
 
 /**
  * The Eadwyn AI rail. One component, every licence.
@@ -115,6 +118,20 @@ function useRailPathname() {
   const ctx = useContext(UNSAFE_LocationContext);
   if (ctx?.location?.pathname != null) return ctx.location.pathname;
   return typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+}
+
+/**
+ * Where the Ask panel sends the member (#4737: a Block card is accepted on the
+ * Sessions page), without requiring a router, as `useRailPathname` does. Inside
+ * the app it pushes onto the router's own history, so the page does not reload;
+ * with no router around it, it falls back to the window.
+ */
+function useRailNavigate() {
+  const nav = useContext(UNSAFE_NavigationContext);
+  return useCallback((to) => {
+    if (typeof nav?.navigator?.push === 'function') nav.navigator.push(to);
+    else if (typeof window !== 'undefined') window.location.assign(to);
+  }, [nav]);
 }
 
 /**
@@ -476,6 +493,18 @@ export default function WorkerRail({
    */
   groups = null,
   /**
+   * D4873 (#4873, part 2): a host's next steps (`ui/RailSteps.jsx`), drawn in place of the page's model
+   * block and the All models list, so the page's normal workflow shows what to do next and no model list or
+   * price. `{ title, ...state }`; `steps.title` names the block ("For Programs"). Without it, nothing changes.
+   */
+  steps = null,
+  /**
+   * D5034 part 4 (#5034): a page's own prompts, drawn first among the Ask
+   * panel's chips; pressing one fills the composer with its words and sends
+   * nothing. Without it, nothing changes.
+   */
+  prompts = null,
+  /**
    * D1463 (#3713, Q1 A pending owner): 'founder-record' while an admin reads a
    * founder's private record behind a reason. The rail keeps who and where,
    * and draws no AI switch, no suggestions, no spend and no usage, no Ask and
@@ -483,6 +512,20 @@ export default function WorkerRail({
    * spend is not shown here, and a founder's never was.
    */
   readOnlyFor = null,
+  /**
+   * D4860 part 2 (#4860, PL-12): an operations screen (HQ's Platform consoles,
+   * Monitoring). The rail starts collapsed on every visit, opens for the visit
+   * when asked, and stays open on a page the viewer pinned. It neither reads
+   * nor writes the shared collapse preference (`ui/railOperations.js`).
+   */
+  operations = false,
+  /**
+   * D4811 part 9 (#4811, board CT-07 "Eadwyn"): a legal workspace keeps model economics off the page. With a
+   * path here the Usage block is one line that links to it (Account › AI tokens) instead of the allowance,
+   * the balance and Add tokens; no figure is drawn, so none can be read as this page's. Without it, nothing
+   * changes.
+   */
+  usageAt = null,
   'data-testid': testId = 'worker-rail',
 }) {
   const founderRecord = readOnlyFor === 'founder-record';
@@ -501,7 +544,15 @@ export default function WorkerRail({
   // D1317: while a detail sheet is open the rail draws its spine beside it,
   // without changing the member's stored choice; it comes back on close.
   const sheetOpen = useSheetOpen();
-  const collapsed = stored || sheetOpen;
+  // D4860 part 2: an operations rail opens for this visit, or because it is
+  // pinned open on this page; the shared preference is not consulted.
+  const [pinned, setPinned] = useState(() => operations && isPinned(safeReadJSON(RAIL_PINNED_KEY, []), pathname));
+  const [visitOpen, setVisitOpen] = useState(pinned);
+  const collapsed = railCollapsed({ operations, stored, visitOpen, sheetOpen });
+  const pinOpen = useCallback((on) => {
+    safeWriteJSON(RAIL_PINNED_KEY, withPin(safeReadJSON(RAIL_PINNED_KEY, []), pathname, on));
+    setPinned(on);
+  }, [pathname]);
 
   // D1317: a mounted rail is where a detail sheet docks (`sheet.css`). Counted,
   // so a second rail unmounting does not undock the first.
@@ -529,15 +580,18 @@ export default function WorkerRail({
     if (sheetOpen) {
       closeSheets();
       setCollapsed(false);
+      // D4860 part 2: an operations rail opens for the visit and leaves the shared preference alone.
+      if (operations) { setVisitOpen(true); return; }
       safeWriteJSON(RAIL_COLLAPSED_KEY, false);
       return;
     }
+    if (operations) { setVisitOpen((prev) => !prev); return; }
     setCollapsed((prev) => {
       const next = !prev;
       safeWriteJSON(RAIL_COLLAPSED_KEY, next);
       return next;
     });
-  }, [sheetOpen]);
+  }, [sheetOpen, operations]);
 
   // WHERE: the provider's section and module, or this rail's workspace.
   const section = crumbs?.section || workspace;
@@ -617,6 +671,7 @@ export default function WorkerRail({
   const askLabel = module ? `${section} · ${module}` : section;
   useAskRail(!founderRecord && askServes({ page: pageKey, supportSession: supportOn, viewer, host: role }), pageKey, askLabel);
   const askState = useAskPanel();
+  const openRailPage = useRailNavigate();
   // D405's phone button stands down while Ask serves here and a page header
   // (not this rail's own fallback) carries it.
   const headerCarriesAsk = useHeaderCarriesAsk();
@@ -632,6 +687,9 @@ export default function WorkerRail({
   const askDocked = askAt === 'dock' || askAt === 'overlay';
   // A detail sheet opening closes Ask (D1317's one-surface rule).
   useEffect(() => { if (sheetOpen) askPanelEvent({ type: 'sheet' }); }, [sheetOpen]);
+  // ...and Ask opening closes the phone sheet (#4737), so pressing the sheet's
+  // own Ask entry leaves the panel, not the sheet, on screen. The Eadwyn panel
+  // a founder gets is closed by `openAskPanel` itself.
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
     const root = document.documentElement;
@@ -704,9 +762,11 @@ export default function WorkerRail({
       label={askState.label}
       crumb={section}
       options={rail.options}
+      prompts={prompts}
       aiOn={aiOn}
       layout={askAt}
       onClose={(why) => askPanelEvent({ type: why || 'close' })}
+      onNavigate={openRailPage}
     />
   ) : null;
   useEadwynRailServes(serves && !founderRecord);
@@ -795,7 +855,8 @@ export default function WorkerRail({
       {/* SUGGESTED FOR THIS PAGE (AIR:23-28). */}
       <section className="fwr-sug" data-ai={aiOn ? 'on' : 'off'} data-testid="worker-rail-suggestions">
         {aiOn && groups && <RailGroups groups={groups} page={pageKey} live={live} guardLine={rates.guardOn ? guardSentence(rates) : SAFETY_LINE} />}
-        {aiOn && (
+        {aiOn && !groups && steps && <RailSteps steps={steps} title={steps.title || workspace} />}
+        {aiOn && !steps && (
         <>
         {!groups && (
         <>
@@ -932,19 +993,44 @@ export default function WorkerRail({
         )}
         </>
         )}
-        {!(aiOn && groups) && <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(rates) : SAFETY_LINE}</p>}
+        {/* D4811 part 9: with usage elsewhere the guard is named without its price. */}
+        {!(aiOn && groups) && <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(usageAt ? null : rates) : SAFETY_LINE}</p>}
       </section>
 
       {/* USAGE (AIR:30-36): the allowance ledger, D629. */}
       <section className="fwr-usage" data-testid="worker-rail-usage">
         <span className="fwr-eyebrow">Usage</span>
-        <RailUsage reading={budgetReading} hideHeld={Boolean(groups?.usage?.some((r) => r.id === 'held'))} />
-        {groups ? <RailUsageExtra rows={groups.usage} /> : null}
+        {usageAt ? (
+          <p className="fwr-usage-note" data-testid="text-worker-rail-usage-elsewhere">
+            Models, usage and top-up are in <a href={usageAt} className="underline" data-testid="link-worker-rail-usage-elsewhere">Account › AI tokens</a>.
+          </p>
+        ) : (
+          <>
+            <RailUsage reading={budgetReading} hideHeld={Boolean(groups?.usage?.some((r) => r.id === 'held'))} />
+            {groups ? <RailUsageExtra rows={groups.usage} /> : null}
+          </>
+        )}
       </section>
     </div>
   );
 
   // D1463: on a founder's record, who and where, then the one sentence.
+  // #4737 (D1443 decision E: every licence, a bottom sheet below 640px). The
+  // rail's fallback Ask lives in the column, which is hidden below 1024px, and
+  // the phone's floating button opens the sheet (or a founder's Eadwyn panel),
+  // which drew only `body`: a page whose header has no Ask mount (a back-link
+  // stack, an editor, a centred hero) gave a phone no way to open Ask. While
+  // Ask serves the page and no header carries it, the sheet and the panel
+  // lead with Ask, as the column does. A deck rail's Ask is its header's.
+  const phoneAsk = askState.available && !headerCarriesAsk && !groups;
+  const phoneBody = phoneAsk ? (
+    <>
+      <div className="fwr-sheet-ask" data-testid="rail-sheet-ask"><PageAsk testId="rail-sheet-ask-button" /></div>
+      {body}
+    </>
+  ) : body;
+  useEffect(() => { if (askState.open) dispatchSheet({ type: 'close' }); }, [askState.open]);
+
   const shown = founderRecord ? (
     <div className="fwr-body" id={bodyId}>
       <div className="fwr-who">
@@ -971,6 +1057,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(operations ? { 'data-operations': 'true' } : {})}
       {...(askPanel && askDocked && askHasRoom ? { 'data-ask-room': 'true' } : {})}
       data-sheet-keep=""
       {...(founderRecord ? { 'data-founder-record': 'true' } : {})}
@@ -998,7 +1085,9 @@ export default function WorkerRail({
           onClick={toggle}
           aria-expanded={!collapsed}
           aria-controls={bodyId}
-          title={collapsed ? `Show the Eadwyn AI rail for ${workspace}` : `Collapse the Eadwyn AI rail for ${workspace}`}
+          title={collapsed
+            ? (operations ? `Open Eadwyn: Ask about ${workspace}` : `Show the Eadwyn AI rail for ${workspace}`)
+            : `Collapse the Eadwyn AI rail for ${workspace}`}
           data-testid="button-worker-rail-toggle"
         >
           {collapsed
@@ -1015,6 +1104,19 @@ export default function WorkerRail({
           has its one Ask. Not on the 44px spine, and never on a deck rail
           (`groups`, D1604): the deck's Ask is its page header's. */}
       {!collapsed && !groups && <div className="fwr-ask-entry"><HeaderAsk fallback testId="rail-ask" /></div>}
+      {/* D4860 part 2 (PL-12): an operations rail is collapsed on every visit
+          unless the viewer pins it open on this page. */}
+      {operations && !collapsed && !founderRecord && (
+        <label className="fwr-pin" data-testid="label-worker-rail-pin">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={(e) => pinOpen(e.target.checked)}
+            data-testid="checkbox-worker-rail-pin"
+          />
+          <span>Pin open on this page</span>
+        </label>
+      )}
       {!sheet.open && !(serves && panel.open) && shown}
     </aside>
     {portalReady && askPanel && askDocked && createPortal(
@@ -1042,7 +1144,7 @@ export default function WorkerRail({
           )}
           {panel.open && (
             <EadwynPanel label={panel.label} style={accentStyle}>
-              {body}
+              {phoneBody}
             </EadwynPanel>
           )}
         </>
@@ -1062,7 +1164,7 @@ export default function WorkerRail({
           />}
           {sheet.open && !d405Retired && (
             <RailSheet id={sheetId} workspace={workspace} onEvent={dispatchSheet} closeRef={sheetCloseRef} style={accentStyle}>
-              {body}
+              {phoneBody}
             </RailSheet>
           )}
         </>

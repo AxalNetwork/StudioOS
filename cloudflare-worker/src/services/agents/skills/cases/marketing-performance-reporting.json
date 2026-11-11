@@ -1,0 +1,34 @@
+{
+  "skill": "marketing-performance-reporting",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Marketing Performance Reporting",
+        "task_scope": "Produces a decision-oriented report connecting objectives, spend, funnel outcomes, variance and next actions.",
+        "evidence": [
+          "objective-to-outcome variance"
+        ],
+        "omitted_field": "reporting period"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for objective-to-outcome variance."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "objective-to-outcome variance"
+    ],
+    "must_say_not_recorded": [
+      "reporting period"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

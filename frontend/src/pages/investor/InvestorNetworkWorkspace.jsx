@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, CircleAlert, RefreshCw, ShieldCheck, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
@@ -13,6 +13,7 @@ import { COLD_AFTER_DAYS, coldView, coldestDays, reminderDue } from '../../lib/n
 import { useAuth } from '../../hooks/useAuthSync';
 import { introTarget, askKey, createIntroRequests } from '../../lib/investorIntroRequest';
 import InvestorIntroRequest from './InvestorIntroRequest';
+import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
 
 /**
  * A section heading's right-hand detail, in the order the body already reads
@@ -41,6 +42,31 @@ const age = (value) => {
   return days === 0 ? 'Today' : `${days}d ago`;
 };
 const safeKey = (value) => String(value || 'record').replace(/\W+/g, '-').toLowerCase();
+
+/** #4611 finding 7: four cards is an OVERVIEW's preview, never a zone's whole list. */
+const PROPOSITION_PREVIEW = 4;
+/** How many more the zone reveals per press. */
+const PROPOSITION_PAGE = 10;
+/** The Organizations roll-up's preview and page, the same distinction. */
+const ORGANIZATION_PREVIEW = 6;
+const ORGANIZATION_PAGE = 12;
+
+/**
+ * #4611 finding 7 — the heading's counts, each with its scope named.
+ *
+ * It read `${propositionRows.length} shown` over four cards, so with thirty
+ * propositions it said "30 shown" above four. Three numbers mean three
+ * different things here and the heading now says which is which: how many are
+ * on screen, how many the current filter matches, and how many exist. The
+ * middle one is printed only when a filter is narrowing, because otherwise it
+ * equals the last and repeating it would be noise.
+ */
+function propositionScopes({ pending, shown, filtered, total, filteredView }) {
+  const parts = [`${pending} awaiting your decision`];
+  parts.push(shown >= filtered ? `${shown} shown` : `${shown} of ${filtered} shown`);
+  if (filteredView && filtered !== total) parts.push(`${total} recorded in all`);
+  return parts.join(' · ');
+}
 // An ask names its target by id only — `GET /api/introductions` joins no
 // names — so the row says which record it points at rather than inventing one.
 const askTarget = (ask) => (ask?.founder_user_id ? `Founder #${ask.founder_user_id}`
@@ -124,7 +150,11 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   // you gave is logged as value-add support, not on this desk.
   const [deskView, setDeskView] = useState('all');
   const [params] = useSearchParams();
-  const highlightedIntro = params.get('intro') || '';
+  // #4609: the proposition surface claims a `kind=proposition` target and any
+  // target whose kind the link did not say (every notification sent before the
+  // destination contract). A `kind=request` uid belongs to the teammate desk.
+  const deepLink = resolveIntroTarget(params);
+  const highlightedIntro = introTargetIsMine(deepLink, 'proposition') ? deepLink.uid : '';
   const requestedTab = params.get('tab') || '';
   const [relationships, setRelationships] = useState(null);
   const [introductions, setIntroductions] = useState(null);
@@ -197,12 +227,46 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
   const deskRows = deskView === 'stalled'
     ? propositionRows.filter((prop) => String(prop.status || '').toLowerCase() === 'expired')
     : propositionRows;
+  /**
+   * #4611 finding 7 — THE PREVIEW CAP IS AN OVERVIEW'S, AND THIS IS A ZONE.
+   *
+   * `deskRows.slice(0, 4)` was applied everywhere this page renders — the
+   * `/network` overview, where four cards is right, AND the dedicated
+   * `/network/introductions` zone, where it is the only place a member can act
+   * on a proposition at all. So with thirty propositions the fifth was
+   * unreachable: no page control, no "show all", nothing. Accepted and declined
+   * records fell off the same edge. The heading beside the four cards read
+   * "30 shown".
+   *
+   * `zone` is the prop `NetworkWorkspace` already passes, so the cap is now
+   * exactly what its name says: a PREVIEW, on the overview only. In the zone
+   * the list pages through `PROPOSITION_PAGE` rows at a time, which keeps the
+   * section a readable length while every record stays reachable by ordinary
+   * navigation.
+   *
+   * The deep-link pin stays, and it has to stay ahead of the cap: a highlighted
+   * proposition is pulled into the preview rather than being cut off by it,
+   * which is what makes a notification land on its record on the overview too.
+   */
+  const inZone = zone === 'introductions';
+  const [shown, setShown] = useState(PROPOSITION_PAGE);
+  // A new filter is a new list: showing page three of `all` as page three of
+  // `stalled` would hand the member a short list and call it the end of a long
+  // one.
+  useEffect(() => { setShown(PROPOSITION_PAGE); }, [deskView, inZone]);
+  const cap = inZone ? shown : PROPOSITION_PREVIEW;
   const visiblePropositions = useMemo(() => {
-    const compact = deskRows.slice(0, 4);
+    const compact = deskRows.slice(0, cap);
     if (!highlightedIntro || compact.some((prop) => prop.uid === highlightedIntro)) return compact;
     const highlighted = deskRows.find((prop) => prop.uid === highlightedIntro);
-    return highlighted ? [highlighted, ...compact.slice(0, 3)] : compact;
-  }, [highlightedIntro, deskRows]);
+    return highlighted ? [highlighted, ...compact.slice(0, Math.max(0, cap - 1))] : compact;
+  }, [highlightedIntro, deskRows, cap]);
+  const morePropositions = Math.max(0, deskRows.length - visiblePropositions.length);
+  // #4611 finding 7: the export view below takes `deskRows` — the whole
+  // filtered collection, which is what the heading's "of N" names. It used to
+  // take the four cards on screen while the heading beside it said thirty, so a
+  // member exported four rows believing they had thirty. Every sibling zone on
+  // this page already exported its full array; propositions was the odd one.
   // The `Asked` view's rows: this investor's own asks, newest first as the
   // route returns them.
   const askRows = asks || [];
@@ -221,6 +285,17 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
     });
     return [...grouped.values()].sort((a, b) => b.people.size - a.people.size || a.name.localeCompare(b.name));
   }, [relationships]);
+  // #4611 finding 7, same shape one section down: six rows were drawn under a
+  // heading that counted every organisation. The zone pages; the overview
+  // previews and says so.
+  const [orgShown, setOrgShown] = useState(ORGANIZATION_PAGE);
+  const inOrgZone = zone === 'organizations';
+  useEffect(() => { setOrgShown(ORGANIZATION_PAGE); }, [inOrgZone]);
+  const visibleOrganizations = useMemo(
+    () => organizations.slice(0, inOrgZone ? orgShown : ORGANIZATION_PREVIEW),
+    [organizations, inOrgZone, orgShown],
+  );
+  const moreOrganizations = Math.max(0, organizations.length - visibleOrganizations.length);
 
   /**
    * The interaction log and the reminders (migration 338). Logging a touch
@@ -304,7 +379,10 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
         propositions: current.propositions.map((item) => item.uid === prop.uid ? { ...item, status: decision === 'accept' ? 'accepted' : 'declined' } : item),
       }));
     } catch (error) {
-      if (error?.status === 409) {
+      if (error?.data?.error === 'credit_conflict') {
+        // D4606: the debit lost a race and nothing was spent.
+        setActionError('Your credits changed at the same moment. Nothing was spent. Try again.');
+      } else if (error?.status === 409) {
         setActionError('This proposition changed elsewhere. The desk has been refreshed.');
         load();
       } else if (error?.status === 402 || error?.data?.code === 'intro_credits_exhausted') {
@@ -463,7 +541,7 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
 
           {(shows('introductions') || shows('organizations')) && <div className="inw-lower">
             {shows('introductions') && <section className="inw-card" aria-labelledby="introductions-desk">
-              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => `${pending.length} awaiting your decision · ${propositionRows.length} shown`)} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: visiblePropositions, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
+              <SectionHeading id="introductions-desk" title="Introductions desk" detail={deskView === 'asked' ? detailFor(errors.asks, asks, () => `${askRows.length} ${askRows.length === 1 ? 'ask' : 'asks'} recorded`) : detailFor(errors.introductions, introductions, () => propositionScopes({ pending: pending.length, shown: visiblePropositions.length, filtered: deskRows.length, total: propositionRows.length, filteredView: deskView !== 'all' }))} role={role} filters={zoneFilters ? zoneFilters({ value: deskView, onChange: setDeskView }) : []} actions={investorZoneActions('network/introductions', { view: deskView === 'asked' ? { header: ['Target', 'Status', 'Quarter', 'Asked'], rows: askRows, cells: (a) => [askTarget(a), a.status, a.quarter, a.created_at] } : { header: ['Introduction', 'Status', 'Score', 'Source'], rows: deskRows, cells: (p) => [p.target?.name || p.target?.email, p.status, p.score, p.source] } })} />
               {deskView === 'asked' ? (
                 errors.asks ? <Alert>{errors.asks}</Alert> : asks === null ? <Skeleton rows={4} /> : askRows.length === 0 ? <div className="inw-empty" data-testid="empty-asks">No introduction ask is recorded. One appears here when you request an intro.</div> : <>
                   <div className="inw-proposition-list">{askRows.map((ask) => <article className="inw-proposition" key={ask.uid} data-testid={`card-ask-${ask.uid}`}>
@@ -485,12 +563,40 @@ export default function InvestorNetworkWorkspace({ embedded = false, zone = null
                     <div className="inw-prop-actions">{active ? <><button type="button" onClick={() => resolveIntro(prop, 'accept')} disabled={busy} data-testid={`button-accept-intro-${prop.uid}`}><Check size={12} />{busy ? 'Working' : 'Accept intro'}</button><button type="button" className="quiet" onClick={() => resolveIntro(prop, 'decline')} disabled={busy} data-testid={`button-decline-intro-${prop.uid}`}><X size={12} />Decline</button></> : <span className="inw-state" data-testid={`status-intro-${prop.uid}`}>{typeLabel(prop.status)}</span>}{(prop.screened === true || prop.screening_status === 'screened') && <span className="inw-screened" data-testid={`status-intro-screened-${prop.uid}`}><ShieldCheck size={11} />Screened</span>}</div>
                   </article>;
                 })}</div>
+                {/* #4611 finding 7: the rest of the collection, reachable by
+                    ordinary navigation. In the zone this extends the list; on
+                    the overview it is a link to the zone, because an overview's
+                    job is to point at the place the work is done. */}
+                {morePropositions > 0 ? (inZone ? (
+                  <div className="inw-prop-actions" data-testid="introductions-more">
+                    <button type="button" onClick={() => setShown((n) => n + PROPOSITION_PAGE)}>
+                      {`Show more (${visiblePropositions.length} of ${deskRows.length})`}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="inw-footnote" data-testid="introductions-more-link">
+                    <Link to="/network/introductions">{`Open Introductions to see all ${deskRows.length}`}</Link>
+                  </p>
+                )) : null}
               </>}
             </section>}
 
             {shows('organizations') && <section className="inw-card" aria-labelledby="organizations">
-              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => `${organizations.length} relationship-backed organizations`)} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
-              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{organizations.slice(0, 6).map((org) => <div className="inw-org" style={{ flexWrap: 'wrap' }} key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b>{introAction([...org.introTargets.values()])}</div>)}</div>}
+              <SectionHeading id="organizations" title="Organizations" detail={detailFor(errors.organizations, relationships, () => (visibleOrganizations.length >= organizations.length
+                ? `${organizations.length} relationship-backed organizations`
+                : `${visibleOrganizations.length} of ${organizations.length} relationship-backed organizations shown`))} role={role} filters={zoneFilters ? zoneFilters({}) : []} actions={investorZoneActions('network/organizations', { view: { header: ['Organization', 'People', 'Recorded types'], rows: organizations, cells: (o) => [o.name, o.people.size, [...o.types].join(' + ')] } })} />
+              {errors.organizations ? <Alert>{errors.organizations}</Alert> : relationships === null ? <Skeleton rows={4} /> : organizations.length === 0 ? <div className="inw-empty" data-testid="empty-organizations">No organization identity is recorded on your relationship records yet.</div> : <div className="inw-org-list">{visibleOrganizations.map((org) => <div className="inw-org" style={{ flexWrap: 'wrap' }} key={org.name} data-testid={`row-organization-${safeKey(org.name)}`}><div><strong>{org.name}</strong><span>{[...org.types].join(' · ') || 'Attributed relationship'}</span></div><b>{org.people.size} known</b>{introAction([...org.introTargets.values()])}</div>)}</div>}
+              {moreOrganizations > 0 ? (inOrgZone ? (
+                <div className="inw-prop-actions" data-testid="organizations-more">
+                  <button type="button" onClick={() => setOrgShown((n) => n + ORGANIZATION_PAGE)}>
+                    {`Show more (${visibleOrganizations.length} of ${organizations.length})`}
+                  </button>
+                </div>
+              ) : (
+                <p className="inw-footnote" data-testid="organizations-more-link">
+                  <Link to="/network/organizations">{`Open Organizations to see all ${organizations.length}`}</Link>
+                </p>
+              )) : null}
               <p className="inw-footnote">Organizations appear only when explicitly attached to a relationship record. Names and email domains are never used to infer a firm.</p>
             </section>}
           </div>}

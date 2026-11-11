@@ -3,7 +3,7 @@ import { TOTP, Secret } from 'otpauth';
 import * as QRCode from 'qrcode';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES } from '../auth';
+import { createJWT, hashToken, generateToken, requireAuth, setAuthCookies, clearAuthCookies, generateCsrfToken, revokeStaleCrossIdentitySession, selectJwt, bumpJwtMinIat, STEP_UP_TTL_MINUTES, supportOperatorOf } from '../auth';
 import { branchOf } from '../util/branch';
 import { sendVerificationEmail } from '../services/email';
 import { send as sendEmail } from '../services/email/send';
@@ -128,6 +128,9 @@ function safe(label: string, friendlyError: string, handler: (c: any) => Promise
       return await handler(c);
     } catch (e: any) {
       const msg = e?.message || String(e);
+      // #4570: a refusal from a gate (`requireAuth`'s 'Unauthorized', a step-up, a frozen admin) is not an
+      // unhandled error. Re-thrown, app.onError answers it with its own status (401, 403, 423) and body.
+      if (AUTH_ERROR_STATUSES[msg]) throw e;
       console.error('[AUTH] unhandled error', label, msg, e?.stack || '');
       const hit = SAFE_ERROR_CODES.find(s => s.re.test(msg));
       if (hit) {
@@ -153,6 +156,7 @@ async function readJson(c: any): Promise<{ ok: boolean; body: any; res: any }> {
 // here so existing call sites (register/verify/login/referral) keep
 // working unchanged.
 import { hashEmail } from '../util/hashEmail';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 // Task #9 follow-up — every fresh signup now lands directly in the
 // 'exploring' holding state instead of the lane role (founder/partner/
 // investor) it used to get. ensureExploringSchema guarantees the
@@ -161,6 +165,7 @@ import { hashEmail } from '../util/hashEmail';
 // (routes/admin_exploring.ts) shows a suggestion immediately, before the
 // onboarding chatbot even runs.
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { withDeadline } from '../util/deadline';
 
 /**
@@ -660,6 +665,7 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   await sql.end();
 
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
 
@@ -870,6 +876,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // browser user) from being replayed from outside the browser even after
   // the SPA's identity-change purge wipes localStorage.
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
 
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
@@ -936,36 +943,37 @@ auth.post('/logout', safe('logout', 'Logout failed.', async (c) => {
   // Best-effort session revocation. We don't await requireAuth() because
   // that would 401 a session whose cookie expired client-side — and the
   // user still wants the cookie cleared in that case.
+  //
+  // D4669 — EVERY TOKEN THE REQUEST PRESENTS, read the way `getCurrentUser`
+  // reads them. This used to take the Bearer if there was one and otherwise
+  // look for HQ's cookie name only, so on a branch (whose cookie is
+  // `studioos_auth_<code>`, D104) a sign-out revoked nothing, and under a
+  // support Bearer the operator's own cookie session was left standing. The
+  // answer now says whether a session was ended, instead of `ok` regardless.
+  let sessionRevoked: 'revoked' | 'none' | 'failed' = 'none';
   try {
-    const authHeader = c.req.header('Authorization');
-    let token: string | null = null;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.slice(7);
-    } else {
-      const cookieHeader = c.req.header('Cookie') || '';
-      for (const part of cookieHeader.split(';')) {
-        const t = part.trim();
-        if (t.startsWith('studioos_auth=')) { token = t.slice('studioos_auth='.length); break; }
+    const { decodeJWT, extractJwtCandidates } = await import('../auth');
+    const { bearer, cookie } = extractJwtCandidates(c);
+    for (const token of [...new Set([bearer, cookie].filter(Boolean) as string[])]) {
+      let payload: { jti?: string; user_id?: number } | null = null;
+      try { payload = await decodeJWT(c.env, token); } catch { payload = null; }
+      if (!payload?.jti) continue;
+      try {
+        await c.env.DB.prepare(
+          "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
+        ).bind(payload.jti, payload.user_id).run();
+        if (sessionRevoked === 'none') sessionRevoked = 'revoked';
+      } catch (e) {
+        sessionRevoked = 'failed';
+        console.error('[AUTH:logout] session revoke failed:', e);
       }
     }
-    if (token) {
-      const { decodeJWT } = await import('../auth');
-      try {
-        const payload = await decodeJWT(c.env, token);
-        if (payload?.jti) {
-          try {
-            await c.env.DB.prepare(
-              "UPDATE user_sessions SET revoked_at = datetime('now') WHERE jti = ? AND user_id = ? AND revoked_at IS NULL"
-            ).bind(payload.jti, payload.user_id).run();
-          } catch {}
-        }
-      } catch {}
-    }
   } catch (e) {
+    sessionRevoked = 'failed';
     console.error('[AUTH:logout] session revoke failed (non-fatal):', e);
   }
   clearAuthCookies(c);
-  return c.json({ ok: true });
+  return c.json({ ok: true, session_revoked: sessionRevoked });
 }));
 
 auth.get('/me', async (c) => {
@@ -1309,7 +1317,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   // token row existed, the screen said "Sign-in link sent", and no mail left.
   // Resend ran the same handler on a warm isolate, the errand survived, and
   // that second press was the first time a message was actually queued.
-  const queued = await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
+  // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  const signup = parsed.body?.purpose === 'signup';
+  const queued = signup
+    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
+    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
@@ -1416,6 +1429,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     }
 
     await revokeStaleCrossIdentitySession(c, user.id);
+    await claimLpRowsAtSignIn(c.env, user); // D5318 H8
     const csrf = generateCsrfToken();
     setAuthCookies(c, jwtToken, csrf);
     const landing = newSignup ? '/onboarding/chat' : '/dashboard';
@@ -1484,6 +1498,10 @@ auth.post('/support/redeem', safe('support-redeem', 'Could not open the support 
     session = await redeemSupportCode(c.env, String(parsed.body?.code || ''));
   } catch (e: any) {
     const msg = String(e?.message || '');
+    // D4669 — the branch could not record the session, so none was opened.
+    if (/^support-unavailable: /.test(msg)) {
+      return c.json({ error: msg.replace(/^support-unavailable: /, ''), code: 'support_session_unrecorded' }, 503);
+    }
     if (/^support: /.test(msg)) {
       return c.json({ error: msg.replace(/^support: /, ''), code: 'support_code_invalid' }, 400);
     }
@@ -1519,8 +1537,10 @@ auth.post('/step-up', safe('step-up', 'Could not verify your code. Please try ag
   // D200 — a step-up is the one event this ledger records in BOTH outcomes:
   // the stamp below overwrites a single column and would otherwise leave no
   // trail of a fresh authenticator check having been asked for, or refused.
+  // D4691 — a support session's step-up is the operator's, and says so.
+  const supportUserId = await supportOperatorOf(c, Number(user.id));
   const stepUp = (outcome: 'ok' | 'refused', detail?: string) =>
-    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip') });
+    recordSecurityEvent(c.env, { kind: 'step_up', factor: 'totp', outcome, detail, userId: user.id, email: user.email, ip: c.req.header('cf-connecting-ip'), supportUserId });
   const parsed = await readJson(c);
   if (!parsed.ok) return parsed.res;
   const code = String(parsed.body?.totp_code || '').trim();

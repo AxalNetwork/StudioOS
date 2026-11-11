@@ -24,8 +24,10 @@ import { safeReadJSON, safeWriteJSON } from '../../../lib/storage';
 import { DEFAULT_SLA, SLA_BAND_CLASS, slaBand } from '../../../lib/dealFlow';
 import { Lightbox, Unreadable, Unrecorded, actionGhost, actionPrimary } from '../../../ui';
 import { SCOPES, TITLE } from './dealFlowModel';
-// D1241: the Scorecard column's wait is SCORING's word; Deal flow's own waits are retired.
-import { NOT_YET } from '../../../components/scoring/scorecard/scorecardModel.js';
+// D4635 (#4635): the Scorecard column reads the supported scoring batch, with its own states.
+import { ventureScoresApi } from '../../../lib/api/ventureScores.js';
+import { ScorecardCell } from './FlowCells';
+import { scoresOf } from './flowModel';
 import {
   CRUMB, LENS_COLUMNS, PARTNER_NOTE, PASS_CLOSES, ROUND_WORD, STUDIO_LINE,
   columnSummary, intakeNotice, investorsLine, lensRows, nextStatus, notRaisingLine, rowActions, studioRow, studioViewHref, studioViewOf,
@@ -121,7 +123,7 @@ export function StudioBoard({ rows, role, sla, onPick }) {
 }
 
 /** DLS11b's table: the investor table's columns, then Lead partner, Investors and Source; Not raising adds who set it. */
-export function StudioTable({ rows, role, notRaising, onPick }) {
+export function StudioTable({ rows, role, notRaising, onPick, scoresFor = () => ({ state: 'loading' }) }) {
   if (!rows.length) {
     return <section className={box} data-testid="studio-empty"><p className="m-0 text-sm">{notRaising ? 'No round is Not raising here.' : 'No round is listed.'}</p></section>;
   }
@@ -146,7 +148,7 @@ export function StudioTable({ rows, role, notRaising, onPick }) {
                 </td>
                 <td><span className={chip}>{r.round}</span></td>
                 <td>{money(r.ask, r.currency)}</td>
-                <td><span className="text-[12px] text-axal-muted">{NOT_YET}</span></td>
+                <td><ScorecardCell scores={scoresFor(r.id)} testId={`studio-scorecard-${r.id}`} /></td>
                 <td>{r.youLead ? 'You' : r.lead || <Unrecorded reason="No lead partner is recorded on this round." />}</td>
                 <td><Investors row={r} /></td>
                 <td>{r.source || <Unrecorded reason="No source is recorded on this round." />}</td>
@@ -169,7 +171,7 @@ function AdvanceDialog({ row, onClose, onDone }) {
   const to = ROUND_WORD[nextStatus(row.status)];
   const go = async () => {
     setBusy(true); setRefusal(null);
-    try { await api.advanceDeal(row.id); onDone(`${row.name} moved to ${to}.`); } catch (e) { reportError('StudioLens:advance', e); setRefusal(e?.message || 'The round did not move. Nothing changed.'); setBusy(false); }
+    try { await api.advanceDeal(row.id, row.status); onDone(`${row.name} moved to ${to}.`); } catch (e) { reportError('StudioLens:advance', e); setRefusal(e?.message || 'The round did not move. Nothing changed.'); setBusy(false); }
   };
   return (
     <Lightbox phone="sheet" label={`Move ${row.name} to ${to}?`} title={`Move ${row.name} to ${to}?`} onClose={() => { if (!busy) onClose(); }} testId="studio-advance"
@@ -226,6 +228,9 @@ export default function StudioLens({ role, view = { view: 'board', notRaising: f
 
   const all = lens.kind === 'ok' && Array.isArray(lens.data?.rows) ? lens.data.rows.map(studioRow) : null;
   const rows = all ? lensRows(all, { notRaising: view.notRaising, intakeOnly: view.intakeOnly, q }) : null;
+  const lensIds = all ? all.map((r) => Number(r.id)).filter((n) => Number.isInteger(n) && n > 0) : [];
+  const [batch] = useRead(() => (lensIds.length ? ventureScoresApi.batch(lensIds) : Promise.resolve({ items: [] })), [lensIds.join(',')]);
+  const scoresFor = (id) => scoresOf(batch.kind === 'ok' ? batch.data : batch.kind === 'unreadable' ? 'failed' : null, id);
   const notice = lens.kind === 'ok' ? intakeNotice(lens.data?.intake_not_raising) : null;
   const finished = (line) => { setOpen(null); setDone(line); reloadLens(); reloadStage(); reloadPasses(); };
   const pick = (key, row) => { setDone(null); setOpen({ key, row }); };
@@ -233,7 +238,7 @@ export default function StudioLens({ role, view = { view: 'board', notRaising: f
   let body;
   if (lens.kind === 'loading') body = <section className={box} aria-busy="true" data-testid="studio-loading"><p className="m-0 text-sm text-axal-muted">Reading the rounds…</p></section>;
   else if (lens.kind === 'unreadable' || !all) body = <section className={box} data-testid="studio-failed"><Unreadable what="The rounds" claim="That is not the same as having none." onRetry={reloadLens} /></section>;
-  else if (view.notRaising || view.view === 'table') body = <StudioTable rows={rows} role={role} notRaising={view.notRaising} onPick={pick} />;
+  else if (view.notRaising || view.view === 'table') body = <StudioTable rows={rows} role={role} notRaising={view.notRaising} onPick={pick} scoresFor={scoresFor} />;
   else body = <StudioBoard rows={rows} role={role} sla={sla} onPick={pick} />;
 
   return (

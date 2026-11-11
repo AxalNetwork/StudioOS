@@ -38,6 +38,7 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 
 import hq from '../src/routes/admin_hq.ts';
+import { normalizeTeamSearch, TEAM_SEARCH_MAX, TEAM_SEARCH_MIN } from '../src/util/teamSearch.ts';
 import { FREEZING_STATUSES } from '../src/util/authErrors.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -109,6 +110,7 @@ function freshDb({ withNotices = true } = {}) {
       last_step_up_at TEXT, created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE territory_licences (
+    revision INTEGER NOT NULL DEFAULT 0,
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, licence_ref TEXT, legal_entity_name TEXT,
       brand_name TEXT, status TEXT NOT NULL DEFAULT 'active', renews_on TEXT, seats_total INTEGER,
       annual_fee_cents INTEGER, currency TEXT, revenue_share_bps INTEGER, token_split_bps INTEGER,
@@ -344,7 +346,12 @@ test('with no branch bound there are no groups, and searched says whether HQ ask
   const unasked = await getAdmins(db);
   assert.deepEqual(unasked.body.branches, []);
   assert.equal(unasked.body.searched, false);
-  assert.deepEqual(unasked.body.branches_coverage, { total: 0, answered: 0, complete: true, unreadable: [] });
+  assert.deepEqual(unasked.body.branches_coverage, {
+    total: 0, asked: 0, answered: 0, complete: true, unreadable: [], not_deployed: [], not_asked: [],
+  });
+  // D5041: the registry was read and holds no row and nothing is bound, so HQ HAS established there is no branch.
+  assert.equal(unasked.body.no_branches, true);
+  assert.equal(unasked.body.registry_available, true);
   const asked = await getAdmins(db, SUPER, 'hana');
   assert.equal(asked.body.searched, true, 'a query reached the route and it did not notice');
   // Every admin still comes back: `q` asks the BRANCHES; the HQ roster is
@@ -398,4 +405,230 @@ test('the open-status tuple and its bound placeholders cannot drift apart', () =
   // a fourth hand-typed list of the ladder's vocabulary.
   assert.match(src, /\[\.\.\.FREEZING_STATUSES, 'responded', 'issued'\]/,
     'the open statuses were retyped instead of derived from FREEZING_STATUSES');
+});
+
+/* ------------------------------------------------------------------ *
+ * D5041 (#5041) — branch truth states                                 *
+ * ------------------------------------------------------------------ */
+
+const FR_ROW = (db: InstanceType<typeof DatabaseSync>, code = 'fr') => db.prepare(
+  "INSERT INTO licence_deployments (licence_uid, code, hostname, status) VALUES (?,?,?,'live')",
+).run(`${LIC}-${code}`, code, `${code}.axal.vc`);
+
+/** A binding that records every call, so a test can prove nobody was asked. */
+const spyBranch = (calls: any[][], hits: any[] = []) => ({
+  async searchAccounts(...a: any[]) { calls.push(a); return { results: hits, truncated: false, branch: 'x', as_of: '2026-09-16T22:00:00Z' }; },
+});
+const branchOf = (body: any, code: string) => (body.branches || []).find((b: any) => b.code === code);
+
+test('D5041: a registry row with a live binding and no search is ready to search, not "not deployed", and nobody is asked', async () => {
+  const db = freshDb();
+  FR_ROW(db);
+  const calls: any[][] = [];
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch(calls) });
+  assert.deepEqual(calls, [], 'an idle read fanned out to a branch');
+  assert.equal(branchOf(body, 'fr').status, 'not_asked');
+  assert.equal(branchOf(body, 'fr').licence_uid, `${LIC}-fr`, 'the licence stamp is lost on an idle row');
+  assert.equal(body.searched, false);
+});
+
+test('D5041: a registry row with no binding and no search is not deployed', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'de');
+  const { body } = await getAdmins(db);
+  assert.equal(branchOf(body, 'de').status, 'not_deployed');
+  assert.match(String(branchOf(body, 'de').reason), /no service binding/);
+});
+
+test('D5041: a binding with no registry row is listed as not asked, and not as a deployment', async () => {
+  const db = freshDb();
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_IT: spyBranch([]) });
+  assert.equal(branchOf(body, 'it').status, 'not_asked');
+  assert.equal(branchOf(body, 'it').licence_uid ?? null, null);
+});
+
+test('D5041: idle rows are not failures in the coverage, and a search then counts only what it asked', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'fr'); FR_ROW(db, 'de');
+  const idle = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.deepEqual(idle.body.branches_coverage, {
+    total: 2, asked: 0, answered: 0, complete: false,
+    unreadable: [], not_deployed: ['de'], not_asked: ['fr'],
+  });
+  const searched = await getAdmins(db, SUPER, 'hana', { BRANCH_FR: spyBranch([]), BRANCH_IT: { async searchAccounts() { throw new Error('refused'); } } });
+  assert.deepEqual(searched.body.branches_coverage, {
+    total: 3, asked: 2, answered: 1, complete: false,
+    unreadable: ['it'], not_deployed: ['de'], not_asked: [],
+  });
+});
+
+test('D5041: one branch unreadable for the query while another answers keeps both states', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'fr');
+  const { body } = await getAdmins(db, SUPER, 'hana', {
+    BRANCH_FR: spyBranch([], [{ id: 7, name: 'Hana', email: 'h@fr.example', role: 'founder', is_active: 1 }]),
+    BRANCH_DE: { async searchAccounts() { throw new Error('binding refused'); } },
+  });
+  assert.equal(branchOf(body, 'fr').status, 'ok');
+  assert.equal(branchOf(body, 'de').status, 'unreadable');
+  assert.equal(body.branches_coverage.answered, 1);
+});
+
+test('D5041: a registry that cannot be read is not "no branches"', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  db.exec('CREATE VIEW licence_deployments AS SELECT * FROM nonexistent_table_5041'); // a read that THROWS, not a missing table
+  const { status, body } = await getAdmins(db);
+  assert.equal(status, 200);
+  assert.equal(body.registry_available, false);
+  assert.match(String(body.registry_reason), /deployment registry/);
+  assert.equal(body.no_branches, false, 'a failed read was reported as none provisioned');
+  assert.equal(body.branches_coverage.complete, false, 'completeness was claimed over an unknown set');
+});
+
+test('D5041: a registry that cannot be read does not hide a bound branch', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  db.exec('CREATE VIEW licence_deployments AS SELECT * FROM nonexistent_table_5041');
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.equal(branchOf(body, 'fr').status, 'not_asked');
+  assert.equal(body.no_branches, false);
+});
+
+test('D5041: a missing registry table (migration 258 not applied) is an empty registry, not a failure', async () => {
+  const db = freshDb();
+  db.exec('DROP TABLE licence_deployments');
+  const { body } = await getAdmins(db);
+  assert.equal(body.registry_available, true);
+  assert.equal(body.no_branches, true);
+});
+
+test('D5041: no_branches is false when a binding exists even though the registry is empty', async () => {
+  const db = freshDb();
+  const { body } = await getAdmins(db, SUPER, '', { BRANCH_FR: spyBranch([]) });
+  assert.equal(body.registry_available, true);
+  assert.equal(body.no_branches, false);
+});
+
+test('D5041: complete is true only when something that could fail was asked and nothing did', async () => {
+  // Idle, one bound branch and nothing else: no branch failed, but none was asked either.
+  const idle = freshDb();
+  FR_ROW(idle, 'fr');
+  const idleBody = (await getAdmins(idle, SUPER, '', { BRANCH_FR: spyBranch([]) })).body;
+  assert.equal(idleBody.branches_coverage.complete, false, 'an unasked branch was counted as covered');
+  // Searched, the one branch answered: complete.
+  const done = (await getAdmins(idle, SUPER, 'hana', { BRANCH_FR: spyBranch([]) })).body;
+  assert.equal(done.branches_coverage.complete, true);
+  // Searched, one answered and one registry row has no binding: nothing failed, but not every branch was reachable.
+  const gap = freshDb();
+  FR_ROW(gap, 'fr'); FR_ROW(gap, 'de');
+  const gapBody = (await getAdmins(gap, SUPER, 'hana', { BRANCH_FR: spyBranch([]) })).body;
+  assert.deepEqual(gapBody.branches_coverage.unreadable, []);
+  assert.equal(gapBody.branches_coverage.complete, false, 'a branch with no binding was counted as covered');
+});
+
+/* ------------------------------------------------------------------ *
+ * D5042 (#5042) — one search contract                                 *
+ * ------------------------------------------------------------------ */
+
+async function getRaw(db: InstanceType<typeof DatabaseSync>, qs: string, extraEnv = {}) {
+  const res = await app.request(`/admins${qs}`, { headers: { Authorization: `Bearer ${await token(SUPER)}` } }, env(db, extraEnv));
+  return { status: res.status, body: await res.json() as any };
+}
+const seen = () => { const calls: any[][] = []; return { calls, bound: { async searchAccounts(...a: any[]) { calls.push(a); return { results: [], truncated: false, branch: 'fr', as_of: '2026-11-08T10:00:00Z' }; } } }; };
+
+test('D5042: normalizeTeamSearch trims, collapses whitespace, counts characters and names its state', () => {
+  assert.equal(TEAM_SEARCH_MIN, 2);
+  assert.equal(TEAM_SEARCH_MAX, 64);
+  assert.equal(normalizeTeamSearch(undefined).state, 'none');
+  assert.equal(normalizeTeamSearch('').state, 'none');
+  assert.equal(normalizeTeamSearch('   \t \n ').state, 'none');
+  assert.deepEqual(normalizeTeamSearch(' a '), { state: 'too_short', query: 'a', min_length: 2, max_length: 64 });
+  assert.deepEqual(normalizeTeamSearch('  gu  '), { state: 'asked', query: 'gu', min_length: 2, max_length: 64 });
+  assert.equal(normalizeTeamSearch('  hana    lee ').query, 'hana lee');
+  assert.equal(normalizeTeamSearch('a'.repeat(64)).state, 'asked');
+  assert.equal(normalizeTeamSearch('a'.repeat(65)).state, 'too_long');
+  assert.equal(normalizeTeamSearch('é'.repeat(64)).state, 'asked', 'characters, not UTF-16 units or bytes');
+  assert.equal(normalizeTeamSearch('😀'.repeat(64)).state, 'asked');
+  assert.equal(normalizeTeamSearch('😀'.repeat(65)).state, 'too_long');
+  assert.equal(normalizeTeamSearch('😀').state, 'too_short');
+});
+
+for (const [label, q, state] of [
+  ['no query', '', 'none'],
+  ['whitespace only', '%20%20%09', 'none'],
+  ['one character', 'g', 'too_short'],
+  ['one character with padding', '%20g%20', 'too_short'],
+  ['over the limit', 'x'.repeat(TEAM_SEARCH_MAX + 1), 'too_long'],
+] as const) {
+  test(`D5042: ${label} asks no branch, and says so`, async () => {
+    const db = freshDb();
+    FR_ROW(db);
+    const { calls, bound } = seen();
+    const { status, body } = await getRaw(db, q ? `?q=${q}` : '', { BRANCH_FR: bound });
+    assert.equal(status, 200);
+    assert.deepEqual(calls, [], 'a query below the minimum or above the maximum fanned out');
+    assert.equal(body.searched, false);
+    assert.equal(body.search.state, state);
+    assert.equal(body.search.min_length, 2);
+    assert.equal(body.search.max_length, 64);
+    assert.equal(branchOf(body, 'fr').status, 'not_asked');
+    assert.equal(body.total, 126, 'the HQ roster is returned whatever the branch search did');
+  });
+}
+
+test('D5042: two characters ask every branch, with the normalized query and nothing else', async () => {
+  const db = freshDb();
+  FR_ROW(db);
+  const { calls, bound } = seen();
+  const { body } = await getRaw(db, '?q=%20%20gu%20%20', { BRANCH_FR: bound });
+  assert.deepEqual(calls, [['gu', 20]]);
+  assert.equal(body.searched, true);
+  assert.deepEqual(body.search, { state: 'asked', query: 'gu', min_length: 2, max_length: 64 });
+  const spaced = seen();
+  await getRaw(db, '?q=hana%20%20%20lee', { BRANCH_FR: spaced.bound });
+  assert.deepEqual(spaced.calls, [['hana lee', 20]]);
+});
+
+test('D5042: the longest allowed query is asked in full', async () => {
+  const db = freshDb();
+  FR_ROW(db);
+  const { calls, bound } = seen();
+  const longest = 'a'.repeat(TEAM_SEARCH_MAX);
+  const { body } = await getRaw(db, `?q=${longest}`, { BRANCH_FR: bound });
+  assert.deepEqual(calls, [[longest, 20]]);
+  assert.equal(body.search.state, 'asked');
+});
+
+test('D5042: view-as uses the same policy: a short or over-long query asks nobody, a good one asks that branch once', async () => {
+  const db = freshDb();
+  FR_ROW(db);
+  for (const q of ['', 'g', 'x'.repeat(TEAM_SEARCH_MAX + 1)]) {
+    const { calls, bound } = seen();
+    const { body } = await getRaw(db, `?branch=fr${q ? `&q=${q}` : ''}`, { BRANCH_FR: bound });
+    assert.deepEqual(calls, [], `view-as asked the branch for ${JSON.stringify(q)}`);
+    assert.equal(body.scope.status, 'not_asked');
+    assert.equal(body.scope.asked, '');
+    assert.equal(body.searched, false);
+    assert.equal(body.branches_coverage.unreadable.length, 0, 'an unasked branch was counted as failed');
+  }
+  const { calls, bound } = seen();
+  const { body } = await getRaw(db, '?branch=fr&q=%20gu%20', { BRANCH_FR: bound });
+  assert.deepEqual(calls, [['gu', 20]]);
+  assert.equal(body.scope.status, 'ok');
+  assert.equal(body.scope.asked, 'gu');
+  assert.equal(body.search.query, 'gu');
+});
+
+test('D5042: view-as of a branch with no binding is not deployed whatever was typed, and nobody is called', async () => {
+  const db = freshDb();
+  FR_ROW(db, 'de');
+  const { body } = await getRaw(db, '?branch=de&q=g');
+  assert.equal(body.scope.status, 'not_deployed');
+});
+
+test('D5042: the browser mirrors the Worker\'s minimum and maximum', () => {
+  const policy = readFileSync(resolve(process.cwd(), 'frontend/src/pages/hq/teamSearchPolicy.js'), 'utf8');
+  assert.match(policy, new RegExp(`TEAM_SEARCH_MIN = ${TEAM_SEARCH_MIN};`));
+  assert.match(policy, new RegExp(`TEAM_SEARCH_MAX = ${TEAM_SEARCH_MAX};`));
 });

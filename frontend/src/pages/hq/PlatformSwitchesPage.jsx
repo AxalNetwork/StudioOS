@@ -54,7 +54,7 @@ export function SwitchForm({ sw, action, propagationSeconds, reasonMin, onDone }
     setBusy(true);
     setError(null);
     try {
-      const res = await api.hqSetPlatformSwitch(sw.key, action, reason.trim());
+      const res = await api.hqSetPlatformSwitch(sw.key, action, reason.trim(), sw.operator?.revision);
       setReason('');
       setAck(false);
       onDone(res);
@@ -213,6 +213,7 @@ export default function PlatformSwitchesPage() {
     <WorkerRail
       workspace="Switches"
       role="super_admin"
+      operations
       stance="Throws and releases HQ's switches"
       note="This rail reads back the operator switches as stored: each one's state, what the deployment holds, and what HQ last did with it and why. It throws nothing itself; the form on the page does, and records who and why."
       coverage={coverage}

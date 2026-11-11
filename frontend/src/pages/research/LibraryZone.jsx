@@ -11,6 +11,9 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
+import { createRecordGate } from './recordGate.js';
+import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from './libraryIndexing.js';
+import { answerabilityOf, indexStateOf, rowProblem } from './researchStates.js';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -54,18 +57,10 @@ import { railOptionFor } from '../../lib/railOptions';
  * has opened anything to you.
  */
 
-const STATE_LABEL = {
-  indexed: 'Answerable',
-  pending: 'Reading…',
-  unsupported: 'Not answerable',
-  failed: 'Not answerable',
-};
-const STATE_TONE = {
-  indexed: 'ok',
-  pending: 'neutral',
-  unsupported: 'warn',
-  failed: 'danger',
-};
+// D3701 (RS-06): index state and answerability are two columns with two
+// vocabularies, named once in `researchStates.js`. This file used to say
+// "Answerable" inside the index-state pill, so the two read as one fact.
+const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
 const KINDS = [
   { value: 'document', label: 'Document' },
@@ -112,17 +107,32 @@ function fmtBytes(n) {
 const LIBRARY_STRIP = {
   advisor: [
     { label: 'Documents', value: (x) => x.total, note: (x) => `${x.clientDocs} client, ${x.reusable} reusable` },
-    { label: 'Indexed', value: (x) => x.indexed, note: () => 'answerable in Ask' },
-    { label: 'Not indexed', value: (x) => x.notIndexed, note: () => 'invisible to Ask until indexed' },
-    { label: 'From clients', value: (x) => x.fromClients, note: () => 'read-only, opened to you through a grant' },
+    // #4610 — THE LABELS ARE THE ARTBOARD'S; WHAT CHANGED IS WHAT THEY COUNT.
+    // The note under this tile has always read "answerable in Ask", and the
+    // figure was `index_state`-derived over every item INCLUDING shares — so it
+    // counted a client's indexed share as answerable while the row beside it
+    // said "Indexed in their library, not yours". Both now read the Worker's
+    // `in_ask`, the one field the rows show, so the tile and its own note and
+    // the rows cannot disagree. #3701 owns these labels; this is not a relabel.
+    // Null, never 0, until the read succeeds.
+    { label: 'Indexed', value: (x) => (x.indexed == null ? 'Unreadable' : x.indexed), note: (x) => (x.indexed == null ? 'the library could not be read' : 'answerable in Ask') },
+    { label: 'Not indexed', value: (x) => (x.notIndexed == null ? 'Unreadable' : x.notIndexed), note: (x) => (x.notIndexed == null ? 'the library could not be read' : 'invisible to Ask until indexed') },
+    // #4610: null until the library read succeeds, so the tile says Unreadable
+    // rather than asserting "0 from clients" about a read that never happened.
+    { label: 'From clients', value: (x) => (x.fromClients == null ? 'Unreadable' : x.fromClients), note: (x) => (x.fromClients == null ? 'the library could not be read; that is not a count of zero' : 'read-only, opened to you through a grant') },
   ],
   founder: [
-    { label: 'Documents', value: (x) => x.total, note: (x) => `${x.indexed} answerable by Ask` },
+    { label: 'Documents', value: (x) => x.total, note: (x) => (x.indexed == null ? 'how many Ask can answer from could not be read' : `${x.indexed} answerable by Ask`) },
     { label: 'Primary sources', value: (x) => x.primary, note: () => 'classified as primary by their owner' },
-    { label: 'Questions asked', value: (x) => x.asked, note: (x) => `${x.noSource} came back with no source` },
+    // D4612: a failed read of the Ask history is Unreadable, never "0 asked".
+    {
+      label: 'Questions asked',
+      value: (x) => (x.askState === 'ready' ? x.asked : x.askState === 'unreadable' ? 'Unreadable' : 'Reading…'),
+      note: (x) => (x.askState === 'ready' ? `${x.noSource} came back with no source` : x.askState === 'unreadable' ? 'the Ask history could not be read; that is not a count of zero' : 'reading the Ask history'),
+    },
     {
       label: 'Cost per question',
-      value: (x) => (x.asked ? formatCost(x.spend / x.asked) : null),
+      value: (x) => (x.askState === 'ready' && x.asked ? formatCost(x.spend / x.asked) : null),
       note: () => 'mean over the questions on record',
       mono: true,
     },
@@ -176,15 +186,46 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   }, []);
   useEffect(() => { loadCollections(); }, [loadCollections]);
 
+  // D4612: a read answers only if it is still the latest, and the page is still here.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = createRecordGate();
   const load = useCallback(async () => {
+    const fresh = gate.current.begin();
     setState((c) => ({ ...c, loading: true, error: '' }));
     try {
-      setState({ loading: false, error: '', payload: await api.research.documents() });
+      const payload = await api.research.documents();
+      if (fresh()) setState({ loading: false, error: '', payload });
     } catch (e) {
-      setState({ loading: false, error: e?.message || 'Your library could not be read.', payload: null });
+      if (fresh()) setState({ loading: false, error: e?.message || 'Your library could not be read.', payload: null });
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // D4612: while a document is being read, re-read the library on a bounded
+  // schedule, quietly (the table stays on screen), until nothing is pending,
+  // the schedule runs out, or the page leaves. A failed re-read keeps the last
+  // good table and tries again on the same schedule.
+  const polls = useRef(0);
+  const [watching, setWatching] = useState('idle'); // idle | watching | stopped
+  const pending = hasPending(state.payload?.items);
+  useEffect(() => {
+    if (!pending) { polls.current = 0; setWatching('idle'); return undefined; }
+    const delay = pollDelay(polls.current);
+    if (delay == null) { setWatching('stopped'); return undefined; }
+    setWatching('watching');
+    const timer = setTimeout(async () => {
+      polls.current += 1;
+      const fresh = gate.current.begin();
+      try {
+        const payload = await api.research.documents();
+        if (fresh()) setState({ loading: false, error: '', payload });
+      } catch {
+        if (fresh()) setState((c) => ({ ...c, payload: c.payload ? { ...c.payload } : c.payload }));
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [pending, state.payload]);
+  useEffect(() => () => gate.current.invalidate(), []);
   useEffect(() => {
     if (!state.loading && window.location.hash.startsWith('#document-')) {
       window.document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: 'center' });
@@ -197,16 +238,21 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // Library page, because the two zones are one system and the artboards say so
   // from both ends. A failure here leaves those two tiles undrawn rather than
   // failing the page: the documents are what this zone is for.
+  // D4612: the Ask figures are their own read, with their own state. A failed
+  // read draws them Unreadable with a retry, never as 0 questions asked.
   const [ask, setAsk] = useState(null);
+  const [askState, setAskState] = useState('loading'); // loading | ready | unreadable
   const wantsAsk = LIBRARY_STRIP[role] === LIBRARY_STRIP.founder;
+  const [askTry, setAskTry] = useState(0);
   useEffect(() => {
     if (!wantsAsk) return undefined;
     let live = true;
+    setAskState('loading');
     api.research.askSessions('all')
-      .then((r) => { if (live) setAsk(r?.totals || null); })
-      .catch(() => {});
+      .then((r) => { if (live) { setAsk(r?.totals || null); setAskState(r?.totals ? 'ready' : 'unreadable'); } })
+      .catch(() => { if (live) { setAsk(null); setAskState('unreadable'); } });
     return () => { live = false; };
-  }, [wantsAsk]);
+  }, [wantsAsk, askTry]);
 
   const upload = async (e) => {
     e.preventDefault();
@@ -276,17 +322,34 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // COUNTED OVER THE WHOLE LIBRARY, NEVER OVER `visible`. A tile that changes
   // because you clicked a chip is not reporting what it claims to — the same
   // rule `SignalsPage`'s age bands follow, and for the same reason.
+  /**
+   * #4610 — A COUNT NOBODY READ IS NULL, NEVER 0.
+   *
+   * `payload?.indexed ?? 0` turned a failed or absent library read into three
+   * confident zeroes — "0 answerable", "0 not indexed", "0 from clients" — in
+   * the same tiles that print real figures when the read works. The Ask-history
+   * read beside them had this right already (D4612: `askState === 'ready' ?
+   * … : null`), so one strip held both conventions, and the honest one was the
+   * newer one. `payload` is null until a read succeeds, so `?? null` is the
+   * whole fix and the tiles' own absence handling does the rest.
+   */
   const ctx = {
     primary: items.filter((d) => d.kind === 'primary').length,
     total: items.length,
-    indexed: payload?.indexed ?? 0,
-    notIndexed: payload?.not_indexed ?? 0,
-    fromClients: payload?.from_clients ?? 0,
+    // `answerable` is the Worker's `in_ask` count — the same field each row
+    // carries — so the strip and the rows cannot disagree about whether a
+    // client's indexed share is answerable here. It is not.
+    indexed: payload?.answerable ?? null,
+    notIndexed: payload?.not_answerable ?? null,
+    indexState: payload?.indexed ?? null,
+    fromClients: payload?.from_clients ?? null,
     clientDocs: items.filter((d) => d.kind === 'client').length,
     reusable: items.filter((d) => d.kind === 'playbook').length,
-    asked: ask?.asked ?? 0,
-    noSource: ask?.no_source ?? 0,
-    spend: ask?.cost_usd ?? 0,
+    // Null, never 0, until the Ask history has been read (D4612).
+    asked: askState === 'ready' ? ask.asked : null,
+    noSource: askState === 'ready' ? ask.no_source : null,
+    spend: askState === 'ready' ? ask.cost_usd : null,
+    askState,
   };
 
   const reindex = async (uid) => {
@@ -304,15 +367,27 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   // is what the ops row means on a page listing the whole library. It is
   // disabled with a reason rather than hidden when there is nothing to re-run —
   // a control that vanishes leaves a reader wondering whether it ever existed.
-  const stale = items.filter((d) => d.source !== 'client' && d.index_state !== 'indexed');
+  // D4612: what is already being read is left alone, at most two go at once,
+  // the page stays busy until every one has answered, and the note says what
+  // each did.
+  const stale = reindexTargets(items);
+  const reindexAll = async () => {
+    setBusy(true); setNote(null); setRunning('reindex');
+    try {
+      const results = await runBatch(stale.map((d) => d.uid), (uid) => api.research.reindex(uid), 2);
+      const title = (uid) => items.find((d) => d.uid === uid)?.title || 'Untitled document';
+      setNote(batchSummary(results, title));
+      await load();
+    } finally { setBusy(false); setRunning(null); }
+  };
   const handlers = {
     newCollection: () => { setNewCollectionOpen(true); collectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
     addDocument: () => fileRef.current?.click(),
     reindex: {
-      onClick: () => stale.forEach((d) => reindex(d.uid)),
+      onClick: reindexAll,
       disabled: busy || stale.length === 0,
       title: stale.length === 0
-        ? 'every document you own is already indexed'
+        ? (pending ? 'the documents Ask cannot see yet are already being read' : 'every document you own is already indexed')
         : `re-read ${stale.length} document${stale.length === 1 ? '' : 's'} Ask cannot currently see`,
     },
   };
@@ -328,12 +403,16 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         />
       )}
       <ZoneHeading
-        title="Your library"
-        blurb="The documents Ask reads from. What is answerable here is exactly what Ask can cite."
-        action={payload ? (
-          <Pill tone={payload.not_indexed > 0 ? 'warn' : 'ok'}>
-            {payload.indexed} answerable
-            {payload.not_indexed > 0 ? ` · ${payload.not_indexed} not` : ''}
+        title="Evidence Library"
+        blurb="Your documents. Only indexed documents can be cited in Ask."
+        /* #4610: the pill counts what Ask can answer from — `in_ask`, the
+           field the rows show — not what is indexed. An indexed client share
+           is indexed and is not answerable here, and this pill used to count
+           it as both. */
+        action={payload && Number.isFinite(Number(payload.answerable)) ? (
+          <Pill tone={payload.not_answerable > 0 ? 'warn' : 'ok'}>
+            {payload.answerable} answerable
+            {payload.not_answerable > 0 ? ` · ${payload.not_answerable} not` : ''}
           </Pill>
         ) : null}
       />
@@ -381,11 +460,24 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
         })}
       </div>
 
+      {ctx.askState === 'unreadable' && wantsAsk && (
+        <p className="text-[11.5px] text-axal-muted" data-testid="library-ask-unreadable">
+          The Ask figures could not be read.{' '}
+          <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => setAskTry((n) => n + 1)}>Try again</button>
+        </p>
+      )}
+      {watching === 'stopped' && (
+        <p className="text-[11.5px] text-axal-muted" data-testid="library-watch-stopped">
+          Some documents are still being read. This page stopped checking after {MAX_POLLS} tries.{' '}
+          <button type="button" className="font-semibold text-violet-700 underline dark:text-violet-300" onClick={() => { polls.current = 0; load(); }}>Check again</button>
+        </p>
+      )}
+
       {/* Cyan is theirs, amber is ours — rendered only where the table can
           actually carry both marks. A legend over rows that are all one source
           explains a distinction the reader cannot see, which is the same defect
           as a filter chip that selects everything. */}
-      {ctx.fromClients > 0 && (
+      {ctx.fromClients != null && ctx.fromClients > 0 && (
         <SourceLegend
           theirs="From a client"
           theirsNote="read-only — opened to you through a grant"
@@ -412,17 +504,53 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
           />
         )}
       >
+        {/* D3701 RS-10C: on a phone the rows are cards, each with both
+            states and its Retry. The table below is for wider screens. */}
+        <ul className="space-y-2.5 sm:hidden" data-testid="library-cards">
+          {visible.map((d) => {
+            const ix = indexStateOf(d);
+            const an = answerabilityOf(d);
+            const problem = rowProblem(d);
+            return (
+              <li key={d.uid}>
+                <Card className="p-3.5">
+                  <p className="break-words text-[13px] font-bold text-axal-ink dark:text-gray-100">{d.title}</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <Pill tone={ix.tone} className="!text-[10px]">{mark(ix)}</Pill>
+                    <Pill tone={an.tone} className="!text-[10px]">{mark(an)}</Pill>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-gray-600 dark:text-gray-400">
+                    {KINDS.find((k) => k.value === d.kind)?.label || d.kind}
+                    {' · '}
+                    {d.created_at ? `added ${String(d.created_at).slice(0, 10)}` : 'added: Not recorded'}
+                  </p>
+                  {problem ? <p className="mt-1 text-[11px] text-red-700 dark:text-red-300">{problem.reason}</p> : null}
+                  {problem?.action === 'retry' ? (
+                    <button type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                      data-testid={`library-card-retry-${d.uid}`}
+                      className="mt-2.5 min-h-[44px] w-full rounded-[10px] border border-axal-hairline text-[13px] font-bold text-axal-ink disabled:opacity-60 dark:border-gray-700 dark:text-gray-100">
+                      Retry
+                    </button>
+                  ) : null}
+                  {problem?.action === 'replace' ? <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">{problem.label}</p> : null}
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden sm:block">
         <Instrument
           testid="library-documents"
           title="Library"
-          meta="Index state is Ask’s reach, stated as a column"
+          meta="Indexed is not the same as answerable"
           cols="2.2fr 1fr 1fr .9fr 1.4fr"
-          head={['Document', 'Kind', 'Source year', 'Index state', 'In Ask']}
-          rows={visible.map((d) => ({
+          head={['Document', 'Kind', 'Source year', 'Index state', 'Answerable in Ask']}
+          rows={visible.map((d) => {
+            const ix = indexStateOf(d);
+            const an = answerabilityOf(d);
+            const problem = rowProblem(d);
+            return {
             key: d.uid,
-            // The row a reader has to act on, tinted so the eye finds it before
-            // the column does. `In Ask` says what it means; the tint says where.
-            rowClass: d.in_ask ? '' : 'bg-amber-50/40 dark:bg-amber-950/20',
             cells: [
               {
                 text: d.title,
@@ -431,14 +559,18 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 // and the marks are the artboard's `seam` and `ours`.
                 seam: d.source === 'client' ? (d.source_label || 'From client') : null,
                 ours: d.source === 'client' ? null : 'Ours',
-                sub: fmtBytes(d.size_bytes) || 'Size not recorded',
+                // RS-06: a Failed or Unsupported row says why under its name.
+                sub: problem
+                  ? `${problem.reason}${problem.action === 'replace' ? ` ${problem.label}` : ''}`
+                  : (fmtBytes(d.size_bytes) || 'Size not recorded'),
               },
               { pill: KINDS.find((k) => k.value === d.kind)?.label || d.kind, pillTone: KIND_TONE[d.kind] || 'neutral' },
               // Source year is recorded separately from the upload date (D549).
               { text: d.source_year == null ? 'Not recorded' : String(d.source_year), sub: d.created_at ? `Added ${String(d.created_at).slice(0, 10)}` : 'Added: Not recorded' },
               {
-                pill: STATE_LABEL[d.index_state] || d.index_state,
-                pillTone: STATE_TONE[d.index_state] || 'neutral',
+                // What the indexer did, in its own words (D3701).
+                pill: mark(ix),
+                pillTone: ix.tone,
                 // The passage count belongs beside the state and nowhere else:
                 // NULL, not 0, because "never read" and "read into nothing" are
                 // different facts and only one means Ask can cite the file.
@@ -450,14 +582,26 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
               // green its state reads — which is exactly why the two columns
               // are separate.
               {
-                text: d.in_ask
-                  ? 'Answerable in Ask'
-                  : (d.source === 'client'
-                    ? 'Indexed in their library, not yours'
-                    : 'Not answerable until indexed'),
+                pill: mark(an),
+                pillTone: an.tone,
+                sub: an.why,
                 node: (
                   <>
-                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)}>
+                    {problem?.action === 'retry' ? (
+                      <button type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                        data-testid={`library-retry-${d.uid}`}
+                        className="rounded-[6px] border border-axal-hairline px-2 py-0.5 text-[11px] font-bold text-axal-ink disabled:opacity-60 dark:border-gray-700 dark:text-gray-100">
+                        Retry
+                      </button>
+                    ) : null}
+                    {/* #4610: `Open` DRAWS WHEREVER IT CAN ACT, which now
+                        includes a client's share — the download route resolves
+                        ownership OR an active share, so the button that used to
+                        404 on a shared row works. It is still conditional,
+                        because `read_only` is about writing and `Open` is a
+                        read: the condition is whether this reader may read the
+                        file, which the row says. */}
+                    <button type="button" className={ghostButtonClass} onClick={() => download(d.uid)} data-testid={`library-open-${d.uid}`}>
                       Open
                     </button>
                     {/* A CLIENT'S DOCUMENT OFFERS NEITHER. Removing it is not
@@ -468,12 +612,14 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                     {d.source !== 'client' && (
                       <>
                         <DocumentMetadata document={d} onSaved={load} />
-                        <button
-                          type="button" disabled={busy} onClick={() => reindex(d.uid)}
-                          className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                        >
-                          Re-index
-                        </button>
+                        {problem?.action === 'retry' ? null : (
+                          <button
+                            type="button" disabled={busy} onClick={() => reindex(d.uid)}
+                            className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                          >
+                            Re-index
+                          </button>
+                        )}
                         <button
                           type="button" disabled={busy} onClick={() => remove(d.uid)}
                           className="text-[11px] text-gray-500 underline hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
@@ -486,9 +632,13 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                 ),
               },
             ],
-          }))}
-          note={`Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
+            };
+          })}
+          note={ctx.indexed == null
+            ? 'How many of your documents Ask can reach could not be read, so this table cannot say. That is a failed read, not a library with nothing answerable in it.'
+            : `Ask reaches exactly the ${ctx.indexed} indexed ${ctx.indexed === 1 ? 'document' : 'documents'} you own. Adding a document and making it answerable are two acts, and the last column is where the second one becomes visible — a file on the shelf that Ask cannot read is invisible to every question asked upstairs.`}
         />
+        </div>
 
         {/* THE ARTBOARD'S PAIR NOTE, and the only one in the Research set. It
             earns its place because the `In Ask` column above is meaningless

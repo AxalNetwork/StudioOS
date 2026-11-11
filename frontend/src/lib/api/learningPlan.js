@@ -23,4 +23,6 @@ export const learningPlanApi = {
   update: (uid, body) => request(`/learning/plan/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (uid) => request(`/learning/plan/${enc(uid)}`, { method: 'DELETE' }),
   markDone: (uid) => request(`/learning/plan/${enc(uid)}/done`, { method: 'POST' }),
+  // #4650 (D4650): { next: { rule, kind, uid, title, href, reason, plan } | null, checked, empty }.
+  next: () => request('/learning/plan/next'),
 };

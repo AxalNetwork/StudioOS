@@ -301,7 +301,8 @@ test('the false card is gone and the eyebrow with it', () => {
     'the card refusing the AI narrative is back, and the band is mounted');
   // And the band it refused is actually mounted.
   assert.match(shown, /surface="portfolio\/positions"/, 'the artboard’s AI band is not on the page');
-  assert.match(P, /Every valuation and ownership write is an admin action/);
+  // #5365 (F-09) rewords the card for an investor: the writes go through the governed workflow, with their source kept.
+  assert.match(P, /Every valuation and ownership change keeps its source\./);
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Positions eyebrow is back');
   // D1424 (#3700): the heading is drawn by the shared ZoneHeader.

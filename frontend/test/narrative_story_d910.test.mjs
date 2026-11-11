@@ -8,6 +8,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_story_d910.test.mjs
  */
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -19,7 +20,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { BoundFigure, ClaimPill, GradeRamp, SectionDot, SourceKind, TypedClaim } from '../src/pages/raise/narrative/StoryComponents.jsx';
 import {
-  CLAIM_STATES, FOUNDERS_FIGURE, LIVE_DECK, MAX_BINDINGS, SAVE_FAILED, SECTIONS, STORY_UNREADABLE, BINDINGS_UNREADABLE,
+  CLAIM_STATES, FOUNDERS_FIGURE, LIVE_DECK, MAX_BINDINGS, SAVE_FAILED, SAVE_CHANGED, saveBody, saveFailure, SECTIONS, STORY_UNREADABLE, BINDINGS_UNREADABLE,
   bindingFromItem, bindingsBySection, boundChip, cannotInsert, claimSegments, draftOf, figureStatus, insertGroups, moveSection,
   saveDialog, savePlan, sectionDot, storySections,
 } from '../src/pages/raise/narrative/storyModel.js';
@@ -42,7 +43,7 @@ const items = (over = {}) => keys.map((key, i) => ({
 }));
 const NARRATIVE = (v = 2, o = {}) => ({
   version: v,
-  meta: { state: 'ok', live: v === 0, investor_type: 'seed_fund', deck_version: null, start_from: 'live', based_on_version: null, check_against: null },
+  meta: { state: 'ok', live: v === 0, investor_type: 'seed_fund', deck_version: null, start_from: 'live', based_on_version: null, check_against: null, revision: 4 },
   sections: o.sections ?? { state: 'ok', items: items(o.over) },
   positioning: { state: 'ok', core: [], overrides: [], effective: [] },
   bindings: o.bindings ?? { state: 'ok', items: [
@@ -268,7 +269,7 @@ test('every figure on Story is bound or a claim, never a bare number', async () 
   } finally { await view.close(); }
 });
 
-test('Save version opens a dialog that says what it changes, then writes one PUT per changed section', async () => {
+test('Save version opens a dialog that says what it changes, then writes ONE PUT carrying every changed section and the revision it was read at', async () => {
   const view = await mounted(STORY);
   try {
     assert.equal(view.props(view.byId('story-save-open')).disabled, true, 'nothing to save yet');
@@ -280,7 +281,7 @@ test('Save version opens a dialog that says what it changes, then writes one PUT
     assert.equal(view.puts().length, 0, 'the dialog writes nothing');
     await view.click('story-save-confirm');
     assert.deepEqual(view.puts().map((p) => [p.url.replace(/^.*\/api/, ''), p.body]), [
-      ['/cycles/raise/narrative/2/sections/problem?project=3', { body: 'Finance teams lose days every month-end.', audience_note: 'Lead with retention.' }],
+      ['/cycles/raise/narrative/2?project=3', { sections: [{ section: 'problem', body: 'Finance teams lose days every month-end.', audience_note: 'Lead with retention.' }], answers: [], expected_revision: 4 }],
     ]);
     assert.ok(!view.testIds().includes('story-save'), 'the dialog closes');
     assert.ok(view.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/2?')).length >= 2, 'the story is read again');
@@ -301,9 +302,10 @@ test('Insert a figure lists the registry by area, says where a missing one goes,
     await view.click('story-save-open');
     await view.click('story-save-confirm');
     const put = view.puts()[0];
-    assert.match(put.url, /\/sections\/problem\?project=3$/);
-    assert.deepEqual(put.body.bindings.map((b) => b.source_key), ['validate.interviews', 'grow.mrr']);
-    assert.deepEqual(put.body.bindings[1], { source_key: 'grow.mrr', record_ref: 'project_metrics:9', as_of: '2026-09-30', grade: 'Measured', snapshot_hash: H_MRR });
+    assert.match(put.url, /\/narrative\/2\?project=3$/);
+    assert.equal(put.body.sections[0].section, 'problem');
+    assert.deepEqual(put.body.sections[0].bindings.map((b) => b.source_key), ['validate.interviews', 'grow.mrr']);
+    assert.deepEqual(put.body.sections[0].bindings[1], { source_key: 'grow.mrr', record_ref: 'project_metrics:9', as_of: '2026-09-30', grade: 'Measured', snapshot_hash: H_MRR });
   } finally { await view.close(); }
 });
 
@@ -316,11 +318,12 @@ test('Alt + arrow moves a section; plain arrows choose one; the new places are s
     // The test DOM does not detach a moved node, so the order is read from what Save sends.
     await view.click('story-save-open');
     await view.click('story-save-confirm');
-    assert.deepEqual(view.puts().map((p) => [p.url.match(/sections\/([a-z_]+)/)[1], p.body]), [['solution', { position: 0 }], ['problem', { position: 1 }]]);
+    assert.equal(view.puts().length, 1);
+    assert.deepEqual(view.puts()[0].body.sections, [{ section: 'solution', position: 0 }, { section: 'problem', position: 1 }]);
   } finally { await view.close(); }
 });
 
-test('a failed save keeps the text and says so; nothing after it is sent', async () => {
+test('a failed save keeps the text and says so; it is one request, so nothing was half written', async () => {
   const view = await mounted(STORY, { handle: handler(NARRATIVE(), undefined, () => response({ detail: 'The save was refused' }, 500)) });
   try {
     await view.type('story-words', 'New words.');
@@ -328,9 +331,24 @@ test('a failed save keeps the text and says so; nothing after it is sent', async
     await view.type('story-words', 'Other words.');
     await view.click('story-save-open');
     await view.click('story-save-confirm');
-    assert.equal(view.puts().length, 1, 'the second section is not sent after the first failed');
+    assert.equal(view.puts().length, 1, 'both sections went in the one request');
+    assert.equal(view.puts()[0].body.sections.length, 2);
     assert.ok(view.textOf('story-save-failed').startsWith(SAVE_FAILED));
     assert.equal(view.props(view.byId('story-words')).value, 'Other words.', 'the text is kept');
+  } finally { await view.close(); }
+});
+
+test('a version changed since it was opened says so, keeps the text, and the accepted draft stays pending', async () => {
+  const conflict = () => response({ error: 'changed_since_open', message: 'This was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const view = await mounted(STORY, { handle: handler(NARRATIVE(), undefined, conflict) });
+  try {
+    await view.type('story-words', 'Mine.');
+    await view.click('story-save-open');
+    await view.click('story-save-confirm');
+    assert.equal(view.puts().length, 1);
+    assert.equal(view.textOf('story-save-failed'), SAVE_CHANGED);
+    assert.equal(view.props(view.byId('story-words')).value, 'Mine.', 'the text is kept');
+    assert.ok(view.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/2?')).length === 1, 'nothing re-read over the text');
   } finally { await view.close(); }
 });
 
@@ -371,4 +389,16 @@ test('NAR19b: on a phone the rail is a section select, and the writer is full wi
     await view.type('story-section-select', 'traction');
     assert.match(view.textOf('story-writer'), /Traction/);
   } finally { await view.close(); }
+});
+
+test('saveBody carries only the answers whose section is saved, and the revision; saveFailure tells a conflict from a refusal', () => {
+  const writes = [{ section: 'market', body: { body: 'x' } }];
+  const pending = { a: { section: 'market', text: 'A' }, b: { section: 'team', text: 'B' } };
+  assert.deepEqual(saveBody(writes, pending, { meta: { revision: 3 } }), {
+    sections: [{ section: 'market', body: 'x' }], answers: [{ objection: 'a', section: 'market', how: 'eadwyn' }], expected_revision: 3,
+  });
+  assert.equal('expected_revision' in saveBody(writes, {}, { meta: { revision: null } }), false, 'no revision read, none sent');
+  assert.equal(saveFailure({ status: 409, code: 'changed_since_open' }).conflict, true);
+  assert.equal(saveFailure({ status: 409, code: 'other' }).conflict, false);
+  assert.equal(saveFailure({ status: 500, message: 'Boom' }).conflict, false);
 });

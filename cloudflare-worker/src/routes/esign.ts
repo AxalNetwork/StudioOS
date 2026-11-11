@@ -51,6 +51,7 @@ import { structureForPaper } from '../services/fundStructure';
 import { renderLegalPdf } from '../services/legalPaperRender';
 import { readPaperChoice, PAPER_CHOICE_MESSAGES } from '../services/legalPaperCss';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
+import { isRestrictedSlug, templateUseRefusal } from '../services/templateSafety';
 import { templateFormatFor, renderFormat, COUNSEL_DRAFT_SLUGS, type TemplateFormat } from '../services/templateFormat';
 import { PDFDocument } from 'pdf-lib';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -296,10 +297,11 @@ export class RenderedBodyError extends Error {
  * through `templateBodyRefusal`.
  */
 export class TemplateBodyError extends Error {
-  reason: 'no_body' | 'unreadable';
+  /** D4811 adds `restricted`: the template is in `COUNSEL_REVIEW_SLUGS` (services/templateSafety.ts). */
+  reason: 'no_body' | 'unreadable' | 'restricted';
   slug: string;
   constructor(reason: TemplateBodyError['reason'], slug: string) {
-    super(reason === 'no_body' ? 'template_has_no_body' : 'template_unreadable');
+    super(reason === 'no_body' ? 'template_has_no_body' : reason === 'restricted' ? 'template_restricted' : 'template_unreadable');
     this.reason = reason;
     this.slug = slug;
   }
@@ -310,8 +312,13 @@ export class TemplateBodyError extends Error {
  * error. The admin sentences reuse the canvas's stub copy (boards L8 and L9).
  */
 export function templateBodyRefusal(e: unknown, audience: 'admin' | 'member'):
-  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable'; message: string } | null {
+  { status: 409 | 503; code: 'template_has_no_body' | 'template_unreadable' | 'template_restricted'; message: string } | null {
   if (!(e instanceof TemplateBodyError)) return null;
+  if (e.reason === 'restricted') {
+    const r = templateUseRefusal({ slug: e.slug, body_md: 'x' })!;
+    return { status: 409, code: 'template_restricted', message: audience === 'member'
+      ? 'This document is not ready to send: counsel has not reviewed its text yet. Nothing was sent.' : r.message };
+  }
   if (e.reason === 'unreadable') {
     return { status: 503, code: 'template_unreadable', message: 'The template could not be read, so nothing was sent. Try again in a moment.' };
   }
@@ -411,6 +418,9 @@ export async function createAndSendEnvelope(
   // recipient or any email is written; a store that cannot be read is refused
   // as unreadable, never as "no body".
   const rendered = opts.renderedBody;
+  // D4811: a restricted template is refused before anything is written, whether
+  // the body is looked up here or was rendered by the caller from that template.
+  if (isRestrictedSlug(documentType) || isRestrictedSlug(opts.documentType)) throw new TemplateBodyError('restricted', documentType);
   if (rendered !== undefined) {
     if (!rendered || typeof rendered.title !== 'string' || !rendered.title.trim()) {
       throw new RenderedBodyError('missing_title');
@@ -1670,7 +1680,20 @@ esign.post('/sign/:token', async (c) => {
             const { pushLicenceToBranch } = await import('../services/licencePush');
             await pushLicenceToBranch(c.env, signed.licence_id);
           }
+          // D5052: the schedule may satisfy the program's legal gate; record the gate's answer (best effort).
+          if (signed) {
+            const { syncLegalGateById } = await import('../services/agreementPolicies');
+            await syncLegalGateById(c.env, signed.licence_id, { actorId: null, reason: 'Program schedule signed.' });
+          }
         } catch (e) { console.warn('[esign] program_schedule_sign_failed', (e as Error)?.name || 'error'); }
+      }
+      // D5049 — a package or program agreement version: the version that names this envelope is executed
+      // once, with its signed copy's hash. Its own try, so it never fails the signature.
+      if (envelopeRow?.envelope_uuid) {
+        try {
+          const { onAgreementEnvelopeCompleted } = await import('../services/programAgreements');
+          await onAgreementEnvelopeCompleted(c.env, envelopeRow.envelope_uuid);
+        } catch (e) { console.warn('[esign] licence_agreement_sign_failed', (e as Error)?.name || 'error'); }
       }
       // D959 — an investor's cohort NDA: the grant that names this envelope
       // records its signature once. Its own try, so it never fails the signature.
@@ -1988,6 +2011,40 @@ function notActionable(c: any, envRow: any, verb: 'voided' | 'reminded') {
 
 // POST /api/legal/esign/:id/void — the sender withdraws an envelope before
 // anyone has signed it. Body: { reason? } (≤ 500 chars).
+/**
+ * D4809: void an envelope on behalf of a workflow that replaces it (the cohort
+ * NDA's Send again), by its uuid. The same rule as the sender's void below:
+ * one batch, only while nobody has started to sign, recipients become 'void'.
+ * Returns whether the envelope is void afterwards (already void counts).
+ */
+export async function voidEnvelopeForResend(env: Env, envelopeUuid: string, reason: string, actorUserId: number): Promise<boolean> {
+  await ensureSchema(env);
+  const row: any = await env.DB.prepare('SELECT id, status FROM esign_envelopes WHERE envelope_uuid = ?').bind(envelopeUuid).first();
+  if (!row) return true;
+  if (row.status === 'void') return true;
+  const id = Number(row.id);
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE esign_envelopes SET status = 'void', last_error = ?
+        WHERE id = ? AND status IN ('sent', 'partially_signed')
+          AND NOT EXISTS (SELECT 1 FROM esign_recipients
+                           WHERE envelope_id = ? AND status IN ('signing', 'signed'))`
+    ).bind(reason, id, id),
+    env.DB.prepare(
+      `UPDATE esign_recipients SET status = 'void'
+        WHERE envelope_id = ? AND status = 'pending'
+          AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status = 'void')`
+    ).bind(id, id),
+  ]);
+  const after: any = await env.DB.prepare('SELECT status FROM esign_envelopes WHERE id = ?').bind(id).first();
+  if (after?.status !== 'void') return false;
+  await appendAudit(env, id, {
+    ts: new Date().toISOString(), signer_id: actorUserId, signer_email: null,
+    action: 'envelope_voided', ip: 'system', meta: { by: 'workflow', reason },
+  });
+  return true;
+}
+
 esign.post('/:id{[0-9]+}/void', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);

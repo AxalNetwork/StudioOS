@@ -1,0 +1,71 @@
+{
+  "skill": "portfolio-valuation-evidence-review",
+  "version": 1,
+  "note": "Synthetic fixture for #4576; all entities, identifiers and figures are made up. Phrase checks are not a model evaluation.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "record_id": "VAL-01",
+        "as_of": "2026-09-30",
+        "holdings": [
+          {
+            "investment_id": "INV-A",
+            "instrument": "ordinary shares",
+            "cost_cents": 20000000,
+            "currency": "USD",
+            "marks": [
+              {
+                "mark_id": "MARK-EV",
+                "scope": "enterprise_value",
+                "amount_cents": 300000000,
+                "date": "2026-09-30",
+                "source_id": "DOC-01"
+              },
+              {
+                "mark_id": "MARK-POS",
+                "scope": "position_value",
+                "amount_cents": 25000000,
+                "date": "2026-09-30",
+                "status": "proposed",
+                "approval": null,
+                "source_id": "DOC-02"
+              }
+            ]
+          }
+        ]
+      },
+      "data_room.index": {
+        "documents": [
+          {
+            "id": "DOC-01",
+            "title": "Synthetic enterprise valuation summary",
+            "contents_available": false
+          },
+          {
+            "id": "DOC-02",
+            "title": "Synthetic position mark worksheet",
+            "contents_available": false
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "enterprise value",
+      "position value",
+      "USD 250,000.00",
+      "MARK-POS"
+    ],
+    "must_say_not_recorded": [
+      "valuation approval",
+      "document contents"
+    ],
+    "must_not_include": [
+      "I certified the NAV",
+      "The valuation is approved",
+      "The value is guaranteed"
+    ]
+  }
+}

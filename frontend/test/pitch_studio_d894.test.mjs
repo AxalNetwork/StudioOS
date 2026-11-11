@@ -805,7 +805,8 @@ test('PD15: an admin compares but has no Restore; a refused restore says so in t
     await m.press(m.by('pitch-studio-compare-39'));
     await m.press(m.by('pitch-compare-restore'));
     await m.press(m.by('pitch-compare-restore-run'));
-    assert.equal(m.text().includes('forbidden'), true);
+    // D5070 (#5376): a 403 reads as the approved forbidden sentence, never the raw word.
+    assert.equal(m.text().includes('You do not have access to do that on this venture.'), true);
     assert.ok(m.by('pitch-compare-restore-dialog'), 'the dialog stays open with the refusal');
   } finally { await m.unmount(); }
 });
@@ -821,7 +822,7 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
     assert.match(html, new RegExp(`data-testid="${id}"`), id);
   }
   assert.doesNotMatch(html, /data-testid="pitch-studio-versions"/, 'no versions table on the home');
-  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›']);
+  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›', 'Import a document ›']);
   assert.deepEqual(DECK_CARD_MENU.map((i) => i.label), ['Versions…', 'Export…', 'Brand kit']);
   // The deck card's facts, each from a read; nothing recorded is "Not recorded".
   assert.match(renderedText(between(html, 'pitch-studio-deck-facts', 'pitch-studio-coverage')), /Audience\s*Not recorded\s*Round\s*Not recorded\s*Saved\s*20 Oct · 2 cards\s*Views\s*5/);
@@ -830,6 +831,8 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(start, /data-testid="pitch-studio-start-pptx-open"/);
   assert.doesNotMatch(renderedText(between(start, 'pitch-studio-start-pptx')), /Coming later/);
+  // D1563 (#3810): Import a document is live beside it and opens its own sheet.
+  assert.match(start, /data-testid="pitch-studio-start-document-open"/);
   // Each item's way in: Standard outline opens New deck; Browse templates opens the gallery (D1604 step 15),
   // never a second link to the same New deck page.
   assert.match(start, /data-testid="pitch-studio-start-outline-link" href="\/raise\/pitch\/new\?project_id=7"/);
@@ -857,7 +860,7 @@ test('D1604 one-click: the brief is the context read\'s; Build waits for it, and
   let answer;
   const ctx = new Promise((r) => { answer = r; });
   newDeckApi.context = async () => ctx;
-  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000 }; };
+  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000, quote_uid: 'dq_synthetic' }; };
   newDeckApi.build = async (b) => { sent.build.push(b); return { proposal: { id: 'p1' } }; };
   const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
     listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),

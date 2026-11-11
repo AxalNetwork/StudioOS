@@ -15,13 +15,13 @@ import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { removeMigratedDatabases } from './_storage_schema.ts';
 import {
-  ADMIN, AGENT, COMPANY, PROJECT, SPONSOR, STRANGER, fakeAgentRun, harness, hex, loopDeps, world, type World,
+  ADMIN, AGENT, COMPANY, MODULE, OPTION, PROJECT, SPONSOR, STRANGER, fakeAgentRun, harness, hex, loopDeps, world, type World,
 } from './_agent_engine_fixture.ts';
 import { admitInScope, putScopeSettings } from '../src/agents/engine.ts';
 import { after, context, load, propose, runStep, runTaskLoop, buildContext } from '../src/agents/loop.ts';
 import { agentDlqConsumer, agentQueueConsumer, dispatchQueue } from '../src/agents/agentQueue.ts';
 import { eraseAccountRuntime, eraseAgentRuntime, eraseScopeRuntime } from '../src/agents/erasure.ts';
-import { sweepAgents } from '../src/agents/sweep.ts';
+import { DISCOVERY_SCAN_MAX, RESEND_MAX, SWEEP_MAX, sweepAgents } from '../src/agents/sweep.ts';
 import { READERS } from '../src/services/agents/reads.ts';
 import { decideRail } from '../src/services/railProposals.ts';
 import engineRoutes, { __setEngineRouteDeps } from '../src/routes/agent_engine.ts';
@@ -36,6 +36,32 @@ const runRow = (w: World, uid: string) => w.db.prepare('SELECT * FROM agent_task
 const taskRow = (w: World, id: number) => w.db.prepare('SELECT * FROM scope_tasks WHERE id = ?').get(id) as any;
 const agentRow = (w: World, id: number) => w.db.prepare('SELECT * FROM team_agents WHERE id = ?').get(id) as any;
 const close = (w: World) => w.close();
+
+/** A project-scoped agent/task pair for the scheduler fixtures. Roles are unique only within this synthetic project. */
+function sweepAgent(w: World, agentId: number, projectId: number, role = `sweep-${agentId}`) {
+  w.db.prepare('INSERT INTO projects (id, uid, name, founder_id, company_id, description) VALUES (?, ?, ?, 100, ?, ?)')
+    .run(projectId, `sweep-project-${projectId}`, `Sweep ${projectId}`, COMPANY, 'Synthetic sweep fixture.');
+  w.db.prepare(`INSERT INTO team_agents (id, uid, scope_kind, company_id, project_id, role_key, first_name, model_id, sponsor_user_id, monthly_cap_microusd, created_by, status)
+    VALUES (?, ?, 'project', NULL, ?, ?, ?, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', ?, 5000000, ?, 'active')`)
+    .run(agentId, hex(agentId, 'b'), projectId, role, `Sweep${agentId}`, SPONSOR, SPONSOR);
+}
+
+function sweepTask(w: World, taskId: number, agentId: number, projectId: number, priority = 0) {
+  w.db.prepare(`INSERT INTO scope_tasks (id, uid, scope_kind, company_id, project_id, title, module, option,
+      assignee_kind, assignee_agent_id, status, board_column, priority, created_by_user_id)
+    VALUES (?, ?, 'project', NULL, ?, ?, ?, ?, 'agent', ?, 'open', 'ready', ?, ?)`)
+    .run(taskId, hex(taskId, 'c'), projectId, `Sweep task ${taskId}`, MODULE, OPTION, agentId, priority, SPONSOR);
+}
+
+function blockedSweepTask(w: World, taskId: number, agentId: number, projectId: number, priority: number) {
+  sweepTask(w, taskId, agentId, projectId, priority);
+  const dependencyId = taskId + 100_000;
+  w.db.prepare(`INSERT INTO scope_tasks (id, uid, scope_kind, company_id, project_id, title, module, option,
+      assignee_kind, status, board_column, priority, created_by_user_id)
+    VALUES (?, ?, 'project', NULL, ?, ?, ?, ?, 'none', 'open', 'ready', 0, ?)`)
+    .run(dependencyId, hex(dependencyId, 'd'), projectId, `Blocker ${taskId}`, MODULE, OPTION, SPONSOR);
+  w.db.prepare('INSERT INTO scope_task_deps (task_id, depends_on_task_id) VALUES (?, ?)').run(taskId, dependencyId);
+}
 
 /** Admit and run the loop to its end with one decision. */
 async function fullRun(w: World, taskId: number, decision: { status: 'accepted' | 'edited' | 'discarded' } | 'timeout', agentRun = fakeAgentRun(w)) {
@@ -526,12 +552,219 @@ test('the sweep resends admitted runs whose message was lost, admits nothing mor
     assert.deepEqual(r2, { resent: 1, admitted: 1, cap_resumed: 0 }, 'self_start offers agent 51 its ready task');
     await w.kv.put('agents:halt', 'drill');
     assert.deepEqual(await sweepAgents(w.env, new Date(), { enqueue: async () => {}, runtime: async () => w.runtime }), { resent: 0, admitted: 0, cap_resumed: 0 });
+    await w.kv.delete('agents:halt');
+    w.env.AGENT_ENGINE = 'off';
+    assert.deepEqual(await sweepAgents(w.env, new Date(), { enqueue: async () => {}, runtime: async () => w.runtime }), { resent: 0, admitted: 0, cap_resumed: 0 }, 'engine off still refuses automatic admission');
   } finally { close(w); }
   const index = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
   // D4387: the sweep runs whenever team agents are on (its cap resume); duties and alerts stay behind the engine.
   assert.match(index, /if \(now\.getUTCMinutes\(\) % 5 === 1 && env\.TEAM_AGENTS_ENABLED === 'true'\) \{\n\s+try \{\n\s+const \{ sweepAgents \}/);
   assert.match(index, /if \(env\.AGENT_ENGINE && env\.AGENT_ENGINE !== 'off'\) \{\n\s+\/\/ D1530[^\n]*\n\s+try \{\n\s+const \{ sweepAgentDuties \}/);
   assert.equal(index.match(/getUTCMinutes\(\) % 5 === 1\b/g)?.length, 1, 'the agent sweep has the minute to itself');
+});
+
+test('D4592 fair discovery reaches ready work after 60 unready agents and more than 20 blocked higher-priority tasks', async () => {
+  // Mutation checked: selecting the first 60 agents before readiness leaves the final ready agent unseen.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    for (let n = 1; n <= 60; n += 1) {
+      const agentId = 1_000 + n, projectId = 2_000 + n, taskId = 3_000 + n;
+      sweepAgent(w, agentId, projectId);
+      blockedSweepTask(w, taskId, agentId, projectId, 1_000);
+    }
+    const readyAgent = 1_061, readyProject = 2_061;
+    sweepAgent(w, readyAgent, readyProject);
+    for (let n = 1; n <= 21; n += 1) blockedSweepTask(w, 4_000 + n, readyAgent, readyProject, 1_000 - n);
+    sweepTask(w, 4_100, readyAgent, readyProject, 0);
+
+    const r = await sweepAgents(w.env, new Date('2026-11-06T21:30:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime });
+    assert.deepEqual(r, { resent: 0, admitted: 1, cap_resumed: 0 });
+    assert.deepEqual((w.db.prepare("SELECT agent_id, task_id FROM agent_task_runs WHERE status = 'admitted'").all() as any[]).map((row) => ({ ...row })), [{ agent_id: readyAgent, task_id: 4_100 }]);
+    const metrics = w.db.prepare("SELECT metric_name, value FROM system_metrics WHERE metric_name LIKE 'agent_sweep_%' ORDER BY metric_name").all() as any[];
+    assert.ok(metrics.some((m) => m.metric_name === 'agent_sweep_oldest_eligible_age_seconds'), 'eligible-work age is recorded without task or tenant identifiers');
+  } finally { close(w); }
+});
+
+test('D4592 hot scope and stale resend traffic cannot consume every new-work opportunity', async () => {
+  // Mutation checked: removing the per-scope candidate bound or spending the new-work budget on resends leaves the cold scope unadmitted.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    const hotProject = 2_500;
+    w.db.prepare('INSERT INTO projects (id, uid, name, founder_id, company_id, description) VALUES (?, ?, ?, 100, ?, ?)')
+      .run(hotProject, 'hot-sweep-project', 'Hot sweep', COMPANY, 'Synthetic hot scope.');
+    for (let n = 1; n <= 70; n += 1) {
+      const agentId = 5_000 + n;
+      w.db.prepare(`INSERT INTO team_agents (id, uid, scope_kind, company_id, project_id, role_key, first_name, model_id, sponsor_user_id, monthly_cap_microusd, created_by, status)
+        VALUES (?, ?, 'project', NULL, ?, ?, ?, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', ?, 5000000, ?, 'active')`)
+        .run(agentId, hex(agentId, 'b'), hotProject, `hot-${n}`, `Hot${n}`, SPONSOR, SPONSOR);
+      sweepTask(w, 6_000 + n, agentId, hotProject, 100);
+    }
+    const coldAgent = 5_100, coldProject = 2_600;
+    sweepAgent(w, coldAgent, coldProject);
+    sweepTask(w, 6_100, coldAgent, coldProject, 0);
+    for (let n = 1; n <= 60; n += 1) {
+      w.db.prepare("INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, created_at) VALUES (?, ?, ?, 1, 'admitted', '2026-11-01 00:00:00')")
+        .run(`stale-${n}`, 8_000 + n, 9_000 + n);
+    }
+    const resent: string[] = [];
+    const r = await sweepAgents(w.env, new Date('2026-11-06T21:35:00Z'), { enqueue: async (_env, uid) => { resent.push(uid); }, runtime: async () => w.runtime });
+    assert.equal(resent.length, RESEND_MAX, 'repair traffic has its own bounded lane');
+    assert.equal(r.admitted, 3, 'two hot-scope admissions plus the cold scope');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = ? AND status = 'admitted'").get(coldAgent) as any).n, 1, 'a cold scope is inspected in the same bounded scan');
+  } finally { close(w); }
+});
+
+test('D4592 a lost cursor or duplicate sweep cannot duplicate a run or lose later ready work', async () => {
+  const w = world({ autonomy: 'self_start' });
+  try {
+    sweepAgent(w, 7_001, 7_101); sweepTask(w, 7_201, 7_001, 7_101);
+    const first = await Promise.all([
+      sweepAgents(w.env, new Date('2026-11-06T21:40:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime }),
+      sweepAgents(w.env, new Date('2026-11-06T21:40:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime }),
+    ]);
+    assert.equal(first.reduce((sum, r) => sum + r.admitted, 0), 1, 'admission remains single-flight across duplicate scans');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = 7001").get() as any).n, 1);
+    w.db.prepare("UPDATE agent_task_runs SET status = 'done' WHERE agent_id = 7001").run();
+    w.db.prepare('DELETE FROM team_agents WHERE id = 7001').run();
+    w.kv.m.delete('agents:sweep:ready-cursor:v1');
+    sweepAgent(w, 7_002, 7_102); sweepTask(w, 7_202, 7_002, 7_102);
+    const recovered = await sweepAgents(w.env, new Date('2026-11-06T21:45:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime });
+    assert.equal(recovered.admitted, 1, 'cursor loss restarts a safe complete rotation');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = 7002 AND status = 'admitted'").get() as any).n, 1);
+  } finally { close(w); }
+});
+
+test('D4592 a complete multi-batch rotation advances the cursor, reaches every eligible agent, and wraps', async () => {
+  // Mutation checked: not persisting the cursor repeats the first batch; wrapping before the end misses the tail.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    const count = DISCOVERY_SCAN_MAX + 10;
+    for (let n = 0; n < count; n += 1) {
+      sweepAgent(w, 10_000 + n, 11_000 + n);
+      sweepTask(w, 12_000 + n, 10_000 + n, 11_000 + n);
+    }
+    const admitted: number[] = [];
+    const cursors: string[] = [];
+    for (let batch = 0; batch < Math.ceil(count / SWEEP_MAX); batch += 1) {
+      admitted.push((await sweepAgents(w.env, new Date(`2026-11-09T0${batch}:00:00Z`), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted);
+      cursors.push(w.kv.m.get('agents:sweep:ready-cursor:v1') ?? 'missing');
+    }
+    assert.deepEqual(admitted, [SWEEP_MAX, SWEEP_MAX, count - 2 * SWEEP_MAX]);
+    assert.deepEqual(cursors, ['10059', '10119', '10129']);
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE status = 'admitted'").get() as any).n, count);
+
+    w.db.prepare("UPDATE agent_task_runs SET status = 'done' WHERE agent_id = 10000").run();
+    w.db.prepare("UPDATE scope_tasks SET status = 'done', board_column = 'done' WHERE id = 12000").run();
+    sweepTask(w, 12_500, 10_000, 11_000);
+    const wrapped = await sweepAgents(w.env, new Date('2026-11-09T03:00:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime });
+    assert.equal(wrapped.admitted, 1, 'work below the terminal cursor is found after one wrap');
+    assert.equal(w.kv.m.get('agents:sweep:ready-cursor:v1'), '10000');
+    const labels = JSON.parse((w.db.prepare("SELECT labels FROM system_metrics WHERE metric_name = 'agent_sweep_eligible' ORDER BY id DESC LIMIT 1").get() as any).labels);
+    assert.deepEqual({ scanned: labels.scanned, cursor_reset: labels.cursor_reset }, { scanned: true, cursor_reset: true });
+  } finally { close(w); }
+});
+
+test('D4592 a concurrent manual admission stays single-flight and leaves later work discoverable', async () => {
+  // Mutation checked: bypassing AgentRuntime.admit's single-flight check creates two live runs.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    const agentId = 13_001, projectId = 13_101, taskId = 13_201;
+    sweepAgent(w, agentId, projectId); sweepTask(w, taskId, agentId, projectId);
+    const [swept, manual] = await Promise.all([
+      sweepAgents(w.env, new Date('2026-11-09T04:00:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime }),
+      w.runtime.admit({ kind: 'project', id: projectId }, { agentId, taskId, by: SPONSOR, source: 'person' }),
+    ]);
+    assert.equal(swept.admitted + (manual.ok ? 1 : 0), 1);
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = ? AND status IN ('admitted','running')").get(agentId) as any).n, 1);
+
+    w.db.prepare("UPDATE agent_task_runs SET status = 'done' WHERE agent_id = ?").run(agentId);
+    w.db.prepare("UPDATE scope_tasks SET status = 'done', board_column = 'done' WHERE id = ?").run(taskId);
+    sweepTask(w, taskId + 1, agentId, projectId);
+    assert.equal((await sweepAgents(w.env, new Date('2026-11-09T04:05:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted, 1, 'the next ready task is not lost after the race');
+  } finally { close(w); }
+});
+
+test('D4592 a lost enqueue leaves one admitted run for the independent resend lane', async () => {
+  // Mutation checked: rolling the row back on enqueue failure leaves nothing for repair; rediscovery creates a second run.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    const agentId = 14_001, projectId = 14_101, taskId = 14_201;
+    sweepAgent(w, agentId, projectId); sweepTask(w, taskId, agentId, projectId);
+    w.env.AGENT_QUEUE.send = async () => { throw new Error('synthetic lost enqueue'); };
+    assert.equal((await sweepAgents(w.env, new Date('2026-11-09T05:00:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted, 1);
+    const run = w.db.prepare('SELECT uid FROM agent_task_runs WHERE agent_id = ?').get(agentId) as any;
+    w.db.prepare("UPDATE agent_task_runs SET created_at = '2026-11-09 04:50:00' WHERE uid = ?").run(run.uid);
+    const resent: string[] = [];
+    const repaired = await sweepAgents(w.env, new Date('2026-11-09T05:05:00Z'), { enqueue: async (_env, uid) => { resent.push(uid); }, runtime: async () => w.runtime });
+    assert.deepEqual([repaired.resent, repaired.admitted, resent], [1, 0, [run.uid]]);
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = ?').get(agentId) as any).n, 1);
+  } finally { close(w); }
+});
+
+test('D4592 an empty eligible population is a completed scan with a safe cursor and zero eligible', async () => {
+  // Mutation checked: omitting `scanned: true` makes a real zero indistinguishable from a stopped sweep.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    assert.deepEqual(await sweepAgents(w.env, new Date('2026-11-09T06:00:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime }), { resent: 0, admitted: 0, cap_resumed: 0 });
+    assert.equal(w.kv.m.has('agents:sweep:ready-cursor:v1'), false);
+    const metric = w.db.prepare("SELECT value, labels FROM system_metrics WHERE metric_name = 'agent_sweep_eligible' ORDER BY id DESC LIMIT 1").get() as any;
+    assert.equal(metric.value, 0);
+    assert.equal(JSON.parse(metric.labels).scanned, true);
+  } finally { close(w); }
+});
+
+test('D4592 insertions and deletions on both sides of the cursor wait no more than one rotation', async () => {
+  // Mutation checked: never wrapping skips the inserted lower id; resetting each sweep starves the higher id.
+  const w = world({ autonomy: 'self_start' });
+  try {
+    for (let n = 1; n <= SWEEP_MAX + 1; n += 1) {
+      sweepAgent(w, 20_000 + n * 10, 21_000 + n * 10);
+      sweepTask(w, 22_000 + n * 10, 20_000 + n * 10, 21_000 + n * 10);
+    }
+    assert.equal((await sweepAgents(w.env, new Date('2026-11-09T07:00:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted, SWEEP_MAX);
+    assert.equal(w.kv.m.get('agents:sweep:ready-cursor:v1'), '20600');
+    sweepAgent(w, 20_595, 23_595); sweepTask(w, 24_595, 20_595, 23_595);
+    sweepAgent(w, 20_620, 23_620); sweepTask(w, 24_620, 20_620, 23_620);
+    w.db.prepare('DELETE FROM scope_tasks WHERE assignee_agent_id = 20610').run();
+    w.db.prepare('DELETE FROM team_agents WHERE id = 20610').run();
+    assert.equal((await sweepAgents(w.env, new Date('2026-11-09T07:05:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted, 1, 'the new higher id is found immediately');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = 20620 AND status = 'admitted'").get() as any).n, 1);
+    assert.equal((await sweepAgents(w.env, new Date('2026-11-09T07:10:00Z'), { enqueue: async () => {}, runtime: async () => w.runtime })).admitted, 1, 'the lower id is found on the wrap');
+    assert.equal((w.db.prepare("SELECT COUNT(*) AS n FROM agent_task_runs WHERE agent_id = 20595 AND status = 'admitted'").get() as any).n, 1);
+  } finally { close(w); }
+});
+
+test('D4592 ready discovery and resend queries keep their migrated-schema indexes', () => {
+  // Mutation checked: dropping any asserted index changes EXPLAIN to a scan or a different index.
+  const w = world();
+  try {
+    w.agent(AGENT); w.task(200, AGENT);
+    const readyPlan = w.db.prepare(`EXPLAIN QUERY PLAN WITH task_ranked AS (
+      SELECT a.*, t.id AS task_id, t.created_at AS task_created_at,
+        ROW_NUMBER() OVER (PARTITION BY a.id ORDER BY t.priority DESC, t.id) AS task_rank
+      FROM team_agents a
+      JOIN scope_tasks t ON t.assignee_kind = 'agent' AND t.assignee_agent_id = a.id
+      WHERE a.status = 'active' AND a.id > ?
+        AND t.status = 'open' AND (t.board_column IS NULL OR t.board_column = 'ready')
+        AND NOT EXISTS (SELECT 1 FROM agent_task_runs r WHERE r.agent_id = a.id AND r.status IN ('admitted', 'running'))
+        AND NOT EXISTS (
+          SELECT 1 FROM scope_task_deps d JOIN scope_tasks dep ON dep.id = d.depends_on_task_id
+          WHERE d.task_id = t.id AND dep.status <> 'done'
+        )
+    ), one_per_agent AS (
+      SELECT * FROM task_ranked WHERE task_rank = 1
+    ), fairly_scoped AS (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY scope_kind, IFNULL(company_id, 0), IFNULL(project_id, 0) ORDER BY id
+      ) AS scope_rank FROM one_per_agent
+    ) SELECT * FROM fairly_scoped WHERE scope_rank <= ? ORDER BY id LIMIT ?`).all(0, 4, DISCOVERY_SCAN_MAX) as any[];
+    const readyDetails = readyPlan.map((row) => row.detail).join('\n');
+    assert.match(readyDetails, /SEARCH t USING INDEX idx_scope_tasks_agent/);
+    assert.match(readyDetails, /SEARCH r USING INDEX idx_agent_task_runs_live/);
+    assert.match(readyDetails, /SEARCH d USING COVERING INDEX sqlite_autoindex_scope_task_deps_1/);
+    const resendPlan = w.db.prepare("EXPLAIN QUERY PLAN SELECT uid FROM agent_task_runs WHERE status = 'admitted' AND created_at <= ? ORDER BY id LIMIT ?").all('2099-01-01 00:00:00', RESEND_MAX) as any[];
+    assert.match(resendPlan.map((row) => row.detail).join('\n'), /SEARCH agent_task_runs USING INDEX idx_agent_task_runs_status/);
+  } finally { close(w); }
 });
 
 // ── Erasure ─────────────────────────────────────────────────────────────────

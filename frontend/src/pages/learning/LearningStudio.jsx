@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { RailFrame } from '../../ui';
@@ -9,15 +9,17 @@ import StudioCourseBuilder from './StudioCourseBuilder';
 import { StudioAssessment, useStudioAssessments } from './LearningAssessments';
 import { withAssessmentRows } from './assessmentModel';
 import WebinarStudio, { WebinarStudioList } from './WebinarStudio';
+import CurriculumCoverage from './CurriculumCoverage';
 import {
   LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard,
 } from './LearningStates';
 import { SECONDARY, PRIMARY } from './studioParts';
 import {
-  STATUS_NOTICE, addLesson, addModule, deleteLesson, deleteModule, moveLesson, moveModule, readStudioCourse,
+  STATUS_NOTICE, addLesson, addModule, copyToStream, deleteLesson, deleteModule, moveLesson, moveModule, readStudioCourse,
   readStudioCourses, readStudioItems, renameModule, saveCourse, saveItem, setCourseStatus, setItemStatus,
   studioRows, updateLesson,
 } from './studioActions';
+import { homeRefusal } from './LearningHomeActions';
 import useLearningRead from './useLearningRead';
 
 /**
@@ -48,7 +50,7 @@ const rowsOf = (state) => (state?.status === 'ready' ? state.rows : []);
  */
 export function StudioView({
   items, courses, exercises = null, exams = null, editor,
-  onRetryItems, onRetryCourses, onRetryExercises, onRetryExams,
+  onRetryItems, onRetryCourses, onRetryExercises, onRetryExams, onCopyToStream = null,
 }) {
   // D4181 (lr17): the video whose analytics Sheet is open, or null.
   const [analytics, setAnalytics] = useState(null);
@@ -81,6 +83,7 @@ export function StudioView({
         rows={rows}
         onRetry={() => { for (const l of lists) l.retry?.(); }}
         onAnalytics={(row) => setAnalytics({ uid: row.uid, title: row.title })}
+        onCopyToStream={onCopyToStream}
       />
       {analytics ? <VideoAnalyticsSheet uid={analytics.uid} fallbackTitle={analytics.title} onClose={() => setAnalytics(null)} /> : null}
       <p className="text-[12.5px] text-axal-muted dark:text-gray-400">
@@ -129,6 +132,8 @@ export default function LearningStudio({ sub }) {
   const webinarUid = params.get('webinar');
   const creating = params.get('new');
   const [items, retryItems, setItems] = useLearningRead(readStudioItems, [], { scope: 'studio-items' });
+  // D4649: the uids whose Copy to Stream POST is in flight.
+  const copyPending = useRef(new Set());
   const assessments = useStudioAssessments();
   const [courses, retryCourses, setCourses] = useLearningRead(readStudioCourses, [], { scope: 'studio-courses' });
   const [course, retryCourse, setCourse] = useLearningRead(() => readStudioCourse(courseUid), [courseUid], { enabled: Boolean(courseUid), scope: 'studio-course' });
@@ -208,6 +213,32 @@ export default function LearningStudio({ sub }) {
     onDeleteLesson: (uid) => run('modules', () => deleteLesson(uid), showCourse),
   });
 
+  /**
+   * #4179 / #4742 — Copy to Stream, from the table's row. The success and the
+   * refusal are both held on the item itself, not on `said` (which belongs to
+   * whatever editor is open): `stream_copy` optimistically moves to "copying"
+   * so the button and the banner draw the state without waiting for the next
+   * `GET /items`, and a refusal is drawn in the route's own words
+   * (`error.data.message`, never `e.message`) as the row's own "Copy failed".
+   */
+  const onCopyToStream = async (row) => {
+    // D4649: one POST per file at a time. The ref refuses a second call before React re-renders, and the
+    // row draws "Starting copy…" (no button) until the route answers.
+    if (copyPending.current.has(row.uid)) return;
+    copyPending.current.add(row.uid);
+    const setStreamCopy = (stream_copy) => setItems((s) => (s.status === 'ready'
+      ? { ...s, rows: s.rows.map((r) => (r.uid === row.uid ? { ...r, stream_copy } : r)) } : s));
+    setStreamCopy({ state: 'copying', starting: true, stream_uid: null });
+    try {
+      const copy = await copyToStream(row.uid);
+      setStreamCopy({ state: copy?.state || 'copying', stream_uid: copy?.stream_uid ?? null });
+    } catch (err) {
+      setStreamCopy({ state: 'failed', error_message: homeRefusal(err, 'The copy could not be started. Try again.') });
+    } finally {
+      copyPending.current.delete(row.uid);
+    }
+  };
+
   const itemRows = rowsOf(items);
   const choices = { exercises: rowsOf(assessments.exercises), exams: rowsOf(assessments.exams) };
   let editor = null;
@@ -248,8 +279,11 @@ export default function LearningStudio({ sub }) {
           items={items} courses={courses} exercises={assessments.exercises} exams={assessments.exams} editor={editor}
           onRetryItems={retryItems} onRetryCourses={retryCourses}
           onRetryExercises={assessments.retryExercises} onRetryExams={assessments.retryExams}
+          onCopyToStream={onCopyToStream}
         />
         {!editor && <WebinarStudioList />}
+        {/* D4650 (#4650, part 4): the catalogue's coverage of the four journeys. */}
+        {!editor && <CurriculumCoverage />}
       </div>
     </RailFrame>
   );

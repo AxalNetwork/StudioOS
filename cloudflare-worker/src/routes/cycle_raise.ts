@@ -103,6 +103,7 @@
  *   GET  /capital-relationships/proposals?project=   the caller's open proposals and drafts
  *   POST /capital-relationships/proposals            { prospect_id, event_id }  one run over a logged note
  *   POST /capital-relationships/proposals/:uid/accept { edited? }  written through the one prospect writer
+ *   POST /capital-relationships/proposals/accept-batch { uids }    D5073: up to 50, one result per proposal
  *   POST /capital-relationships/drafts               { prospect_id, purpose, via? }  one run; the founder sends it
  *   A draft or proposal is edited or dismissed through `/api/ai/rail/proposals/:uid/decide`.
  *
@@ -152,7 +153,7 @@ import {
   importProspects, runCheck,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
-import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
+import { ChangedSinceOpen, NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeEdits, saveNarrativeSection, savePositioning, type NarrativeAnswer } from '../services/narrative/store';
 import { InputError, NoOpenRead, REASON_UNREADABLE, endRead, giveReason, isAdmin, kindOf, listNotes, listReasons, narrativeAdminGate, postNote, ventureOf, type Mode } from '../services/narrative/adminRead';
 import { raisePhone } from '../services/cycleFocus';
 import {
@@ -188,7 +189,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
 import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
-import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
+import { CapRelTabError, DRAFT_OPTION, NOTE_OPTION, PROPOSAL_PAGE, acceptProposal, acceptProposals, activityRead, draftMessage, materialsRead, proposalsRead, proposeFromNote, prospectRecord } from '../services/capRelTabs';
 import { recomputePmf, pmfHistory, pmfModelRead } from '../services/scoring/pmfStore';
 import { dataRoomOwner, roomSummary } from './data_room';
 import { safeCard, type Card } from '../services/cycleCards';
@@ -199,7 +200,7 @@ import {
 } from '../services/capRelAccess';
 import useOfFunds from './cycle_use_of_funds';
 import { prospectBrief } from '../services/prospectBrief';
-import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
+import { RaiseEvidenceError, raiseEvidenceContext, readRaiseEvidence, acceptItem as acceptEvidenceItem, dismissItem as dismissEvidenceItem, decideMany as decideEvidenceMany, setSharing as setEvidenceSharing, linkClaim as linkEvidenceClaim, previewEvidence, type RaiseEvidenceContext } from '../services/raiseEvidence';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 cycleRaise.route('/use-of-funds', useOfFunds);
@@ -326,7 +327,11 @@ async function pmfActor(c: any, user: User): Promise<number> {
 
 const ctxOf = (c: any, projectId: number): Ctx => ({ env: c.env, projectId, today: today() });
 
+const CHANGED_SINCE_OPEN = 'This was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.';
+
 function writeFailed(c: any, e: unknown) {
+  // D5069: a write made from a read that is no longer the record's.
+  if (e instanceof ChangedSinceOpen) return c.json({ error: 'changed_since_open', message: CHANGED_SINCE_OPEN, current_revision: e.currentRevision }, 409);
   if (e instanceof WriterError) return c.json({ detail: e.sentence }, e.status as any);
   // The plan gate's refusal (`ensureTier`), with its upgrade body.
   if (e instanceof Response) return e;
@@ -575,6 +580,15 @@ cycleRaise.post('/capital-relationships/proposals', async (c) => {
     if (!proposals) return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that note just now. Try again.' });
     return c.json({ proposals });
   } catch (e) { return capRelTabFailed(c, e, 'proposals run'); }
+});
+
+// D5073: the proposals of one note accepted in one request. Each runs `acceptProposal`, so every check is per proposal;
+// one that is no longer open is its own refusal and does not stop the rest.
+cycleRaise.post('/capital-relationships/proposals/accept-batch', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try { return c.json(await acceptProposals(c.env, s.projectId, Number(s.user.id), b.uids)); } catch (e) { return capRelTabFailed(c, e, 'accept batch'); }
 });
 
 cycleRaise.post('/capital-relationships/proposals/:uid/accept', async (c) => {
@@ -1158,6 +1172,54 @@ cycleRaise.post('/narrative/:version/claims/:uid/use-record', async (c) => {
   } catch (e) { return writeFailed(c, e); }
 });
 
+// D5069 (#5069) — Save version, whole: every changed section and every objection
+// answer the save carries, in ONE transaction under the revision the page read
+// (`expected_revision`, from `GET /narrative/:version` meta.revision). It commits
+// all of it or none of it, and a version that moved since is 409
+// `changed_since_open` with the stored revision. Version 0 is read only.
+cycleRaise.put('/narrative/:version{[0-9]+}', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const raw = c.req.param('version');
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  const b = await body(c);
+  const sections = Array.isArray(b.sections) ? b.sections : [];
+  const answersIn = Array.isArray(b.answers) ? b.answers : [];
+  if (!Array.isArray(b.sections) && b.sections !== undefined) return c.json({ detail: 'sections is a list' }, 400);
+  if (!Array.isArray(b.answers) && b.answers !== undefined) return c.json({ detail: 'answers is a list' }, 400);
+  const edits: Array<{ section: unknown; body: Record<string, unknown> }> = [];
+  for (const x of sections) {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) return c.json({ detail: 'Each section is an object with a section key' }, 400);
+    const { section, ...rest } = x as Record<string, unknown>;
+    edits.push({ section, body: rest });
+  }
+  // Each answered objection exists, and `how` and `section` are the answer route's own.
+  const answers: NarrativeAnswer[] = [];
+  if (answersIn.length) {
+    let known: Set<string>;
+    try { known = new Set((await readObjections(c.env, s.projectId)).items.map((o) => o.key)); } catch (e) { return unreadable(c, e); }
+    for (const x of answersIn as Array<Record<string, unknown>>) {
+      const key = String(x?.objection ?? '');
+      const how = x?.how === 'eadwyn' || x?.how === 'picked' ? x.how : null;
+      const section = NARRATIVE_SECTIONS.find((n) => n.key === x?.section);
+      if (!known.has(key)) return c.json({ detail: 'Objection not found' }, 404);
+      if (!how) return c.json({ detail: 'how is eadwyn or picked' }, 400);
+      if (!section) return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((n) => n.key) }, 404);
+      answers.push({ objection: key, section: section.key, how });
+    }
+  }
+  try {
+    return c.json(await saveNarrativeEdits(c.env, {
+      projectId: s.projectId, userId: Number(s.user.id), version: raw, expectedRevision: b.expected_revision, sections: edits, answers,
+    }));
+  } catch (e) {
+    if (e instanceof WriterError && e.sentence === 'Unknown section') {
+      return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404);
+    }
+    return writeFailed(c, e);
+  }
+});
+
 cycleRaise.put('/narrative/:version/sections/:section', async (c) => {
   const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
@@ -1651,6 +1713,13 @@ cycleRaise.get('/evidence/preview', async c => {
 });
 cycleRaise.post('/evidence/refresh', async c => {
   try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; return c.json(await readRaiseEvidence(ctx, { ...evidencePage(c), refresh: true })); }
+  catch (error) { return evidenceFailure(c, error); }
+});
+// D5073: many decisions in one request, one authoritative result per row (see `decideMany`).
+cycleRaise.post('/evidence/items/batch', async c => {
+  try { const ctx = await evidenceScope(c, true); if (ctx instanceof Response) return ctx; const body = await evidenceBody(c);
+    if (Object.keys(body).some(k => k !== 'action' && k !== 'items')) throw new RaiseEvidenceError('invalid', 400);
+    return c.json(await decideEvidenceMany(ctx, body.action, body.items)); }
   catch (error) { return evidenceFailure(c, error); }
 });
 cycleRaise.post('/evidence/items/:id/accept', async c => {

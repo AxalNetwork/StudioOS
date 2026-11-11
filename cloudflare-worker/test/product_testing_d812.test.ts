@@ -113,6 +113,35 @@ const PROGRAMME = {
   time_needed: '2 hours a week', places: 2, eligible_roles: ['founder'], questions: ['What do you use today?'],
 };
 const events = (w: any) => w.db.prepare('SELECT action, actor_user_id FROM testing_events ORDER BY id').all().map((r: any) => `${r.action}:${r.actor_user_id}`);
+
+test('#4835: a programme patch preserves an independent edit made before the batch', async () => {
+  const w = world();
+  const { body } = await call(w, ACME, 'POST', '/partner/testing/programmes', PROGRAMME);
+  const uid = body.programme.uid;
+  const batch = w.env.DB.batch;
+  w.env.DB.batch = (statements: unknown[]) => {
+    w.db.prepare('UPDATE testing_programmes SET places = ? WHERE uid = ?').run(7, uid);
+    return batch(statements);
+  };
+  const edited = await call(w, ACME, 'PATCH', `/partner/testing/programmes/${uid}`, { summary: 'Updated summary' });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.body.programme.summary, 'Updated summary');
+  assert.equal(edited.body.programme.places, 7);
+});
+
+test('#4835: closing before the application batch prevents both the application and its event', async () => {
+  const w = world();
+  const uid = await openPartnerProgramme(w);
+  const batch = w.env.DB.batch;
+  w.env.DB.batch = (statements: unknown[]) => {
+    w.db.prepare("UPDATE testing_programmes SET status = 'closed' WHERE uid = ?").run(uid);
+    return batch(statements);
+  };
+  const applied = await call(w, FRAN, 'POST', `/testing/programmes/${uid}/apply`, { answers: ['A spreadsheet'] });
+  assert.equal(applied.status, 409);
+  assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM testing_applications').get()?.n, 0);
+  assert.ok(!events(w).includes(`applied:${FRAN}`));
+});
 const bell = (w: any, user: number) => w.db.prepare('SELECT type FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.type);
 
 /** A partner programme through submit, approve and open; returns its uid. */

@@ -10,8 +10,10 @@
  *   GET  /governance      canvas H23's ledger (which completes H7's
  *                         privileged-action feed), unioned across the five
  *                         stores that actually record one
- *   POST /force-reauth    sign every active account out, everywhere, with a
- *                         typed reason; recorded in admin_audit_log
+ *   POST /force-reauth    sign every active account on THIS deployment out,
+ *                         with a typed reason; recorded in admin_audit_log.
+ *                         D4669: branches are not reached, and the answer
+ *                         lists each (services/emergencyScope.ts)
  *   POST /dsr/:userId/close   close a data-subject erasure request as
  *                         fulfilled or denied, with a typed reason (D168)
  *   GET  /sessions        D481 — active sessions and live support sessions,
@@ -60,30 +62,48 @@ import {
   IMPERSONATION_EXPIRY_MINUTES, requireSuperAdmin, requireSuperAdminWriteBar, bumpJwtMinIat, selectJwt,
 } from '../auth';
 import {
-  listActiveSessions, countActiveSessions, listLiveImpersonations, revokeUserSession, endImpersonation,
-  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
+  listActiveSessions, countActiveSessions, listLiveImpersonations, countSupportSessions, revokeUserSession, endImpersonation,
+  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT, SESSION_LIST_LIMIT,
 } from '../services/userSessions';
+import {
+  SESSION_STATUS_DEFINITIONS, supportSessionStatus, supportSessionLimitMinutes, parseStoredTs,
+  type SupportSessionStatus,
+} from '../services/sessionStatus';
+import {
+  securityEventIdentity, supportIdentity, userIdentity, type Identity,
+} from '../services/securityIdentity';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
-import { loadGuardrailCounters } from '../services/aiRouter';
+import { loadGuardrailCounters, loadRecentGuardVerdicts } from '../services/aiRouter';
 import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
 import { screeningSummary } from '../services/sanctions';
-import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
+import { readBackupHeartbeat, readRestoreDrill, readRestoreDrillHistory } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import {
-  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
+  emergencyScope, deploymentOutcomes, signOutOnBranches, type BranchSignOutTarget,
+} from '../services/emergencyScope';
+import { EMERGENCY_REASON_MIN, EMERGENCY_OP_KEY_RE } from '../rpc/branchOps';
+import {
+  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, dsrOverdue, DSR_CLOCK_RULE, DSR_CLOCK_LABEL,
+  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
+import { ensureAdminAuditLogTable } from './admin';
+import { freshnessFor, type SecuritySource } from '../services/securitySourceFreshness';
 
 const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
 const MIN_REASON = 8;
+/** D4800 — at most this many administrators are named in the MFA finding; the count is exact regardless. */
+const ADMIN_MFA_GAP_LIMIT = 50;
 
 
 type Absent = { available: false; reason: string };
 const absent = (reason: string): Absent => ({ available: false, reason });
+/** D5247 — a freshness row's fields beside a ledger source, whose own key stays `table`. */
+const withoutSource = ({ source: _s, ...rest }: { source: string } & Record<string, unknown>) => rest;
 
 /**
  * D152 — THE SENTENCE WAS WRONG ON TWO OF ITS THREE CLAUSES, AND IT IS
@@ -161,26 +181,53 @@ const AI_SAFETY_WINDOW_DAYS = 7;
  * possible direction to be wrong in.
  */
 async function aiSafetyBlock(env: Env) {
-  const counters = await loadGuardrailCounters(env, AI_SAFETY_WINDOW_DAYS);
+  // D481 — the token anomalies carry their own availability, their own table
+  // and their own window (24 hours against the seven days before), stated in
+  // their own `how`; they answer whatever the rollup below does.
+  const always = {
+    token_anomalies: await loadTokenAnomalies(env),
+    // D4803 — SE08's "Recent guard verdicts", its own read with its own availability.
+    recent_verdicts: await loadRecentGuardVerdicts(env, AI_SAFETY_WINDOW_DAYS),
+    not_counted: AI_SAFETY_NOT_COUNTED,
+  };
+  // D4691 — `available` is earned, not asserted: a rollup that threw is the
+  // whole block unreadable, with its reason, never a block of zeros.
+  let counters: Awaited<ReturnType<typeof loadGuardrailCounters>>;
+  try {
+    counters = await loadGuardrailCounters(env, AI_SAFETY_WINDOW_DAYS);
+  } catch {
+    return {
+      available: false as const,
+      reason: 'The AI guardrail counters could not be read on this database. That is not a claim that no guarded '
+        + 'call ran or that nothing was blocked.',
+      ...always,
+    };
+  }
   return {
-    available: true,
+    available: true as const,
     window_days: counters.window_days,
     since: counters.since,
     verdicts: counters.verdicts,
     enforcement: counters.enforcement,
     guard: counters.guard, // D4522: router enforcement is separate from legacy chat.
-    // D481 — its own availability, its own table, its own window (24 hours
-    // against the seven days before), stated in its own `how`.
-    token_anomalies: await loadTokenAnomalies(env),
-    not_counted: AI_SAFETY_NOT_COUNTED,
+    ...always,
   };
 }
 
-/** SQLite's `datetime('now')` is 'YYYY-MM-DD HH:MM:SS' (UTC, no zone). */
-function parseSqlTs(s: string | null | undefined): number {
-  if (!s) return NaN;
-  const iso = s.includes('T') ? s : `${s.replace(' ', 'T')}Z`;
-  return Date.parse(iso);
+/** SQLite's `datetime('now')` is 'YYYY-MM-DD HH:MM:SS' (UTC, no zone); D4691 — one parser, shared with the status rules. */
+const parseSqlTs = (s: string | null | undefined): number => parseStoredTs(s);
+
+/**
+ * D4691 — one read, its own availability. Every figure on /overview comes
+ * through this or an equivalent per-store try, so one failed store costs its
+ * own tile and never the page, and never reads as an empty table or a zero.
+ */
+async function readPart<T>(what: string, fn: () => Promise<T>): Promise<({ available: true } & T) | Absent> {
+  try {
+    return { available: true, ...(await fn()) };
+  } catch {
+    return absent(`${what} could not be read on this database. This is not a claim that there are none.`);
+  }
 }
 
 /**
@@ -266,12 +313,23 @@ r.get('/overview', async (c) => {
   // The COUNT only. The rows themselves moved to /governance when H7's feed
   // replaced the Y2 audit zone: reading fifty of them here and rendering none
   // is a page of D1 work per load for a table nothing draws.
-  const auditTotal = await env.DB.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').first<{ n: number }>();
+  const audit = await readPart('The admin action log', async () => {
+    const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').first<{ n: number }>();
+    if (!row) throw new Error('no row');
+    return { total: Number(row.n) || 0, feed: '/api/admin/security/governance' };
+  });
 
   // Impersonation: the table is created lazily by services/cohortTiming.ts on
   // first use, so a database that has never impersonated has no table. That
   // is "no sessions", but reported as unreadable rather than guessed at.
-  let impersonations: { available: true; active: number; recent: Record<string, unknown>[] } | Absent;
+  //
+  // D4691 — `active` is `live` by the shared rule (services/sessionStatus.ts):
+  // exactly the rows the Sessions zone lists with an End button. It used to be
+  // every record with no end time, so a record nobody closed counted as a
+  // live support session forever. Those are counted apart as `not_closed`.
+  let impersonations:
+    | { available: true; active: number; live: number; not_closed: number; open: number; recent: Record<string, unknown>[] }
+    | Absent;
   try {
     const recent = await env.DB.prepare(
       `SELECT i.id, i.admin_user_id, i.target_user_id, i.context, i.started_at, i.ended_at,
@@ -282,10 +340,23 @@ r.get('/overview', async (c) => {
         ORDER BY i.started_at DESC, i.id DESC
         LIMIT ?`,
     ).bind(IMPERSONATION_LIMIT).all<Record<string, unknown>>();
-    const active = await env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM impersonation_sessions WHERE ended_at IS NULL',
-    ).first<{ n: number }>();
-    impersonations = { available: true, active: Number(active?.n) || 0, recent: recent.results || [] };
+    const counts = await countSupportSessions(env);
+    const now = Date.now();
+    impersonations = {
+      available: true,
+      active: counts.live,
+      live: counts.live,
+      not_closed: counts.not_closed,
+      open: counts.open,
+      recent: (recent.results || []).map((i) => ({
+        ...i,
+        status: supportSessionStatus(i, now),
+        actor: supportIdentity(
+          { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+          { id: i.target_user_id, name: i.target_name, email: i.target_email },
+        ),
+      })),
+    };
   } catch {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
@@ -300,23 +371,57 @@ r.get('/overview', async (c) => {
     sessions = absent('The user_sessions table could not be read on this database.');
   }
 
-  const admins = await env.DB.prepare(
-    `SELECT COUNT(*) AS total,
-            SUM(CASE WHEN tfa_methods IS NOT NULL AND tfa_methods <> '[]' THEN 1 ELSE 0 END) AS with_mfa
-       FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
-  ).first<{ total: number; with_mfa: number }>();
+  const mfa = await readPart('Admin MFA coverage', async () => {
+    const row = await env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN tfa_methods IS NOT NULL AND tfa_methods <> '[]' THEN 1 ELSE 0 END) AS with_mfa
+         FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
+    ).first<{ total: number; with_mfa: number }>();
+    if (!row) throw new Error('no row');
+    // D4800 — which administrators the gap is, so the finding can name them
+    // (open question A's recommended A2). Same predicate as the count, read in
+    // the same part: if the names cannot be read, the whole part is unreadable
+    // rather than a count beside an empty list.
+    const gap = await env.DB.prepare(
+      `SELECT id, name, email
+         FROM users
+        WHERE LOWER(role) = 'admin' AND is_active = 1
+          AND NOT (tfa_methods IS NOT NULL AND tfa_methods <> '[]')
+        ORDER BY id
+        LIMIT ?`,
+    ).bind(ADMIN_MFA_GAP_LIMIT).all<{ id: number; name: string | null; email: string | null }>();
+    return {
+      admins_total: Number(row.total) || 0,
+      admins_with_mfa: Number(row.with_mfa) || 0,
+      admins_without_mfa: (gap.results || []).map((a) => ({ id: Number(a.id), name: a.name ?? null, email: a.email ?? null })),
+    };
+  });
 
-  const kycRows = await env.DB.prepare(
-    'SELECT kyc_status, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY kyc_status',
-  ).all<{ kyc_status: string | null; n: number }>();
-  const kyc: Record<string, number> = {};
-  for (const row of kycRows.results || []) kyc[String(row.kyc_status ?? 'not_started')] = Number(row.n) || 0;
+  // D4691 — `kyc` keeps its shape (status → count) when read; an unreadable
+  // queue is `kyc: null` beside `kyc_available: false` and its reason, never
+  // an empty object the page would draw as a queue with nobody in it.
+  let kyc: Record<string, number> | null = null;
+  let kycReason: string | null = null;
+  try {
+    const kycRows = await env.DB.prepare(
+      'SELECT kyc_status, COUNT(*) AS n FROM users WHERE is_active = 1 GROUP BY kyc_status',
+    ).all<{ kyc_status: string | null; n: number }>();
+    kyc = {};
+    for (const row of kycRows.results || []) kyc[String(row.kyc_status ?? 'not_started')] = Number(row.n) || 0;
+  } catch {
+    kycReason = 'The KYC queue could not be read on this database. This is not a claim that the queue is empty.';
+  }
 
-  const dsrRows = await env.DB.prepare(
-    `SELECT id, email, name, role, deletion_requested_at FROM users
-      WHERE deletion_requested_at IS NOT NULL
-      ORDER BY deletion_requested_at ASC`,
-  ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
+  let dsrRows: { results?: Array<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }> } | null;
+  try {
+    dsrRows = await env.DB.prepare(
+      `SELECT id, email, name, role, deletion_requested_at FROM users
+        WHERE deletion_requested_at IS NOT NULL
+        ORDER BY deletion_requested_at ASC`,
+    ).all<{ id: number; email: string; name: string; role: string; deletion_requested_at: string }>();
+  } catch {
+    dsrRows = null;
+  }
 
   // D168 — WHAT EACH SUBJECT HAS ASKED BEFORE. `users.deletion_requested_at`
   // is still the one source of "open" (see migration 272), so the list above
@@ -326,10 +431,14 @@ r.get('/overview', async (c) => {
   const ledger = await loadDsrHistory(env);
   const ledgerAvailable = ledger.available;
   const ledgerReason = ledger.available ? null : ledger.reason;
+  // D4675 — the exact request each row is, so a close names what was reviewed.
+  const openIds = await loadOpenDsrRequestIds(env);
 
   const now = Date.now();
-  const dsr = (dsrRows.results || []).map((u) => {
+  const dsr = (dsrRows?.results || []).map((u) => {
     const seen = ledger.available ? ledger.byUser.get(u.id) : undefined;
+    const open = openIds?.get(u.id);
+    const requestedMs = dsrStampMs(u.deletion_requested_at);
     return {
       id: u.id, email: u.email, name: u.name, role: u.role,
       // D481 — the kind comes from the store that holds the row. Every row
@@ -337,10 +446,19 @@ r.get('/overview', async (c) => {
       // request, and the page prints this field rather than a literal.
       kind: 'erasure',
       requested_at: u.deletion_requested_at,
+      // D4675 — the ledger row a close targets, only when it holds THIS
+      // request's stamp; null for a request the ledger does not hold yet.
+      request_id: open && open.requested_at === u.deletion_requested_at ? open.id : null,
       // null when the timestamp cannot be parsed: an unknown clock is not a
       // clock at zero. The arithmetic lives in the service so it can fail a
       // test — it had never had one.
-      days_left: dsrDaysLeft(parseSqlTs(u.deletion_requested_at), now),
+      days_left: dsrDaysLeft(requestedMs, now),
+      // D4675 — the instant the clock runs out (the end of the due day, UTC),
+      // so the rule is stated rather than inferred from a day count.
+      deadline_at: dsrDeadlineIso(requestedMs),
+      // D4675 part 2 (Q2 = B): overdue from that instant. The same fact as
+      // `days_left < 0`, said once so no reader has to derive it.
+      overdue: dsrOverdue(requestedMs, now),
       // null rather than 0 whenever the ledger could not be read — see above.
       prior_requests: ledgerAvailable ? (seen?.prior ?? 0) : null,
       last_outcome: ledgerAvailable ? (seen?.outcome ?? null) : null,
@@ -348,15 +466,27 @@ r.get('/overview', async (c) => {
     };
   });
 
-  return c.json({
-    audit: { total: Number(auditTotal?.n) || 0, feed: '/api/admin/security/governance' },
+  const body = {
+    audit,
     impersonations,
     sessions,
-    mfa: { admins_total: Number(admins?.total) || 0, admins_with_mfa: Number(admins?.with_mfa) || 0 },
+    // D4691 — the one set of status definitions every count and list here uses.
+    session_definitions: SESSION_STATUS_DEFINITIONS,
+    mfa,
     kyc,
+    kyc_available: kyc !== null,
+    ...(kycReason ? { kyc_reason: kycReason } : {}),
     kyc_not_recorded: KYC_NOT_RECORDED,
     dsr: {
-      clock_days: DSR_CLOCK_DAYS,
+      // D4691 — the open requests' own read. Unreadable is `available: false`
+      // with no rows, so the page cannot show "no open request".
+      available: dsrRows !== null,
+      ...(dsrRows === null
+        ? { reason: 'The open erasure requests could not be read on this database. This is not a claim that none are open.' }
+        : {}),
+      // D4675 part 2 (Q1 = B): the rule, named. It replaced `clock_days: 30`;
+      // a calendar month has no fixed day count, so none is sent.
+      clock: { rule: DSR_CLOCK_RULE, label: DSR_CLOCK_LABEL },
       kinds: DSR_KINDS,
       rows: dsr,
       // D200 — H23 draws the DSR clocks "by territory · runs against the
@@ -364,10 +494,13 @@ r.get('/overview', async (c) => {
       // construction, so the grouping has one group, and the second field says
       // why there is not a second: no branch RPC returns a branch's erasure
       // requests, and the brief forbids fanning out for one.
-      by_branch: [{ branch: 'HQ-held', open: dsr.length }],
+      by_branch: dsrRows === null ? [] : [{ branch: 'HQ-held', open: dsr.length }],
       branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
+      // D4803 (SE06) — the requests closed in the last 90 days, with who closed
+      // them; its own read and its own unreadable state.
+      recent: await loadRecentDsrClosures(env),
     },
     // D200 — the ledger H23 draws: rows today and refused sign-ins in 24h,
     // with the retention, the kinds, and what it deliberately does not count.
@@ -387,10 +520,33 @@ r.get('/overview', async (c) => {
     // its own key; never one green light inferred from the other.
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
+      // D4803 — SE09's KV snapshots card: the worker cron's own heartbeat,
+      // read with the same validation. KV has no restore drill.
+      kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
+      drill_history: await readRestoreDrillHistory(env, now),
       not_recorded: DR_NOT_RECORDED,
     },
-  });
+  };
+
+  // D5247 — per store this read touched: whether it answered, the last good read, the store's own age and
+  // whether it is past it. The ledger's own stores carry the same fields on /governance's `sources[]`. A
+  // heartbeat or marker answered when R2 answered (one never written, or invalid, is a read that found no
+  // evidence); its evidence time is the recovery point or the marker's stamp.
+  const r2Answered = (state: string) => state !== 'unreadable';
+  const { backup: hbD1, kv: hbKv } = body.backup_dr;
+  const marker = body.backup_dr.drill;
+  const sources = await freshnessFor(env, [
+    { source: 'admin_audit_log', answered: body.audit.available },
+    { source: 'impersonation_sessions', answered: body.impersonations.available },
+    { source: 'security_events', answered: body.security_events.available },
+    { source: 'sanctions_screenings', answered: body.sanctions.available },
+    { source: 'backup_d1', answered: r2Answered(hbD1.state), evidence_at: hbD1.available ? hbD1.recovery_point : null },
+    { source: 'backup_kv', answered: r2Answered(hbKv.state), evidence_at: hbKv.available ? hbKv.recovery_point : null },
+    { source: 'restore_drill', answered: r2Answered(marker.state), evidence_at: 'at' in marker ? marker.at : null },
+  ], now);
+
+  return c.json({ ...body, sources });
 });
 
 // ── Canvas H7 · the privileged-action feed ────────────────────────────────
@@ -483,6 +639,13 @@ type FeedRow = {
   source: string;
   tone: 'alert' | 'warn' | 'note';
   /**
+   * D4691 — who acted, in the one shape every reader on this page uses
+   * (services/securityIdentity.ts): an account, a support operator on behalf
+   * of an account, the platform, or — for a refused attempt — only a network.
+   * `actor` above is this identity's label, kept for older readers.
+   */
+  actor_identity: Identity;
+  /**
    * D200 — H23's fifth column. Stored for a security event; DERIVED for the
    * other four stores, because each of them writes AFTER the act it records
    * (`logAdminAction`, `logActivity`, `logEvent` — hq_security.test.mjs pins
@@ -495,6 +658,9 @@ type FeedRow = {
 /** A person, by the best name the join gave — never a bare id passed off as one. */
 const who = (name: unknown, email: unknown, id: unknown): string | null =>
   (name ? String(name) : null) || (email ? String(email) : null) || (id ? `user ${id}` : null);
+
+/** D4691 — a feed row's two actor fields from one identity, so they cannot disagree. */
+const actorOf = (identity: Identity) => ({ actor: identity.label, actor_identity: identity });
 
 /** `filters_json` is free-form. Only a non-empty string `reason` is lifted out. */
 function reasonFrom(json: unknown): string | null {
@@ -525,11 +691,13 @@ const minutesBetween = (a: number, b: number) => Math.max(0, Math.round((b - a) 
  * token's expiry means the record was never closed, not that somebody is
  * still inside.
  */
-function impersonationOutcome(i: ImpersonationRow, now: number): 'live' | 'ended' | 'not closed' {
-  if (i.ended_at) return 'ended';
-  const started = parseSqlTs(i.started_at as string);
-  const elapsed = Number.isNaN(started) ? null : minutesBetween(started, now);
-  return elapsed !== null && elapsed >= IMPERSONATION_EXPIRY_MINUTES ? 'not closed' : 'live';
+const OUTCOME_OF: Record<SupportSessionStatus, 'live' | 'ended' | 'not closed' | 'unknown'> = {
+  live: 'live', ended: 'ended', not_closed: 'not closed', unknown: 'unknown',
+};
+function impersonationOutcome(i: ImpersonationRow, now: number): 'live' | 'ended' | 'not closed' | 'unknown' {
+  // D4691 — the shared rule, so this column, the Data access zone, the
+  // overview's count and the Sessions list cannot disagree about one row.
+  return OUTCOME_OF[supportSessionStatus(i, now)];
 }
 
 /**
@@ -554,7 +722,11 @@ const FEED_AUDIT_ALL_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.fi
      FROM admin_audit_log a
      LEFT JOIN users u ON u.id = a.admin_user_id
      LEFT JOIN users t ON t.id = a.viewed_user_id
-    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+    WHERE (? IS NULL OR datetime(a.exported_at) < datetime(?))
+      AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
+      AND (? IS NULL OR a.admin_user_id = ?)
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, a.filters_json, a.exported_at,
           u.name AS admin_name, u.email AS admin_email, a.admin_user_id,
@@ -563,7 +735,11 @@ const FEED_AUDIT_EXPORTS_SQL = `SELECT a.id, a.action, a.report_type, a.format, 
      LEFT JOIN users u ON u.id = a.admin_user_id
      LEFT JOIN users t ON t.id = a.viewed_user_id
     WHERE a.action LIKE '%export%'
-    ORDER BY a.exported_at DESC, a.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(a.exported_at) < datetime(?))
+      AND (? IS NULL OR datetime(a.exported_at) >= datetime(?))
+      AND (? IS NULL OR a.admin_user_id = ?)
+      AND (? IS NULL OR a.action LIKE ? ESCAPE '!' OR a.report_type LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(a.exported_at) DESC, a.id DESC LIMIT ?`;
 
 /** Twenty-five placeholders, one per entry in ACTOR_SIDE_ACTIONS (D625 added the three identity reads; D1232 the KYC value shown, renewals, audit, periods, D1230's Send to HQ and its decision, and D1229's case, figures, assignment, note, ask for information and re-check). */
 const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
@@ -571,7 +747,11 @@ const FEED_ACTIVITY_ACTOR_SIDE_SQL = `SELECT l.id, l.action, l.details, l.create
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
     WHERE l.action IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(l.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
+      AND (? IS NULL OR l.user_id = ?)
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 /** One placeholder, one per entry in SUSPENSION_ACTIVITY_ACTIONS. */
 const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.created_at, l.user_id,
@@ -579,7 +759,11 @@ const FEED_ACTIVITY_SUSPENSIONS_SQL = `SELECT l.id, l.action, l.details, l.creat
      FROM activity_logs l
      LEFT JOIN users u ON u.id = l.user_id
     WHERE l.action IN (?)
-    ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(l.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(l.created_at) >= datetime(?))
+      AND (? IS NULL OR l.user_id = ?)
+      AND (? IS NULL OR l.action LIKE ? ESCAPE '!' OR l.details LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(l.created_at) DESC, l.id DESC LIMIT ?`;
 
 const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
           u.name AS actor_name, u.email AS actor_email,
@@ -587,7 +771,11 @@ const FEED_LICENCE_ALL_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.acto
      FROM licence_events e
      LEFT JOIN users u ON u.id = e.actor_user_id
      LEFT JOIN territory_licences l ON l.id = e.licence_id
-    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+    WHERE (? IS NULL OR datetime(e.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
+      AND (? IS NULL OR e.actor_user_id = ?)
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /** Two placeholders, one per entry in SUSPENSION_LICENCE_EVENTS. */
 const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at, e.actor_user_id,
@@ -597,7 +785,11 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
      LEFT JOIN users u ON u.id = e.actor_user_id
      LEFT JOIN territory_licences l ON l.id = e.licence_id
     WHERE e.event IN (?, ?)
-    ORDER BY e.created_at DESC, e.id DESC LIMIT ?`;
+      AND (? IS NULL OR datetime(e.created_at) < datetime(?))
+      AND (? IS NULL OR datetime(e.created_at) >= datetime(?))
+      AND (? IS NULL OR e.actor_user_id = ?)
+      AND (? IS NULL OR e.event LIKE ? ESCAPE '!' OR e.note LIKE ? ESCAPE '!' OR l.licence_ref LIKE ? ESCAPE '!' OR l.brand_name LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(e.created_at) DESC, e.id DESC LIMIT ?`;
 
 /**
  * D200 — the fifth store. The subject joins to an account where the event
@@ -605,13 +797,210 @@ const FEED_LICENCE_SUSPENSIONS_SQL = `SELECT e.id, e.event, e.note, e.created_at
  * row that resolves to nobody is its network bucket and nothing more.
  */
 const FEED_SECURITY_EVENTS_SQL = `SELECT s.id, s.kind, s.factor, s.outcome, s.detail, s.user_id, s.ip_prefix,
-          s.branch_code, s.occurred_at,
-          u.name AS subject_name, u.email AS subject_email
+          s.branch_code, s.occurred_at, s.support_user_id,
+          u.name AS subject_name, u.email AS subject_email,
+          sp.name AS support_name, sp.email AS support_email
      FROM security_events s
      LEFT JOIN users u ON u.id = s.user_id
-    ORDER BY s.occurred_at DESC, s.id DESC LIMIT ?`;
+     LEFT JOIN users sp ON sp.id = s.support_user_id
+    WHERE (? IS NULL OR datetime(s.occurred_at) < datetime(?))
+      AND (? IS NULL OR datetime(s.occurred_at) >= datetime(?))
+      AND (? IS NULL OR s.user_id = ? OR s.support_user_id = ?)
+      AND (? IS NULL OR s.outcome = ?)
+      AND (? IS NULL OR s.kind LIKE ? ESCAPE '!' OR s.factor LIKE ? ESCAPE '!' OR s.detail LIKE ? ESCAPE '!' OR u.name LIKE ? ESCAPE '!' OR u.email LIKE ? ESCAPE '!' OR sp.name LIKE ? ESCAPE '!' OR sp.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(s.occurred_at) DESC, s.id DESC LIMIT ?`;
+
+/**
+ * D4803 (Events) — the impersonation sessions for the FEED, under the same
+ * cursor and filters as the other four stores. The Data access zone keeps its
+ * own unfiltered read of the newest sessions: a filter on the ledger must not
+ * make that zone look as if nobody had acted as anyone.
+ * `ended` is 1 for sessions with an end, 0 for open ones, NULL for both.
+ */
+const FEED_IMPERSONATIONS_SQL = `SELECT i.id, i.context, i.started_at, i.ended_at,
+          a.name AS admin_name, a.email AS admin_email, i.admin_user_id,
+          t.name AS target_name, t.email AS target_email, i.target_user_id
+     FROM impersonation_sessions i
+     LEFT JOIN users a ON a.id = i.admin_user_id
+     LEFT JOIN users t ON t.id = i.target_user_id
+    WHERE (? IS NULL OR datetime(i.started_at) < datetime(?))
+      AND (? IS NULL OR datetime(i.started_at) >= datetime(?))
+      AND (? IS NULL OR i.admin_user_id = ?)
+      AND (? IS NULL OR (? = 1 AND i.ended_at IS NOT NULL) OR (? = 0 AND i.ended_at IS NULL))
+      AND (? IS NULL OR i.context LIKE ? ESCAPE '!' OR a.name LIKE ? ESCAPE '!' OR a.email LIKE ? ESCAPE '!' OR t.name LIKE ? ESCAPE '!' OR t.email LIKE ? ESCAPE '!')
+    ORDER BY datetime(i.started_at) DESC, i.id DESC LIMIT ?`;
 
 type ImpersonationRow = Record<string, unknown>;
+
+/**
+ * D4803 (Events, SE03) — the ledger's cursor and its server-side filters.
+ *
+ * Each store applies the same four conditions in its own SQL, every value
+ * bound and every timestamp normalised through `datetime()` (D124), so each
+ * store still returns its OWN newest FEED_LIMIT matching rows and the merge
+ * stays exact, as the whole-feed read always was:
+ *
+ *   before  older than this instant (the cursor; the page's last `at`)
+ *   from    on or after this day, `YYYY-MM-DD`, UTC
+ *   to      on or before this day, `YYYY-MM-DD`, UTC (the whole day)
+ *   actor   a user id: who acted (a gate or step-up event also matches the
+ *           support operator acting for that account)
+ *   q       a search, matched as a substring, case-insensitively for ASCII
+ *           (SQLite's LIKE), against the action, the names and emails the row
+ *           joins, and the store's own text column
+ *   outcome ok | refused | live | ended | not_closed
+ *   source  one store's table name
+ *
+ * A value outside its shape is a 400 naming the field, never a quietly
+ * widened read: an investigator who typed a date the server ignored would be
+ * reading a list that is not the one they asked for.
+ */
+export const FEED_OUTCOMES = ['ok', 'refused', 'live', 'ended', 'not_closed'] as const;
+export const FEED_SOURCES = [
+  'admin_audit_log', 'activity_logs', 'impersonation_sessions', 'licence_events', 'security_events',
+] as const;
+type FeedOutcome = (typeof FEED_OUTCOMES)[number];
+type FeedSource = (typeof FEED_SOURCES)[number];
+export type FeedQuery = {
+  upper: string | null;
+  lower: string | null;
+  actor: number | null;
+  like: string | null;
+  outcome: FeedOutcome | null;
+  source: FeedSource | null;
+  applied: Record<string, string | number>;
+};
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SEARCH_MAX = 100;
+/** `YYYY-MM-DD HH:MM:SS`, UTC: the shape `datetime()` returns, so a bound value compares as the column does. */
+const sqlStamp = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+
+/** The query string as a FeedQuery, or the first field that is out of shape. */
+export function parseFeedQuery(q: (k: string) => string | undefined):
+  { ok: true; query: FeedQuery } | { ok: false; field: string; message: string } {
+  const applied: Record<string, string | number> = {};
+  const text = (k: string) => {
+    const v = q(k);
+    return typeof v === 'string' && v.trim() ? v.trim() : null;
+  };
+  let upper: number | null = null;
+  let lower: number | null = null;
+
+  const before = text('before');
+  if (before) {
+    const ms = parseStoredTs(before);
+    if (Number.isNaN(ms)) return { ok: false, field: 'before', message: 'The cursor is not a timestamp.' };
+    upper = ms;
+    applied.before = before;
+  }
+  const day = (k: 'from' | 'to') => {
+    const v = text(k);
+    if (!v) return { ok: true as const, ms: null };
+    const ms = DAY_RE.test(v) ? Date.parse(`${v}T00:00:00Z`) : NaN;
+    if (Number.isNaN(ms)) return { ok: false as const };
+    applied[k] = v;
+    return { ok: true as const, ms };
+  };
+  const from = day('from');
+  if (!from.ok) return { ok: false, field: 'from', message: 'The start date must be YYYY-MM-DD.' };
+  const to = day('to');
+  if (!to.ok) return { ok: false, field: 'to', message: 'The end date must be YYYY-MM-DD.' };
+  if (from.ms !== null) lower = from.ms;
+  // `to` names a whole day, so the bound is the start of the next one.
+  if (to.ms !== null) {
+    const end = to.ms + 86_400_000;
+    upper = upper === null ? end : Math.min(upper, end);
+  }
+  if (lower !== null && upper !== null && lower >= upper) {
+    return { ok: false, field: 'from', message: 'The start date is after the end of the range.' };
+  }
+
+  const actorText = text('actor');
+  let actor: number | null = null;
+  if (actorText) {
+    if (!/^[1-9]\d{0,9}$/.test(actorText)) return { ok: false, field: 'actor', message: 'The actor must be a user id.' };
+    actor = Number(actorText);
+    applied.actor = actor;
+  }
+
+  const search = text('q');
+  let like: string | null = null;
+  if (search) {
+    if (search.length > SEARCH_MAX) return { ok: false, field: 'q', message: `A search is at most ${SEARCH_MAX} characters.` };
+    // `!` escapes LIKE's own wildcards, so a search for "50%" finds "50%".
+    like = `%${search.replace(/[!%_]/g, (ch) => `!${ch}`)}%`;
+    applied.q = search;
+  }
+
+  const outcomeText = text('outcome');
+  let outcome: FeedOutcome | null = null;
+  if (outcomeText) {
+    if (!(FEED_OUTCOMES as readonly string[]).includes(outcomeText)) {
+      return { ok: false, field: 'outcome', message: `The outcome is one of ${FEED_OUTCOMES.join(', ')}.` };
+    }
+    outcome = outcomeText as FeedOutcome;
+    applied.outcome = outcome;
+  }
+
+  const sourceText = text('source');
+  let source: FeedSource | null = null;
+  if (sourceText) {
+    if (!(FEED_SOURCES as readonly string[]).includes(sourceText)) {
+      return { ok: false, field: 'source', message: 'The source is not one of the five stores.' };
+    }
+    source = sourceText as FeedSource;
+    applied.source = source;
+  }
+
+  return {
+    ok: true,
+    query: {
+      upper: upper === null ? null : sqlStamp(upper),
+      lower: lower === null ? null : sqlStamp(lower),
+      actor, like, outcome, source, applied,
+    },
+  };
+}
+
+/** The binds for one store's time, actor and search conditions, in statement order. */
+const timeBinds = (f: FeedQuery) => [f.upper, f.upper, f.lower, f.lower];
+const actorBinds = (f: FeedQuery, n = 2) => [f.actor, ...Array(n - 1).fill(f.actor)];
+const likeBinds = (f: FeedQuery, n: number) => [f.like, ...Array(n).fill(f.like)];
+
+/**
+ * Which stores a filtered read can hold a row from. Only `security_events`
+ * stores an outcome; the other four are written after their act (`ok`), and an
+ * impersonation's outcome is a state (live, ended, not closed).
+ */
+function storesFor(f: FeedQuery): Record<FeedSource, boolean> {
+  const all = {
+    admin_audit_log: true, activity_logs: true, impersonation_sessions: true, licence_events: true, security_events: true,
+  };
+  if (f.outcome === 'refused') Object.assign(all, { admin_audit_log: false, activity_logs: false, impersonation_sessions: false, licence_events: false });
+  if (f.outcome === 'ok') all.impersonation_sessions = false;
+  if (f.outcome === 'live' || f.outcome === 'ended' || f.outcome === 'not_closed') {
+    Object.assign(all, { admin_audit_log: false, activity_logs: false, licence_events: false, security_events: false });
+  }
+  if (f.source) for (const k of FEED_SOURCES) if (k !== f.source) all[k] = false;
+  return all;
+}
+
+/**
+ * The page ends on a whole second. The cursor is the last row's time and the
+ * next read takes rows strictly older, at the second `datetime()` keeps, so a
+ * page cut inside a second would drop that second's remaining rows. Trailing
+ * rows in the last row's second are held back to the next page — unless the
+ * whole page is one second, which is returned whole and said so.
+ */
+export function trimToSecond<T extends { ts: number }>(rows: T[], more: boolean): { page: T[]; split: boolean } {
+  if (!more || rows.length === 0) return { page: rows, split: false };
+  const sec = (t: number) => (Number.isNaN(t) ? NaN : Math.floor(t / 1000));
+  const last = sec(rows[rows.length - 1].ts);
+  let cut = rows.length;
+  while (cut > 0 && sec(rows[cut - 1].ts) === last) cut -= 1;
+  return cut === 0 ? { page: rows, split: true } : { page: rows.slice(0, cut), split: false };
+}
 
 r.get('/governance', async (c) => {
   await requireSuperAdmin(c);
@@ -621,12 +1010,19 @@ r.get('/governance', async (c) => {
   // stale bookmark should show more than it asked for, never less.
   const filter = FEED_FILTERS.some((f) => f.key === asked) ? asked : 'all';
   const now = Date.now();
+  // D4803 — the cursor and the server-side filters. A value out of shape is
+  // refused with its field, never read as a wider list than was asked for.
+  const parsed = parseFeedQuery((k) => c.req.query(k));
+  if (!parsed.ok) return c.json({ error: parsed.message, code: 'invalid_filter', field: parsed.field }, 400);
+  const fq = parsed.query;
+  const narrowed = Object.keys(fq.applied).length > 0;
+  const stores = storesFor(fq);
 
-  const readAudit = filter === 'all' || filter === 'exports';
-  const readActivity = filter === 'all' || filter === 'suspensions';
-  const readImpersonations = filter === 'all' || filter === 'impersonations';
-  const readLicences = filter === 'all' || filter === 'licence_changes' || filter === 'suspensions';
-  const readSecurity = filter === 'all' || filter === 'auth';
+  const readAudit = (filter === 'all' || filter === 'exports') && stores.admin_audit_log;
+  const readActivity = (filter === 'all' || filter === 'suspensions') && stores.activity_logs;
+  const readImpersonations = (filter === 'all' || filter === 'impersonations') && stores.impersonation_sessions;
+  const readLicences = (filter === 'all' || filter === 'licence_changes' || filter === 'suspensions') && stores.licence_events;
+  const readSecurity = (filter === 'all' || filter === 'auth') && stores.security_events;
 
   const rows: Array<FeedRow & { ts: number }> = [];
   const sources: Array<{ table: string; available: boolean; rows?: number; reason?: string }> = [];
@@ -666,7 +1062,7 @@ r.get('/governance', async (c) => {
     try {
       const res = await env.DB
         .prepare(filter === 'exports' ? FEED_AUDIT_EXPORTS_SQL : FEED_AUDIT_ALL_SQL)
-        .bind(FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const a of got) {
         const action = String(a.action || '');
@@ -675,7 +1071,7 @@ r.get('/governance', async (c) => {
           key: `audit:${a.id}`,
           at: (a.exported_at as string) || null,
           ts: parseSqlTs(a.exported_at as string),
-          actor: who(a.admin_name, a.admin_email, a.admin_user_id),
+          ...actorOf(userIdentity(a.admin_user_id, a.admin_name, a.admin_email)),
           action,
           tenant: null,
           target: [
@@ -702,7 +1098,7 @@ r.get('/governance', async (c) => {
       const allow = suspensionsOnly ? SUSPENSION_ACTIVITY_ACTIONS : ACTOR_SIDE_ACTIONS;
       const res = await env.DB
         .prepare(suspensionsOnly ? FEED_ACTIVITY_SUSPENSIONS_SQL : FEED_ACTIVITY_ACTOR_SIDE_SQL)
-        .bind(...allow, FEED_LIMIT).all<Record<string, unknown>>();
+        .bind(...allow, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 4), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const l of got) {
         const action = String(l.action || '');
@@ -710,7 +1106,7 @@ r.get('/governance', async (c) => {
           key: `activity:${l.id}`,
           at: (l.created_at as string) || null,
           ts: parseSqlTs(l.created_at as string),
-          actor: who(l.actor_name, l.actor_email, l.user_id),
+          ...actorOf(userIdentity(l.user_id, l.actor_name, l.actor_email)),
           action,
           tenant: null,
           // `details` is already the sentence a person wrote at the write site.
@@ -728,15 +1124,37 @@ r.get('/governance', async (c) => {
 
   // ── impersonation_sessions ────────────────────────────────────────────
   if (readImpersonations) {
-    if (impersonations === null) {
+    // Unfiltered, the feed shares the Data access zone's read; narrowed, it
+    // reads its own under the same conditions as the other four stores.
+    let feedImpersonations: ImpersonationRow[] | null = impersonations;
+    if (narrowed) {
+      const ended = fq.outcome === 'ended' ? 1 : fq.outcome === 'live' || fq.outcome === 'not_closed' ? 0 : null;
+      try {
+        const res = await env.DB.prepare(FEED_IMPERSONATIONS_SQL)
+          .bind(...timeBinds(fq), ...actorBinds(fq), ended, ended, ended, ...likeBinds(fq, 5), FEED_LIMIT)
+          .all<ImpersonationRow>();
+        feedImpersonations = res.results || [];
+      } catch {
+        feedImpersonations = null;
+      }
+    }
+    if (feedImpersonations === null) {
       sources.push({ table: 'impersonation_sessions', available: false, reason: IMPERSONATION_UNREADABLE });
     } else {
-      for (const i of impersonations) {
+      // An open session is live or not closed by the clock, which SQL cannot
+      // tell apart; the store's own count still decides `more`.
+      const wanted = fq.outcome === 'live' || fq.outcome === 'not_closed'
+        ? feedImpersonations.filter((i) => impersonationOutcome(i, now) === (fq.outcome === 'live' ? 'live' : 'not closed'))
+        : feedImpersonations;
+      for (const i of wanted) {
         rows.push({
           key: `impersonation:${i.id}`,
           at: (i.started_at as string) || null,
           ts: parseSqlTs(i.started_at as string),
-          actor: who(i.admin_name, i.admin_email, i.admin_user_id),
+          ...actorOf(supportIdentity(
+            { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+            { id: i.target_user_id, name: i.target_name, email: i.target_email },
+          )),
           action: 'impersonate',
           tenant: null,
           // The reason is mandatory on the support-session dialog, so a row
@@ -750,7 +1168,7 @@ r.get('/governance', async (c) => {
           outcome: impersonationOutcome(i, now),
         });
       }
-      sources.push({ table: 'impersonation_sessions', available: true, rows: took(impersonations.length) });
+      sources.push({ table: 'impersonation_sessions', available: true, rows: took(feedImpersonations.length) });
     }
   }
 
@@ -759,9 +1177,10 @@ r.get('/governance', async (c) => {
     try {
       const res = filter === 'suspensions'
         ? await env.DB.prepare(FEED_LICENCE_SUSPENSIONS_SQL)
-          .bind(...SUSPENSION_LICENCE_EVENTS, FEED_LIMIT).all<Record<string, unknown>>()
+          .bind(...SUSPENSION_LICENCE_EVENTS, ...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT)
+          .all<Record<string, unknown>>()
         : await env.DB.prepare(FEED_LICENCE_ALL_SQL)
-          .bind(FEED_LIMIT).all<Record<string, unknown>>();
+          .bind(...timeBinds(fq), ...actorBinds(fq), ...likeBinds(fq, 6), FEED_LIMIT).all<Record<string, unknown>>();
       const got = res.results || [];
       for (const e of got) {
         const event = String(e.event || '');
@@ -769,7 +1188,7 @@ r.get('/governance', async (c) => {
           key: `licence:${e.id}`,
           at: (e.created_at as string) || null,
           ts: parseSqlTs(e.created_at as string),
-          actor: who(e.actor_name, e.actor_email, e.actor_user_id),
+          ...actorOf(userIdentity(e.actor_user_id, e.actor_name, e.actor_email)),
           action: `licence ${event}`,
           // The one column that is real here, and only here.
           tenant: (e.brand_name as string) || null,
@@ -791,23 +1210,32 @@ r.get('/governance', async (c) => {
   // ── security_events — D200, the fifth store ───────────────────────────
   if (readSecurity) {
     try {
-      const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL).bind(FEED_LIMIT).all<Record<string, unknown>>();
+      const secOutcome = fq.outcome === 'ok' || fq.outcome === 'refused' ? fq.outcome : null;
+      const res = await env.DB.prepare(FEED_SECURITY_EVENTS_SQL)
+        .bind(...timeBinds(fq), ...actorBinds(fq, 3), secOutcome, secOutcome, ...likeBinds(fq, 7), FEED_LIMIT)
+        .all<Record<string, unknown>>();
       const got = res.results || [];
       for (const s of got) {
         const outcome = String(s.outcome || '');
         const branch = String(s.branch_code || 'hq');
+        // D4691 — a refused sign-in or recovery step established nobody, so
+        // its actor is its network and the account it named is the subject,
+        // in the Target column; a gate refusal or step-up is the signed-in
+        // caller's, or the support operator's on that caller's behalf.
+        const { actor, subject } = securityEventIdentity(s);
         rows.push({
           key: `security:${s.id}`,
           at: (s.occurred_at as string) || null,
           ts: parseSqlTs(s.occurred_at as string),
-          // A subject that resolved to an account is named; one that did not
-          // is its network, because the address a refused attempt presented
-          // was hashed before it reached the row and is not recoverable.
-          actor: who(s.subject_name, s.subject_email, s.user_id) || `network ${String(s.ip_prefix || 'unknown')}`,
+          ...actorOf(actor),
           action: `${String(s.kind || '')}.${String(s.factor || '')}`,
           // The deployment that recorded it — a fact about where, not whose.
           tenant: branch === 'hq' ? 'HQ' : branch,
-          target: s.detail ? `detail=${String(s.detail)}` : null,
+          target: [
+            subject ? `named ${subject.label}` : null,
+            actor.kind === 'support' && actor.on_behalf_of ? `on behalf of ${actor.on_behalf_of.label}` : null,
+            s.detail ? `detail=${String(s.detail)}` : null,
+          ].filter(Boolean).join(' · ') || null,
           source: 'security_events',
           tone: outcome === 'refused' ? 'alert' : 'note',
           outcome,
@@ -831,9 +1259,21 @@ r.get('/governance', async (c) => {
   rows.sort((a, b) => {
     const av = Number.isNaN(a.ts) ? -Infinity : a.ts;
     const bv = Number.isNaN(b.ts) ? -Infinity : b.ts;
-    return bv - av;
+    // D4699 — rows at the same instant (several stores, or one store in one second) fall back to
+    // their key, so the same rows come back in the same order on every read and every page.
+    return bv - av || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0);
   });
-  const page = rows.slice(0, FEED_LIMIT).map(({ ts, ...row }) => row);
+  // More is held when any store filled its own page, OR when the stores
+  // together returned more than one page (two stores of forty each): the rows
+  // past FEED_LIMIT are real and Load older has to reach them.
+  if (rows.length > FEED_LIMIT) more = true;
+  const { page: kept, split } = trimToSecond(rows.slice(0, FEED_LIMIT), more);
+  const page = kept.map(({ ts, ...row }) => row);
+  // D4803 — Load older: the next read is everything strictly older than the
+  // last row kept. No cursor when nothing older is held, or when the last row
+  // has no time to continue from.
+  const lastAt = more && kept.length ? kept[kept.length - 1].at : null;
+  const cursor = lastAt && !Number.isNaN(parseSqlTs(lastAt)) ? { before: lastAt } : null;
 
   // ── H7's "Data access" zone: who saw data they do not own ─────────────
   // Impersonations and exports side by side, because the question this zone
@@ -848,31 +1288,41 @@ r.get('/governance', async (c) => {
       items: impersonations.slice(0, DATA_ACCESS_LIMIT).map((i) => {
         const started = parseSqlTs(i.started_at as string);
         const ended = i.ended_at ? parseSqlTs(i.ended_at as string) : NaN;
-        const live = !i.ended_at;
-        const elapsed = Number.isNaN(started) || (!live && Number.isNaN(ended))
+        const status = supportSessionStatus(i, now);
+        const live = status === 'live';
+        const open = status !== 'ended';
+        const elapsed = Number.isNaN(started) || (!open && Number.isNaN(ended))
           ? null
-          : minutesBetween(started, live ? now : ended);
+          : minutesBetween(started, open ? now : ended);
+        // D4691 — the shared rule decides live and not-closed, as everywhere
+        // else on the page. Past the first token's thirty minutes an HQ
+        // session can still be live (it may have been extended, up to the
+        // ceiling), so the time left is stated as an upper bound; only past
+        // the session's limit is an open record "not closed" — the record was
+        // never closed, NOT somebody still inside.
         let dur: string | null;
-        if (elapsed === null) dur = null;
-        else if (!live) dur = `${elapsed}m`;
-        else if (elapsed >= IMPERSONATION_EXPIRY_MINUTES) {
-          // The token expired at thirty minutes; closing the row is a
-          // best-effort write on the way out (routes/admin.ts), so an open
-          // row past the limit means the record was never closed, NOT that
-          // somebody is still inside. "0m left" would claim the opposite.
-          dur = 'not closed';
-        } else dur = `${IMPERSONATION_EXPIRY_MINUTES - elapsed}m left`;
+        if (status === 'not_closed') dur = 'not closed';
+        else if (elapsed === null) dur = null;
+        else if (!open) dur = `${elapsed}m`;
+        else if (elapsed < IMPERSONATION_EXPIRY_MINUTES && Number(i.admin_user_id) !== 0) {
+          dur = `${IMPERSONATION_EXPIRY_MINUTES - elapsed}m left`;
+        } else dur = `at most ${Math.max(0, supportSessionLimitMinutes(i.admin_user_id) - elapsed)}m left`;
         return {
           kind: 'impersonation',
+          status,
+          actor: supportIdentity(
+            { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+            { id: i.target_user_id, name: i.target_name, email: i.target_email },
+          ),
           what: `Impersonation · ${who(i.target_name, i.target_email, i.target_user_id) || 'unknown account'}`,
           meta: [
-            who(i.admin_name, i.admin_email, i.admin_user_id),
+            supportIdentity({ id: i.admin_user_id, name: i.admin_name, email: i.admin_email }, { id: i.target_user_id }).label,
             stamp(i.started_at),
             i.context ? clip(String(i.context), 120) : null,
           ].filter(Boolean).join(' · '),
           dur,
           live,
-          overdue: Boolean(live && elapsed !== null && elapsed >= IMPERSONATION_EXPIRY_MINUTES),
+          overdue: status === 'not_closed',
         };
       }),
     };
@@ -892,9 +1342,10 @@ r.get('/governance', async (c) => {
       available: true,
       items: (ex.results || []).map((e) => ({
         kind: 'export',
+        actor: userIdentity(e.admin_user_id, e.admin_name, e.admin_email),
         what: `Export · ${e.report_type ? String(e.report_type) : String(e.action || 'report')}`,
         meta: [
-          who(e.admin_name, e.admin_email, e.admin_user_id),
+          userIdentity(e.admin_user_id, e.admin_name, e.admin_email).label,
           e.format ? String(e.format) : null,
           stamp(e.exported_at),
         ].filter(Boolean).join(' · '),
@@ -909,13 +1360,26 @@ r.get('/governance', async (c) => {
     accessExports = absent('The export records could not be read.');
   }
 
+  // D5247 — each store this read touched gains its last good read and its own age, so the Overview can mark it
+  // Stale; a store this filter did not read is not in `sources` and is not recorded.
+  const fresh = await freshnessFor(env, sources.map((s) => ({ source: s.table as SecuritySource, answered: s.available })));
+  const withFreshness = sources.map((s, i) => ({ ...s, ...withoutSource(fresh[i]) }));
+
   return c.json({
     filter,
     filters: FEED_FILTERS,
     rows: page,
     limit: FEED_LIMIT,
     more,
-    sources,
+    // D4803 — the cursor for Load older, what the server applied (so the page
+    // can say which list it is showing), and whether a page ended inside one
+    // second because every row on it shared that second.
+    cursor,
+    applied: fq.applied,
+    page_split_second: split,
+    outcomes: FEED_OUTCOMES,
+    stores: FEED_SOURCES,
+    sources: withFreshness,
     // What no store can say, said once rather than once per row.
     tenant_available: false,
     tenant_reason:
@@ -1008,9 +1472,19 @@ r.get('/sessions', async (c) => {
 
   // UNREADABLE IS A 503, NOT AN EMPTY LIST. "Nobody is signed in" is the one
   // answer a security desk must never give by accident.
+  // D4699 — `before_id` continues the list strictly below that session id (the last row's). Out of
+  // shape is refused with its field, never read as the first page.
+  const rawBefore = c.req.query('before_id');
+  let beforeId: number | null = null;
+  if (rawBefore !== undefined && rawBefore !== '') {
+    if (!/^[1-9][0-9]{0,15}$/.test(rawBefore)) {
+      return c.json({ error: 'The cursor is not a session id.', code: 'invalid_filter', field: 'before_id' }, 400);
+    }
+    beforeId = Number(rawBefore);
+  }
   let list: Awaited<ReturnType<typeof listActiveSessions>>;
   try {
-    list = await listActiveSessions(c.env, currentJti);
+    list = await listActiveSessions(c.env, currentJti, SESSION_LIST_LIMIT, beforeId);
   } catch {
     return c.json({
       error: 'Unreadable — the user_sessions table could not be read on this database. This is not a claim '
@@ -1021,9 +1495,21 @@ r.get('/sessions', async (c) => {
 
   // The support sessions answer for themselves: a database that never
   // impersonated has no table, and that costs this half, not the list.
-  let impersonations: { available: true; rows: Awaited<ReturnType<typeof listLiveImpersonations>> } | Absent;
+  let impersonations:
+    | { available: true; rows: Array<Awaited<ReturnType<typeof listLiveImpersonations>>[number] & { actor: Identity }> }
+    | Absent;
   try {
-    impersonations = { available: true, rows: await listLiveImpersonations(c.env) };
+    const live = await listLiveImpersonations(c.env);
+    impersonations = {
+      available: true,
+      rows: live.map((i) => ({
+        ...i,
+        actor: supportIdentity(
+          { id: i.admin_user_id, name: i.admin_name, email: i.admin_email },
+          { id: i.target_user_id, name: i.target_name, email: i.target_email },
+        ),
+      })),
+    };
   } catch {
     impersonations = absent('The impersonation_sessions table could not be read on this database.');
   }
@@ -1032,8 +1518,14 @@ r.get('/sessions', async (c) => {
     token_hours: SESSION_TOKEN_HOURS,
     total: list.total,
     rows: list.rows,
+    // D4699 — Load more: the next page is `?before_id=<cursor.before_id>`; null when this is the last.
+    cursor: list.next_before_id ? { before_id: list.next_before_id } : null,
     impersonations,
     expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
+    // D4669 — every act on this list reaches this deployment only.
+    scope: emergencyScope(c.env),
+    // D4691 — the same definitions /overview's tiles are counted by.
+    definitions: SESSION_STATUS_DEFINITIONS,
   });
 });
 
@@ -1089,6 +1581,7 @@ r.post('/sessions/:id/revoke', async (c) => {
     revoked_at: out.revoked_at,
     message: 'Revoked. That session\'s token is refused from its next request; the account\'s other sessions '
       + 'are untouched.',
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1149,6 +1642,7 @@ r.post('/sessions/revoke', async (c) => {
     message: revoked === results.length
       ? `Revoked ${revoked} session${revoked === 1 ? '' : 's'}.`
       : `Revoked ${revoked} of ${results.length}. The rest were already revoked or no longer exist; each is listed.`,
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1194,12 +1688,139 @@ r.post('/impersonations/:id/end', async (c) => {
     ok: true,
     impersonation_session_id: id,
     target_user_id: out.row.target_user_id,
-    // THE RESPONSE SAYS WHAT ENDING DID NOT DO. The support token carries no
-    // session id, so it cannot be revoked one by one; it expires on its own
-    // clock. Saying "ended" alone would claim the access stopped now.
-    message: 'The support session is closed and can no longer be extended. Its token carries no session id, so '
-      + `it stays valid until it expires — at most ${IMPERSONATION_EXPIRY_MINUTES} minutes after it was minted. `
-      + 'To cut it now, sign the account out, which also ends that account holder\'s own sessions.',
+    // D4669 — ENDING NOW ENDS THE ACCESS. The support token names this
+    // record and every request re-reads it (auth.ts `sessionStanding`), so the
+    // message no longer has to explain a token outliving its session.
+    message: 'The support session is ended. Its token is refused from its next request, and it can no longer '
+      + 'be extended. The account holder\'s own sessions are untouched.',
+    scope: emergencyScope(c.env),
+  });
+});
+
+/**
+ * POST /api/admin/security/branch-sign-out
+ *
+ * D4669 part 2 (#4669) — the owner's option B: HQ's emergency sign-out may
+ * reach branch deployments, ON REQUEST, and each branch reports its own
+ * outcome. The ordinary acts above are unchanged and still write this
+ * deployment only; this is the separate act an operator chooses when an
+ * incident spans branches.
+ *
+ * Body: `{ branches: 'all' | string[], target, reason, op_key }`, where
+ * `target` is `{ kind: 'all' }` (every account on each branch named),
+ * `{ kind: 'account', email }` (the person's account on each branch named, by
+ * email, because HQ's ids mean nothing in another database) or
+ * `{ kind: 'account', user_id }` (one account HQ found on ONE branch).
+ *
+ * THE SAME BAR AS SIGNING EVERYONE OUT HERE (TOTP, a recent step-up, the
+ * elevation), checked before any binding is touched. The branch checks the
+ * caller is HQ, the reason, the operator's name and the key itself.
+ *
+ * EACH BRANCH IS ITS OWN ROW, and only an answer counts:
+ *   done         the branch said it acted (with how many accounts, and
+ *                `replayed` when this act was already on its record);
+ *   failed       the branch refused before writing: nothing changed there;
+ *   unreachable  not bound, or no answer in time: whether it acted is not
+ *                known, and it NEVER counts as done.
+ * The act is `done` only when every branch named said done, `failed` when none
+ * did, and `partial` otherwise — said as partial, never rounded either way.
+ *
+ * ONE KEY PER OPERATOR REQUEST. The page makes it when the dialog opens and
+ * resends it on Try again, and each branch answers a key it already holds
+ * with that record. So retrying a branch that timed out cannot sign anyone
+ * out twice or write a second audit row there.
+ *
+ * GATES THAT STAY: `HQ_RPC_SECRET` must be set (409 otherwise, as for every
+ * secret-carrying branch call), and a branch without a binding is reported,
+ * not skipped.
+ */
+r.post('/branch-sign-out', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const { reason, body } = await reasonOf(c);
+  if (reason.length < EMERGENCY_REASON_MIN) {
+    return c.json({
+      error: `A reason of at least ${EMERGENCY_REASON_MIN} characters is required. It is stored here and on every branch reached.`,
+      code: 'reason_required',
+    }, 400);
+  }
+  const opKey = String(body?.op_key ?? '');
+  if (!EMERGENCY_OP_KEY_RE.test(opKey)) {
+    return c.json({ error: 'The request carries no operation key, so a retry could not be recognised. Reopen the dialog.', code: 'op_key_required' }, 400);
+  }
+
+  const t = (body?.target ?? {}) as Record<string, unknown>;
+  let target: BranchSignOutTarget;
+  if (t.kind === 'all') {
+    target = { kind: 'all' };
+  } else if (t.kind === 'account' && typeof t.email === 'string' && t.email.includes('@')) {
+    target = { kind: 'account', email: t.email.trim().toLowerCase().slice(0, 320) };
+  } else if (t.kind === 'account' && Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0) {
+    target = { kind: 'account', user_id: Number(t.user_id) };
+  } else {
+    return c.json({ error: 'Name the target: every account, or one account by email (or by its id on one branch).', code: 'invalid_target' }, 400);
+  }
+
+  const bound = (() => { try { return branchBindings(c.env).map((b) => b.code); } catch { return null; } })();
+  if (bound === null) {
+    return c.json({ error: 'Which branches are bound could not be read, so no branch was asked. Nothing changed.', code: 'branches_unreadable' }, 503);
+  }
+  let codes: string[];
+  if (body?.branches === 'all') {
+    codes = bound;
+  } else if (Array.isArray(body?.branches)) {
+    codes = [...new Set((body.branches as unknown[]).map((x) => String(x ?? '').trim().toLowerCase()).filter(Boolean))];
+  } else {
+    return c.json({ error: 'Name the branches: every bound branch, or a list of branch codes.', code: 'invalid_branches' }, 400);
+  }
+  if (codes.length === 0) {
+    return c.json({ error: 'No branch is bound here, so there is no branch to reach. Nothing changed.', code: 'no_branch' }, 409);
+  }
+  if ('user_id' in target && codes.length !== 1) {
+    return c.json({ error: 'An account id belongs to one branch. Name that one branch, or name the person by email.', code: 'invalid_target' }, 400);
+  }
+  if (!c.env.HQ_RPC_SECRET) {
+    return c.json({
+      error: 'HQ_RPC_SECRET is not set on this Worker, so a branch cannot tell this call from any other Worker in the account. '
+        + 'Set it, then try again. No branch was asked.',
+      code: 'hq_rpc_secret_unset',
+    }, 409);
+  }
+
+  const result = await signOutOnBranches(c.env, codes, {
+    secret: c.env.HQ_RPC_SECRET,
+    hq_actor_name: String((actor as { name?: string }).name || actor.email || 'Axal VC HQ').slice(0, 200),
+    reason,
+    op_key: opKey,
+    target,
+  });
+
+  // HQ's record of the act, after the outcome is known and whatever it is: an
+  // operator's request to sign people out of other deployments is recorded
+  // even when no branch answered. `logAdminAction` never throws, so its
+  // failure never turns a reported outcome into an error.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_branch_sign_out', {
+    reason,
+    op_key: opKey,
+    target_kind: target.kind,
+    ...('email' in target ? { target_email: target.email } : {}),
+    ...('user_id' in target ? { branch_user_id: target.user_id } : {}),
+    outcome: result.outcome,
+    branches: result.outcomes.map((o) => ({ code: o.deployment, outcome: o.outcome, affected: o.affected ?? null })),
+  });
+
+  const done = result.outcomes.filter((o) => o.outcome === 'done').length;
+  const message = result.outcome === 'done'
+    ? `Every branch asked (${done}) answered that it signed the ${target.kind === 'all' ? 'accounts' : 'account'} out.`
+    : result.outcome === 'partial'
+      ? `${done} of ${result.outcomes.length} branches answered that they acted. The others are listed with what is known; a branch that did not answer is not counted as done.`
+      : 'No branch answered that it acted. Each is listed with what is known.';
+  return c.json({
+    ok: result.outcome === 'done',
+    outcome: result.outcome,
+    op_key: opKey,
+    message,
+    outcomes: result.outcomes,
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1247,7 +1868,22 @@ r.post('/force-reauth/:userId', async (c) => {
     return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
   }
 
-  const revokedAt = await bumpJwtMinIat(c.env, uid);
+  // D4669 — A FAILED WRITE IS SAID, NOT THROWN. The floor is the whole act;
+  // if it could not be raised nothing changed, and the operator must know
+  // that rather than meet a generic error mid-incident.
+  let revokedAt: number;
+  try {
+    revokedAt = await bumpJwtMinIat(c.env, uid);
+  } catch (e) {
+    console.error('[admin_security] force-reauth/:userId failed', (e as Error).message);
+    return c.json({
+      error: 'The sign-out could not be written, so nothing was changed: the account\'s sessions are still valid. '
+        + 'Try again; if it keeps failing, revoke its sessions one by one.',
+      code: 'sign_out_failed',
+      outcomes: deploymentOutcomes(c.env, { outcome: 'failed' }),
+      scope: emergencyScope(c.env),
+    }, 503);
+  }
 
   // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`, and
   // it is what lets the governance feed's LEFT JOIN name WHO was signed out.
@@ -1264,7 +1900,12 @@ r.post('/force-reauth/:userId', async (c) => {
     user_id: uid,
     email: target.email,
     revoked_at: revokedAt,
-    message: `${target.name || target.email} has been signed out of every session. They will need to sign in again.`,
+    // D4669 — "every session" on THIS deployment. An account of the same
+    // person on a branch is a different account in a different database.
+    message: `${target.name || target.email} has been signed out of every session on this deployment, including `
+      + 'any support session opened as them. They will need to sign in again.',
+    outcomes: deploymentOutcomes(c.env, { outcome: 'done', affected: 1 }),
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1289,10 +1930,23 @@ r.post('/force-reauth', async (c) => {
   // +1s so tokens issued in this same second are bounced too, exactly as the
   // per-account primitive does. Inactive accounts cannot sign in anyway.
   const nowSec = Math.floor(Date.now() / 1000) + 1;
-  const result = await c.env.DB.prepare(
-    'UPDATE users SET jwt_min_iat = ? WHERE is_active = 1',
-  ).bind(nowSec).run();
-  const affected = Number(result.meta?.changes ?? 0);
+  let affected: number;
+  try {
+    const result = await c.env.DB.prepare(
+      'UPDATE users SET jwt_min_iat = ? WHERE is_active = 1',
+    ).bind(nowSec).run();
+    affected = Number(result.meta?.changes ?? 0);
+  } catch (e) {
+    // D4669 — one statement, so a failure changed nothing. Said, with the
+    // per-deployment answer, rather than a generic 500.
+    console.error('[admin_security] force-reauth failed', (e as Error).message);
+    return c.json({
+      error: 'The sign-out could not be written, so nothing was changed: every session is still valid. Try again.',
+      code: 'sign_out_failed',
+      outcomes: deploymentOutcomes(c.env, { outcome: 'failed' }),
+      scope: emergencyScope(c.env),
+    }, 503);
+  }
 
   // D165 — was a raw INSERT into admin_audit_log, which is the third copy D159
   // set out to end and missed. `filters_json` carries the same payload, so the
@@ -1310,7 +1964,13 @@ r.post('/force-reauth', async (c) => {
     ok: true,
     affected,
     revoked_at: nowSec,
-    message: 'Every active account has been signed out everywhere, including yours. Sign in again with your authenticator.',
+    // D4669 — THIS DEPLOYMENT, and the answer says which branches it did not
+    // reach. The old sentence ("everywhere") read as platform-wide while the
+    // write touched one database.
+    message: 'Every active account on this deployment has been signed out, including yours. Branch deployments '
+      + 'are not reached by this action; each is listed. Sign in again with your authenticator.',
+    outcomes: deploymentOutcomes(c.env, { outcome: 'done', affected }),
+    scope: emergencyScope(c.env),
   });
 });
 
@@ -1321,20 +1981,20 @@ r.post('/force-reauth', async (c) => {
  * was written only by the subject (routes/settings.ts request and cancel),
  * read here against a statutory 30-day clock, and rendered by SecurityPage in
  * amber with an overdue count — and this file declared four handlers, none of
- * which could act on one. The only way a row left HQ's list was the subject
- * cancelling. HQ watched a legal deadline it had no way to stop.
+ * which could act on one. HQ watched a legal deadline it had no way to stop.
  *
  * SAME BAR AS FORCE RE-AUTH, and for a reason of its own rather than by
  * symmetry: closing a request stops a statutory clock and writes the record
- * a regulator would read. A cheaper gate would make the one act whose whole
- * value is its trustworthiness the easiest one in this file to perform.
+ * a regulator would read.
  *
- * BOTH HALVES MOVE IN ONE BATCH. The ledger row and `users.deletion_requested_at`
- * are the record and the open flag; if either moved alone they would disagree,
- * and the disagreement would be invisible — one screen would show a closed
- * request still open, or an open request nobody can see. If the batch cannot
- * run, NOTHING moves and the refusal says why: clearing the flag with no
- * record is strictly worse than failing.
+ * D4675 — THE REVIEWED REQUEST, ONCE. The body names the request the operator
+ * reviewed (`requested_at`, and `request_id` when the list had one) and a
+ * `close_key` the page made once for this close. The service applies the
+ * close only to that request while it is still open, writes the decision, the
+ * subject's notice and both audit rows in one batch, and answers a retry of
+ * the same key with the record it already made. Every answer says what is on
+ * record: closed, already closed by this act, nothing written because the
+ * request changed or was closed first, or unconfirmed.
  */
 r.post('/dsr/:userId/close', async (c) => {
   const actor = await requireSuperAdminWriteBar(c);
@@ -1348,6 +2008,10 @@ r.post('/dsr/:userId/close', async (c) => {
   try { body = (await c.req.json()) as Record<string, unknown>; } catch { body = {}; }
   const outcome = String(body?.outcome ?? '').trim();
   const reason = String(body?.reason ?? '').trim();
+  const requestedAt = typeof body?.requested_at === 'string' ? body.requested_at : '';
+  const rawId = body?.request_id;
+  const requestId = rawId === null || rawId === undefined ? null : Number(rawId);
+  const closeKey = typeof body?.close_key === 'string' ? body.close_key : '';
 
   if (!isHqDsrOutcome(outcome)) {
     return c.json({
@@ -1362,60 +2026,91 @@ r.post('/dsr/:userId/close', async (c) => {
       code: 'reason_required',
     }, 400);
   }
+  if (!requestedAt || !DSR_CLOSE_KEY_RE.test(closeKey)
+      || (requestId !== null && (!Number.isInteger(requestId) || requestId <= 0))) {
+    return c.json({
+      error: 'This close does not say which request was reviewed. Reload the Security page and close it again.',
+      code: 'review_required',
+    }, 400);
+  }
 
-  // REFUSE AN ABSENT TARGET rather than reporting a close of nobody — the same
-  // rule /force-reauth/:userId states above, and it bites harder here: the
+  // REFUSE AN ABSENT TARGET rather than reporting a close of nobody: the
   // audit row would name a subject who does not exist against a statutory act.
   const target = await c.env.DB.prepare(
-    'SELECT id, email, name, deletion_requested_at FROM users WHERE id = ?',
-  ).bind(uid).first<{ id: number; email: string; name: string | null; deletion_requested_at: string | null }>();
+    'SELECT id, email, name FROM users WHERE id = ?',
+  ).bind(uid).first<{ id: number; email: string; name: string | null }>();
   if (!target) {
     return c.json({ error: 'No account holds that id.', code: 'user_not_found' }, 404);
   }
-  if (!target.deletion_requested_at) {
-    return c.json({
-      error: 'That account has no open erasure request. One may have been closed already, or the subject '
-        + 'may have cancelled it themselves.',
-      code: 'no_open_request',
-    }, 409);
-  }
 
   const subject = target.name || target.email;
+  let result;
   try {
-    await closeDsrRequest(c.env, { userId: uid, actorUserId: actor.id, outcome, reason });
+    await ensureAdminAuditLogTable(c.env);
+    // `target_user_id: uid` is how the audit row names the subject (D159);
+    // the service writes it in the same batch as the decision.
+    result = await closeDsrRequest(c.env, {
+      userId: uid, actorUserId: actor.id, actorEmail: actor.email, outcome, reason,
+      requestedAt, requestId, closeKey,
+    });
   } catch (e) {
     return c.json({
-      error: 'The request ledger could not be written, so nothing was changed — the request is still open. '
+      error: 'The close could not be confirmed. As far as this server can tell nothing was recorded and the '
+        + 'request is still open; repeating it records it at most once. '
         + `Migration 272 creates \`dsr_requests\`. (${(e as Error).message})`,
       code: 'ledger_unavailable',
     }, 503);
   }
 
-  // `target_user_id` is the key `logAdminAction` reads for `viewed_user_id`,
-  // and it is what lets the governance feed's LEFT JOIN name the subject.
-  // Spelt `user_id` it would record a statutory act with a blank Target —
-  // which is why D159's guard refuses that spelling at every call site.
-  await logAdminAction(c.env, actor.id, actor.email, 'dsr_request_closed', {
-    reason,
-    target_user_id: uid,
-    outcome,
-  });
+  if (result.status === 'unconfirmed') {
+    return c.json({
+      ok: false,
+      code: 'outcome_unconfirmed',
+      error: 'The close was sent, but whether it was recorded could not be read back. Try again: repeating '
+        + 'this close records it at most once.',
+    }, 202);
+  }
+  if (result.status === 'key_conflict') {
+    return c.json({
+      error: 'This close carries a key already used for a different close. Reload the page and close it again.',
+      code: 'idempotency_key_conflict',
+    }, 409);
+  }
+  if (result.status === 'stale') {
+    return c.json({
+      error: 'Nothing was recorded. The request you reviewed is no longer the open one: the subject withdrew it '
+        + 'and asked again. Reload to review the current request.',
+      code: 'stale_request',
+      current_requested_at: result.current_requested_at,
+    }, 409);
+  }
+  if (result.status === 'not_open') {
+    return c.json({
+      error: 'Nothing was recorded. That account has no open erasure request: it was closed first, or the '
+        + 'subject cancelled it themselves.',
+      code: 'no_open_request',
+      last_outcome: result.last?.outcome ?? null,
+      last_outcome_at: result.last?.closed_at ?? null,
+    }, 409);
+  }
 
   return c.json({
     ok: true,
+    replayed: result.replayed,
     user_id: uid,
+    request_id: result.row.id,
     email: target.email,
     outcome,
-    requested_at: target.deletion_requested_at,
+    requested_at: result.row.requested_at,
     // THE RESPONSE SAYS WHAT WAS AND WAS NOT DONE. `fulfilled` records that
     // the manual erasure happened; this platform performs none, and a message
     // implying otherwise would be the false claim the outcome list exists to
     // avoid.
-    message: outcome === 'fulfilled'
+    message: (result.replayed ? 'Already on record from your earlier attempt. ' : '') + (outcome === 'fulfilled'
       ? `Recorded: ${subject}'s erasure request was fulfilled. This stops the statutory clock and records who `
         + 'closed it and why. It does not itself erase anything — the erasure is the manual act you are recording.'
       : `Recorded: ${subject}'s erasure request was denied, with your reason stored against it. The statutory `
-        + 'clock has stopped; they can make a new request.',
+        + 'clock has stopped; they can make a new request.'),
   });
 });
 

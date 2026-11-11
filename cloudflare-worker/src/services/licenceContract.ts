@@ -23,27 +23,49 @@
 import type { LicenceRow } from '../routes/admin_licences';
 import { AXAL_ENTITIES, type AxalEntityKey } from './legalDocFormat';
 import { LICENCE_TERM_FIELDS, type LicenceTerms } from './licenceTerms';
+import { codeAmount, exponentOf } from '../../../frontend/src/lib/money.js';
 
 /** `{{field}}`, the spelling `extractMergeFields` already recognises. */
 const PLACEHOLDER = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
 
-/** 3500 → "35%"; 3550 → "35.5%". Basis points, never a float in the store. */
+/**
+ * 3500 → "35%"; 3550 → "35.5%"; 3501 → "35.01%". Basis points, never a float in
+ * the store, and never rounded to one decimal on the way out (D4671): the old
+ * `toFixed(1)` printed 3501 as "35.0%", a contract that said the Licensee's
+ * share was a different number from the one the ledger and the statements use.
+ * A non-integer count of basis points is not a rate anyone agreed, so it reads
+ * as absent and the field stays unfilled.
+ */
 export function pctFromBps(bps: number | null | undefined): string | null {
   if (bps === null || bps === undefined) return null;
   const n = Number(bps);
-  if (!Number.isFinite(n)) return null;
-  return `${(n / 100).toFixed(n % 100 === 0 ? 0 : 1)}%`;
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+  return pctExact(n);
 }
 
-/** 9000000 cents in EUR → "EUR 90,000.00". */
+/**
+ * 9000000 cents in EUR → "EUR 90,000.00". Exact (D4671): an amount that is not
+ * a whole number of minor units keeps every digit it has, so 1234.5 cents reads
+ * "EUR 12.345" rather than being rounded into a figure nobody agreed.
+ */
 export function moneyFromCents(cents: number | null | undefined, currency: string | null): string | null {
   if (cents === null || cents === undefined) return null;
   const n = Number(cents);
   if (!Number.isFinite(n)) return null;
-  const whole = Math.trunc(Math.abs(n) / 100);
-  const frac = String(Math.abs(n) % 100).padStart(2, '0');
+  // D5373: the licence's own currency sets the decimals (JPY none, EUR two, KWD three). `licences.currency` is NOT NULL
+  // DEFAULT 'EUR'; a code that is not a listed currency has no known decimals, so the field stays unfilled (null).
+  const code = currency || 'EUR';
+  const exp = exponentOf(code);
+  if (exp === null) return null;
+  const abs = Math.abs(n);
+  const unit = 10 ** exp;
+  const whole = Math.floor(abs / unit);
+  // The minor units left over, to six places, with the trailing zeros dropped:
+  // 50 → "50", 5 → "05", 34.5 → "34" + "5" (the digits after the `exp` that are whole minor units).
+  const [minor, extra = ''] = String(Number((abs - whole * unit).toFixed(6))).split('.');
+  const frac = exp === 0 ? extra : minor.padStart(exp, '0') + extra;
   const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${currency || 'EUR'} ${n < 0 ? '-' : ''}${grouped}.${frac}`;
+  return `${code} ${n < 0 ? '-' : ''}${grouped}${frac ? `.${frac}` : ''}`;
 }
 
 /**
@@ -61,6 +83,7 @@ export function mergeValues(
   territories: string[],
   seats: Array<{ seat_type: string; seats_licensed: number }> = [],
   terms: LicenceTerms | null = null,
+  exclusivity: ExclusivityMerge | null = null,
 ): Record<string, string | null> {
   const flat = ledgerValues(licence, territories, seats);
   // D803 (#2240): the same values under `licence.<name>`, and D797's terms
@@ -68,7 +91,41 @@ export function mergeValues(
   const named: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(flat)) named[`licence.${k}`] = v;
   for (const [k, v] of Object.entries(termValues(terms, licence.currency))) named[`terms.${k}`] = v;
+  for (const [k, v] of Object.entries(exclusivityValues(exclusivity, licence.currency))) named[`exclusivity.${k}`] = v;
   return { ...flat, ...named };
+}
+
+/**
+ * D5019 (#5019): a contractual exclusivity, as `{{exclusivity.<name>}}` fields. Only a version marked contractual is
+ * given; a field with nothing recorded stays null, so the contract shows it unfilled rather than inventing a figure.
+ */
+export type ExclusivityMerge = {
+  scope_type: string; countries: string[]; regions: string[]; starts_on: string | null; ends_on: string | null;
+  review_on: string | null; cure_period_days: number | null;
+  targets: Array<{ year: number; period_start: string; period_end: string; min_revenue_cents: number | null; min_cohorts: number | null; min_active_members: number | null }>;
+};
+
+const SCOPE_WORDS: Record<string, string> = {
+  non_exclusive: 'non-exclusive', country_exclusive: 'exclusive in each named country', regional_exclusive: 'exclusive in each named region',
+  master_franchise: 'a master franchise over the named territory',
+};
+
+export function exclusivityValues(x: ExclusivityMerge | null, currency: string | null): Record<string, string | null> {
+  if (!x) return {};
+  const money = (c: number | null) => (c === null ? null : codeAmount(c, currency, { locale: 'en-GB' }));
+  const out: Record<string, string | null> = {
+    scope: SCOPE_WORDS[x.scope_type] ?? null,
+    territory: [...x.countries, ...x.regions].join(', ') || null,
+    starts_on: x.starts_on, ends_on: x.ends_on, review_on: x.review_on,
+    cure_period_days: x.cure_period_days === null ? null : String(x.cure_period_days),
+  };
+  for (const t of x.targets) {
+    out[`year_${t.year}_period`] = `${t.period_start} to ${t.period_end}`;
+    out[`year_${t.year}_min_revenue`] = money(t.min_revenue_cents);
+    out[`year_${t.year}_min_cohorts`] = t.min_cohorts === null ? null : String(t.min_cohorts);
+    out[`year_${t.year}_min_active_members`] = t.min_active_members === null ? null : String(t.min_active_members);
+  }
+  return out;
 }
 
 /** Basis points as a percentage with at most two decimals: 25 → "0.25%", 2000 → "20%". */
@@ -181,4 +238,17 @@ export function renderContract(
     return v;
   });
   return { body, unfilled };
+}
+
+/**
+ * Every `{{field}}` still standing in a stored contract body, in order, once
+ * each (D4671). `unfilled_fields` is what instantiation reported; this reads
+ * the BODY, which is the document that would be signed, and so catches a
+ * namespaced `{{licence.x}}` / `{{terms.x}}` a hand edit or an older row left
+ * behind as well as the ones the list names.
+ */
+export function unresolvedFields(body: string): string[] {
+  const out: string[] = [];
+  for (const m of String(body ?? '').matchAll(PLACEHOLDER)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
 }

@@ -29,6 +29,9 @@ import {
   sectorLabelHref, signedPct,
 } from '../../lib/companyDirectoryView.js';
 import { companyHref } from '../../lib/companyDirectoryView.js';
+import { useResearchLinks } from './researchLinks.js';
+import { directoryHref } from './fundDirectoryRead';
+import { formatMinorOrCount } from '../../lib/money';
 
 const SECTIONS = [
   ['metrics', 'Key metrics'], ['market', 'Market context'], ['competitors', 'Competitors'],
@@ -197,7 +200,8 @@ export function Competitors({ item, peers }) {
   );
 }
 
-function FundList({ title, read, more }) {
+// D4612: `canOpen` is whether this reader is admitted to Funds; `more` keeps the list's own filter.
+function FundList({ title, read, more, canOpen = true }) {
   return (
     <Card className="space-y-2">
       <div className="flex items-baseline justify-between gap-2"><h3 className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{title}</h3>{read.data ? <span className={faint}>{read.data.total} funds</span> : null}</div>
@@ -207,27 +211,29 @@ function FundList({ title, read, more }) {
             <ul className="divide-y divide-axal-hairline dark:divide-gray-800">
               {read.data.items.map((f) => (
                 <li key={f.uid} className="py-2">
-                  <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="text-[12.5px] font-semibold text-axal-violet underline">{f.name}</Link>
-                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? money(f.fund_size_cents / 100, f.size_currency) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
+                  {canOpen
+                    ? <Link to={`/research/funds/catalog/${encodeURIComponent(f.uid)}`} className="text-[12.5px] font-semibold text-axal-violet underline">{f.name}</Link>
+                    : <span className="text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{f.name}</span>}
+                  <div className={faint}>{[f.hq, f.fund_size_cents != null ? formatMinorOrCount(f.fund_size_cents, f.size_currency, { trimWhole: true }) : null, f.fund_year ? String(f.fund_year) : 'vintage not recorded'].filter(Boolean).join(' · ')}</div>
                 </li>
               ))}
             </ul>
           ) : <p className="text-[12px] text-axal-muted">No fund in the directory matches.</p>}
-          {read.data.total > read.data.items.length ? <Link to={more} className="text-[12px] font-semibold text-axal-violet underline">See all {read.data.total} in Funds →</Link> : null}
+          {canOpen && read.data.total > read.data.items.length ? <Link to={more} className="text-[12px] font-semibold text-axal-violet underline">See all {read.data.total} in Funds →</Link> : null}
         </>
       )}
     </Card>
   );
 }
 
-export function Funds({ tracked, focusRead, hqRead, country }) {
+export function Funds({ tracked, focusRead, hqRead, country, links = { funds: true } }) {
   return (
     <section id="funds" className="space-y-3">
       <div><h2 className={h2}>Funds</h2><p className={lede}>Funds whose stated focus maps to this company’s tracked sector, and funds headquartered in its country. Focus and HQ are free text, matched through the crosswalk.</p></div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {tracked?.slug ? <FundList title={`Focus maps to ${tracked.name || tracked.slug}`} read={focusRead} more="/research/funds?view=directory" />
+        {tracked?.slug ? <FundList title={`Focus maps to ${tracked.name || tracked.slug}`} read={focusRead} canOpen={links.funds} more={directoryHref({ focus: tracked.slug })} />
           : <Card><h3 className="text-[13px] font-bold">By focus</h3><p className="mt-1 text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> No tracked sector to match a focus on.</p></Card>}
-        {tracked?.country_code ? <FundList title={`Headquartered in ${country || tracked.country_code}`} read={hqRead} more="/research/funds?view=directory" />
+        {tracked?.country_code ? <FundList title={`Headquartered in ${country || tracked.country_code}`} read={hqRead} canOpen={links.funds} more={directoryHref({ hq_country: tracked.country_code })} />
           : <Card><h3 className="text-[13px] font-bold">By headquarters</h3><p className="mt-1 text-[12px] text-axal-muted"><strong>{NOT_RECORDED}.</strong> The crosswalk places this company in no country.</p></Card>}
       </div>
       <p className={faint}>research_fund_directory · sizes as the sources report them.</p>
@@ -370,8 +376,9 @@ export function CompanyHeader({ item, tracked }) {
   );
 }
 
-export default function CompanyProfile() {
+export default function CompanyProfile({ role }) {
   const { uid } = useParams();
+  const links = useResearchLinks(role);
   const company = useRead(() => researchCompaniesApi.get(uid), [uid]);
   const tracked = company.data?.tracked_sector;
   const slug = tracked?.status === 'ok' ? tracked.slug : null;
@@ -399,7 +406,7 @@ export default function CompanyProfile() {
       <KeyMetrics metrics={d.metrics} />
       <MarketContext tracked={tracked} market={market} />
       <Competitors item={d.item} peers={d.peers} />
-      <Funds tracked={tracked} focusRead={focusRead} hqRead={hqRead} country={d.item.country} />
+      <Funds tracked={tracked} focusRead={focusRead} hqRead={hqRead} country={d.item.country} links={links} />
       <Signals tracked={tracked} market={slug ? market : null} geography={code ? geography : null} />
       <SourcesTable item={d.item} metrics={d.metrics} financials={d.financials} employment={d.employment} sources={d.sources} fundingRounds={d.funding_rounds} />
       <p className={faint}>Company records come from Wikidata (CC0) or, for UK companies, Companies House (Open Government Licence v3.0); website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.</p>

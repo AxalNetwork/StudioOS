@@ -166,6 +166,8 @@ test('an availability rule nobody has set reads as absent, not as zero', async (
   assert.deepEqual(r.body, {
     weekly_paid_cap: null, buffer_minutes: null, min_notice_hours: null,
     blackouts: [], timezone: null, configured: false,
+    // #4713: the version of the rule set, '' while there are none yet.
+    revision: '',
   });
 });
 

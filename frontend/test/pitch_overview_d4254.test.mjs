@@ -77,12 +77,15 @@ test('no deck: only the ways in that exist on main are drawn', () => {
 test('the routes: Overview at /raise/pitch, the new tiles, and the old addresses redirect with the query', () => {
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   // D4359: the gate around the moved-notice branch adds twelve characters ahead of the Overview.
-  assert.match(app, /path="\/raise\/pitch"[\s\S]{0,412}studioGate\(<PitchStudio tab="overview" \/>\)/);
+  assert.match(app, /path="\/raise\/pitch"[\s\S]{0,440}studioGate\(<PitchStudio tab="overview" \/>\)/);
   assert.match(app, /path="\/raise\/pitch\/decks" element=\{guard\([^)]*\), studioGate\(<PitchStudio tab="decks" \/>\)\)\}/);
   assert.match(app, /path="\/raise\/pitch\/script" element=\{guard\([^)]*\), studioGate\(<PitchStudio tab="script" \/>\)\)\}/);
   assert.match(app, /path="\/raise\/pitch\/share" element=\{guard\([^)]*\), studioGate\(<PitchStudio tab="analytics" \/>\)\)\}/);
   assert.match(app, /path="\/raise\/pitch-deck" element=\{<KeepQueryRedirect to="\/raise\/pitch" \/>\}/);
   assert.doesNotMatch(app, /path="\/raise\/pitch\/analytics" element=\{<KeepQueryRedirect to="\/raise\/pitch\/share" \/>\}/);
-  assert.match(app, /function KeepQueryRedirect\(\{ to \}\)[\s\S]{0,200}search: loc\.search, hash: loc\.hash/);
+  // #4853: the redirect carries the venture as `project_id`, the only name the Studio reads.
+  assert.match(app, /function KeepQueryRedirect\(\{ to \}\)[\s\S]{0,400}search: ventureSearch\(loc\.search\), hash: loc\.hash/);
+  assert.match(app, /path="\/raise\/pitch-deck\/new" element=\{<KeepQueryRedirect to="\/raise\/pitch\/share" \/>\}/);
+  assert.ok(app.indexOf('path="/raise/pitch-deck/new"') < app.indexOf('path="/raise/:slug/new"'), 'the static route ranks above /raise/:slug/new');
   assert.ok(app.indexOf('path="/raise/pitch-deck"') < app.indexOf('path="/raise/:slug"'), 'the static route ranks above /raise/:slug');
 });

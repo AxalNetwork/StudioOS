@@ -1,0 +1,34 @@
+{
+  "skill": "fund-formation-document-checklist",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "synthetic_fixture": true,
+        "skill_name": "Fund Formation Documentation Checklist",
+        "task_scope": "Builds a fund-formation document and dependency checklist across governing, offering, service-provider and regulatory materials.",
+        "evidence": [
+          "fund formation dependency"
+        ],
+        "omitted_field": "jurisdiction-specific filing"
+      },
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for fund formation dependency."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "fund formation dependency"
+    ],
+    "must_say_not_recorded": [
+      "jurisdiction-specific filing"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

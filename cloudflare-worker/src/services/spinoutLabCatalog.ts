@@ -15,6 +15,9 @@ export type WeekDef = {
   unlockedFeatures: string[];
 };
 
+/** The sprint's length: four weeks of seven days. The public pages say "28 days" (founder_lp_duration_consistency). */
+export const SPRINT_DAYS = 28;
+
 export const MILESTONES: WeekDef[] = [
   {
     week: 1,
@@ -131,6 +134,15 @@ export function weekMet(week: number, completed: Set<string>): boolean {
     if (!def.requiredAny.some((k) => completed.has(k))) return false;
   }
   return true;
+}
+
+/**
+ * D4659 — the one graduation rule: every week's requirements are met. The
+ * database's view `spinout_lab_graduates` (migration 202611071800) is the same
+ * rule in SQL; the tests pin its key lists to `MILESTONES`.
+ */
+export function isLabGraduate(completed: Set<string>): boolean {
+  return MILESTONES.every((w) => weekMet(w.week, completed));
 }
 
 /** Cumulative unlocked features through `currentWeek` (inclusive). */

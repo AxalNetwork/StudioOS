@@ -29,6 +29,8 @@ env:
   # this '0' changed to '1' once both are real.
   DR_DRILL_PREVIEW: '0'
   DRILL_SOURCE: gha
+  # D4558: with the independent copy on, the drill also fails when its heartbeat is missing or stale.
+  DR_SECOND_COPY_ENABLED: ${{ vars.DR_SECOND_COPY_ENABLED }}
 
 jobs:
   drill:

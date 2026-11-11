@@ -24,7 +24,9 @@ const EMAIL = /@example\.test/;
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '708_calendar_source_prefs.sql', '202611101741_5207_calendar_copy_jobs.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  }
   // 1 admin · 2 founder · 4, 6 investors on deal 200 · 5 another deal's investor · 9 advisor with a sessions grant.
   for (const i of [1, 2, 4, 5, 6, 9]) db.prepare('INSERT INTO users (id,uid,email,name,role,founder_id) VALUES (?,?,?,?,?,?)')
     .run(i, uidOf(i), `member-${i}@example.test`, `Fixture ${i}`, i === 1 ? 'admin' : i === 2 ? 'founder' : i === 9 ? 'advisor' : 'investor', i === 2 ? 102 : null);

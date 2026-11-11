@@ -5,6 +5,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/data_room_files_d1106.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -13,6 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
+import { ROOM_CAPS } from './_data_room_capabilities.mjs'; // D5074: the Worker's maps, pinned to it by its own test
 import {
   accessRows, deleteFolderCopy, effectLine, folderNdaCopy, gainLose, gateCopy, grantOn, inScope, makeCurrentCopy, moveCopy, needsYou,
   queueEntry, recentFiles, removeCopy, storageLine, tableRows, treeRows, uploadRefusal, whoCanOpen,
@@ -24,7 +26,7 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 
 const ROOM = {
   project: { uid: 'p3uid', name: 'Harbor Ledger' },
-  role: 'owner',
+  role: 'owner', capabilities: ROOM_CAPS.owner,
   folders: [
     { id: 1, uid: 'f1', name: 'Financials', parent_id: null, visibility: 'nda', display_order: 0 },
     { id: 2, uid: 'f2', name: 'Bank', parent_id: 1, visibility: 'open', display_order: 0 },
@@ -215,7 +217,7 @@ test('Files: Remove says there is no Trash and then deletes; a co-founder cannot
     await v.click('dataroom-remove-go');
     assert.deepEqual(v.writes().map((w) => w.slice(0, 2)), [['DELETE', '/api/data-room/p3uid/files/a1'], ['DELETE', '/api/data-room/p3uid/files/a2']]);
   } finally { await v.close(); }
-  const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder' }) });
+  const co = await mounted('/raise/data-room/files?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }) });
   try {
     await co.change('dataroom-pick-a1', {});
     assert.equal(co.prop('dataroom-bulk-gate', 'disabled'), true);
@@ -305,7 +307,7 @@ test('Upload at /new: the queue in states, a large file refused before sending, 
     assert.deepEqual(body, { name: 'Pipeline.xlsx', data: 'data:text/plain;base64,aGVsbG8=', folder_uid: 'f3', visibility: 'nda', access_tier: 'invited', access_expires_at: null, checklist_item: 'financial_model' });
     assert.ok(v.has('dataroom-upload-state-done'));
   } finally { await v.close(); }
-  const co = await mounted('/raise/data-room/new?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder' }) });
+  const co = await mounted('/raise/data-room/new?project_id=3', { handle: handlerFor({ ...ROOM, role: 'cofounder', capabilities: ROOM_CAPS.cofounder }) });
   try {
     assert.ok(co.has('dataroom-upload-cofounder') && !co.has('dataroom-upload-nda'), 'a co-founder sets no gate');
     await co.change('dataroom-upload-pick', { files: [new File(['hi'], 'Notes.txt', { type: 'text/plain' })] });
@@ -326,7 +328,13 @@ test('Home: Needs you, who has access, what was added; a failed room read is Unr
     assert.ok(!v.of('dataroom-needs').includes('not read here yet'), 'the wait that named the gap is gone');
     assert.match(v.of('dataroom-who'), /Juniper Angels.*NDA needed · Legal · No end date/s);
     assert.match(v.of('dataroom-recent'), /Contract\.pdf/);
-    assert.match(v.of('dataroom-90-wait'), /part 4/);
+    // D5072: no implementation language under the last ninety days; it names Activity and links to it.
+    assert.doesNotMatch(v.of('dataroom-90'), /part 4|D1105|need the activity read/);
+    assert.match(v.of('dataroom-90-note'), /on Activity\.$/);
+    assert.equal(v.prop('dataroom-90-link', 'href'), '/raise/data-room/activity?project_id=3');
+    // D5072: opening Home repeats no read (it used to read the module twice: a fresh query object re-ran its effect).
+    const gets = v.calls.filter((c) => c.method === 'GET').map((c) => c.url.replace(/^.*\/api/, ''));
+    assert.deepEqual(gets.filter((u, i) => gets.indexOf(u) !== i), [], 'no read is repeated');
     assert.ok(v.has('cycle-module'));
   } finally { await v.close(); }
   const f = await mounted('/raise/data-room?project_id=3', { handle: handlerFor(ROOM, { room: true }) });

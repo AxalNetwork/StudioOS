@@ -182,6 +182,9 @@ test('mounted for an Operating Partner: read only, moves only on the round they 
   } finally { await v.unmount(); s.restore(); }
 });
 
+// D4635: the Scorecard column's batch is a read sent as a POST; it is not a write.
+const READS = /^\/api\/venture-scores\/batch$/;
+
 test('Advance says where the round goes, writes only on Move, and a refusal stays in the dialog', async () => {
   // Mutations checked: the write on opening the dialog; the dialog closed on a refusal; the lens not read again.
   let refuse = true;
@@ -191,7 +194,7 @@ test('Advance says where the round goes, writes only on Move, and a refusal stay
     await v.click('studio-menu-72');
     await v.click('studio-menu-72-advance');
     assert.match(v.of('studio-advance'), /Move Beta to Raising\?.*Beta moves from Screened to Raising for every investor, and the founder is told\./s);
-    assert.equal(s.seen.filter((x) => x.method === 'POST').length, 0, 'written before Move');
+    assert.equal(s.seen.filter((x) => x.method === 'POST' && !READS.test(x.path)).length, 0, 'written before Move');
     await v.click('studio-advance-go');
     assert.match(v.of('studio-advance-refusal'), /You can move only the rounds you lead\./);
     assert.ok(!v.has('studio-done'));
@@ -213,10 +216,10 @@ test('Pass closes the round for every investor, needs a reason, and posts it', a
     await v.click('studio-menu-73-pass');
     assert.equal(v.of('pass-closes'), PASS_CLOSES);
     await v.clickText('Select a reason to continue');
-    assert.equal(s.seen.filter((x) => x.method === 'POST').length, 0, 'a pass with no reason');
+    assert.equal(s.seen.filter((x) => x.method === 'POST' && !READS.test(x.path)).length, 0, 'a pass with no reason');
     await v.radio('valuation');
     await v.clickText('Record pass · Valuation');
-    assert.deepEqual(s.seen.find((x) => x.method === 'POST'), { method: 'POST', path: '/api/deals/73/pass', body: { reason: 'valuation', note: '' } });
+    assert.deepEqual(s.seen.find((x) => x.method === 'POST' && !READS.test(x.path)), { method: 'POST', path: '/api/deals/73/pass', body: { reason: 'valuation', note: '' } });
     assert.match(v.of('studio-done'), /Gamma is Not raising\. The round is closed for every investor, and the founder is told\./);
   } finally { await v.unmount(); s.restore(); }
 });
@@ -260,7 +263,7 @@ test('a failed read says so in its own block; the header, toolbar and the other 
 test('DealsPage is retired: /deals mounts the lens for an admin or a partner, and no browser pop-up', () => {
   assert.equal(existsSync(resolve(process.cwd(), 'frontend/src/pages/DealsPage.jsx')), false);
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes("effectiveRole === 'investor' ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />"));
+  assert.ok(app.includes("holds('investor') ? <InvestorDealsRoutes /> : <StudioLensRoute role={effectiveRole} />"));
   assert.ok(!/DealsPage'\)/.test(app), 'DealsPage is still imported');
   for (const f of ['StudioLens.jsx', 'StudioParts.jsx', 'studioLensModel.js']) {
     assert.ok(!/\b(?:window\.)?(alert|confirm|prompt)\(/.test(read(`frontend/src/pages/investor/dealflow/${f}`)), `a browser pop-up in ${f}`);

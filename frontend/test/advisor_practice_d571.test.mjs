@@ -37,6 +37,7 @@ import {
 } from '../src/pages/advisor/practice/ClientAccessLog.jsx';
 import { AdvisorProfileView } from '../src/pages/advisor/AdvisorProfilePage.jsx';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -44,7 +45,8 @@ const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
 const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;|&rsquo;|’/g, "'")
   .replace(/&quot;/g, '"').replace(/&ldquo;|&rdquo;|“|”/g, '"').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
-const ADVISORS = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const ADVISORS = advisorRoutesSource();
 const GRANTS = read('cloudflare-worker/src/routes/advisor_grants.ts');
 const API = read('frontend/src/lib/api.js');
 const APP = read('frontend/src/App.jsx');
@@ -87,6 +89,8 @@ const version = (over = {}) => ({
 const deliverable = (over = {}) => ({
   id: 1, uid: 'd-1', advisor_id: 3, engagement_id: 7, client_name: 'Halverton', title: 'Pricing model',
   client_user_id: 41, client_user_name: 'Ada Client', client_user_email: 'ada@halverton.example',
+  // #4684: the latest sent version's recipient, which a nudge reaches; null until something is sent.
+  recipient_email: null,
   state: 'not_started', due_date: null, manual_status: null, version_count: 1,
   latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
@@ -225,8 +229,11 @@ test('A1: the attachment is the newest version with a web link; anything else is
   assert.equal(safeHref('javascript:alert(1)'), null);
   assert.equal(safeHref('www.example.com'), null);
   assert.equal(safeHref(' https://x.example/a '), 'https://x.example/a');
-  assert.deepEqual(attachmentBody({ link_url: 'ftp://x' }), { error: 'Enter a web address that starts with https://' });
-  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' ' }), { body: { link_url: 'https://x.example', summary: null } });
+  // #4712 (D4712): a revision carries what changed AND a web link; neither alone is a version.
+  assert.deepEqual(attachmentBody({ link_url: 'ftp://x', summary: 'Second pass' }), { error: 'Enter a web address that starts with https://' });
+  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' ' }), { error: 'Say what changed in this version.' });
+  assert.deepEqual(attachmentBody({ link_url: '', summary: '' }), { error: 'Say what changed in this version.' });
+  assert.deepEqual(attachmentBody({ link_url: 'https://x.example', summary: ' Second pass ' }), { body: { link_url: 'https://x.example', summary: 'Second pass' } });
 });
 
 test('A1: an edit sends what changed, refuses what the route would quietly drop, and confirms a move once sent', () => {
@@ -320,7 +327,7 @@ test('A2: the canvas rule — no price, not bookable — in the body, the switch
   assert.equal(sessionTypeBody({ name: '', mode: 'free' }).error, 'A session type needs a name.');
   assert.equal(sessionTypeBody({ name: 'X', mode: 'free', duration: '0' }).error, 'Length is whole minutes, from 1 to 1440.');
   assert.deepEqual(parseAmount('12.345'), { error: 'Enter an amount like 150 or 150.50' });
-  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.5', bookable: true, note: '' });
+  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.50', bookable: true, note: '' });
 });
 
 test('A2: the table — switch disabled where the rule forbids it, the contradiction flagged, bookings Not recorded', () => {
@@ -545,9 +552,12 @@ test('the canvas addresses land on the zone sections, behind the zones\' own gua
   assert.match(APP, /const AdvisorProfilePage = lazy\(\(\) => import\('\.\/pages\/advisor\/AdvisorProfilePage'\)\);/);
 
   const delivery = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-  assert.match(delivery, /const VIEWS = new Set\(\['all', 'by_client', 'unopened', 'opened', 'draft'\]\);/);
+  // #4833 (D4833): `by_client` is still an address the page opens on; it
+  // groups the v2 cards rather than being a chip.
+  assert.match(delivery, /const VIEWS = new Set\(\[[^\]]*'by_client'[^\]]*\]\);/);
   assert.match(delivery, /VIEWS\.has\(searchParams\.get\('view'\)\)/);
-  assert.match(delivery, /filter === 'by_client'\s*\n?\s*\? <DeliverablesByClient/);
+  assert.match(delivery, /useState\(initialView === 'by_client'\)/);
+  assert.match(delivery, /grouped\s*\n?\s*\? <Card padding="md"><DeliverablesByClient/);
   assert.match(delivery, /api\.updateMyAdvisorDeliverable\(item\.id, body\)/);
   const sessions = codeOnly(read('frontend/src/pages/advisor/practice/SessionsZone.jsx'));
   assert.match(sessions, /id="session-types"/);

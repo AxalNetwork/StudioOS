@@ -15,6 +15,7 @@
  *     deck's proposals; it is not shown as failed.
  */
 import { deckAreasApi } from '../../../lib/api/deckAreas.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 export const STILL_RUNNING = 'Still generating. It stays in this deck’s proposals; nothing more was charged.';
 
@@ -49,11 +50,11 @@ export function areaRunResults(deckId, run) {
       };
       const shaped = v.state === 'ready' ? payloadResult(v.payload) : null;
       if (shaped) results.push({ ...base, status: 'proposed', ...shaped });
-      else results.push({ ...base, status: 'refused', error: { message: v.error?.message || 'This variant has nothing to place.', code: v.error?.code ?? null } });
+      else results.push({ ...base, status: 'refused', error: { message: userFacingRaiseError(v.error, { fallback: 'This variant has nothing to place.', scope: 'raise:pitch:areas' }), code: v.error?.code ?? null } });
     }
   }
   for (const r of run?.refused ?? []) {
-    results.push({ key: r.key, areaKey: r.key, status: 'refused', error: { message: r.refusal?.message || 'This area cannot run.', code: r.refusal?.code ?? null } });
+    results.push({ key: r.key, areaKey: r.key, status: 'refused', error: { message: userFacingRaiseError(r.refusal, { fallback: 'This area cannot run.', scope: 'raise:pitch:areas' }), code: r.refusal?.code ?? null } });
   }
   return { results, refusal: null };
 }

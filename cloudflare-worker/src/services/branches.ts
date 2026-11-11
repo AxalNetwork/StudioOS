@@ -52,7 +52,18 @@ export const BRANCH_DEADLINE_MS = 2_000;
 /** The binding prefix. Exported so the guard test cannot drift from it. */
 export const BRANCH_BINDING_PREFIX = 'BRANCH_';
 
-export type BranchState = 'ok' | 'unreadable' | 'not_deployed';
+/**
+ * What happened between HQ and one branch (D5041). Four distinct facts, none standing in for another:
+ *
+ *   ok            the branch was asked and answered
+ *   unreadable    the branch was asked and did not answer
+ *   not_deployed  HQ holds a deployment row but this Worker has no service binding to it
+ *   not_asked     a binding exists and HQ chose not to ask (no search was run): the branch is
+ *                 ready, and nothing is known about it from this read
+ *
+ * `not_asked` only appears on a read that can choose not to ask (Team without a search).
+ */
+export type BranchState = 'ok' | 'unreadable' | 'not_deployed' | 'not_asked';
 
 export type BranchResult<T> = {
   code: string;
@@ -260,6 +271,41 @@ export function coverage<T>(results: BranchResult<T>[]): {
     answered: results.filter((r) => r.status === 'ok').length,
     complete: unreadable.length === 0,
     unreadable,
+  };
+}
+
+/**
+ * D5041 — the Team page's coverage, which is about what was ASKED.
+ *
+ * `coverage()` counts every row that is not `ok` as unreadable, which is right for a fan-out
+ * that asks every branch and wrong for a read that deliberately asked none: an idle branch
+ * would be counted as a failed answer. Here only branches that were asked can fail
+ * (`unreadable`), a missing binding is `not_deployed`, and an unasked bound branch is
+ * `not_asked`. `answered` is branches that were asked and answered.
+ *
+ * `complete` is true only when HQ has established the deployment set (`registryAvailable`),
+ * nothing failed or lacks a binding, and either a search ran or there is no branch to ask.
+ * With the registry unreadable it is false whatever the bindings say: the set itself is unknown.
+ */
+export function teamCoverage<T>(
+  results: BranchResult<T>[],
+  opts: { searched: boolean; registryAvailable: boolean },
+): {
+  total: number; asked: number; answered: number; complete: boolean;
+  unreadable: string[]; not_deployed: string[]; not_asked: string[];
+} {
+  const codes = (state: BranchState) => results.filter((r) => r.status === state).map((r) => r.code);
+  const unreadable = codes('unreadable');
+  const notDeployed = codes('not_deployed');
+  return {
+    total: results.length,
+    asked: results.filter((r) => r.status === 'ok' || r.status === 'unreadable').length,
+    answered: results.filter((r) => r.status === 'ok').length,
+    complete: opts.registryAvailable && unreadable.length === 0 && notDeployed.length === 0
+      && (opts.searched || results.length === 0),
+    unreadable,
+    not_deployed: notDeployed,
+    not_asked: codes('not_asked'),
   };
 }
 

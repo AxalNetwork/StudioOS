@@ -34,6 +34,7 @@ import { api } from '../src/lib/api.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { deckCommentsApi } from '../src/lib/api/deckComments.js';
 import { deckCardStatusApi } from '../src/lib/api/deckCardStatus.js';
+import { deckPreflightApi } from '../src/lib/api/deckPreflight.js';
 import ShareDialog from '../src/pages/raise/pitch/ShareDialog.jsx';
 import { ClosedLink, FigureSources, NdaGate } from '../src/pages/raise/pitch/ShareViewerParts.jsx';
 import { StudioAnalytics } from '../src/pages/raise/pitch/PitchStudio.jsx';
@@ -103,7 +104,7 @@ test('the dialog says what Create link writes before it writes, and the link it 
   for (const path of [null, '', 'https://evil.example/x', '/share/deck/a b', '/share/deck/../x/y', '//evil.example/share/deck/x']) {
     assert.equal(shareUrl({ share_path: path }, 'https://axal.vc'), null, String(path));
   }
-  assert.equal(shareFailure({ status: 400, data: { detail: 'include has an unknown key' } }), 'include has an unknown key No link was made.');
+  assert.equal(shareFailure({ status: 400, data: { detail: 'include has an unknown key' } }), 'Check what you entered. Nothing was saved.');
   assert.equal(shareFailure(new Error('network')), 'The link could not be made. Nothing was sent.');
 });
 
@@ -135,6 +136,11 @@ async function mountDialog(answers) {
   // D1579 (#3826): and the version's card status, beside it; every card Done, unless a test says so.
   const savedCards = deckCardStatusApi.read;
   deckCardStatusApi.read = async (...a) => { calls.push(['cardStatus', ...a]); return (answers.cardStatus || (async () => ({ tracked: false, not_done: { count: 0, cards: [] } })))(...a); };
+  // D4598 (#4598) part 2: the link's own effective content, read fresh per variant/include
+  // combination; empty and clean unless a test says so, so this file's existing tests (about the
+  // D1570/D1579 gate and the one link writer, not the preflight check) are not about this at all.
+  const savedLinkCards = deckPreflightApi.linkCards;
+  deckPreflightApi.linkCards = async (...a) => { calls.push(['linkCards', ...a]); return (answers.linkCards || (async () => ({ slides: [], theme: null, version: deck.version })))(...a); };
   const restore = installDocument();
   const container = document.createElement('div'); document.body.appendChild(container);
   const rootEl = createRoot(container);
@@ -157,6 +163,7 @@ async function mountDialog(answers) {
       cyclesWrite.formOptions = saved.formOptions; cyclesWrite.raise.deckLink = saved.deckLink;
       deckCommentsApi.approval = savedApproval;
       deckCardStatusApi.read = savedCards;
+      deckPreflightApi.linkCards = savedLinkCards;
     },
   };
 }
@@ -200,7 +207,7 @@ test('a failed prospects read falls back to a typed name, and a refusal makes no
     assert.equal(m.pr(m.by('pitch-share-create')).disabled, true, 'no name, no link');
     await m.change('pitch-share-label', 'Fund Z');
     await m.press('pitch-share-create');
-    assert.match(m.text(), /view_limit is 1 to 100 No link was made\./);
+    assert.match(m.text(), /Check what you entered\. Nothing was saved\./);
     assert.equal(m.created.length, 0);
     assert.equal(m.by('pitch-share-made'), undefined);
   } finally { await m.unmount(); }

@@ -61,6 +61,12 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
+    // D1's batch is one transaction; so is this.
+    async batch(stmts: any[]) {
+      db.exec('BEGIN');
+      try { const out = []; for (const s of stmts) out.push(await s.run()); db.exec('COMMIT'); return out; }
+      catch (e) { db.exec('ROLLBACK'); throw e; }
+    },
   };
 }
 
@@ -68,7 +74,7 @@ const SCHEMA = `
   CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1,
                       jwt_min_iat INTEGER, name TEXT, email TEXT);
   CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
-  CREATE TABLE territory_licences (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
+  CREATE TABLE territory_licences ( revision INTEGER NOT NULL DEFAULT 0,id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT UNIQUE NOT NULL,
     licence_ref TEXT UNIQUE NOT NULL, legal_entity_name TEXT NOT NULL, brand_name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft');
   CREATE TABLE licence_territories (id INTEGER PRIMARY KEY AUTOINCREMENT, licence_id INTEGER NOT NULL,
@@ -80,7 +86,13 @@ const SCHEMA = `
     provision_run_id TEXT, requested_by_user_id INTEGER,
     requested_at TEXT NOT NULL DEFAULT (datetime('now')), live_at TEXT,
     last_health_at TEXT, last_health_ok INTEGER, last_version TEXT,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    current_attempt INTEGER NOT NULL DEFAULT 1, do_jurisdiction TEXT);
+  CREATE TABLE licence_deployment_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+    licence_uid TEXT NOT NULL, code TEXT NOT NULL, attempt_no INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'dispatching', failure_code TEXT, failure_note TEXT, run_id TEXT, run_url TEXT,
+    run_status TEXT, run_conclusion TEXT, requested_by_user_id INTEGER,
+    requested_at TEXT NOT NULL DEFAULT (datetime('now')), settled_at TEXT, UNIQUE (licence_uid, attempt_no));
 `;
 
 /** One active licence holding FR·BE·LU, and one holding nothing at all. */

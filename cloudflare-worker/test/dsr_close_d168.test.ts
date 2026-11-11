@@ -33,7 +33,7 @@ import {
   closeDsrRequest,
   loadDsrHistory,
   dsrDaysLeft,
-  DSR_CLOCK_DAYS,
+  DSR_CLOCK_RULE,
 } from '../src/services/dsrRequests';
 
 const root = process.cwd();
@@ -42,6 +42,24 @@ const SECURITY = read('cloudflare-worker/src/routes/admin_security.ts');
 const SETTINGS = read('cloudflare-worker/src/routes/settings.ts');
 const SERVICE = read('cloudflare-worker/src/services/dsrRequests.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/272_dsr_requests.sql');
+
+const KEYS_MIGRATION = read('cloudflare-worker/sql/migrations/202611072219_dsr_close_key.sql');
+let keySeq = 0;
+/**
+ * D4675 — HQ's close as the page sends it: the request it reviewed (the flag's
+ * current stamp and ledger row) and a fresh close key.
+ */
+async function closeAsReviewed(db: any, env: any, opts: { userId: number; actorUserId: number; outcome: any; reason: string }) {
+  const flag = (db.prepare('SELECT deletion_requested_at AS t FROM users WHERE id = ?').get(opts.userId) as any)?.t ?? '';
+  let open: any = null;
+  try { open = db.prepare('SELECT id, requested_at FROM dsr_requests WHERE user_id = ? AND outcome IS NULL').get(opts.userId); } catch { open = null; }
+  keySeq += 1;
+  return closeDsrRequest(env, {
+    ...opts, actorEmail: 'hq@axal.vc', requestedAt: flag,
+    requestId: open && open.requested_at === flag ? open.id : null,
+    closeKey: `test-close-key-${String(keySeq).padStart(6, '0')}`,
+  });
+}
 
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
@@ -88,7 +106,11 @@ function fresh(withLedger = true) {
   db.exec(`CREATE TABLE activity_logs (
              id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT,
              user_id INTEGER, created_at TEXT DEFAULT (datetime('now')))`);
-  if (withLedger) db.exec(MIGRATION);
+  // Narrowed like the two above: the columns the close's audit row binds.
+  db.exec(`CREATE TABLE admin_audit_log (
+             id INTEGER PRIMARY KEY AUTOINCREMENT, admin_user_id INTEGER NOT NULL, action TEXT NOT NULL,
+             viewed_user_id INTEGER, filters_json TEXT, exported_at TEXT DEFAULT (datetime('now')))`);
+  if (withLedger) { db.exec(MIGRATION); db.exec(KEYS_MIGRATION); }
   db.exec(`INSERT INTO users (id, email, name) VALUES
              (1, 'subject@example.com', 'A Subject'),
              (2, 'hq@axal.vc', 'HQ Holder'),
@@ -134,7 +156,7 @@ test('closing as fulfilled records the decision, stops the clock, and tells the 
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
 
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'purged on 2026-09-19, DSR-14' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'purged on 2026-09-19, DSR-14' });
 
   const rows = rowsFor(db, 1);
   assert.equal(rows.length, 1, 'closing must not open a second row');
@@ -161,7 +183,7 @@ test('closing as fulfilled records the decision, stops the clock, and tells the 
 test('closing as denied is recorded, and the subject can then ask again', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1);
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'open legal hold, DSR-15' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'open legal hold, DSR-15' });
 
   assert.equal(rowsFor(db, 1)[0].outcome, 'denied');
   assert.equal(requestedAtOf(db, 1), null);
@@ -196,7 +218,7 @@ test('a request made before migration 272 is derived on close, carrying its ORIG
   db.prepare("UPDATE users SET deletion_requested_at = '2026-08-02 11:30:00' WHERE id = 1").run();
   assert.equal(rowsFor(db, 1).length, 0, 'fixture is wrong: there should be no ledger row yet');
 
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'legacy request, DSR-09' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'legacy request, DSR-09' });
 
   const rows = rowsFor(db, 1);
   assert.equal(rows.length, 1, 'the close did not derive the missing row, so the decision has no record');
@@ -223,9 +245,9 @@ test('a withdrawal is the subject\'s own act and names no operator', async () =>
 test('the history reports how often each subject asked — and its own failure', async () => {
   const { db, env } = fresh();
   await subjectRequests(db, env, 1, '2026-07-01 09:00:00');
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'first refusal' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'first refusal' });
   await subjectRequests(db, env, 1, '2026-08-01 09:00:00');
-  await closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'second, granted' });
+  await closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'fulfilled', reason: 'second, granted' });
 
   const h = await loadDsrHistory(env);
   assert.equal(h.available, true);
@@ -255,7 +277,7 @@ test('NOTHING moves when the ledger cannot be written', async () => {
   db.prepare("UPDATE users SET deletion_requested_at = '2026-08-02 11:30:00' WHERE id = 1").run();
 
   await assert.rejects(
-    () => closeDsrRequest(env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'should not land' }),
+    () => closeAsReviewed(db, env, { userId: 1, actorUserId: 2, outcome: 'denied', reason: 'should not land' }),
     'the close succeeded against a database with no ledger',
   );
   assert.equal(requestedAtOf(db, 1), '2026-08-02 11:30:00',
@@ -290,16 +312,18 @@ test('"fulfilled" never claims the platform deleted anything', () => {
     'the service no longer states that an outcome is a decision record rather than a deletion');
 });
 
-test('the member\'s own two handlers write the ledger, best-effort', () => {
-  // Best-effort is the point: a member must be able to request and to cancel
-  // whatever state HQ's ledger is in, so neither may throw into their path.
-  for (const [fn, label] of [['openDsrRequest', 'request'], ['withdrawDsrRequest', 'cancel']] as const) {
-    const at = SETTINGS.indexOf(`await ${fn}(c.env, user.id)`);
-    assert.ok(at > 0, `the ${label} handler no longer writes the ledger`);
-    const around = SETTINGS.slice(Math.max(0, at - 200), at + 200);
-    assert.match(around, /try \{/, `the ${label} handler's ledger write is not best-effort`);
-    assert.match(around, /catch/, `the ${label} handler's ledger write has no catch`);
-  }
+test('the member\'s own two handlers write the ledger through the service, which never blocks them', () => {
+  // D4675: the flag and the ledger now move in one batch inside the service
+  // (`requestErasure`, `cancelErasure`), and the service — not a try/catch in
+  // the handler — falls back to the flag alone, so a member can still request
+  // and cancel whatever state HQ's ledger is in. That fallback is exercised
+  // against a real database in dsr_lifecycle_d4675.test.ts.
+  assert.match(SETTINGS, /await requestErasure\(c\.env, user\.id\)/, 'the request handler no longer writes the ledger');
+  assert.match(SETTINGS, /await cancelErasure\(c\.env, user\.id\)/, 'the cancel handler no longer writes the ledger');
+  assert.match(SERVICE, /export async function requestErasure[\s\S]{0,1400}catch \(e\)[\s\S]{0,300}deletion_requested_at = COALESCE/,
+    'the request no longer falls back to the flag alone when the ledger cannot be written');
+  assert.match(SERVICE, /export async function cancelErasure[\s\S]{0,1400}catch \(e\)[\s\S]{0,300}deletion_requested_at = NULL/,
+    'the cancel no longer falls back to clearing the flag alone when the ledger cannot be written');
 });
 
 test('migration 272 enforces one OPEN request per subject, and admits three outcomes', () => {
@@ -313,31 +337,29 @@ test('migration 272 enforces one OPEN request per subject, and admits three outc
 });
 
 test('the statutory clock counts DOWN from receipt, and an unknown stamp is not zero', () => {
-  // THIS ARITHMETIC HAD NEVER BEEN TESTED. It has driven the amber zone, the
-  // red "Nd overdue" and the "inside deadline pressure" headline since the
-  // Security page shipped. Inverting the subtraction turns every overdue
-  // request into one with weeks left — on the one screen where that is a
-  // compliance failure rather than a wrong number.
-  const day = 86400000;
-  const now = Date.parse('2026-09-19T12:00:00Z');
+  // THIS ARITHMETIC HAD NEVER BEEN TESTED until D4675. It drives the amber
+  // zone, the red "Nd overdue" and the Overview's deadline findings. Inverting
+  // the subtraction turns every overdue request into one with weeks left — on
+  // the one screen where that is a compliance failure rather than a wrong
+  // number. D4675 part 2 made the clock one calendar month (2026-11-10).
+  const at = (s: string) => Date.parse(s);
+  const received = at('2026-09-19T12:00:00Z'); // due by the end of 19 October
 
-  assert.equal(dsrDaysLeft(now, now), 30, 'a request made today does not have the full window');
-  assert.equal(dsrDaysLeft(now - 10 * day, now), 20);
-  assert.equal(dsrDaysLeft(now - 30 * day, now), 0, 'the deadline day itself must read 0, not 1 or -1');
-  assert.equal(dsrDaysLeft(now - 44 * day, now), -14, 'an overdue request must count NEGATIVE, not stop at 0');
+  assert.equal(dsrDaysLeft(received, received), 30, 'September 19 → October 19 is 30 calendar days');
+  assert.equal(dsrDaysLeft(received, at('2026-09-29T08:00:00Z')), 20);
+  assert.equal(dsrDaysLeft(received, at('2026-10-19T23:59:59Z')), 0, 'the due day itself reads 0, not 1 or -1');
+  assert.equal(dsrDaysLeft(received, at('2026-11-02T00:00:00Z')), -14, 'an overdue request must count NEGATIVE, not stop at 0');
 
   // The 14-day amber threshold the page reads (`days_left <= 14`), pinned from
-  // BOTH SIDES OF ITS ACTUAL EDGE. The first draft of this put the edge a day
-  // out — 15 days elapsed leaves 15, which is outside; 16 elapsed leaves 14,
-  // which is inside. A one-sided assertion would not have caught that, and
-  // getting the boundary wrong here is the whole failure mode.
-  assert.equal(dsrDaysLeft(now - 15 * day, now), 15, 'the boundary moved');
-  assert.ok(dsrDaysLeft(now - 15 * day, now)! > 14, '15 days in is not yet inside deadline pressure');
-  assert.ok(dsrDaysLeft(now - 16 * day, now)! <= 14, '16 days in must be inside deadline pressure');
+  // BOTH SIDES OF ITS ACTUAL EDGE: a one-sided assertion would not catch the
+  // boundary moving a day, and getting it wrong is the whole failure mode.
+  assert.equal(dsrDaysLeft(received, at('2026-10-04T12:00:00Z')), 15, 'the boundary moved');
+  assert.ok(dsrDaysLeft(received, at('2026-10-04T23:59:59Z'))! > 14, '15 days out is not yet inside deadline pressure');
+  assert.ok(dsrDaysLeft(received, at('2026-10-05T00:00:00Z'))! <= 14, '14 days out must be inside deadline pressure');
 
   // null, never 0 — an unknown clock is not a clock at its deadline.
-  assert.equal(dsrDaysLeft(NaN, now), null);
-  assert.equal(dsrDaysLeft(dsrParseFixture('not a date'), now), null);
+  assert.equal(dsrDaysLeft(NaN, received), null);
+  assert.equal(dsrDaysLeft(dsrParseFixture('not a date'), received), null);
 });
 
 /** Mirrors admin_security.ts's `parseSqlTs` so the null path is reached the same way. */
@@ -346,12 +368,17 @@ function dsrParseFixture(s: string): number {
   return Date.parse(iso);
 }
 
-test('the clock constant is defined once, and the route reads it from there', () => {
-  assert.equal(DSR_CLOCK_DAYS, 30);
-  // A second copy in the route is how the payload's `clock_days` and the
+test('the clock rule is defined once, and the route reads it from there', () => {
+  assert.equal(DSR_CLOCK_RULE, 'calendar_month');
+  // A second copy in the route is how the payload's named rule and the
   // arithmetic behind `days_left` come to disagree.
-  assert.doesNotMatch(SECURITY, /const DSR_CLOCK_DAYS\s*=/,
-    'DSR_CLOCK_DAYS is declared in the route again — one of the two copies will drift');
-  assert.match(SECURITY, /dsrDaysLeft\(parseSqlTs\(u\.deletion_requested_at\), now\)/,
+  assert.doesNotMatch(SECURITY, /const DSR_CLOCK_(RULE|DAYS)\s*=/,
+    'the clock rule is declared in the route again — one of the two copies will drift');
+  assert.match(SECURITY, /clock: \{ rule: DSR_CLOCK_RULE, label: DSR_CLOCK_LABEL \}/,
+    'the payload no longer names the rule it counts by');
+  // D4675: through `dsrStampMs`, the service's own UTC parse, so the parse is tested too.
+  assert.match(SECURITY, /const requestedMs = dsrStampMs\(u\.deletion_requested_at\)/,
+    'the route no longer parses the receipt stamp through the tested helper');
+  assert.match(SECURITY, /days_left: dsrDaysLeft\(requestedMs, now\)/,
     'the route no longer computes days_left through the tested helper');
 });

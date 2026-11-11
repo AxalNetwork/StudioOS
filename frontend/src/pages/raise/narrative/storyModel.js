@@ -29,6 +29,7 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { AREA_LABEL, AREA_ORDER, NOT_ON_STUDIOOS, chipOf, fillLink, gapLine, valueText } from '../pitch/sourcesModel.js';
 import { dayLabel } from '../pitch/pitchStudioModel.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * The story's sections, as the Worker keeps them (`services/narrative/store.ts`
@@ -301,7 +302,33 @@ export function saveDialog(writes, version) {
 const listOf = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /** What a failed save says. The text stays in the editor (NAR17d). */
-export const SAVE_FAILED = 'Save failed. Your text is kept here; nothing after the failed section was saved.';
+export const SAVE_FAILED = 'Save failed. Your text is kept here; nothing of this save was written.';
+
+/** The version moved after it was opened (D5069): nothing was written, and the text stays. */
+export const SAVE_CHANGED = 'This version was changed somewhere else after you opened it. Nothing of yours was saved and your text is kept here. Reload to read the latest, then make your change again.';
+
+/**
+ * The one request a Save version makes (D5069): every changed section, and the
+ * answer for each accepted "Answer it" draft whose section is among them, with
+ * the revision the version was read at. Never one request per section.
+ */
+export function saveBody(writes, pending, read) {
+  const written = new Set(writes.map((w) => w.section));
+  const body = {
+    sections: writes.map((w) => ({ section: w.section, ...w.body })),
+    answers: Object.entries(pending || {})
+      .filter(([, p]) => written.has(p.section))
+      .map(([objection, p]) => ({ objection, section: p.section, how: 'eadwyn' })),
+  };
+  const rev = read?.meta?.revision;
+  if (Number.isSafeInteger(rev)) body.expected_revision = rev;
+  return body;
+}
+
+/** What a failed Save version says: the conflict's own sentence, or the refusal's. */
+export const saveFailure = (e) => (e?.status === 409 && e?.code === 'changed_since_open'
+  ? { conflict: true, text: SAVE_CHANGED }
+  : { conflict: false, text: `${SAVE_FAILED} ${userFacingRaiseError(e, { fallback: 'The save was refused.' })}` });
 
 /* ------------------------------------------------------------------ *
  * Insert a figure (NAR3)
@@ -404,12 +431,12 @@ const TOKEN_CODES = new Set(['budget_user_day', 'budget_user_month', 'budget_org
  */
 export function runRefusal(e) {
   const code = e?.code || e?.data?.code || e?.data?.error || null;
-  const said = String(e?.data?.message || e?.data?.detail || e?.message || '').trim();
-  const sentence = said && !/^[a-z_]+$/.test(said) ? said : '';
   if (Number(e?.status) === 402 || TOKEN_CODES.has(code)) {
-    return { kind: 'tokens', text: sentence || 'Not enough AI tokens for this run.', sub: `${AI_DRAW} Nothing was charged.` };
+    // The budget refusals carry the Worker's own sentence (a code outside the taxonomy); a bare 402 does not.
+    const own = TOKEN_CODES.has(code) ? userFacingRaiseError(e, { fallback: '' }) : '';
+    return { kind: 'tokens', text: own || 'Not enough AI tokens for this run.', sub: `${AI_DRAW} Nothing was charged.` };
   }
   if (code === 'assist_off') return { kind: 'off', text: AI_OFF_LINE, sub: AI_OFF_SUB };
-  return { kind: 'other', text: sentence || 'Eadwyn could not write this just now. Nothing was charged. Try again.', sub: null };
+  return { kind: 'other', text: userFacingRaiseError(e, { fallback: 'Eadwyn could not write this just now. Nothing was charged. Try again.', scope: 'raise:narrative' }), sub: null };
 }
 

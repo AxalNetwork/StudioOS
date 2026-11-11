@@ -735,6 +735,38 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://posthog.com/docs/model-context-protocol' },
     verified_on: null,
   },
+  // D2407 (#2407 parts 1–3): each read tool is one of `BEEHIIV_READ_TOOLS`, by its call site in `services/beehiiv/reads.ts`;
+  // the one write tool is the draft tool, by its call site in `services/beehiiv/drafts.ts` (part 3).
+  beehiiv: {
+    tagline: 'Read your newsletter on Beehiiv: subscriber counts, open and click rates, and each post’s performance.',
+    long_description: [
+      'Reads your publication’s subscriber counts, open and click rates, and each post’s performance. Never reads your subscribers’ addresses.',
+      'Sign in with Beehiiv, and choose the one publication each of your companies reads. You press each sync from Grow: the figures land in Distribution and in Revenue and traction with their date, and a figure you delete stays deleted.',
+      'Creates a draft in your Beehiiv when you press Send. You publish it from Beehiiv. Each publication is switched on per company under Publishing, and starts off. Read works on every Beehiiv plan. Drafts need a paid plan.',
+    ],
+    tools: [
+      tool('publications', 'your publications', 'read', 'Lists the publications your Beehiiv sign-in can see, so you can choose one per company.', null, ["call('list_publications'"]),
+      tool('audience', 'subscriber counts and average open and click rates', 'read', 'Reads your publication’s active, free and premium subscriber counts and its average open and click rates, as a dated snapshot.', 'distribution', ["call('get_publication_stats'"]),
+      tool('traction', 'active and premium subscribers', 'read', 'Shows active and premium subscribers in Revenue and traction, beside revenue and never as revenue. Paid-subscription revenue is not read.', 'revenue_and_traction', ["call('get_publication_stats'"]),
+      tool('posts', 'sent posts and their figures', 'read', 'Reads your last 20 sent posts, each with its recipients, unique opens and clicks, and its open and click rates.', 'distribution', ["call('list_posts'", "call('get_post_stats'"]),
+      tool('draft', 'a draft post', 'write', 'Creates a draft post in a publication you switched on, only when you press Send in Publish to…: a title and the text you previewed, never published, scheduled or sent.', null, ['session.callTool(DRAFT_TOOL']),
+    ],
+    never_does: [
+      'No subscriber, email address or segment is read or kept: only counts and rates arrive.',
+      'Nothing is published, scheduled or sent from Axal VC, and no post is edited or deleted: a draft is created only when you press Send, and you publish it from Beehiiv.',
+      'Your Beehiiv readers are never joined to Axal VC’s own newsletters, and no Axal VC audience is offered to Beehiiv.',
+      'No Beehiiv API key is pasted or shown: Sign in with Beehiiv only.',
+    ],
+    prompts: [],
+    prompts_reason: notRead('Beehiiv'),
+    made_by: AXAL,
+    service: { name: 'Beehiiv', href: 'https://www.beehiiv.com' },
+    sign_in: { kind: 'mcp', label: 'Sign in with Beehiiv', key_help_href: null },
+    endpoints: { sign_in: 'https://mcp.beehiiv.com/mcp', api: null },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://www.beehiiv.com/support/article/39255979546263-getting-started-with-the-beehiiv-mcp' },
+    verified_on: null,
+  },
 };
 
 /** Connectors with a page but no registry row (D753 decision 2). */
@@ -853,7 +885,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

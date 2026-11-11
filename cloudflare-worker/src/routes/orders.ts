@@ -37,6 +37,7 @@ import {
   type PricedCart,
 } from '../services/orders';
 import { refuse } from '../util/refusal';
+import { commitPromoReservation, promoRefusalBody, releasePromoReservation } from '../services/promoRedemption';
 import { recordAiTopupPurchase } from '../services/aiTopups';
 import { isTokenPackPrice, packRefusalBody, TOKEN_PACK_REFUSALS, tokenPackQuote } from '../services/aiCredits';
 import { keyReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
@@ -136,10 +137,13 @@ orders.post('/intent', async (c) => {
   // 3. Promo discount (percent on subtotal; amount_off capped at subtotal).
   let discountCents = 0;
   let resolvedPromoCode: string | null = null;
+  let reservationRef: string | null = null;
   if (promoCode) {
-    const pr = await resolveCartPromo(c.env, promoCode, cart, user.id);
+    const pr = await resolveCartPromo(c.env, promoCode, cart, user.id, `cart:${orderId}`);
+    if ('refusal' in pr) return c.json(promoRefusalBody(pr.refusal), 400);
     if ('error' in pr) return c.json({ error: 'promo_invalid', reason: pr.error }, 400);
     discountCents = pr.discountCents;
+    reservationRef = pr.reservationRef;
     resolvedPromoCode = pr.promo.code;
   }
 
@@ -179,6 +183,8 @@ orders.post('/intent', async (c) => {
       items: cart.lines,
     });
     await fulfilOrder(c.env, orderRef);
+    // D4855: no payment webhook follows a free order, so its discount counts now.
+    await commitPromoReservation(c.env, reservationRef);
     return c.json({
       free: true,
       order_ref: orderRef,
@@ -212,6 +218,7 @@ orders.post('/intent', async (c) => {
     'metadata[items]': itemsMetaBlob(cart.lines),
   };
   if (resolvedPromoCode) piParams['metadata[promo_code]'] = resolvedPromoCode;
+  if (reservationRef) piParams['metadata[promo_reservation_ref]'] = reservationRef;
 
   let intent: { id: string; client_secret: string; status: string };
   try {
@@ -222,6 +229,8 @@ orders.post('/intent', async (c) => {
       { idempotencyKey, moneyKind: 'marketplace' },
     );
   } catch (e) {
+    // No PaymentIntent, so nothing was spent against the ceiling.
+    await releasePromoReservation(c.env, reservationRef);
     return refuse(c, 502, { code: 'intent_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
 

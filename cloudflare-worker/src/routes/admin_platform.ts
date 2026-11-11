@@ -13,6 +13,18 @@
  *                        the shared services do and do not carry (D209, H14)
  *   GET  /storage        every member's stored bytes as totals by kind, plan
  *                        and state; no name or file name (D1170)
+ *   GET  /capacity       this Worker's D1 size against its plan limit, queue
+ *                        backlog and oldest-message age, binding presence;
+ *                        unavailable is never zero (D4559)
+ *   GET  /capacity/history  daily snapshots and the D1 projected limit month,
+ *                        with its window and confidence (D4559 part 2)
+ *   GET  /capacity/alerts   open capacity alert episodes and those cleared in
+ *                        the last 30 days (D4559 part 2)
+ *   POST /capacity/alerts/:id/mute  mute an open episode for up to a week,
+ *                        with a reason, audited (D4559 part 2)
+ *   GET  /advisory-refunds-due  advisory charges owed back, open first (D4703)
+ *   POST /advisory-refunds-due/:id/resolve  record that one was refunded, with
+ *                        a reason, audited; moves no money (#5305)
  *
  * EVERY BLOCK CARRIES ITS OWN STATE. One store failing to answer makes that
  * block unreadable, with the reason, and leaves the others standing: an
@@ -78,449 +90,42 @@
 import { Hono } from 'hono';
 import { backfillMemberFileSizes } from '../services/memberFileSizeBackfill';
 import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
-import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
+import { readMeetingBotOperations, meetingBotPricePolicy, readRecentBotFailures } from '../services/meetingBotOperationsRead';
 import { startDiagnosis, readDiagnosis, readDiagnosisScreenshot } from '../services/meetingBotDiagnose';
 import { BotError } from '../services/meetingBots';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
-import { readWebhookDeliveries } from '../services/stripeWebhookDeliveries';
 import { DERIVED_UNAVAILABLE } from './licence';
 import { ensureAdminAuditLogTable } from './admin';
 import {
   DEFAULT_TAKE_RATE_BPS, MAX_TAKE_RATE_BPS, TAKE_RATE_KEY, settlementMode, takeRate,
 } from '../services/advisorMoney';
 import {
-  CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState,
-} from '../util/cronHistory';
-import { dlqDepth } from '../services/deadLetters';
-import {
-  PLATFORM_SWITCH_KEYS, readOperatorSwitchEntries, readPlatformSwitches,
+  PLATFORM_SWITCH_KEYS, readOperatorSwitchEntries,
 } from '../services/platformSwitches';
 import {
-  OPERATOR_SWITCH_REACH, OPERATOR_SWITCH_TTL_MS, SWITCH_REASON_MIN, isOperatorSwitchKey, setOperatorSwitch,
+  OPERATOR_SWITCH_REACH, OPERATOR_SWITCH_TTL_MS, SWITCH_REASON_MIN, isOperatorSwitchKey, readOperatorSwitches, setOperatorSwitch,
 } from '../services/operatorSwitches';
-import { logAdminAction } from '../services/adminAudit';
-import { telegramTokenConfigured } from '../services/telegramClient';
-import { xClientConfigured } from '../services/xClient';
+import { adminAuditStatement, logAdminAction } from '../services/adminAudit';
 import { describeTopology } from '../services/topology';
-import {
-  MANAGED_PROVIDERS, keyStateOf, readProviderKeyLastSet, readProviderKeyStatus,
-} from '../services/providerOauthKeys';
-import { githubMirrorTarget } from '../services/githubSync';
-import { readRecentSyncAttempts, readTicketSync } from '../services/supportQueues';
-import {
-  getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary,
-} from '../services/catalog';
-import { promoState, readProductIds } from '../services/promos';
 import { readPlatformStorage } from '../services/storageHq';
+import { d1Policy, readPlatformCapacity } from '../services/platformCapacity';
+import {
+  HISTORY_DAYS_DEFAULT, HISTORY_DAYS_MAX, MUTE_MAX_HOURS, muteCapacityAlert, readCapacityAlerts, readCapacityHistory,
+} from '../services/platformCapacityHistory';
+import { branchOf } from '../util/branch';
+import { readPlatformSummary } from '../services/platformSummary';
 
 const r = new Hono<{ Bindings: Env }>();
 
-/** H17 P5's "Incidents (7d)" — the window the count is taken over. */
-export const INCIDENT_WINDOW_DAYS = 7;
-
-/**
- * Said with the count, because a zero here is easy to misread. The public
- * status page publishes what `status_incidents` holds, and the only writer is
- * `POST /api/public/status/incidents` — an admin intake that nothing in the
- * product calls. So the number is what somebody entered, not what happened.
- */
-const INCIDENT_BASIS =
-  'Incidents entered for the public status page in the last seven days. No screen in the '
-  + 'product enters one — the intake exists and nothing calls it — so a zero means none was '
-  + 'entered, not that nothing went wrong.';
-
-/** P6's member counts, and why the canvas's figure is not drawn. */
-const MEMBERS_REASON =
-  'Member counts are not recorded: the platform never asks Telegram how many people are in a '
-  + 'channel, so any number here would be invented.';
-
-// ── H16 (D213) ─────────────────────────────────────────────────────────────
-
-/** P1's two notes: the keys this list does not hold, and where they are. */
-const KEY_NOTES = [
-  'Google sign-in is set at deploy and no console manages it, so it is not on this list.',
-  'The GitHub token belongs to the ticket mirror and is reported under GitHub sync, not here.',
-];
-
-/** Why a key's date is what it is, so the page never has to guess. */
-const LAST_SET_BASIS_NOTE =
-  'A key held as a Worker secret is dated by the last save or rotation the Integration keys '
-  + 'console recorded; one set at deploy, or saved again at deploy after being removed from the '
-  + 'console, has no date here. A key held in the database is dated by its row.';
-
-/** P2's note: what the recent list is, and is not. */
-const SYNC_RECENT_NOTE =
-  'A ticket keeps only its latest mirror attempt, so this is the latest attempt per ticket, not '
-  + 'a log of failures: a ticket that failed and later synced shows the sync.';
-
-// The webhook's path and window, and the reader both pages share (D1011).
-export { STRIPE_WEBHOOK_PATH, WEBHOOK_WINDOW_HOURS } from '../services/stripeWebhookDeliveries';
-
-const STOREFRONT_NOTE =
-  'Each deployment reads its own mirror of its own Stripe catalog. A sync on this deployment '
-  + 'changes what this storefront sells and no branch\'s.';
-
-/** P4 lists this many codes, newest first, and says when there are more. */
-export const PROMO_LIST_LIMIT = 50;
-
-/** P4's caveats, each a thing the panel's figures cannot say. */
-const PROMO_CAVEATS = [
-  'Redemptions are the ones this platform recorded. Stripe counts subscription redemptions and '
-  + 'nothing mirrors them, so a figure here is a lower bound, and a code is called exhausted '
-  + 'only when the recorded count alone reaches its cap.',
-  'A code names no licence and no cohort: any buyer can apply it, to the products it lists or '
-  + 'to every product when it lists none.',
-  'A promo ceiling is not checked against these codes: nothing enforces one at checkout, and no '
-  + 'screen sets one yet.',
-  'For a code that repeats, the number of months is kept by Stripe, not here.',
-];
-
-/**
- * A count read back from SQL, or a throw. Every console block below catches
- * into its own unreadable state, so a value that is not a number fails that
- * block instead of reading as a measured zero — the `|| 0` this page is
- * built not to have. `null` is refused before `Number()` sees it, because
- * `Number(null)` is 0.
- */
-function countOf(value: unknown, what: string): number {
-  const n = value === null || value === undefined ? NaN : Number(value);
-  if (!Number.isFinite(n)) throw new Error(`${what} unreadable`);
-  return n;
-}
+// D4859 (#4859): the summary's panels, their words and their readers live in services/platformSummary.ts, one reader
+// per panel, run together. The constants other code and tests name stay importable from here.
+export { INCIDENT_WINDOW_DAYS, PROMO_LIST_LIMIT, STRIPE_WEBHOOK_PATH, WEBHOOK_WINDOW_HOURS } from '../services/platformSummary';
 
 r.get('/summary', async (c) => {
   await requireSuperAdmin(c);
-  const env = c.env;
-
-  // ── Keys and connections ──────────────────────────────────────────────
-  let integrations: unknown;
-  try {
-    const rows = await env.DB.prepare(
-      `SELECT provider_key, status, COUNT(*) AS n
-         FROM integrations GROUP BY provider_key, status ORDER BY provider_key`,
-    ).all<{ provider_key: string; status: string; n: number }>();
-    const byProvider = new Map<string, Record<string, number>>();
-    let total = 0;
-    let unhealthy = 0;
-    for (const row of rows.results || []) {
-      const key = String(row.provider_key);
-      const status = String(row.status);
-      const n = Number(row.n) || 0;
-      if (!byProvider.has(key)) byProvider.set(key, {});
-      byProvider.get(key)![status] = n;
-      total += n;
-      if (status === 'error' || status === 'disconnected') unhealthy += n;
-    }
-    integrations = {
-      available: true,
-      total,
-      unhealthy,
-      providers: [...byProvider.entries()].map(([provider, by_status]) => ({ provider, by_status })),
-      // Said explicitly so nobody wires a reveal into this payload later.
-      secrets_included: false,
-      secrets_note: 'Key material is never read by this endpoint. It counts connections and reports their state.',
-    };
-  } catch {
-    integrations = { available: false, reason: 'The integrations table could not be read.' };
-  }
-
-  // ── Scheduled jobs ────────────────────────────────────────────────────
-  // THE LIST IS THE DECLARED TRIGGERS, NOT WHATEVER NAMES THE TABLE HOLDS.
-  // A trigger that has never recorded a run is the finding, so it has to be
-  // on the list to be seen, and a row under a name nobody declares is not a
-  // job HQ runs. One indexed read per trigger, in place of a GROUP BY that
-  // read the whole table on every load.
-  let jobs: unknown;
-  try {
-    const now = new Date();
-    const latest = await latestRunPerTrigger(env, CRON_TRIGGERS.map((t) => t.expr), now);
-    const list = CRON_TRIGGERS.map((t) => {
-      const row = latest.get(t.expr) ?? null;
-      const { state, expected_at } = triggerState(t.expr, row, now, STALE_GRACE_MINUTES);
-      return {
-        name: t.name,
-        trigger_name: t.expr,
-        expected_at,
-        last_started_at: row?.started_at || null,
-        last_finished_at: row?.finished_at || null,
-        status: row?.status || null,
-        error: row?.error || null,
-        state,
-      };
-    });
-    jobs = {
-      available: true,
-      grace_minutes: STALE_GRACE_MINUTES,
-      triggers: list,
-      failing: list.filter((j) => j.state === 'failed').length,
-      stale: list.filter((j) => j.state === 'stale').length,
-      never: list.filter((j) => j.state === 'never').length,
-    };
-  } catch {
-    jobs = { available: false, reason: 'The scheduled-run history could not be read.' };
-  }
-
-  // ── Monitoring (D202, H17 P5) ─────────────────────────────────────────
-  // Two of P5's four stats are computed here. The other two are the page's,
-  // from reads it already makes: Workers healthy from /deployments, cron
-  // triggers from `jobs` above.
-  const dlq = await dlqDepth(env);
-  let incidents: unknown;
-  try {
-    // datetime() on both sides: `created_at` is written by datetime('now'),
-    // and a bound ISO cutoff would read a same-day row as older than it is.
-    const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM status_incidents
-        WHERE datetime(created_at) >= datetime('now', ?)`,
-    ).bind(`-${INCIDENT_WINDOW_DAYS} days`).first<{ n: number }>();
-    const count = countOf(row?.n, 'incident count');
-    incidents = { available: true, window_days: INCIDENT_WINDOW_DAYS, count, basis: INCIDENT_BASIS };
-  } catch {
-    incidents = {
-      available: false,
-      window_days: INCIDENT_WINDOW_DAYS,
-      reason: 'The status-page incident table could not be read, so the count is unknown rather '
-        + 'than zero.',
-    };
-  }
-
-  // ── Broadcast (D202, H17 P6) ──────────────────────────────────────────
-  // The token is a deployment fact, not a row, so it is reported whichever
-  // way the channel read goes — and said once, not once per channel.
-  const tokenConfigured = telegramTokenConfigured(env);
-  let telegram: unknown;
-  try {
-    // `chat_bound` is `/send`'s own test (`if (!post.chat_id)`) done in SQL,
-    // so the id is reduced to a boolean before it leaves the database.
-    const rows = await env.DB.prepare(
-      `SELECT c.id, c.label, c.audience, c.enabled, c.last_test_at, c.last_error,
-              CASE WHEN c.chat_id IS NULL OR c.chat_id = '' THEN 0 ELSE 1 END AS chat_bound,
-              (SELECT COUNT(*) FROM telegram_posts p
-                WHERE p.channel_id = c.id AND p.status = 'sent') AS sent_count,
-              (SELECT MAX(p.sent_at) FROM telegram_posts p
-                WHERE p.channel_id = c.id AND p.status = 'sent') AS last_sent_at
-         FROM telegram_channels c
-        ORDER BY c.audience ASC, c.id ASC`,
-    ).all<{
-      id: number; label: string; audience: string; enabled: number;
-      last_test_at: string | null; last_error: string | null;
-      chat_bound: number; sent_count: number; last_sent_at: string | null;
-    }>();
-    const channels = (rows.results || []).map((ch) => {
-      const enabled = !!ch.enabled;
-      const chatBound = !!ch.chat_bound;
-      return {
-        id: ch.id,
-        label: String(ch.label),
-        audience: String(ch.audience),
-        enabled,
-        chat_bound: chatBound,
-        // A channel's own facts decide its state; the token is platform-wide
-        // and is reported beside the list rather than folded into each row.
-        state: !enabled ? 'disabled' : !chatBound ? 'unbound' : 'ready',
-        sent_count: countOf(ch.sent_count, 'sent count'),
-        last_sent_at: ch.last_sent_at || null,
-        last_test_at: ch.last_test_at || null,
-        last_error: ch.last_error ? String(ch.last_error).slice(0, 200) : null,
-      };
-    });
-    telegram = {
-      available: true,
-      token_configured: tokenConfigured,
-      channels,
-      members_available: false,
-      members_reason: MEMBERS_REASON,
-    };
-  } catch {
-    telegram = {
-      available: false,
-      token_configured: tokenConfigured,
-      reason: 'The Telegram channel table could not be read.',
-    };
-  }
-
-  // X is listed whether or not it is set up: the canvas's own rule, that an
-  // absent row looks like a decision nobody made.
-  const xConfigured = xClientConfigured(env);
-  let x: unknown;
-  try {
-    const row = await env.DB.prepare(
-      `SELECT COUNT(*) AS accounts,
-              COALESCE(SUM(CASE WHEN enabled THEN 1 ELSE 0 END), 0) AS enabled
-         FROM x_accounts`,
-    ).first<{ accounts: number; enabled: number }>();
-    x = {
-      available: true,
-      client_configured: xConfigured,
-      accounts: countOf(row?.accounts, 'X account count'),
-      enabled_accounts: countOf(row?.enabled, 'enabled X account count'),
-    };
-  } catch {
-    x = { available: false, client_configured: xConfigured, reason: 'The X account table could not be read.' };
-  }
-
-  // ── Switches (D202, H17 P7) ───────────────────────────────────────────
-  let switches: unknown;
-  try {
-    switches = { available: true, items: await readPlatformSwitches(env) };
-  } catch {
-    switches = { available: false, reason: 'The platform switches could not be read.' };
-  }
-
-  // ── Integration keys (D213, H16 P1) ──────────────────────────────────
-  // The read lives in services/providerOauthKeys, beside the table it reads:
-  // this file never names that table's columns. `readProviderKeyStatus`
-  // creates nothing and reports a failed read, and only four fields per key
-  // leave this block.
-  let integrationKeys: unknown;
-  try {
-    const status = await readProviderKeyStatus(env);
-    const lastSet = await readProviderKeyLastSet(env);
-    const items = status.items.map((item) => {
-      const state = keyStateOf(item, status.db_readable);
-      let lastSetAt: string | null = null;
-      let lastSetBasis: 'console_audit' | 'd1_row' | 'no_record' | 'unreadable' | null = null;
-      if (state === 'env') {
-        if (!lastSet.available) {
-          lastSetBasis = 'unreadable';
-        } else {
-          lastSetAt = lastSet.byProvider.get(item.provider_key) ?? null;
-          lastSetBasis = lastSetAt ? 'console_audit' : 'no_record';
-        }
-      } else if (state === 'db') {
-        lastSetAt = item.updated_at ?? null;
-        lastSetBasis = lastSetAt ? 'd1_row' : 'no_record';
-      }
-      return { provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis };
-    });
-    const count = (st: string) => items.filter((it) => it.state === st).length;
-    integrationKeys = {
-      available: true,
-      managed: MANAGED_PROVIDERS.length,
-      db_readable: status.db_readable,
-      db_reason: status.db_readable
-        ? null
-        : 'The key table could not be read, so a key not set as a Worker secret may or may not be '
-          + 'held there. Those rows say unknown rather than unset.',
-      counts: { env: count('env'), db: count('db'), unset: count('unset'), unreadable: count('unreadable') },
-      items,
-      last_set_available: lastSet.available,
-      last_set_reason: lastSet.available
-        ? LAST_SET_BASIS_NOTE
-        : 'The audit log could not be read, so when a key held as a Worker secret was last saved is unknown.',
-      notes: KEY_NOTES,
-    };
-  } catch {
-    integrationKeys = {
-      available: false,
-      reason: 'The managed keys could not be read.',
-    };
-  }
-
-  // ── GitHub sync (D213, H16 P2) ────────────────────────────────────────
-  // Three reads, three states. The target is an env fact and cannot fail; the
-  // window is Support's own reader, reused rather than restated; the recent
-  // list is its own read. None of them creates a column.
-  const githubSync = {
-    target: githubMirrorTarget(env),
-    window: await readTicketSync(env),
-    recent: await readRecentSyncAttempts(env),
-    recent_note: SYNC_RECENT_NOTE,
-  };
-
-  // ── Payments catalog (D213, H16 P3) ───────────────────────────────────
-  // The publishable key is one KV read, the same answer checkout is given.
-  // Masked by the Payments console's own mask; its mode comes from its own
-  // prefix, never from anything secret.
-  const pk = await getPublishableKey(env);
-  const publishable = { configured: !!pk, masked: maskPublishableKey(pk), mode: publishableKeyMode(pk) };
-  const catalog = await readCatalogMirrorSummary(env);
-  // The deliveries block, now one reader shared with Payments' PAY5 (D1011).
-  const webhook = await readWebhookDeliveries(env);
-  const paymentsCatalog = {
-    publishable,
-    catalog,
-    webhook,
-    storefront_note: STOREFRONT_NOTE,
-  };
-
-  // ── Promo codes (D213, H16 P4) ────────────────────────────────────────
-  // No schema bootstrap: migration 099 is in the baseline, and a database
-  // without it answers unreadable rather than being altered by a read. The
-  // state of every code is counted, not only the listed fifty.
-  let promoCodes: unknown;
-  try {
-    const res = await env.DB.prepare(
-      `SELECT id, code, percent_off, amount_off, currency, duration, product_ids_json,
-              max_redemptions, times_redeemed, active, expires_at, created_at
-         FROM promo_codes
-        ORDER BY datetime(created_at) DESC, id DESC`,
-    ).all<{
-      id: string; code: string; percent_off: number | null; amount_off: number | null;
-      currency: string | null; duration: string; product_ids_json: string | null;
-      max_redemptions: number | null; times_redeemed: number; active: number;
-      expires_at: string | null; created_at: string;
-    }>();
-    const nowMs = Date.now();
-    const counts = { active: 0, inactive: 0, expired: 0, exhausted: 0 };
-    const all = (res.results || []).map((row) => {
-      const redeemed = countOf(row.times_redeemed, 'times redeemed');
-      const state = promoState(row, redeemed, nowMs);
-      counts[state] += 1;
-      // null in the column is the migration default, an empty list: every product.
-      // A value that is not a JSON array of strings did not parse.
-      const products = readProductIds(row.product_ids_json ?? '[]');
-      const productCount = products.ok ? products.ids.length : null;
-      return {
-        code: String(row.code),
-        state,
-        percent_off: row.percent_off == null ? null : Number(row.percent_off),
-        amount_off: row.amount_off == null ? null : Number(row.amount_off),
-        currency: row.currency ? String(row.currency) : null,
-        duration: String(row.duration),
-        // null is "the list did not parse", which is not "all products" (0).
-        product_count: productCount,
-        max_redemptions: row.max_redemptions == null ? null : Number(row.max_redemptions),
-        times_redeemed: redeemed,
-        expires_at: row.expires_at || null,
-      };
-    });
-    promoCodes = {
-      available: true,
-      total: all.length,
-      counts,
-      items: all.slice(0, PROMO_LIST_LIMIT),
-      listed_limit: PROMO_LIST_LIMIT,
-      truncated: all.length > PROMO_LIST_LIMIT,
-      caveats: PROMO_CAVEATS,
-    };
-  } catch {
-    promoCodes = {
-      available: false,
-      reason: 'The promo code mirror could not be read, so no code is listed rather than none existing.',
-    };
-  }
-
-  return c.json({
-    integrations,
-    jobs,
-    monitoring: { dlq, incidents },
-    broadcast: { telegram, x },
-    // D213 — H16's four consoles, summarised, each block its own state.
-    integration_keys: integrationKeys,
-    github_sync: githubSync,
-    payments_catalog: paymentsCatalog,
-    promo_codes: promoCodes,
-    // D203 — the switches block is the whole answer now. It used to travel
-    // with `flags_available: false` and a sentence saying no operator store
-    // existed; the store exists, and the writable entry in `switches` says
-    // what it holds. A refusal nothing reads would be a producer with no
-    // reader, so the pair is gone rather than flipped.
-    switches,
-
-    ...DERIVED_UNAVAILABLE,
-  });
+  // D4859: every panel is read at once, each in its own state; a reader that fails or hangs answers for its own block only.
+  return c.json({ ...(await readPlatformSummary(c.env)), ...DERIVED_UNAVAILABLE });
 });
 
 // ---------------------------------------------------------------------------
@@ -593,7 +198,7 @@ r.post('/switches/:key', async (c) => {
     return c.json({ error: 'No switch has that name.', code: 'unknown_switch' }, 404);
   }
 
-  let body: { action?: unknown; reason?: unknown } = {};
+  let body: { action?: unknown; reason?: unknown; revision?: unknown } = {};
   try { body = (await c.req.json()) ?? {}; } catch { body = {}; }
   const action = String(body.action ?? '');
   if (action !== 'throw' && action !== 'release') {
@@ -608,26 +213,73 @@ r.post('/switches/:key', async (c) => {
   }
 
   const thrown = action === 'throw';
+  // D4703 (#4703): a release names the activation it ends. Without it an old
+  // tab could clear a newer throw; a release that does not say which is refused.
+  const revision = body.revision;
+  if (!thrown && !(typeof revision === 'number' && Number.isSafeInteger(revision) && revision >= 0)) {
+    return c.json({
+      error: 'A release must name the revision of the throw it ends. Reload the switch and try again.',
+      code: 'revision_required',
+    }, 400);
+  }
+  const auditAction = thrown ? 'platform_switch_thrown' : 'platform_switch_released';
   let changed: boolean;
+  let recorded = true;
+  let mirrored: boolean | null = null;
   try {
-    ({ changed } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id));
+    // The change and its audit row in one batch: both or neither (D4703).
+    // D4860 part 3: a throw is mirrored to KV first; a D1 outage then still
+    // stops Eadwyn, answered 202 below with no audit row yet.
+    await ensureAdminAuditLogTable(c.env);
+    ({ changed, recorded, mirrored } = await setOperatorSwitch(c.env, key, thrown, reason, actor.id, {
+      revision: thrown ? undefined : (revision as number),
+      audit: adminAuditStatement(c.env, actor.id, auditAction, { reason, switch_key: key, ...(thrown ? {} : { revision }) }, { onlyIfChanged: true }),
+      auditMirrorOnly: thrown ? undefined : adminAuditStatement(c.env, actor.id, auditAction, { reason, switch_key: key, revision, store: 'emergency' }),
+    }));
   } catch {
     return c.json({
       error: 'The operator switch store could not be written, so nothing was changed.',
       code: 'store_unavailable',
     }, 503);
   }
+  if (thrown && !recorded) {
+    return c.json({
+      ok: true,
+      recorded: false,
+      code: 'thrown_unrecorded',
+      message: 'Thrown in the emergency store, so Eadwyn stops within about a minute everywhere. The database did not '
+        + 'answer, so there is no audit row yet: throw it again once the database answers to record it.',
+    }, 202);
+  }
+  if (!thrown && changed && mirrored === false) {
+    return c.json({
+      ok: true,
+      code: 'release_incomplete',
+      message: 'Released in the database, but the emergency store still holds the switch, so Eadwyn stays off. '
+        + 'Release it again to clear the emergency store.',
+    }, 202);
+  }
   if (!changed) {
+    if (!thrown) {
+      const now = await readOperatorSwitches(c.env, { fresh: true }).catch(() => null);
+      const row = now && now.readable ? now.rows.get(key) : null;
+      if (row?.thrown && row.revision !== revision) {
+        return c.json({
+          error: 'This switch was thrown again after this page read it. Nothing was released. Reload to see the current throw.',
+          code: 'stale_revision',
+          current_revision: row.revision,
+        }, 409);
+      }
+    }
     return c.json({
       error: thrown ? 'That switch is already thrown.' : 'That switch is not thrown, so there is nothing to release.',
       code: 'no_change',
     }, 409);
   }
 
-  await logAdminAction(c.env, actor.id, actor.email, thrown ? 'platform_switch_thrown' : 'platform_switch_released', {
-    reason,
-    switch_key: key,
-  });
+  // The hashed-actor activity row stays best-effort: the governance row above
+  // is the record, and it landed with the change.
+  await logAdminActivityOnly(c.env, actor, auditAction, { reason, switch_key: key });
 
   // The switch as it now stands, read back from the store — including whether
   // the deploy half still holds it on after a release, which a release cannot
@@ -640,8 +292,8 @@ r.post('/switches/:key', async (c) => {
     ok: true,
     switch: entry,
     message: thrown
-      ? `Thrown. This deployment refuses at once; every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds.`
-      : `Released. Every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds, unless the deployment still holds it on.`,
+      ? `Thrown. This deployment refuses at once; every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds${mirrored === false ? ', but the emergency store did not take it, so a database outage could release it: throw it again to mirror it' : ''}.`
+      : `Released. Every instance follows within ${OPERATOR_SWITCH_TTL_MS / 1000} seconds${mirrored ? ', and within about a minute where the emergency store is read' : ''}, unless the deployment still holds it on.`,
   });
 });
 
@@ -663,6 +315,31 @@ r.post('/switches/:key', async (c) => {
 // future charge WOULD use and that today's ledger projects with. The response
 // says so rather than leaving a percentage to imply otherwise. D75.
 // ---------------------------------------------------------------------------
+/**
+ * D4703 (#4703): a take rate in basis points, or null. A JSON integer, or a
+ * string of digits only. Missing, null, blank, `'0x10'`, `'1e3'`, `12.5` and
+ * `true` are all refused: `Number('')` is 0, and the old parse wrote 0% for a
+ * request that sent nothing.
+ */
+export function parseTakeRateBps(raw: unknown): number | null {
+  let n: number;
+  if (typeof raw === 'number') n = raw;
+  else if (typeof raw === 'string' && /^\d+$/.test(raw.trim())) n = Number(raw.trim());
+  else return null;
+  return Number.isSafeInteger(n) && n >= 0 && n <= MAX_TAKE_RATE_BPS ? n : null;
+}
+
+/** The hashed-actor `activity_logs` row only; the governance row was batched with the change. */
+async function logAdminActivityOnly(env: Env, actor: { id: number; email?: string | null }, action: string, details: Record<string, unknown>) {
+  try {
+    const { hashEmail } = await import('../util/hashEmail');
+    await env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)')
+      .bind(action, JSON.stringify(details), await hashEmail(actor.email || ''), actor.id).run();
+  } catch (e) {
+    console.warn('[admin_platform] activity_logs write failed', action, (e as Error).message);
+  }
+}
+
 r.get('/take-rate', async (c) => {
   const admin = await requireSuperAdmin(c);
   void admin;
@@ -684,15 +361,17 @@ r.get('/take-rate', async (c) => {
 });
 
 r.put('/take-rate', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
+  // D4703 (#4703): the write bar, as the switch write has — a TOTP session and
+  // a recent step-up. A rate that decides what the platform charges is as
+  // sensitive as a switch.
   const body = await c.req.json().catch(() => ({} as any));
 
   // BASIS POINTS ONLY, and no coercion from a percentage. Accepting both would
   // make `15` ambiguous — 15 bps is 0.15% and 15% is 1500 — and the form that
   // guessed wrong would undercharge by a factor of a hundred without erroring.
-  const raw = body.bps;
-  const bps = typeof raw === 'number' ? raw : Number(String(raw ?? '').trim());
-  if (!Number.isInteger(bps) || bps < 0 || bps > MAX_TAKE_RATE_BPS) {
+  const bps = parseTakeRateBps(body.bps);
+  if (bps == null) {
     return c.json({
       detail: `bps must be a whole number of basis points between 0 and ${MAX_TAKE_RATE_BPS} `
         + `(1500 = 15%). A percentage is not accepted here: 15 would be 0.15%.`,
@@ -701,29 +380,30 @@ r.put('/take-rate', async (c) => {
 
   const before = await takeRate(c.env);
   const actor = String((admin as any)?.email || (admin as any)?.id || 'super_admin');
-  await c.env.DB.prepare(
-    `INSERT INTO platform_settings (key, value, updated_at, updated_by)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-  ).bind(TAKE_RATE_KEY, String(bps), new Date().toISOString(), actor).run();
 
   // AUDITED, and the BEFORE value is in the row. "Someone set it to 12%" does
   // not answer "what was it before, and for how long" — which is the question
-  // asked when an advisor disputes a quarter. Best-effort, matching the
-  // convention elsewhere: the setting has already changed, so a logging hiccup
-  // must not imply it has not.
+  // asked when an advisor disputes a quarter.
+  //
+  // D4703 (#4703): THE SETTING AND ITS RECORD IN ONE BATCH. The audit used to
+  // run after the write, inside a try/catch that swallowed a failure, so the
+  // rate could change with no row saying who changed it or from what. Now a
+  // failed audit fails the write too, and nothing changes.
   try {
     await ensureAdminAuditLogTable(c.env);
-    await c.env.DB.prepare(
-      `INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json)
-       VALUES (?, ?, ?, ?)`,
-    ).bind(
-      (admin as any).id, 'advisor_take_rate_update', 'platform',
-      JSON.stringify({ from_bps: before.bps, from_source: before.source, to_bps: bps }),
-    ).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO platform_settings (key, value, updated_at, updated_by)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      ).bind(TAKE_RATE_KEY, String(bps), new Date().toISOString(), actor),
+      adminAuditStatement(c.env, (admin as any).id, 'advisor_take_rate_update',
+        { from_bps: before.bps, from_source: before.source, to_bps: bps }),
+    ]);
   } catch (e: any) {
-    console.warn('[admin_platform] take-rate audit failed:', String(e?.message || e));
+    console.warn('[admin_platform] take-rate write failed:', String(e?.message || e));
+    return c.json({ detail: 'The take rate could not be saved with its audit record, so nothing was changed.', code: 'store_unavailable' }, 503);
   }
 
   const after = await takeRate(c.env);
@@ -743,10 +423,109 @@ r.put('/take-rate', async (c) => {
   });
 });
 
+// D4703 (#4703): advisory charges that landed on a cancelled or missed
+// booking, owed back under the no-cancellation-fee policy. Open rows first.
+// Booking uid and amount only: no founder or advisor is named here. #5305 adds
+// the row's id (what the resolve below names), and for a resolved row who
+// resolved it (an operator, by name), when, and the reason they gave.
+r.get('/advisory-refunds-due', async (c) => {
+  await requireSuperAdmin(c);
+  try {
+    const rows = await c.env.DB.prepare(
+      `SELECT r.id AS id, r.booking_uid AS booking_uid, r.booking_status AS booking_status,
+              r.payment_intent_id AS payment_intent_id, r.amount_cents AS amount_cents, r.currency AS currency,
+              r.created_at AS created_at, r.resolved_at AS resolved_at, r.resolved_by AS resolved_by,
+              u.name AS resolved_by_name, r.resolution_reason AS resolution_reason
+         FROM advisory_refunds_due r
+         LEFT JOIN users u ON u.id = r.resolved_by
+        ORDER BY (r.resolved_at IS NOT NULL), r.created_at DESC LIMIT 200`,
+    ).all<Record<string, unknown>>();
+    const items = rows.results || [];
+    return c.json({ items, open: items.filter((r) => r.resolved_at == null).length });
+  } catch {
+    return c.json({ error: 'The refunds-due record could not be read.', code: 'store_unavailable' }, 503);
+  }
+});
+
+// #5305 (D4703 "Built"): an operator records that one refund due was paid
+// back. SUPER ADMIN with the write bar, like every other platform write
+// (D4703 item 14). A written reason is required. The row and its
+// `admin_audit_log` row are one batch, and the UPDATE is conditional on the
+// row still being open, so two operators resolving at once leave one
+// resolution and one audit row; the second is refused with 409.
+//
+// THIS MOVES NO MONEY AND CALLS NO PROVIDER. Refunds stay manual (the owner,
+// 2026-11-07): the operator refunds outside the platform and records it here.
+/** The shortest reason a resolve accepts: the same 12 a refund issued through HQ takes (D224). */
+export const REFUND_DUE_REASON_MIN = 12;
+
+r.post('/advisory-refunds-due/:id/resolve', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return c.json({ error: 'No refund due has that id.', code: 'not_found' }, 404);
+  }
+  let body: { reason?: unknown } = {};
+  try { body = (await c.req.json()) ?? {}; } catch { body = {}; }
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  if (reason.length < REFUND_DUE_REASON_MIN || reason.length > 500) {
+    return c.json({
+      error: `Say how this was refunded, in ${REFUND_DUE_REASON_MIN} to 500 characters. It is kept with the row and in the audit log.`,
+      code: 'reason_required',
+    }, 400);
+  }
+  let row: { booking_uid: string; amount_cents: number | null; currency: string | null; resolved_at: string | null } | null;
+  try {
+    row = await c.env.DB.prepare(
+      'SELECT booking_uid, amount_cents, currency, resolved_at FROM advisory_refunds_due WHERE id = ?',
+    ).bind(id).first<{ booking_uid: string; amount_cents: number | null; currency: string | null; resolved_at: string | null }>();
+  } catch {
+    return c.json({ error: 'The refunds-due record could not be read, so nothing was changed.', code: 'store_unavailable' }, 503);
+  }
+  if (!row) return c.json({ error: 'No refund due has that id.', code: 'not_found' }, 404);
+  const alreadyResolved = () => c.json({
+    error: 'This refund due is already resolved. Nothing was changed.', code: 'already_resolved',
+  }, 409);
+  if (row.resolved_at != null) return alreadyResolved();
+  let changed = 0;
+  try {
+    await ensureAdminAuditLogTable(c.env);
+    const out = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE advisory_refunds_due
+            SET resolved_at = datetime('now'), resolved_by = ?, resolution_reason = ?
+          WHERE id = ? AND resolved_at IS NULL`,
+      ).bind(actor.id, reason, id),
+      adminAuditStatement(c.env, actor.id, 'advisory_refund_due_resolved', {
+        refund_due_id: id, booking_uid: row.booking_uid, amount_cents: row.amount_cents,
+        currency: row.currency, reason,
+      }, { onlyIfChanged: true }),
+    ]);
+    changed = Number((out?.[0] as any)?.meta?.changes ?? 0);
+  } catch {
+    return c.json({
+      error: 'The resolution could not be saved with its audit record, so nothing was changed.', code: 'store_unavailable',
+    }, 503);
+  }
+  if (changed === 0) return alreadyResolved();
+  const after = await c.env.DB.prepare(
+    'SELECT resolved_at, resolved_by, resolution_reason FROM advisory_refunds_due WHERE id = ?',
+  ).bind(id).first<{ resolved_at: string; resolved_by: number; resolution_reason: string }>().catch(() => null);
+  return c.json({
+    ok: true,
+    id,
+    resolved_at: after?.resolved_at ?? null,
+    resolved_by: actor.id,
+    resolution_reason: reason,
+    moves_money: false,
+  });
+});
+
 // D886 B10: aggregated HQ operations, never customer content.
 r.get('/meeting-bots', async (c) => {
   await requireSuperAdmin(c);
-  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy() });
+  // D5153: the recent failed runs, each with its startup stage, code and next step.
+  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy(), recent_failures: await readRecentBotFailures(c.env) });
 });
 
 // A test uses a fresh, consented session owned by the operator. It cannot
@@ -853,6 +632,78 @@ r.get('/storage', async (c) => {
   await requireSuperAdmin(c);
   c.header('Cache-Control', 'private, no-store');
   return c.json(await readPlatformStorage(c.env));
+});
+
+/**
+ * D4559 (#4559) — platform capacity, read-only: this Worker's D1 size against
+ * its plan limit with warning/critical levels, each producer queue's backlog
+ * and oldest-message age, and which declared bindings are present. Worker-
+ * native reads only (no account API, no token). A source that does not answer
+ * is `unavailable` with a reason, never a zero, and keeps the overall level
+ * from reading `ok`. No member, company or tenant is named.
+ */
+r.get('/capacity', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  return c.json(await readPlatformCapacity(c.env));
+});
+
+/**
+ * D4559 part 2 — the trend. `days` is 1..365 (default 90). Each series is the
+ * daily snapshot of one deployment metric; an unreadable day is a null point,
+ * never a zero. `d1_projection` names a month, its window and a confidence, or
+ * says why there is none.
+ */
+r.get('/capacity/history', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  const raw = c.req.query('days');
+  const days = raw === undefined ? HISTORY_DAYS_DEFAULT : Number(raw);
+  if (!Number.isInteger(days) || days < 1 || days > HISTORY_DAYS_MAX) {
+    return c.json({ detail: `days must be a whole number from 1 to ${HISTORY_DAYS_MAX}.` }, 400);
+  }
+  const scope = branchOf(c.env) ? 'branch' : 'hq';
+  const history = await readCapacityHistory(c.env, scope, days, d1Policy(c.env).limit);
+  if (history.state === 'unreadable') return c.json({ ...history, detail: history.reason }, 503);
+  return c.json(history);
+});
+
+/** D4559 part 2 — the alert episodes. An unreadable store is 503, never an empty list. */
+r.get('/capacity/alerts', async (c) => {
+  await requireSuperAdmin(c);
+  c.header('Cache-Control', 'private, no-store');
+  const alerts = await readCapacityAlerts(c.env, branchOf(c.env) ? 'branch' : 'hq');
+  if (alerts.state === 'unreadable') return c.json({ ...alerts, detail: alerts.reason }, 503);
+  return c.json(alerts);
+});
+
+/**
+ * D4559 part 2 — mute one OPEN episode. It is still tracked and still clears on
+ * recovery; only its notices stop until `muted_until`. A reason is required and
+ * audited. A cleared or unknown episode is 404.
+ */
+r.post('/capacity/alerts/:id/mute', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ detail: 'Alert not found.' }, 404);
+  const b = (await c.req.json().catch(() => ({}))) as { hours?: unknown; reason?: unknown };
+  const hours = Number(b.hours);
+  if (!Number.isInteger(hours) || hours < 1 || hours > MUTE_MAX_HOURS) {
+    return c.json({ detail: `hours must be a whole number from 1 to ${MUTE_MAX_HOURS}.` }, 400);
+  }
+  const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
+  if (reason.length < 5 || reason.length > 500) {
+    return c.json({ detail: 'Say why this alert is muted (5 to 500 characters).' }, 400);
+  }
+  let result;
+  try {
+    result = await muteCapacityAlert(c.env, id, hours, reason, actor.id);
+  } catch {
+    return c.json({ detail: 'The alert could not be muted. Nothing changed.' }, 503);
+  }
+  if (!result.changed) return c.json({ detail: 'Alert not found, or it has already cleared.' }, 404);
+  await logAdminAction(c.env, actor.id, actor.email, 'platform_capacity_alert_muted', { alert_id: id, hours, reason });
+  return c.json({ ok: true, muted_until: result.muted_until });
 });
 
 export default r;

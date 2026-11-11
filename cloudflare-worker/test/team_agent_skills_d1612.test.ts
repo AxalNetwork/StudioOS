@@ -51,6 +51,10 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
+  db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   db.exec(sql('migrations/091_user_skill_profile.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invited_by INTEGER, created_at TEXT, updated_at TEXT)`);
@@ -90,8 +94,9 @@ function app() {
     const status = AUTH_ERROR_STATUSES[e?.message];
     return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error', m: String(e?.message) }, 500);
   });
-  a.route('/api/teams', teamSkills);
+  // Production order (index.ts): team_agents is mounted before team_skills. #4733: the other order hid the shadowing.
   a.route('/api/teams', teamAgents);
+  a.route('/api/teams', teamSkills);
   return a;
 }
 async function call(w: W, who: number, method: string, path: string, body?: unknown, company?: number) {
@@ -258,6 +263,44 @@ test('A2 add-agent takes skills through the same gates; a refused skill adds no 
   const added = await call(w, EDITOR, 'POST', '/project/' + ALONE + '/agents', body({ skills: [{ uid: cfo }] }));
   assert.equal(added.status, 201, added.text);
   assert.deepEqual(links(w).map((l) => [l.skill, l.version]), [[cfo, 1]]);
+  // D4534: the skills an agent was added with are one skills_changed event, by the person who added it.
+  const ev = w.db.prepare("SELECT actor_user_id, detail_json FROM team_agent_events WHERE kind = 'skills_changed'").all() as any[];
+  assert.deepEqual(ev.map((e) => [e.actor_user_id, JSON.parse(e.detail_json)]), [[EDITOR, { added: [{ uid: cfo, version: 1 }], repinned: [], removed: [] }]]);
+});
+
+test('Team Skills lists a large HQ draft catalogue with bounded queries and keeps drafts scoped to writers', async () => {
+  const w = world();
+  try {
+    const publishedUid = await published(w, update());
+    await call(w, EDITOR, 'PUT', `/agents/${CFO}/skills`, { skills: [{ uid: publishedUid }] });
+    const companyDraft = await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme draft' }));
+    assert.equal(companyDraft.status, 201, companyDraft.text);
+    const before = await call(w, SUPER, 'GET', '/skills?company=co-uid-1');
+    assert.equal(before.status, 200, before.text);
+
+    const insert = w.db.prepare(`INSERT INTO agent_skills (uid, scope, slug, name, purpose, steps_json, allowed_tools_json, output_kind, created_by)
+      VALUES (?, 'hq', ?, ?, 'An unpublished draft.', '[]', '[]', 'draft', ?)`);
+    for (let i = 0; i < 180; i++) insert.run((1000 + i).toString(16).padStart(32, '0'), `draft-${i}`, `Extra draft ${i}`, SUPER);
+    const originalPrepare = w.env.DB.prepare.bind(w.env.DB);
+    let queries = 0;
+    w.env.DB.prepare = (statement: string) => { queries++; return originalPrepare(statement); };
+
+    const preview = await call(w, SUPER, 'GET', '/skills?company=co-uid-1');
+    assert.equal(preview.status, 200, preview.text);
+    assert.ok(queries <= 20, `expected a bounded catalogue read, prepared ${queries} queries`);
+    assert.equal(preview.body.hq.length, 181);
+    assert.equal(preview.body.company.skills.length, 0, 'HQ cannot read a company draft as its editor');
+    assert.deepEqual(preview.body.hq[0], before.body.hq[0], 'published card and token costs survive a large draft catalogue');
+    assert.equal(preview.body.hq[0].used_by, 1);
+    assert.ok(preview.body.hq[0].context_tokens > 0);
+    assert.equal(preview.body.hq[1].can_write, true);
+
+    const editor = await call(w, EDITOR, 'GET', '/skills?company=co-uid-1&role=cfo');
+    assert.deepEqual(editor.body.hq.map((s: any) => [s.uid, s.can_write, s.draft]), [[publishedUid, false, undefined]]);
+    assert.deepEqual(editor.body.company.skills.map((s: any) => [s.uid, s.draft]), [[companyDraft.body.skill.uid, companyDraft.body.skill.draft]]);
+    const other = await call(w, OTHER_EDITOR, 'GET', '/skills?company=co-uid-1');
+    assert.equal(other.status, 404);
+  } finally { w.db.close(); }
 });
 
 test('A2 coverage: per axis the people\'s highest level and the agents\'; an agent-only axis has people_level null', async () => {

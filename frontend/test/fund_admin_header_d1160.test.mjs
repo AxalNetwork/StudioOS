@@ -19,9 +19,10 @@ import FundOpsRedirect from '../src/pages/admin/fundAdmin/FundOpsRedirect.jsx';
 import FundAdminBoundary from '../src/pages/admin/fundAdmin/Refusal.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import {
-  FILTER_KEPT, LINE, MOVED_NOTICE, REFUSALS, TITLE, fundFilter, fundOpsTarget, fundsCsv, headerPrimary, moreItems,
-  profilePill, tabCounts, withFund,
+  LINE, MOVED_NOTICE, REFUSALS, TITLE, fundFilter, fundOpsTarget, fundsCsv, headerPrimary, moreItems,
+  profilePill, withFund,
 } from '../src/pages/admin/fundAdmin/fundAdminModel.js';
+import { WORKSPACES, primaryAction, workspaceFlags } from '../src/pages/admin/fundAdmin/workspaceModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -118,28 +119,42 @@ test('the primary button is the act table\'s: the Super Admin\'s "New capital ca
   assert.deepEqual(headerPrimary('funds', ACCESS(true), null, 7), { label: 'Edit fund facts', to: '/admin/fund-admin/funds/7?edit=facts' });
 });
 
-test('the tab counts: a number read, a dash with its reason, the amber flag with what waits — never a zero', () => {
-  const c = tabCounts(OVERVIEW());
-  assert.deepEqual(c.funds, { kind: 'num', value: 2 });
-  assert.equal(c.lps.kind, 'dash');
-  assert.match(c.lps.tip, /the LPs tab reads its own roster/);
-  assert.deepEqual(c.calls, { kind: 'flag', value: 3, testId: 'fund-admin-flag-calls' });
+test('D4812: the six workspaces carry only the amber flag with what waits — never a count no read gives, never "—"', () => {
+  assert.deepEqual(WORKSPACES.map((w) => w.label), ['Overview', 'Investors', 'Capital', 'Portfolio', 'Reporting', 'Banking & Books']);
+  const c = workspaceFlags(OVERVIEW());
+  assert.deepEqual(c.capital, { kind: 'flag', value: 3, testId: 'fund-admin-flag-capital' });
   assert.deepEqual(c.banking, { kind: 'flag', value: 5, testId: 'fund-admin-flag-banking' });
-  assert.deepEqual(c.reports, { kind: 'flag', value: 2, testId: 'fund-admin-flag-reports' });
-  const quiet = tabCounts({ ...OVERVIEW(), drafts: { state: 'ok', items: [] } });
-  assert.equal(quiet.reports, null, 'nothing waits: no flag, never a 0');
-  assert.deepEqual(tabCounts({}).funds, { kind: 'dash', tip: 'The administered funds could not be read.' });
-  assert.deepEqual(tabCounts(null).funds, { kind: 'load' });
+  assert.deepEqual(c.reporting, { kind: 'flag', value: 2, testId: 'fund-admin-flag-reporting' });
+  const quiet = workspaceFlags({ ...OVERVIEW(), drafts: { state: 'ok', items: [] } });
+  assert.equal(quiet.reporting, null, 'nothing waits: no flag, never a 0');
+  for (const v of Object.values(workspaceFlags({}))) assert.equal(v, null, 'an unread overview flags nothing');
+  assert.ok(Object.values(c).every((v) => v == null || v.kind === 'flag'), 'no dash, no number count');
+});
+
+test('D4812: the primary follows state — overdue first, never a capital call on a fund with nothing committed, never a money act on an unread table', () => {
+  const o = OVERVIEW();
+  assert.deepEqual(primaryAction({ view: 'overview', access: ACCESS(true), overview: o }), { label: 'Review overdue lines', to: '/admin/fund-admin/calls?fund=7' });
+  assert.deepEqual(primaryAction({ view: 'overview', access: ACCESS(true), overview: o, fundId: 9 }), { label: 'New capital call', to: '/admin/fund-admin/calls?fund=9' });
+  assert.equal(primaryAction({ view: 'overview', access: ACCESS(false), overview: o, fundId: 9 }).label, 'Preview a capital call');
+  assert.equal(primaryAction({ view: 'overview', access: null, overview: o, fundId: 9 }), null, 'unverified permissions: no money act');
+  const empty = { ...o, funds: { state: 'ok', items: [{ ...o.funds.items[1], committed_cents: 0, overdue_lines: 0 }] }, drafts: { state: 'ok', items: [] }, matches: { state: 'ok', items: [] } };
+  assert.deepEqual(primaryAction({ view: 'overview', access: ACCESS(true), overview: empty }), { label: 'Add LP', to: '/admin/fund-admin/lps?add=1&fund=9' });
+  assert.deepEqual(primaryAction({ view: 'calls', access: ACCESS(true), overview: empty, fundId: 9, fallback: { label: 'New capital call', to: '/funds/calls?fund=9' } }), { label: 'Add LP', to: '/admin/fund-admin/lps?add=1&fund=9' });
+  const matched = { ...o, funds: { state: 'ok', items: [o.funds.items[1]] }, matches: { state: 'ok', items: [{ fund_id: 9, proposed: 2, needs_review: 0 }] } };
+  assert.deepEqual(primaryAction({ view: 'overview', access: ACCESS(true), overview: matched }), { label: 'Reconcile 2', to: '/admin/fund-admin/banking/reconciliation' });
+  assert.deepEqual(primaryAction({ view: 'overview', access: ACCESS(true), overview: { ...o, funds: { state: 'ok', items: [] } } }), { label: 'New fund', to: '/admin/fund-admin/funds?new=1' });
+  assert.equal(primaryAction({ view: 'overview', access: ACCESS(true), overview: null }), null, 'nothing read: no primary is guessed');
+  assert.equal(primaryAction({ view: 'distributions', access: null, fallback: { label: 'Preview a distribution', to: '/x' } }), null);
+  assert.deepEqual(primaryAction({ view: 'lps', access: null, fallback: { label: 'Add LP', to: '/y' } }), { label: 'Add LP', to: '/y' });
 });
 
 test('the fund filter: All funds and each fund, a per-fund tab picks one, and the filter rides every tab', () => {
   const funds = [{ id: 7, name: 'Fund I' }, { id: 9, name: 'Fund II' }];
   const all = fundFilter(funds, '', 'overview');
   assert.deepEqual(all.pills.map((p) => [p.label, p.on]), [['All funds', true], ['Fund I', false], ['Fund II', false]]);
-  assert.equal(all.note, null);
   const kept = fundFilter(funds, '?fund=9', 'lps');
   assert.deepEqual(kept.pills.map((p) => p.on), [false, false, true]);
-  assert.equal(kept.note, FILTER_KEPT, 'a tab that shows every fund says so');
+  assert.ok(!('note' in kept), 'D4812: every view reads the scope, so none says it is "kept"');
   const per = fundFilter(funds, '', 'calls');
   assert.deepEqual(per.pills.map((p) => [p.label, p.on]), [['Fund I', true], ['Fund II', false]], 'a per-fund tab offers no All funds');
   assert.equal(withFund('/admin/fund-admin/calls', '?fund=7&moved=fund-ops', 9), '/admin/fund-admin/calls?fund=9');
@@ -147,9 +162,10 @@ test('the fund filter: All funds and each fund, a per-fund tab picks one, and th
 });
 
 test('More, the pill, Export and the forward\'s address', () => {
-  assert.deepEqual(moreItems(ACCESS(true)).map((m) => m.key), ['hq-funds', 'lp-applications', 'export']);
-  assert.deepEqual(moreItems(ACCESS(false)).map((m) => m.key), ['lp-applications', 'export'], 'HQ › Funds is the Super Admin\'s');
-  assert.equal(moreItems(ACCESS(true))[0].to, '/admin/funds');
+  assert.deepEqual(moreItems(ACCESS(true)).map((m) => m.key), ['funds', 'hq-funds', 'lp-applications', 'export']);
+  assert.deepEqual(moreItems(ACCESS(false)).map((m) => m.key), ['funds', 'lp-applications', 'export'], 'HQ › Funds is the Super Admin\'s');
+  assert.equal(moreItems(ACCESS(true))[0].to, '/admin/fund-admin/funds', 'D4812: Funds opens from More');
+  assert.equal(moreItems(ACCESS(true))[1].to, '/admin/funds');
   assert.deepEqual(profilePill(ACCESS(true)), { label: 'Super Admin', tone: 'held' });
   assert.deepEqual(profilePill(ACCESS(false)), { label: 'Admin', tone: 'hq' });
   assert.equal(profilePill(null), null, 'no profile is claimed before the table reads');
@@ -163,21 +179,24 @@ test('More, the pill, Export and the forward\'s address', () => {
 
 /* ------------------------------------------------------------------ mounted */
 
-test('the header: title, profile pill, the one primary, More, the line, the as-of chip and the counts', async () => {
+test('the header: title, profile pill, the one primary, More, the line, Updated · Refresh and the flags', async () => {
   const v = await mount('/admin/fund-admin', { user: SUPER });
   try {
     assert.ok(v.by('fund-admin-header'));
     assert.match(v.text('fund-admin-header'), new RegExp(`^${TITLE}`));
     assert.equal(v.text('fund-admin-role'), 'Super Admin');
-    assert.equal(v.text('fund-admin-primary'), 'New capital call');
+    assert.equal(v.text('fund-admin-primary'), 'Review overdue lines', 'D4812: the most urgent thing waiting');
     assert.ok(v.text('fund-admin-header').includes(LINE));
-    assert.equal(v.text('fund-admin-as-of'), 'As of 2026-10-25');
-    assert.match(v.text('fund-admin-tab-funds'), /Funds 2/);
-    assert.equal(v.text('fund-admin-flag-calls'), '3');
+    assert.match(v.text('fund-admin-updated'), /^Updated \d{2}:\d{2} UTC · Refresh$/);
+    assert.deepEqual(v.ids().filter((id) => id.startsWith('fund-admin-tab-')), WORKSPACES.map((w) => `fund-admin-tab-${w.key}`));
+    assert.ok(!v.text('admin-page-tabs').includes('—'), 'no ambiguous dash count');
+    assert.equal(v.ids().filter((id) => id === 'fund-admin-scope').length, 1, 'one fund-scope control');
+    assert.ok(!v.by('fund-admin-filter-select'), 'the phone select that drew the same state twice is gone');
+    assert.equal(v.text('fund-admin-flag-capital'), '3');
     assert.equal(v.text('fund-admin-flag-banking'), '5');
     assert.ok(!v.by('fund-admin-flag-fees'));
     await v.click('admin-page-more');
-    assert.ok(v.by('fund-admin-more-hq-funds') && v.by('fund-admin-more-lp-applications') && v.by('fund-admin-more-export'));
+    assert.ok(v.by('fund-admin-more-funds') && v.by('fund-admin-more-hq-funds') && v.by('fund-admin-more-lp-applications') && v.by('fund-admin-more-export'));
   } finally { await v.close(); }
   const a = await mount('/admin/fund-admin/calls?fund=7', { user: ADMIN });
   try {
@@ -195,14 +214,16 @@ test('the fund filter survives a tab change, and a per-fund tab reads the fund i
     assert.equal(v.props('fund-admin-filter-f-9')['aria-current'], 'true');
     assert.ok(!v.by('fund-admin-filter-all'), 'a per-fund tab offers no All funds');
     assert.match(v.text('distributions-section'), /Distributions · Example Fund II/);
-    assert.equal(v.href('fund-admin-tab-reports'), '/admin/fund-admin/reports?fund=9');
-    assert.equal(v.href('fund-admin-tab-lps'), '/admin/fund-admin/lps?fund=9');
+    assert.equal(v.href('fund-admin-tab-reporting'), '/admin/fund-admin/reports?fund=9');
+    assert.equal(v.href('fund-admin-tab-investors'), '/admin/fund-admin/lps?fund=9');
+    assert.equal(v.props('fund-admin-tab-capital')['aria-current'], 'page', 'Distributions sits in Capital');
     assert.equal(v.href('fund-admin-filter-f-7'), '/admin/fund-admin/distributions?fund=7');
     assert.ok(!v.by('fund-select'), 'the tab\'s own chooser is gone: the header carries it');
   } finally { await v.close(); }
   const lps = await mount('/admin/fund-admin/lps?fund=9');
   try {
-    assert.equal(lps.text('fund-admin-filter-note'), FILTER_KEPT);
+    assert.ok(!lps.by('fund-admin-filter-note'), 'D4812: no "kept for another tab" sentence');
+    assert.match(lps.text('fund-admin-scope'), /Fund scope: Example Fund II/);
     assert.equal(lps.href('fund-admin-filter-all'), '/admin/fund-admin/lps');
     assert.ok(lps.by('fund-admin-panel-lps'), 'the tab and its panel are kept');
     assert.ok(lps.by('lps-section') && !lps.by('fund-admin-wait-lps'), 'D1162: the roster replaces the wait card');
@@ -230,8 +251,8 @@ test('an admin at /funds lands on Fund administration with the notice; /funds/pe
   } finally { await p.close(); }
   // An investor's /funds is unchanged: the landing for an investor, the forward for anyone else the guard admits.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/funds" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/funds" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\} \/>/);
 });
 
 test('the refusals (FND20): a branch admin, a support session and a member, each in the canvas\'s words, with no read', async () => {

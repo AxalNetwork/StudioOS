@@ -1,7 +1,7 @@
 // D1030 (#2387) — My events: Upcoming, Hosting, Discover and Past, each at its
 // own address, drawn from the reads that exist. Fixtures are worked out by hand
 // from `GET /api/events`, `/suggested` and `GET /api/public/events`.
-import test from 'node:test';
+import test, { after, before, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { Routes, Route } from 'react-router-dom';
@@ -15,6 +15,11 @@ const read = (p) => readFileSync(new URL('../../' + p, import.meta.url), 'utf8')
 const pagePath = 'pages/events/MyEventsPage.jsx';
 const page = read('frontend/src/' + pagePath);
 const NOW = Date.parse('2026-11-10T12:00:00Z');
+// The pages read the clock, and the fixture's events sit days after NOW: from 2026-11-12 18:00 UTC the real clock
+// passes the next event and Upcoming, Hosting and Past change. So the clock is NOW (D5398: a test never depends on the
+// day it runs; found by the +7-day run).
+before(() => mock.timers.enable({ apis: ['Date'], now: NOW }));
+after(() => mock.timers.reset());
 const at = (iso) => ({ starts_at: iso, ends_at: null, timezone: 'UTC' });
 
 const ATTENDING = [
@@ -128,6 +133,8 @@ function stub(source) {
     .replace(/import \{ eventsPublic \} from [^;]+;/, `const eventsPublic = globalThis.${key}.publicApi;`)
     .replace(/import \{ useAuth \} from [^;]+;/, `const useAuth = () => ({ user: globalThis.${key}.user });`)
     .replace(/import \{ useToast \} from [^;]+;/, `const useToast = () => globalThis.${key}.toast;`)
+    // #4738: the recommendation reads are their own tests'; here they answer "not available", so the Suggested card is what the page draws.
+    .replace(/import \* as recommendations from [^;]+;/, "const recommendations = new Proxy({}, { get: () => async () => ({ available: false, reason: 'Recommendations aren’t available right now.' }) });")
     .replace(/import PageExplainer[^;]+;/, 'const PageExplainer = () => null;')
     .replace(/import EventQRCode[^;]+;/, 'const EventQRCode = ({ value }) => <canvas data-ticket-code={value} />;')
     .replace(/import \{ usePhoneWidth \} from [^;]+;/, 'const usePhoneWidth = () => false;');

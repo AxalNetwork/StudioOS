@@ -1,6 +1,9 @@
 // D4522: connect HQ reads to the existing Super Admin APIs, independently of rollout.
 import React, { useEffect, useState } from "react";
 import CohortCard from "./CohortCard.jsx";
+import PolicyControls from "./PolicyControls.jsx";
+import { policyRefusal } from "./refusals.js";
+import { provenanceRows } from "./provenanceModel.js";
 import { adminAiAgentsApi as api } from "../../../lib/api/adminAiAgents";
 const missing = "Not recorded";
 const money = (v) => (v == null ? missing : `$${(v / 1e6).toFixed(2)}`);
@@ -201,6 +204,7 @@ export function Runs() {
 }
 function RunDetail({ uid, close }) {
   const state = useRead(() => api.run(uid), uid);
+  const [open, setOpen] = useState(false);
   return (
     <section className={box}>
       <button onClick={close}>Close run</button>
@@ -217,7 +221,32 @@ function RunDetail({ uid, close }) {
           </>
         )}
       </Reading>
+      <details data-testid="run-provenance" onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="min-h-11 cursor-pointer">Provenance</summary>
+        {open && <RunProvenance uid={uid} />}
+      </details>
     </section>
+  );
+}
+/** #5346 (D4575): the run's lineage, read only when opened; "Not recorded" with its reason, never 0. */
+function RunProvenance({ uid }) {
+  const state = useRead(() => api.runProvenance(uid), uid);
+  return (
+    <Reading state={state}>
+      {(d) => (
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
+          {provenanceRows(d?.provenance).map((row) => (
+            <React.Fragment key={row.label}>
+              <dt className="font-semibold">{row.label}</dt>
+              <dd className="m-0 break-words">
+                {row.value}
+                {row.why ? <span className="text-axal-muted dark:text-gray-400"> ({row.why})</span> : null}
+              </dd>
+            </React.Fragment>
+          ))}
+        </dl>
+      )}
+    </Reading>
   );
 }
 export function Spend() {
@@ -310,18 +339,18 @@ export function Policies() {
   const [reason, setReason] = useState(""),
     [confirm, setConfirm] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(false);
+    [error, setError] = useState("");
   const change = async (paused) => {
     setBusy(true);
-    setError(false);
+    setError("");
     try {
       if (paused) await api.resumeAll(reason);
       else await api.pauseAll(reason, confirm);
       setReason("");
       setConfirm("");
       state.retry();
-    } catch {
-      setError(true);
+    } catch (e) {
+      setError(policyRefusal(e));
     } finally {
       setBusy(false);
     }
@@ -336,26 +365,7 @@ export function Policies() {
           </p>
         ) : (
           <div className="space-y-4">
-            <section className={box}>
-              <h2>Platform AI policy</h2>
-              <h3>Models by area</h3>
-              <p>{text(d.policy.area_models)}</p>
-              <h3>Locked models</h3>
-              <p>{text(d.policy.locks)}</p>
-              <h3>Caps</h3>
-              {[
-                "platform_budget",
-                "default_team_cap",
-                "max_team_cap",
-                "per_run_ceiling",
-              ].map((k) => (
-                <p key={k}>
-                  {k.replaceAll("_", " ")}: {money(d.policy[`${k}_microusd`])}
-                </p>
-              ))}
-              <h3>Allowed read tools</h3>
-              <p>{text(d.policy.read_tools)}</p>
-            </section>
+            <PolicyControls policy={d.policy} reload={state.retry} />
             <section className={box}>
               <h2>Guardrails</h2>
               <Table
@@ -378,7 +388,7 @@ export function Policies() {
                 rollout.
               </p>
               <label>
-                Reason · required
+                Reason to pause or resume · required
                 <textarea
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -412,9 +422,8 @@ export function Policies() {
                     : "Pause all AI agents"}
               </button>
               {error && (
-                <p role="alert">
-                  The change could not be saved. Read the current policy before
-                  trying again.{" "}
+                <p role="alert" data-testid="policy-pause-error">
+                  {error}{" "}
                   <button onClick={state.retry}>Refresh policy</button>
                 </p>
               )}

@@ -1,0 +1,34 @@
+{
+  "skill": "pr-media-outreach-planning",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "PR and Media Outreach Planning",
+        "task_scope": "Plans media outreach around newsworthiness, target outlets, spokesperson readiness and evidence-backed story angles.",
+        "evidence": [
+          "news angle and outlet fit"
+        ],
+        "omitted_field": "spokesperson approval"
+      },
+      "network.relationships": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for news angle and outlet fit."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "news angle and outlet fit"
+    ],
+    "must_say_not_recorded": [
+      "spokesperson approval"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

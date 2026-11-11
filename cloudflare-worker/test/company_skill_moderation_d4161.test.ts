@@ -47,6 +47,11 @@ function world() {
   db.exec(sql('migrations/759_agent_skills.sql'));
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql'));
+  // D4533: a publish writes the version's evidence column (null for a company skill); that migration builds on 202611022140.
+  db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql'));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611081919_skill_release_evidence.sql'));
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin', 'admin', null);
@@ -108,7 +113,8 @@ const inbox = (w: W, userId: number) => {
   try { return w.db.prepare('SELECT type, title, body FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(userId) as any[]; } catch { return []; }
 };
 const audits = (w: W) => {
-  try { return (w.db.prepare('SELECT action, filters_json FROM admin_audit_log ORDER BY id').all() as any[]).map((r) => ({ action: r.action, details: JSON.parse(r.filters_json) })); } catch { return []; }
+  // HQ's moderation rows only: since D4534 a company's own publish and retire are audited too, as `company_skill_*`.
+  try { return (w.db.prepare("SELECT action, filters_json FROM admin_audit_log WHERE action NOT LIKE 'company_skill_%' ORDER BY id").all() as any[]).map((r) => ({ action: r.action, details: JSON.parse(r.filters_json) })); } catch { return []; }
 };
 
 test('D4161: Super Admin only — a plain admin and a company editor are refused', async () => {

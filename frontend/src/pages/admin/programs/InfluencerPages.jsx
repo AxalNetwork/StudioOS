@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import Lightbox from '../../../ui/Lightbox';
 import { actionGhost, actionPrimary } from '../../../ui';
 import { adminInfluencersApi } from '../../../lib/api/adminInfluencers';
+import { parseMinor, toMajorString } from '../../../lib/money.js';
 import {
   BlockFailed, Card, Chip, DIALOG_BODY, DialogButtons, FIELD_LABEL, Field, INPUT, LINK, Pill, SUB, Skeleton, TD, TH,
 } from './parts';
@@ -298,20 +299,31 @@ export function FlagsCard() {
  * Offers (in11c)
  * ------------------------------------------------------------------ */
 
+/** D4810: an offers page; the cap is the Worker's (OFFERS_PAGE_MAX). */
+export const OFFERS_PAGE = 50;
+
 export function OffersTab({ superAdmin }) {
+  const [offset, setOffset] = useState(0);
+  // D4810: two reads whatever the number of influencers: the influencers (for
+  // New offer) and one page of every influencer's offers. It was one offers
+  // read per influencer, awaited in turn.
   const [read, reload] = useRead(async () => {
-    const { influencers = [] } = await adminInfluencersApi.list('all');
-    const rows = [];
-    for (const m of influencers) {
-      try {
-        const { offers = [] } = await adminInfluencersApi.offers(m.user_uid);
-        for (const o of offers) rows.push({ m, o });
-      } catch {
-        rows.push({ m, o: null });
-      }
-    }
-    return { influencers, rows };
-  }, []);
+    const [{ influencers = [] }, page] = await Promise.all([
+      adminInfluencersApi.list('all'),
+      // Offers carry budgets and spend: the Worker reads them to the Super Admin only.
+      adminInfluencersApi.allOffers({ limit: OFFERS_PAGE, offset }).catch((e) => {
+        if (Number(e?.status) === 403) return { refused: true };
+        throw e;
+      }),
+    ]);
+    if (page?.refused) return { influencers, rows: [], total: 0, refused: true };
+    if (!Array.isArray(page?.items)) throw new Error('The offers did not come back as a list.');
+    const rows = page.items.map(({ influencer, offer }) => ({
+      m: { uid: influencer?.user_uid, user_uid: influencer?.user_uid, handle: influencer?.handle ?? null, person: { name: influencer?.name ?? null } },
+      o: offer,
+    }));
+    return { influencers, rows, total: Number(page.total) || 0 };
+  }, [offset]);
   const [linking, setLinking] = useState(false);
   const [act, setAct] = useState(null);
   const rows = read.status === 'ready' ? read.data.rows : [];
@@ -326,7 +338,8 @@ export function OffersTab({ superAdmin }) {
       ) : null}
       {read.status === 'loading' ? <Skeleton lines={3} /> : null}
       {read.status === 'error' ? <BlockFailed what="The offers" onRetry={reload} testId="influencers-offers-unreadable" /> : null}
-      {read.status === 'ready' && !rows.length ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-empty">No influencer has an offer yet.</p> : null}
+      {read.status === 'ready' && read.data.refused ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-refused">Offers carry budgets and spend, so only the Super Admin reads them.</p> : null}
+      {read.status === 'ready' && !read.data.refused && !rows.length ? <p className={`m-0 ${SUB}`} data-testid="influencers-offers-empty">No influencer has an offer yet.</p> : null}
       {rows.length ? (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-[13px]" data-testid="influencers-offers-table">
@@ -358,6 +371,15 @@ export function OffersTab({ superAdmin }) {
           </table>
         </div>
       ) : null}
+      {read.status === 'ready' && read.data.total > OFFERS_PAGE ? (
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="influencers-offers-pages">
+          <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{`${offset + 1}–${offset + rows.length} of ${read.data.total}`}</span>
+          <span className="flex gap-2">
+            <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset === 0} onClick={() => setOffset((o) => Math.max(0, o - OFFERS_PAGE))} data-testid="influencers-offers-prev">Previous</button>
+            <button type="button" className="text-[12.5px] font-bold text-axal-violet disabled:opacity-40 dark:text-violet-300" disabled={offset + OFFERS_PAGE >= read.data.total} onClick={() => setOffset((o) => o + OFFERS_PAGE)} data-testid="influencers-offers-next">Next</button>
+          </span>
+        </div>
+      ) : null}
       {linking ? <LinkOfferDialog influencers={read.data.influencers} onClose={() => setLinking(false)} onLinked={reload} /> : null}
       {act ? (
         <ReasonDialog title={act.status === 'ended' ? 'End this offer' : act.status === 'paused' ? 'Pause this offer' : 'Resume this offer'}
@@ -378,6 +400,9 @@ export function LinkOfferDialog({ influencers, onClose, onLinked }) {
   const [budget, setBudget] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [featured, setFeatured] = useState(false);
+  // D5373: the budget is typed in the offer's own currency, at that currency's decimals.
+  const budgetParsed = parseMinor(budget, currency.trim().toUpperCase());
+  const budgetMinor = budgetParsed.ok ? budgetParsed.minor : 0;
   const extra = (
     <>
       <label className="flex flex-col gap-1"><span className={FIELD_LABEL}>Influencer</span>
@@ -395,9 +420,9 @@ export function LinkOfferDialog({ influencers, onClose, onLinked }) {
   );
   return (
     <ReasonDialog title="Link an offer" sub="The code keeps its own rules from Promo codes; the offer adds its owner and a budget." action="Link" extra={extra} onClose={onClose} testId="influencers-link"
-      check={() => (Math.round(Number(budget) * 100) > 0 ? null : 'Give the budget as an amount above 0.')}
+      check={() => (budgetMinor > 0 ? null : 'Give the budget as an amount above 0, with no more decimals than the currency has.')}
       onSubmit={async (reason) => {
-        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: Math.round(Number(budget) * 100), currency, featured, reason });
+        await adminInfluencersApi.linkOffer(who, { promo_id: promo.trim(), budget_cents: budgetMinor, currency: currency.trim().toUpperCase(), featured, reason });
         onLinked();
         return 'Linked. It applies at checkout for the members this influencer brings.';
       }} />
@@ -456,7 +481,7 @@ export function SettingsTab({ superAdmin }) {
 export function DefaultsDialog({ t, onClose, onSaved }) {
   const [rate, setRate] = useState(t.percentage_bps == null ? '' : String(t.percentage_bps / 100));
   const [invoices, setInvoices] = useState(t.duration_invoices == null ? '' : String(t.duration_invoices));
-  const [budget, setBudget] = useState(t.offer_budget_cents == null ? '' : String(t.offer_budget_cents / 100));
+  const [budget, setBudget] = useState(t.offer_budget_cents == null ? '' : toMajorString(t.offer_budget_cents, String(t.currency || 'USD').toUpperCase()) ?? String(t.offer_budget_cents));
   const [currency, setCurrency] = useState(t.currency || 'USD');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);

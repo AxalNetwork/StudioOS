@@ -278,6 +278,81 @@ export function grantBadgeOf(field) {
   return { ...w, reason };
 }
 
+/**
+ * D4873 (#4873, part 2): member access, the registry's own field (migration 202611082300), in the canvas's
+ * words. A row whose read failed says so; a row with no field (an older branch's read) is "Not read here
+ * yet"; null is "Not recorded".
+ */
+export const ACCESS_WORDS = Object.freeze({
+  open: 'Open to all',
+  apply: 'Apply',
+  request: 'Request',
+  invite: 'By invite',
+  assigned: 'Assigned by an admin',
+  not_open: 'Not open to members yet',
+  closed: 'Closed',
+});
+export function memberAccessOf(row) {
+  if (!row || typeof row !== 'object') return { state: 'loading', value: READING };
+  if (row.extras && row.extras.available === false) return { state: 'unreadable', value: COULD_NOT_READ, reason: row.extras.reason || null };
+  if (!('member_access' in row)) return { state: 'pending', value: NOT_READ_YET };
+  if (row.member_access === null) return { state: 'unrecorded', value: NOT_RECORDED };
+  return ACCESS_WORDS[row.member_access]
+    ? { state: 'ready', value: ACCESS_WORDS[row.member_access], key: row.member_access }
+    : { state: 'unreadable', value: COULD_NOT_READ, reason: 'The member access is a word this page does not know.' };
+}
+
+/* ------------------------------------------------------------------ *
+ * Five dimensions, never one status word (D4807)
+ * ------------------------------------------------------------------ */
+
+/**
+ * One word used to say all of: how built a program is, whether it is running,
+ * whether members can use it, whether studios may be offered it, and whether
+ * any studio holds it. A program can be Live yet not open to members, or open
+ * to an admin's assignment while Not built yet. These are the five, each its
+ * own row with its own label, from what the card and the grant field carry:
+ *
+ *   Build state      the registry's status in the build words, or Not recorded
+ *   Operation        Running, Running in part, Paused or Not running
+ *   Member access    how a member gets in, or "Not open to members yet"
+ *   Studio offering  the policy: held by HQ, HQ only, runs at HQ, not offered
+ *   Studio grants    the studios that hold it now (D956's grant field), or why not
+ */
+export const DIMENSIONS = Object.freeze([
+  { key: 'build', label: 'Build state' },
+  { key: 'operation', label: 'Operation' },
+  { key: 'access', label: 'Member access' },
+  { key: 'offering', label: 'Studio offering' },
+  { key: 'grants', label: 'Studio grants' },
+]);
+const OPERATION = Object.freeze({ Live: 'Operational', 'Partly built': 'Running in part', Paused: 'Paused', 'Not built yet': 'Not running', Proposed: 'Not running' });
+const OFFERING = Object.freeze({
+  'HQ-held': 'Held by HQ', 'HQ only': 'HQ only', 'Runs at HQ': 'Runs at HQ only', 'Not offered yet': 'Not offered to studios yet',
+});
+export function programDimensions(card, { superAdmin = false, grantBadge = null, state = 'ready' } = {}) {
+  if (state !== 'ready') {
+    const word = state === 'loading' ? READING : state === 'pending' ? NOT_READ_YET : state === 'unrecorded' ? NOT_RECORDED : COULD_NOT_READ;
+    return DIMENSIONS.map((d) => ({ ...d, value: word, state }));
+  }
+  const built = STATUS_PILL[card?.status] ? card.status : null;
+  // D4873: a card read from the registry carries member access as its own field, and a Super Admin's grant
+  // field says the offering policy: `hq_only` is not offered to studios, `granted_to` is offered.
+  const row = card?.row && typeof card.row === 'object' ? card.row : null;
+  const field = superAdmin && row?.grant && row.grant.available !== false ? row.grant : null;
+  const values = {
+    build: built || NOT_RECORDED,
+    operation: OPERATION[card?.status] || NOT_RECORDED,
+    access: row ? memberAccessOf(row).value
+      : card?.who === 'Not open to members yet' ? 'Not open to members yet' : card?.join || NOT_RECORDED,
+    offering: field?.state === 'hq_only' ? 'HQ only' : field?.state === 'granted_to' ? 'Offered to studios'
+      : OFFERING[superAdmin ? card?.hqGrant : card?.grant] || NOT_RECORDED,
+    grants: field?.state === 'hq_only' ? 'None: not offered'
+      : grantBadge ? (grantBadge.word === GRANT_UNREADABLE ? COULD_NOT_READ : grantBadge.word) : NOT_READ_YET,
+  };
+  return DIMENSIONS.map((d) => ({ ...d, value: values[d.key], state: 'ready' }));
+}
+
 /* ------------------------------------------------------------------ *
  * The program pages: header, facts and tabs (D953 §3)
  * ------------------------------------------------------------------ */
@@ -755,7 +830,10 @@ export function etTime(stamp) {
 /** A cohort deadline is 00:00 ET and inclusive, so it reads "8 Nov 00:00 ET", never "7 Nov 23:59". */
 export const etStamp = (stamp) => (parseStamp(stamp) === null ? null : `${etDay(stamp)} ${etTime(stamp)} ET`);
 
-const isAdvisor = (row) => String(row?.advisor_role || '').toLowerCase() === 'advisor';
+// D4807: prefer the Worker's one eligibility answer; role-alone is the fallback.
+const isAdvisor = (row) => (typeof row?.advisor_eligible === 'boolean'
+  ? row.advisor_eligible || row.advisor_is_active === false
+  : String(row?.advisor_role || '').toLowerCase() === 'advisor');
 /** D960's account rule: the holder's account is active (`advisor_is_active`, true only when `users.is_active` is 1). */
 const isActiveAccount = (row) => row?.advisor_is_active === true;
 const isOpen = (row) => row?.is_active === true || row?.is_active === 1;
@@ -969,7 +1047,9 @@ export function learnersFrom(read) {
     return { state: 'unreadable' };
   }
   const learners = Array.isArray(read.data?.learners) ? read.data.learners : [];
-  return { state: 'ready', learners };
+  // D4810: a page carries how many there are in all; null when the read did not say.
+  const total = Number.isFinite(Number(read.data?.total)) && read.data?.total !== null && read.data?.total !== undefined ? Number(read.data.total) : null;
+  return { state: 'ready', learners, total };
 }
 
 /* ------------------------------------------------------------------ *

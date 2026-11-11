@@ -3,7 +3,7 @@ import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
   BOARD_LANES, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
@@ -14,6 +14,8 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useScrollToHash from '../../../hooks/useScrollToHash';
 import AdvisorAccessLog from './ClientAccessLog';
+import { partialLine, readEveryPage } from './everyPage';
+import { correctionBody, correctionForm, historyLine } from './engagementCorrection';
 import MyTasks from '../../work/MyTasks.jsx';
 
 /**
@@ -69,20 +71,31 @@ export default function EngagementsZone() {
   const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
+  const [partial, setPartial] = useState(null);
+  // #4714 (D4714): whether the bookings the candidates come from were read.
+  const [candidatesRead, setCandidatesRead] = useState(true);
   const [draft, setDraft] = useState({
     client_name: '', shape: 'retainer', scope_label: '', scope_includes: '',
     scope_excludes: '', amount: '', term_ends_at: '',
   });
+  // #4715 (D4715): the signed engagement whose terms are being corrected, and each one's history as read.
+  const [correcting, setCorrecting] = useState(null);
+  const [fix, setFix] = useState(correctionForm(null));
+  const [history, setHistory] = useState({});
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const data = await api.listMyAdvisorEngagements();
+      // #4714 (D4714): every page; `totals` are the whole set's.
+      const read = await readEveryPage((page) => api.listMyAdvisorEngagements(page));
+      const data = { items: read.items, totals: read.first?.totals || null };
+      setPartial(partialLine(read));
       // WHO THIS ADVISOR MAY LINK, as a TOLERATED SECOND SOURCE. The candidates
       // are the people who have booked them — the relationship the worker checks
       // — and an advisor whose bookings will not load still has a contract
       // board, so this never takes the page down with it.
-      const held = await api.listMyAdvisorBookings().catch(() => null);
+      const held = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page)).catch(() => null);
+      setCandidatesRead(held != null);
       const seen = new Map();
       for (const b of held?.items || []) {
         if (b.client_user_id && !seen.has(b.client_user_id)) {
@@ -97,7 +110,7 @@ export default function EngagementsZone() {
     } catch (error) {
       setState({
         loading: false,
-        error: error?.message || 'The engagement record could not be read.',
+        error: zoneError(error, error?.message || 'The engagement record could not be read.', 'practice'),
         items: [], totals: null,
       });
     }
@@ -142,10 +155,12 @@ export default function EngagementsZone() {
       await load();
     } catch (error) {
       setNote({ ok: false, text: error?.message || failure });
+      // D4695: the row moved since the board drew it. Show it as it now stands, so the next press starts from it.
+      if (error?.code === 'lane_changed' || error?.code === 'cycles_changed' || error?.code === 'term_decided') await load();
     } finally { setBusy(''); }
   };
 
-  const advance = (e, lane) => act(e.id, () => api.advanceMyAdvisorEngagement(e.id, lane),
+  const advance = (e, lane) => act(e.id, () => api.advanceMyAdvisorEngagement(e.id, lane, e.lane),
     'That lane could not be recorded.');
 
   /**
@@ -171,12 +186,43 @@ export default function EngagementsZone() {
   const recordRenewal = (e) => act(e.id, async () => {
     await api.recordMyAdvisorEngagementRenewal(e.id, {
       decision: decision.decision,
+      // The term being decided: the cycle count this row showed. A retry of the same press is one cycle.
+      expected_cycles: Number(e.cycles || 0),
       note: decision.note.trim() || null,
       term_ends_at: decision.term_ends_at || null,
     });
     setDeciding(null);
     setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
   }, 'That renewal decision could not be recorded.');
+
+  const showHistory = async (e) => {
+    if (history[e.id]?.items) { setHistory((h) => ({ ...h, [e.id]: undefined })); return; }
+    setHistory((h) => ({ ...h, [e.id]: { loading: true } }));
+    try {
+      const res = await api.listMyAdvisorEngagementEvents(e.id);
+      setHistory((h) => ({ ...h, [e.id]: { items: res?.items || [] } }));
+    } catch (error) {
+      setHistory((h) => ({ ...h, [e.id]: { error: error?.message || 'The history could not be read.' } }));
+    }
+  };
+
+  const correct = async (e) => {
+    const res = correctionBody(e, fix);
+    if (res.error) { setNote({ ok: false, text: res.error }); return; }
+    await act(e.id, async () => {
+      try {
+        await api.updateMyAdvisorEngagement(e.id, res.body);
+      } catch (error) {
+        if (error?.code === 'engagement_changed') {
+          throw Object.assign(new Error('This engagement changed since you opened it. It has been reloaded; check the terms and correct them again.'), { code: 'lane_changed' });
+        }
+        throw error;
+      }
+      setCorrecting(null);
+      setHistory((h) => ({ ...h, [e.id]: undefined }));
+      setNote({ ok: true, text: 'The correction was recorded in the engagement’s history.' });
+    }, 'That correction could not be recorded.');
+  };
 
   const create = async () => {
     const parsed = dollarsToCents(draft.amount);
@@ -199,6 +245,53 @@ export default function EngagementsZone() {
     }, 'That engagement could not be created.');
   };
 
+  const createForm = (
+          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Client">
+                <input className={inputClass} value={draft.client_name} placeholder="Meridian Labs"
+                  onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
+              </Field>
+              <Field label="Shape" hint="What the engagement bills as. Equity and per-call clients carry no cycle amount, and Earnings leaves them out of a cash gross for that reason.">
+                <select className={inputClass} value={draft.shape}
+                  onChange={(e) => setDraft({ ...draft, shape: e.target.value })}>
+                  {SHAPES.map((s) => <option key={s} value={s}>{SHAPE_LABEL[s]}</option>)}
+                </select>
+              </Field>
+              <Field label="Scope, in a line" hint="What the board card shows: “2 sessions/mo”, “Sprint, 6 weeks”.">
+                <input className={inputClass} value={draft.scope_label}
+                  onChange={(e) => setDraft({ ...draft, scope_label: e.target.value })} />
+              </Field>
+              <Field label="Term ends" hint="Left blank until there is a date. A blank is not today.">
+                <input className={inputClass} type="date" value={draft.term_ends_at}
+                  onChange={(e) => setDraft({ ...draft, term_ends_at: e.target.value })} />
+              </Field>
+              <Field label="In scope">
+                <textarea className={inputClass} rows={2} value={draft.scope_includes}
+                  placeholder="Two sessions a month, one written review per cycle."
+                  onChange={(e) => setDraft({ ...draft, scope_includes: e.target.value })} />
+              </Field>
+              <Field label="Not in scope" hint="Stored as its own text, not as an absence. This is the sentence that prevents the conversation.">
+                <textarea className={inputClass} rows={2} value={draft.scope_excludes}
+                  placeholder="Not in scope: fundraising introductions, board attendance."
+                  onChange={(e) => setDraft({ ...draft, scope_excludes: e.target.value })} />
+              </Field>
+              <Field label="Per cycle" hint="Leave blank if there is no cash amount — an equity engagement is the ordinary case. Blank means unrecorded, not free.">
+                <input className={inputClass} value={draft.amount} placeholder="4500"
+                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
+              </Field>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+              A new engagement opens in <strong>Drafting</strong>. Signing it is a move on the board,
+              because that is what starts the first term and gives the row a renewal to decide.
+            </p>
+            <button type="button" className={`${buttonClass} mt-2`}
+              disabled={busy === 'new' || !draft.client_name.trim()} onClick={create}>
+              Add to Drafting
+            </button>
+          </div>
+  );
+
   return (
     <>
     {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
@@ -208,12 +301,20 @@ export default function EngagementsZone() {
       error={state.error}
       isEmpty={!state.loading && !state.error && items.length === 0}
       onRetry={load}
-      empty={<NothingYet
+      empty={<>
+      <NothingYet
         title="No engagement is on file"
         body="This board fills as you record the contracts behind your sessions — who the client is, what the scope says, and whether each term renewed. It is empty because nothing has been recorded, not because anything was lost."
-        action={<button type="button" className={buttonClass} onClick={() => setAdding(true)}>Record an engagement</button>}
-      />}
+        action={<button type="button" className={buttonClass} onClick={() => setAdding((v) => !v)}>
+          {adding ? 'Close' : 'Record an engagement'}
+        </button>}
+      />
+      {/* D4687 (#4687): the form used to live only inside the non-empty body,
+          so this button set state that nothing rendered. */}
+      {adding && <Card padding="md" className="mt-3" data-testid="engagement-create-empty">{createForm}</Card>}
+      </>}
     >
+      {partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="engagements-partial">{partial}</p>}
       <ZoneToolbar
         className="mb-3"
         role="advisor"
@@ -265,52 +366,7 @@ export default function EngagementsZone() {
             {adding ? 'Close' : 'New engagement'}
           </button>}
         />
-        {adding && (
-          <div className="mb-3 rounded-[10px] border border-axal-hairline p-3 dark:border-gray-700">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Client">
-                <input className={inputClass} value={draft.client_name} placeholder="Meridian Labs"
-                  onChange={(e) => setDraft({ ...draft, client_name: e.target.value })} />
-              </Field>
-              <Field label="Shape" hint="What the engagement bills as. Equity and per-call clients carry no cycle amount, and Earnings leaves them out of a cash gross for that reason.">
-                <select className={inputClass} value={draft.shape}
-                  onChange={(e) => setDraft({ ...draft, shape: e.target.value })}>
-                  {SHAPES.map((s) => <option key={s} value={s}>{SHAPE_LABEL[s]}</option>)}
-                </select>
-              </Field>
-              <Field label="Scope, in a line" hint="What the board card shows: “2 sessions/mo”, “Sprint, 6 weeks”.">
-                <input className={inputClass} value={draft.scope_label}
-                  onChange={(e) => setDraft({ ...draft, scope_label: e.target.value })} />
-              </Field>
-              <Field label="Term ends" hint="Left blank until there is a date. A blank is not today.">
-                <input className={inputClass} type="date" value={draft.term_ends_at}
-                  onChange={(e) => setDraft({ ...draft, term_ends_at: e.target.value })} />
-              </Field>
-              <Field label="In scope">
-                <textarea className={inputClass} rows={2} value={draft.scope_includes}
-                  placeholder="Two sessions a month, one written review per cycle."
-                  onChange={(e) => setDraft({ ...draft, scope_includes: e.target.value })} />
-              </Field>
-              <Field label="Not in scope" hint="Stored as its own text, not as an absence. This is the sentence that prevents the conversation.">
-                <textarea className={inputClass} rows={2} value={draft.scope_excludes}
-                  placeholder="Not in scope: fundraising introductions, board attendance."
-                  onChange={(e) => setDraft({ ...draft, scope_excludes: e.target.value })} />
-              </Field>
-              <Field label="Per cycle" hint="Leave blank if there is no cash amount — an equity engagement is the ordinary case. Blank means unrecorded, not free.">
-                <input className={inputClass} value={draft.amount} placeholder="4500"
-                  onChange={(e) => setDraft({ ...draft, amount: e.target.value })} />
-              </Field>
-            </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              A new engagement opens in <strong>Drafting</strong>. Signing it is a move on the board,
-              because that is what starts the first term and gives the row a renewal to decide.
-            </p>
-            <button type="button" className={`${buttonClass} mt-2`}
-              disabled={busy === 'new' || !draft.client_name.trim()} onClick={create}>
-              Add to Drafting
-            </button>
-          </div>
-        )}
+        {adding && createForm}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {BOARD_LANES.map((lane) => {
             const cards = visible.filter((e) => boardLaneOf(e.lane) === lane.key);
@@ -328,7 +384,7 @@ export default function EngagementsZone() {
                        cards and no sentence reads as a rendering failure. */
                     ? <p className="py-2 text-[10.5px] leading-relaxed text-axal-faint">Nothing here.</p>
                     : cards.map((e) => <BoardCard key={e.id} e={e} busy={busy === e.id}
-                      onAdvance={advance} candidates={candidates} onLink={linkClient} />)}
+                      onAdvance={advance} candidates={candidates} candidatesRead={candidatesRead} onLink={linkClient} />)}
                 </div>
               </div>
             );
@@ -392,6 +448,62 @@ export default function EngagementsZone() {
                 <p className="mt-1.5 text-[10.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                   {e.scope_excludes || <Unrecorded>No exclusion recorded</Unrecorded>}
                 </p>
+                {/* #4715 (D4715): signed terms change only as a recorded correction, and the history shows it. */}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" className={ghostButtonClass} disabled={busy === e.id}
+                    aria-expanded={correcting === e.id} aria-controls={`correct-${e.id}`}
+                    onClick={() => { setCorrecting(correcting === e.id ? null : e.id); setFix(correctionForm(e)); }}>
+                    {correcting === e.id ? 'Cancel correction' : 'Correct terms'}
+                  </button>
+                  <button type="button" className={ghostButtonClass}
+                    aria-expanded={!!history[e.id]?.items} aria-controls={`history-${e.id}`}
+                    onClick={() => showHistory(e)}>
+                    {history[e.id]?.items ? 'Hide history' : 'History'}
+                  </button>
+                </div>
+                {correcting === e.id && (
+                  <form id={`correct-${e.id}`} data-testid={`correct-form-${e.id}`} className="mt-2 grid gap-2"
+                    onSubmit={(ev) => { ev.preventDefault(); correct(e); }}>
+                    <p className="text-[11px] leading-relaxed text-axal-muted">
+                      These terms were signed. A correction keeps both versions and your reason in the history.
+                    </p>
+                    <Field label="Scope line">
+                      <input className={inputClass} name="scope_label" value={fix.scope_label}
+                        onChange={(ev) => setFix({ ...fix, scope_label: ev.target.value })} />
+                    </Field>
+                    <Field label="In scope">
+                      <textarea className={inputClass} rows={2} name="scope_includes" value={fix.scope_includes}
+                        onChange={(ev) => setFix({ ...fix, scope_includes: ev.target.value })} />
+                    </Field>
+                    <Field label="Not in scope">
+                      <textarea className={inputClass} rows={2} name="scope_excludes" value={fix.scope_excludes}
+                        onChange={(ev) => setFix({ ...fix, scope_excludes: ev.target.value })} />
+                    </Field>
+                    <Field label="Amount per cycle">
+                      <input className={inputClass} name="amount" inputMode="decimal" value={fix.amount}
+                        onChange={(ev) => setFix({ ...fix, amount: ev.target.value })} />
+                    </Field>
+                    <Field label="Term ends">
+                      <input className={inputClass} type="date" name="term_ends_at" value={fix.term_ends_at}
+                        onChange={(ev) => setFix({ ...fix, term_ends_at: ev.target.value })} />
+                    </Field>
+                    <Field label="Reason for the correction" hint="Required. Kept with the change.">
+                      <textarea className={inputClass} rows={2} name="reason" required value={fix.reason}
+                        onChange={(ev) => setFix({ ...fix, reason: ev.target.value })} />
+                    </Field>
+                    <div><button type="submit" className={buttonClass} disabled={busy === e.id}>Record correction</button></div>
+                  </form>
+                )}
+                {history[e.id] && (
+                  <div id={`history-${e.id}`} data-testid={`history-${e.id}`} className="mt-2" aria-live="polite">
+                    {history[e.id].loading ? <p className="text-[11px] text-axal-muted">Reading the history…</p>
+                      : history[e.id].error ? <p className="text-[11px] text-amber-700 dark:text-amber-300">{history[e.id].error}</p>
+                        : history[e.id].items.length === 0 ? <p className="text-[11px] text-axal-muted">No history recorded for this engagement.</p>
+                          : <ol className="space-y-1">{history[e.id].items.map((ev) => (
+                            <li key={ev.uid} className="text-[11px] leading-relaxed">{historyLine(ev)}</li>
+                          ))}</ol>}
+                  </div>
+                )}
               </div>
             ))}</div>}
           <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
@@ -411,7 +523,7 @@ export default function EngagementsZone() {
         {ordered.filter((e) => canDecideRenewal(e.lane)).length === 0
           ? <p className="text-[12.5px] leading-relaxed text-axal-muted">
             Nothing is under contract, so there is no renewal to decide. A draft or a proposal has no term
-            behind it — the worker refuses a decision on one rather than inventing an outcome for it.
+            behind it, so no decision can be recorded on one; an outcome is never invented for it.
           </p>
           : <ul className="space-y-2">{ordered.filter((e) => canDecideRenewal(e.lane)).map((e) => (
             <li key={e.id} data-testid={`row-pr2-decide-${e.id}`}
@@ -476,9 +588,8 @@ export default function EngagementsZone() {
 
       <StatedLimit title="What this board cannot say">
         <p>
-          <strong>Nothing sends a renewal notice.</strong> The artboard&rsquo;s header offers one in bulk;
-          no notice pipeline exists for an advisor, so the control says so rather than looping over a
-          send that is not there. Recording the decision is what this page does.
+          <strong>Nothing sends a renewal notice.</strong> Axal does not send renewal notices for
+          advisors yet, so no control offers to. Recording the decision is what this page does.
         </p>
         <p className="mt-2">
           <strong>A client is a name here, and a platform account only sometimes.</strong> An engagement
@@ -486,9 +597,8 @@ export default function EngagementsZone() {
           is one. Until a client is linked, nothing joins this contract to the sessions booked under it.
         </p>
         <p className="mt-2">
-          <strong>The board advances by control, not by drag.</strong> The canvas says &ldquo;drag to
-          advance&rdquo;; a per-card control reaches the same state and is keyboard-reachable without a
-          drag-and-drop layer to make accessible. And a signed engagement is never offered
+          <strong>The board advances by control, not by drag.</strong> Each card has its own control,
+          which works from the keyboard. And a signed engagement is never offered
           <em> Move to Ended</em> — that ending is a renewal decision, and it is recorded as one.
         </p>
       </StatedLimit>
@@ -506,7 +616,7 @@ export default function EngagementsZone() {
  * rather than a disabled one: there is no move to make, and a greyed button
  * implies there is.
  */
-function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
+function BoardCard({ e, busy, onAdvance, candidates, candidatesRead = true, onLink }) {
   const due = e.lane === 'renewal_due';
   const moves = laneMoves(e.lane);
   // The linked account may not be among the candidates any more — a booking can
@@ -550,8 +660,10 @@ function BoardCard({ e, busy, onAdvance, candidates, onLink }) {
         </select>
         <p className="mt-1 text-[9.5px] leading-relaxed text-axal-faint">
           {e.founder_user_id
-            ? 'Linked. Work products can be sent to them, and they can record having opened one.'
-            : options.length === 0
+            ? 'Linked. Work products can be sent to them, and they can record having opened one. Changing the account never moves work already sent: it stays with the person it went to.'
+            : !candidatesRead
+              ? 'Your bookings could not be read, so the accounts you could link are not listed. Reload to try again.'
+              : options.length === 0
               ? 'Nobody has booked you yet, so there is no account to link. The contract works either way.'
               : 'Only a linked client can be sent a work product, or record that they opened one.'}
         </p>

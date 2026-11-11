@@ -33,12 +33,14 @@ import {
   BOARD_LANES, SIGNED_LANES, boardLaneOf, canDecideRenewal, clientNote,
   dueLine, laneMoves, shapeNote, shortDay,
 } from '../src/pages/advisor/practice/engagementBoard.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/EngagementsZone.jsx');
 const P = codeOnly(PAGE);
 const ROUTES = read('frontend/src/workspaces/advisor/AdvisorBucketRoutes.jsx');
-const WORKER = read('cloudflare-worker/src/routes/advisors.ts');
+// #4715: the advisor router is advisors.ts plus the route modules it mounts.
+const WORKER = advisorRoutesSource();
 const APP = read('frontend/src/App.jsx');
 
 const eng = (over = {}) => ({
@@ -218,15 +220,19 @@ test('ONE engagement record feeds every instrument, and the second read feeds no
   // projection in, so the allowed set is named instead.
   const calls = [...P.matchAll(/api\.(\w+)\(/g)].map((m) => m[1]);
   const reads = calls.filter((n) => n.startsWith('list') || n.startsWith('get'));
-  assert.deepEqual(reads.slice().sort(), ['listMyAdvisorBookings', 'listMyAdvisorEngagements']);
+  // #4715 (D4715): one more, named rather than allowed by count: a card's own history, read when its
+  // History button is pressed. It feeds that card's history list and no instrument.
+  assert.deepEqual(reads.slice().sort(), ['listMyAdvisorBookings', 'listMyAdvisorEngagementEvents', 'listMyAdvisorEngagements']);
 
   // AND THE SECOND ONE IS TOLERATED, so an advisor whose bookings will not load
   // still has a contract board: no `.catch` there and one failing feed takes the
   // whole zone down.
-  assert.match(P, /api\.listMyAdvisorBookings\(\)\.catch\(\(\) => null\)/);
+  // #4714 (D4714): both reads walk every page (`readEveryPage`); the bookings
+  // walk is still the tolerated one.
+  assert.match(P, /readEveryPage\(\(page\) => api\.listMyAdvisorBookings\(undefined, page\)\)\.catch\(\(\) => null\)/);
   // Only the engagement read is allowed to set the page's error state.
   const load = P.slice(P.indexOf('const load = useCallback'), P.indexOf('useEffect(() => { load(); }'));
-  assert.equal((load.match(/api\.listMyAdvisorEngagements\(\)/g) || []).length, 1);
+  assert.equal((load.match(/api\.listMyAdvisorEngagements\(page\)/g) || []).length, 1);
 });
 
 test('every write the page makes is a method the api layer actually has', () => {

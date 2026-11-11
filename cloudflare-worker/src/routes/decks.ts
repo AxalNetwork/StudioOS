@@ -1,4 +1,4 @@
-import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #25 — Pitch deck builder (Worker mirror).
  *
@@ -12,9 +12,8 @@ import { deckCompliance } from '../services/decks/compliance';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
-import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
-import { getProjectMembershipRole } from '../services/projectAccess';
-import { ensureTier, tierCovers } from '../middleware/requireTier';
+import { projectOwned } from '../services/decks/access';
+import { ensureTier, tierCovers, userMeetsTier } from '../middleware/requireTier';
 import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
@@ -25,8 +24,6 @@ import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
 // that don't fit the project/financials/captable source shape.
 import { fillAxalSpinoutDemoDay, buildAxalSpinoutDemoDaySlides, buildAxalSpinoutCoverage } from '../services/decks/axalSpinoutDemoDay';
-import { assembleSpinoutDeckData } from '../services/decks/spinoutDeckData';
-import { applySpinoutOverrides, loadSpinoutDeckOverrides } from '../services/decks/spinoutDeckOverrides';
 import { recommendMethod, listOverrides, setOverride, deleteOverride, engineDefault, engineDefaults, overrideOf } from '../services/decks/recommend';
 import { logAdminAction } from '../services/adminAudit';
 import { getDeckBrand, setStudioWatermark, ensureMethodAllowed, fetchLandingPageForProject, applyBrandKitToSlides } from '../services/decks/branding';
@@ -64,21 +61,9 @@ import { peopleOf } from '../services/decks/deckPeople';
 import { funnelPoint, structuresChanged } from '../services/decks/observability';
 import { keyOfProject } from '../services/decks/cardAudio';
 
-/** D895 applies only to deck operations, not other project-content routes. */
-export async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
-  user = { ...user, role: String(user.role || '').toLowerCase() };
-  if (holdsOnlyLicence(user, 'advisor')) throw new Error('Forbidden');
-  const adminWrite = opts.write && user.role === 'admin';
-  if (adminWrite && (!isSuperAdmin(await hydrateSuperAdmin(c.env, user)) || await isSupportSession(c))) throw new Error('Forbidden');
-  const project = await sharedProjectOwned(c, user, projectId, opts);
-  const owner = holdsLicence(user, 'founder') && user.founder_id != null && user.founder_id === project.founder_id;
-  if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
-  if (adminWrite && opts.audit !== false) {
-    await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)')
-      .bind('deck_write_authorized', JSON.stringify({ method: c.req.method, route: c.req.routePath }), `user:${user.id}`, user.id, project.id).run();
-  }
-  return project;
-}
+// Compatibility export for deck modules that already import the gate from
+// this router. New modules import services/decks/access directly.
+export { projectOwned } from '../services/decks/access';
 
 /** Called after projectOwned has verified this request's active-company scope. */
 async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise<number | null> {
@@ -772,35 +757,12 @@ export function founderSpinoutFields(fields: Record<string, string>): Record<str
   return safe;
 }
 
-async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, string> | null> {
+function bakeSpinoutFields(row: any): Record<string, unknown> | null {
   if (extractDeckMethodId(row) !== 'axal_spinout_demoday') return null;
-  const projectId = Number(row?.project_id);
-  if (!Number.isFinite(projectId)) return null;
-  let ownerUserId: number | null = null;
-  try {
-    const proj = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first<any>();
-    if (proj?.founder_id != null) {
-      const owner = await env.DB.prepare(
-        'SELECT id FROM users WHERE founder_id = ? ORDER BY id ASC LIMIT 1',
-      ).bind(proj.founder_id).first<any>();
-      if (owner?.id != null) ownerUserId = Number(owner.id);
-    }
-  } catch (e) {
-    console.error('[decks] spinout owner resolve failed:', (e as Error).message);
-    return null;
-  }
-  if (ownerUserId == null) return null;
-  try {
-    const base = await assembleSpinoutDeckData(env, ownerUserId, projectId);
-    // Same override layer as POST /projects/:id/spinout-deck. Without it the
-    // shared / printed deck would silently revert every manual edit back to the
-    // module text — the founder would see one deck on screen and send another.
-    const overrides = await loadSpinoutDeckOverrides(env, projectId);
-    return founderSpinoutFields(applySpinoutOverrides(base, overrides).fields || {});
-  } catch (e) {
-    console.error('[decks] spinout fields bake failed:', (e as Error).message);
-    return null;
-  }
+  // D4595: the saved version is the complete render snapshot. Resolving Lab
+  // records or template overrides here made an old/frozen version change after
+  // it was saved. The editor already persists every template field in slides.
+  return deckFieldsByKey(rowToDeck(row).slides || []);
 }
 
 // Drives the SPA route /deck/print-export/:token from inside a
@@ -831,7 +793,7 @@ decks.get('/print-export/:token', async (c) => {
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
-    spinout_fields: await bakeSpinoutFields(c.env, row),
+    spinout_fields: bakeSpinoutFields(row),
   });
 });
 
@@ -992,18 +954,21 @@ decks.get('/share/:token', async (c) => {
       if (order) cards = variantSlides(cards, order);
     } catch { /* an unreadable variant opens the master as it is */ }
   }
+  const sharedSlides = await withVoiceLinks(c.env, shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))), Number(row.project_id));
   return c.json({
     ...publicDeckOf(row),
     // D1507: quotes and logos go out only with the consent or permission the venture's records hold.
     // D1569 (#3816): a card's AI voice-over goes out as a signed link only, after every gate above passed.
-    slides: await withVoiceLinks(c.env, shareSlides(cards, included, await shareGatesFor(c.env, Number(row.project_id))), Number(row.project_id)),
+    slides: sharedSlides,
     // D1565: who the link was made for, drawn over every card ("Prepared for …").
     watermark: link?.watermark_text ?? null,
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
-    spinout_fields: shareSpinoutFields(await bakeSpinoutFields(c.env, row)),
+    // Derived from the already-filtered saved cards, so template rendering
+    // cannot reintroduce a quote, figure or cap-table field the link excluded.
+    spinout_fields: shareSpinoutFields(extractDeckMethodId(row) === 'axal_spinout_demoday' ? deckFieldsByKey(sharedSlides) : null),
     // D691 decision 5 — the viewer hides Save as PDF when this is false. It
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
@@ -1096,6 +1061,11 @@ decks.post('/share/:token/heartbeat', async (c) => {
   const link = await c.env.DB.prepare('SELECT id, deck_id, include_json, variant_id FROM pitch_deck_share_tokens WHERE id = ?')
     .bind(live.id).first<{ id: number; deck_id: number; include_json: string | null; variant_id: number | null }>();
   if (!timePerSlideOn(link?.include_json)) return c.json({ ok: true, counts_only: true });
+  // D4598: the view must be this link's own visit. A view id from another link of the deck is no beat of this one:
+  // nothing is written to that visit (its seconds, its cards, its signals).
+  const own = await c.env.DB.prepare('SELECT id FROM deck_share_views WHERE id = ? AND deck_id = ? AND share_token_id = ?')
+    .bind(viewId, parseInt(m[1]), live.id).first<{ id: number }>();
+  if (!own) return c.json({ ok: false }, 200);
   try {
     await c.env.DB.prepare(
       `UPDATE deck_share_views
@@ -1124,6 +1094,18 @@ decks.post('/share/:token/heartbeat', async (c) => {
   return c.json({ ok: true });
 });
 
+/** The slide order a variant names (D1565), by its row id or its uid; null with none, or one that cannot be read. */
+async function variantOrderOf(env: Env, cards: any[], deckId: number, by: { id?: number | null; uid?: string | null }): Promise<number[] | null> {
+  try {
+    const v = by.id
+      ? await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(by.id), deckId).first<{ slide_order_json: string }>()
+      : by.uid
+        ? await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE uid = ? AND deck_id = ?').bind(String(by.uid), deckId).first<{ slide_order_json: string }>()
+        : null;
+    return v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
+  } catch { return null; /* an unreadable variant opens the master as it is */ }
+}
+
 /**
  * D1573 (#3820): the cards a link sends, in the order its reader sees them: the
  * version's cards with their uids, in the link's variant order (D1565), less the
@@ -1131,15 +1113,25 @@ decks.post('/share/:token/heartbeat', async (c) => {
  * reader's slide place maps to one card here.
  */
 export async function linkSentCards(env: Env, deckRow: any, link: { variant_id?: number | null; include_json?: string | null } | null): Promise<any[]> {
-  let cards = rowToDeck(deckRow).slides || [];
-  if (link?.variant_id) {
-    try {
-      const v = await env.DB.prepare('SELECT slide_order_json FROM deck_variants WHERE id = ? AND deck_id = ?').bind(Number(link.variant_id), Number(deckRow.id)).first<{ slide_order_json: string }>();
-      const order = v ? cleanOrder(cards, JSON.parse(v.slide_order_json || '[]')) : null;
-      if (order) cards = variantSlides(cards, order);
-    } catch { /* an unreadable variant opens the master as it is */ }
-  }
-  return shareSlides(cards, parseShareInclude(link?.include_json));
+  const cards = rowToDeck(deckRow).slides || [];
+  const order = link?.variant_id ? await variantOrderOf(env, cards, Number(deckRow.id), { id: Number(link.variant_id) }) : null;
+  return shareSlides(order ? variantSlides(cards, order) : cards, parseShareInclude(link?.include_json));
+}
+
+/**
+ * D4598 (#4598) part 2 — the effective content Share or Export is about to send, for the
+ * check before it sends it: for a proposed link (not yet made), the SAME selection
+ * `linkSentCards` computes for a persisted one — a variant and "what is included" — so
+ * the check the dialog runs and the card a reaction later attributes to never drift
+ * apart; for Export, the cards a hidden-card-dropping export carries (`exportDeckOf`'s
+ * own rule — only a hidden card is ever left out; the two "include" options add text
+ * elsewhere, never drop a card).
+ */
+export async function effectiveSlidesFor(env: Env, deckRow: any, opts: { kind: 'share' | 'export'; variantUid?: string | null; include?: Partial<ShareInclude> }): Promise<any[]> {
+  const cards = rowToDeck(deckRow).slides || [];
+  if (opts.kind === 'export') return visibleCards(cards);
+  const order = opts.variantUid ? await variantOrderOf(env, cards, Number(deckRow.id), { uid: opts.variantUid }) : null;
+  return shareSlides(order ? variantSlides(cards, order) : cards, parseShareInclude(opts.include));
 }
 
 /** D895: unknown counts and an unlimited cap are distinct from measured zero. One rule, shared with the link records (D1111). */
@@ -1354,12 +1346,13 @@ decks.get('/video-link', async (c) => {
 decks.get('/methods', async (c) => {
   const user = await requireAuth(c);
   const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
+  // D4729: the lock follows the same rule as the Raise + Grow gate, so a held licence's bypass never unlocks Founder's premium methods.
+  const meetsStudio = userMeetsTier(user, 'studio');
   const items = DECK_METHODS.map((m) => ({
     id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
     best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
     category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
+    locked: !!m.premium && !meetsStudio,
     fields_from_project: m.fields_from_project,
     fields_from_financials: m.fields_from_financials,
     fields_from_captable: m.fields_from_captable,
@@ -1395,7 +1388,7 @@ decks.get('/:id', async (c) => {
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
   try { await projectOwned(c, user, Number(row.project_id)); }
   catch { return c.json({ error: 'forbidden' }, 403); }
-  return c.json(rowToDeck(row));
+  return c.json({ ...rowToDeck(row), spinout_fields: bakeSpinoutFields(row) });
 });
 
 decks.put('/:id', async (c) => {
@@ -2452,6 +2445,9 @@ decks.put('/brand/watermark', async (c) => {
     }
     if (e?.message === 'INVALID_WATERMARK_URL') {
       return c.json({ error: 'watermark_url must be https URL ≤1000 chars' }, 400);
+    }
+    if (e?.message === 'WATERMARK_HOST_NOT_PUBLIC') {
+      return c.json({ error: 'watermark_url must be on a public host' }, 400);
     }
     return c.json({ error: 'failed' }, 500);
   }

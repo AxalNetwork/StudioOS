@@ -41,6 +41,9 @@ paths = [
   '''(?i)cloudflare-worker/test/calendar\.google-oauth\.test\.ts$''',
 ]
 regexes = [
+  # D4559 (#4559): platform capacity metric ids such as `key: 'd1.size_ratio'`
+  # in services/platformCapacity.ts are metric dictionary names, not secrets.
+  '''\bd1\.size_(bytes|ratio)\b''',
   # D1135: this exact synthetic signing seed belongs only to the SQLite test's
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
@@ -138,6 +141,13 @@ regexes = [
   # the Worker's JWT_SECRET. The commit that added it stays in this pull
   # request's scan range, so the literal is pinned here rather than rewritten.
   '''\bsynthetic-d1588-secret-0123456789abcdef\b''',
+  # D4834 (#4834): the synthetic JWT signing seed first committed in
+  # cloudflare-worker/test/practice_earnings_4834.test.ts, which signs that
+  # test's own tokens against an in-memory database. Not a credential and not
+  # the Worker's JWT_SECRET. The test now uses the shared unit-test seed, but
+  # the commit that added this one stays in the pull request's scan range, so
+  # it is pinned here rather than rewritten.
+  '''\btest-secret-for-practice-earnings-4834\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]

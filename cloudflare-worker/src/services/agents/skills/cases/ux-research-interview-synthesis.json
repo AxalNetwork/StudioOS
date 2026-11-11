@@ -1,0 +1,34 @@
+{
+  "skill": "ux-research-interview-synthesis",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "validate.records": {
+        "synthetic_fixture": true,
+        "skill_name": "UX Research Interview Synthesis",
+        "task_scope": "Synthesizes multiple consented interviews into cross-interview themes, unmet needs, workarounds and contradictory evidence.",
+        "evidence": [
+          "cross-interview theme synthesis"
+        ],
+        "omitted_field": "interview sample size"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for cross-interview theme synthesis."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "cross-interview theme synthesis"
+    ],
+    "must_say_not_recorded": [
+      "interview sample size"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

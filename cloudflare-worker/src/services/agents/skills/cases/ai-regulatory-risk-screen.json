@@ -1,0 +1,34 @@
+{
+  "skill": "ai-regulatory-risk-screen",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "synthetic_fixture": true,
+        "skill_name": "AI Regulatory Risk Screening",
+        "task_scope": "Screens AI intended use, deployment context, data and user impact for potentially applicable regulatory obligations.",
+        "evidence": [
+          "AI use-case risk indicators"
+        ],
+        "omitted_field": "deployment jurisdiction"
+      },
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for AI use-case risk indicators."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "AI use-case risk indicators"
+    ],
+    "must_say_not_recorded": [
+      "deployment jurisdiction"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

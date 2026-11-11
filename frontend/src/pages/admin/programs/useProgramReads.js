@@ -41,7 +41,11 @@ export function useRead(scope, what, tick, enabled, load) {
     return () => { live = false; };
     // `load` is rebuilt on every render; `what`, `tick` and `enabled` say when to call it.
   }, [what, tick, enabled]);
-  return read;
+  // D4807: an answer belongs to the request that asked for it. On the render
+  // where `what` changes, state still holds the previous request's answer until
+  // the effect resets it; returning that would show one studio's figures under
+  // the next studio's name. Anything not made for this `what` is loading.
+  return read.what === what ? read : idle(what);
 }
 
 /** A reply without the list it should carry is a failed read, never an empty one. */
@@ -105,7 +109,8 @@ const readLabApplications = () => api.adminSpinoutApplications().then(labReply);
  * per-studio form, so they are not read under a studio.
  *
  * The cards do not follow the period (S-PER): while a new period is read,
- * `cards` keeps the last answer for the same studio, so they do not flicker.
+ * `cards` keeps the last answer for the same studio (marked `stale`), so they
+ * do not flicker.
  */
 export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: null, canRead: true }) } = {}) {
   const [tick, reload] = useTick();
@@ -120,9 +125,13 @@ export function useCatalogueReads(superAdmin, { weeks, scopeOf = () => ({ code: 
   // summaries. Neither has a per-studio form, so neither is read under a studio's name.
   const partners = useRead('partners:summary', 'partners-summary', tick, canRead && !scope, () => referralPartnersApi.summary());
   const investors = useRead('investors:summary', 'investors-summary', tick, canRead && !scope, () => investorCohortsApi.summary());
+  // D4807: the last answer is carried only while the next one is loading, only
+  // for the same studio, and is marked `stale`; a read that failed shows its
+  // failure, never the figures from before it.
   const last = useRef({ scope: null, read: null });
   if (catalogue.status === 'ready') last.current = { scope: scope || '', read: catalogue };
-  const cards = catalogue.status === 'ready' || last.current.scope !== (scope || '') || !last.current.read ? catalogue : last.current.read;
+  const carried = catalogue.status === 'loading' && last.current.read && last.current.scope === (scope || '');
+  const cards = carried ? { ...last.current.read, stale: true } : catalogue;
   const drawn = [catalogue, ...(scope || !canRead ? [] : [labApps])];
   return { catalogue, cards, labApps, partners, investors, scopes, studio, drawn, reload };
 }
@@ -199,36 +208,22 @@ export function usePerksReads(tab) {
   return { inReview, perks, claims, reload };
 }
 
-/** Learning: R9 on Overview and People; P4 on Overview; R10 for the program People picked. */
-export function useLearningReads(tab, programUid) {
+/** D4810: a learners page on People; the page size and the cap are the Worker's. */
+export const LEARNERS_PAGE = 50;
+
+/**
+ * Learning: R9 on Overview and People; P4 on Overview; on Overview, D4810's
+ * one completion read for every published program (it replaced one learners
+ * read per program); on People, one page of the picked program's learners.
+ */
+export function useLearningReads(tab, programUid, learnerOffset = 0) {
   const [tick, reload] = useTick();
   const learning = useRead('learning', 'learning', tick, tab === 'overview' || tab === 'people', readLearning);
   const weekly = useRead('learning:weekly', 'weekly', tick, tab === 'overview', () => programsApi.learningWeekly(12));
-  const learners = useRead('learners', `learners:${programUid || ''}`, tick, tab === 'people' && Boolean(programUid),
-    () => learningApi.programLearners(programUid).then(listed('learners', 'The learners')));
-  return { learning, weekly, learners, reload, tick };
+  const completion = useRead('learning:completion', 'completion', tick, tab === 'overview',
+    () => learningApi.programsCompletion().then(listed('programs', 'Completion by program')));
+  const learners = useRead('learners', `learners:${programUid || ''}:${learnerOffset}`, tick, tab === 'people' && Boolean(programUid),
+    () => learningApi.programLearners(programUid, { limit: LEARNERS_PAGE, offset: learnerOffset }).then(listed('learners', 'The learners')));
+  return { learning, weekly, completion, learners, reload, tick };
 }
 
-/**
- * D962: R10 for each program `uids` names, each read alone, so a program
- * whose learners cannot be read marks only its own row (Completion by
- * program, OD9's Finished).
- */
-export function useLearnersFor(uids, tick, enabled) {
-  const [reads, setReads] = useState({});
-  const key = uids.join(',');
-  useEffect(() => {
-    if (!enabled) return undefined;
-    let live = true;
-    setReads(Object.fromEntries(uids.map((u) => [u, { status: 'loading', data: null, error: null, at: null }])));
-    uids.forEach((u) => {
-      learningApi.programLearners(u).then(listed('learners', 'The learners')).then(
-        (data) => { if (live) setReads((r) => ({ ...r, [u]: { status: 'ready', data, error: null, at: Date.now() } })); },
-        (error) => { reportError('admin-programs:learners', error); if (live) setReads((r) => ({ ...r, [u]: { status: 'error', data: null, error, at: null } })); },
-      );
-    });
-    return () => { live = false; };
-    // `uids` is keyed by `key`.
-  }, [key, tick, enabled]);
-  return reads;
-}

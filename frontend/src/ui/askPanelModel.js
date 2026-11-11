@@ -3,6 +3,7 @@ import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
 import { INVESTOR_ASK_CHIPS } from '../lib/railOptions/investor.js';
 import { ADVISOR_ASK_CHIPS } from '../lib/railOptions/advisor.js';
 import { PARTNER_ASK_CHIPS } from '../lib/railOptions/partner.js';
+import { BLOCK_OPTION, blockDates, needsBlockPage } from './sessionsBlockHandoff.js';
 
 /**
  * D1443 (#3706, canvas AK) — the Ask panel's words and rules, as plain
@@ -141,6 +142,20 @@ export const RUN_CHIPS = Object.freeze(
  * an upload, a form), so its chip puts the words in the composer as a typed
  * question: it never claims to run the page's control.
  */
+/**
+ * D5034 part 4 (#5034) — a page's own prompts, as Ask chips that fill the
+ * composer with their words (never run chips): the member reads, edits and
+ * sends. Keys are `prompt:<n>`, so they never collide with an option's key or
+ * a run chip. Drawn before the page's options; `panelChips` keeps the six cap.
+ */
+export function promptOptions(prompts) {
+  if (!Array.isArray(prompts)) return [];
+  return prompts
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean)
+    .map((label, i) => ({ key: `prompt:${i + 1}`, label }));
+}
+
 export function panelChips(options) {
   if (!Array.isArray(options)) return [];
   const seen = new Set();
@@ -168,6 +183,16 @@ export function proposalCard(row) {
   return { uid: String(row?.uid ?? ''), eyebrow, text, source, status: str(row?.status) || 'proposed', ...(typeof row?.disclaimer_key === 'string' ? { disclaimer_key: row.disclaimer_key } : {}) };
 }
 
+/**
+ * A card as the panel holds it: the row's words and the run chip it came from.
+ * A `sessions:block` card also carries the dates its Block form is filled with
+ * (`blockDates`, #4737), because it is accepted on the Sessions page.
+ */
+export function optionCard(row, option) {
+  const card = { ...proposalCard(row), option };
+  return option === BLOCK_OPTION ? { ...card, block: blockDates(row?.payload) } : card;
+}
+
 /** `free_afternoon` → "Free afternoon"; anything that is not a key gives nothing. */
 function words(v) {
   const k = str(v);
@@ -185,9 +210,14 @@ function dateRange(p) {
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
-/** "Accept all (n)" is offered for two or more open cards, and caps at 50 (`/api/fills/rows/accept`'s cap). */
+/**
+ * "Accept all (n)" is offered for two or more open cards, and caps at 50
+ * (`/api/fills/rows/accept`'s cap). A card accepted on its own page (a Block
+ * card, #4737) is never in it: accepting one means pressing Block on the
+ * page, so it is taken there one at a time.
+ */
 export function acceptAllLabel(cards) {
-  const open = (cards || []).filter((c) => c.status === 'proposed').length;
+  const open = (cards || []).filter((c) => c.status === 'proposed' && !needsBlockPage(c)).length;
   if (open < 2) return null;
   return `Accept all (${Math.min(open, 50)})`;
 }

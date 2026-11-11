@@ -250,14 +250,17 @@ test('every founder surface identified by the measurement now narrows', () => {
     const route = read(`cloudflare-worker/src/routes/${f}.ts`);
     let src = route;
     if (f === 'decks') {
-      // #2435 shares the actual gate with brand; follow that import rather
-      // than requiring the removed duplicate company predicate in the router.
-      for (const router of [route, read('cloudflare-worker/src/routes/brand.ts')]) {
-        assert.match(router, /import \{ projectOwned(?: as sharedProjectOwned)? \} from '\.\.\/middleware\/projectContentAccess'/);
-        assert.match(router, /await projectOwned\(c, user,/);
-        if (router.includes('projectOwned as sharedProjectOwned')) assert.match(router, /await sharedProjectOwned\(c, user, projectId, opts\)/);
-      }
-      src += read('cloudflare-worker/src/middleware/projectContentAccess.ts');
+      // D4595 puts the deck-specific role matrix in one service while that
+      // service delegates company scope to the shared project-content gate.
+      assert.match(route, /import \{ projectOwned \} from '\.\.\/services\/decks\/access'/);
+      assert.match(route, /await projectOwned\(c, user,/);
+      const deckAccess = read('cloudflare-worker/src/services/decks/access.ts');
+      assert.match(deckAccess, /projectOwned as sharedProjectOwned/);
+      assert.match(deckAccess, /await sharedProjectOwned\(c, user, projectId, opts\)/);
+      const brand = read('cloudflare-worker/src/routes/brand.ts');
+      assert.match(brand, /import \{ projectOwned \} from '\.\.\/middleware\/projectContentAccess'/);
+      assert.match(brand, /await projectOwned\(c, user,/);
+      src += deckAccess + read('cloudflare-worker/src/middleware/projectContentAccess.ts');
     }
     assert.match(src, /activeCompanyFor|resolveActiveCompany/, `${f}.ts must resolve the active company`);
     assert.match(src, /company_id/, `${f}.ts must use it`);

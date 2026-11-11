@@ -73,6 +73,7 @@ function stubs(over = {}) {
   return {
     calls,
     apis: {
+      auth: { stepUp: rec('stepUp', async () => ({ ok: true })) },
       fundAdmin: {
         access: rec('access', async () => access(false)),
         overview: rec('overview', async () => OVERVIEW()),
@@ -290,11 +291,15 @@ test('an Admin sees the economics sentence where Change would be, and the people
     assert.ok(v.by('fund-providers-edit'), 'service providers are an Admin\'s');
     assert.ok(v.by('fund-lpa-regenerate'));
     assert.equal(v.text('fund-carry'), '20.00%');
-    assert.match(v.text('fund-tile-outstanding'), /\$280,000\.00 3 lines overdue/);
+    // D4812 part 3 (FA-04): six key figures, and overdue lines said beneath them.
+    assert.match(v.text('fund-figures'), /Target size .* Committed .* Called .* NAV .* Distributed .* LPs/);
+    assert.match(v.text('fund-overdue'), /3 lines overdue/);
     assert.match(v.text('fund-waterfall'), /Not recorded: the distribution job has no hurdle or tiers\./);
     assert.match(v.text('fund-lpa-state'), /Version 3/);
     assert.equal(v.text('fund-admin-primary'), 'Edit fund facts');
-    assert.equal(v.text('fund-admin-tab-funds').startsWith('Funds'), true);
+    // D4812: Funds is no peer tab; a fund's page carries a crumb back to Fund administration.
+    assert.ok(!v.by('fund-admin-tab-funds'));
+    assert.match(v.text('admin-page-crumb'), /Fund administration/);
     assert.equal(named(s, 'get')[0][1], 7);
   } finally { await v.close(); }
 });
@@ -307,10 +312,10 @@ test('a fund with no carry reads Not recorded on its page; the outside GP fund s
     assert.match(v.text('fund-gp-none'), /No general partner of record/);
     assert.match(v.text('fund-lpa-state'), /No LPA is drafted until the fund has a general partner of record/);
     assert.ok(!v.by('fund-lpa-view'), 'nothing to view');
-    assert.equal(v.text('fund-tile-fund-size'), 'Fund size Not recorded');
+    assert.equal(v.text('fund-figure-target'), 'Target size — Not recorded');
   } finally { await v.close(); }
   const o = await mount(ADMIN, as(ADMIN).apis, '/admin/fund-admin/funds/9');
-  try { assert.doesNotMatch(o.text('fund-tiles'), /\$0\.00/); } finally { await o.close(); }
+  try { assert.doesNotMatch(o.text('fund-figures'), /\$0\.00/); } finally { await o.close(); }
 });
 
 test('the Super Admin\'s Change asks a reason, then sends it with both rates', async () => {
@@ -326,8 +331,15 @@ test('the Super Admin\'s Change asks a reason, then sends it with both rates', a
     assert.equal(named(s, 'update').length, 0);
     await v.type('fund-economics-reason', 'Side letter agreed at first close.');
     await v.submit('fund-economics-submit');
+    // D4812 part 5: Review shows each rate before → after; the act runs only from Confirm.
+    assert.equal(named(s, 'update').length, 0);
+    assert.match(v.text('fund-economics-flow-effects'), /Carry 20\.00% → 25\.00%/);
+    await v.click('fund-economics-flow-continue');
+    if (v.by('fund-economics-flow-confirm-code')) await v.type('fund-economics-flow-confirm-code', '123456');
+    await v.submit('fund-economics-flow-confirm');
     assert.deepEqual(named(s, 'update')[0].slice(1), [7, { carried_interest: 0.25, management_fee: 0.02, reason: 'Side letter agreed at first close.' }]);
-    assert.ok(!v.by('fund-economics-dialog'));
+    await v.click('fund-economics-flow-done-done');
+    assert.ok(!v.by('fund-economics-dialog') && !v.by('fund-economics-flow'));
     assert.match(v.text('fund-notice'), /reason is kept on the audit record/);
     assert.equal(named(s, 'get').length, 2, 'the fund is read again');
   } finally { await v.close(); }

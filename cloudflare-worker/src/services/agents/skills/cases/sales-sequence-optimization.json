@@ -1,0 +1,34 @@
+{
+  "skill": "sales-sequence-optimization",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Sales Sequence Optimization",
+        "task_scope": "Evaluates sequence timing, channel mix and message progression using recorded response data and controlled tests.",
+        "evidence": [
+          "touch-level response comparison"
+        ],
+        "omitted_field": "sequence cohort size"
+      },
+      "research.library": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for touch-level response comparison."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "touch-level response comparison"
+    ],
+    "must_say_not_recorded": [
+      "sequence cohort size"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

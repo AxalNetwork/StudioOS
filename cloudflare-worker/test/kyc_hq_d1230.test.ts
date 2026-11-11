@@ -39,7 +39,7 @@ async function fixture() {
       kyc_reviewed_at TEXT, kyc_reviewed_by INTEGER, kyc_rejection_reason TEXT
     );
     CREATE TABLE super_admins (user_id INTEGER PRIMARY KEY);
-    CREATE TABLE user_sessions (jti TEXT PRIMARY KEY, user_id INTEGER, factor TEXT, created_at TEXT, last_step_up_at TEXT);
+    CREATE TABLE user_sessions (jti TEXT PRIMARY KEY, user_id INTEGER, factor TEXT, created_at TEXT, last_step_up_at TEXT, revoked_at TEXT, last_seen_at TEXT);
     CREATE TABLE activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT, actor TEXT, user_id INTEGER);
     CREATE TABLE corporate_profiles (user_id INTEGER PRIMARY KEY, sanctions_last_checked_at TEXT, entity_name TEXT, registered_country TEXT);
     INSERT INTO users (id, email, name, role, kyc_status) VALUES
@@ -91,9 +91,10 @@ const app = (() => {
 /** A call as `userId`; `stepUp` gives the session a fresh TOTP factor. */
 async function call(env: any, db: DatabaseSync, userId: number, method: string, path: string, body?: unknown, { stepUp = true } = {}) {
   const jti = `jti-${userId}-${Math.random().toString(36).slice(2)}`;
-  if (stepUp) {
-    db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at) VALUES (?, ?, 'totp', strftime('%Y-%m-%d %H:%M:%S','now'))").run(jti, userId);
-  }
+  // D4669 — every call's token has its session row (an unreadable or missing
+  // one is refused); without `stepUp` the row's factor is not TOTP.
+  db.prepare("INSERT INTO user_sessions (jti, user_id, factor, created_at) VALUES (?, ?, ?, strftime('%Y-%m-%d %H:%M:%S','now'))")
+    .run(jti, userId, stepUp ? 'totp' : 'password');
   const role = (db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any).role;
   const tok = await new SignJWT({ user_id: userId, role, jti }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));

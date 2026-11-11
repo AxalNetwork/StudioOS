@@ -19,6 +19,15 @@ and is not kept in sync.
 | `migrations/202611041613_grow_campaigns.sql` | D4447 (#4447): campaign plans, channel budgets and same-venture item links; Part A of #3722. |
 | `migrations/202611041438_team_allowlists.sql` | D4422 (#4422): per-company and standalone-project model/tool lists, with actor/time; company projects inherit their parent policy. |
 | `migrations/202611042009_distribution_inbox_reads.sql` | D4494: per-member, per-message Inbox receipts. |
+| `migrations/202611071531_licence_revisions.sql` | D4694 (#4694): a `revision` on `licence_terms` and `licence_fee_invoices` and a `terms_revision` on `territory_licences`, so a write from a stale snapshot is refused (409) instead of replacing a newer value. Additive, default 0. |
+| `migrations/202611071547_advisor_engagement_events.sql` | D4695 (#4695): `advisor_engagement_events`, an engagement's append-only renewal history (`signed`, `renewed`, `ended`), with unique indexes that make a repeated decision on one term a no-op. New table, re-runnable. |
+| `migrations/202611072219_security_events_support_actor.sql` | D4691 (#4691): nullable `security_events.support_user_id`, the operator behind a gate refusal or step-up made inside a support session (0 for a branch session). Additive, nothing backfilled. |
+| `migrations/202611081919_skill_release_evidence.sql` | D4533 (#4533): the release evidence of Axal's skills: a draft's declared required models, the evidence hash a review and an eval result were given on, and an HQ version's manifest in its own row. Triggers keep versions, cases, results and decided reviews as written. Additive, nothing backfilled. |
+| `migrations/202611082048_ticket_filing_snapshot.sql` | D5030 (#5030): `tickets.filed_persona`, `filed_role`, `filed_licence_uid`, `filed_branch_code`, the support context a ticket was filed in, written once by the INSERT. Additive, nothing backfilled. |
+| `migrations/202611082049_support_sla_policy_version.sql` | D5032 (#5032): `support_sla_policy_state`, the version of the ticket SLA tiers on this database (HQ's own, or the copy a branch applied). New table, re-runnable, no seed. |
+| `migrations/202611090932_shared_licences.sql` | D5057 (#5057): `licences`, the shared licence identity for the operator (territory, white_label, master_franchise) and user (founder, investor, operating_partner, advisor) families. One row per territory licence, under its own uid and ref, backfilled re-runnably and written by trigger on every new one; `licence_program_agreements` must name a shared licence. No territory, contract or invoice row changes. |
+| `migrations/202611090953_meeting_bot_runtime_startup.sql` | D5153 (#5153): `meeting_bots.runtime_stage`, `runtime_stage_at`, `runtime_version`, `runtime_error_code`, `runtime_callback_seen_at`, `runtime_start_ms`, the operator's startup facts for a run (closed code lists, no meeting content). Additive, nothing backfilled. |
+| `migrations/202611090834_intro_delivery_attempt.sql` | D4604 (#4604): nullable `relationship_interactions.delivery_op_uid`, the send operation that holds an accepted introduction's delivery, so a second composition cannot resend it and a delivered one is reconciled to made. Additive, nothing backfilled. |
 
 ## Adding a change
 
@@ -61,3 +70,6 @@ legacy sizes NULL and adds no users column. The operator backfill measures R2
 HEAD metadata after deployment; the migration never reads or deletes objects.
 
 | `migrations/202611041900_grow_campaign_details.sql` | D4483 (#4483): nullable audience/channel budget details and plain creative text; ALTERs apply once through the ledger. |
+| `migrations/202611072340_platform_capacity_history.sql` | D4559 (#4559) part 2: daily deployment-metric snapshots (NULL when unreadable, never 0) and capacity alert episodes with one open row per metric. No tenant data. |
+| `migrations/202611090840_licence_agreement_policies.sql` | D5052 (#5052): versioned package/program agreement policies (strategy, legal gate, included programs, required schedules), the version each licence froze, and an append-only legal history. New tables, re-runnable, no seed. |
+| `migrations/202611100929_financial_events.sql` | D5299 (#5299, revenue ledger 1/6 of #5038): `financial_events`, one append-only row per Stripe or HQ financial event, idempotent on (source, source event id) and on a refund's charge and cumulative total; rows immutable but for reconciliation (triggers); `financial_event_coverage` records each source's coverage start. New tables, re-runnable, no backfill. |

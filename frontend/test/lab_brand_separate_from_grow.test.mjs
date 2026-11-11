@@ -29,6 +29,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { routeBlock } from './_routes.mjs';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { legacyRedirects } from '../src/workspaces/shellConfig.js';
 
 const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), p), 'utf8'));
@@ -72,10 +73,9 @@ test('nothing on the Grow side links or claims the Lab tool', () => {
   assert.match(zone, /\{ label: 'New page', to: '\/build\/brand' \}/);
   assert.ok(!zone.includes('/spinout-lab/brand'), "Grow's New page action opens the Lab tool");
 
-  const sidebar = read('frontend/src/sidebarConfig.js');
-  const growRow = sidebar.slice(sidebar.indexOf("{ to: '/grow', icon: TrendingUp"), sidebar.indexOf('] },', sidebar.indexOf("{ to: '/grow', icon: TrendingUp")));
-  assert.ok(growRow.includes("'/build/brand'"), 'the Grow row no longer claims the brand builder');
-  assert.ok(!growRow.includes('/spinout-lab/brand'), 'the Grow sidebar row lights up on the Lab tool');
+  const growRow = SIDEBAR_GROUPS.founder.flatMap((group) => group.items).find((row) => row.to === '/grow');
+  assert.ok(growRow?.match.includes('/build/brand'), 'the Grow row no longer claims the brand builder');
+  assert.ok(!growRow.match.includes('/spinout-lab/brand'), 'the Grow sidebar row lights up on the Lab tool');
 
   assert.ok(!legacyRedirects('founder').some((r) => r.from === '/spinout-lab/brand'),
     'the shell records /grow/brand as the Lab tool\'s successor');

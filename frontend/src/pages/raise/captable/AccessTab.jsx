@@ -9,6 +9,7 @@ import {
   REQUESTS_NONE, REQUESTS_NOTE,
   grantRows, recordedHolderChoices, levelLabel, levelRows, linkBody, linkProblems, linkRows, logRows, requestRows,
 } from './capTableAccess';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1026 (#2863) — Access (CT13): who sees what, the levels, the share links
@@ -169,7 +170,7 @@ function AccessLog({ projectId, reload, retry }) {
   const next = pages.length ? pages[pages.length - 1]?.next_before : first.data?.next_before;
   const loadMore = async () => {
     setMore({ busy: true, error: '' });
-    try { const p = await capTableAccessApi.log(projectId, next); setPages((x) => [...x, p]); setMore({ busy: false, error: '' }); } catch (e) { setMore({ busy: false, error: e?.message || 'More of the log could not be read.' }); }
+    try { const p = await capTableAccessApi.log(projectId, next); setPages((x) => [...x, p]); setMore({ busy: false, error: '' }); } catch (e) { setMore({ busy: false, error: userFacingRaiseError(e, { fallback: 'More of the log could not be read.' }) }); }
   };
   return (
     <Section title="Access log" testId="captable-access-log">

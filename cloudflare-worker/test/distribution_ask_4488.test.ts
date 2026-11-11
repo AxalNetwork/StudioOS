@@ -69,6 +69,44 @@ test('unquoted run, foreign campaign and reader refuse before AI', async () => {
   assert.equal(f.prompts.length,0);
 });
 
+test('Repurpose quotes a scoped plan and accepts one manual piece per post without sending', async () => {
+  const f = fixture('{"drafts":[{"index":0,"text":"An X thread"},{"index":1,"text":"A short video caption"}]}');
+  f.db.exec(`INSERT INTO growth_channels(uid,project_id,name,state,utm_source) VALUES
+    ('x',1,'X thread','testing','x'),('video',1,'Video','testing','youtube');
+    INSERT INTO content_calendar_items(uid,project_id,title,planned_on,status,channel_id) VALUES
+    ('source',1,'Launch plan','2026-11-10','planned',(SELECT id FROM growth_channels WHERE uid = 'channel-one')),
+    ('foreign',2,'Private plan','2026-11-10','planned',NULL);`);
+  const request = { project: 1, piece_uid: 'source', sources: ['distribution'], kinds: [
+    { kind: 'repurpose', channel_uid: 'x' }, { kind: 'repurpose', channel_uid: 'video' },
+  ] };
+  assert.equal((await f.call('POST','/quote',{ ...request, piece_uid: 'foreign' })).status,404);
+  assert.equal((await f.call('POST','/quote',request,3)).status,403);
+  assert.equal((await f.call('POST','/quote',{ ...request, kinds: [request.kinds[0],request.kinds[0]] })).status,400);
+  const quote = await f.call('POST','/quote',request);
+  assert.equal(quote.status,200,JSON.stringify(quote.body));
+  assert.ok(quote.body.estimate.hold_microusd > 0);
+  const run = await f.call('POST','/run',{ ...request, quote: quote.body.estimate });
+  assert.equal(run.status,200,JSON.stringify(run.body));
+  assert.deepEqual(run.body.proposals.map(p => [p.payload.kind,p.payload.channel_uid]),[['post','x'],['post','video']]);
+  assert.match(f.prompts.join(' '),/Launch plan/);
+  assert.equal(f.count('content_calendar_items'),2);
+  const [one,two] = run.body.proposals;
+  const edited = await f.call('POST',`/${one.uid}/decide`,{ project:1,decision:'edit',edited:{text:'Edited X thread'} });
+  assert.equal(edited.status,200,JSON.stringify(edited.body));
+  const bulk = await f.call('POST','/accept-safe',{ project:1,uids:[two.uid,one.uid] });
+  assert.deepEqual(bulk.body.results.map(r => r.status),[200,409]);
+  assert.deepEqual(f.db.prepare(`SELECT i.status, i.source, i.planned_on, i.planned_at_time, g.uid AS channel,
+    json_extract(d.body_json,'$.text') AS copy FROM publish_drafts d
+    JOIN content_calendar_items i ON i.id = d.calendar_item_id JOIN growth_channels g ON g.id = i.channel_id
+    ORDER BY d.id`).all().map(r => ({ ...r })),[
+      {status:'planned',source:'manual',planned_on:'2026-11-10',planned_at_time:null,channel:'x',copy:'Edited X thread'},
+      {status:'planned',source:'manual',planned_on:'2026-11-10',planned_at_time:null,channel:'video',copy:'A short video caption'},
+    ]);
+  assert.equal(f.count('publish_sends'),0);
+  assert.equal(f.count('mail_sent'),0);
+  assert.equal(f.prompts.length,1);
+});
+
 test('an exhausted allowance is 402 without proposals or provider errors', async () => {
   const f = fixture();
   f.db.exec('UPDATE ai_topup_accounts SET balance_microusd = 0');

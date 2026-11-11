@@ -22,6 +22,7 @@ import {
 import { StatCard, Section, Chip, SlideOver, FilterChips, EmptyState, Field } from './advisor/network/kit';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
+import { formatRate } from '../lib/rate';
 
 const fmtMoney = (v) => {
   if (v == null) return '—';
@@ -31,7 +32,8 @@ const fmtMoney = (v) => {
 };
 const fmtMoneyFull = (v) => (v == null ? '—' : `$${Number(v).toLocaleString()}`);
 const fmtX = (v) => (v == null ? '—' : `${Number(v).toFixed(2)}x`);
-const fmtIrr = (v) => (v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
+// D4619 (#4619): the shared fraction-to-percent formatter; a missing IRR stays "—".
+const fmtIrr = (v) => formatRate(v) ?? '—';
 const fmtPct = (v) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
 const AXIS = { fontSize: 11, fill: '#94a3b8' };

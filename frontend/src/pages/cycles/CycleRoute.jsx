@@ -21,6 +21,7 @@ import ConnectToolSheet from '../account/ConnectToolSheet';
 import { takeBuildProject, toolDeepLink } from '../account/connectorsModel';
 import RoundCallSheet from '../founder/RoundCallSheet';
 import RecordLightbox from '../founder/RecordLightbox';
+import { interviewListOf } from '../../lib/discoveryEvidence';
 import { recordingHref } from '../founder/recordSetup';
 import { openingStep } from '../founder/assistantSession.js';
 import { reviewPath } from '../../lib/activeRecording';
@@ -31,24 +32,21 @@ import RecordView, { RecordPhoneProvider } from './RecordView';
 import { HEADER_BUTTON, RecordHeaderProvider } from './RecordHeader.jsx';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import DistributionTabs from './distribution/DistributionTabs.jsx';
-import OverviewTab from './distribution/OverviewTab.jsx';
-import ChannelsTab from './distribution/ChannelsTab.jsx';
-import ProspectsPage from './distribution/ProspectsPage.jsx';
 import DistributionAskIntent from './distribution/DistributionAskIntent.jsx';
 import InboxTab, { InboxNeedsYou, useInboxUnread } from './distribution/InboxTab.jsx';
-import CampaignsTab from './distribution/CampaignsTab.jsx';
-import NewCampaignPage from './distribution/NewCampaignPage.jsx';
+import { SequenceNeedsYou } from './distribution/SequenceBuilder.jsx';
+import NewsletterTab from './distribution/NewsletterTab.jsx';
 import { ComingSoon } from './distribution/DistributionParts.jsx';
 import { distributionPrimary } from './distribution/distributionModel.js';
 import { EmailAction } from '../email/emailParts.jsx';
 import RecordEmailSheet from '../email/RecordEmailSheet.jsx';
 import { emailHref, personOfRecord } from '../email/emailModel.js';
 import { prototypeLovable } from './lovable/lovableModel';
-import InterviewRecord from '../founder/InterviewReviewPage';
 import Lightbox, { LightboxBarProvider } from '../../ui/Lightbox';
 import { CYCLE_GUTTER, RECORD_ID } from './cyclePaths';
 import { availableRecord, CLIENT_ACTIONS, confirmView, declaredActions, finishRecordWrite, recordActionBody, recordEditAction, recordFormFor, rowAction } from './recordModel';
 import PhoneCycleRoot from './PhoneCycleRoot';
+import ValidateNextAction from './ValidateNextAction';
 import RaiseLead, { RaiseAsk } from './RaiseOverviewLead';
 import CycleModulePage from './CycleModulePage';
 import PhoneModulePage, { CycleBar, PHONE_GUTTER } from './PhoneModulePage';
@@ -64,11 +62,7 @@ import RaisePosthog from './RaisePosthog';
 import { ImprovementPosthog, RevenuePosthog } from './GrowPosthog';
 import NotionInterviewImport from './NotionInterviewImport';
 import NotionSnapshotImport from './NotionSnapshotImport';
-import CalendarTab, { CalendarWeek } from './distribution/CalendarTab.jsx';
 import { buildPartsMap } from './buildParts';
-import UpdatesHistory from './UpdatesHistory';
-import ReportingDesk from './ReportingDesk';
-import BuildPlan, { BuildPlanDoor, VerdictRecordWithPlan } from './BuildPlan';
 import { PmfPart } from './PmfPart';
 import { PmfChip } from './PmfMethod';
 import UpdateAskReplies from './UpdateAskReplies';
@@ -87,23 +81,51 @@ import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { moduleToolLinks } from './founderToolNavigation.js';
-import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 import { NarrativeAdminGate, narrativeFormAccess } from '../raise/narrative/NarrativeAdmin';
-import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
-import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
-import DataRoomUpload from '../raise/dataroom/DataRoomUpload.jsx';
 import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
-import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
-import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
 import EvidencePart from './evidence/EvidencePart';
+import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
+import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
 import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
+import { lazyStep } from './lazyStep.jsx';
+
+// D4574 (#4574, H5): each step's module behind its own lazy boundary, so a step page
+// fetches its own step, not all of them. Each keeps its local name, so every render
+// site reads as before; only components go lazy (hooks and models stay static).
+const OverviewTab = lazyStep(() => import('./distribution/OverviewTab.jsx'));
+const ChannelsTab = lazyStep(() => import('./distribution/ChannelsTab.jsx'));
+const ProspectsPage = lazyStep(() => import('./distribution/ProspectsPage.jsx'));
+const CampaignsTab = lazyStep(() => import('./distribution/CampaignsTab.jsx'));
+const ResultsTab = lazyStep(() => import('./distribution/ResultsTab.jsx'));
+const NewCampaignPage = lazyStep(() => import('./distribution/NewCampaignPage.jsx'));
+const AdsTab = lazyStep(() => import('./distribution/AdsTab.jsx'));
+const InterviewRecord = lazyStep(() => import('../founder/InterviewReviewPage'));
+const CalendarTab = lazyStep(() => import('./distribution/CalendarTab.jsx'));
+const CalendarWeek = lazyStep(() => import('./distribution/CalendarTab.jsx'), 'CalendarWeek');
+const UpdatesHistory = lazyStep(() => import('./UpdatesHistory'));
+const ReportingDesk = lazyStep(() => import('./ReportingDesk'));
+const BuildPlan = lazyStep(() => import('./BuildPlan'));
+const BuildPlanDoor = lazyStep(() => import('./BuildPlan'), 'BuildPlanDoor', { fallback: null });
+const VerdictRecordWithPlan = lazyStep(() => import('./BuildPlan'), 'VerdictRecordWithPlan');
+const NarrativeHome = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeHome');
+const NarrativeTabBar = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabBar', { fallback: null });
+const NarrativeTabPage = lazyStep(() => import('../raise/narrative/NarrativeTool'), 'NarrativeTabPage');
+const CapTableHomeNav = lazyStep(() => import('../raise/captable/CapTableTool'), 'CapTableHomeNav', { fallback: null });
+const CapTableTabPage = lazyStep(() => import('../raise/captable/CapTableTool'), 'CapTableTabPage');
+const DataRoomHomeNav = lazyStep(() => import('../raise/dataroom/DataRoomTool'), 'DataRoomHomeNav', { fallback: null });
+const DataRoomTabPage = lazyStep(() => import('../raise/dataroom/DataRoomTool'), 'DataRoomTabPage');
+const DataRoomUpload = lazyStep(() => import('../raise/dataroom/DataRoomUpload.jsx'));
+const UseOfFundsHomeNav = lazyStep(() => import('../raise/useoffunds/UseOfFundsTool'), 'UseOfFundsHomeNav', { fallback: null });
+const UseOfFundsTabPage = lazyStep(() => import('../raise/useoffunds/UseOfFundsTool'), 'UseOfFundsTabPage');
+const CapRelHomeNav = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelHomeNav', { fallback: null });
+const CapRelTabPage = lazyStep(() => import('../raise/caprel/CapRelTool'), 'CapRelTabPage');
 
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -366,21 +388,16 @@ const CYCLE_DEFS = {
     }),
     add: toFnMap({}),
     fills: { 'product-improvement': 'feedback_theme' },
-    // The Grow desk's two AI bands (ZoneDraft, D424), on the modules they
-    // read: the applicant ranking on Team expansion, the outreach sequence
-    // for sign-ups who have not converted on Distribution.
+    // The Grow desk's AI band (ZoneDraft, D424) on the module it reads: the
+    // applicant ranking on Team expansion. D4493 retired Distribution's
+    // outreach-sequence band: 'Ask Eadwyn for a sequence' in the sequence
+    // builder (Prospects) runs it through D4488's drafting task.
     drafts: new Map([
       ['team-expansion', [{
         surface: 'grow/talent', label: 'Match · why this one', run: 'Rank the applicants', accept: 'Keep this ranking',
         empty: 'Nothing proposed yet. Eadwyn will rank your applicants and give reasons for the top one — each a receipt you can open and check in their own application.',
         nothingToDraft: 'No live role has an applicant yet.',
         foot: 'A reading only. Nothing here moves an application to a screen.',
-      }]],
-      ['distribution', [{
-        surface: 'grow/customers', label: 'Proposal · outreach sequence', run: 'Draft a sequence', accept: 'Accept sequence',
-        empty: 'Nothing proposed yet. Eadwyn will draft a sequence for the signups who have gone furthest without converting, opening each touch on a pain you have actually recorded.',
-        nothingToDraft: 'No customer signup is recorded for this startup yet.',
-        foot: 'Each opener quotes a pain from your own map, or says none fits.',
       }]],
     ]),
     // A module's further parts, drawn under its table from the module read.
@@ -496,6 +513,8 @@ export function primaryForModule(cycle, slug, search = '', open) {
 
 export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   // Writes build on the latest query, never on a render's (react-router hands a
   // functional update the search params of the render that made the setter), and
   // drop `drop`'s keys in the same write: a sign-in's return or `?tool=` that the
@@ -507,12 +526,15 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     const next = new URLSearchParams(latest.current);
     for (const k of dropRef.current || []) next.delete(k);
     for (const k of extraDrop) next.delete(k);
-    next.set('project_id', String(id));
-    setSearchParams(next, { replace: true });
+    // D5074: the one form, so a legacy `?project=` never travels beside it.
+    setSearchParams(new URLSearchParams(canonicalVentureSearch(next, id)), { replace: true });
   }, [setSearchParams]);
-  // The read's own links (`next.href`) say `?project=`; the page's say
-  // `?project_id=`. Either picks the venture.
-  const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  // D5074 (#5074): the address is parsed here and nowhere else (`ventureQuery.js`).
+  // The read's own links (`next.href`) say `?project=`, older ones a project UID;
+  // each names the venture, and the address is then replaced with `?project_id=`.
+  const ref = ventureRef(searchParams);
+  const named = ref?.id ?? null;
+  const namedUid = ref?.uid ?? null;
   // Back from a provider's sign-in at /build/connect with no venture named: the
   // one Build kept before the redirect (D686 §5.4), taken once.
   const [stashed] = useState(() => (named ? null : kept?.() ?? null));
@@ -528,14 +550,23 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     let alive = true;
     api.listProjects().then((list) => {
       if (!alive) return;
-      const first = (list || [])[0];
+      // A UID names its venture; one not in the list falls back to the first, as an unreadable id always has.
+      const first = (namedUid ? resolveVenture(list, ref)?.project : null) || (list || [])[0];
       setProjectId(first?.id || null);
       setStatus(first ? 'ready' : 'none');
-      if (first) writeProject(first.id);
+      // A UID's address is rewritten by the redirect below, which keeps the hash.
+      if (first && !namedUid) writeProject(first.id);
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
-  }, [requested, writeProject, reloadKey]);
-  return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
+  }, [requested, writeProject, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps -- `namedUid` is read with `requested`
+  // D5074: a legacy address (`?project=N`, a UID) is replaced with the canonical
+  // one once its venture is known, every other query key and the hash kept.
+  const current = immediate && requested ? requested : projectId;
+  useEffect(() => {
+    const to = legacyVentureRedirect(location, current);
+    if (to) navigate(to, { replace: true, state: location.state });
+  }, [current, location, navigate]);
+  return { projectId: current, status: immediate && requested ? 'ready' : status, writeProject };
 }
 
 /**
@@ -578,24 +609,68 @@ export function underModule(modules, path, cycle = 'validate', action = 'record'
 
 /**
  * The lightbox, with the interview it was opened on (`?interview=<id>`, from a
- * row's "Record a session") read first so Who is pre-filled. An interview that
- * cannot be found opens the lightbox with Who empty rather than not at all.
+ * row's "Record a session") read first so Who is pre-filled.
+ *
+ * D4625 (#4625): `listInterviews` answers `{ project_id, interviews: [...] }`,
+ * which `interviewListOf` decodes. The requested interview is one of four
+ * things, and never silently another:
+ *   - none requested: the intentional new-person flow (no read at all);
+ *   - found: the lightbox opens on it, Who pre-filled, and Start attaches the
+ *     session to that interview;
+ *   - not in this venture's list (missing, or out of the caller's scope): said
+ *     so, with a deliberate "Record someone new" and a Close;
+ *   - unreadable (the read failed, or its answer was not a list): said so,
+ *     with Try again. It never falls into the new-person flow.
+ * A result is kept with the venture and interview it was read for, so
+ * switching either while a read is in flight can never show or apply the
+ * earlier one.
  */
-export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage }) {
+export function RecordMount({ projectId, interviewId, setupKey, onClose, onStarted, asPage, read = (id) => api.listInterviews(id), lightboxProps }) {
   const { recorder } = useActiveRecording();
   // D768: while Record a session is open, the rail is that option's (transcription).
   useRailOption('transcribe:interview', 'Record a session');
-  const [interview, setInterview] = useState(interviewId ? undefined : null);
+  const key = interviewId ? `${projectId}|${interviewId}` : null;
+  const [result, setResult] = useState(null); // { key, status: 'ready' | 'missing' | 'error', interview }
+  const [attempt, setAttempt] = useState(0);
+  const [newFor, setNewFor] = useState(null); // the key the founder chose "Record someone new" for
   useEffect(() => {
-    if (!interviewId) { setInterview(null); return undefined; }
+    if (!key) return undefined;
     let alive = true;
-    api.listInterviews(projectId)
-      .then((rows) => { if (alive) setInterview((rows || []).find((r) => String(r.id) === String(interviewId)) || null); })
-      .catch(() => { if (alive) setInterview(null); });
+    const settle = (next) => { if (alive) setResult({ key, ...next }); };
+    Promise.resolve().then(() => read(projectId))
+      .then((res) => {
+        const rows = interviewListOf(res);
+        if (!rows) { settle({ status: 'error', interview: null }); return; }
+        const found = rows.find((r) => String(r.id) === String(interviewId));
+        settle(found ? { status: 'ready', interview: found } : { status: 'missing', interview: null });
+      })
+      .catch(() => settle({ status: 'error', interview: null }));
     return () => { alive = false; };
-  }, [projectId, interviewId]);
-  if (interview === undefined) return null;
-  return <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} />;
+  }, [key, projectId, interviewId, attempt]); // eslint-disable-line react-hooks/exhaustive-deps -- `read` is a test seam, not a trigger
+  const lightbox = (interview) => <RecordLightbox projectId={projectId} interview={interview} initialClientKey={setupKey} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} {...lightboxProps} />;
+  if (!key) return lightbox(null);
+  if (newFor === key) return lightbox(null);
+  const current = result?.key === key ? result : null;
+  if (!current) return null;
+  if (current.status === 'ready') return lightbox(current.interview);
+  const missing = current.status === 'missing';
+  return (
+    <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" onClose={onClose} testId="record-unavailable" {...asPage}
+      footer={(
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-unavailable-close">Close</button>
+          {missing
+            ? <button type="button" onClick={() => setNewFor(key)} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-new">Record someone new</button>
+            : <button type="button" onClick={() => { setResult(null); setAttempt((n) => n + 1); }} className="rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep" data-testid="record-unavailable-retry">Try again</button>}
+        </div>
+      )}>
+      <p className="m-0 text-[13px] leading-relaxed text-axal-ink dark:text-gray-100" role={missing ? 'status' : 'alert'} data-testid="record-unavailable-message">
+        {missing
+          ? 'That interview is not in this venture, or you cannot open it. Nothing was recorded.'
+          : 'The interview could not be read just now, so the session was not set up. Nothing was recorded. Try again.'}
+      </p>
+    </Lightbox>
+  );
 }
 
 /** The module slug of a cycle path (`/validate/customer-research?…`), or null for the overview and the cycle's own action path. */
@@ -628,7 +703,7 @@ export function finishPath(session, where, projectId) {
  * around any of them: two dialogs must never nest.
  */
 function ValidateMount({ projectId, searchParams, onClose, onDone, asPage }) {
-  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
+  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} setupKey={searchParams.get('setup_key')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
 }
 // D686 §5.4 (#1597): the sheet connects for this project's company, and a
 // change re-reads the Build page once the lightbox closes.
@@ -855,6 +930,22 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
   // D1464 (#4021): the access pill and banner say HQ for the Super Admin, Studio admin for an Admin.
   const supportViewer = isSuperAdminUser(user) ? 'super_admin' : 'admin';
+  /**
+   * D5079 (#5079): a sensitive Raise tool's own authoritative read can be
+   * refused while this page's module read succeeds — the two are gated
+   * differently, and an admin passes one and not the other. The tool reports
+   * its refusal here, and this page then draws none of the module's
+   * authoritative data for it. The page's own refused branch is what withholds
+   * it — the card, the records table with its Add and row actions, and the
+   * children: Eadwyn's bands, the module's parts and the Evidence block — so
+   * this flag only has to reach it. Only the tool's own refusal and its tab
+   * row stay, because `subnav` sits outside that branch. "Not allowed to
+   * read" must never be drawn as "read, and empty".
+   */
+  const [toolRefusal, setToolRefusal] = useState(null);
+  const onToolRefused = useCallback((refusal) => setToolRefusal(refusal ?? null), []);
+  useEffect(() => { setToolRefusal(null); }, [cycle, slug, projectId]);
+  const refusedTool = !record && toolRefusal?.refused ? toolRefusal : null;
   const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -950,9 +1041,18 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }, [adding, editingId]);
 
   // The table's query resets when the module changes.
-  useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
-
+  // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
+  // read below (its dependency is `query`), so every module page read its module twice when it opened.
   useEffect(() => {
+    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+  }, [slug]);
+
+  // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
+  // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.
+  const overviewId = useRef({ gen: 0, key: '' });
+  const retrySeq = useRef({});
+  useEffect(() => {
+    overviewId.current = { gen: overviewId.current.gen + 1, key: `${cycle}|${projectId}|${overviewId.current.gen + 1}` };
     // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
     if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
@@ -999,8 +1099,15 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // others stay drawn (D656: a failing source leaves the others alone).
   const retryCard = useCallback((cardSlug) => {
     if (!projectId) return;
+    const started = overviewId.current.key;
+    const seq = (retrySeq.current[cardSlug] || 0) + 1;
+    retrySeq.current[cardSlug] = seq;
     cyclesApi.module(cycle, projectId, cardSlug, {})
-      .then((data) => setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o)))
+      .then((data) => {
+        // A venture switch, a re-read or a newer retry of this card has happened since: this answer is obsolete.
+        if (overviewId.current.key !== started || retrySeq.current[cardSlug] !== seq) return;
+        setOverview((o) => (o ? { ...o, cards: o.cards.map((c) => (c.slug === cardSlug ? adaptCard(cycle, { slug: cardSlug, ...data.card }) : c)) } : o));
+      })
       .catch(() => {});
   }, [cycle, projectId]);
 
@@ -1060,19 +1167,19 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     : formOpen && cycle === 'raise' && slug === DATA_ROOM ? (
       <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
     ) : formOpen ? (
-      <FormLightbox key={`add-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} {...narrativeAccess} cycle={cycle} slug={slug} search={location.search}
+      <FormLightbox key={`add-${projectId}-${formOpen.key}${fillRow ? `-${fillRow.uid}` : ''}`} form={formOpen} {...narrativeAccess} cycle={cycle} slug={slug} search={location.search}
         renderAssistant={uofAssistant}
         fill={fillFor(formOpen)}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
         onSearch={formOpen.search ? (_field, q) => formOpen.search(formWrites, projectId, q) : null}
-        onSubmit={(values) => formOpen.submit(formWrites, projectId, values)}
+        onSubmit={(values, memory) => formOpen.submit(formWrites, projectId, values, memory)}
         onSaved={saved}
         onClose={closeAdd} />
     ) : editing && edit.idOf(editing) != null && edit.readsRecord ? (
       // Drawn once the record answers: its values, or the refusal in the dialog.
       rowEdit?.spec ? (
-        <FormLightbox key={`edit-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${projectId}-${editing.id}`} form={rowEdit.spec.form} current={rowEdit.spec.current} {...narrativeAccess} cycle={cycle} slug={slug}
           renderAssistant={uofAssistant}
           fill={fillFor(rowEdit.spec.form, rowEdit.spec.id)}
           loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, rowEdit.spec.id) : null}
@@ -1080,11 +1187,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onSaved={saved}
           onClose={closeEdit} />
       ) : rowEdit ? (
-        <FormLightbox key={`edit-${editing.id}-refused`} form={{ ...edit, fields: [] }} {...narrativeAccess} cycle={cycle} slug={slug}
+        <FormLightbox key={`edit-${projectId}-${editing.id}-refused`} form={{ ...edit, fields: [] }} {...narrativeAccess} cycle={cycle} slug={slug}
           refused={rowEdit.error || 'This record has no Edit.'} onSubmit={() => {}} onClose={closeEdit} />
       ) : null
     ) : editing && edit.idOf(editing) != null ? (
-      <FormLightbox key={`edit-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
+      <FormLightbox key={`edit-${projectId}-${editing.id}`} form={edit} current={edit.valuesOf(editing)} {...narrativeAccess} cycle={cycle} slug={slug}
         renderAssistant={uofAssistant}
         fill={fillFor(edit, edit.idOf(editing))}
         loadOptions={edit.loadOptions ? () => edit.loadOptions(cyclesWrite, projectId, edit.idOf(editing)) : null}
@@ -1216,7 +1323,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           onWrite={recordState.write} onClient={recordState.client} onShowAll={recordState.showAll} />)}
       </RecordHeaderProvider>
       </RecordPhoneProvider>
-      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
+      {emailing && emailPerson && <RecordEmailSheet person={emailPerson} label={recordTitle} from={emailFrom} readOnly={Boolean(narrativeAdmin || supportOpen)} onClose={() => setEmailing(false)} />}
       {recordState.actionError && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{recordState.actionError}</p>}
     </div>;
   } else if (!slug) {
@@ -1238,7 +1345,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
           action={action}
           search={q}
           // D1466 (#3714): Raise's lead row (Next steps, From your tools), drawn from the read's own parts.
-          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} /> : null}
+          // D4589 (#4589): Validate's next action, the same Worker focus the phone root draws.
+          lead={cycle === 'raise' ? <RaiseLead data={rawOverview} search={q} onRetry={() => setReload((n) => n + 1)} />
+            : cycle === 'validate' && rawOverview ? <ValidateNextAction raw={rawOverview} search={q} openAction={openAction} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
           // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
@@ -1267,12 +1376,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         header={distribution ? null : undefined}
         cards={tabs}
         data={module}
-        status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
-        message={moduleStatus === 'refused' ? moduleMessage : undefined}
+        status={projectStatus === 'unreadable' ? 'unreadable' : refusedTool ? 'refused' : moduleStatus}
+        message={refusedTool ? refusedTool.message : moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
-        recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
+        recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
@@ -1290,10 +1399,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
@@ -1335,14 +1444,16 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4484: Overview keeps the existing module body; unlanded tabs read no campaign data.
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
-    if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} />{body}</>;
-    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} key={projectId} aiOff={!fillsOn} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;
+    // D4490 integration (#4484): Ads was built in #4510 but never mounted; it reads its own campaign list and Ask.
+    if (distributionTab === 'ads' && projectStatus === 'ready') body = <AdsTab projectId={projectId} aiOff={!fillsOn} />;
     body = campaignNew ? (projectStatus === 'ready' ? <NewCampaignPage key={`${projectId}:${location.search}`} projectId={projectId} role={user?.role} search={q} aiOff={!fillsOn} /> : body) : <DistributionTabs projectId={projectStatus==='ready'?projectId:null} tab={distributionTab} search={q} action={action} aiOff={!fillsOn} inboxCount={inboxUnread.count}
       loading={projectStatus === 'loading' || (distributionTab === 'overview' && projectStatus === 'ready' && moduleStatus === 'loading')}>
-      {['channels', 'inbox', 'calendar', 'prospects'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : <ComingSoon />}
+      {['channels', 'inbox', 'calendar', 'prospects', 'ads'].includes(distributionTab) && projectStatus === 'ready' ? body : distributionTab === 'overview' || projectStatus !== 'ready' ? body : distributionTab === 'campaigns' ? <CampaignsTab key={projectId} projectId={projectId} role={user?.role} search={q} campaignUid={campaignUid}/> : distributionTab === 'results' ? <ResultsTab key={projectId} projectId={projectId} /> : distributionTab === 'newsletter' ? <NewsletterTab /> : <ComingSoon />}
     </DistributionTabs>;
   }
 
@@ -1357,7 +1468,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
+  // D5074 (#5074): the venture this page resolved, for every tool under it (`useVenture()`).
   return (
+    <VentureProvider projectId={projectId} status={projectStatus} reloadKey={projectsKey}>
     <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} className={distribution ? 'distribution-frame' : undefined} data-testid={`cycle-route-${cycle}`}>
       {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
@@ -1406,5 +1519,6 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
+    </VentureProvider>
   );
 }

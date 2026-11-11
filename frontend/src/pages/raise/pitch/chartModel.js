@@ -14,6 +14,7 @@
  * back from today's month, or everything. A month with no point is left out,
  * never drawn as 0.
  */
+import { formatMinor } from '../../../lib/money.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 
 export { NOT_RECORDED };
@@ -83,7 +84,7 @@ const money = (v) => `$${Math.round(v).toLocaleString('en-US')}`;
 export function valueWord(v, unit) {
   if (typeof v !== 'number' || !Number.isFinite(v)) return NOT_RECORDED;
   if (unit === 'usd') return money(v);
-  if (unit === 'cents') return money(v / 100);
+  if (unit === 'cents') return formatMinor(v, 'USD', { trimWhole: true }) ?? NOT_RECORDED;
   if (unit === 'percent') return `${Math.round(v * 10) / 10}%`;
   if (unit === 'months') return `${Math.round(v * 10) / 10} months`;
   return Math.round(v).toLocaleString('en-US');

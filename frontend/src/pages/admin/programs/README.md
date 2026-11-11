@@ -47,6 +47,22 @@ page in a child component inside it:
   PG19b in the page. It also holds `ProgramsTabs`, the strip "Catalogue ·
   Proposals [n]" the catalogue draws for a Super Admin.
 
+- `GenericProgramPage.jsx` — D4808 (#4808), workspace "Programs":
+  `/admin/programs/:key` (with `/how-it-runs` and `/activity`), registered by
+  `frontend/src/routes/adminProgramsGeneric.jsx`. Draws any program the
+  registry holds, so a program an approval or New program made needs no route
+  of its own: About, Availability, Declared capabilities, the Approved
+  proposal exactly as approved, How it runs and Activity. The literal
+  addresses above rank higher, so the nine keep their pages.
+- `ProposalReviewPage.jsx` — D4808: `/admin/programs/proposals/:uid`, a
+  proposal's review before Decide. D4873 (part 3): it draws the Proposals list
+  with `ProposalReviewSheet.jsx` open over it.
+- `genericProgramModel.js` — D4808: both pages' words and rows. Pure.
+- `overviewModel.js` — D4873 (#4873, part 2): the catalogue's operating console.
+  Pure. The four headline cards (they reconcile with the queues; an unread
+  queue makes a headline "N+" and Incomplete), Needs attention, Eadwyn's next
+  steps, and the rows grouped by category.
+
 The pieces they draw with:
 
 - `ProgramFrame.jsx` — every program page's crumb, header, facts strip and
@@ -96,6 +112,8 @@ The pieces they draw with:
 - `useProgramReads.js` — the reads, each made alone. The catalogue reads
   `adminProgramsApi.catalogue` (`GET /api/admin/programs`, D954) and Lab
   applications' `counts.pending` (`GET /api/admin/spinout-applications`, D960).
+- `useProgramsTitle.js` — the browser tab title for a Programs page and its
+  scope (D4807), set directly so an admin page fires no public pageview.
 - `catalogueModel.js` — pure. D961's period, the four tiles, the three
   charts' series, rows and tables, the cards from the registry, Lab
   applications and the studio chip, each from one block of part 1's read.
@@ -104,7 +122,10 @@ The pieces they draw with:
   search, status, sort and pages.
 - `ProposalFields.jsx` — D964: PG14's Basics and How it runs fields, shared by
   Propose a program and New program.
-- `DecideDialog.jsx` — D964: PG15a, a Super Admin's decision on one proposal.
+- `ProposalReviewSheet.jsx` — D4873 (#4873, part 3): PG04's review drawer, a `Sheet` over the
+  Proposals list at `/admin/programs/proposals/:uid`. The full specification of one revision,
+  read-only, its history, and the decision on it (Decline, Send back, Approve revision N), each
+  through a review step, sent with `expected_revision`. It replaces D964's Decide dialog.
 - `NewProgramDialog.jsx` — D964: New program (PG2's header), for a Super Admin.
 - `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
   lists, the Review lines, PG15a's choices, PG19b, the list parameters and the

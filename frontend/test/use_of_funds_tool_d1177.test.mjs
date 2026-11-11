@@ -8,6 +8,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_tool_d1177.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -44,15 +45,15 @@ function planFixture({ viewer = { kind: 'founder', can_write: true, mercury: tru
     id: 9, uid: 'b9', name: 'Base', is_base: 1, currency: 'usd', amount_to_raise_cents: null, target_runway_months: null, lines: [], milestones: [],
     hires: { state: 'ok', items: [] }, model: { runway: modelled(null, 'Raise amount or a complete split totalling 100% is Not recorded.'), sections: [], cashPath: modelled(null, 'Opening cash is Not recorded.'), cashOut: modelled(null), burn: modelled(null, 'Planned burn is Not recorded.'), milestones: modelled([]) },
   } : {
-    id: 9, uid: 'b9', name: 'Seed · base', is_base: 1, currency: 'usd', amount_to_raise_cents: raise, target_runway_months: 18, source: 'Typed',
+    id: 9, uid: 'b9', revision: 4, name: 'Seed · base', is_base: 1, currency: 'usd', amount_to_raise_cents: raise, target_runway_months: 18, source: 'Typed',
     lines: KEYS.map((k, i) => ({ category_key: k, share_pct: SHARES[i], source: 'Typed' })),
     milestones: [
       { id: 1, category_key: 'infrastructure', label: 'SOC 2 Type I', due_on: '2027-01', cost_cents: 6000000, source: 'Typed', cost_state: 'recorded' },
       { id: 2, category_key: 'operations', label: 'EU entity', due_on: '2027-04', cost_cents: null, source: 'Typed', cost_state: 'not_costed' },
     ],
     hires: { state: 'ok', items: [
-      { id: 11, category_key: 'product', role: 'Senior engineer', start_month: '2026-12', annual_cents: 15000000, currency: 'usd' },
-      { id: 12, category_key: 'go-to-market', role: 'Account executive', start_month: '2027-02', annual_cents: 42000000, currency: 'usd' },
+      { id: 11, category_key: 'product', role: 'Senior engineer', start_month: '2026-12', annual_cents: 15000000, currency: 'usd', revision: 3 },
+      { id: 12, category_key: 'go-to-market', role: 'Account executive', start_month: '2027-02', annual_cents: 42000000, currency: 'usd', revision: 0 },
     ] },
     model: {
       sections: KEYS.map((k, i) => ({ key: k, allocation: modelled(alloc[i]), payroll: modelled(M.map(() => (k === 'product' ? 1250000 : 0))), spend: modelled(spend[i]) })),
@@ -280,8 +281,61 @@ test('UF3 Edit split: a total other than 100 waits; a good split saves the raise
     assert.ok(put, 'the split is saved');
     assert.equal(put.body.amount_to_raise_cents, 200000000);
     assert.equal(put.body.runway_months, 18);
+    assert.equal(put.body.expected_revision, 4, 'D5069: the save names the revision it read');
     assert.deepEqual(put.body.sections.map((s) => s.pct), [45, 25, 10, 10, 10]);
     assert.ok(v.text('uof-notice').includes('out of sync'));
+  } finally { await v.close(); }
+});
+
+test('D5069 a split refused because the plan changed keeps the dialog, says so, and offers Review latest', async () => {
+  const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 5 }, 409);
+  const v = await mounted('/raise/use-of-funds?project_id=3', { over: { 'PUT /cycles/raise/use-of-funds': conflict } });
+  try {
+    await v.click('uof-edit-split-open');
+    await v.type('uof-split-amount', '2000000');
+    await v.click('uof-split-save');
+    assert.match(v.text('uof-split-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+    assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+    assert.ok(v.by('uof-edit-split'), 'the dialog stays open');
+    const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+    const before = reads();
+    await v.click('uof-review-latest');
+    assert.ok(reads() > before, 'Review latest reads the plan again');
+    assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire edit and a hire removal carry the hire\'s own revision', async () => {
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': () => response({ id: 11 }), 'DELETE /cycles/raise/use-of-funds/hires/12': () => response({ ok: true }) } });
+  try {
+    await v.click('uof-hire-edit-open');
+    await v.type('uof-hire-role', 'Staff engineer');
+    await v.click('uof-hire-save');
+    const patch = v.sent.find((s) => s.line.startsWith('PATCH /cycles/raise/use-of-funds/hires/11'));
+    assert.deepEqual(patch.body, { role: 'Staff engineer', category_key: 'product', start_month: '2026-12', expected_revision: 3 });
+    assert.ok(!('annual_cents' in patch.body) && !('currency' in patch.body), 'the cost and its currency are not rewritten');
+    await v.click('uof-hire-edit-open');
+    await v.click('uof-hire-remove');
+    assert.ok(v.sent.some((s) => s.line.startsWith('DELETE /cycles/raise/use-of-funds/hires/11') && s.line.includes('expected_revision=3')), 'a removal names the revision in its query');
+  } finally { await v.close(); }
+});
+
+test('D5375 a hire refused because it changed keeps the dialog, says so, and offers Review latest', async () => {
+  const conflict = () => response({ code: 'changed_since_open', error: 'changed_since_open', detail: 'This hire was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.', current_revision: 4 }, 409);
+  const v = await mounted('/raise/use-of-funds/milestones?project_id=3', { over: { 'PATCH /cycles/raise/use-of-funds/hires/11': conflict, 'DELETE /cycles/raise/use-of-funds/hires/11': conflict } });
+  try {
+    for (const press of ['uof-hire-save', 'uof-hire-remove']) {
+      await v.click('uof-hire-edit-open');
+      await v.click(press);
+      assert.match(v.text('uof-hire-error'), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+      assert.ok(v.by('uof-edit-hire'), 'the dialog stays open');
+      assert.ok(v.by('uof-review-latest'), 'Review latest is offered');
+      const reads = () => v.sent.filter((s) => s.line === 'GET /cycles/raise/use-of-funds/plan?project=3').length;
+      const before = reads();
+      await v.click('uof-review-latest');
+      assert.ok(reads() > before, 'Review latest reads the plan again');
+      assert.ok(v.text('uof-notice').includes('Your change was not saved'));
+    }
   } finally { await v.close(); }
 });
 
@@ -341,7 +395,7 @@ test('UF5–UF6 Milestones and hires: the tables, Not costed, and Add milestone 
     await v.type('uof-milestone-by', '2027-03');
     await v.click('uof-milestone-save');
     const post = v.sent.find((s) => s.line.startsWith('POST /cycles/raise/use-of-funds/milestones'));
-    assert.deepEqual(post.body, { label: 'Self-serve onboarding live', category_key: 'product', due_on: '2027-03', cost_cents: null });
+    assert.deepEqual(post.body, { label: 'Self-serve onboarding live', category_key: 'product', due_on: '2027-03', cost_cents: null, expected_revision: 4 }); // D5069
     assert.ok(v.text('uof-notice').includes('Not costed'));
   } finally { await v.close(); }
 });

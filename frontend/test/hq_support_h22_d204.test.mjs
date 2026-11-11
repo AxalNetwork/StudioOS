@@ -104,24 +104,41 @@ test('the three queues carry H22’s own names, in H22’s order', () => {
   assert.deepEqual(Object.keys(QUEUE_TITLES), ['escalations', 'hq_held', 'admin_product']);
 });
 
-test('the matrix has H22’s four columns, in order, and HQ is the first row', () => {
-  const at = CANVAS.indexOf('<span class="zt">Tenant × queue</span>');
-  assert.ok(at > 0);
-  const canvasCols = [...CANVAS.slice(at, at + 900).matchAll(/<span class="th">([^<]+)<\/span>/g)].map((m) => m[1]);
+test('the matrix has the v2 canvas’s four columns, in order, and HQ is the first row', () => {
+  // D5034 part 3 (#5034) — H22's "Tenant × queue" (Branch, Escalations, HQ-held, About Admin) is the
+  // Support v2 canvas's "Queues by subsidiary" (SU04a), named for operators; the cells are unchanged.
+  const V2 = read('design/incoming/Support v2 Page.dc.html');
+  const at = V2.indexOf('Queues by subsidiary');
+  assert.ok(at > 0, 'the v2 canvas no longer draws Queues by subsidiary');
+  const block = V2.slice(at, at + 1200);
+  const canvasCols = ['Subsidiary', 'Escalations', 'Customer tickets on HQ', 'Subsidiary admin tickets'];
+  let from = 0;
+  for (const c of canvasCols) {
+    const i = block.indexOf(`>${c}<`, from);
+    assert.ok(i > 0, `the canvas does not draw the column ${c} in this order`);
+    from = i;
+  }
   const html = render(TenantMatrix, { matrix: payload().matrix });
+  assert.match(html, />Queues by subsidiary</);
   const head = html.slice(html.indexOf('<thead>'), html.indexOf('</thead>'));
   const pageCols = [...head.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
   assert.deepEqual(pageCols, canvasCols);
+  assert.match(head, /<th scope="col"/);
   const firstRow = html.slice(html.indexOf('<tbody>'));
   assert.match(firstRow, /^<tbody><tr[^>]*data-kind="hq"/, 'HQ is not the first row — the table would total more than its rows');
 });
 
-test('the band has no switcher caret, because there is no switcher', () => {
-  const at = CODE.indexOf('bg-[#881337]');
-  assert.ok(at > 0, 'the band is gone');
-  const band = CODE.slice(at, CODE.indexOf('</div>', at));
-  assert.match(band, />All subsidiaries</);
-  assert.doesNotMatch(band, /▾/);
+test('the scope is stated, never drawn as a switcher, because there is no switcher', () => {
+  // D5034 (#5034) — H22's "All subsidiaries" bar read as a selector with no
+  // selector behind it; Support v2 states the scope in words under the title.
+  const SRC = codeOnly(read('frontend/src/pages/hq/support/SupportWorkspaces.jsx'));
+  const at = SRC.indexOf('data-testid="hq-support-scope"');
+  assert.ok(at > 0, 'the scope line is gone');
+  const scope = SRC.slice(at, SRC.indexOf('</p>', at));
+  assert.match(scope, />Platform-wide support</);
+  assert.match(scope, />HQ \+ all available subsidiaries</);
+  assert.doesNotMatch(scope, /▾|<select|aria-haspopup/);
+  assert.doesNotMatch(CODE, />All subsidiaries</, 'the selector-like bar is back');
 });
 
 // ──────────────────────────────────────────────────────────── the band ──
@@ -270,11 +287,11 @@ test('every rail row is a [title, detail] pair, and the retired refusal is gone'
 
 // ──────────────────────────────────────────────────────────── the page ──
 
-test('the page makes one read and three writes — the Support route, HQ’s answer, send again and the SLA tiers (D482) — and never falls back to a zero', () => {
-  // Exactly these four. A fifth call — a second read of the board, say — fails here.
+test('the page makes two reads and three writes — the Support route and its HQ-local half (D5031), HQ’s answer, send again and the SLA tiers (D482) — and never falls back to a zero', () => {
+  // Exactly these five. A sixth call — a third read of the board, say — fails here.
   assert.deepEqual(
     [...(CODE.match(/api\.\w+\(/g) || [])].sort(),
-    ['api.escalationAnswer(', 'api.escalationResend(', 'api.hqSupport(', 'api.hqSupportSetSlaTiers('],
+    ['api.escalationAnswer(', 'api.escalationResend(', 'api.hqSupport(', 'api.hqSupportLocal(', 'api.hqSupportSetSlaTiers('],
   );
   assert.doesNotMatch(CODE, /\|\|\s*0\b/, 'a count falls back to zero');
   assert.doesNotMatch(CODE, /from '\.\.\/\.\.\/pages\//, 'the page imports a routed page');

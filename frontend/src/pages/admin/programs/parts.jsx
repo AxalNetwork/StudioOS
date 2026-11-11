@@ -75,6 +75,9 @@ export function Tile({ t, onRetry }) {
       {t.state === 'ready' && t.overdue ? (
         <span className="self-start"><Pill tone="amber" testId={`programs-tile-${t.key}-overdue`}><span aria-hidden="true">!</span>Overdue</Pill></span>
       ) : null}
+      {t.state === 'ready' && t.partial ? (
+        <span className="self-start"><Pill tone="amber" testId={`programs-tile-${t.key}-partial`}><span aria-hidden="true">◐</span>{t.partial}</Pill></span>
+      ) : null}
       {t.state === 'ready' && t.cover ? <span className={SUB}>{t.cover}</span> : null}
       {t.state === 'unreadable' ? (
         <>
@@ -86,6 +89,76 @@ export function Tile({ t, onRetry }) {
       {t.state === 'placeholder' ? <Unread word={t.word} reason={t.reason} /> : null}
       {(Array.isArray(t.extra) ? t.extra : t.extra ? [t.extra] : []).map((x) => <span key={x} className={SUB}>{x}</span>)}
     </div>
+  );
+}
+
+/**
+ * D4873 (#4873, part 2): one of the four headline cards (PG01, PG06), in its state, each announced by its
+ * word, not only its style: Loading, Incomplete (drawn dashed, with what it covers; never a plain number),
+ * Overdue, Could not be read (with Try again), or Not read here yet / Not recorded with its reason. `c` is
+ * `overviewModel.headlineCards`'.
+ */
+export function HeadlineCard({ c, onRetry }) {
+  const dashed = c.state === 'ready' && c.incomplete;
+  return (
+    <section aria-labelledby={`programs-tile-${c.key}-h`} aria-busy={c.state === 'loading' || undefined} data-testid={`programs-tile-${c.key}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-[12px] border bg-white px-4 py-3.5 dark:bg-gray-900 ${dashed ? 'border-dashed border-amber-500 dark:border-amber-500' : 'border-axal-hairline dark:border-gray-700'}`}>
+      <span className="flex flex-wrap items-center gap-2">
+        <h3 id={`programs-tile-${c.key}-h`} className={`m-0 ${EYE}`}>{c.label}</h3>
+        {dashed ? <Pill tone="amber" testId={`programs-tile-${c.key}-partial`}><span aria-hidden="true">◐</span>Incomplete</Pill> : null}
+      </span>
+      {c.state === 'loading' ? (
+        <>
+          <span aria-hidden="true" className="block h-6 w-3/5 rounded-md bg-axal-hairline dark:bg-gray-800" />
+          <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400"><span aria-hidden="true">{READING}</span><span className="sr-only">{`Loading ${c.label}`}</span></span>
+        </>
+      ) : null}
+      {c.state === 'ready' ? (
+        <>
+          <span className="flex flex-wrap items-baseline gap-2">
+            <span className="font-mono text-[24px] font-medium tracking-[-.02em] text-axal-ink dark:text-gray-100" data-testid={`programs-tile-${c.key}-value`}>
+              {String(c.value).split(' ')[0]}
+              {String(c.value).includes(' ') ? <span className="text-[14px] font-semibold tracking-normal text-axal-muted dark:text-gray-400">{` ${String(c.value).split(' ').slice(1).join(' ')}`}</span> : null}
+            </span>
+            {c.delta ? <span className="font-mono text-[12px] font-semibold text-axal-muted dark:text-gray-400" data-testid={`programs-tile-${c.key}-delta`}>{c.delta}</span> : null}
+          </span>
+          {c.parts?.length ? <span className={SUB} data-testid={`programs-tile-${c.key}-parts`}>{c.parts.join(' · ')}</span> : null}
+          {c.note ? <span className={SUB} data-testid={`programs-tile-${c.key}-note`}>{c.note}</span> : null}
+          {c.overdue ? <span className="self-start"><Pill tone="amber" testId={`programs-tile-${c.key}-overdue`}><span aria-hidden="true">!</span>Overdue</Pill></span> : null}
+        </>
+      ) : null}
+      {c.state === 'unreadable' ? (
+        <>
+          <span role="alert" className="text-[15px] font-bold leading-snug text-red-700 dark:text-red-300">Could not be read</span>
+          <span className={SUB}>{c.reason || NONE_CLAIM}</span>
+          {onRetry ? <button type="button" onClick={onRetry} className="self-start text-[12px] font-semibold text-red-700 underline dark:text-red-300">Try again</button> : null}
+        </>
+      ) : null}
+      {c.state === 'placeholder' ? <Unread word={c.word} reason={c.reason} /> : null}
+    </section>
+  );
+}
+
+/** D4807: the last answer stays while the next one reads, and says so. */
+export function StaleNote({ stale }) {
+  return stale ? <span role="status" className={SUB} data-testid="programs-catalogue-stale">Showing the last reading while the new one loads.</span> : null;
+}
+
+/**
+ * The five dimensions of a program, each its own labelled row (D4807): build
+ * state, operation, member access, studio offering and studio grants. No one
+ * status word stands for all five.
+ */
+export function ProgramDimensions({ dims, testId }) {
+  return (
+    <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]" data-testid={testId}>
+      {dims.map((d) => (
+        <React.Fragment key={d.key}>
+          <dt className="font-semibold text-axal-muted dark:text-gray-400">{d.label}</dt>
+          <dd className="m-0 font-medium text-axal-ink dark:text-gray-100" data-testid={`${testId}-${d.key}`}>{d.value}</dd>
+        </React.Fragment>
+      ))}
+    </dl>
   );
 }
 
@@ -225,6 +298,44 @@ export function Field({ label, value, onChange, max, rows = 0, placeholder, sub,
   );
 }
 
+export const SHOW_AS = [{ value: 'chart', label: 'Chart' }, { value: 'table', label: 'Table' }];
+
+/**
+ * D4873 (#4873): a single choice among a few (the period, Chart or Table),
+ * drawn as chips but announced as what it is: a `radiogroup` whose options
+ * are `radio`s with `aria-checked`, so a screen reader says which one is
+ * selected. One stop in the tab order (the selected option); the arrow keys
+ * move the choice, as a radio group's do.
+ */
+export function ChoiceGroup({ label, options, value, onPick, testId, groupTestId }) {
+  const refs = React.useRef([]);
+  const at = Math.max(0, options.findIndex((o) => o.value === value));
+  const key = (e) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault?.();
+    const next = (at + step + options.length) % options.length;
+    onPick(options[next].value);
+    refs.current[next]?.focus?.();
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={label} data-testid={groupTestId}>
+      {options.map((o, i) => {
+        const on = o.value === value;
+        return (
+          <button key={o.value} ref={(el) => { refs.current[i] = el; }} type="button" role="radio" aria-checked={on} tabIndex={i === at ? 0 : -1}
+            onClick={() => { if (!on) onPick(o.value); }} onKeyDown={key} data-testid={testId(o.value)}
+            className={`rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on
+              ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
+              : 'border-axal-hairline text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800'}`}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * A chart card (D893's parts and palette, `ui/Charts.jsx`): Reading…, could
  * not be read with Try again, a placeholder with its reason, or the chart
@@ -238,14 +349,8 @@ export function ChartCard({ title, b, onRetry, testId, children }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 className={H2}>{title}</h2>
         {ready && b.chart ? (
-          <span className="flex gap-1" role="group" aria-label="Show as">
-            {['Chart', 'Table'].map((w) => (
-              <button key={w} type="button" aria-pressed={(w === 'Table') === table} onClick={() => setTable(w === 'Table')} data-testid={`${testId}-${w.toLowerCase()}`}
-                className={`rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${(w === 'Table') === table
-                  ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
-                  : 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400'}`}>{w}</button>
-            ))}
-          </span>
+          <ChoiceGroup label="Show as" value={table ? 'table' : 'chart'} onPick={(v) => setTable(v === 'table')}
+            options={SHOW_AS} testId={(v) => `${testId}-${v}`} />
         ) : null}
       </div>
       {b.state === 'loading' ? <Skeleton lines={3} /> : null}
@@ -271,19 +376,21 @@ export function ChartCard({ title, b, onRetry, testId, children }) {
  * inside a `role="img"` wrapper that carries its sentence, with Chart and
  * Table, its legend, what is named under it and its foot.
  */
-export function ChartBlock({ b, shape = 'lines', onRetry, children, testId }) {
-  const [table, setTable] = useState(false);
+export function ChartBlock({ b, shape = 'lines', onRetry, children, testId, view = null }) {
+  const [own, setOwn] = useState(false);
+  // D4873: a section that holds several charts (Activity) passes one `view` for all of them, and draws the one
+  // Chart / Table control itself; a chart on its own keeps its own.
+  const table = view ? view === 'table' : own;
+  const setTable = setOwn;
   const id = testId || `programs-chart-${b.key}`;
   const ready = b.state === 'ready';
   return (
     <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-labelledby={`${id}-h`} data-testid={id}>
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id={`${id}-h`} className={H2}>{b.title}</h2>
-        {ready ? (
-          <div className="flex gap-1.5" role="group" aria-label={`${b.title}: show as`}>
-            <Chip on={!table} onClick={() => setTable(false)} testId={`${id}-as-chart`}>Chart</Chip>
-            <Chip on={table} onClick={() => setTable(true)} testId={`${id}-as-table`}>Table</Chip>
-          </div>
+        {ready && !view ? (
+          <ChoiceGroup label={`${b.title}: show as`} value={table ? 'table' : 'chart'} onPick={(v) => setTable(v === 'table')}
+            options={SHOW_AS} testId={(v) => `${id}-as-${v}`} />
         ) : null}
       </div>
       {b.state === 'loading' ? <ChartSkeleton shape={shape} testId={`${id}-loading`} /> : null}
@@ -311,13 +418,12 @@ export function ChartBlock({ b, shape = 'lines', onRetry, children, testId }) {
 /** The period control (`dc:469`): live while the page reads (PG17). */
 export function PeriodControl({ periods, weeks, onPick }) {
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Period" data-testid="programs-period">
-      {periods.map((p) => <Chip key={p.weeks} on={p.weeks === weeks} onClick={() => onPick(p.weeks)} testId={`programs-period-${p.weeks}`}>{p.label}</Chip>)}
-    </div>
+    <ChoiceGroup label="Period" value={weeks} onPick={onPick} groupTestId="programs-period"
+      options={periods.map((p) => ({ value: p.weeks, label: p.label }))} testId={(v) => `programs-period-${v}`} />
   );
 }
 
-/** PG2's "Studio" select, for a Super Admin: D893's Scope list (`scopeLines`, `SCOPE_NOTE`), as Insights draws it. */
+/** PG2's scope select (D4807: "Scope", since HQ-held accounts are a valid choice, not a studio), for a Super Admin: D893's Scope list (`scopeLines`, `SCOPE_NOTE`), as Insights draws it. */
 export function StudioSelect({ scopes, current, onPick }) {
   const [open, setOpen] = useState(false);
   const label = current?.kind === 'branch' ? current.label : 'HQ-held accounts';
@@ -327,10 +433,10 @@ export function StudioSelect({ scopes, current, onPick }) {
     <div className="relative">
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="programs-studio"
         className="min-h-[36px] rounded-[7px] border border-axal-lavender-edge bg-axal-lavender px-2.5 py-1.5 text-[12.5px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
-        {`Studio · ${label} ▾`}
+        {`Scope · ${label} ▾`}
       </button>
       {open ? (
-        <div role="listbox" aria-label="Studio" className={`${CARD} absolute right-0 top-10 z-10 flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="programs-studio-list">
+        <div role="listbox" aria-label="Scope" className={`${CARD} absolute right-0 top-10 z-10 flex w-[300px] max-w-[calc(100vw-32px)] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="programs-studio-list">
           {lines.map((l) => {
             const on = l.code === picked;
             return (

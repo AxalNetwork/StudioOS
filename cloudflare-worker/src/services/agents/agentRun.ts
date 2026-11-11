@@ -62,12 +62,20 @@
  * grants (`tool_not_approved`) and refuses a read outside its allow-list
  * (`tool_not_in_skill`). Its steps and allow-list join the system prompt; the
  * usage row records `skill_id` and `skill_version`.
+ *
+ * SKILL RUNTIME (D4555, #4555). The skill's text comes through
+ * `skillTextForRun` (`skillRuntime.ts`). The legacy loader is the default and
+ * gives today's `skillPrompt()` text with no other read. Only the preview
+ * Worker with `AGENT_SKILL_RUNTIME=cloudflare_sdk` (`skillEngineOf`) loads it
+ * through the Agent Skills SDK adapter, over the D1-authorized run manifest;
+ * a D1 re-check that refuses there is 409 `skill_unavailable` before any
+ * model call, and its `run` event names the runtime (`skill_runtime`).
  */
 import { agentModels, planOk } from './modelOffers';
 import { allowlistRefusal } from './allowlists';
 import type { Env, User } from '../../types';
 import { PLATFORM_PAUSED_MESSAGE, modelUnder, readPolicy } from './aiPolicy';
-import { agentAreas } from './adminReads';
+import { agentArea } from './adminReads';
 import { ROUTE, quoteRun, run, type RailContext, type RefusalReason, type RunOptions, type TaskClass } from '../aiRouter';
 import { railOptionsOn, type RailOptionRow } from '../ai/railMatrix';
 import { proposeRail, railByRunKey, type RailProposal } from '../railProposals';
@@ -76,7 +84,8 @@ import { agentDisclaimerText, disclaimerKeyForRole } from './disclaimers';
 import { personaOf } from './personas';
 import { canManage, effectiveBook, logEvent, monthSpend, scopeOfAgent, type AgentRow, type Scope, type Spend } from './teams';
 import { cleanReads, grantsOf, readTools, type ToolDeps } from './agentTools';
-import { skillForRun, skillPrompt, tagUsage } from './skillEval';
+import { skillForRun, tagUsage } from './skillEval';
+import { skillEngineOf, skillTextForRun, type RunSkillDeps, type RunSkillText } from './skillRuntime';
 
 export const PROMPT_MAX = 8000;
 const CYCLE_PAGE = { validate: 'Founder · Validate', build: 'Founder · Build', raise: 'Founder · Raise', grow: 'Founder · Grow' } as const;
@@ -97,6 +106,10 @@ export type AgentRunInput = {
   runUid?: string | null;
   /** D1612 part D (#3954): the uid of one of the agent's skills; its PINNED version guides the run. */
   skill?: string | null;
+  /** D4534: the version the caller saved (a scheduled session); a different pin is refused `skill_version_changed`. */
+  skillVersion?: number | null;
+  /** D4555, tests only: the SDK and resource provider the preview skill runtime uses. */
+  skillDeps?: RunSkillDeps;
 };
 
 export type AgentRefusal = { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -255,6 +268,14 @@ function promptRefusal(prompt: unknown): AgentRefusal | null {
 export async function agentQuote(env: Env, input: Omit<AgentRunInput, 'prompt'> & { prompt?: string }): Promise<AgentQuote> {
   const c = await check(env, { ...input, prompt: input.prompt?.trim() ? input.prompt : ' ' });
   if (!c.ok) return c;
+  // #5340: with the preview switch on, a quote for a named skill holds the text the SDK path sends; switched off, nothing is read for it.
+  if (input.skill != null && skillEngineOf(env) === 'cloudflare_sdk') {
+    const skill = await skillForRun(env, input.agent, input.skill, [], input.skillVersion ?? null);
+    if (!skill.ok) return skill;
+    const loaded = await skillTextForRun(env, input.agent.id, skill, 'cloudflare_sdk', input.skillDeps);
+    if (!loaded.ok) return no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.');
+    c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+  }
   try {
     const q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface });
     // `misconfigured` is quoteRun's "Unreadable": the price is unknown, which is not 0 and not a refusal of the run.
@@ -302,7 +323,7 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
   if (!policy) return no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
   if (policy.paused.on) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   if (c.opts.model) {
-    const area = (await agentAreas(env)).get(a.id) ?? null;
+    const area = await agentArea(env, a.id);
     const m = modelUnder(policy, String(c.opts.model), area);
     if (!m) return no(403, 'model_locked', 'This agent\'s model is switched off on the platform, and so is its area\'s default. Pick another model for it.');
     const scope = await scopeOfAgent(env, a);
@@ -311,14 +332,17 @@ async function underPolicy(env: Env, a: AgentRow, c: { opts: Omit<RunOptions, 'r
     if (allowed) return allowed;
     c.opts.model = m.model;
   }
-  const ceiling = policy.per_run_ceiling_microusd;
-  if (ceiling != null) {
-    let q: Awaited<ReturnType<typeof quoteRun>>;
-    try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
-    if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
-    if (q.hold_microusd > ceiling) {
-      return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
-    }
+  return ceilingRefusal(env, c, policy.per_run_ceiling_microusd);
+}
+
+/** D4162's per-run ceiling, quoted on the run's system prompt as it stands; also called once the SDK path's skill text is in (#5340). */
+async function ceilingRefusal(env: Env, c: { opts: Omit<RunOptions, 'rail' | 'surface'>; rail: RailContext; surface: string }, ceiling: number | null): Promise<AgentRefusal | null> {
+  if (ceiling == null) return null;
+  let q: Awaited<ReturnType<typeof quoteRun>>;
+  try { q = await quoteRun(env, { ...c.opts, rail: c.rail, surface: c.surface }); } catch { q = { ok: false, refusal: 'misconfigured', error: 'unreadable' } as any; }
+  if (!q.ok) return no(503, 'run_quote_unreadable', 'This run could not be priced, so it was not checked against the platform\'s per-run ceiling. Nothing was charged.');
+  if (q.hold_microusd > ceiling) {
+    return no(402, 'run_ceiling', `This run would cost more than the platform's per-run ceiling of $${(ceiling / 1e6).toFixed(2)}. Nothing was charged.`);
   }
   return null;
 }
@@ -344,9 +368,23 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   const shaped = cleanReads(input.toolReads, grantsOf(a.tool_grants_json));
   if (!shaped.ok) return refused(env, a, shaped, input.module, input.option);
   // D1612 part D (#3954): a named skill runs at the agent's pinned version; its tools are checked again now.
-  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool)) : null;
+  const skill = input.skill != null ? await skillForRun(env, a, input.skill, shaped.reads.map((t) => t.tool), input.skillVersion ?? null) : null;
   if (skill && !skill.ok) return refused(env, a, skill, input.module, input.option);
-  if (skill) c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${skillPrompt(skill.version)}`;
+  // D4555: the skill's text through the skill runtime; the legacy loader unless the preview switch is on.
+  const engine = skill ? skillEngineOf(env) : 'legacy';
+  let loaded: RunSkillText | null = null;
+  if (skill) {
+    loaded = await skillTextForRun(env, a.id, skill, engine, input.skillDeps);
+    if (!loaded.ok) return refused(env, a, no(409, 'skill_unavailable', 'This skill is no longer available to this agent, so it was not run.'), input.module, input.option);
+    c.opts.systemPrompt = `${c.opts.systemPrompt}\n\n${loaded.text}`;
+    // #5340: the SDK path's text (activation and files) is priced before any hold; the ceiling quote above did not hold it.
+    if (loaded.runtime === 'cloudflare_sdk') {
+      const policy = await readPolicy(env);
+      const over = policy ? await ceilingRefusal(env, c, policy.per_run_ceiling_microusd)
+        : no(503, 'policy_unreadable', 'The platform\'s AI policy could not be read, so the agent was not run. Try again shortly.');
+      if (over) return refused(env, a, over, input.module, input.option);
+    }
+  }
   const read = await readTools(env, a, shaped.reads, runUid, input.toolDeps);
   if ('disconnected' in read) {
     await pause(env, a, 'tool_disconnected');
@@ -396,6 +434,8 @@ export async function agentRun(env: Env, input: AgentRunInput): Promise<AgentRun
   await logEvent(env, a.id, a.sponsor_user_id, 'run', {
     module: input.module, option: input.option, ...(tools.length ? { tool_reads: tools } : {}),
     ...(skill ? { skill: { uid: skill.skill.uid, version: skill.version.version } } : {}),
+    // D4555: only a run that asked for the SDK names its runtime; a legacy run's event is unchanged.
+    ...(engine === 'cloudflare_sdk' && loaded?.ok ? { skill_runtime: { runtime: loaded.runtime, fallback: loaded.fallback } } : {}),
   }, { usageLogId, proposalUid: proposal.uid });
   return { ok: true, proposal, charged: await chargedFor(env, usageLogId), usageLogId, runKey, replayed: false };
 }

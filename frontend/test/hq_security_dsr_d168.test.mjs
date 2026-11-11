@@ -57,38 +57,44 @@ function dsrZone() {
   return rest.slice(0, end);
 }
 
-/** The close control's own component, bounded the same way. */
-function closeControl() {
-  const start = PAGE.indexOf('function DsrClose(');
-  assert.ok(start > 0, 'the DsrClose control is gone');
-  const rest = PAGE.slice(start + 1);
-  const end = rest.indexOf('\nfunction ') >= 0 ? rest.indexOf('\nfunction ') : rest.indexOf('\nexport default');
-  assert.ok(end > 0, 'DsrClose has no end');
-  return rest.slice(0, end);
-}
+/**
+ * The close control. D4803 (slice 3) moved it out of the zone into SE06's
+ * Record outcome dialog, `security/PrivacyActions.jsx`, with the outcomes
+ * themselves in `security/privacyModel.js`; the claims below are read there.
+ */
+const ACTIONS = raw('frontend/src/pages/hq/security/PrivacyActions.jsx');
+const MODEL = raw('frontend/src/pages/hq/security/privacyModel.js');
+const WORKSPACE = raw('frontend/src/pages/hq/security/PrivacyWorkspace.jsx');
+const closeControl = () => ACTIONS;
 
 test('the zone offers the two outcomes HQ may record, and only those', () => {
-  const zone = dsrZone();
-  assert.match(zone, /<DsrClose\b/, 'the zone renders no way to close a request — the defect is back');
-  assert.match(zone, /onDone=\{load\}/,
-    'closing does not refresh the list, so a closed request stays on screen until a reload');
+  // D4803: the workspace renders the dialog, and a recorded close re-reads the list.
+  assert.match(PAGE, /<PrivacyWorkspace dsr=\{ready \? data\.dsr : null\}[^>]*onReread=\{load\}/,
+    'the Privacy workspace is not mounted with a re-read, so a closed request stays on screen until a reload');
+  assert.match(WORKSPACE, /<DsrOutcomeDialog\b/, 'the workspace renders no way to close a request — the defect is back');
+  assert.match(WORKSPACE, /onRecorded=\{\(\) => onReread\?\.\(\)\}/, 'a recorded close does not refresh the list');
 
   const ctl = closeControl();
-  assert.match(ctl, /setOutcome\('fulfilled'\)/, 'the fulfilled control is gone');
-  assert.match(ctl, /setOutcome\('denied'\)/, 'the denied control is gone');
+  // The two outcomes HQ may record are the model's list, and the dialog offers exactly that list.
+  assert.match(MODEL, /\{ key: 'fulfilled',/, 'the fulfilled outcome is gone');
+  assert.match(MODEL, /\{ key: 'denied',/, 'the denied outcome is gone');
+  assert.match(ctl, /OUTCOMES\.map\(/, 'the dialog no longer offers the model\'s outcomes');
+  const ctlOrModel = ctl + MODEL;
 
   // A WITHDRAWAL IS THE SUBJECT'S OWN ACT. The server refuses it from HQ, so a
   // control here would offer a button the server declines — the
   // `still_an_admin` mistake D134 named — and, worse, it would be recording
   // that the subject changed their mind when they did not.
-  assert.doesNotMatch(ctl, /setOutcome\('withdrawn'\)/,
+  assert.doesNotMatch(ctlOrModel, /key: 'withdrawn'|setOutcome\('withdrawn'\)/,
     'HQ is offered a withdrawal, which records an act the subject did not perform');
 });
 
 test('the reason floor the server enforces is mirrored, so the form never offers a refusal', () => {
   const ctl = closeControl();
-  assert.match(ctl, /reason\.trim\(\)\.length < 8/,
-    'the submit is no longer disabled below the reason length the server requires');
+  assert.match(ctl, /reason\.trim\(\)\.length < MIN_REASON/,
+    'the dialog no longer stops below the reason length the server requires');
+  assert.match(raw('frontend/src/pages/hq/security/accessModel.js'), /export const MIN_REASON = 8;/,
+    'the client reason floor no longer matches the server\'s');
   // And the server is where it is actually enforced — a client-only rule is a
   // convention, not a control.
   assert.match(ROUTE, /const MIN_REASON = 8;/,
@@ -100,7 +106,7 @@ test('"fulfilled" is described as recording a manual act, never as performing on
   // codebase; a control that read as if it deleted the account would make the
   // compliance record itself false.
   const ctl = closeControl();
-  assert.match(flat(ctl), /does not erase anything/i,
+  assert.match(flat(ctl), /It does not erase data\./,
     'the fulfilled control no longer says the platform erases nothing');
 
   const zone = dsrZone();
@@ -132,6 +138,7 @@ test('the SPA method and the worker route are the same endpoint', () => {
   assert.match(ROUTE, /r\.post\('\/dsr\/:userId\/close'/,
     'the worker route the api.js method calls is gone');
   // The page must go through the method rather than fetching directly.
-  assert.match(closeControl(), /api\.hqCloseDsrRequest\(row\.id, outcome, reason\.trim\(\)\)/,
+  assert.match(closeControl(), /send = api\.hqCloseDsrRequest\b/, 'the dialog writes through something other than the api.js method');
+  assert.match(closeControl(), /await send\(raw\.id, outcome, reason\.trim\(\), \{/,
     'the control no longer calls the api.js method');
 });

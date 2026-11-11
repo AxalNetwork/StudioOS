@@ -30,8 +30,11 @@ import {
   loadPainGroupModel, getPainGroupsView, normPhrase, resolvePhrase, safeParseStrings, severityLevel,
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
-import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import { evidenceFor, verdictFor, laneFor, v1StateFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
+import {
+  changedWithin, historyChangesAvailable, loadVerdictHistory, movedWithin, observationAt,
+  parseObserved, recordVerdictChanges, RECENTLY_MOVED_DAYS,
+} from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
@@ -240,7 +243,8 @@ export function themesOf(
 // Claims
 // ---------------------------------------------------------------------------
 
-export const CLAIM_STATUSES = ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded'] as const;
+/** D4586 v2 adds `contested`: the bar is met and the contradiction is material. Its lane is Testing. */
+export const CLAIM_STATUSES = ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded'] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 export type Claim = {
@@ -248,6 +252,14 @@ export type Claim = {
   evidence: number; strength: string | null; sprint: string | null;
   owner: string | null; updated_at: string | null;
   supporting: number; contradicting: number; fit_unrecorded: number;
+  /**
+   * D4586 coverage, beside the direction counts and never part of the status: interviews touching both directions,
+   * distinct interviews touching the claim, and the distinct interviewees and organizations behind them (null: not
+   * recorded on every one).
+   */
+  both: number; interviews: number; interviewees: number | null; organizations: number | null;
+  /** The same evidence under v1, which the verdict history reads to tell a method change from new evidence (D4586 § 6). */
+  v1: { verdict: string | null; lane: string };
   /** The founder's Inconclusive mark, which `history:last_week` dates. */
   inconclusive_at: string | null;
   links: LinkRow[];
@@ -272,7 +284,7 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       const gid = model.aliasByNorm.get(normPhrase(p));
       if (gid) groups.add(gid);
     }
-    return { icp_fit: iv.icp_fit, groups };
+    return { icp_fit: iv.icp_fit, groups, name: iv.interviewee_name, company: iv.interviewee_company };
   });
   const linksBy = new Map<number, LinkRow[]>();
   for (const l of links) {
@@ -294,6 +306,8 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       evidence: e.supporting + e.contradicting, strength, sprint: h.sprint,
       owner: h.owner_name ?? null, updated_at: h.updated_at,
       supporting: e.supporting, contradicting: e.contradicting, fit_unrecorded: e.fitUnrecorded,
+      both: e.both ?? 0, interviews: e.interviews ?? 0, interviewees: e.interviewees ?? null, organizations: e.organizations ?? null,
+      v1: v1StateFor(e),
       inconclusive_at: h.inconclusive_at, links: ls, verdict, lane,
     };
   });
@@ -302,11 +316,14 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
 /**
  * A claim's status from its verdict and lane (D690 decision 16), so a past
  * observation in the verdict history reads in today's words. `inconclusive`
- * is the founder's mark, which sits under a decided verdict.
+ * is the founder's mark, which sits under a decided verdict. `contested`
+ * (D4586 v2) sits above it too: it is what the interviews show, and the
+ * founder's mark cannot hide a material contradiction.
  */
 export function statusOf(verdict: string | null, lane: string, inconclusive: boolean): ClaimStatus {
   return verdict === 'validated' ? 'supported'
     : verdict === 'invalidated' ? 'refuted'
+      : verdict === 'contested' ? 'contested'
       : inconclusive ? 'inconclusive'
         : lane === 'none' ? 'untested'
           : lane === 'testing' ? 'testing'
@@ -895,7 +912,9 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
 }
 
 export async function experimentsCard(ctx: Ctx): Promise<Card> {
-  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; evidence added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
+  // D4585: the status and the weekly bars both count pain-theme links (the interview population the status uses); the
+  // caption says so, since a claim's record also lists evidence linked directly.
+  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; interview-theme links added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
     const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true })]);
     const lab = interviewClaimsOf(interviews);
     if (hyps.length === 0 && lab.total === 0) {
@@ -1067,10 +1086,11 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    cols: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+    // D4585: the status counts interviews only (the approved policy), so the column says so.
+    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
-        opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('refuted', 'Refuted'),
+        opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('contested', 'Contested'), opt('refuted', 'Refuted'),
         opt('inconclusive', 'Inconclusive'), opt('not_recorded', 'Fit not recorded'), opt('retired', 'Retired'),
       ] },
       { key: 'sprint', label: 'Sprint', options: [] },
@@ -1443,33 +1463,42 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // filters and paging, and before the history is loaded; the writer writes
   // only on a change, logs no activity row, and never fails the read.
   await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
-    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
+    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane, v1: c.v1,
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
+  const now = new Date();
+  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const lastWeek = new Date(now.getTime() - 7 * 86_400_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId, {
+    claimIds: openClaims.map((c) => c.id), boundaries: [lastWeek],
+  });
 
   // FVW's views over the verdict history (decision 16), before paging.
-  const now = new Date();
   const historyOf = (id: number) => history.byClaim.get(id) || [];
-  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const movedAvailable = historyChangesAvailable(history.coverage, movedSince);
+  const monthAvailable = historyChangesAvailable(history.coverage, monthStart);
+  const lastWeekAvailable = history.coverage.boundaries.some((value) => {
+    const at = parseObserved(value);
+    return at != null && Math.abs(at.getTime() - lastWeek.getTime()) < 1000;
+  });
   const f = rq.filter;
-  type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | null };
-  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
+  // D4586 § 6: a claim moved only by the methodology changing reads `method`, never as new evidence.
+  type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | 'method' | null };
+  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: movedAvailable ? movedWithin(historyOf(c.id), movedSince) : null }));
   // The views read unretired claims only.
   if (retired && (f.moved || f.history)) rows = [];
-  if (f.moved === 'recent') rows = rows.filter((r) => r.moved === 'recent');
+  if (f.moved === 'recent') rows = movedAvailable ? rows.filter((r) => r.moved != null) : [];
   if (f.history === 'last_week') {
     // Each claim's status in force seven days ago; a claim with no observation
     // that old is left out, never shown at today's status.
-    const at = new Date(now.getTime() - 7 * 86_400_000);
-    rows = rows.flatMap((r) => {
-      const o = observationAt(historyOf(r.c.id), at);
+    rows = lastWeekAvailable ? rows.flatMap((r) => {
+      const o = observationAt(historyOf(r.c.id), lastWeek);
       if (!o) return [];
       const marked = parseObserved(r.c.inconclusive_at);
-      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= at.getTime()) }];
-    });
+      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= lastWeek.getTime()) }];
+    }) : [];
   } else if (f.history === 'this_month') {
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    rows = rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict'));
+    rows = monthAvailable ? rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict')) : [];
   }
   rows = rows.filter((r) => has(rq.q, r.c.code, r.c.claim));
   if (f.status && !retired) rows = rows.filter((r) => r.status === f.status);
@@ -1488,6 +1517,15 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     ...paged(LISTS.experiments.cols, rows.map(({ c, status, moved }) => ({
       id: c.id, hypothesis: `${c.code} · ${c.claim}`, status,
       evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
+      // D4585 (#4585): `evidence` is the interviews the claim's status is computed from (its pain links). The claim's
+      // other linked evidence (direct interviews, demand signals, metrics, experiments) is counted apart, by kind, so a
+      // claim with a pre-sale and no interview reads "0 interviews, 1 other", never as having no evidence.
+      interview_support: c.evidence,
+      // D4586 (#4586): support, contradiction, unknown fit and breadth, together. An interview touching both directions
+      // is in both counts and named once in `both`; `interviews` counts each interview once.
+      supporting: c.supporting, contradicting: c.contradicting, fit_unrecorded: c.fit_unrecorded, both: c.both,
+      interviews: c.interviews, interviewees: c.interviewees, organizations: c.organizations,
+      linked_evidence: linkedCounts(evidenceBy.get(c.id) || []),
       provenance: provenanceOf(c.id),
       moved,
       ...(retired ? { retired: true } : {}),
@@ -1508,23 +1546,38 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         stats: {
           hypotheses: openClaims.length,
           supported: count('supported'),
+          // D4586 v2: past the bar with material contradiction; in the Testing lane but never "awaiting".
+          contested: count('contested'),
           refuted: count('refuted'),
           awaiting: count('testing') + count('untested'),
           withheld: count('not_recorded'),
           fit_not_recorded: interviews.filter((i) => i.icp_fit == null).length,
           bar: VALIDATION_BAR,
+          // D4585: what `supported`, `refuted` and each row's `evidence` count. Other linked evidence is `linked_evidence`.
+          status_basis: 'interviews',
           // When the record starts, or null with none: a window opening before
           // it is not an answer, and the page says where the record starts.
           history_since: history.since,
+          history_coverage: history.coverage,
+          history_filter_available: f.moved === 'recent' ? movedAvailable
+            : f.history === 'last_week' ? lastWeekAvailable
+              : f.history === 'this_month' ? monthAvailable : null,
         },
         // Per open claim, how far its ICP support is from the bar.
-        fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'refuted').map((c) => ({
+        fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'contested' && c.status !== 'refuted').map((c) => ({
           id: c.id, code: c.code, supporting: c.supporting, bar: VALIDATION_BAR, fit_unrecorded: c.fit_unrecorded,
         })),
       },
     }),
     fills_recorded: fillsRecorded,
   };
+}
+
+/** D4585: a claim's evidence links by kind; these are outside the interview-only status calculation. */
+export function linkedCounts(links: Array<{ kind: string }>) {
+  const n = { interview: 0, signal: 0, metric: 0, experiment: 0 };
+  for (const l of links) if (l.kind in n) n[l.kind as keyof typeof n] += 1;
+  return n;
 }
 
 export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {

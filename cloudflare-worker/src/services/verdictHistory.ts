@@ -33,7 +33,8 @@
  * in the steady state, which is almost every request.
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
+import { METHODOLOGY_VERSION } from './validateMethodology';
 
 /**
  * Migration 255's table, bootstrapped at runtime like its siblings.
@@ -56,8 +57,15 @@ export async function ensureVerdictHistorySchema(env: Env): Promise<boolean> {
       + 'hypothesis_id INTEGER NOT NULL, '
       + 'verdict TEXT, '
       + 'lane TEXT NOT NULL, '
-      + "observed_at TEXT NOT NULL DEFAULT (datetime('now')))",
+      + "observed_at TEXT NOT NULL DEFAULT (datetime('now')), "
+      + 'methodology_version INTEGER, '
+      + 'method_change INTEGER NOT NULL DEFAULT 0)',
     );
+    // D4586 part 3 (migration 202611092033): a table created before it gains the two columns. Skipped when present.
+    await runSchemaBootstrap(env, [
+      'ALTER TABLE hypothesis_verdict_history ADD COLUMN methodology_version INTEGER',
+      'ALTER TABLE hypothesis_verdict_history ADD COLUMN method_change INTEGER NOT NULL DEFAULT 0',
+    ]);
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_hypothesis_verdict_history_project'
       + ' ON hypothesis_verdict_history(project_id, observed_at)',
@@ -81,20 +89,107 @@ export type VerdictState = {
   hypothesis_id: number;
   verdict: string | null;
   lane: string;
+  /**
+   * D4586 § 6: the same evidence read under v1 (`v1StateFor`). When the last
+   * stored row is a v1 row equal to this, the evidence has not moved and the
+   * new row is recorded as a method change, not as new evidence.
+   */
+  v1?: { verdict: string | null; lane: string };
 };
 
-/** One recorded observation. */
-export type VerdictObservation = VerdictState & { observed_at: string };
+/** One recorded observation. `methodology_version` is null for a row observed under v1. */
+export type VerdictObservation = Omit<VerdictState, 'v1'> & {
+  id: number; observed_at: string;
+  methodology_version: number | null;
+  /** True when the row was written only because the method changed (D4586 § 6). */
+  method_change: boolean;
+};
+
+export type VerdictHistoryCoverage = {
+  status: 'complete' | 'partial' | 'unavailable';
+  /** Oldest instant in the newest contiguous slice returned to the caller. */
+  since: string | null;
+  /** Oldest observation recorded for the project, even when the middle is omitted. */
+  recorded_since: string | null;
+  through: string | null;
+  limit: number;
+  boundaries: string[];
+};
+
+export type VerdictHistoryOptions = {
+  /** Current claims whose latest and requested boundary states must be retained. */
+  claimIds?: number[];
+  /** Exact as-of instants the caller needs, bounded below. */
+  boundaries?: Date[];
+};
+
+const HISTORY_LIMIT = 2000;
+const BOUNDARY_LIMIT = 4;
+const CLAIM_LIMIT = 2000;
+
+const unavailableCoverage = (): VerdictHistoryCoverage => ({
+  status: 'unavailable', since: null, recorded_since: null, through: null,
+  limit: HISTORY_LIMIT, boundaries: [],
+});
+
+const sqlInstant = (d: Date): string => d.toISOString().replace('T', ' ').slice(0, 19);
+
+type StoredObservation = Omit<VerdictObservation, 'method_change'> & { method_change: number | boolean | null };
+
+/** One state per requested claim at or before a temporal boundary. */
+async function boundaryRows(env: Env, projectId: number, claimIds: number[], at: string): Promise<StoredObservation[]> {
+  if (!claimIds.length) return [];
+  const res = await env.DB.prepare(
+    `WITH wanted(id) AS (
+       SELECT CAST(value AS INTEGER) FROM json_each(?)
+     ), ranked AS (
+       SELECT h.id, h.hypothesis_id, h.verdict, h.lane, h.observed_at, h.methodology_version, h.method_change,
+              ROW_NUMBER() OVER (PARTITION BY h.hypothesis_id ORDER BY h.observed_at DESC, h.id DESC) AS rn
+         FROM hypothesis_verdict_history h
+         JOIN wanted w ON w.id = h.hypothesis_id
+        WHERE h.project_id = ? AND h.observed_at <= ?
+     )
+     SELECT id, hypothesis_id, verdict, lane, observed_at, methodology_version, method_change
+       FROM ranked WHERE rn = 1 ORDER BY observed_at, id
+      LIMIT 2000`,
+  ).bind(JSON.stringify(claimIds), projectId, at).all<StoredObservation>();
+  return res.results || [];
+}
+
+/** One state per requested claim immediately before a retained `(time, id)`. */
+async function predecessorRows(
+  env: Env, projectId: number, claimIds: number[], observedAt: string, rowId: number,
+): Promise<StoredObservation[]> {
+  if (!claimIds.length) return [];
+  const res = await env.DB.prepare(
+    `WITH wanted(id) AS (
+       SELECT CAST(value AS INTEGER) FROM json_each(?)
+     ), ranked AS (
+       SELECT h.id, h.hypothesis_id, h.verdict, h.lane, h.observed_at, h.methodology_version, h.method_change,
+              ROW_NUMBER() OVER (PARTITION BY h.hypothesis_id ORDER BY h.observed_at DESC, h.id DESC) AS rn
+         FROM hypothesis_verdict_history h
+         JOIN wanted w ON w.id = h.hypothesis_id
+        WHERE h.project_id = ?
+          AND (h.observed_at < ? OR (h.observed_at = ? AND h.id < ?))
+     )
+     SELECT id, hypothesis_id, verdict, lane, observed_at, methodology_version, method_change
+       FROM ranked WHERE rn = 1 ORDER BY observed_at, id
+      LIMIT 2000`,
+  ).bind(JSON.stringify(claimIds), projectId, observedAt, observedAt, rowId).all<StoredObservation>();
+  return res.results || [];
+}
 
 /**
- * How many observations a single board read will carry back per project.
+ * How many contiguous recent observations a single board read carries back.
  *
  * A Worker materialises the whole response in memory, and a board is read on
  * every visit to two zones. Written as a literal inside the statement rather
  * than interpolated: `scripts/check-sql-prepare.mjs` refuses any `${…}` in a
  * `DB.prepare` template, and it is right to — a constant reads the same as a
  * variable at the point the query text is built. Changes are rare per claim, so
- * 2000 is several years of a busy board and still bounded.
+ * 2000 is several years of a busy board and still bounded. D4629 may add one
+ * predecessor/latest/boundary state per requested claim; those inputs and
+ * every materialised query are capped separately above.
  */
 
 /**
@@ -115,18 +210,18 @@ export async function recordVerdictChanges(
   // MAX(observed_at): two observations can share a second, and `id` is the only
   // total order this table has.
   const latest = await env.DB.prepare(
-    `SELECT h.hypothesis_id, h.verdict, h.lane
+    `SELECT h.hypothesis_id, h.verdict, h.lane, h.methodology_version
        FROM hypothesis_verdict_history h
        JOIN (SELECT hypothesis_id, MAX(id) AS id
                FROM hypothesis_verdict_history
               WHERE project_id = ?
               GROUP BY hypothesis_id) m ON m.id = h.id`,
-  ).bind(projectId).all<{ hypothesis_id: number; verdict: string | null; lane: string }>()
+  ).bind(projectId).all<{ hypothesis_id: number; verdict: string | null; lane: string; methodology_version: number | null }>()
     .catch(() => ({ results: [] as any[] }));
 
-  const last = new Map<number, { verdict: string | null; lane: string }>();
+  const last = new Map<number, { verdict: string | null; lane: string; methodology_version: number | null }>();
   for (const r of latest.results || []) {
-    last.set(Number(r.hypothesis_id), { verdict: r.verdict ?? null, lane: String(r.lane) });
+    last.set(Number(r.hypothesis_id), { verdict: r.verdict ?? null, lane: String(r.lane), methodology_version: r.methodology_version ?? null });
   }
 
   let written = 0;
@@ -140,10 +235,14 @@ export async function recordVerdictChanges(
       && (prev.verdict ?? null) === (s.verdict ?? null)
       && prev.lane === s.lane;
     if (same) continue;
+    // D4586 § 6: the last row was observed under v1 and the v1 rule still gives it on today's evidence, so only
+    // the method moved this claim. The row is written (the status did change) and marked, never read as new evidence.
+    const methodChange = Boolean(prev && prev.methodology_version == null && s.v1
+      && (prev.verdict ?? null) === (s.v1.verdict ?? null) && prev.lane === s.v1.lane);
     await env.DB.prepare(
-      `INSERT INTO hypothesis_verdict_history (project_id, hypothesis_id, verdict, lane)
-       VALUES (?, ?, ?, ?)`,
-    ).bind(projectId, s.hypothesis_id, s.verdict ?? null, s.lane).run().catch(() => null);
+      `INSERT INTO hypothesis_verdict_history (project_id, hypothesis_id, verdict, lane, methodology_version, method_change)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).bind(projectId, s.hypothesis_id, s.verdict ?? null, s.lane, METHODOLOGY_VERSION, methodChange ? 1 : 0).run().catch(() => null);
     written += 1;
   }
   return written;
@@ -160,31 +259,93 @@ export async function recordVerdictChanges(
 export async function loadVerdictHistory(
   env: Env,
   projectId: number,
-): Promise<{ byClaim: Map<number, VerdictObservation[]>; since: string | null }> {
+  options: VerdictHistoryOptions = {},
+): Promise<{ byClaim: Map<number, VerdictObservation[]>; since: string | null; coverage: VerdictHistoryCoverage }> {
   const byClaim = new Map<number, VerdictObservation[]>();
-  if (!(await ensureVerdictHistorySchema(env))) return { byClaim, since: null };
+  if (!(await ensureVerdictHistorySchema(env))) return { byClaim, since: null, coverage: unavailableCoverage() };
 
-  const res = await env.DB.prepare(
-    `SELECT hypothesis_id, verdict, lane, observed_at
-       FROM hypothesis_verdict_history
-      WHERE project_id = ?
-      ORDER BY id
-      LIMIT 2000`,
-  ).bind(projectId).all<VerdictObservation>().catch(() => ({ results: [] as VerdictObservation[] }));
+  const ids = [...new Set((options.claimIds || []).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  const wanted = ids.slice(0, CLAIM_LIMIT);
+  const boundaries = [...new Set((options.boundaries || [])
+    .filter((d) => d instanceof Date && !Number.isNaN(d.getTime()))
+    .map(sqlInstant))].slice(0, BOUNDARY_LIMIT);
 
-  let since: string | null = null;
-  for (const r of res.results || []) {
-    const id = Number(r.hypothesis_id);
-    if (!byClaim.has(id)) byClaim.set(id, []);
-    byClaim.get(id)!.push({
-      hypothesis_id: id,
-      verdict: r.verdict ?? null,
-      lane: String(r.lane),
-      observed_at: String(r.observed_at),
-    });
-    if (since === null || String(r.observed_at) < since) since = String(r.observed_at);
+  try {
+    // D4629: newest temporal slice, with one look-ahead row solely to report
+    // truncation. The outer order restores the oldest-first contract consumed
+    // by observationAt/changedWithin. `id` breaks same-second ties.
+    const recent = await env.DB.prepare(
+      `SELECT id, hypothesis_id, verdict, lane, observed_at, methodology_version, method_change FROM (
+         SELECT id, hypothesis_id, verdict, lane, observed_at, methodology_version, method_change
+           FROM hypothesis_verdict_history
+          WHERE project_id = ?
+          ORDER BY observed_at DESC, id DESC
+          LIMIT 2001
+       ) ORDER BY observed_at, id`,
+    ).bind(projectId).all<StoredObservation>();
+    const fetched = recent.results || [];
+    const truncated = fetched.length > HISTORY_LIMIT;
+    const slice = truncated ? fetched.slice(fetched.length - HISTORY_LIMIT) : fetched;
+    const firstRecorded = await env.DB.prepare(
+      `SELECT observed_at FROM hypothesis_verdict_history
+        WHERE project_id = ? ORDER BY observed_at, id LIMIT 1`,
+    ).bind(projectId).first<{ observed_at: string }>();
+
+    const merged = new Map<number, StoredObservation>();
+    for (const row of slice) merged.set(Number(row.id), row);
+
+    // Keep the state immediately before the retained slice. Without it, a
+    // change on the first retained row looks like a claim's first observation.
+    if (truncated && wanted.length && slice.length) {
+      const oldest = slice[0];
+      const prior = await predecessorRows(env, projectId, wanted, String(oldest.observed_at), Number(oldest.id));
+      for (const row of prior) merged.set(Number(row.id), row);
+    }
+
+    // A quiet claim can fall outside a busy project's newest slice. Retain its
+    // latest state, and the exact state at each requested as-of boundary.
+    for (const at of ['9999-12-31 23:59:59', ...boundaries]) {
+      for (const row of await boundaryRows(env, projectId, wanted, at)) merged.set(Number(row.id), row);
+    }
+
+    const ordered = [...merged.values()].sort((a, b) =>
+      String(a.observed_at).localeCompare(String(b.observed_at)) || Number(a.id) - Number(b.id));
+    for (const r of ordered) {
+      const claimId = Number(r.hypothesis_id);
+      if (!byClaim.has(claimId)) byClaim.set(claimId, []);
+      byClaim.get(claimId)!.push({
+        id: Number(r.id), hypothesis_id: claimId, verdict: r.verdict ?? null,
+        lane: String(r.lane), observed_at: String(r.observed_at),
+        methodology_version: r.methodology_version == null ? null : Number(r.methodology_version),
+        method_change: Number(r.method_change ?? 0) === 1,
+      });
+    }
+
+    const since = slice.length ? String(slice[0].observed_at) : null;
+    const coverage: VerdictHistoryCoverage = {
+      status: truncated || ids.length > CLAIM_LIMIT || (options.boundaries || []).length > BOUNDARY_LIMIT ? 'partial' : 'complete',
+      since,
+      recorded_since: firstRecorded?.observed_at ? String(firstRecorded.observed_at) : null,
+      through: slice.length ? String(slice[slice.length - 1].observed_at) : null,
+      limit: HISTORY_LIMIT,
+      boundaries,
+    };
+    return { byClaim, since, coverage };
+  } catch (e) {
+    console.error('[verdictHistory] loadVerdictHistory:', (e as Error).message);
+    return { byClaim, since: null, coverage: unavailableCoverage() };
   }
-  return { byClaim, since };
+}
+
+/** Whether every transition since `at` is present in the contiguous slice. */
+export function historyChangesAvailable(coverage: VerdictHistoryCoverage, at: Date): boolean {
+  if (coverage.status === 'unavailable') return false;
+  // A complete recorded history may itself have begun inside the requested
+  // window; its first row is not counted as a change, and every later pair is
+  // still available. Only a truncated middle creates an unknown transition.
+  if (coverage.status === 'complete') return coverage.since != null;
+  const start = parseObserved(coverage.since);
+  return !!(start && start.getTime() <= at.getTime());
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +382,7 @@ export function observationAt<T extends { observed_at: string }>(history: T[] | 
  * one is on or after `since`. The first observation is the claim appearing
  * on the record, never a change.
  */
-export function changedWithin(history: VerdictObservation[] | null | undefined, since: Date, field: 'verdict' | 'lane'): boolean {
+export function changedWithin(history: Array<Pick<VerdictObservation, 'verdict' | 'lane' | 'observed_at'>> | null | undefined, since: Date, field: 'verdict' | 'lane'): boolean {
   const h = history || [];
   for (let i = 1; i < h.length; i += 1) {
     if ((h[i][field] ?? null) === (h[i - 1][field] ?? null)) continue;
@@ -229,4 +390,22 @@ export function changedWithin(history: VerdictObservation[] | null | undefined, 
     if (when && when.getTime() >= since.getTime()) return true;
   }
   return false;
+}
+
+/**
+ * D4586 § 6: why a claim moved lane inside the window. `recent` when any move
+ * came from its evidence; `method` when every move in the window was the
+ * methodology changing on unchanged evidence; null when it did not move.
+ */
+export function movedWithin(history: VerdictObservation[] | null | undefined, since: Date): 'recent' | 'method' | null {
+  const h = history || [];
+  let method = false;
+  for (let i = 1; i < h.length; i += 1) {
+    if (h[i].lane === h[i - 1].lane) continue;
+    const when = parseObserved(h[i].observed_at);
+    if (!when || when.getTime() < since.getTime()) continue;
+    if (!h[i].method_change) return 'recent';
+    method = true;
+  }
+  return method ? 'method' : null;
 }

@@ -45,7 +45,8 @@ test('GET /services/offerings answers an `items` envelope — read from the work
   const at = SERVICES_ROUTE.indexOf("services.get('/offerings',");
   assert.ok(at > 0, 'the offerings list handler is gone — has it been renamed?');
   const body = SERVICES_ROUTE.slice(at, SERVICES_ROUTE.indexOf("services.get('/offerings/:id'", at));
-  assert.match(body, /return c\.json\(\{ items \}\)/,
+  // `items` first; the request counts ride beside it (#4696).
+  assert.match(body, /return c\.json\(\{\s*items,/,
     'if this route ever changes its envelope, this test says so rather than pinning the old one');
 });
 
@@ -59,7 +60,7 @@ test('the catalogue reads `.items` on both tabs, never `.offerings`', () => {
 
 test('My offerings reads the route the worker actually serves', () => {
   const code = codeOnly(PAGE);
-  assert.match(code, /api\.listServiceOfferings\(\{ mine: 1 \}\)/,
+  assert.match(code, /api\.listServiceOfferings\(\{ mine: 1, page \}\)/,
     '`?mine=1` scopes on owner_user_id and includes inactive drafts — the arm services.ts added for this view');
   assert.doesNotMatch(code, /listPartnerOfferings/,
     'that method called a route the worker has never served');

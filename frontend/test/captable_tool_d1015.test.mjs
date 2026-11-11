@@ -1,6 +1,7 @@
 // D1015 (#2432) — the Cap table tool inside the Raise module page: its tab
 // words, the blocks four existing reads carry, On record against Modelled, and
 // the wiring. Fixtures are worked out by hand from the Worker's shapes.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -240,7 +241,9 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1023 (#2860): the instrument drawer's route sets `capTableProposal` too, with `:instrument`; D1024 (#2861): a scenario's route sets `capTableScenario`.
   assert.match(route, /const capTableTab = capTableScenario && cycle === 'raise' \? 'scenario'\s*: capTableProposal && cycle === 'raise' \? \(instrumentId \? 'instrument' : 'proposal'\)\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
   assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?(?:!dataRoomOldFile && )?(?:!uofTab && )?(?:!capRelTab && )?!!projectId/);
-  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
+  // D5079 (#5079): Home also reports a refused record read to the page, so
+  // the page draws none of the cap table's data under the refusal.
+  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} onRefused=\{onToolRefused\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);
   assert.doesNotMatch(tool, /equity-plan|getEquityPlan/, 'the tool file reads no plan itself: Option pool reads the venture\'s (D1023)');

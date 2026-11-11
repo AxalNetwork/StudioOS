@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { deckQaApi } from '../../../lib/api/deckQa.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import {
   ADD_QUESTION, ASK_FOR_ANSWERS, ASK_NONE, ASK_NOTE, CARD_CHOICES, NO_DECK_QUESTIONS, QUESTIONS_UNREAD, READER_NOTE,
   STATE_PILL, WRITE_YOUR_ANSWER, WRITTEN_UNREAD, answerShown, askPlacements, cardPill, questionState, questionsLine, saveBody,
@@ -37,7 +38,7 @@ const BOX = 'w-full rounded-[9px] border px-3 py-2 text-[13px] leading-[1.55]';
 const BOX_PLACED = `${BOX} border-violet-200 bg-violet-50 text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100`;
 const BOX_PLAIN = `${BOX} border-axal-hairline bg-white text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`;
 
-const refusalOf = (e) => e?.detail || e?.message || 'That could not be saved. Try again.';
+const refusalOf = (e) => userFacingRaiseError(e, { fallback: 'That could not be saved. Try again.', scope: 'raise:pitch:questions' });
 
 export default function QuestionsTab({ deckId, deckTitle, version, readOnly }) {
   const [read, setRead] = useState({ status: deckId == null ? 'none' : 'loading', data: null });

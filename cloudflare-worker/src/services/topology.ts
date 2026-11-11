@@ -204,6 +204,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('inviteAccount', true, true),
       // D262 — HQ's unbind route and licence termination both call it.
       m('unbindAdmin', true, true),
+      // D4669 part 2 — HQ · Security's sign-out on branch deployments (admin_security.ts), on request.
+      m('emergencySignOut', true, true),
     ],
   },
   branchCallsHq: {
@@ -225,6 +227,7 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
 
 /** What reads the shared dataset — every `aeSql` call site, by the surface it feeds. */
 export const AE_READERS = [
+  'HQ · Platform · Health — whether the dataset answers, and its last request row, over twenty-four hours (D4854)',
   'HQ · Analytics · Technical — the platform-wide request log, not split by branch',
   'HQ · Monitoring · traffic by branch — super admin only (D161)',
   'HQ · Platform · Deployments — HQ\'s own acts against each branch over thirty days (D163)',

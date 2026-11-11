@@ -112,3 +112,10 @@ the shared parts and `RecordChatTool.jsx`'s tab bar (`SubTabs`), and reads
 three channels built, D1309's "Today" panel is gone.
 
 - `FounderCoMarketingPage.jsx` reuses the published feed in Grow › Partner network; `CoMarketingFounderRedirect.jsx` counts only the founder’s legacy forward, retaining query and hash (D4439, #4439).
+- `recordingClock.js` (#4574 H4) holds the recording timer (`clock`, `short`) and `useDarkTheme`, apart from `RecordingView.jsx` so that `RecordingPill.jsx`, mounted on every signed-in route, does not load the whole view. `RecordingView.jsx` re-exports all three.
+For D4587 (#4587), `InterviewReviewPage.jsx` keys list/detail/receipt state to
+the originating interview and selected-session request generation. Only a
+detail that names the visible session enables review actions. `sessionPlayer.js`
+also discards and revokes audio that finishes loading after a session switch.
+
+D4619 (#4619): `useFounderCycleReads.js` is the founder Studio's per-cycle overview read, out of `FounderStudioHome.jsx`. Each answer is kept and committed under the full venture + cycle key, so a late answer for another venture is dropped and A → B → A asks again for A. A `project_id` the member cannot open settles as an unavailable venture (`unavailableProject` in `founderStudioModel.js`), and `FounderStudioBody.jsx` says so; the first venture is chosen only when no ID was supplied.

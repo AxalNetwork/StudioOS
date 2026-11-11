@@ -130,31 +130,48 @@ test('weekly referrals normalize stamps, fill empty Mondays, reject bad weeks an
   } finally { h.db.close(); }
 });
 
-test('perk review state matrix, explicit un-feature and kept notes; live approval edits features only and audits', async () => {
+test('perk review state matrix, explicit un-feature and kept notes; the feature switch is its own operation and audits', async () => {
   const h = await harness();
   try {
     addPerk(h.db,'perk',{status:'in_review',featured:1});
-    const expected: Record<string,string[]>={approve:['in_review','draft','paused','live'],reject:['in_review','draft'],pause:['live']};
+    const expected: Record<string,string[]>={approve:['in_review','draft','paused'],reject:['in_review','draft'],pause:['live']};
     for (const state of ['in_review','draft','paused','live','rejected']) for (const action of ['approve','reject','pause']) {
       h.db.prepare("UPDATE perks SET status=?,review_note='provenance',featured=1,reviewed_by_user_id=NULL,reviewed_at=NULL,updated_at='2026-10-01' WHERE uid='perk'").run(state);
-      const res = await h.call('/perks/admin/perk/review','POST',{action,featured:false,review_note:action==='reject'?'why':''});
-      if (!expected[action].includes(state)) { assert.equal(res.status,409,`${state}/${action}`); assert.equal(res.body.error,'not_reviewable'); }
+      const res = await h.call('/perks/admin/perk/review','POST',{action,featured:false,review_note:action==='reject'?'why':'',expected_revision:'2026-10-01'});
+      // D4806: approving a listing that is already live is refused (its feature has its own operation).
+      if (state==='live' && action==='approve') { assert.equal(res.status,409,`${state}/${action}`); assert.equal(res.body.error,'already_live'); }
+      else if (!expected[action].includes(state)) { assert.equal(res.status,409,`${state}/${action}`); assert.equal(res.body.error,'not_reviewable'); }
       else {
         assert.equal(res.status,200,`${state}/${action}`);
         const row=h.db.prepare("SELECT * FROM perks WHERE uid='perk'").get()!;
         assert.equal(row.featured,0); assert.equal(row.review_note,action==='reject'?'why':'provenance');
-        if (state==='live' && action==='approve') { assert.equal(row.reviewed_at,null); assert.equal(row.reviewed_by_user_id,null); }
       }
     }
     h.db.exec("UPDATE perks SET status='live',featured=1,review_note='keep',updated_at='2026-10-01'");
-    assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'approve',review_note:'ignore',editorial_note:'quote'})).status,200);
+    // D4806: the feature switch is its own operation on a live listing, and names the revision it read.
+    const off=await h.call('/perks/admin/perk/feature','POST',{featured:false,expected_revision:'2026-10-01'});
+    assert.equal(off.status,200); assert.equal(off.body.featured,false);
+    assert.equal((await h.call('/perks/admin/perk/feature','POST',{featured:true,editorial_note:'quote',expected_revision:'2026-10-01'})).body.error,'listing_changed','the first switch moved the revision on');
+    assert.equal((await h.call('/perks/admin/perk/feature','POST',{featured:true,editorial_note:'quote'})).body.error,'expected_revision_required');
+    assert.equal((await h.call('/perks/admin/perk/feature','POST',{expected_revision:off.body.revision})).body.error,'bad_featured');
+    assert.equal((await h.call('/perks/admin/perk/feature','POST',{featured:true,editorial_note:'quote',expected_revision:off.body.revision})).status,200);
     const row=h.db.prepare('SELECT * FROM perks').get()!; assert.equal(row.featured,1); assert.equal(row.review_note,'keep'); assert.equal(row.editorial_note,'quote');
+    assert.equal(row.status,'live');
+    const cur=()=>String(h.db.prepare("SELECT updated_at FROM perks WHERE uid='perk'").get()?.updated_at);
+    assert.equal((await h.call('/perks/admin/perk/feature','POST',{featured:true,editorial_note:'quote',expected_revision:cur()})).body.error,'no_change');
+    h.db.exec("UPDATE perks SET status='paused'");
+    const notLive=await h.call('/perks/admin/perk/feature','POST',{featured:true,expected_revision:cur()});
+    assert.equal(notLive.status,409); assert.equal(notLive.body.error,'not_live');
+    assert.equal(h.db.prepare('SELECT status FROM perks').get()?.status,'paused','a feature switch cannot put a paused listing back on the shelf');
+    h.db.exec("UPDATE perks SET status='live'");
     const audits=h.db.prepare('SELECT action,viewed_user_id,filters_json FROM admin_audit_log').all();
     assert.ok(audits.some((x)=>x.action==='perk.approved')); assert.ok(audits.some((x)=>x.action==='perk.rejected')); assert.ok(audits.some((x)=>x.action==='perk.paused'));
     const feature=audits.find((x)=>x.action==='perk.feature_updated')!; assert.equal(feature.viewed_user_id,PARTNER); assert.equal(JSON.parse(String(feature.filters_json)).featured_changed,true);
     assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'bad'})).body.error,'bad_action');
     assert.equal((await h.call('/perks/admin/absent/review','POST',{action:'approve'})).body.error,'not_found');
-    assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'reject'})).body.error,'note_required');
+    assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'pause'})).body.error,'expected_revision_required');
+    assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'pause',expected_revision:'stale'})).body.error,'listing_changed');
+    assert.equal((await h.call('/perks/admin/perk/review','POST',{action:'reject',expected_revision:cur()})).body.error,'note_required');
   } finally { h.db.close(); }
 });
 
@@ -214,8 +231,9 @@ test('perk and strategic decisions refuse a competing decision without an audit 
       };
       return stmt;
     };
-    const p=await h.call('/perks/admin/race/review','POST',{action:'approve'});
-    assert.equal(p.status,409); assert.equal(p.body.error,'not_reviewable');
+    const revision=String(h.db.prepare("SELECT updated_at FROM perks WHERE uid='race'").get()?.updated_at);
+    const p=await h.call('/perks/admin/race/review','POST',{action:'approve',expected_revision:revision});
+    assert.equal(p.status,409); assert.equal(p.body.error,'listing_changed');
     assert.equal(h.db.prepare("SELECT review_note FROM perks WHERE uid='race'").get()?.review_note,'other reviewer');
     const s=await h.call(`/refer/admin/strategic-access/${FOUNDER}/decision`,'POST',{decision:'granted'});
     assert.equal(s.status,409); assert.equal(s.body.error,'already_decided'); assert.equal(races,2);

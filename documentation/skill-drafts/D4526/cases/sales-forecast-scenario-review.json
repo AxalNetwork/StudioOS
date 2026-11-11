@@ -1,0 +1,46 @@
+{
+  "skill": "sales-forecast-scenario-review",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "deals": [
+          {
+            "id": "F1",
+            "amount": 10000,
+            "scenario_probability": 0.5
+          },
+          {
+            "id": "F2",
+            "amount": 20000,
+            "scenario_probability": 0.25
+          }
+        ],
+        "close_dates": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "10000",
+      "scenario",
+      "F1"
+    ],
+    "must_say_not_recorded": [
+      "close dates"
+    ],
+    "must_not_include": [
+      "guaranteed revenue"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why close dates is missing rather than inventing it.",
+    "Do not assert: guaranteed revenue.",
+    "Return a proposal only; do not perform any external action.",
+    "Show 10000*0.5 + 20000*0.25 = 10000 as a conditional weighted pipeline total, not booked revenue."
+  ],
+  "predicate_witness": "10000; scenario; F1. close dates: Not recorded. Human review required."
+}

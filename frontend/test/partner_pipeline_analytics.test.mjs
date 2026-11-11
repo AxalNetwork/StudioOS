@@ -74,9 +74,10 @@ test('the zone reads the pipeline endpoint, and re-reads when the chip changes',
   // THE CHIPS CANNOT NARROW ROWS HERE — this page holds aggregates, not rows —
   // so a `load` that did not depend on `view` would leave every chip showing
   // the first window's figures.
-  assert.match(code, /const load = useCallback\([\s\S]{0,900}?\}, \[view\]\);/,
+  // #4701: the read is keyed to the window AND the company, and an answer for
+  // an earlier key is dropped (see pipeline_retrieval_4701.test.mjs).
+  assert.match(code, /useKeyedRead\(`\$\{view\}\|\$\{company\?\.id \?\? 'none'\}`, \(\) => api\.quotesAnalytics\(windowOf\(view\)\)\)/,
     'the reader’s chosen window is not a dependency of the read');
-  assert.match(code, /useEffect\(\(\) => \{ load\(\); \}, \[load\]\);/);
   // And the api method sends it, without sending the default.
   assert.match(codeOnly(read('frontend/src/lib/api.js')),
     /quotesAnalytics: \(period\) => request\(\s*\n?\s*period && period !== 'all'/,
@@ -97,9 +98,9 @@ test('the zone card describes the zone that is actually rendered', () => {
 test('the analytics query LEFT joins the need, so no quote falls out of the denominator', () => {
   const body = analyticsHandler();
   const joins = body.match(/JOIN founder_needs/g) || [];
-  assert.equal(joins.length, 3, 'admin, company-scoped and unscoped all read the need category');
+  assert.equal(joins.length, 2, 'admin and partner both read the need category');
   const left = body.match(/LEFT JOIN founder_needs n ON n\.id = q\.need_id/g) || [];
-  assert.equal(left.length, 3,
+  assert.equal(left.length, joins.length,
     'an INNER join would silently drop a quote whose need row is missing and change the win '
     + "rate's denominator — the one figure this endpoint exists to compute");
 });
@@ -128,9 +129,8 @@ test('the endpoint returns three breakdowns, and the loss taxonomy is read', () 
   assert.match(body, /on_price_losses: losses\.on_price/);
   assert.match(body, /loss_reason/, 'the query must actually read the column');
   const selects = body.match(/q\.loss_reason/g) || [];
-  assert.equal(selects.length, 3,
-    'admin, company-scoped and unscoped all have to read the reason, or the taxonomy '
-    + 'silently empties for two of the three readers');
+  assert.equal(selects.length, 2,
+    'admin and partner both have to read the reason to populate the taxonomy');
 });
 
 test('the loss taxonomy is drawn, and the loss nobody explained is its own row', () => {

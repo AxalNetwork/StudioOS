@@ -1,0 +1,34 @@
+{
+  "skill": "conversion-landing-page-wireframing",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Conversion Landing Page Wireframing",
+        "task_scope": "Structures conversion landing pages around audience intent, proof, objections, trust and a clear action.",
+        "evidence": [
+          "message-to-proof landing hierarchy"
+        ],
+        "omitted_field": "conversion baseline"
+      },
+      "build.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for message-to-proof landing hierarchy."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "message-to-proof landing hierarchy"
+    ],
+    "must_say_not_recorded": [
+      "conversion baseline"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

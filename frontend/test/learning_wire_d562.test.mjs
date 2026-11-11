@@ -189,7 +189,7 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   assert.match(lessonSelect, /i\.duration_seconds/);
   const admin = read('cloudflare-worker/src/routes/admin_learning.ts');
   // D4179 (#4179): the items reply keeps its `items` key; an uploaded item adds its `stream_copy`.
-  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
+  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "return item ? c.json({ item }) :"]) {
     assert.ok(admin.includes(reply), `admin_learning.ts no longer answers ${reply}`);
   }
   // A webinar lesson names an event by its slug.
@@ -282,7 +282,8 @@ test('the studio\'s writes go out with the right method, path and body', async (
     await setItemStatus('v-yt', 'unpublish');
     await setItemStatus('v-yt', 'archive');
     await saveCourse({ uid: null, form: { title: 'Seed basics', slug: 'seed-basics', summary: '', cover_url: '', level: '', estimated_minutes: ' 80 ', visibility: 'open', resources: [{ title: 'Template', url: 'https://example.com/t.pdf' }, { title: ' ', url: '' }] } });
-    await saveCourse({ uid: 'c1', form: { title: 'Seed basics', slug: 'seed-basics', summary: 'S', cover_url: '', level: 'advanced', estimated_minutes: '', visibility: 'program', resources: [] } });
+    await saveCourse({ uid: 'c1', form: { title: 'Seed basics', slug: 'seed-basics', summary: 'S', cover_url: '', level: 'advanced', estimated_minutes: '', visibility: 'program', resources: [],
+      audience: ['founder'], stage: ' Pre-seed ', outcomes: 'Read a term sheet\n\n  Price a round  ', prerequisites: '', author: 'A. Author', reviewer: ' ', reviewed_on: '2026-10-01', practical_output: 'A model cap table' } });
     await setCourseStatus('c1', 'publish');
     await addModule('c1', 'Pricing');
     await renameModule('m2', 'Pricing a round');
@@ -331,8 +332,14 @@ test('the studio\'s writes go out with the right method, path and body', async (
   assert.deepEqual(bodyOf(8), {
     title: 'Seed basics', slug: 'seed-basics', summary: '', cover_url: '', level: null, estimated_minutes: '80', visibility: 'open',
     resources: [{ title: 'Template', url: 'https://example.com/t.pdf' }],
+    // D4650: a form with no metadata sends each field as not recorded.
+    audience: [], stage: null, outcomes: [], prerequisites: [], author: null, reviewer: null, reviewed_on: null, practical_output: null,
   });
   assert.deepEqual(bodyOf(9).resources, []);
+  // D4650: lists are one entry per non-blank line, trimmed; blank text is null.
+  const meta9 = bodyOf(9);
+  assert.deepEqual([meta9.audience, meta9.stage, meta9.outcomes, meta9.prerequisites, meta9.author, meta9.reviewer, meta9.reviewed_on, meta9.practical_output],
+    [['founder'], 'Pre-seed', ['Read a term sheet', 'Price a round'], [], 'A. Author', null, '2026-10-01', 'A model cap table']);
   assert.deepEqual(bodyOf(11), { title: 'Pricing' });
   assert.deepEqual(bodyOf(12), { title: 'Pricing a round' });
   // Up and down send the complete new order, as the route requires.

@@ -3,6 +3,7 @@ import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { userMayReadDeal } from './deals';
+import { hasActiveDealNda, ndaExempt } from '../services/dealAccess';
 import { effectiveFlags } from './public';
 import { effectiveVisibility } from '../services/userSettings';
 import { ARCHETYPES } from '../services/archetypeScoring';
@@ -162,20 +163,12 @@ function handler(section: 'team' | 'market' | 'traction') {
       const project = await c.env.DB.prepare(`SELECT p.id, p.founder_id, p.name, p.sector, p.stage, p.tagline AS headline
         FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ? AND p.deleted_at IS NULL`).bind(id).first<any>();
       if (!project) return c.json({ error: 'deal_not_found' }, 404);
-      // Canonical deal access is necessary, but external partners also need an NDA
-      // for these new sections. Only staff and the venture's own founder are exempt.
-      const ndaExempt = ['admin', 'founder'].includes(user.role);
-      // Founders reach here only for their own venture, through userMayReadDeal.
-      if (!ndaExempt) {
-        const founder = await c.env.DB.prepare(`SELECT id FROM users WHERE founder_id = ? AND COALESCE(is_active, 1) = 1 ORDER BY id LIMIT 1`)
-          .bind(project.founder_id).first<any>();
-        // Same directional pair as trust.ts, without a read-side schema bootstrap.
-        const nda = founder ? await c.env.DB.prepare(`SELECT status, valid_until FROM pairwise_ndas
-          WHERE party_a_user_id = ? AND party_b_user_id = ? LIMIT 1`).bind(founder.id, user.id).first<any>() : null;
-        if (!nda || nda.status !== 'active' || (nda.valid_until && !(Date.parse(nda.valid_until) > Date.now()))) {
-          return c.json({ masked: true, reason: 'no_pairwise_nda',
-            project: { name: project.name, sector: project.sector, stage: project.stage, headline: project.headline } });
-        }
+      // Canonical deal access is necessary, but external partners also need an NDA for these sections.
+      // D4631: the exemption is the admin, or the caller's relationship to THIS deal (its own venture's founder),
+      // never a primary role: a founder reading another venture's deal through an investor licence needs the NDA.
+      if (!ndaExempt(user, project.founder_id) && !(await hasActiveDealNda(c.env, Number(user.id), project.founder_id))) {
+        return c.json({ masked: true, reason: 'no_pairwise_nda',
+          project: { name: project.name, sector: project.sector, stage: project.stage, headline: project.headline } });
       }
       const data = section === 'team' ? await team(c.env, project) : section === 'market' ? await market(c.env, project) : await traction(c.env, project, user);
       return c.json({ masked: false, ...data });

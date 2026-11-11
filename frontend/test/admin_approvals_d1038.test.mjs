@@ -34,7 +34,7 @@ import { readAllExperts } from '../src/pages/admin/approvals/ExpertBoard.jsx';
 import { oldestApproved } from '../src/pages/admin/approvals/PitchBoard.jsx';
 import {
   assigneeOf, assignChoices, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef, hasNextPage,
-  hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, inboxTiles, itemOfPath, itemPath, itemView, laneAgeChart,
+  hqBandLine, hqLaneViews, inboxGroupCounts, inboxQueryOf, inboxRows, summaryStrip, weeklyTile, itemOfPath, itemPath, itemView, laneAgeChart,
   notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, historyLines, cardAge, filterCount, sortLabel,
 } from '../src/pages/admin/approvals/inboxModel.js';
 import { glancesFromStudioGlance } from '../src/pages/admin/adminStudioOverview.js';
@@ -207,7 +207,7 @@ test('rows: the band pill, the group, and who holds it — "Not read" is never "
   ]);
   assert.equal(rows[0].href, '/admin/approvals/items/kyc-41');
   assert.deepEqual(assigneeOf({}), { kind: 'unread', text: 'Not read' });
-  assert.equal(pageLine(INBOX), '1–3 of 123 +', 'a failed lane leaves the total short, and says so');
+  assert.equal(pageLine(INBOX), '1–3 of 123+', 'a failed lane leaves the total short, and says so');
   assert.equal(pageLine({ ...INBOX, unreadable: [] }), '1–3 of 123');
   assert.equal(pageLine({ ...INBOX, total: null }), '1–3 of —');
   assert.equal(hasNextPage({ ...INBOX, total: 123 }), true);
@@ -215,15 +215,18 @@ test('rows: the band pill, the group, and who holds it — "Not read" is never "
 });
 
 test('the four tiles: numbers from the reads, "Could not be read" with why, never a 0 for a gap', () => {
-  const t = inboxTiles({ status: 'ready', reply: INBOX }, { status: 'ready', reply: WEEKLY });
-  assert.deepEqual([t.waiting.value, t.waiting.sub], ['123 +', 'LP applications could not be read']);
-  assert.deepEqual([t.over72.value, t.mine.value, t.decided.value, t.decided.sub], ['5', '2', '12', 'median wait 1 d 9 h']);
-  const whole = inboxTiles({ status: 'ready', reply: { ...INBOX, unreadable: [] } }, null);
+  // D4814: the four tiles gave way to the strip (Waiting · Overdue · Unassigned · Oldest); Decided this week moved to Workload.
+  const t = summaryStrip({ status: 'ready', reply: INBOX });
+  assert.deepEqual([t.waiting.value, t.waiting.sub], ['123+', 'LP applications could not be read']);
+  assert.equal(t.overdue.value, '5');
+  const d = weeklyTile({ status: 'ready', reply: WEEKLY });
+  assert.deepEqual([d.value, d.sub], ['12', 'median wait 1 d 9 h']);
+  const whole = summaryStrip({ status: 'ready', reply: { ...INBOX, unreadable: [] } });
   assert.equal(whole.waiting.sub, 'across 5 lanes');
-  assert.equal(whole.decided.state, 'loading');
-  const withheld = inboxTiles({ status: 'ready', reply: { ...INBOX, tiles: { over_72h: null, assigned_to_me: null, reason: 'Assignments could not be read.' } } }, { status: 'error' });
-  assert.deepEqual([withheld.over72.state, withheld.mine.reason, withheld.decided.state], ['unreadable', 'Assignments could not be read.', 'unreadable']);
-  assert.equal(inboxTiles({ status: 'error' }, null).waiting.state, 'unreadable');
+  assert.equal(weeklyTile(null).state, 'loading');
+  const withheld = summaryStrip({ status: 'ready', reply: { ...INBOX, tiles: { over_72h: null, assigned_to_me: null, reason: 'Assignments could not be read.' } } });
+  assert.deepEqual([withheld.overdue.state, withheld.unassigned.reason, weeklyTile({ status: 'error' }).state], ['unreadable', 'Assignments could not be read.', 'unreadable']);
+  assert.equal(summaryStrip({ status: 'error' }).waiting.state, 'unreadable');
   const counts = inboxGroupCounts(INBOX, false);
   assert.deepEqual([counts.people, counts.deals, counts.all], [10, null, null], 'a failed lane leaves its group with no total');
 });
@@ -260,7 +263,8 @@ test('the item: its facts and history, or why not (gone, missing, unread with a 
 });
 
 test('Assign: each admin with what they hold now, the caller marked; the title; a refusal said with the list re-read', () => {
-  assert.deepEqual(assignChoices(INBOX, 7).choices.map((c) => c.label), ['Admin A · you · 14 now', 'Admin B · 3 now']);
+  // D4814 (AP-05): "You · 14 assigned", you first, then lowest workload (assignChoices' own tests are in admin_approvals_v2_4814).
+  assert.deepEqual(assignChoices(INBOX, 7).choices.map((c) => c.label), ['Admin A · You · 14 assigned', 'Admin B · 3 assigned']);
   assert.equal(assignChoices({ reviewers: null, reviewers_reason: 'Admins could not be read.' }, 7).text, 'Admins could not be read.');
   assert.equal(assignTitle([{ who: 'Person A', laneLabel: 'KYC' }]), 'Assign Person A’s identity check');
   assert.equal(assignTitle([{}, {}, {}]), 'Assign 3 items');
@@ -443,29 +447,33 @@ test('mounted, Inbox (APR1): the tiles, the two charts with their sentences, the
   try {
     assert.equal(v.h1s(), 1);
     assert.match(v.of('approvals-header'), /Approvals has a new address\. Update your bookmark\./);
-    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*123 \+/);
-    assert.match(v.of('approvals-tile-waiting'), /Waiting\s*123 \+\s*LP applications could not be read/);
-    assert.match(v.of('approvals-tile-over72'), /Over 72 hours\s*5\s*oldest 6 d 2 h, Due diligence/);
-    assert.match(v.of('approvals-tile-assigned'), /Assigned to you\s*2/);
-    assert.match(v.of('approvals-tile-decided'), /Decided this week\s*12\s*median wait 1 d 9 h/);
+    // D4814: the four tiles are the strip (Waiting · Overdue · Unassigned · Oldest); "+" when a lane failed, no space.
+    assert.match(v.of('approvals-tab-inbox'), /Inbox\s*123\+/);
+    assert.match(v.of('approvals-strip-waiting'), /Waiting\s*123\+\s*LP applications could not be read/);
+    assert.match(v.of('approvals-strip-overdue'), /Overdue\s*5\s*over 72 hours/);
+    assert.match(v.of('approvals-view-mine'), /Assigned to me\s*2/, 'Assigned to me moved from the headline to the work views');
+    assert.match(v.of('approvals-decided-week'), /Decided this week · 12 · median wait 1 d 9 h/, 'and Decided this week to Workload');
     assert.equal(v.props('approvals-chart-lanes-img')['aria-label'], laneAgeChart(INBOX).sum, 'the chart\'s one sentence');
     assert.equal(v.props('approvals-chart-weeks-img').role, 'img');
     assert.match(v.of('approvals-chart-weeks'), /Wellbeing experts, Exploring do not record when they were decided/);
     await v.click('approvals-chart-lanes-toggle');
     assert.match(v.of('approvals-chart-lanes'), /View as chart.*KYC\s*2\s*3\s*5\s*0\s*10 waiting/s, 'View as table: the same rows');
     assert.deepEqual(v.ids('approvals-row-'), ['approvals-row-kyc:41', 'approvals-row-due_diligence:9', 'approvals-row-jobs:3']);
-    assert.match(v.of('approvals-row-kyc:41'), /4 d 7 h\s*Over 72 hours\s*KYC\s*People and accounts\s*Person A\s*Identity check\s*Admin A\s*KYC & KYB/);
-    assert.match(v.of('approvals-row-due_diligence:9'), /Unassigned\s*Due diligence/);
-    assert.match(v.of('approvals-row-jobs:3'), /Age not recorded.*Not read\s*Jobs/s, 'an unread assignment is never "Unassigned"');
+    // D4814: Request (who, what, lane) · Waiting · Owner · Review "in [destination]".
+    assert.match(v.of('approvals-row-kyc:41'), /Person A\s*Identity check\s*KYC · People and accounts\s*4 d 7 h\s*! Overdue\s*Admin A\s*Review\s*in KYC & KYB/);
+    assert.match(v.of('approvals-row-due_diligence:9'), /Unassigned\s*Assign\s*Review\s*in Due diligence/);
+    assert.match(v.of('approvals-row-jobs:3'), /Age not recorded.*Not read\s*Review\s*in Jobs/s, 'an unread assignment is never "Unassigned"');
     assert.equal(v.props('approvals-open-kyc:41').href, '/admin/approvals/items/kyc-41?moved=held-approvals');
     assert.match(v.of('approvals-partial'), /LP applications could not be read, so its items are missing below\. The other 4 lanes are complete\. Try again/);
-    assert.equal(v.of('approvals-count'), '1–3 of 123 +');
-    assert.match(v.of('approvals-waiting-on-hq'), /What this studio asked HQ\.\s*Renewal\s*sent 20 Oct 2026/);
-    assert.doesNotMatch(v.of('approvals-waiting-on-hq'), /Seat increase/, 'an answered request is not waiting');
-    assert.match(v.of('approvals-group-people'), /People and accounts\s*10/);
-    assert.match(v.of('approvals-group-deals'), /Deals and portfolio\s*—/, 'a failed lane is a dash, never 0');
-    assert.ok(!v.has('approvals-group-hq'), 'an Admin has no HQ group');
-    assert.deepEqual(api(v), ['/api/admin/approvals', '/api/admin/approvals/decided/weekly', '/api/admin/studio/glance', '/api/licence/mine/requests']);
+    assert.equal(v.of('approvals-count'), '1–3 of 123+');
+    // D4814: Waiting on HQ is a studio shell's; this is the HQ-held shell, which neither draws nor reads it.
+    assert.ok(!v.has('approvals-waiting-on-hq'));
+    // D4814: the group chips live in the one Filters panel.
+    await v.click('approvals-filters-open');
+    assert.match(v.of('approvals-sheet-group-people'), /People and accounts\s*10/);
+    assert.match(v.of('approvals-sheet-group-deals'), /Deals and portfolio\s*—/, 'a failed lane is a dash, never 0');
+    assert.ok(!v.has('approvals-sheet-group-hq'), 'an Admin has no HQ group');
+    assert.deepEqual(api(v), ['/api/admin/approvals', '/api/admin/approvals/decided/weekly', '/api/admin/studio/glance']);
     assert.ok(!v.seen.some((p) => /decide|approve|reject/.test(p.split('?')[0].replace('/decided', ''))), 'nothing decides here');
   } finally { await v.unmount(); }
 });
@@ -475,7 +483,7 @@ test('mounted, Inbox: filters live in the address and reach the Worker; one sear
   try {
     const sent = v.seen.find((p) => p.startsWith('/api/admin/approvals?'));
     assert.equal(sent, '/api/admin/approvals?page=1&group=people&age=past&assigned=me&sort=lane');
-    assert.equal(v.props('approvals-assigned').value, 'me');
+    assert.equal(v.props('approvals-view-mine')['aria-checked'], true, 'D4814: assigned=me is the Assigned to me view');
     await v.click('approvals-next');
     assert.equal(v.at.path, '/admin/approvals?group=people&age=past&assigned=me&sort=lane&q=k&page=2');
     assert.ok(v.seen.includes('/api/admin/approvals?page=2&group=people&age=past&assigned=me&sort=lane'));
@@ -499,14 +507,15 @@ test('mounted, Inbox: the ⋯ menu copies the item\'s link; the bulk bar assigns
     await v.change('approvals-pick-jobs:3');
     assert.match(v.of('approvals-bulk'), /2 selected\s*Assign…\s*Clear/);
     await v.click('approvals-bulk-assign');
-    assert.match(v.of('approvals-assign'), /Assign 2 items\s*They see it under Assigned to me\. Assigning decides nothing\./);
-    assert.match(v.of('approvals-assign-7'), /Admin A · you · 14 now/);
+    // D4814 (AP-05): the note says assigning changes ownership only; each reviewer shows the items they own.
+    assert.match(v.of('approvals-assign'), /Assign 2 items.*Assigning changes ownership only\. It does not decide these items\./s);
+    assert.match(v.of('approvals-assign-7'), /Admin A\s*You · 14 assigned/);
     assert.equal(v.props('approvals-assign-send').disabled, true, 'nobody chosen, nothing sent');
     await v.change('approvals-assign-pick-8');
     const before = v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length;
     await v.click('approvals-assign-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/approvals/assignments', body: { assignee_user_id: 8, items: [{ lane: 'kyc', item_id: 41 }, { lane: 'jobs', item_id: 3 }] } }]);
-    assert.match(v.of('approvals-toast'), /Assigned to Admin B\./);
+    assert.match(v.of('approvals-toast'), /2 items are now assigned to Admin B\./);
     assert.ok(!v.has('approvals-assign'));
     assert.ok(v.seen.filter((p) => p.startsWith('/api/admin/approvals?')).length > before, 'the list is read again');
     refuse = true;
@@ -527,11 +536,12 @@ test('mounted, the item (APR3): its own address over the Inbox, the facts, Assig
     assert.equal(v.at.path, '/admin/approvals/items/kyc-41');
     assert.ok(v.has('approvals-inbox'), 'the Inbox stays underneath');
     assert.ok(v.seen.includes('/api/admin/approvals/items/kyc/41'));
-    assert.match(v.of('approvals-item'), /Item\s*Person A\s*Esc to close/);
-    assert.match(v.of('approvals-item-facts'), /Submitted\s*20 Oct 2026, 08:00\s*Profile\s*Identity check\s*Item ID\s*41\s*Lane\s*KYC · People and accounts/);
-    assert.match(v.of('approvals-item-assigned'), /Assigned\s*Admin A\s*Assign…/);
+    assert.match(v.of('approvals-item'), /Item · KYC\s*Person A\s*Waiting 4 d 7 h/);
+    assert.match(v.of('approvals-item-facts'), /Submitted\s*20 Oct 2026, 08:00\s*Profile \/ request\s*Identity check\s*Item ID\s*41\s*Lane\s*KYC · People and accounts/);
+    // D4814 (AP-04): the owner first, with when they took it; the caller owns it, so no Assign to me.
+    assert.match(v.of('approvals-item-assigned'), /Owner\s*Admin A · you\s*Owner since 21 Oct 2026, 09:00 · assigned by Admin B\s*Change…$/);
     assert.match(v.of('approvals-item-history'), /Assigned to Admin A by Admin B · 21 Oct 2026/);
-    assert.match(v.of('approvals-item'), /Open in KYC & KYB\s*This lane is decided on its own page, where its rules and messages live\./);
+    assert.match(v.of('approvals-item-continue'), /Continue review in KYC & KYB →\s*Close\s*This decision is completed in KYC & KYB, where its evidence and notification rules live\./);
     await v.click('approvals-item-close');
     assert.equal(v.at.path, '/admin/approvals');
     assert.ok(!v.has('approvals-item'));
@@ -556,7 +566,7 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unfiltered_total: 0, unreadable: [] }) });
   try {
-    assert.match(v.of('approvals-empty'), /Nothing is waiting on you\..*See what was decided/s);
+    assert.match(v.of('approvals-empty'), /Nothing needs approval\..*All approval queues currently read as clear\..*See what was decided/s, 'D4814: AP-18a\'s words');
     assert.ok(v.hrefs().includes('/admin/approvals/decided'));
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals?age=past', h(AdminApprovals), { inbox: () => json({ ...INBOX, items: [], total: 0, unreadable: [] }) });
@@ -568,7 +578,7 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
     assert.match(v.of('approvals-failed'), /We could not load Approvals\.\s*The rest of the admin still works/);
     assert.match(v.of('approvals-failed-details'), /HTTP 503 · assigned_unreadable/);
     assert.ok(!v.has('approvals-empty'), 'a failed read is not "nothing waiting"');
-    assert.match(v.of('approvals-tile-waiting'), /Could not be read/);
+    assert.match(v.of('approvals-strip-waiting'), /Could not be read/);
   } finally { await v.unmount(); }
   v = await mount('/admin/approvals?lane=payouts', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }));
   try {
@@ -577,12 +587,14 @@ test('mounted, states: skeletons while reading (APR12); nothing waiting (APR11a)
   } finally { await v.unmount(); }
 });
 
-test('mounted, Super Admin: the HQ decides band and the HQ group chip', async () => {
+test('mounted, Super Admin: the HQ group in Filters, and the tab counting HQ\'s lanes', async () => {
+  // D4814: the HQ decides band left the Inbox (Lanes keeps it); the Waiting cell says HQ's share instead.
   const glance = { ...GLANCE, approvals: { ...GLANCE.approvals, hq_decides: { lanes: [{ key: 'payouts', count: 22, oldest_age_hours: 30 }], pending_total: 22, unreadable: [] } } };
   const v = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }), { glance: () => json(glance) });
   try {
-    assert.equal(v.of('approvals-hq-band'), 'HQ decides · 22 waiting · only Super Admins see this group');
-    assert.ok(v.has('approvals-group-hq'));
+    assert.ok(!v.has('approvals-hq-band'));
+    await v.click('approvals-filters-open');
+    assert.ok(v.has('approvals-sheet-group-hq'));
   } finally { await v.unmount(); }
   const admin = await mount('/admin/approvals', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 0 } }), { glance: () => json(glance) });
   try {
@@ -595,9 +607,10 @@ test('mounted, Decided (APR10): the log in the store\'s words, "not recorded bef
   try {
     assert.ok(v.seen.includes('/api/admin/approvals/decided?page=1&outcome=approved'));
     assert.match(v.of('approvals-tab-decided'), /Decided\s*357/);
-    assert.match(v.of('approvals-decided-notes'), /Wellbeing experts: decisions were not recorded before 21 Oct 2026\.\s*Explorers ready for a profile: Explorers do not record who decided\./);
-    assert.match(v.of('approvals-decided-kyc:40:2026-10-25 14:00:00'), /25 Oct 2026, 14:00\s*KYC\s*Person D\s*Approved\s*Admin A\s*1 d 9 h\s*Welcome aboard\s*◉ They see this/);
-    assert.equal(v.of('approvals-decided-count'), '1–1 of 357');
+    // D4814 part 4 (AP-07): the history's limits in About this history, after the log; Request · Outcome · Decided by · Wait · Note · Open ↗.
+    assert.match(v.of('approvals-decided-about'), /About this history.*Wellbeing experts: decisions were not recorded before 21 Oct 2026\..*Explorers ready for a profile does not record its decisions: Explorers do not record who decided\./s);
+    assert.match(v.of('approvals-decided-kyc:40:2026-10-25 14:00:00'), /25 Oct 2026, 14:00\s*Person D\s*KYC\s*Approved\s*Admin A\s*1 d 9 h\s*Welcome aboard\s*👁 Shown to them\s*Open in KYC & KYB ↗/);
+    assert.equal(v.of('approvals-decided-count'), '1–1 of 357 · newest first');
     assert.ok(!v.seen.some((p) => p.startsWith('/api/admin/approvals?')), 'Decided reads no inbox');
   } finally { await v.unmount(); }
   const down = await mount('/admin/approvals/decided', h(AdminApprovals), { decided: () => json({ code: 'bad_page', message: 'x' }, 503) });
@@ -627,22 +640,27 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.equal(v.of('approvals-notifies-events'), 'Not read here yet', 'a glance without it is not read here, never "Nobody"');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*20/);
     // D1041: KYB is counted now (the stub's glance answers 0); D1132: so is Product testers.
-    assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0/);
-    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*New\s*0\s*—\s*Here/);
-    assert.match(v.of('approvals-lane-events'), /Events\s*0\s*—\s*Events › Review/);
+    // D4814 part 4 (AP-06): "N waiting", native boards tagged, Reviewed in with →.
+    assert.match(v.of('approvals-lane-kyb'), /KYB\s*New\s*0 waiting/);
+    assert.match(v.of('approvals-lane-product_testers'), /Product testers\s*Approvals board\s*New\s*0 waiting\s*—.*Product testers →/);
+    assert.match(v.of('approvals-lane-events'), /Events\s*0 waiting\s*—.*Events › Review →/);
     assert.match(v.of('approvals-not-a-queue'), /Partner invitations: An open invitation waits on the invitee, not an admin\./);
     assert.ok(!v.has('approvals-hq-lanes'), 'an Admin never sees the HQ group');
+    assert.match(v.of('approvals-hq-locked'), /HQ decides — Super Admin only.*You are signed in as Admin\..*Super Admin/s);
   } finally { await v.unmount(); }
   v = await render('/admin/approvals/lanes', h(ApprovalsPage, { viewer: { role: 'admin', is_super_admin: 1 } }));
   try {
     assert.match(v.of('approvals-hq-lanes'), /HQ decides · Tickets could not be read, so no total/);
-    assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4\s*3 d 8 h\s*Commissions/);
+    assert.match(v.of('approvals-hq-payouts'), /Payout requests\s*4 waiting\s*oldest 3 d 8 h.*Commissions/);
     assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
     assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
-    assert.match(v.of('approvals-hq-proposals'), /not built yet/);
+    // D5302: Program proposals opens HQ's queue (D964), which decides it; never "not built yet".
+    assert.match(v.of('approvals-hq-proposals'), /Programs › Proposals/);
+    assert.doesNotMatch(v.of('approvals-hq-proposals'), /not built yet/);
+    assert.ok(v.hrefs().includes('/admin/programs/proposals'));
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
-    assert.match(v.of('approvals-hq-grants'), /Licences › Program grants › Requests/);
+    assert.match(v.of('approvals-hq-grants'), /Licences › Program access by licence › Requests/);
     assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);
     assert.ok(v.hrefs().includes('/admin/licences/programs/requests'));
   } finally { await v.unmount(); s.restore(); }
@@ -769,8 +787,8 @@ test('every decision says what changes, who is told and what is recorded; reason
   assert.match(doneLine('tester_remove', 'Eva', { places_ended: 2 }), /2 open program places ended/);
   assert.deepEqual(['https://example.com/post', 'http://example.com', 'https://u:p@example.com', 'not a url', `https://e.com/${'a'.repeat(500)}`].map(publishUrlOk), [true, false, false, false, false]);
   assert.equal(refusalLine(Object.assign(new Error('Gus’s email is not verified, so they cannot be told.'), { status: 409 })), 'Gus’s email is not verified, so they cannot be told.');
-  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /Nothing changed/);
-  assert.match(refusalLine(new Error('Network down')), /Nothing changed/, 'no status is never shown as saved');
+  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /outcome could not be confirmed/i);
+  assert.match(refusalLine(new Error('Network down')), /outcome could not be confirmed/i, 'no status never claims that a possibly committed write changed nothing');
 });
 
 test('the boards read every page: testers to a thousand, experts to a thousand, and say when they stopped (D1046)', async () => {
@@ -790,17 +808,19 @@ test('mounted, Product testers (APR4): five tabs with counts, the facts, intake 
   const v = await board('/admin/approvals/product-testers', testerRoute());
   try {
     assert.match(v.of('approvals-board-header'), /Approvals.*Product testers.*New lane/s);
-    assert.match(v.of('testers-tab-waiting'), /Waiting\s*2/);
+    // D4814 part 3: the canvas's Pending, the shared four-cell summary, the pool below the queue.
+    assert.match(v.of('testers-tab-waiting'), /Pending\s*2/);
     assert.match(v.of('testers-tab-active'), /Active\s*1/);
     assert.match(v.of('testers-tab-removed'), /Removed\s*0/);
     assert.match(v.of('testers-facts'), /Admins cannot apply/);
     assert.match(v.of('testers-intake-paused'), /Member intake is paused\. Nobody can apply now\./);
-    assert.match(v.of('testers-tile-waiting'), /Waiting\s*2\s*oldest/);
+    assert.match(v.of('testers-strip-waiting'), /Pending\s*2\s*applications/);
     assert.match(v.of('testers-tile-active'), /Active testers\s*1/);
     assert.match(v.of('testers-tile-in-program'), /In a testing program now\s*1/);
     assert.match(v.props('testers-chart-bars')['aria-label'], /^Applications to test products in the last 12 weeks: /);
-    assert.match(v.of('tester-1'), /Gus Demo\s*gus@example\.com\s*Investor.*3 hours a week\s*Given · v2\s*Approved\s*Verified/s);
-    assert.match(v.of('tester-3'), /Ben Sample.*Not given.*! Not given.*! Not verified/s);
+    assert.match(v.of('tester-1'), /Gus Demo\s*gus@example\.com\s*3 hours a week\s*Investor/s);
+    assert.doesNotMatch(v.of('tester-1'), /! Email not verified|! No email consent/, 'nothing stops Gus');
+    assert.match(v.of('tester-3'), /Ben Sample.*! Email not verified\s*! No email consent/s);
     assert.ok(!v.has('tester-2'), 'an active tester is not on Waiting');
     assert.ok(gets(v, '/api/admin/product-testers?').some((p) => p.includes('in_programme=yes')), 'the in-program tile is the Worker\'s count');
   } finally { await v.unmount(); }
@@ -819,8 +839,9 @@ test('mounted, a tester (APR5): the row opens their address over the board; A ap
     assert.equal(v.at.path, '/admin/approvals/product-testers/1');
     assert.match(v.of('tester-drawer-content'), /Investor.*Applied\s*17 Oct 2026.*Email\s*Verified\s*gus@example\.com.*What do you want to test\?\s*B2B tools for small funds\..*Email consent: given on 17 Oct 2026, version v2\..*Product Alpha · picked.*Approved by Admin B · 14 Aug 2026/s);
     assert.ok(v.has('testers-tab-waiting'), 'the board stays under the drawer');
-    assert.ok(v.has('tester-assign'), 'Assign is the inbox\'s');
-    assert.equal(v.props('tester-assign').href, '/admin/approvals/items/product_testers-1');
+    // D4814 part 3: the owner is in the drawer, first; this fake inbox holds no record of it, so it is "Not read".
+    assert.match(v.of('tester-owner'), /Owner\s*Not read/);
+    assert.ok(!v.has('tester-assign'), 'no link away to the inbox for Assign');
     await v.click('tester-action-approve');
     assert.match(v.of('tester-dialog-approve-told'), /They are told by email and in their inbox\./);
     assert.match(v.of('tester-dialog-approve-recorded'), /Recorded in their history: who approved them and when/);
@@ -854,7 +875,10 @@ test('mounted, a tester: an unverified email is refused before sending (APR5r); 
     await v.change('tester-dialog-reason', 'We are full for this quarter.');
     await v.click('tester-dialog-decline-send');
     assert.deepEqual(v.posts, [{ path: '/api/admin/product-testers/1/decline', body: { note: null, reason: 'We are full for this quarter.' } }]);
-    assert.match(v.of('tester-dialog-decline-refused'), /This tester changed while you were looking at it/);
+    // D4814 part 5 (AP-18e): another decision got there first — nothing of yours was written; the latest state is read.
+    assert.match(v.of('tester-dialog-decline-changed'), /This item changed while you were reviewing it\. The latest state has been loaded\. Nothing was recorded by you\.\s*This tester changed while you were looking at it/);
+    assert.equal(v.of('tester-dialog-decline-latest'), 'View latest');
+    assert.ok(!v.has('tester-dialog-decline-send'), 'no second send from a stale dialog');
     assert.ok(!v.has('board-done'), 'a refusal is never shown as done');
   } finally { await v.unmount(); }
 });
@@ -915,8 +939,9 @@ test('mounted, Co-marketing (APR6): five states read alone and paged, the tiles 
     assert.match(v.of('pitches-tab-withdrawn'), /Withdrawn\s*—/, 'a failed state is a dash, never 0');
     assert.match(v.of('pitches-tile-visits'), /Visits from published pitches, 30 days\s*412/);
     assert.match(v.of('pitches-tile-signups'), /Sign-ups\s*9\s*from published pitches, 30 days/);
-    assert.match(v.of('pitches-tile-approved'), /Approved, not yet published\s*1\s*oldest/);
-    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Webinar\s*Partner A\s*14 Nov 2026\s*Seed founders, Europe/);
+    // D4814 part 3: the four-cell summary's fourth cell, and the canvas's Pitch · Partner · Format columns.
+    assert.match(v.of('pitches-strip-approved'), /Approved, not published\s*1\s*oldest/);
+    assert.match(v.of('pitch-p1'), /Hiring your first engineer\s*Seed founders, Europe\s*Partner A\s*Webinar\s*14 Nov 2026/);
     await v.click('pitch-open-p1');
     assert.equal(v.at.path, '/admin/approvals/co-marketing/p1');
     assert.match(v.of('pitch-drawer-content'), /Summary\s*A one-hour webinar\..*Angle\s*The first hire sets the bar.*What they bring\s*Two hiring managers.*Attribution code: issued on approval\..*Proposed by Partner A · 18 Oct 2026/s);
@@ -972,19 +997,20 @@ test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the
   let v = await board('/admin/approvals/wellbeing-experts', expertRoute());
   try {
     assert.ok(gets(v, '/api/wellbeing/admin/experts').some((p) => /state=all/.test(p) && /limit=200/.test(p)));
-    assert.match(v.of('experts-tab-verify'), /To verify\s*2/);
+    assert.match(v.of('experts-tab-verify'), /Needs verification\s*2/);
     assert.match(v.of('experts-tab-declined'), /Declined\s*1/);
     assert.match(v.of('experts-tab-hidden'), /Hidden\s*1/);
-    assert.match(v.of('experts-tile-verify'), /To verify\s*2\s*oldest/);
-    assert.match(v.of('expert-e1'), /Expert A\s*Founder coach\s*92%\s*Licence and 1 file/);
+    assert.match(v.of('experts-strip-waiting'), /Needs verification\s*2\s*experts/);
+    assert.match(v.of('expert-e1'), /Expert A\s*Founder coach\s*Licence and 1 file/);
+    assert.match(v.of('expert-open-e1'), /^Verify →$/);
     assert.match(v.of('expert-e2'), /Expert B.*Licence/s);
   } finally { await v.unmount(); }
   v = await board('/admin/approvals/wellbeing-experts/declined', expertRoute());
   try { assert.match(v.of('expert-e3'), /Expert C.*! None given/s); } finally { await v.unmount(); }
   v = await board('/admin/approvals/wellbeing-experts', expertRoute({ list: (q) => json({ items: q.get('offset') === '0' ? EXPERTS.slice(0, 1) : [], total: 80 }) }));
   try {
-    assert.match(v.of('experts-tab-verify'), /To verify\s*—/);
-    assert.match(v.of('experts-tile-verify'), /To verify\s*—/);
+    assert.match(v.of('experts-tab-verify'), /Needs verification\s*—/);
+    assert.match(v.of('experts-strip-waiting'), /Needs verification\s*Could not be read/);
     assert.match(v.of('experts-partial'), /first 1 of 80/);
   } finally { await v.unmount(); }
 });
@@ -992,7 +1018,8 @@ test('mounted, Wellbeing experts (APR8): five tabs with Declined, the tiles, the
 test('mounted, an expert (APR8d, APR8a, APR8b): credentials and profile; Verify needs "I checked their credentials" and sends the version; Decline needs a reason; an expired licence is refused first', async () => {
   let v = await board('/admin/approvals/wellbeing-experts/e1', expertRoute());
   try {
-    assert.match(v.of('expert-drawer-content'), /92% complete\s*Coaching.*Languages\s*English, Portuguese.*Pricing\s*\$120 an hour.*Licence number WB-4821 · issued by Board Name · expires 31 Mar 2028.*Licence\.pdf/s);
+    // D4814 part 3 (AP-13a): credentials and evidence first, then the owner, then the profile.
+    assert.match(v.of('expert-drawer-content'), /Credentials and evidence\s*Licence number WB-4821 · issued by Board Name · expires 31 Mar 2028.*Licence\.pdf.*Register lookups aren’t automated.*Owner.*92% complete\s*Coaching.*Languages\s*English, Portuguese.*Pricing\s*\$120 an hour/s);
     assert.equal(v.props('expert-file-f1').href, '/api/wellbeing/experts/credentials/files/f1');
     await v.click('expert-action-verify');
     assert.equal(v.props('expert-dialog-verify-send').disabled, true, 'not until they say they checked');
@@ -1091,43 +1118,45 @@ test('D1047 (APR15a): on a phone the inbox is cards — lane, who, what, the age
   const v = await mount('/admin/approvals', h(AdminApprovals));
   try {
     assert.deepEqual(v.ids('approvals-card-').filter((x) => /^approvals-card-[a-z_]+:\d+$/.test(x)), ['approvals-card-kyc:41', 'approvals-card-due_diligence:9', 'approvals-card-jobs:3']);
-    assert.match(v.of('approvals-card-kyc:41'), /KYC\s*Person A\s*Identity check\s*4 d 7 h · Over 72 hours\s*Decided on KYC & KYB ›/);
+    // D4814 (AP-14): name, request · lane, the age in words, the owner, where review continues, then Open and ⋯.
+    assert.match(v.of('approvals-card-kyc:41'), /Person A\s*Identity check · KYC\s*4 d 7 h · Over 72 hours\s*Assigned to Admin A\s*Review in KYC & KYB\s*Open\s*⋯/);
     assert.equal(v.of('approvals-card-age-jobs:3'), 'Age not recorded');
     assert.equal(v.props('approvals-card-open-kyc:41').href, '/admin/approvals/items/kyc-41');
     assert.match(v.props('approvals-cards').className, /\bmd:hidden\b/);
-    assert.match(v.props('approvals-tiles').className, /\bgrid-cols-2\b/, 'the tiles are two by two');
+    assert.match(v.props('approvals-strip').className, /\bgrid-cols-2\b/, 'the strip is two by two (D4814)');
     assert.match(v.props('approvals-card-more-kyc:41').className, /\bh-11 w-11\b/, 'the ⋯ is 44 by 44');
     await v.click('approvals-card-more-kyc:41');
     assert.ok(v.has('approvals-row-sheet'));
     assert.equal(v.props('approvals-row-sheet-layer')['data-phone'], 'sheet', '⋯ is a bottom sheet');
-    assert.equal(v.props('approvals-row-sheet-open').href, '/admin/approvals/items/kyc-41');
+    assert.match(v.of('approvals-row-sheet-open-in'), /^Open in KYC & KYB ↗$/, 'D4814: the sheet opens the lane\'s page; the card has Open');
     await v.click('approvals-row-sheet-assign');
     assert.ok(!v.has('approvals-row-sheet'), 'the sheet closes');
     assert.ok(v.has('approvals-assign'), 'Assign… opens its dialog');
   } finally { await v.unmount(); }
 });
 
-test('D1047 (APR15b): Filters with its count and Sort open one bottom sheet; each choice lands in the address; Clear empties it', async () => {
+test('D1047 (APR15b): Filters with its count opens one bottom sheet; each choice lands in the address; Clear empties it', async () => {
+  // D4814: one toolbar on every width — search, Filters and the one Sort; the Sort is no longer inside the sheet.
   const v = await mount('/admin/approvals?age=past', h(AdminApprovals));
   try {
-    assert.match(v.props('approvals-filters').className, /\bhidden\b.*\bsm:flex\b/, 'the desktop filters are not drawn on a phone');
-    assert.match(v.props('approvals-phone-filters').className, /\bsm:hidden\b/);
+    assert.ok(!v.has('approvals-phone-filters'), 'no second, phone-only toolbar');
     assert.equal(v.of('approvals-filters-count'), '1');
-    assert.equal(v.of('approvals-sort-open'), 'Sort: Waiting longest ▾');
     await v.click('approvals-filters-open');
     assert.equal(v.props('approvals-filters-sheet-layer')['data-phone'], 'sheet');
-    assert.match(v.of('approvals-filters-sheet'), /Filters and sort.*Search.*Group.*Lane.*Age.*Assigned.*Sort/s);
+    assert.match(v.of('approvals-filters-sheet'), /Filters.*Group.*Lane.*Age.*Owner/s);
+    assert.doesNotMatch(v.of('approvals-filters-sheet'), /Sort/);
     assert.equal(v.of('approvals-filters-done'), 'Show 123');
     await v.change('approvals-sheet-lane', 'kyc');
     assert.match(v.at.path, /lane=kyc/);
     assert.match(v.at.path, /age=past/);
     assert.equal(v.of('approvals-filters-count'), '2');
     assert.ok(v.has('approvals-filters-sheet'), 'the sheet stays open while choosing');
-    await v.change('approvals-sheet-sort', 'who');
+    await v.change('approvals-sort', 'who');
     assert.match(v.at.path, /sort=who/);
     assert.equal(v.of('approvals-filters-count'), '2', 'the order does not count');
     await v.click('approvals-filters-clear');
-    assert.equal(v.at.path, '/admin/approvals');
+    assert.doesNotMatch(v.at.path, /lane=|age=/, 'Clear all empties the filters');
+    assert.match(v.at.path, /sort=who/, 'and keeps the order and the view');
     await v.click('approvals-filters-done');
     assert.ok(!v.has('approvals-filters-sheet'));
   } finally { await v.unmount(); }
@@ -1143,7 +1172,8 @@ test('D1047 (APR15c): a board\'s drawer has "‹ [lane]" back on a phone; dialog
   } finally { await v.unmount(); }
   const parts = read('frontend/src/pages/admin/approvals/boardParts.jsx');
   assert.match(parts, /export const FOOT = 'flex justify-end gap-2 max-sm:\*:flex-1';/);
-  assert.match(parts, /<div className=\{FOOT\}>\s*<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
+  // D4814 part 5: the footer swaps Cancel/send for Close/View latest after a conflict; both pairs sit in FOOT.
+  assert.match(parts, /<div className=\{FOOT\}>[\s\S]{0,200}<button type="button" className=\{BTN\} onClick=\{onClose\} data-testid=\{`\$\{testId\}-cancel`\}>/, 'the decision dialog\'s buttons');
   for (const [f, label] of [['TesterBoard', 'Product testers'], ['PitchBoard', 'Co-marketing'], ['ExpertBoard', 'Wellbeing experts']]) {
     const src = read(`frontend/src/pages/admin/approvals/${f}.jsx`);
     assert.ok(src.includes(`<PhoneBack label="${label}" onClose={onClose}`), f);

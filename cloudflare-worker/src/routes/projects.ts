@@ -543,7 +543,7 @@ async function createProjectHandler(c: any) {
   // by a prior project flow that crashed). Counting only via user.founder_id
   // would let them bypass the cap on their first call. Resolve via email
   // first, then fall back to the linked column.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(c.env);
     let founderRow: Array<{ id: number }> = [];
     if (user.founder_id) {

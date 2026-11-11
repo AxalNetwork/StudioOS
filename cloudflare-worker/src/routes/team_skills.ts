@@ -8,10 +8,21 @@
  *        Axal", and the company's own skills when `company` is the caller's
  *   GET  /skills/:uid                    one skill: its SKILL.md, versions and the agents using it
  *   POST /skills                         a new draft { scope, company?, ...fields } or { scope, company?, skill_md }
- *   PATCH /skills/:uid                   edit the draft, or retire it
+ *   PATCH /skills/:uid                   edit the draft, or retire it. D5325: `expected_draft_hash` (the card's
+ *                                        `draft_hash`) is checked: stale → 409 `draft_conflict` { draft_hash, draft,
+ *                                        updated_at, updated_by }, nothing written; malformed → 400 `draft_hash_invalid`;
+ *                                        absent → unchecked, as before. The write is guarded inside its batch either way.
+ *   D5325: every card (list, detail and write replies) carries `readiness` (SK-13, `services/agents/skillReadiness.ts`),
+ *        `draft_hash` (a writer's; null for a reader) and `run_cost: null` (Not recorded until #4536)
  *   POST /skills/:uid/publish            a new immutable version (`services/agents/skillPublish.ts`); an HQ
  *                                        skill needs a second Super Admin's approval and its golden cases
- *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`)
+ *                                        at 9 of 10 (D4160: 409 `needs_approval`, `golden_cases_failing`) on every
+ *                                        required model (D4533: 409 `evaluation_incomplete`); a refusal carries
+ *                                        the release decision as `freshness`, and so does the reply
+ *                                        `{ skill, freshness }` (null for a company skill). D4533 (B1): the body may
+ *                                        carry `release_note` (text, up to 2000 characters; 400
+ *                                        `release_note_invalid` | `release_note_too_long`), kept on the version row;
+ *                                        GET /skills/:uid answers it as `versions[].release_note` (null: none written)
  *
  * D4121 (#4121): what an agent's runs cost, skill by skill (a run carries one skill, #3954).
  *   GET  /agents/:uid/cost-estimate?add=&remove=   the agent with skills added or removed:
@@ -66,15 +77,18 @@ import {
   type OutputKind, type SkillDraft, type Tag,
 } from '../services/agents/skills';
 import { teamAgentsEnabled } from './team_agents';
-import { publishDraft } from '../services/agents/skillPublish';
+import { publishDraft, releaseNoteOf } from '../services/agents/skillPublish';
+import { draftHash } from '../services/agents/skillLifecycle';
+import { readinessOfSkills, type Readiness } from '../services/agents/skillReadiness';
 import { grantsOf } from '../services/agents/agentTools';
 import { agentByUid, canManage, canRead, effectiveBook, loadScope, scopeCols, scopeOfAgent, type AgentRow, type Scope } from '../services/agents/teams';
 import { moduleOf } from '../services/agents/catalogue';
 import { systemPrompt } from '../services/agents/agentRun';
 import { RUN_COST_CONFIG, deltaOf, estimate, pinTokens, skillRunChangeMicro, specialistHint, type Estimate, type Pin } from '../services/agents/runCost';
 import { modelRefusal } from '../services/aiRouter';
+import { logAdminAction } from '../services/adminAudit';
 import {
-  ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, peopleAxes, teamUserIds, toolLabel, versionTags,
+  ATTACH_STATUS, agentCompanyId, agentValues, attachCheck, axesOf, checkSkillList, linkStatement, linksOf, logSkillsChanged, peopleAxes, skillsChange, teamUserIds, toolLabel, versionTags,
   type AttachCode, type Blocked,
 } from '../services/agents/skillLinks';
 
@@ -83,6 +97,7 @@ type SkillRow = {
   id: number; uid: string; scope: 'hq' | 'company'; company_id: number | null; slug: string; name: string; purpose: string;
   steps_json: string; allowed_tools_json: string; output_kind: OutputKind; status: 'draft' | 'published' | 'retired';
   current_version: number; created_by: number; updated_by: number | null; created_at: string; updated_at: string;
+  required_models_json?: string | null;
 };
 type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;
@@ -140,9 +155,13 @@ type Parts = { name: string; purpose: string; steps: string[]; tools: string[]; 
 async function draftParts(env: Env, s: SkillRow): Promise<Parts> {
   const tags = await all<{ taxonomy_skill_slug: string; level: Tag['level'] }>(env, 'SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = ? ORDER BY rowid', s.id);
   const roles = await all<{ role_key: string }>(env, 'SELECT role_key FROM agent_skill_roles WHERE skill_id = ? ORDER BY rowid', s.id);
+  return draftContent(s, tags.map((t) => ({ slug: t.taxonomy_skill_slug, level: t.level })), roles.map((r) => r.role_key));
+}
+
+function draftContent(s: SkillRow, tags: Tag[], roles: string[]): Parts {
   return {
     name: s.name, purpose: s.purpose, steps: parse(s.steps_json, []), tools: parse(s.allowed_tools_json, []), output_kind: s.output_kind,
-    tags: tags.map((t) => ({ slug: t.taxonomy_skill_slug, level: t.level })), roles: roles.map((r) => r.role_key),
+    tags, roles,
   };
 }
 const versionParts = (v: VersionRow): Parts => ({
@@ -167,22 +186,89 @@ function partsDto(p: Parts, tax: Taxonomy) {
   };
 }
 
-/** A library card: readers see the published version; a writer also sees the draft. */
-async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorName: string) {
-  const writer = await mayWrite(env, s, user);
-  const current = s.current_version > 0 ? await versionOf(env, s.id, s.current_version) : null;
-  const shown = current ? versionParts(current) : await draftParts(env, s);
+/**
+ * D5325: `readiness` is SK-13's state, decided on the server (`skillReadiness.ts`). `draft_hash` is the version of the
+ * draft a writer loaded (`draftHash`, the same value as HQ's `skill.draft_hash`), sent back as `expected_draft_hash`
+ * on `PATCH /skills/:uid`; null for a reader. `run_cost` is null: a recorded cost per run is #4536's, and until it
+ * exists the screen reads "Not recorded", never 0. `context_tokens` stays the estimate it was (D4121).
+ */
+type CardExtra = { readiness: Readiness; draft_hash: string | null };
+
+function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts, draft: Parts | null, usedByCount: number, contextTokens: number | null, extra: CardExtra) {
   return {
     uid: s.uid, scope: s.scope, slug: s.slug, status: s.status, version: s.current_version || null,
     author: s.scope === 'hq' ? 'Axal' : authorName,
     ...partsDto(shown, tax),
-    used_by: await usedBy(env, s.id),
-    // D4121: what the current version adds to every run, in tokens; null for a draft never published.
-    context_tokens: current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null,
+    used_by: usedByCount,
+    context_tokens: contextTokens,
     updated_at: s.updated_at,
-    can_write: writer,
-    ...(writer ? { draft: partsDto(await draftParts(env, s), tax) } : {}),
+    can_write: draft !== null,
+    readiness: extra.readiness,
+    draft_hash: draft ? extra.draft_hash : null,
+    run_cost: null,
+    ...(draft ? { draft: partsDto(draft, tax) } : {}),
   };
+}
+
+/** D5325: one skill's readiness, from the same reads as the list's; `unknown` when its golden cases cannot be read. */
+async function readinessOfOne(env: Env, s: SkillRow, parts: Parts): Promise<Readiness> {
+  const needsCases = s.scope === 'hq' && s.status !== 'retired';
+  const caseUids = needsCases
+    ? await all<{ uid: string }>(env, 'SELECT uid FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id', s.id).then((r) => r.map((k) => k.uid)).catch(() => null)
+    : [];
+  if (!caseUids) return 'unknown';
+  return (await readinessOfSkills(env, [{ ...s, parts, case_uids: caseUids }])).get(s.id) ?? 'unknown';
+}
+
+/** A library card: readers see the published version; a writer also sees the draft. */
+async function cardOf(env: Env, s: SkillRow, user: User, tax: Taxonomy, authorName: string) {
+  const writer = await mayWrite(env, s, user);
+  const current = s.current_version > 0 ? await versionOf(env, s.id, s.current_version) : null;
+  const parts = await draftParts(env, s);
+  const draft = writer || !current ? parts : null;
+  const tokens = current ? (await pinTokens(env, [{ skill_id: s.id, version: s.current_version }]))?.[0] ?? null : null;
+  const extra = { readiness: await readinessOfOne(env, s, parts), draft_hash: writer ? await draftHash(parts) : null };
+  return skillCard(s, tax, authorName, current ? versionParts(current) : draft!, writer ? draft : null, await usedBy(env, s.id), tokens, extra);
+}
+
+/** Read the scoped catalogue with a fixed number of D1 requests, even for HQ’s full draft library. */
+async function libraryCards(env: Env, tax: Taxonomy, company: { id: number; company_name: string } | null, canWriteHq: boolean, canWriteCompany: boolean) {
+  const rows = await all<SkillRow & { draft_tags: string; draft_roles: string; case_uids: string; used_by: number }>(env,
+    `SELECT s.*,
+       (SELECT json_group_array(json_object('slug', t.taxonomy_skill_slug, 'level', t.level))
+          FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t) AS draft_tags,
+       (SELECT json_group_array(r.role_key)
+          FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r) AS draft_roles,
+       (SELECT json_group_array(k.uid)
+          FROM (SELECT uid FROM agent_skill_cases WHERE skill_id = s.id AND removed_at IS NULL ORDER BY id) k) AS case_uids,
+       (SELECT COUNT(*) FROM agent_skill_links l JOIN team_agents a ON a.id = l.agent_id
+          WHERE l.skill_id = s.id AND a.status <> 'removed') AS used_by
+       FROM agent_skills s
+      WHERE (s.scope = 'hq' AND (? = 1 OR (s.current_version > 0 AND s.status <> 'retired')))
+         OR (s.scope = 'company' AND s.company_id = ? AND (? = 1 OR (s.current_version > 0 AND s.status <> 'retired')))
+      ORDER BY s.id`, Number(canWriteHq), company?.id ?? -1, Number(canWriteCompany));
+  const pins = rows.filter((s) => s.current_version > 0).map((s) => `${s.id}:${s.current_version}`);
+  const versions = pins.length ? await all<VersionRow>(env,
+    `SELECT v.* FROM agent_skill_versions v WHERE v.skill_id || ':' || v.version IN (SELECT value FROM json_each(?))`,
+    JSON.stringify(pins)) : [];
+  const byId = new Map(versions.map((v) => [v.skill_id, v]));
+  const tokens = await pinTokens(env, versions.map((v) => ({ skill_id: v.skill_id, version: v.version })));
+  const tokensById = new Map(versions.map((v, i) => [v.skill_id, tokens?.[i] ?? null]));
+
+  // D5325: every card's readiness in two more reads whatever the count, from each skill's current draft and live cases.
+  const parts = new Map(rows.map((s) => [s.id, draftContent(s, parse(s.draft_tags, []), parse(s.draft_roles, []))]));
+  const readiness = await readinessOfSkills(env, rows.map((s) => ({ ...s, parts: parts.get(s.id)!, case_uids: parse<string[]>(s.case_uids, []) })));
+
+  const cards: Array<ReturnType<typeof skillCard>> = [];
+  for (const s of rows) {
+    const writer = s.scope === 'hq' ? canWriteHq : canWriteCompany;
+    const current = byId.get(s.id);
+    if (!writer && !current) continue;
+    const draft = writer ? parts.get(s.id)! : null;
+    const extra = { readiness: readiness.get(s.id) ?? 'unknown' as Readiness, draft_hash: draft ? await draftHash(draft) : null };
+    cards.push(skillCard(s, tax, company?.company_name ?? '', current ? versionParts(current) : draft!, draft, s.used_by, tokensById.get(s.id) ?? null, extra));
+  }
+  return cards;
 }
 
 // ── The library ─────────────────────────────────────────────────────────────
@@ -201,13 +287,9 @@ router.get('/skills', async (c) => {
   const sort = c.req.query('sort') ?? 'popular';
   if (!['popular', 'new', 'az'].includes(sort)) return say(c, 400, 'sort_invalid', 'Sort by popular, new or A–Z.');
 
-  const rows = await all<SkillRow>(c.env, `SELECT * FROM agent_skills WHERE scope = 'hq' OR (scope = 'company' AND company_id = ?) ORDER BY id`, company?.id ?? -1);
-  const cards: Array<Awaited<ReturnType<typeof cardOf>>> = [];
-  for (const s of rows) {
-    if (!(await mayRead(c.env, s, user))) continue;
-    if (s.status === 'retired' && !(await mayWrite(c.env, s, user))) continue;
-    cards.push(await cardOf(c.env, s, user, tax, company?.company_name ?? ''));
-  }
+  const canWriteHq = isSuperAdmin(user as any);
+  const canWriteCompany = company ? await canEditAsMember(c.env, company, user) : false;
+  const cards = await libraryCards(c.env, tax, company, canWriteHq, canWriteCompany);
   // The role grid counts every readable skill, before the filters narrow the list.
   const agentCounts = company
     ? await all<{ role_key: string; n: number }>(c.env, `SELECT a.role_key, COUNT(*) AS n FROM team_agents a LEFT JOIN projects p ON p.id = a.project_id
@@ -227,8 +309,8 @@ router.get('/skills', async (c) => {
   return c.json({
     roles,
     hq: list.filter((k) => k.scope === 'hq'),
-    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: await canEditAsMember(c.env, { id: company.id }, user) } : null,
-    can_write_hq: isSuperAdmin(user as any),
+    company: company ? { uid: company.uid, name: company.company_name, skills: list.filter((k) => k.scope === 'company'), can_write: canWriteCompany } : null,
+    can_write_hq: canWriteHq,
   });
 });
 
@@ -240,8 +322,8 @@ router.get('/skills/:uid', async (c) => {
   const company = s.company_id != null ? await c.env.DB.prepare('SELECT uid, company_name FROM company_profiles WHERE id = ?').bind(s.company_id).first<{ uid: string; company_name: string }>() : null;
   const card = await cardOf(c.env, s, user, tax, company?.company_name ?? '');
   const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
-  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null }>(c.env,
-    `SELECT v.version, v.published_at, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
+  const versions = await all<{ version: number; published_at: string; by_uid: string | null; by_name: string | null; release_note: string | null }>(c.env,
+    `SELECT v.version, v.published_at, v.release_note, u.uid AS by_uid, u.name AS by_name FROM agent_skill_versions v LEFT JOIN users u ON u.id = v.published_by
       WHERE v.skill_id = ? ORDER BY v.version DESC`, s.id);
   // The agents using it that the caller can see, grouped by company, with projects under each.
   const links = await all<AgentRow & { pinned: number }>(c.env,
@@ -267,7 +349,7 @@ router.get('/skills/:uid', async (c) => {
   }
   return c.json({
     skill: { ...card, skill_md: current?.skill_md ?? null },
-    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null })),
+    versions: versions.map((v) => ({ version: v.version, published_at: v.published_at, by: v.by_uid ? { uid: v.by_uid, name: v.by_name } : null, release_note: v.release_note ?? null })),
     agents: [...groups.values()],
   });
 });
@@ -286,6 +368,61 @@ function writeDraftStatements(env: Env, skillId: number, d: SkillDraft) {
     env.DB.prepare('DELETE FROM agent_skill_roles WHERE skill_id = ?').bind(skillId),
     ...d.roles.map((r) => env.DB.prepare('INSERT INTO agent_skill_roles (skill_id, role_key) VALUES (?, ?)').bind(skillId, r)),
   ];
+}
+
+/**
+ * D4533 (finding F1): a draft save is audited, HQ's as `agent_skill_draft_*` and a company's as
+ * `company_skill_draft_*`. The draft is mutable and is not a history; the record is who saved which definition hash,
+ * before and after. A save that changes nothing writes no row.
+ */
+async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string) {
+  await logAdminAction(env, user.id, user.email, `${s.scope === 'hq' ? 'agent_skill' : 'company_skill'}_draft_${act}`, {
+    skill_uid: s.uid, skill_name: s.name, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
+    before: before ? { definition_hash: before } : null, after: { definition_hash: after },
+  });
+}
+
+/**
+ * D5325: the draft as ONE read (its columns, tags and roles in their order), so the version the PATCH checks and the
+ * guard its write carries are the same snapshot. The guard is the batch's first statement: when the draft is no
+ * longer this snapshot it fails (`json()` of a non-JSON text raises), and D1 rolls the whole batch back. The two
+ * statements spell the same `json_array(…)` expression; were they to drift, every checked save would be refused, which
+ * `skill_library_v2_backend_5325.test.ts` catches.
+ */
+type DraftSnapshot = { snapshot: string; parts: Parts; updated_at: string; updated_by: number | null };
+
+async function draftSnapshot(env: Env, skillId: number): Promise<DraftSnapshot | null> {
+  const row = await env.DB.prepare(`SELECT json_array(s.name, s.purpose, s.steps_json, s.allowed_tools_json, s.output_kind,
+      json((SELECT json_group_array(json_array(t.taxonomy_skill_slug, t.level)) FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t)),
+      json((SELECT json_group_array(r.role_key) FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r))) AS snapshot,
+      s.updated_at, s.updated_by FROM agent_skills s WHERE s.id = ?`)
+    .bind(skillId).first<{ snapshot: string; updated_at: string; updated_by: number | null }>();
+  if (!row) return null;
+  const json = <T>(v: unknown, fallback: T): T => (typeof v === 'string' ? parse<T>(v, fallback) : (v as T) ?? fallback);
+  const [name, purpose, steps, tools, outputKind, tags, roles] = JSON.parse(row.snapshot) as unknown[];
+  return {
+    snapshot: row.snapshot, updated_at: row.updated_at, updated_by: row.updated_by,
+    parts: {
+      name: String(name), purpose: String(purpose), steps: json<string[]>(steps, []), tools: json<string[]>(tools, []), output_kind: outputKind as OutputKind,
+      tags: json<Array<[string, Tag['level']]>>(tags, []).map(([slug, level]) => ({ slug, level })), roles: json<string[]>(roles, []),
+    },
+  };
+}
+
+const draftGuard = (env: Env, skillId: number, snapshot: string) =>
+  env.DB.prepare(`SELECT CASE WHEN json_array(s.name, s.purpose, s.steps_json, s.allowed_tools_json, s.output_kind,
+      json((SELECT json_group_array(json_array(t.taxonomy_skill_slug, t.level)) FROM (SELECT taxonomy_skill_slug, level FROM agent_skill_tags WHERE skill_id = s.id ORDER BY rowid) t)),
+      json((SELECT json_group_array(r.role_key) FROM (SELECT role_key FROM agent_skill_roles WHERE skill_id = s.id ORDER BY rowid) r))) = ?
+    THEN 1 ELSE json('draft_conflict ' || s.uid) END AS unchanged FROM agent_skills s WHERE s.id = ?`)
+    .bind(snapshot, skillId);
+
+/** D5325 (board SK-04 D): the draft as it is now, who saved it and when, for the conflict the editor shows. Nothing was written. */
+async function draftConflict(c: C, now: DraftSnapshot) {
+  const by = now.updated_by == null ? null
+    : await c.env.DB.prepare('SELECT uid, name FROM users WHERE id = ?').bind(now.updated_by).first<{ uid: string; name: string | null }>();
+  return say(c, 409, 'draft_conflict', 'This draft changed while you were editing. Nothing of yours was saved: reload it and reapply your changes.', {
+    draft_hash: await draftHash(now.parts), draft: partsDto(now.parts, await taxonomy(c.env)), updated_at: now.updated_at, updated_by: by ? { uid: by.uid, name: by.name } : null,
+  });
 }
 
 router.post('/skills', async (c) => {
@@ -309,6 +446,10 @@ router.post('/skills', async (c) => {
     if (!parsed) return say(c, 400, 'skill_md_invalid', SKILL_MESSAGES.skill_md_invalid);
     fields = parsed;
   }
+  // #4733: v2 has no role picker ("any skill can go to any agent"), so a skill written without roles (a body with no `roles`, or a
+  // SKILL.md with none) is held to every agent role. An explicit empty list on a JSON body is still refused (`roles_missing`).
+  const f = fields as Record<string, unknown>;
+  if (f.roles === undefined || (b.skill_md !== undefined && Array.isArray(f.roles) && f.roles.length === 0)) fields = { ...f, roles: [...ROLE_KEYS] };
   const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
   if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
   const d = checked.draft;
@@ -322,6 +463,7 @@ router.post('/skills', async (c) => {
   ).bind(uid, b.scope, companyId, d.slug, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, user.id).first<{ id: number }>();
   await c.env.DB.batch(writeDraftStatements(c.env, Number(inserted!.id), d));
   const s = (await skillByUid(c.env, uid))!;
+  await auditDraft(c.env, user, s, 'created', null, await draftHash(d));
   const tax = await taxonomy(c.env);
   return c.json({ skill: await cardOf(c.env, s, user, tax, '') }, 201);
 });
@@ -338,8 +480,22 @@ router.patch('/skills/:uid', async (c) => {
     // D4160: an Axal skill is retired with its replacement and a reason, from HQ › AI agents.
     if (s.scope === 'hq') return say(c, 409, 'replacement_required', 'Retire an Axal skill from HQ › AI agents, naming the skill that replaces it.');
     await c.env.DB.prepare(`UPDATE agent_skills SET status = 'retired', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(user.id, s.id).run();
+    // D4534: a company skill's retirement is in the admin audit, as HQ's is (D4160).
+    await logAdminAction(c.env, user.id, user.email, 'company_skill_retired', {
+      skill_uid: s.uid, skill_name: s.name, company_id: s.company_id, before: { status: s.status, version: s.current_version || null }, after: { status: 'retired' },
+    });
   } else {
-    const cur = await draftParts(c.env, s);
+    // D5325: the draft version check. `expected_draft_hash` is the `draft_hash` the editor loaded; a stale one is 409
+    // `draft_conflict` and nothing is written. Without it the save is unchecked, as before, for the callers that do not
+    // send it yet; the write below is still guarded against a change landing between this read and the batch.
+    const expected = b.expected_draft_hash;
+    if (expected !== undefined && (typeof expected !== 'string' || !/^[a-f0-9]{64}$/.test(expected))) {
+      return say(c, 400, 'draft_hash_invalid', 'Send the draft_hash you loaded as expected_draft_hash.');
+    }
+    const snap = await draftSnapshot(c.env, s.id);
+    if (!snap) return noSkill(c);
+    if (expected !== undefined && expected !== await draftHash(snap.parts)) return draftConflict(c, snap);
+    const cur = snap.parts;
     const has = (k: string) => k in b;
     const merged = {
       slug: s.slug, name: has('name') ? b.name : cur.name, purpose: has('purpose') ? b.purpose : cur.purpose,
@@ -349,11 +505,21 @@ router.patch('/skills/:uid', async (c) => {
     const checked = checkDraft(merged, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
     if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
     const d = checked.draft;
-    await c.env.DB.batch([
-      c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-        .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, s.id),
-      ...writeDraftStatements(c.env, s.id, d),
-    ]);
+    try {
+      await c.env.DB.batch([
+        // D5325: the batch is one transaction; its first statement fails it unless the draft is still what was read.
+        draftGuard(c.env, s.id, snap.snapshot),
+        c.env.DB.prepare(`UPDATE agent_skills SET name = ?, purpose = ?, steps_json = ?, allowed_tools_json = ?, output_kind = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+          .bind(d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, s.id),
+        ...writeDraftStatements(c.env, s.id, d),
+      ]);
+    } catch (e) {
+      const now = await draftSnapshot(c.env, s.id);
+      if (now && now.snapshot !== snap.snapshot) return draftConflict(c, now);
+      throw e;
+    }
+    const [before, after] = await Promise.all([draftHash(cur), draftHash(d)]);
+    if (before !== after) await auditDraft(c.env, user, s, 'saved', before, after);
   }
   const tax = await taxonomy(c.env);
   return c.json({ skill: await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '') });
@@ -367,10 +533,14 @@ router.post('/skills/:uid/publish', async (c) => {
   // D4160: one publish for this route and HQ's bulk publish. An HQ skill needs a
   // second admin's approval and its golden cases at the bar. A company skill's
   // new version clears HQ's open flag or suspension in the same batch (D4161).
-  const done = await publishDraft(c.env, s, user);
+  // D4533 (B1): an optional release note, kept on the version row. A bad one refuses before anything is written.
+  const note = releaseNoteOf((await c.req.json().catch(() => null))?.release_note);
+  if (!note.ok) return say(c, note.status, note.code, note.message);
+  const done = await publishDraft(c.env, s, user, null, note.note);
   if (!done.ok) return say(c, done.status, done.code, done.message, done.extra);
   const tax = await taxonomy(c.env);
-  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md } });
+  // D4533: an HQ publish answers the decision it was let through on (`freshness`), and null for a company skill.
+  return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md }, freshness: done.freshness });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────
@@ -482,10 +652,13 @@ router.put('/agents/:uid/skills', async (c) => {
   if (!b || !Array.isArray(b.skills) || b.skills.length > 40) return say(c, 400, 'body_invalid', 'Send the agent\'s skills as a list of up to 40.');
   const checked = await checkSkillList(c.env, a, b.skills, (sk) => mayRead(c.env, sk as SkillRow, user));
   if (!checked.ok) return refuseBlocked(c, checked.blocked, { skill_uid: checked.skill_uid });
+  const before = await linksOf(c.env, a.id);
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM agent_skill_links WHERE agent_id = ? AND skill_id NOT IN (SELECT value FROM json_each(?))').bind(a.id, JSON.stringify(checked.wanted.map((w) => w.s.id))),
     ...checked.wanted.map((w) => linkStatement(c.env, a.id, w.s.id, w.version, user.id)),
   ]);
+  // D4534: who added, re-pinned or removed which skills.
+  await logSkillsChanged(c.env, a.id, user.id, skillsChange(before, await linksOf(c.env, a.id)));
   return c.json({ can_manage: true, ...(await agentSkillsDto(c.env, a)) });
 });
 
@@ -710,6 +883,10 @@ router.post('/skills/:uid/assign', async (c) => {
     'INSERT INTO agent_skill_links (agent_id, skill_id, version, linked_by) VALUES (?, ?, ?, ?) ON CONFLICT (agent_id, skill_id) DO NOTHING',
   ).bind(a.id, s.id, s.current_version, user.id))) : [];
   const added = res.reduce((n, r) => n + Number(r?.meta?.changes ?? 0), 0);
+  // D4534: one event per agent the skill was added to.
+  for (const [i, a] of targets.entries()) {
+    if (Number(res[i]?.meta?.changes ?? 0) > 0) await logSkillsChanged(c.env, a.id, user.id, { added: [{ uid: s.uid, version: s.current_version }], repinned: [], removed: [] });
+  }
   return c.json({ added, refused, used_by: await usedBy(c.env, s.id) });
 });
 

@@ -127,7 +127,7 @@ test('money is per currency and absent is never zero', () => {
   assert.equal(formatMoney(123450, 'USD'), '$1,234.50');
   assert.equal(formatMoney(35000, 'eur'), '€350.00');
   assert.equal(formatMoney('5000', 'USD'), '$50.00');
-  assert.equal(formatMoney(500, null), '5.00', 'no currency: the number, and the page names the gap');
+  assert.equal(formatMoney(500, null), '500 minor units', 'no currency: the stored count, never divided by 100 (D5373); the page names the gap');
   for (const absent of [null, undefined, '', '  ', [], 'abc']) {
     assert.equal(formatMoney(absent, 'USD'), null, `${JSON.stringify(absent)} is not an amount`);
     assert.equal(centsOf(absent), null);
@@ -373,9 +373,9 @@ test('the payout history: each state; the currency and the day it failed when re
   const list = text(h(PayoutHistory, { state: 'ready', rows: PAYOUTS }));
   assert.match(list, /\$500\.00 USD Wire transfer destination not named Failed Requested Oct 4, 2026 · failed Oct 5, 2026 IBAN rejected · its 2 commissions went back to Accrued when it failed/);
   assert.match(list, /€1,200\.00 EUR Wire transfer destination not named Requested Requested Oct 4, 2026 Note: IBAN ending 1234/);
-  assert.match(list, /300\.00 currency not recorded Stripe destination not named Processing Requested Oct 2, 2026/);
+  assert.match(list, /30,000 minor units currency not recorded Stripe destination not named Processing Requested Oct 2, 2026/);
   assert.match(list, /\$6,400\.00 USD Wire transfer destination not named Completed Requested Sep 28, 2026 · completed Sep 30, 2026/);
-  assert.match(list, /2,000\.00 currency not recorded Crypto destination not named Failed Requested Sep 14, 2026 · the day it failed is not recorded Bank returned the transfer: account closed · requested before payouts recorded their commissions, so none went back to Accrued/);
+  assert.match(list, /200,000 minor units currency not recorded Crypto destination not named Failed Requested Sep 14, 2026 · the day it failed is not recorded Bank returned the transfer: account closed · requested before payouts recorded their commissions, so none went back to Accrued/);
   // A payout with no uid shows no currency, whatever its row says: the
   // request that wrote it recorded none, and the column default is not one.
   assert.doesNotMatch(text(h(PayoutHistory, { state: 'ready', rows: [{ ...PAYOUTS[2], currency: 'EUR' }] })), /EUR|USD|€|\$/);
@@ -700,9 +700,9 @@ test('the payout queue offers only what the route allows each status, and the co
   assert.doesNotMatch(all, /button-(complete|process|fail)-(6|3|2)"/, 'completed and failed payouts are final');
   const words = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'all' }));
   assert.match(words, /Pat Partner \$500\.00 USD Wire transfer destination not named Failed requested Oct 4, 2026 IBAN rejected · failed Oct 5, 2026 Recorded by Hana HQ on Oct 5, 2026/);
-  assert.match(words, /Pat Partner 300\.00 currency not recorded Stripe destination not named Processing requested Oct 2, 2026 Process payout Mark failed Recorded by account #7 Pat/);
+  assert.match(words, /Pat Partner 30,000 minor units currency not recorded Stripe destination not named Processing requested Oct 2, 2026 Process payout Mark failed Recorded by account #7 Pat/);
   assert.match(words, /Recorded by Hana HQ on Sep 30, 2026/);
-  assert.match(words, /pat@example\.com 2,000\.00 currency not recorded Crypto destination not named Failed requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
+  assert.match(words, /pat@example\.com 200,000 minor units currency not recorded Crypto destination not named Failed requested Sep 14, 2026 Bank returned the transfer: account closed · the day it failed is not recorded/);
   assert.match(NETWORK, /pu\.name AS processed_by_name/);
 
   const complete = text(h(PayoutQueue, { state: 'ready', rows: QUEUE, view: 'open', pending: { id: 5, action: 'complete', reason: '' } }));

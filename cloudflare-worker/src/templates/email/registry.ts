@@ -85,6 +85,16 @@ export const TEMPLATES: Record<string, EmailTemplate> = {
     text: `Hi {{name}},\n\nClick to sign in to Axal:\n{{magic_url}}\n\nThe link expires in 15 minutes and can only be used once.`,
     html: `<p>Hi {{name}},</p><p>Click to sign in to Axal.</p><p><a href="{{{magic_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Sign in</a></p><p style="color:#6b7280;font-size:13px;">Expires in 15 minutes. Single use.</p>`,
   }),
+  // #4578 (D4578): the same link as auth_magic_link, worded for an account that was just created on /register. It is
+  // not a sign-in email: it finishes creating the account, and says membership is reviewed afterwards.
+  // vars: name, magic_url
+  auth_signup_link: t({
+    key: 'auth_signup_link', category: 'security', severity: 'info',
+    replyTo: 'security@axal.vc', alwaysSend: true,
+    subject: 'Finish creating your Axal VC account',
+    text: `Hi {{name}},\n\nConfirm your email to finish creating your Axal VC account:\n{{magic_url}}\n\nCreating an account is free. The Axal team then reviews your membership and sends a membership agreement to sign; your workspace opens once it is signed.\n\nThe link expires in 15 minutes and can only be used once. If you didn't ask to create an account, you can ignore this email.`,
+    html: `<p>Hi {{name}},</p><p>Confirm your email to finish creating your Axal VC account.</p><p><a href="{{{magic_url}}}" style="display:inline-block;background:#111;color:#fff;padding:11px 18px;border-radius:8px;text-decoration:none;font-weight:600;">Finish creating my account</a></p><p style="color:#374151;font-size:14px;">Creating an account is free. The Axal team then reviews your membership and sends a membership agreement to sign; your workspace opens once it is signed.</p><p style="color:#6b7280;font-size:13px;">Expires in 15 minutes. Single use. If you didn't ask to create an account, you can ignore this email.</p>`,
+  }),
   // vars: name, device_name, ip
   auth_passkey_added: t({
     key: 'auth_passkey_added', category: 'security', severity: 'warning',

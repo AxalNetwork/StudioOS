@@ -67,7 +67,7 @@ export default function InvestorPortfolioCanvas() {
         },
       });
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error.message || 'The direct book could not be loaded.' }));
+      setState((current) => ({ ...current, loading: false, error: true }));
     }
   }, []);
 
@@ -86,10 +86,10 @@ export default function InvestorPortfolioCanvas() {
   const acceptedIntros = state.intros.filter((item) => ['accepted', 'meeting_set'].includes(item.status)).length;
   const hasPartialFailure = Object.values(state.unavailable).some(Boolean);
   const statCards = [
-    { label: 'TVPI · gross', value: multiple(state.analytics?.tvpi), note: 'Total value / paid-in', delta: 'Gross of fees and carry' },
-    { label: 'MOIC · gross', value: multiple(state.analytics?.moic), note: `${money(state.analytics?.paid_in)} invested`, delta: 'Marked value + realised' },
-    { label: 'DPI', value: multiple(state.analytics?.dpi), note: `${money(state.analytics?.distributed)} realised`, delta: 'Cash returned' },
-    { label: 'RVPI', value: multiple(state.analytics?.rvpi), note: `${money(state.analytics?.nav)} held`, delta: 'Residual value' },
+    { label: 'TVPI · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.tvpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : 'Total value / paid-in', delta: 'Gross of fees and carry' },
+    { label: 'MOIC · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.moic), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.paid_in)} invested`, delta: 'Marked value + realised' },
+    { label: 'DPI', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.dpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.distributed)} realised`, delta: 'Cash returned' },
+    { label: 'RVPI', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.rvpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.nav)} held`, delta: 'Residual value' },
   ];
 
   return (
@@ -114,9 +114,9 @@ export default function InvestorPortfolioCanvas() {
           the zones, so no pill is current here. */}
       <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" activeSlug={null} className="my-3.5" />
 
-      {state.error && <div className="i4-error" data-testid="status-investor-portfolio-error">{state.error}<button type="button" onClick={load} data-testid="button-retry-investor-portfolio">Retry</button></div>}
+      {state.error && <div className="i4-error" data-testid="status-investor-portfolio-error"><span>Positions could not be read.</span><button type="button" onClick={load} data-testid="button-retry-investor-portfolio">Retry</button></div>}
       {hasPartialFailure && <div className="i4-partial" data-testid="status-investor-portfolio-partial">Some portfolio sources are temporarily unavailable. Affected sections are labelled below.</div>}
-      {state.loading ? <Skeleton /> : (
+      {state.loading ? <Skeleton /> : state.error ? null : (
         <>
           <section className="i4-stats" aria-label="Direct book performance">
             {statCards.map((stat) => <article key={stat.label} className="i4-stat"><div><span>{stat.label}</span><b>{stat.value}</b><small>{stat.note}</small></div><em>{stat.delta}</em></article>)}
@@ -147,9 +147,9 @@ export default function InvestorPortfolioCanvas() {
             </article>
             <article className="i4-card i4-value-add" id="portfolio-value-add">
             <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
-               <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? '—' : state.intros.length}</strong></div>
-               <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? '—' : (state.health?.totals?.green ?? 0)}</strong></div>
-               <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{state.unavailable.health ? 'Health source unavailable' : 'Open the health register for reasons and source signals'}</p></div><strong>{state.unavailable.health ? '—' : interventionCount}</strong></div>
+               <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? 'Unavailable' : state.intros.length}</strong></div>
+               <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? 'Unavailable' : (state.health?.totals?.green ?? 0)}</strong></div>
+               <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{state.unavailable.health ? 'Health source unavailable' : 'Open the health register for reasons and source signals'}</p></div><strong>{state.unavailable.health ? 'Unavailable' : interventionCount}</strong></div>
               <p className="i4-seam-note">Support given is kept beside the position it serves. Founder-facing records remain distinct.</p>
             </article>
           </section>
@@ -176,7 +176,8 @@ export default function InvestorPortfolioCanvas() {
       note="Tables, updates, health sweeps and portfolio tools work without AI. Returns are computed from recorded positions, marks and distributions. Missing values stay blank rather than being estimated."
       coverage={[
         `${rows.length} position${rows.length === 1 ? '' : 's'} readable`,
-        state.analytics?.as_of ? `Marks as of ${state.analytics.as_of}` : 'Mark date not recorded',
+        state.unavailable.analytics ? 'Return analytics unavailable'
+          : state.analytics?.as_of ? `Marks as of ${state.analytics.as_of}` : 'Mark date not recorded',
       ]}
       coverageNote="Updates and cap-table ownership stay linked to the company records they came from."
       unavailable={[

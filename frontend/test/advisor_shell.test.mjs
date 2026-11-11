@@ -98,8 +98,9 @@ test('Expertise owns the canonical advisor profile destination', () => {
   // booking and was broken at both, so the two halves went to the buckets that
   // work: storefront to Expertise, booking to Practice.
   const app = readRoutesSource();
-  assert.match(advisor, /\{ to: '\/expertise', icon: UserCircle, label: 'Expertise'/);
-  assert.match(advisor, /match: \['\/expertise', '\/advisors'\]/,
+  const expertise = advisor.match(/\{ to: '\/expertise'[^}]*\}/)?.[0] ?? '';
+  assert.match(expertise, /label: 'Expertise'/);
+  assert.match(expertise, /match: \['\/expertise', '\/advisors'\]/,
     'the Expertise row no longer claims a path that redirects elsewhere');
 
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));

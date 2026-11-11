@@ -381,7 +381,13 @@ test('generateIntroPropositions proposes consent-gated matches with reciprocal m
   assert.equal(notes.length, 1);
   assert.equal(notes[0].user_id, 2);
   assert.equal(notes[0].type, 'intro_proposition_received');
-  assert.match(String(notes[0].link), /\/network\?tab=introductions&intro=/);
+  // #4609: the canonical destination is the PATH form, with `kind` naming
+  // which of the two introduction systems the uid is from. The `?tab=` form it
+  // replaced reached `NetworkPage` and `InvestorNetworkWorkspace` and nothing
+  // else, so a partner or advisor following it landed on the Network overview
+  // with the uid discarded. Links already sent keep working through
+  // `resolveIntroTarget`, which reads both shapes; nothing emits the old one.
+  assert.match(String(notes[0].link), /^\/network\/introductions\?intro=[A-Za-z0-9_-]+&kind=proposition$/);
 });
 
 // ---------------------------------------------------------------------------

@@ -5,12 +5,18 @@
  * COUNTS ONLY. No member's name, email or account id leaves the read. Every
  * query below groups, counts or sums; the strings that travel are statuses,
  * types, kinds, role keys, Monday weeks, and a posting's title and company.
+ * #4717 adds the rows behind three counts, records and never people: the next
+ * events and the oldest waiting ones (an event's title, time, capacity and
+ * seats taken, `event_id`), and the oldest waiting and most-applied postings
+ * (title, company, `posting_id`). Never a host, an applicant or a member.
  *
  * EACH BLOCK ANSWERS ALONE, in D893's shape:
  *   · `{ available: true, ... }` — read;
  *   · `{ available: false, unreadable: true, reason }` — its store failed, and
  *     that is not a claim of zero;
  *   · `{ recorded: false, reason }` — no store holds it.
+ * D4820 part 3 adds `queue.experts`: the wellbeing experts waiting to be
+ * verified, as Approvals counts them, with each one's id, headline and wait.
  * `queue`, `participation_by_role` and `wellbeing` are made of parts that read
  * different stores, so each part is its own block and fails alone.
  *
@@ -21,8 +27,8 @@
  * own answer here: a block D918 could not read is unreadable here too, and
  * nothing is recomputed. Only the keys are Community's.
  *
- * WELLBEING ANSWERS ARE NEVER READ. The check-in band counts distinct members
- * in `wellbeing_daily_pulses` and touches no other column, so no answer is
+ * WELLBEING ANSWERS ARE NEVER READ. The check-in band counts distinct founders
+ * in `wellbeing_daily_pulses` (#4717) and touches no other column of it, so no answer is
  * decrypted or summed. It is bucketed, and withheld below a cohort of seven.
  *
  * WEEKS ARE MONDAY WEEKS IN UTC, from `weekAxis`, as Insights draws them. The
@@ -45,8 +51,10 @@ export const OVERDUE_HOURS = 72;
 export const MIN_CHECKIN_COHORT = 7;
 /** The check-in band's width: a count is shown as the multiple of this at or below it. */
 export const CHECKIN_BUCKET = 5;
-/** The postings `jobs.top` lists. */
+/** The postings `jobs.top` and `jobs.most_applied` list. */
 export const TOP_POSTINGS = 5;
+/** #4717: the oldest waiting postings `queue.jobs.review` lists, as many as the events' (D918's `REVIEW_ROWS`). */
+export const REVIEW_ROWS = 6;
 
 /** D1121: a published posting approved before migration 609 has no recorded day, so its days open are not known. */
 export const DAYS_OPEN_REASON = 'This posting was approved before the day was recorded, so how long it has been open is not known.';
@@ -116,7 +124,27 @@ async function jobsQueue(env: Env, nowMs: number) {
   ).bind(sqlTime(nowMs - OVERDUE_HOURS * 3_600_000)).first<{ pending: number; no_submitted_at: number; overdue: number; oldest: string | null }>();
   const oldest = r?.oldest ? String(r.oldest) : null;
   const waited = oldest ? Date.parse(`${oldest.replace(' ', 'T')}Z`) : NaN;
+  // #4717 — the oldest waiting postings, the rows behind `pending`. One
+  // submitted before migration 550 has no recorded wait: listed after every
+  // dated one, never Overdue and never a wait of 0.
+  const rows = await env.DB.prepare(
+    `SELECT j.id AS id, j.title AS title, p.name AS company, j.submitted_at AS submitted_at
+       FROM job_postings j LEFT JOIN projects p ON p.id = j.project_id
+      WHERE j.status = 'pending_review'
+      ORDER BY CASE WHEN j.submitted_at IS NULL THEN 1 ELSE 0 END, datetime(j.submitted_at), j.id
+      LIMIT ?`,
+  ).bind(REVIEW_ROWS).all<{ id: number; title: string; company: string | null; submitted_at: string | null }>();
+  const review = (rows.results || []).map((j) => {
+    const at = j.submitted_at ? Date.parse(`${String(j.submitted_at).replace(' ', 'T')}Z`) : NaN;
+    const hours = Number.isFinite(at) ? Math.max(0, Math.floor((nowMs - at) / 3_600_000)) : null;
+    return {
+      posting_id: Number(j.id), title: String(j.title ?? ''), company: j.company == null ? null : String(j.company),
+      waiting_since: Number.isFinite(at) ? new Date(at).toISOString() : null,
+      waiting_hours: hours, overdue: hours !== null && hours > OVERDUE_HOURS,
+    };
+  });
   return {
+    review,
     pending: n(r?.pending),
     overdue: n(r?.overdue),
     // Submitted before migration 550: waiting, with no recorded wait. Never counted as Overdue or as 0 hours.
@@ -137,12 +165,18 @@ function daysOpen(status: unknown, publishedAt: unknown, nowMs: number): number 
   return Math.max(0, Math.floor((nowMs - at) / 86_400_000));
 }
 
+/** The span both periods cover, so a two-period count reads only those rows (#4717 package 5). */
+const earliest = (a: WeekAxis, b: WeekAxis) => (a.from < b.from ? a.from : b.from);
+const latest = (a: WeekAxis, b: WeekAxis) => (a.to > b.to ? a.to : b.to);
+
 async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis, nowMs: number) {
   const apps = await env.DB.prepare(
     `SELECT SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS window,
             SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS previous
-       FROM job_applications`,
-  ).bind(axis.from, axis.to, before.from, before.to).first<{ window: number; previous: number }>();
+       FROM job_applications
+      -- #4717 package 5: only the two periods are read (the index on datetime(created_at)), never all history.
+      WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?)`,
+  ).bind(axis.from, axis.to, before.from, before.to, earliest(axis, before), latest(axis, before)).first<{ window: number; previous: number }>();
   const byWeek = await env.DB.prepare(
     `SELECT date(created_at, '-6 days', 'weekday 1') AS week, COUNT(*) AS n
        FROM job_applications
@@ -166,7 +200,28 @@ async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis, nowMs: numb
       ORDER BY applications DESC, j.id ASC
       LIMIT ?`,
   ).bind(axis.from, axis.to, TOP_POSTINGS).all<{ title: string; company: string | null; status: string; published_at: string | null; applications: number }>();
+  // #4717 — the Jobs card's "most applications": every posting's applications
+  // of all time, the five highest, with their days open. Counted here so the
+  // card needs no list of every posting.
+  const most = await env.DB.prepare(
+    `SELECT j.id AS id, j.title AS title, p.name AS company, j.status AS status, j.published_at AS published_at,
+            COUNT(a.id) AS applications
+       FROM job_postings j
+       JOIN job_applications a ON a.posting_id = j.id
+       LEFT JOIN projects p ON p.id = j.project_id
+      GROUP BY j.id
+      ORDER BY applications DESC, j.id ASC
+      LIMIT ?`,
+  ).bind(TOP_POSTINGS).all<{ id: number; title: string; company: string | null; status: string; published_at: string | null; applications: number }>();
   return {
+    most_applied: (most.results || []).map((r) => ({
+      posting_id: Number(r.id),
+      title: String(r.title ?? ''),
+      company: r.company == null ? null : String(r.company),
+      status: String(r.status ?? ''),
+      applications: n(r.applications),
+      days_open: daysOpen(r.status, r.published_at, nowMs),
+    })),
     applications: { window: n(apps?.window), previous: n(apps?.previous) },
     weekly: weekly(axis, byWeek.results || []),
     by_status,
@@ -228,20 +283,38 @@ async function circlesBlock(env: Env) {
   };
 }
 
+/**
+ * #4717 — THE ROSTER, COUNTED ON THE SERVER, ARCHIVED ROWS OUT. The page used
+ * to count `GET /api/admin/network-profiles`, which answers 200 rows by
+ * default, so a larger roster was counted short with nothing said. These are
+ * counts over the whole table. An archived row (migration 551,
+ * `archived_at` set) is off the roster's working list and is not counted
+ * anywhere here except as `archived`. Shown is `is_active = 1`; hidden is the
+ * rest of the unarchived rows.
+ */
 async function networkBlock(env: Env) {
   const q = await env.DB.prepare(
-    `SELECT kind, CASE WHEN is_active = 1 THEN 1 ELSE 0 END AS active, COUNT(*) AS n
+    `SELECT kind,
+            CASE WHEN archived_at IS NOT NULL THEN 'archived'
+                 WHEN is_active = 1 THEN 'active' ELSE 'hidden' END AS state,
+            COUNT(*) AS n
        FROM network_profiles GROUP BY 1, 2`,
-  ).all<{ kind: string; active: number; n: number }>();
+  ).all<{ kind: string; state: string; n: number }>();
   const by_kind: Record<string, number> = {};
+  const by_kind_state: Record<string, { active: number; hidden: number }> = {};
   let active = 0;
   let inactive = 0;
+  let archived = 0;
   for (const r of q.results || []) {
+    const count = n(r.n);
+    if (r.state === 'archived') { archived += count; continue; }
     const k = String(r.kind ?? '') === 'mentor' ? 'advisor' : String(r.kind ?? '');
-    by_kind[k] = (by_kind[k] ?? 0) + n(r.n);
-    if (n(r.active) === 1) active += n(r.n); else inactive += n(r.n);
+    by_kind[k] = (by_kind[k] ?? 0) + count;
+    by_kind_state[k] = by_kind_state[k] ?? { active: 0, hidden: 0 };
+    if (r.state === 'active') { active += count; by_kind_state[k].active += count; }
+    else { inactive += count; by_kind_state[k].hidden += count; }
   }
-  return { by_kind, active, inactive };
+  return { by_kind, by_kind_state, active, inactive, archived };
 }
 
 // ---------------------------------------------------------------------------
@@ -261,14 +334,70 @@ async function expertsPart(env: Env) {
   return { verified: n(r?.verified), unverified: n(r?.unverified), hidden: n(r?.hidden), inactive: n(r?.inactive) };
 }
 
+/**
+ * D4820 part 3 (#4820, CM02) — WELLBEING EXPERTS WAITING TO BE VERIFIED, the
+ * third queue under Waiting on you. ONE DEFINITION: the same rule as
+ * Approvals' `wellbeing_experts` lane (`APPROVAL_SOURCES`, D1043's "To
+ * verify" bar): active, unverified, not hidden, not declined, at least 70%
+ * complete, and not a sample. `community_experts_queue_4820.test.ts` holds the
+ * two WHERE clauses to the same predicate, so Community and Approvals cannot
+ * count different experts.
+ *
+ * NO PERSON TRAVELS. An expert is waiting since the profile was created (no
+ * store records a submission time; Approvals ages the lane the same way). The
+ * rows carry the expert's id, the profile's headline and the wait, never the
+ * expert's name or account: Community names records, not people (D931).
+ */
+export const EXPERTS_TO_VERIFY_WHERE =
+  'is_active = 1 AND verified = 0 AND COALESCE(hidden_by_admin, 0) = 0 '
+  + "AND decision_state <> 'declined' "
+  + "AND COALESCE(profile_completion_pct, 0) >= 70 AND substr(uid, 1, 5) <> 'seed_'";
+export const EXPERTS_QUEUE_COUNT_SQL =
+  'SELECT COUNT(*) AS pending, '
+  + 'SUM(CASE WHEN datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS overdue, '
+  + 'MIN(datetime(created_at)) AS oldest '
+  + 'FROM experts WHERE ' + EXPERTS_TO_VERIFY_WHERE;
+export const EXPERTS_QUEUE_ROWS_SQL =
+  'SELECT id, headline, created_at FROM experts WHERE ' + EXPERTS_TO_VERIFY_WHERE
+  + ' ORDER BY julianday(created_at) ASC, id ASC LIMIT ?';
+
+async function expertsQueue(env: Env, nowMs: number) {
+  const r = await env.DB.prepare(EXPERTS_QUEUE_COUNT_SQL)
+    .bind(sqlTime(nowMs - OVERDUE_HOURS * 3_600_000))
+    .first<{ pending: number; overdue: number; oldest: string | null }>();
+  const rows = await env.DB.prepare(EXPERTS_QUEUE_ROWS_SQL).bind(REVIEW_ROWS)
+    .all<{ id: number; headline: string | null; created_at: string | null }>();
+  const hoursSince = (v: unknown) => {
+    const at = v ? Date.parse(`${String(v).replace(' ', 'T')}Z`) : NaN;
+    return Number.isFinite(at) ? { at, hours: Math.max(0, Math.floor((nowMs - at) / 3_600_000)) } : null;
+  };
+  const oldest = hoursSince(r?.oldest);
+  return {
+    pending: n(r?.pending),
+    overdue: n(r?.overdue),
+    oldest_wait_hours: oldest ? oldest.hours : null,
+    rows: (rows.results || []).map((e) => {
+      const w = hoursSince(e.created_at);
+      const headline = typeof e.headline === 'string' && e.headline.trim() ? e.headline.trim() : null;
+      return {
+        expert_id: Number(e.id), headline,
+        waiting_since: w ? new Date(w.at).toISOString() : null,
+        waiting_hours: w ? w.hours : null,
+        overdue: w !== null && w.hours > OVERDUE_HOURS,
+      };
+    }),
+  };
+}
+
 /** Bookings by when they were made, with real experts only. */
 async function bookingsPart(env: Env, axis: WeekAxis, before: WeekAxis) {
   const totals = await env.DB.prepare(
     `SELECT SUM(CASE WHEN datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?) THEN 1 ELSE 0 END) AS window,
             SUM(CASE WHEN datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?) THEN 1 ELSE 0 END) AS previous
        FROM expert_bookings b JOIN experts e ON e.id = b.expert_id
-      WHERE substr(e.uid, 1, ?) <> ?`,
-  ).bind(axis.from, axis.to, before.from, before.to, SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX)
+      WHERE substr(e.uid, 1, ?) <> ?
+        AND datetime(b.created_at) >= datetime(?) AND datetime(b.created_at) < datetime(?)`,
+  ).bind(axis.from, axis.to, before.from, before.to, SAMPLE_EXPERT_UID_PREFIX.length, SAMPLE_EXPERT_UID_PREFIX, earliest(axis, before), latest(axis, before))
     .first<{ window: number; previous: number }>();
   const byWeek = await env.DB.prepare(
     `SELECT date(b.created_at, '-6 days', 'weekday 1') AS week, COUNT(*) AS n
@@ -281,13 +410,22 @@ async function bookingsPart(env: Env, axis: WeekAxis, before: WeekAxis) {
 }
 
 /**
- * How many members checked in during the window, as a band. Reads `user_id`
+ * How many FOUNDERS checked in during the window, as a band. Reads `user_id`
  * and `day` only: no answer column is selected, so nothing is decrypted.
- * Under `MIN_CHECKIN_COHORT` the band is withheld.
+ * Under `MIN_CHECKIN_COHORT` founders the band is withheld.
+ *
+ * #4717 — THE POPULATION IS FOUNDERS, as the band's sentence says. It used to
+ * count every distinct `user_id`, so an investor's or an advisor's check-in
+ * could lift a cohort of five founders over the floor of seven and show a
+ * band the privacy rule meant to withhold. A pulse whose account is gone has
+ * no role and is not counted.
  */
 async function checkinsPart(env: Env, axis: WeekAxis) {
   const r = await env.DB.prepare(
-    `SELECT COUNT(DISTINCT user_id) AS members FROM wellbeing_daily_pulses WHERE day >= ? AND day < ?`,
+    `SELECT COUNT(DISTINCT p.user_id) AS members
+       FROM wellbeing_daily_pulses p
+       JOIN users u ON u.id = p.user_id
+      WHERE u.role = 'founder' AND p.day >= ? AND p.day < ?`,
   ).bind(axis.from.slice(0, 10), axis.to.slice(0, 10)).first<{ members: number }>();
   const members = n(r?.members);
   if (members < MIN_CHECKIN_COHORT) return { withheld: true, min_cohort: MIN_CHECKIN_COHORT, band: null };
@@ -344,10 +482,15 @@ export function showUpCounts(b: D918Block) {
 async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
   const o = await readOverview(env, weeks, nowMs);
   return {
+    // #4717: the queue's count and the oldest waiting events, the rows behind it.
     queue: o.queue,
+    review: o.review,
     events: {
       // D918's next 30 days (published or waiting) and their seats taken, counts only (D1121).
       upcoming: o.upcoming_30d,
+      // #4717: the soonest of the events `upcoming` counts, and every event by status (the page's empty rule).
+      next_up: o.next_up,
+      by_status: o.by_status,
       weekly: eventsWeekly(o.weekly as D918Block),
       show_up: showUpCounts(o.show_up as D918Block),
       by_type: o.by_type,
@@ -361,8 +504,16 @@ async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
 // The read
 // ---------------------------------------------------------------------------
 
+/**
+ * #4717 package 6 — the period a read without `weeks` answers: 12, the page's
+ * own default (D933). D931 answered 4, so the read and the page it serves
+ * disagreed about the one period neither named; the page always names one,
+ * and any other caller now gets the page's.
+ */
+export const COMMUNITY_DEFAULT_WEEKS: CommunityWeeks = 12;
+
 export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | null {
-  if (raw === undefined || raw === '') return 4;
+  if (raw === undefined || raw === '') return COMMUNITY_DEFAULT_WEEKS;
   const w = Number(raw);
   return (COMMUNITY_WEEKS as readonly number[]).includes(w) && String(w) === raw ? (w as CommunityWeeks) : null;
 }
@@ -370,7 +521,7 @@ export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | n
 export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: number = Date.now()) {
   const axis = weekAxis(new Date(nowMs).toISOString(), weeks);
   const before = previousAxis(axis);
-  const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins] = await Promise.all([
+  const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins, expertsQ] = await Promise.all([
     eventsParts(env, weeks, nowMs),
     block('The job board queue', () => jobsQueue(env, nowMs)),
     block('The job board', () => jobsBlock(env, axis, before, nowMs)),
@@ -380,6 +531,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     block('Wellbeing experts', () => expertsPart(env)),
     block('Expert bookings', () => bookingsPart(env, axis, before)),
     block('Wellbeing check-ins', () => checkinsPart(env, axis)),
+    block('The wellbeing experts queue', () => expertsQueue(env, nowMs)),
   ]);
   return {
     weeks,
@@ -389,7 +541,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     previous: { from: before.from, to: before.to },
     as_of: new Date(nowMs).toISOString(),
     blocks: {
-      queue: { events: ev.queue, jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
+      queue: { events: ev.queue, event_rows: ev.review, jobs: jobsQ, experts: expertsQ, overdue_hours: OVERDUE_HOURS },
       events: ev.events,
       jobs,
       participation_by_role: { events: ev.byRole, jobs: jobsRoles },

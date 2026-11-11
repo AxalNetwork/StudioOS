@@ -1,0 +1,40 @@
+{
+  "skill": "gtm-motion-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "segment": "Regional distributors",
+        "buying_process": "Security review and pilot",
+        "sales_capacity": 2,
+        "acquisition_cost": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Regional distributors",
+      "Security review",
+      "pilot"
+    ],
+    "must_say_not_recorded": [
+      "acquisition cost"
+    ],
+    "must_not_include": [
+      "self-serve is proven optimal"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why acquisition cost is missing rather than inventing it.",
+    "Do not assert: self-serve is proven optimal.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Regional distributors; Security review; pilot. acquisition cost: Not recorded. Human review required."
+}

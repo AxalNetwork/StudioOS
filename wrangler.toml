@@ -181,6 +181,8 @@ DECK_GEN_RUNTIME = "do"
 # D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
+# D1451 (#5297): Teams joins stay off until the bot's Teams page driver is measured; only "on" lets the bot take a Teams link.
+MEETING_BOT_TEAMS = "off"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
 # now point at axal.vc (the canonical host). All post-login redirects
 # and user-facing links (email verification, magic links, etc.) will
@@ -725,6 +727,8 @@ AGENT_RUNTIME = "do"
 DECK_GEN_RUNTIME = "do"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
+# D1451 (#5297): mirrored from [vars]; the owner turns it on in its own PR.
+MEETING_BOT_TEAMS = "off"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
 # axal.vc. OAUTH_CALLBACK_BASE_URL keeps OAuth redirect_uri registrations
 # pinned to app.axal.vc until all provider dashboards are updated.
@@ -1054,6 +1058,8 @@ workers_dev = true
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
 MEETING_BOT = "off"
+# D1451 (#5297): Teams joins off, as everywhere.
+MEETING_BOT_TEAMS = "off"
 # D1528 (#3847): the agent engine stays off in preview until the owner's account steps are done.
 AGENT_ENGINE = "off"
 # D4423: owner-approved monthly gateway limit ($100); does not enable agents.
@@ -1078,9 +1084,11 @@ WHATSAPP_CALLS = "false"
 WHATSAPP_MCP_SETUP = "off"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
-# `advisor-ongoing-preview`) created in the dashboard. Defaults to the
-# prod slug so the binding still works before a preview gateway exists.
-CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# `advisor-ongoing-preview`) created in the dashboard. #4566: empty (inert,
+# calls go direct, `advisorGatewaySlug`) until that gateway exists. It used to
+# default to production's `advisor-ongoing`, which shares production's gateway
+# logs, cache and rate limits; `scripts/check-preview-isolation.mjs` refuses that.
+CF_AI_GATEWAY_SLUG_ADVISOR     = ""
 # D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
 CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"

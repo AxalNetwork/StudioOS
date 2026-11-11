@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { EMPTY_DRAFT, draftFrom, latestOnly, saveRequest } from './statusReportDraft';
+import { useMutations, useZoneRead } from './useZoneMutations';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -73,7 +76,8 @@ function ReportTile({ label, value, note, nr = false }) {
   );
 }
 
-function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
+function ReportCard({ report, sending, discarding, onEdit, onSend, onDelete, note }) {
+  const busy = sending || discarding;
   const sent = report.state === 'sent';
   return (
     <div className="rounded-xl border border-axal-hairline p-4 dark:border-gray-700">
@@ -92,15 +96,16 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
         <div className="flex flex-wrap gap-2">
           {!sent && (
             <>
-              <button type="button" className={ghostButtonClass} onClick={() => onEdit(report)}>
+              <button type="button" className={ghostButtonClass} onClick={() => onEdit(report)}
+                aria-label={`Edit the ${report.period} report for ${report.founder_name || report.need_title || report.engagement_uid}`}>
                 Edit
               </button>
               <button
-                type="button" className={buttonClass} disabled={busy}
+                type="button" className={buttonClass} aria-disabled={busy || undefined}
                 title="Records that you sent it. Nothing here delivers anything."
-                onClick={() => onSend(report)}
+                onClick={() => { if (!busy) onSend(report); }}
               >
-                Mark sent
+                {sending ? 'Marking…' : 'Mark sent'}
               </button>
             </>
           )}
@@ -131,7 +136,7 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
         <div className="mt-3 flex">
           <button
             type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
-            disabled={busy} onClick={() => onDelete(report)}
+            aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(report); }}
           >
             Discard draft
           </button>
@@ -142,21 +147,39 @@ function ReportCard({ report, busy, onEdit, onSend, onDelete, note }) {
   );
 }
 
-/**
- * The shape a composed draft always has, so no field below is read off a null.
- * Every list is an array and every scalar is something the JSX can render.
- */
-const EMPTY_DRAFT = {
-  period: '',
-  existing: null,
-  shipped_from_log: [],
-  next_from_milestones: [],
-  blocked: [],
-  blocked_note: null,
-};
+// The shape a composed draft always has lives in `statusReportDraft.js` (#4673), with the
+// rule that a draft belongs to the engagement and period it was composed for.
 
-function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) {
-  const [engagementId, setEngagementId] = useState('');
+/** D4822: "November 2026" from "2026-11"; the period as typed when it is not one. */
+export function periodWords(period) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(period || ''));
+  return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : String(period || '');
+}
+
+/**
+ * D4822 (canvas PD4a): the composer always names what it is writing — the client, the period, and whether that
+ * report is a new one, a saved draft or already sent — from the identity it was COMPOSED for (#4673), never from
+ * the selectors, which may have moved since.
+ */
+export function ComposerAnchor({ client, period, state }) {
+  const word = state === 'sent' ? 'Sent · read only' : state === 'draft' ? 'Draft' : 'New report';
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-axal-hairline bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-900" data-testid="status-report-anchor">
+      <span className="text-[15px] font-extrabold text-axal-ink dark:text-gray-100">{client || 'Client not recorded'}</span>
+      <span className="text-[14px] text-axal-muted">· {periodWords(period)}</span>
+      <Pill tone={state === 'sent' ? 'ok' : state === 'draft' ? 'warn' : 'neutral'}>{word}</Pill>
+    </div>
+  );
+}
+
+function Composer({ engagements, onSaved, onError, note, focusTick = 0, target = null, defaultEngagementId = '' }) {
+  const { run: runSave, isPending: isSaving } = useMutations();
+  const shippedRef = useRef(null);
+  // D4822 part 2: opened from an engagement's Sheet, the composer starts on that engagement.
+  const [engagementId, setEngagementId] = useState(defaultEngagementId || '');
+  useEffect(() => {
+    if (defaultEngagementId) setEngagementId((v) => v || defaultEngagementId);
+  }, [defaultEngagementId]);
   // D1424 (#3700): the header's "New report" lands the cursor on Engagement.
   const engagementRef = useRef(null);
   useEffect(() => {
@@ -179,6 +202,10 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
   const [shipped, setShipped] = useState('');
   const [nextUp, setNextUp] = useState('');
   const [loadError, setLoadError] = useState('');
+  // #4673: which composition is current. A response for an older selection is
+  // dropped, so it can neither show nor be saved under another engagement.
+  const gate = useRef(null);
+  if (!gate.current) gate.current = latestOnly();
   // D1329 (#3490, AF19): Fill with Eadwyn on Shipped and Next, from the
   // engagement record at no AI tokens. A saved draft is its record; a new one
   // hangs under its engagement, for this month only (the record's month is the
@@ -188,37 +215,56 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
   const fill = useScopedFill({
     scope: SCOPED_FORMS.statusReport,
     record: reportId,
-    parent: reportId ? null : (engagementId && draft.period === thisMonth ? Number(engagementId) : null),
-    enabled: composed && (reportId != null || (engagementId && draft.period === thisMonth)),
+    parent: reportId ? null : (draft.engagement_id != null && draft.period === thisMonth ? Number(draft.engagement_id) : null),
+    enabled: composed && (reportId != null || (draft.engagement_id != null && draft.period === thisMonth)),
     values: { shipped, next_up: nextUp },
     onValues: (v) => { if (v.shipped != null) setShipped(v.shipped); if (v.next_up != null) setNextUp(v.next_up); },
   });
 
-  const compose = useCallback(async () => {
-    if (!engagementId) return;
+  const composeFor = useCallback(async (forEngagement, forPeriod, thenFocus = false) => {
+    if (!forEngagement) return;
     setLoadError('');
+    const ticket = gate.current.start();
+    const asked = { engagement_id: Number(forEngagement), period: forPeriod };
     try {
-      const r = await api.getPartnerReportDraft(engagementId, period);
+      const r = await api.getPartnerReportDraft(forEngagement, forPeriod);
+      // #4673: the selection moved (or another compose started) while this one
+      // was in flight: drop it.
+      if (!gate.current.isCurrent(ticket)) return;
       // Spread over the empty shape rather than replacing it: a response that
       // omitted a list would otherwise reintroduce the undefined this exists
-      // to prevent.
-      setDraft({ ...EMPTY_DRAFT, ...(r || {}) });
+      // to prevent. The identity is the one ASKED for, whatever came back.
+      setDraft(draftFrom(r, asked));
       setComposed(true);
       setShipped(r?.existing?.shipped || '');
       setNextUp(r?.existing?.next_up || '');
+      if (thenFocus) setTimeout(() => shippedRef.current?.focus?.(), 0);
     } catch (e) {
+      if (!gate.current.isCurrent(ticket)) return;
       setDraft(EMPTY_DRAFT);
       setComposed(false);
       setLoadError(e?.message || 'The draft could not be composed.');
     }
-  }, [engagementId, period]);
+  }, []);
+  const compose = useCallback(() => composeFor(engagementId, period), [composeFor, engagementId, period]);
+
+  // EDIT OPENS THE REPORT THAT WAS CHOSEN (#4698). The button used to open the
+  // composer on whatever engagement and period it already held; now the card
+  // hands over its own engagement and period, they are set into the selectors,
+  // and the report is composed for exactly that pair and focused.
+  useEffect(() => {
+    if (!target?.tick) return;
+    setEngagementId(String(target.engagement_id));
+    setPeriod(target.period);
+    composeFor(target.engagement_id, target.period, true);
+  }, [target?.tick]);
 
   return (
     <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Engagement">
           <select ref={engagementRef} className={inputClass} value={engagementId} data-testid="status-report-engagement"
-            onChange={(e) => { setEngagementId(e.target.value); setComposed(false); }}>
+            onChange={(e) => { gate.current.invalidate(); setEngagementId(e.target.value); setComposed(false); }}>
             <option value="">Choose one</option>
             {engagements.map((e) => (
               <option key={e.engagement_id} value={e.engagement_id}>
@@ -229,7 +275,7 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
         </Field>
         <Field label="Period" hint="YYYY-MM">
           <input className={inputClass} value={period} maxLength={7}
-            onChange={(e) => { setPeriod(e.target.value); setComposed(false); }} />
+            onChange={(e) => { gate.current.invalidate(); setPeriod(e.target.value); setComposed(false); }} />
         </Field>
         <div className="flex items-end">
           <button type="button" className={ghostButtonClass} disabled={!engagementId} onClick={compose}>
@@ -244,6 +290,11 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
 
       {composed && (
         <div className="mt-4 space-y-4">
+          <ComposerAnchor
+            client={(() => { const e = engagements.find((x) => String(x.engagement_id) === String(draft.engagement_id)); return e ? (e.founder_name || e.need_title || e.engagement_uid) : null; })()}
+            period={draft.period}
+            state={draft.existing?.state ?? null}
+          />
           {draft.existing?.state === 'sent' && (
             <p className="text-[12.5px] font-semibold text-amber-700 dark:text-amber-400">
               A report for {draft.period} was already sent. It cannot be edited —
@@ -253,9 +304,8 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
 
           <div className="grid gap-4 md:grid-cols-3">
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Shipped in {draft.period}
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Shipped</h3>
+              <div className="text-[11px] text-axal-faint">from the deliverables log, {periodWords(draft.period)}</div>
               {draft.shipped_from_log.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">
                   Nothing in the deliverables log carries a send date in this period.
@@ -265,16 +315,15 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
                   {draft.shipped_from_log.map((x, i) => (
                     <li key={`${x.title}-${i}`}>
                       {x.title}{x.version ? ` (${x.version})` : ''}
-                      {!x.opened && <span className="text-axal-faint"> · not opened</span>}
+                      {x.opened === false && <span className="text-axal-faint"> · not opened</span>}
                     </li>
                   ))}
                 </ul>
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Next, from open milestones
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Next</h3>
+              <div className="text-[11px] text-axal-faint">from open milestones</div>
               {draft.next_from_milestones.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">No open milestone.</p>
               ) : (
@@ -288,9 +337,8 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
               )}
             </div>
             <div>
-              <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-                Blocked
-              </div>
+              <h3 className="text-[13px] font-extrabold text-axal-ink dark:text-gray-100">Blocked</h3>
+              <div className="text-[11px] text-axal-faint">open blockers, read live</div>
               {draft.blocked.length === 0 ? (
                 <p className="mt-1 text-[12px] text-axal-faint">Nothing open.</p>
               ) : (
@@ -319,7 +367,7 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
           <FillFormBar fill={fill} />
           <div className="grid gap-3">
             <Field label="Shipped" hint="Yours to write. The log above is what the record says was sent." fill={{ ctl: fill, name: 'shipped', value: shipped }}>
-              <textarea className={inputClass} rows={3} value={shipped} maxLength={4000}
+              <textarea ref={shippedRef} className={inputClass} rows={3} value={shipped} maxLength={4000}
                 onChange={(e) => setShipped(e.target.value)} />
             </Field>
             <Field label="Next" hint="Yours to write. The milestones above are what is open." fill={{ ctl: fill, name: 'next_up', value: nextUp }}>
@@ -330,18 +378,24 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
 
           <button
             type="button" className={buttonClass}
-            disabled={busy || draft.existing?.state === 'sent' || (!shipped.trim() && !nextUp.trim())}
+            disabled={draft.existing?.state === 'sent' || (!shipped.trim() && !nextUp.trim())}
+            aria-disabled={isSaving('save') || undefined}
             onClick={async () => {
-              try {
-                const saved = await api.savePartnerStatusReport(engagementId, draft.period, {
-                  shipped, next_up: nextUp,
-                });
+              if (isSaving('save')) return;
+              // #4673: saved against the draft's own engagement and period,
+              // which the Worker checks against the URL it is sent to. Taken
+              // now, so a second press while this one is out starts nothing and
+              // the words sent are the words that were on screen.
+              const sending = saveRequest(draft, { shipped, next_up: nextUp });
+              const r = await runSave('save', async () => {
+                const saved = await api.savePartnerStatusReport(...sending);
                 await fill.afterSave(saved?.id);
-                await onSaved();
-              } catch (e) { onError(e); }
+              });
+              if (r.skipped) return;
+              if (r.ok) await onSaved(); else onError(r.error);
             }}
           >
-            Save draft
+            {isSaving('save') ? 'Saving…' : 'Save draft'}
           </button>
           <SaveNote note={note?.scope === 'compose' ? note : null} />
         </div>
@@ -351,58 +405,56 @@ function Composer({ engagements, busy, onSaved, onError, note, focusTick = 0 }) 
 }
 
 export default function PartnerStatusReportsZone() {
-  const [state, setState] = useState({ loading: true, error: '', data: null, engagements: null });
+  // The skeleton is for the first read. A later one (every save or send) keeps
+  // the composer and what is typed in it on screen (#4698).
+  const { state: read, load } = useZoneRead(async () => {
+    const [r, h] = await Promise.all([
+      api.listPartnerStatusReports(),
+      api.getPartnerDeliveryHealth(),
+    ]);
+    return { data: r || {}, engagements: Array.isArray(h?.items) ? h.items : [] };
+  }, 'The status reports did not load.');
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    engagements: read.data?.engagements ?? null,
+  };
   const [view, setView] = useState('this_cycle');
-  const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [composing, setComposing] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
+  // The report Edit was pressed on: its own engagement and period.
+  const [editTarget, setEditTarget] = useState(null);
+  const { run: runMutation, isPending } = useMutations();
 
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const [r, h] = await Promise.all([
-        api.listPartnerStatusReports(),
-        api.getPartnerDeliveryHealth(),
-      ]);
-      setState({
-        loading: false,
-        error: '',
-        data: r || {},
-        engagements: Array.isArray(h?.items) ? h.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false,
-        error: e?.message || 'The status reports did not load.',
-        data: null, engagements: null,
-      });
-    }
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
+  // One operation per report, so two reports are independent and a second click
+  // on the same one starts nothing. A refusal is announced and nothing closes.
+  const run = useCallback(async (key, fn, ok, scope) => {
     setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await load();
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      return false;
     }
-  }, [load]);
+    setNote({ ok: true, text: ok, scope });
+    load();
+    return true;
+  }, [runMutation, load]);
 
   const d = state.data;
   // NORMALISED ONCE, so every read below can say `r.blockers.length` without a
   // guard. The listing returns the array; this is the belt for a response that
   // predates it, and it keeps "no blockers" and "not returned" from becoming
   // two shapes the JSX has to tell apart.
-  const items = (Array.isArray(d?.items) ? d.items : [])
+  // D4822 part 2: `?engagement=` narrows the feed to one engagement, and the composer starts on it.
+  const focus = useEngagementFocus();
+  const allItems = (Array.isArray(d?.items) ? d.items : [])
     .map((r) => ({ ...r, blockers: Array.isArray(r.blockers) ? r.blockers : [] }));
+  const items = allItems.filter((r) => matchesFocus(r, focus.key));
   const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allItems], focus.key);
   const drafts = items.filter((r) => r.state === 'draft');
 
   // Hoisted so the gate branch below and the live row draw the SAME row.
@@ -471,32 +523,31 @@ export default function PartnerStatusReportsZone() {
       notice={unlinked ? <NoPartnerProfile /> : null}
       isEmpty={unlinked || (items.length === 0 && !composing)}
       empty={(
+        <div className="space-y-3">
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={0} total={allItems.length} noun="reports" onClear={focus.clear} />
         <NothingYet
-          title="No report written yet"
-          body={
-            'A report is composed from what this engagement already carries — '
-            + 'what was shipped in the period, what is open, and what is blocked '
-            + 'with whose side it is on. You write the words; the record supplies '
-            + 'the facts.'
-          }
+          title="No status reports yet"
+          body="Prepare, review and record recurring client updates: what shipped, what is next, what is blocked. You write the words; the record supplies the facts."
           action={engagements.length > 0
-            ? <button type="button" className={buttonClass} onClick={() => setComposing(true)}>Compose one</button>
-            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
+            ? <button type="button" className={buttonClass} onClick={() => setComposing(true)}>Draft status report</button>
+            : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open Pipeline</Link>}
         />
+        </div>
       )}
     >
-      <div className="space-y-6">
+      <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+        {read.refreshError && (
+          <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+            The reports could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+          </p>
+        )}
+        <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allItems, ...engagements], focus.key)} shown={items.length} total={allItems.length} noun="reports" onClear={focus.clear} />
         <ZoneHeading
-          title="Client status reports"
-          blurb={
-            'The recurring client-facing update: shipped, next, blocked. Drafted '
-            + 'with assistance and sent by a person — and where the blocker is on '
-            + 'the client’s side, the report says so plainly without treating it '
-            + 'as an excuse.'
-          }
+          title="Recurring client updates"
+          blurb="Prepare, review and record recurring client updates. Nothing sends automatically: a person reviews each one and records it as sent."
           action={engagements.length > 0 && (
             <button type="button" className={ghostButtonClass} onClick={() => setComposing((v) => !v)}>
-              {composing ? 'Close' : 'Compose a report'}
+              {composing ? 'Close' : 'Draft status report'}
             </button>
           )}
         />
@@ -504,6 +555,8 @@ export default function PartnerStatusReportsZone() {
         {/* ══ THE `pd4` STRIP ═══════════════════════════════════════════════
             `In draft · Sent this cycle · Naming a blocker · Median read time`,
             each counted over every report rather than the chip-narrowed list. */}
+        {/* D4822 part 2: these are firm-wide figures, so they are not drawn over one focused engagement. */}
+        {!focus.key && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <ReportTile
             label="In draft"
@@ -531,9 +584,10 @@ export default function PartnerStatusReportsZone() {
           <ReportTile
             label="Median read time"
             nr
-            note="nothing records that a client read one"
+            note="Read time unavailable · client reads are not currently tracked"
           />
         </div>
+        )}
 
         {d?.delivery_note && (
           <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.delivery_note}</p>
@@ -596,8 +650,9 @@ export default function PartnerStatusReportsZone() {
         {composing && (
           <Composer
             engagements={engagements}
+            defaultEngagementId={focusId}
             focusTick={focusTick}
-            busy={busy}
+            target={editTarget}
             note={note}
             onSaved={async () => {
               setNote({ ok: true, text: 'Draft saved.', scope: 'compose' });
@@ -611,23 +666,38 @@ export default function PartnerStatusReportsZone() {
 
         <Section title="Reports">
           <div className="space-y-3">
-            {items.map((r) => (
+            {/* THE SELECTED CHIP'S REPORTS, the set the feed and the export read.
+                This list drew every report whatever was chosen, so Mark sent and
+                Discard sat on rows the filter had excluded (#4698). */}
+            {visible.map((r) => (
               <ReportCard
                 key={r.id}
                 report={r}
-                busy={busy}
+                sending={isPending(`send:${r.id}`)}
+                discarding={isPending(`discard:${r.id}`)}
                 note={note}
-                onEdit={() => setComposing(true)}
+                onEdit={(rep) => {
+                  setEditTarget({ engagement_id: rep.engagement_id, period: rep.period, tick: Date.now() + Math.random() });
+                  setComposing(true);
+                  setFocusTick((n) => n + 1);
+                }}
                 onSend={(rep) => run(
+                  `send:${rep.id}`,
                   () => api.sendPartnerStatusReport(rep.id),
                   'Marked sent.', `rep:${rep.id}`,
                 )}
                 onDelete={(rep) => run(
+                  `discard:${rep.id}`,
                   () => api.deletePartnerStatusReport(rep.id),
                   'Draft discarded.', `rep:${rep.id}`,
                 )}
               />
             ))}
+            {items.length > 0 && visible.length === 0 && (
+              <p className="text-[12px] text-axal-muted">
+                No report is in this state, so none is offered here. Choose another chip to reach the other {items.length}.
+              </p>
+            )}
           </div>
         </Section>
 

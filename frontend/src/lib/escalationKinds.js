@@ -1,3 +1,4 @@
+import { codeAmount } from './money.js';
 // D801 (#2234) — every escalation kind's label, and the requests a licence's
 // Administrator sends HQ (D799). The Worker's vocabulary is `ESCALATION_KINDS`
 // in `rpc/hqOps.ts`; a kind this map does not name still reads, from its key.
@@ -66,17 +67,10 @@ export function requestSummary(item) {
 
 const enumWord = (v) => String(v).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-/**
- * This licence's open requests of the panel's kinds. A request raised on HQ's
- * tier names the licence in `subject_ref` (D799); one raised by a branch is
- * matched by its branch code, when the licence has one.
- */
-export function licenceRequests(items, licenceUid, branchCode = null) {
-  return (items || []).filter((it) =>
-    it.status === 'open'
-    && LICENCE_PANEL_KINDS.includes(it.kind)
-    && (it.subject_ref === licenceUid || (branchCode && it.branch_code === branchCode && it.branch_code !== 'hq')));
-}
+// #4700 — a licence's own requests are matched on the server
+// (`GET /api/admin/licences/:uid/requests`), before the page is cut. The
+// browser-side filter that stood here matched against a capped board and had
+// no deployment code to match a branch's request by, so it was removed.
 
 const DAY = 24 * 3600 * 1000;
 const dayOf = (iso) => (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso) ? Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) : null);
@@ -115,7 +109,7 @@ export function termAsItStands(term, licence) {
     case 'fee':
       return licence.annual_fee_cents === null || licence.annual_fee_cents === undefined
         ? 'Annual fee not recorded'
-        : `Annual fee ${licence.currency || ''} ${(Number(licence.annual_fee_cents) / 100).toLocaleString('en-GB')}`.replace(/\s+/g, ' ');
+        : `Annual fee ${codeAmount(Number(licence.annual_fee_cents), licence.currency, { locale: 'en-GB' })}`;
     case 'term':
       return `${licence.term_years ? `${licence.term_years} years` : 'Term not recorded'}${licence.renews_on ? `, renews ${licence.renews_on}` : ''}`;
     case 'seats': {

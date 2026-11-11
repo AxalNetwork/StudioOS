@@ -27,6 +27,7 @@ import { branchPrograms } from '../src/rpc/branchOps.ts';
 import {
   HQ_READS_REASON, REFERRAL_REWARDS_REASON,
   loadProgramsForBranch, programCatalogue,
+  PROGRAM_DEFINITIONS, LAB_PEOPLE_REASON, PRODUCT_TESTING_HQ_ONLY,
 } from '../src/services/programCatalogue.ts';
 import { PROGRAM_KEYS, PAUSE_NOT_DECIDED } from '../src/services/programRegistry.ts';
 import { MENTOR_ACCESS_ACTIONS, NOT_AUDITED_YET } from '../src/services/programActivity.ts';
@@ -59,6 +60,10 @@ const BUILT = beforeM560();
 BUILT.exec(M560); // whole, as the deploy applies it: a failure here fails the file
 // D955 (#2788): 561 adds programs.licence_uid, which every registry read now selects; the deploy applies it after 560.
 BUILT.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8')); // D4808
+// D4807: People taking part reads the episode views, which sit over 565's mentor events and 560's enrolment events.
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '565_advisor_cohort_assignment_events.sql'), 'utf8'));
+BUILT.exec(readFileSync(resolve(MIGRATIONS, '202611072215_programs_participation_episodes_4807.sql'), 'utf8'));
 
 /** A copy of BUILT, its schema and every row it holds (560's seed and 381's rules included). */
 function fresh(): DatabaseSync {
@@ -85,6 +90,20 @@ function fresh(): DatabaseSync {
   return db;
 }
 
+/**
+ * D4807: the assign and end routes write a 565 event beside each assignment row. A fixture that inserts rows
+ * directly gives each one the same events, so People taking part (which reads the episodes) sees them.
+ */
+function recordAssignmentEvents(db: DatabaseSync) {
+  db.exec(`INSERT INTO advisor_cohort_assignment_events (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+      SELECT a.id, a.advisor_user_id, a.cohort_cycle_id, 'assigned', NULL, NULL, a.assigned_at FROM advisor_cohort_assignments a
+       WHERE NOT EXISTS (SELECT 1 FROM advisor_cohort_assignment_events e WHERE e.assignment_id = a.id AND e.kind = 'assigned');
+    INSERT INTO advisor_cohort_assignment_events (assignment_id, advisor_user_id, cohort_cycle_id, kind, admin_user_id, note, created_at)
+      SELECT a.id, a.advisor_user_id, a.cohort_cycle_id, 'ended', NULL, NULL, a.unassigned_at FROM advisor_cohort_assignments a
+       WHERE a.unassigned_at IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM advisor_cohort_assignment_events e WHERE e.assignment_id = a.id AND e.kind = 'ended');`);
+}
+
 /** Every Programs response this file reads, so the last test covers them all. */
 const SEEN: string[] = [];
 
@@ -107,6 +126,9 @@ async function call(app: any, db: DatabaseSync, who: number, path: string, init:
 }
 const progs = (db: DatabaseSync, who: number, path: string, init?: Parameters<typeof call>[4]) => call(adminPrograms, db, who, path, init);
 
+/** D4806: Publish names the revision of the draft the reviewer saw (`draft.hash`), as the Playbook page sends it. */
+const publishAs = async (db: DatabaseSync, path: string) => ({ method: 'POST', body: { expected_hash: ((await progs(db, SUPER, path)).body as any).draft.hash } }) as any;
+
 const envOf = (db: DatabaseSync, extra: Record<string, unknown> = {}) => ({ DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...extra }) as any;
 
 /** The catalogue's fixture: every figure below is worked out by hand from it. */
@@ -124,6 +146,7 @@ function catalogueFixture(db: DatabaseSync) {
     ('as-1', ${ADV1}, 1, '2026-10-05 10:00:00', NULL, 1),
     ('as-2', ${FORMER}, 2, '2026-09-20 10:00:00', NULL, 1),
     ('as-3', ${ADV1}, 4, '2026-08-20 10:00:00', '2026-09-30 10:00:00', 0);`);
+  recordAssignmentEvents(db);
   // Queues: two cohort applications (2 h and 80 h), two open referrals (30 h, 1 h waiting on the member),
   // one closed referral, one perk in review (edited 50 h ago), one pending host (10 h).
   db.prepare(`INSERT INTO cohort_applicants (application_id, user_id, cohort_cycle_id, status, created_at) VALUES (1, ?, 1, 'pending', ?), (2, ?, 1, 'pending', ?), (3, ?, 1, 'accepted', ?)`)
@@ -310,11 +333,11 @@ test('the playbook: an Admin reads what is published; a Super Admin edits the dr
   assert.equal(edit.body.playbook.sections.find((s: any) => s.key === 'terms').body, 'No contract template is linked to this program yet.',
     'an edit never reaches the published playbook');
 
-  const pub = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', { method: 'POST' });
+  const pub = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', await publishAs(db, '/mentor-cohorts'));
   assert.equal(pub.status, 200, JSON.stringify(pub.body));
   assert.equal(pub.body.playbook.version, 2);
   assert.equal(pub.body.draft.differs, false);
-  const again = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', { method: 'POST' });
+  const again = await progs(db, SUPER, '/mentor-cohorts/playbook/publish', await publishAs(db, '/mentor-cohorts'));
   assert.equal(again.status, 409);
   assert.equal(again.body.code, 'nothing_to_publish');
 
@@ -362,8 +385,9 @@ test('the catalogue: the queues, their bands and the Waiting total, exact', asyn
   const tile = cat.tiles.waiting as any;
   assert.equal(tile.count, 6);
   assert.equal(tile.oldest_hours, 80);
-  assert.deepEqual(tile.covers, ['cohort', 'referrals', 'perks', 'hosts']);
-  assert.deepEqual(tile.left_out.map((x: any) => x.queue), ['strategic']);
+  // D4807: every actionable queue is in the headline, so there is nothing left out to footnote.
+  assert.deepEqual(tile.covers, ['cohort', 'referrals', 'perks', 'hosts', 'strategic']);
+  assert.deepEqual(tile.left_out, []);
 });
 
 test('the catalogue leaves a deactivated Advisor out (D960): no mentor, no cohort covered', async () => {
@@ -372,6 +396,7 @@ test('the catalogue leaves a deactivated Advisor out (D960): no mentor, no cohor
   // A third Advisor holds the running cycle B, which only FORMER held, on a deactivated account.
   db.exec(`INSERT INTO users (id, uid, email, name, role, is_active) VALUES (9, 'u-9', 'person9@example.test', 'Ola Off', 'advisor', 0);
     INSERT INTO advisor_cohort_assignments (uid, advisor_user_id, cohort_cycle_id, assigned_at, unassigned_at, is_active) VALUES ('as-9', 9, 2, '2026-10-02 10:00:00', NULL, 1);`);
+  recordAssignmentEvents(db);
   const mentor = rowOf(await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW), 'mentor-cohorts');
   assert.deepEqual(mentor.figures.mentors, { available: true, count: 1 }, 'ADV1 only: the deactivated Advisor is not an active mentor');
   assert.deepEqual(mentor.figures.coverage, { available: true, cohorts: 2, covered: 1, uncovered: 1 }, 'B stays uncovered');
@@ -436,6 +461,9 @@ test('D1119: part 4 claims and strategic requests are read, including zero and i
   const cat = await read();
   assert.deepEqual(rowOf(cat, 'perks').figures.claims, { available: true, count: 3 });
   assert.deepEqual(cat.waiting.strategic, { available: true, count: 2 });
+  // D4807: the headline is the sum of every queue beside it, strategic requests included; no footnote reconciles it.
+  const w = cat.waiting as any;
+  assert.equal((cat.tiles.waiting as any).count, w.cohort.count + w.referrals.count + w.perks.count + w.hosts.count + w.strategic.count);
   assert.deepEqual(rowOf(cat, 'refer-and-earn').needs_you, { available: true, count: 4, strategic_requests: { available: true, count: 2 } });
   assert.deepEqual(cat.joins_weekly.perks, { available: true, count: 3, total: 3, weeks: [
     { week: '2026-09-28', count: 1 }, { week: '2026-10-05', count: 0 },
@@ -453,6 +481,9 @@ test('D1119: part 4 claims and strategic requests are read, including zero and i
   db.exec('DROP TABLE referral_strategic_access;');
   const brokenQueue = await read();
   assert.equal((brokenQueue.waiting.strategic as any).unreadable, true);
+  // D4807: an unreadable queue makes the headline unreadable, never short.
+  assert.equal((brokenQueue.tiles.waiting as any).unreadable, true);
+  assert.match(String((brokenQueue.tiles.waiting as any).reason), /strategic queue could not be read/);
   assert.equal(rowOf(brokenQueue, 'refer-and-earn').needs_you.unreadable, true);
   assert.equal((brokenQueue.waiting.perks as any).available, true);
 });
@@ -787,7 +818,8 @@ test('activity: Mentor reads D960\'s assign and end rows, naming the cohort and 
   ], 'Learning\'s row is Learning\'s');
   assert.ok(!JSON.stringify(r.body).includes('target_user_id'), 'the mentor is a person and is never named');
   // The action names are the ones the route writes.
-  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_cohorts.ts.
+  const route = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/advisors_cohorts.ts'), 'utf8');
   for (const a of MENTOR_ACCESS_ACTIONS) assert.ok(route.includes(`'${a}'`), a);
 });
 
@@ -810,4 +842,21 @@ test('no Programs response in this file carries an email address or a person\'s 
   const all = SEEN.join('\n');
   assert.equal(/person\d+@example\.test/.test(all), false);
   for (const name of ['Sam Super', 'Ada Admin', 'Ava Advisor', 'Finn Former', 'Fay Founder']) assert.equal(all.includes(name), false, name);
+});
+
+test('D4807: no internal decision, issue or open-question reference is sent in words the page draws', async () => {
+  const db = fresh();
+  catalogueFixture(db);
+  const cat = await programCatalogue(envOf(db), { id: SUPER, superAdmin: true }, 4, NOW);
+  // The words a reader sees: every string in the read except keys, ids, stamps and numbers.
+  const words: string[] = [];
+  const walk = (v: unknown, key = '') => {
+    if (typeof v === 'string') { if (!/^(key|uid|program|queue|scope|state|kind|status|group|grp|week|month|aged)$/.test(key)) words.push(v); }
+    else if (Array.isArray(v)) v.forEach((x) => walk(x, key));
+    else if (v && typeof v === 'object') Object.entries(v).forEach(([k, x]) => walk(x, k));
+  };
+  walk(cat);
+  words.push(...Object.values(PROGRAM_DEFINITIONS), LAB_PEOPLE_REASON, HQ_READS_REASON, REFERRAL_REWARDS_REASON, PRODUCT_TESTING_HQ_ONLY);
+  const internal = words.flatMap((w) => w.match(/\bO-FND\b|\bOD-[A-Z0-9]+\b|\bD\d{3,5}\b|#\d{3,5}\b/g) ?? []);
+  assert.deepEqual(internal, [], `internal references in the read: ${internal.join(', ')}`);
 });

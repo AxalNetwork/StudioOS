@@ -6,14 +6,19 @@
 // with, so a key D797 adds appears in the editor on its own and the editor can
 // never offer a key the Worker refuses. Only the section titles live here.
 //
-// UNITS. A screen types money and percentages; the store keeps whole cents and
-// whole basis points. Each conversion is exact both ways: "1234.5" is 123450
-// cents, "12.5" % is 1250 bps, and anything with more than two decimals is
-// refused rather than rounded. A cleared field saves `null`, which every reader
-// shows as "Not recorded".
-import { LICENCE_TERM_FIELDS } from '../../../cloudflare-worker/src/services/licenceTerms.ts';
+// UNITS. A screen types money and percentages; the store keeps whole minor units and
+// whole basis points. Each conversion is exact both ways: "1234.5" EUR is 123450
+// minor units, "12.5" % is 1250 bps, and more decimals than the currency has is
+// refused rather than rounded. Money follows the LICENCE'S currency (D5029,
+// `lib/money.js`): 1234 JPY is 1234, 1.005 KWD is 1005. A licence with no usable currency
+// shows its stored count of minor units and cannot have a money term edited, rather than being read as euros.
+// A cleared field saves `null`, which every reader shows as "Not recorded".
+import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_FIELDS } from '../../../cloudflare-worker/src/services/licenceTerms.ts';
+import { currencyCode, exponentOf, parseMinor, toMajorString } from './money';
 
-export { LICENCE_TERM_FIELDS };
+// D4819: the canvas's default contract sections, which every stored schedule
+// reads under its own overrides; a licence with no schedule row reads them too.
+export { DEFAULT_TERM_SECTIONS, LICENCE_TERM_FIELDS };
 
 /**
  * The canvas's section titles (board L9), by D797 group. A group D797 adds later
@@ -63,14 +68,16 @@ export function unitOf(field, currency) {
 export const enumLabel = (v) => String(v).replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 /** A stored value as its input's text; null is the empty field. */
-export function toInput(field, value) {
+export function toInput(field, value, currency) {
   if (value === null || value === undefined) return '';
   switch (field.type) {
     case 'cents': {
-      const n = Number(value);
-      const whole = Math.trunc(n / 100);
-      const rest = Math.abs(n % 100);
-      return rest ? `${whole}.${String(rest).padStart(2, '0')}` : String(whole);
+      // Exact text in the licence's own decimals. With no usable currency the
+      // stored count is shown as it is: never blanked (a save would clear it) and never divided by a guessed factor.
+      const major = toMajorString(Number(value), currency);
+      if (major === null) return String(value);
+      // A fractional amount keeps all of the currency's decimals ("1234.50", "1.005"); a whole one has none ("1234").
+      return Number(value) % (10 ** exponentOf(currency)) ? major : major.split('.')[0];
     }
     case 'bps': {
       const n = Number(value);
@@ -96,13 +103,14 @@ function hundredths(text) {
  * An input's text as the value to store, or the sentence that refuses it.
  * The empty field is `null`: "Not recorded".
  */
-export function fromInput(field, raw) {
+export function fromInput(field, raw, currency) {
   const text = typeof raw === 'string' ? raw.trim() : '';
   if (!text) return { ok: true, value: null };
   switch (field.type) {
     case 'cents': {
-      const n = hundredths(text.replace(/,/g, ''));
-      return n === null ? { ok: false, message: 'Type an amount, with at most two decimals.' } : { ok: true, value: n };
+      if (!currencyCode(currency)) return { ok: false, message: 'Record the licence currency before editing a money term.' };
+      const parsed = parseMinor(text, currency);
+      return parsed.ok ? { ok: true, value: parsed.minor } : { ok: false, message: parsed.message };
     }
     case 'bps': {
       const n = hundredths(text);
@@ -133,7 +141,14 @@ export function fromInput(field, raw) {
 export function displayValue(field, value, currency) {
   if (value === null || value === undefined) return NOT_RECORDED;
   switch (field.type) {
-    case 'cents': return `${currency ? `${currency} ` : ''}${Number(toInput(field, value)).toLocaleString('en-GB', { minimumFractionDigits: Number(value) % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+    case 'cents': {
+      const exp = exponentOf(currency);
+      const major = toMajorString(Number(value), currency);
+      if (exp === null || major === null) return `${Number(value).toLocaleString('en-GB')} minor units (currency ${currency ? `"${currency}" is not one we can price in` : 'not recorded'})`;
+      // Whole amounts show no decimals ("EUR 90,000"); a fraction shows the currency's own number of them.
+      const fraction = Number(value) % (10 ** exp) !== 0;
+      return `${currency} ${new Intl.NumberFormat('en-GB', { minimumFractionDigits: fraction ? exp : 0, maximumFractionDigits: exp }).format(major)}`;
+    }
     case 'bps': return `${toInput(field, value)}%`;
     case 'bool': return Number(value) === 1 ? 'Yes' : 'No';
     case 'enum': return enumLabel(value);
@@ -143,11 +158,11 @@ export function displayValue(field, value, currency) {
 }
 
 /** The form's starting state from a stored schedule: each field's text and contract section. */
-export function initialForm(stored, fields = LICENCE_TERM_FIELDS) {
+export function initialForm(stored, fields = LICENCE_TERM_FIELDS, currency) {
   const values = {};
   const sections = {};
   for (const f of fields) {
-    values[f.key] = toInput(f, stored?.terms?.[f.key] ?? null);
+    values[f.key] = toInput(f, stored?.terms?.[f.key] ?? null, currency);
     sections[f.key] = stored?.sections?.[f.key] ?? '';
   }
   return { values, sections };
@@ -159,12 +174,16 @@ export function initialForm(stored, fields = LICENCE_TERM_FIELDS) {
  * `null`, a cleared section `null`. With an error, nothing is sent and every
  * refused field is named.
  */
-export function buildSave(stored, form, reason, fields = LICENCE_TERM_FIELDS) {
+export function buildSave(stored, form, reason, fields = LICENCE_TERM_FIELDS, currency) {
   const errors = {};
   const terms = {};
   const sections = {};
   for (const f of fields) {
-    const parsed = fromInput(f, form.values[f.key]);
+    // A money term on a licence with no usable currency is shown as its stored count and cannot be edited; left as
+    // shown, it is unchanged, not an error and not a clear.
+    if (f.type === 'cents' && !currencyCode(currency)
+      && String(form.values[f.key] ?? '').trim() === toInput(f, stored?.terms?.[f.key] ?? null, currency)) continue;
+    const parsed = fromInput(f, form.values[f.key], currency);
     if (!parsed.ok) { errors[f.key] = parsed.message; continue; }
     const before = stored?.terms?.[f.key] ?? null;
     if (parsed.value !== before) terms[f.key] = parsed.value;
@@ -183,6 +202,8 @@ export function buildSave(stored, form, reason, fields = LICENCE_TERM_FIELDS) {
       ...(Object.keys(terms).length ? { terms } : {}),
       ...(Object.keys(sections).length ? { sections } : {}),
       reason: why,
+      // D4694 — the revision the form was read at; a save from an older one is refused with a 409.
+      expected_revision: Number.isSafeInteger(stored?.revision) ? stored.revision : 0,
     },
   };
 }

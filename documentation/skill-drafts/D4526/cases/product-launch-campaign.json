@@ -1,0 +1,50 @@
+{
+  "skill": "product-launch-campaign",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "release": "Export 2",
+        "ready": [
+          "CSV"
+        ],
+        "pending": [
+          "PDF"
+        ],
+        "channels": [
+          "Social",
+          "Newsletter"
+        ],
+        "launch_date": null
+      },
+      "build.records": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "draft",
+    "must_include": [
+      "Export 2",
+      "CSV",
+      "PDF"
+    ],
+    "must_say_not_recorded": [
+      "launch date"
+    ],
+    "must_not_include": [
+      "PDF is available now"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why launch date is missing rather than inventing it.",
+    "Do not assert: PDF is available now.",
+    "Return a proposal only; do not perform any external action.",
+    "Include social and newsletter draft variants and a reviewable launch sequence.",
+    "CSV may be described as ready; PDF must remain pending."
+  ],
+  "predicate_witness": "Export 2; CSV; PDF. launch date: Not recorded. Human review required."
+}

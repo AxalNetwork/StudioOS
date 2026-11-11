@@ -118,7 +118,8 @@ test('one function decides the consent state, and the chips read it', () => {
   const fn = between(zone, 'export function consentState(', 'const CONSENT_LABEL');
   // ORDER IS THE ASSERTION. Published wins over a withdrawal, a withdrawal over
   // a pending ask, and neither over silence — so no row is ever in two states.
-  const order = ['published', 'withdrawn', 'awaiting', 'not_asked'];
+  // D4672 added `ask_again` (asked, but only about an older revision or on a lapsed link) before silence.
+  const order = ['published', 'withdrawn', 'awaiting', 'ask_again', 'not_asked'];
   const seen = order.map((s) => fn.indexOf(`'${s}'`));
   for (const [i, at] of seen.entries()) assert.ok(at > 0, `the ${order[i]} branch is gone`);
   assert.deepEqual([...seen].sort((a, b) => a - b), seen,
@@ -127,7 +128,8 @@ test('one function decides the consent state, and the chips read it', () => {
     'a published item is no longer published first');
   assert.match(fn, /if \(consents\.some\(\(k\) => k\.withdrawn_at\)\) return 'withdrawn';/,
     'a withdrawal no longer blocks');
-  assert.match(fn, /if \(consents\.some\(\(k\) => !k\.consent_given && !k\.withdrawn_at\)\) return 'awaiting';/,
+  // D4672: awaiting is an OPEN ask about the claim as it reads now — the Worker's `requested`.
+  assert.match(fn, /if \(consents\.some\(\(k\) => k\.state === 'requested'\)\) return 'awaiting';/,
     'an unanswered ask is no longer awaiting');
   // AND THE CHIPS READ THE SAME FUNCTION. They did not before: `Blocked` asked
   // `consents.some(withdrawn_at)` while the badge asked `is_published`, so a
@@ -266,7 +268,7 @@ test('Ask for consent runs, and its old reason described a page that exists', ()
   assert.ok(actionsRaw.includes('/attest/partner/:token'),
     'the table no longer records which surface the retired reason was wrong about');
   // The page supplies it, or the op renders nowhere at all.
-  assert.match(zone, /askConsent: \(\) => \{ setNote\(null\); setAsking\(true\); \}/,
+  assert.match(zone, /askConsent: \(\) => \{ clearNote\(\); setAsking\(true\); \}/,
     'the page no longer supplies the handler');
   assert.match(zone, /partnerZoneActions\('offers\/proof', \{ handlers, view: \{/,
     'the action row drops handlers, so the op renders nowhere');
@@ -281,11 +283,13 @@ test('the ask names the outcome it is about, and issues one credential', () => {
   assert.match(modal, /onChange=\{\(e\) => setPick\(Number\(e\.target\.value\)\)\}/, 'the outcome cannot be chosen');
   assert.match(modal, /issuedToken=\{issued\?\.itemId === item\.id \? issued : null\}/,
     'the issued link is no longer scoped to the item it was issued for');
-  // It reuses the panel rather than reimplementing the form, so the once-only
-  // token rule and its explanation cannot come apart from it.
+  // It reuses the panel rather than reimplementing the form, so the link rule
+  // and its explanation cannot come apart from it.
   assert.match(modal, /<AskPanel\s/, 'the modal no longer reuses the ask panel');
-  assert.ok(zone.includes('This is the only time it is shown.'),
-    'the once-only token warning is gone');
+  // D4672: the link is no longer the client's credential (a code emailed to them
+  // is), so it is not "shown once"; the panel says instead that it cannot answer.
+  assert.ok(zone.includes('so holding the link is'), 'the panel no longer says the link cannot answer');
+  assert.ok(!zone.includes('This is the only time it is shown.'), 'the link is still called a once-only credential');
 });
 
 test('the AI band is the artboard’s, and its count is this firm’s', () => {

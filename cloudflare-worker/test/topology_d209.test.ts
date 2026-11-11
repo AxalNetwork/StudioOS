@@ -426,7 +426,7 @@ test('the topology states the metadata the router sends, and only for the calls 
 
 // ── 6 · Analytics Engine ────────────────────────────────────────────────────
 
-test('four functions read the shared dataset, each behind the credential check the page reports', () => {
+test('five functions read the shared dataset, each behind the credential check the page reports', () => {
   const reports = FILES.find((f) => f.file === 'services/analyticsReports.ts')!.src;
   const sites = callSites('aeSql');
   assert.deepEqual([...new Set(sites.map((s) => s.file))], ['services/analyticsReports.ts'], 'aeSql is read outside analyticsReports.ts');
@@ -436,14 +436,14 @@ test('four functions read the shared dataset, each behind the credential check t
     const fns = [...before.matchAll(/(?:export\s+)?async\s+function\s+([A-Za-z_$][\w$]*)\s*\(/g)];
     return fns[fns.length - 1][1];
   });
-  // D210 added the fourth, H15's weekly accounts read, and the page lists it.
+  // D210 added H15's weekly accounts read; D4854 added Platform health's telemetry probe. The page lists both.
   assert.deepEqual(enclosing, [
-    'loadTechnicalFromAnalyticsEngine', 'loadTrafficByBranch', 'loadBranchActionMirror', 'loadActiveAccountsByBranchWeek',
+    'probeTelemetry', 'loadTechnicalFromAnalyticsEngine', 'loadTrafficByBranch', 'loadBranchActionMirror', 'loadActiveAccountsByBranchWeek',
   ]);
   assert.equal(enclosing.length, AE_READERS.length, 'one reader line per function that reads the dataset');
   assert.match(fnBody(reports, 'async function aeSql('), /^\s*if \(!aeReadable\(env\)\) return null;/,
     'aeSql asks aeReadable first, so "readable here" and "can read" are one fact');
-  assert.doesNotMatch(reportsCode, /export\s+(?:async\s+)?function\s+aeSql\b/, 'aeSql is private; the four loaders are its only callers');
+  assert.doesNotMatch(reportsCode, /export\s+(?:async\s+)?function\s+aeSql\b/, 'aeSql is private; the five loaders are its only callers');
   assert.equal(NOT_FROM_ANALYTICS.length, 3);
 });
 
@@ -458,7 +458,8 @@ test('three places write the dataset, and the branch code rides in the sixth blo
   assert.doesNotMatch(deck, /_KIND = '\//, 'a deck kind never starts with a slash');
   const obs = CODE.find((f) => f.file === 'middleware/observability.ts')!.code;
   const call = bodyAfter(obs, '.writeDataPoint(');
-  assert.match(call, /indexes:\s*\[path\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
+  // D4672: the path is recorded with any credential parameter replaced (`recorded`); still one index, the route path.
+  assert.match(call, /indexes:\s*\[recorded\.slice\(0, 96\)\]/, 'one index, the path — the branch is not an index');
   const blobs = /blobs:\s*\[([\s\S]*?)\]/.exec(call);
   assert.ok(blobs, 'the request row writes blobs');
   const slots = blobs![1].split('\n').map((l) => l.replace(/\/\/.*$/, '').trim()).join(' ').split(',').map((x) => x.trim()).filter(Boolean);
@@ -480,9 +481,20 @@ test('the one route that dispatches a deploy is super-admin only — "a branch c
   const sites = callSites('dispatchWorkflow');
   assert.deepEqual(sites.map((s) => s.file), ['routes/admin_deployments.ts'], 'a second route can dispatch a deploy');
   const src = FILES.find((f) => f.file === 'routes/admin_deployments.ts')!.src;
-  const handler = bodyAfter(src, "r.post('/licences/:uid/deploy', async (c) =>");
-  assert.match(handler, /^\s*const admin = await requireSuperAdmin\(c\);/, 'the gate is the handler\'s first statement');
-  assert.ok(handler.includes('dispatchWorkflow('), 'the dispatch sits inside that handler');
+  // D4706: the dispatch sits in ONE helper, `dispatchAttempt`, so a first
+  // deploy and a retry send exactly the same request. The guard follows it:
+  // dispatchWorkflow is called only there, and dispatchAttempt only from the
+  // two handlers whose first statement is the super-admin gate.
+  const helper = fnBody(src, 'async function dispatchAttempt(');
+  assert.ok(helper.includes('dispatchWorkflow('), 'the dispatch sits inside dispatchAttempt');
+  assert.equal((src.match(/dispatchWorkflow\(/g) || []).length, 1, 'dispatchWorkflow is called from one place');
+  const callers = ["r.post('/licences/:uid/deploy', async (c) =>", "r.post('/licences/:uid/deploy/retry', async (c) =>"];
+  for (const sig of callers) {
+    const handler = bodyAfter(src, sig);
+    assert.match(handler, /^\s*const admin = await requireSuperAdmin\(c\);/, `${sig}: the gate is the handler's first statement`);
+    assert.ok(handler.includes('dispatchAttempt('), `${sig} dispatches through the helper`);
+  }
+  assert.equal((src.match(/dispatchAttempt\(/g) || []).length, 1 + callers.length, 'no other handler reaches dispatchAttempt');
 });
 
 // ── 8 · the payload, on each tier ───────────────────────────────────────────

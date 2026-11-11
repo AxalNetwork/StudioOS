@@ -40,6 +40,7 @@ function fixture() {
   db.exec(migration('459_cycle_activity_convention.sql'));
   // D690 (#1692): Validate's record stores, and what the interview record reads.
   db.exec(migration('460_validate_record_stores.sql'));
+  db.exec(migration('755_posthog_metrics.sql')); // D4585: Add evidence offers valued PostHog metrics
   db.exec(migration('439_validate_proposals_structuring.sql'));
   db.exec(migration('446_interview_structure_receipts.sql'));
   // D757 (#1925): "What it fed" reads a proposal's interview (246's
@@ -496,7 +497,7 @@ test('#1692 test 5: each record has its title, four facts, its sections in the c
   const attach = sig.actions.find((a: any) => a.key === 'attach');
   assert.equal(attach.multipart, true);
   const claim = (await real(db, 10, 'GET', rec('experiments', '5'))).body;
-  assert.deepEqual(claim.facts.map((f: any) => f.value ?? f.reason), ['5 of 8 interviewees', 'No condition written', '0 for · 0 against', 'Anecdote']);
+  assert.deepEqual(claim.facts.map((f: any) => f.value ?? f.reason), ['5 of 8 interviewees', 'No condition written', '0 for · 0 against · 0 interviews', 'Anecdote']);
   assert.deepEqual(claim.main[1].rows.map((r: any) => [r.a, r.c]), [['Landing page', 'Running']]);
 });
 

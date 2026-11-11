@@ -14,6 +14,13 @@
  * block answering alone (`services/communityOverview.ts`). No HQ gate. A
  * `weeks` this cannot read is a 400, never a quietly different window; the
  * default is 4.
+ *
+ *   GET /api/admin/community/jobs?q=&status=&place=&seniority=&sort=&limit=&offset=
+ *   GET /api/admin/community/circles?q=&type=&access=&published=&featured=&sort=&limit=&offset=
+ *
+ * #4717 package 4. The Jobs and Circles lightboxes, one page at a time with the
+ * total that matched (`services/communityLists.ts`). A filter or sort this
+ * cannot read is a 400. The consoles' own lists are unchanged.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -21,6 +28,10 @@ import { requireAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import { communityActivity, parseActivityQuery } from '../services/communityActivity';
 import { communityOverview, parseCommunityWeeks } from '../services/communityOverview';
+import {
+  ListQueryRefusal, listCommunityCircles, listCommunityJobs, parseCirclesQuery, parseJobsQuery,
+} from '../services/communityLists';
+import { refuse } from '../util/refusal';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -41,6 +52,34 @@ r.get('/overview', async (c) => {
     const weeks = parseCommunityWeeks(c.req.query('weeks'));
     if (!weeks) return c.json({ code: 'bad_weeks', detail: 'weeks must be 4, 12 or 52.' }, 400);
     return c.json(await communityOverview(c.env, weeks));
+  } catch (e) {
+    return mapError(c, e);
+  }
+});
+
+r.get('/jobs', async (c) => {
+  try {
+    await requireAdmin(c);
+    let q;
+    try { q = parseJobsQuery((k) => c.req.query(k)); } catch (e) {
+      if (e instanceof ListQueryRefusal) return refuse(c, 400, { code: e.code, message: e.sentence });
+      throw e;
+    }
+    return c.json(await listCommunityJobs(c.env, q));
+  } catch (e) {
+    return mapError(c, e);
+  }
+});
+
+r.get('/circles', async (c) => {
+  try {
+    await requireAdmin(c);
+    let q;
+    try { q = parseCirclesQuery((k) => c.req.query(k)); } catch (e) {
+      if (e instanceof ListQueryRefusal) return refuse(c, 400, { code: e.code, message: e.sentence });
+      throw e;
+    }
+    return c.json(await listCommunityCircles(c.env, q));
   } catch (e) {
     return mapError(c, e);
   }

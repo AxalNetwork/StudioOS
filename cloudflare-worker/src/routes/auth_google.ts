@@ -130,6 +130,7 @@ import { hashEmail } from '../util/hashEmail';
 import { ensureExploringSchema } from '../services/exploringSchema';
 import { verifyGoogleIdToken, googleIsAuthoritative } from '../services/googleIdToken';
 import { recordSecurityEvent } from '../services/securityEvents';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { isProductionEnv } from '../util/paymentMode';
 
 // Google's token endpoint gets ten seconds. The catch below already returns
@@ -705,6 +706,7 @@ async function mintGoogleSession(
     await revokeStaleCrossIdentitySession(c, user.id);
   } catch (e) { console.warn('[auth_google] cross-session revoke failed', e); }
 
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
   const csrf = generateCsrfToken();
   // Domain `.axal.vc` on HQ, so the session holds on both hosts.
   setAuthCookies(c, token, csrf);

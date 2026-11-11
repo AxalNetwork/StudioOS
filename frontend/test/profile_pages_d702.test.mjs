@@ -70,9 +70,12 @@ test('the old labels are gone from the page', () => {
 });
 
 test('a change sends only the field that changed, so a toggle never stamps a visibility choice', () => {
+  // D4615: the card hands each edit to its serialized saver, which sends that delta and the revision read.
   const card = privacyCard();
-  assert.match(card, /api\.updatePrivacySettings\(delta\)/);
+  assert.match(card, /saver\.current\?\.save\(delta\)/);
   assert.doesNotMatch(card, /api\.updatePrivacySettings\(next\)/);
+  const savers = readFileSync(new URL('../src/lib/settingsSavers.js', import.meta.url), 'utf8');
+  assert.match(savers, /client\.updatePrivacySettings\(\{ \.\.\.delta, expected_revision: rev \}\)/);
 });
 
 test('the labels are the audiences the Worker enforces', () => {
@@ -129,7 +132,7 @@ test('9. the three /profile/* lines are founders only; /profile is You for a fou
 
 test('9. the desktop "Your profile" row is above Account, for founders only', () => {
   const menu = APP.slice(APP.indexOf('function UserDropdown('), APP.indexOf('function UserDropdown(') + 6000);
-  assert.match(menu, /\{user\?\.role === 'founder' && \(\s*<Link to="\/profile"[\s\S]{0,260}?role="menuitem">\s*Your profile\s*<\/Link>\s*\)\}\s*<Link to="\/account"/);
+  assert.match(menu, /\{held\.includes\('founder'\) && \(\s*<Link to="\/profile"[\s\S]{0,260}?role="menuitem">\s*Your profile\s*<\/Link>\s*\)\}\s*<Link to="\/account"/);
 });
 
 // --- 10. The pages at 1440 and 390 -------------------------------------------

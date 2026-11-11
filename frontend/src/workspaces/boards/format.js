@@ -12,17 +12,32 @@
  * one to the other's formatter is off by a hundred in whichever direction
  * hurts, so they are named for what they take.
  */
-const USD = new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
-});
 
+import { formatMinorOrCount } from '../../lib/money.js';
 const isNum = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
 
 /** A REAL-dollar column (`quotes.price`, `founder_needs.budget_*`). */
-export const usd = (dollars) => (isNum(dollars) ? USD.format(Number(dollars)) : null);
+export const usd = (dollars) => (isNum(dollars) ? new Intl.NumberFormat('en-US', {
+  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+}).format(Number(dollars)) : null);
 
-/** An integer-cents column. */
-export const usdCents = (cents) => (isNum(cents) ? USD.format(Number(cents) / 100) : null);
+/**
+ * An integer-cents column in its OWN currency, exactly (D4674): whole amounts
+ * drop the cents, anything else keeps both, so CHF 123.45 reads "CHF 123.45" on
+ * every board and never "$123". An absent value is null, never a zero. A currency
+ * code the runtime does not know falls back to the code beside the amount.
+ */
+export function moneyCents(cents, currency = 'USD') {
+  if (!isNum(cents)) return null;
+  const n = Number(cents);
+  const code = String(currency || 'USD').toUpperCase();
+  // D5373: at the currency's own decimals; a code that is not a listed currency names the stored count.
+  // Intl puts a no-break space between a code and the amount ("CHF 123.45").
+  return formatMinorOrCount(n, code, { locale: 'en-US', trimWhole: true }).replace(/\u00a0/g, ' ');
+}
+
+/** An integer-cents column that is always US dollars. */
+export const usdCents = (cents) => moneyCents(cents, 'USD');
 
 /** A budget range, either end of which may be missing. */
 export function budget(min, max) {

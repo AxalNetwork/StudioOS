@@ -7,6 +7,7 @@ import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import { useViewAsBranch } from '../../contexts/ViewAsBranchContext';
 import HqBranchOverlay from './HqBranchOverlay';
+import { registryUnreadable } from './hqTeamBranchModel';
 import { revenueAbsenceForLicence } from '../../lib/hqRevenuePerSub';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import MyTasks from '../work/MyTasks.jsx';
@@ -85,7 +86,10 @@ const plural = (count, one, many) => (count === 1 ? one : many);
  * this Worker set is at least as likely an explanation as anything at the far
  * end.
  */
-const branchReason = (b, what) => {
+const branchReason = (b, what, registryDown = false) => {
+  // D5374 — with the registry unreadable, "no branch for this licence" is not known: it is only
+  // known that HQ could not look. The sentence for an empty registry needs a registry that was read.
+  if (!b && registryDown) return `HQ could not read its deployment registry, so whether this licence has a branch is not established and its ${what} is unknown, not zero.`;
   if (!b) return `No branch is deployed for this licence, so there is no ${what} to read.`;
   if (b.status === 'not_deployed') return b.reason || `This licence has no branch binding yet, so its ${what} cannot be read.`;
   if (b.status === 'unreadable') return b.reason || `This branch did not answer in time, so its ${what} is unknown rather than zero.`;
@@ -164,6 +168,9 @@ export default function HqHomePage() {
   // D149 (`revenue_share_bps`, on the row and thrown away).
   const branches = ready ? data.branches || [] : [];
   const branchCoverage = ready ? data.branches_coverage || null : null;
+  // D5374 — `registry_available: false` is "HQ could not read the deployment registry", which is
+  // not "no branch is deployed". An older payload without the field makes no claim either way.
+  const registryDown = ready && registryUnreadable(data);
   const usageCoverage = ready ? data.usage_coverage || null : null;
   // Keyed on `licence_uid`, which is the ONLY join between the two (migration
   // 258). A branch with no deployment row behind it is absent from this map
@@ -178,6 +185,12 @@ export default function HqHomePage() {
   /** Seats used summed from branch reads — the fan-out HQ Home already receives (D150). */
   const seatsUtilised = useMemo(() => {
     if (!ready) return { value: null, reason: null };
+    if (!branches.length && registryDown) {
+      return {
+        value: null,
+        reason: 'The deployment registry could not be read, so which branches exist is not established and seat utilisation cannot be summed.',
+      };
+    }
     if (!branches.length) {
       return {
         value: null,
@@ -206,14 +219,23 @@ export default function HqHomePage() {
         reason: `Summed over ${answered} ${answered === 1 ? 'branch' : 'branches'} that answered; ${silent} did not, so this is not a complete total.`,
       };
     }
+    if (registryDown) {
+      return {
+        value: sum,
+        reason: `Summed over ${answered} ${answered === 1 ? 'branch' : 'branches'} that answered; the deployment registry could not be read, so other branches may exist and this is not a complete total.`,
+      };
+    }
     return { value: sum, reason: null };
-  }, [ready, branches]);
+  }, [ready, branches, registryDown]);
 
   // The sentence H13 rule 3 requires, derived rather than typed. Three states,
   // and the middle one is the whole point: a branch that did not answer is
   // NAMED, because a total that quietly drops one is worse than no total.
   const branchLine = (() => {
     const c = branchCoverage;
+    if (registryDown) {
+      return 'Deployment registry: unreadable, so the set of branches is not established and no branch total here is complete';
+    }
     if (!c || !num(c.total)) {
       return 'No branch is deployed, so every figure above is HQ\'s own database.';
     }
@@ -378,6 +400,15 @@ export default function HqHomePage() {
         </header>
 
         {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The HQ overview" claim="This is not a claim that none exist." onRetry={load} /></div>}
+        {registryDown && (
+          <div className="mt-4" data-testid="hq-home-registry-unreadable">
+            <Unreadable
+              what="HQ's deployment registry"
+              claim={`${data.registry_reason || 'The set of provisioned branches is not established.'} This is not a claim that no branch is deployed, and branch figures below are not a complete total.`}
+              onRetry={load}
+            />
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
           {/* D210 — H15 is reached from here. Its own nav lights Home, and the HQ
@@ -500,7 +531,7 @@ export default function HqHomePage() {
                       <dd className="mt-0.5 font-bold tabular-nums">
                         {live && num(live.accounts?.total) !== null
                           ? num(live.accounts.total)
-                          : <Unrecorded reason={branchReason(b, 'account')} />}
+                          : <Unrecorded reason={branchReason(b, 'account', registryDown)} />}
                       </dd>
                     </div>
                     <div>
@@ -512,7 +543,7 @@ export default function HqHomePage() {
                             consumer has to handle both. */}
                         {live && num(live.seats_used) !== null
                           ? num(live.seats_used)
-                          : <Unrecorded reason={live?.seats_used_reason || branchReason(b, 'seat count')} />}
+                          : <Unrecorded reason={live?.seats_used_reason || branchReason(b, 'seat count', registryDown)} />}
                       </dd>
                     </div>
                     <div className="col-span-2">
@@ -533,7 +564,7 @@ export default function HqHomePage() {
                               {live.backlog.oldest_at ? ` · oldest ${day(live.backlog.oldest_at)}` : ''}
                             </>
                           )
-                          : <Unrecorded reason={live?.backlog_reason || branchReason(b, 'backlog')} />}
+                          : <Unrecorded reason={live?.backlog_reason || branchReason(b, 'backlog', registryDown)} />}
                       </dd>
                     </div>
                   </dl>

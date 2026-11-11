@@ -527,7 +527,10 @@ test('D263 drill: the marker is read from exactly drill-d1.json', async () => {
   assert.deepEqual(keys, ['drill-d1.json']);
 });
 
-test('D263 drill: no binding, a throw, bad JSON and an unknown outcome are all unreadable — never never_run', async () => {
+// D4691 split this one state in two: nothing read is `unreadable`, something
+// read that is not a drill marker is `invalid`. Both are `available: false`,
+// and neither is ever never_run.
+test('D263 drill: no binding and a throw are unreadable; bad JSON and an unknown outcome are invalid — never never_run', async () => {
   const unbound = await readRestoreDrill({} as any) as any;
   assert.deepEqual([unbound.available, unbound.state], [false, 'unreadable']);
   assert.match(unbound.reason, /BACKUPS/);
@@ -537,13 +540,13 @@ test('D263 drill: no binding, a throw, bad JSON and an unknown outcome are all u
   assert.match(threw.reason, /r2 down/);
 
   const bad = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': '{not json' }) } as any) as any;
-  assert.deepEqual([bad.available, bad.state], [false, 'unreadable']);
+  assert.deepEqual([bad.available, bad.state], [false, 'invalid']);
 
   const notObject = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': [1, 2] }) } as any) as any;
-  assert.deepEqual([notObject.available, notObject.state], [false, 'unreadable']);
+  assert.deepEqual([notObject.available, notObject.state], [false, 'invalid']);
 
   const odd = await readRestoreDrill({ BACKUPS: bucketWith({ 'drill-d1.json': { ...MARKER_PASSED, outcome: 'green' } }) } as any) as any;
-  assert.deepEqual([odd.available, odd.state], [false, 'unreadable']);
+  assert.deepEqual([odd.available, odd.state], [false, 'invalid']);
   assert.match(odd.reason, /"green"/);
 });
 
@@ -612,6 +615,52 @@ test('D263 /overview: a green heartbeat beside a failed drill marker reports the
   assert.equal(r.body.backup_dr.backup.available, true);
   assert.equal(r.body.backup_dr.drill.state, 'last_run_failed', 'the drill was inferred from the backup half');
   assert.deepEqual([r.body.backup_dr.drill.step, r.body.backup_dr.drill.exit_code], ['restore', 2]);
+});
+
+test('D5317 /overview keeps drill history independent and returns actual runs newest first', async () => {
+  const db = freshDb({ extra: ['sanctions_screenings'] });
+  const old = 'drill-d1-history/old';
+  const recent = 'drill-d1-history/recent';
+  const evidence = bucketWith({
+    [old]: { ...MARKER_PASSED, at: '2026-09-01T00:00:00Z', run_id: '101' },
+    [recent]: { ...MARKER_FAILED, at: '2026-09-02T00:00:00Z', run_id: '102', reason: 'restore_failed' },
+    'drill-d1.json': MARKER_FAILED,
+  });
+  const empty = await overview(db, { BACKUPS: { ...evidence, list: async () => ({ objects: [], truncated: false }) } });
+  assert.deepEqual(empty.body.backup_dr.drill_history, { available: true, rows: [] });
+  const unreadable = await overview(db, { BACKUPS: { ...evidence, list: async () => { throw Error('R2'); } } });
+  assert.equal(unreadable.body.backup_dr.drill_history.available, false);
+  assert.ok(!('rows' in unreadable.body.backup_dr.drill_history));
+  assert.equal(unreadable.body.backup_dr.drill.state, 'last_run_failed');
+  const recorded = await overview(db, { BACKUPS: { ...evidence, list: async () => ({
+    objects: [{ key: recent, size: 100 }, { key: old, size: 100 }], truncated: false,
+  }) } });
+  const history = recorded.body.backup_dr.drill_history;
+  assert.equal(history.available, true);
+  assert.deepEqual(history.rows.map((row: any) => [row.run_id, row.outcome]), [['102', 'failed'], ['101', 'passed']]);
+  assert.deepEqual([history.rows[0].step, history.rows[0].exit_code, history.rows[0].reason], ['restore', 2, 'restore_failed']);
+
+  // Pruning can remove an object after list() has returned it. Other object
+  // reads can fail independently as well.
+  const failedKeys = ['pruned', 'unreadable', 'invalid', 'oversized'].map((key) => `drill-d1-history/${key}`);
+  const failedRows = failedKeys.map((key, i) => ({ key, size: i === 3 ? 16_385 : 100 }));
+  const mixedBucket = bucketWith({
+    [recent]: { ...MARKER_FAILED, run_id: '102' },
+    [failedKeys[1]]: new Error('R2 read failed'),
+    [failedKeys[2]]: '{invalid',
+    [failedKeys[3]]: MARKER_PASSED,
+  });
+  const mixed = await overview(db, { BACKUPS: { ...mixedBucket, list: async () => ({
+    objects: [...failedRows, { key: recent, size: 100 }], truncated: false,
+  }) } });
+  assert.equal(mixed.body.backup_dr.drill_history.available, true);
+  assert.equal(mixed.body.backup_dr.drill_history.partial, true);
+  assert.deepEqual(mixed.body.backup_dr.drill_history.rows.map((row: any) => row.run_id), ['102']);
+  const allFailed = await overview(db, { BACKUPS: { ...mixedBucket, list: async () => ({
+    objects: failedRows, truncated: false,
+  }) } });
+  assert.equal(allFailed.body.backup_dr.drill_history.available, false);
+  assert.ok(!('rows' in allFailed.body.backup_dr.drill_history));
 });
 
 test('/overview on a database without 282: the ledger is unreadable with its reason — never 0 today', async () => {

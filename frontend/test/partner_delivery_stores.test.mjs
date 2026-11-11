@@ -189,6 +189,18 @@ const KNOWN_DUPLICATE_NUMBERS = {
   '229': ['229_fit_rule_signal.sql', '229_research_market_directory.sql'],
   '230': ['230_partner_capacity.sql', '230_research_fund_reports.sql'],
   '259': ['259_hq_escalations.sql', '259_licence_contracts.sql'],
+  // #4970 (D4675) and #4991 (D4691) each stamped a migration 2026-11-07 22:19
+  // UTC and merged an hour apart. Both are on main, touch different tables, and
+  // are applied; renaming either would edit an applied migration and apply it
+  // again (D269). The same pair is LEGACY_DUPLICATE_STAMPS in
+  // scripts/lib/migrationPlan.mjs.
+  '202611072219': ['202611072219_dsr_close_key.sql', '202611072219_security_events_support_actor.sql'],
+  // #5261 (D5157) and #5273 (D4613) each stamped a migration 2026-11-09 20:35
+  // UTC and merged four minutes apart: research_projects and research_funds'
+  // catalogue_uid, different tables. Both are on main; renaming either would
+  // edit a migration on main (D269). The same pair is in LEGACY_DUPLICATE_STAMPS
+  // in scripts/lib/migrationPlan.mjs.
+  '202611092035': ['202611092035_research_fund_catalogue_uid.sql', '202611092035_research_projects.sql'],
 };
 
 test('the migration numbers are free and in order', () => {

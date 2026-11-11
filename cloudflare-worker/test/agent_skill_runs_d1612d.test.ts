@@ -42,10 +42,12 @@ function world() {
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
     + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
   // The migration under test, over the AI log schema's ai_usage_logs.
   db.exec(sql('migrations/202611022313_agent_skill_runs.sql'));
+  db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Eve Editor', 'founder', 100, 'growth');
@@ -144,6 +146,57 @@ test('D1612 D: the starter cases ship with their skills and pass the case check'
   assert.equal(starterCase('no-such-skill'), null);
 });
 
+test('D5334: a live copy replaces the starter run by content, while a different live case still runs', async () => {
+  const w = world();
+  const starter = starterCase('board-meeting-brief')!;
+  const insert = w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by)
+    VALUES (?, 1, ?, ?, ?, ?)`);
+  insert.run('case-same-content', 'The seeded display name is different', JSON.stringify(starter.input), JSON.stringify(starter.expect), SUPER);
+  insert.run('case-different-content', 'A genuinely different case', JSON.stringify({ records: { 'mercury.balances': { cash_usd: 1 } } }),
+    JSON.stringify({ output: 'brief', must_include: ['cash'], must_say_not_recorded: [], must_not_include: [] }), SUPER);
+
+  const cases = await casesOf(w.env, { id: 1, slug: 'board-meeting-brief' });
+  // Mutation checked: treating the display name as content puts `starter` back and makes this three cases.
+  assert.deepEqual(cases.map((c) => c.key), ['case-same-content', 'case-different-content']);
+  const seen: string[] = [];
+  const deps = {
+    runCase: async (_env: any, _parts: any, _input: any, expect: any, model: string) => {
+      seen.push(`${expect.must_include.includes('cash') ? 'different' : 'starter-content'}|${model}`);
+      return { result: 'pass', detail: null, usage_log_id: null };
+    },
+    tellHq: async () => 1,
+  };
+  w.env.RATE_LIMITS = { get: async () => null, put: async () => {} };
+  const models = [RUN_MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+  const result = await evaluatePublished(w.env, SUPER, models, deps as any, 1);
+  assert.deepEqual([result.skills, result.results, seen.length], [1, 4, 4], 'two distinct contents, once per model');
+  assert.equal(seen.filter((unit) => unit.startsWith('starter-content|')).length, 2, 'the duplicated starter content ran only once per model');
+  const [board] = await skillBoard(w.env, [1]);
+  assert.deepEqual([board.pass, board.total, board.not_run], [4, 4, 0], 'the board counts each content/model once');
+});
+
+test('D5334: a pass on v1 followed by a fail on v2 is compare evidence, not a v2 regression alert', async () => {
+  const w = world();
+  const starter = starterCase('board-meeting-brief')!;
+  const { caseSha } = await import('../src/services/agents/skillLifecycle.ts');
+  const { compareResults } = await import('../src/services/agents/skillEvalCompare.ts');
+  w.db.prepare(`INSERT INTO agent_skill_version_evals
+      (skill_id, version, case_key, case_name, model_id, result, run_by, evaluator_version, case_sha256)
+      VALUES (1, 1, ?, ?, ?, 'pass', ?, 3, ?)`)
+    .run(starter.key, starter.name, RUN_MODEL, SUPER, await caseSha(starter));
+  const told: any[] = [];
+  w.env.RATE_LIMITS = { get: async () => null, put: async () => {} };
+  const result = await evaluatePublished(w.env, SUPER, [RUN_MODEL], {
+    runCase: async () => ({ result: 'fail', detail: 'It left out the required fact.', usage_log_id: null }),
+    tellHq: async (_env: any, notice: any) => { told.push(notice); return 1; },
+  } as any, 1);
+  // Mutation checked: dropping `version = ?` from the before-read turns this into a regression and sends a notice.
+  assert.deepEqual([result.regressions.length, told.length], [0, 0]);
+  const rows = w.db.prepare(`SELECT case_key, case_name, case_sha256, model_id, result, evaluator_version, detail, run_at
+    FROM agent_skill_version_evals WHERE skill_id = 1 ORDER BY version`).all() as any[];
+  assert.equal(compareResults([rows[0]], [rows[1]]).pairs[0].outcome, 'regressed', 'the explicit candidate-versus-baseline read still reports the difference');
+});
+
 test('D1612 D: the board runs each published Axal skill\'s cases on its current version; a pass turned fail is a regression, told once', async () => {
   const w = world();
   w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by) VALUES ('case-live-1', 1, 'Live case', ?, ?, ?)`)
@@ -196,4 +249,110 @@ test('D1612 D: the board runs each published Axal skill\'s cases on its current 
   fail.run(SUPER); fail.run(SUPER);
   assert.deepEqual((await skillBoard(w.env, [2]))[0].regressed, []);
   assert.deepEqual(await skillBoard(w.env, []), []);
+});
+
+test('#4531: the published evaluation judges through the same rule; the demonstrated runway output fails and is recorded', async () => {
+  const w = world();
+  const { EVAL_DEPS } = await import('../src/services/agents/skillLifecycle.ts');
+  const real = EVAL_DEPS.run;
+  let says = 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway is 12 months. Churn is Not recorded.';
+  EVAL_DEPS.run = async () => ({ ok: true, output: says, usageLogId: null }) as any;
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  try {
+    // The board-meeting-brief starter case (`skills/cases/board-meeting-brief.json`) on its current version.
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq: async () => 1 } as any, 1);
+    const row = () => w.db.prepare("SELECT result, detail FROM agent_skill_version_evals WHERE skill_id = 1 AND case_key = ? ORDER BY id DESC LIMIT 1").get(STARTER_KEY) as any;
+    // Mutation checked: the published path given its own phrase judge → this passes and the test fails.
+    assert.deepEqual([row().result, row().detail], ['fail', 'It did not say runway is not recorded.']);
+    says = 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway: Not recorded.';
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq: async () => 1 } as any, 1);
+    assert.equal(row().result, 'pass');
+  } finally { EVAL_DEPS.run = real; }
+});
+
+test('#4531 slice 2: the published evaluation judges the new assertions; a passing output that starts breaking one is a regression, told once', async () => {
+  const w = world();
+  const expect = {
+    output: 'brief', must_include: ['500000'], must_say_not_recorded: [], must_not_include: [],
+    structure: { sections: ['Cash', 'Runway'] }, evidence: { cite: ['mercury.balances'] },
+    refusal: { mode: 'not_recorded', subject: 'runway' }, claims: { required: [{ subject: 'cash', object: 'recorded' }], forbidden: [] },
+  };
+  w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by) VALUES ('case-structured', 1, 'Structured case', ?, ?, ?)`)
+    .run(JSON.stringify({ records: { 'mercury.balances': { cash_usd: 500000 } } }), JSON.stringify(expect), SUPER);
+  const live = (await casesOf(w.env, { id: 1, slug: 'board-meeting-brief' })).find((c) => c.key === 'case-structured')!;
+  // Mutation checked: `checkCase` dropping the slice-2 keys → the board judges phrases only, the second run passes and this fails.
+  assert.deepEqual(live.expect.structure, expect.structure);
+  const { EVAL_DEPS } = await import('../src/services/agents/skillLifecycle.ts');
+  const real = EVAL_DEPS.run;
+  let says = '## Cash\nCash of 500000 is recorded [mercury.balances].\n## Runway\nRunway: Not recorded';
+  EVAL_DEPS.run = async () => ({ ok: true, output: says, usageLogId: null }) as any;
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  const told: any[] = [];
+  const tellHq = async (_env: any, n: any) => { told.push(n); return 1; };
+  const row = () => w.db.prepare("SELECT result, detail FROM agent_skill_version_evals WHERE skill_id = 1 AND case_key = 'case-structured' ORDER BY id DESC LIMIT 1").get() as any;
+  try {
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    // Mutation checked: the published path judging without the case's input → the citation cannot resolve and this fails.
+    assert.deepEqual([row().result, row().detail], ['pass', null]);
+    // The same phrases, but the citation now names a record the case does not hold.
+    says = says.replace('[mercury.balances]', '[mercury.transactions]');
+    const second = await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    assert.deepEqual([row().result, row().detail], ['fail', "It cited [mercury.transactions], which the case's records do not hold."]);
+    assert.deepEqual(second.regressions.filter((r) => r.case === 'Structured case').map((r) => [r.version, r.model]), [[2, RUN_MODEL]]);
+    const notices = () => told.filter((n) => n.body.startsWith('Structured case'));
+    assert.equal(notices().length, 1);
+    assert.match(notices()[0].body, /It cited \[mercury\.transactions\]/);
+    // Still failing, on another assertion: no second notice for the same skill, version, case and model.
+    says = '## Cash\nCash of 500000 is recorded [mercury.balances].\nRunway is 3 months.';
+    await evaluatePublished(w.env, SUPER, [RUN_MODEL], { tellHq } as any, 1);
+    assert.deepEqual([row().result, row().detail], ['fail', 'It has no "Runway" section.']);
+    assert.equal(notices().length, 1, 'told once');
+  } finally { EVAL_DEPS.run = real; }
+});
+
+test('#4531 slice 3: each published result names the evaluator and the case text it ran, and the report tells a changed case from a regression', async () => {
+  const { EVALUATOR, caseSha } = await import('../src/services/agents/skillLifecycle.ts');
+  const { compareResults } = await import('../src/services/agents/skillEvalCompare.ts');
+  const w = world();
+  let result: 'pass' | 'fail' = 'pass';
+  const deps = { runCase: async () => ({ result, detail: result === 'fail' ? 'It left out "37".' : null, usage_log_id: null }), tellHq: async () => 1 };
+  const kv = new Map<string, string>();
+  w.env.RATE_LIMITS = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => { kv.set(k, v); } };
+  await evaluatePublished(w.env, SUPER, [RUN_MODEL], deps as any, 1);
+  const rows = () => w.db.prepare('SELECT case_key, case_name, case_sha256, model_id, result, evaluator_version, detail, run_at FROM agent_skill_version_evals WHERE skill_id = 1 ORDER BY id').all() as any[];
+  const first = rows();
+  // Mutation checked: EVAL_INSERT without the two columns → both null and this fails.
+  assert.equal(first[0].evaluator_version, EVALUATOR.version);
+  assert.equal(first[0].case_sha256, await caseSha(starterCase('board-meeting-brief')!), 'the starter case as checked and run');
+  // The same case and evaluator, a pass then a fail: a regression.
+  result = 'fail';
+  await evaluatePublished(w.env, SUPER, [RUN_MODEL], deps as any, 1);
+  const second = rows();
+  assert.deepEqual(compareResults([second[0]], [second[1]]).regressions.map((p) => p.case_key), [STARTER_KEY]);
+  // The same key with other text (a starter case shipped anew) is a changed case, not a regression.
+  // Mutation checked: `pairOutcome` without the case check → this reads `regressed` and fails.
+  assert.equal(compareResults([second[0]], [{ ...second[1], case_sha256: 'c'.repeat(64) }]).pairs[0].outcome, 'case_changed');
+  // A row from before migration 202611090905 records neither, and is never read as matching.
+  w.db.prepare("UPDATE agent_skill_version_evals SET evaluator_version = NULL, case_sha256 = NULL WHERE id = (SELECT MIN(id) FROM agent_skill_version_evals)").run();
+  assert.equal(compareResults([rows()[0]], [rows()[1]]).pairs[0].outcome, 'not_recorded');
+});
+
+test('D4533 step 5: a newer version and a retirement move no pin; the run still reads the pinned version', async () => {
+  const w = world();
+  // A recovery published v3 (v1's definition under a new number), then HQ retired the skill. The agent was never re-pinned.
+  w.db.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by)
+    VALUES (1, 3, 'md', 'Board meeting brief v3', 'From recorded figures, a runway note.', ?, '["mercury.read"]', 'brief', '[]', '["cfo"]', ?)`).run(JSON.stringify(['A restored step under v3']), SUPER);
+  w.db.prepare("UPDATE agent_skills SET current_version = 3, status = 'retired' WHERE id = 1").run();
+  const r = await agentRun(w.env, { agent: agent(w), ...STEP, skill: SKILL_UID });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const sys = w.prompts.join('\n');
+  // Mutation checked: the skill read at `current_version` → v3's step is in the turn and these fail.
+  assert.match(sys, /\(version 1\)/);
+  assert.doesNotMatch(sys, /A restored step under v3|A newer step/);
+  const rows = w.db.prepare('SELECT skill_version FROM ai_usage_logs WHERE skill_id = 1').all() as any[];
+  assert.ok(rows.length >= 1);
+  assert.ok(rows.every((x) => x.skill_version === 1));
+  assert.equal((w.db.prepare('SELECT version FROM agent_skill_links WHERE agent_id = 1 AND skill_id = 1').get() as any).version, 1);
 });

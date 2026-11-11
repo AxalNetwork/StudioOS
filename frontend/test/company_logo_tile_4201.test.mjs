@@ -73,14 +73,13 @@ test('the form saves the logo with its one Save, before the fields, and the prev
   const src = read('pages/account/companies/CompanyGeneralForm.jsx');
   assert.match(src, /const dirty = Object\.keys\(patch\)\.length > 0 \|\| logo !== null;/, 'a held logo makes the form dirty');
   const save = src.slice(src.indexOf('const onSave'), src.indexOf('if (state.status === \'loading\')'));
-  const upload = save.indexOf('logoApi.upload(uid, logo.upload)');
-  const remove = save.indexOf('logoApi.remove(uid)');
-  const fields = save.indexOf('api.updateCompany(uid, patch)');
-  assert.ok(upload > 0 && remove > 0 && fields > upload && fields > remove, 'the logo first, then the fields');
-  assert.match(save, /if \(Object\.keys\(patch\)\.length\) updated = await api\.updateCompany/, 'no empty PATCH for a logo-only change');
+  // D4961: one request commits the logo and the fields. #4963: it carries the version the form loaded.
+  assert.match(save, /logoApi\.saveSettings\(uid, intent\)/, 'the logo and the fields commit in one request');
+  assert.match(save, /expectedVersion: versionOf\(baseline\)/, 'the save names the version it loaded');
+  assert.doesNotMatch(save, /logoApi\.upload|logoApi\.remove|api\.updateCompany/, 'no separate logo-then-fields writes');
   assert.match(src, /const why = logoProblem\(file\);\s*setLogoError\(why\);\s*if \(why\) return;/, 'a bad file is never held');
   assert.match(src, /<CompanyMark name=\{name\} size=\{28\} logoUrl=\{shownLogo\(row, logo\)\} \/>/, 'the preview shows what will be saved');
-  assert.match(src, /setForm\(formOf\(row\)\); holdLogo\(null\);/, 'Discard drops the held logo too');
+  assert.match(src, /holdLogo\(null\)/, 'Discard drops the held logo too');
   assert.match(src, /unsavedLine\(patch, logo\)/);
   assert.doesNotMatch(read('pages/account/companies/generalFormModel.js'), /'logo_url'/, 'still no logo URL field');
 });

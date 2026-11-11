@@ -38,6 +38,18 @@ export function personOfRecord(cycle, slug, recordId) {
   return spec.id.test(id) ? `${spec.kind}:${id}` : null;
 }
 
+/**
+ * #4660 (finding 4): the one person-reference contract between a record's
+ * Email action and `RecordEmailSheet`. A person ref is the string
+ * `personOfRecord` returns (`kind:id`, e.g. `interviewee:11`); `EmailAction`,
+ * `emailHref` and the Sheet all take that string, never an object. This says
+ * whether a value is one, so the Sheet never asks the Worker about
+ * `undefined`.
+ */
+export function isPersonRef(value) {
+  return typeof value === 'string' && /^[a-z][a-z_]{0,30}:[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+}
+
 /** `/email` opened on one person, from a record (EM4b): the person and where the composer was opened from. */
 export function emailHref(ref, from = null) {
   const q = new URLSearchParams({ person: ref, compose: '1' });
@@ -125,6 +137,11 @@ export function draftHoldLine(estimate) {
   return costLine(n);
 }
 export const HOLD_READING = 'Reading what this draft holds…';
+/** D4666: a revision's own hold, in the words of the button it belongs to. */
+export function reviseHoldLine(label, estimate) {
+  const hold = aiTokens(estimate?.hold_microusd);
+  return hold ? `${label} · holds up to ${hold} in AI tokens. Nothing is charged until you press ${label}.` : null;
+}
 
 /** The field trigger shows on a blank Body only, and never for a reader (#4017). */
 export const showBodyTrigger = ({ body, readOnly = false, open = false } = {}) => !readOnly && !open && bodyText(body) === '';
@@ -165,23 +182,104 @@ export function networkCard(share) {
 
 /**
  * The People pane for a founder (D1344): their Network matches, and every
- * person they have a draft for, newest first. The other profiles' groups are
- * the Worker's (`GET /api/mail/people`, D1348) once it lands.
+ * person they have a draft for, newest first. The page draws the profile's
+ * own groups from `GET /api/mail/people` since D4664 (`peoplePane`); this
+ * stays as the founder's draft-and-share projection.
  */
 export function founderPeople({ drafts = [], shares = [] } = {}) {
+  const groups = [];
+  const recent = recentDrafts(drafts);
+  if (recent) groups.push(recent);
+  const matches = shares.map((s) => ({ ref: s.person, name: s.name, source: `Network · accepted ${day(s.matched_at) ?? 'on a day not recorded'}`, last: day(s.matched_at), share: s }));
+  if (matches.length) groups.push({ key: 'network', label: 'Network matches', people: matches, empty: null, error: null });
+  return groups;
+}
+
+/** "Your drafts": one row per record person the member has a draft for, newest first; null when there is none. A Network match is never here. */
+export function recentDrafts(drafts = []) {
   const seen = new Set();
   const recent = [];
-  for (const d of drafts) {
+  for (const d of Array.isArray(drafts) ? drafts : []) {
     const ref = d?.person;
     if (!ref || seen.has(ref) || ref.startsWith('member:')) continue;
     seen.add(ref);
     recent.push({ ref, name: draftName(d), source: `From ${MODULE_OF_KIND[ref.split(':')[0]] ?? 'a record'}`, last: day(d.created_at) });
   }
-  const matches = shares.map((s) => ({ ref: s.person, name: s.name, source: `Network · accepted ${day(s.matched_at) ?? 'on a day not recorded'}`, last: day(s.matched_at), share: s }));
-  const groups = [];
-  if (recent.length) groups.push({ key: 'recent', label: 'Your drafts', people: recent });
-  if (matches.length) groups.push({ key: 'network', label: 'Network matches', people: matches });
-  return groups;
+  return recent.length ? { key: 'recent', label: 'Your drafts', people: recent, empty: null, error: null } : null;
+}
+
+/**
+ * D4664 (#4664, finding 8): each profile's "No people yet", in its own words
+ * and with a door that profile can open. Only a founder is sent to Customer
+ * research; an explorer, who has no module of their own, gets no door.
+ */
+const NO_PEOPLE = Object.freeze({
+  founder: { line: 'People appear here as you record interviews, add investors to your pipeline or accept Network matches.', action: 'Open Customer research', href: '/validate/customer-research' },
+  investor: { line: 'People appear here from your deal flow, your portfolio, your co-investors and your Network matches.', action: 'Open Network', href: '/network' },
+  advisor: { line: 'People appear here from your client sessions, your cohort founders and your Network matches.', action: 'Open your clients', href: '/advisor/advisory/clients' },
+  partner: { line: 'People appear here from your engagements, your leads and your Network matches.', action: 'Open Network', href: '/network' },
+  admin: { line: 'People appear here once you hold a case: an application you scheduled or decided, or a support ticket assigned to you.', action: 'Open Spin-Out Lab applications', href: '/admin/programs/spinout-lab/applications' },
+  explorer: { line: 'Your Network matches appear here once you and another member both accept an introduction.', action: null, href: null },
+});
+
+/** The "No people yet" card for a profile: `{ title, line, action, href }`. An unknown profile gets no door. */
+export function noPeopleState(profile) {
+  const own = NO_PEOPLE[profile] ?? { line: 'People appear here as you work with them.', action: null, href: null };
+  return { title: 'No people yet', ...own };
+}
+
+/** One server row (`GET /api/mail/people`) as the pane draws it: the source, the last contact day and the derived marker, as returned. */
+function paneRow(p) {
+  return { ref: p.ref, name: p.name, role: p.role ?? null, source: p.source, last: day(p.last_contact), marker: p.marker_label ?? null };
+}
+
+/**
+ * D4664 (#4664, finding 8): the People pane from the profile's own read.
+ * `people` is `{ status: 'reading' | 'ready' | 'unreadable', data }`, `data`
+ * being `GET /api/mail/people`'s body. The member's recent drafts lead, as a
+ * section of their own; they never stand in for the profile's read.
+ *
+ *   · each server group keeps its own state: rows, its own `empty` line, or
+ *     its own `error`. A failed group never erases a healthy one, and is
+ *     never drawn as empty;
+ *   · `none` is true only when the read answered, no group failed and no
+ *     group (nor the drafts) has anyone: the one time "No people yet" is true.
+ */
+export function peoplePane({ drafts = [], people = { status: 'reading', data: null } } = {}) {
+  const recent = recentDrafts(drafts);
+  const ready = people?.status === 'ready';
+  const server = ready && Array.isArray(people.data?.groups) ? people.data.groups : [];
+  const groups = server.map((g) => ({
+    key: g.key, label: g.label,
+    people: g.error ? [] : (Array.isArray(g.people) ? g.people : []).map(paneRow),
+    empty: g.error ? null : (g.empty ?? null),
+    error: g.error ? String(g.error) : null,
+  }));
+  return {
+    status: people?.status ?? 'reading',
+    profile: ready ? (people.data?.profile ?? null) : null,
+    note: ready ? (people.data?.note ?? null) : null,
+    prompt: ready ? (people.data?.empty ?? null) : null,
+    groups: recent ? [recent, ...groups] : groups,
+    none: ready && !recent && groups.every((g) => !g.error && g.people.length === 0),
+  };
+}
+
+/**
+ * D4664 (#4664, finding 10): what the page may say about one Network match's
+ * sharing. `read` is the shares read, `{ status: 'reading' | 'ready' |
+ * 'unreadable', items }`. Only a read that answered decides anything: while
+ * it reads, or after it failed, the state is unknown. Then there is no
+ * address and no composer, and never "they have not shared".
+ */
+export function shareStatus(read, personRef) {
+  if (read?.status === 'unreadable') return { known: false, state: 'unreadable', share: null };
+  if (read?.status !== 'ready') return { known: false, state: 'reading', share: null };
+  const share = (Array.isArray(read.items) ? read.items : []).find((s) => s.person === personRef) ?? null;
+  if (!share) return { known: true, state: 'none', share: null };
+  if (share.ready) return { known: true, state: 'ready', share };
+  if (share.mine === 'shared') return { known: true, state: 'waiting', share };
+  return { known: true, state: 'matched', share };
 }
 
 /** A draft's person, by name: its own record's label ("Customer research · Ada" → "Ada"), else the ref itself. */
@@ -208,4 +306,36 @@ export function pageLabel(page, perPage, total) {
 export function quotedLine(row) {
   const q = Array.isArray(row?.quoted) ? row.quoted : [];
   return `Quoted: ${q.length ? q.join(', ') : 'nothing'}`;
+}
+
+/**
+ * #4660 (part 3): the versions of the draft chain a stored draft belongs to, to
+ * reopen it in the composer: its ancestors by `parent_uid` (oldest first), the
+ * draft itself, then the latest revision of each step after it. `at` is the
+ * index of the draft that was opened. A draft whose parent is not in the list
+ * simply starts the chain; nothing is invented. Null when the uid is not in the
+ * list.
+ */
+export function draftChain(drafts, uid) {
+  const list = Array.isArray(drafts) ? drafts : [];
+  const byUid = new Map(list.map((d) => [d.uid, d]));
+  const chosen = byUid.get(uid);
+  if (!chosen) return null;
+  const before = [];
+  const seen = new Set([chosen.uid]);
+  for (let d = byUid.get(chosen.parent_uid); d && !seen.has(d.uid); d = byUid.get(d.parent_uid)) { before.unshift(d); seen.add(d.uid); }
+  const after = [];
+  for (let tip = chosen; ;) {
+    const kids = list.filter((d) => d.parent_uid === tip.uid && !seen.has(d.uid));
+    if (!kids.length) break;
+    const next = kids.reduce((a, b) => (String(b.created_at ?? '') >= String(a.created_at ?? '') ? b : a));
+    after.push(next); seen.add(next.uid); tip = next;
+  }
+  return { versions: [...before, chosen, ...after], at: before.length };
+}
+
+/** A stored draft as the conversation shows it: the member's own text when they saved one, else what Eadwyn wrote. */
+export function draftRowText(d) {
+  const e = d?.edit ?? null;
+  return { subject: e ? e.subject : (d?.subject ?? ''), body: e ? e.body : (d?.body ?? ''), edited: !!e };
 }

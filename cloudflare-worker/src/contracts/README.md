@@ -35,11 +35,13 @@ reply against its schema, not only that the route exists.
 | `deckReplaceImages.schema.json` | `POST /api/decks/:id/images/replace-all/quote` (D1561, #3808): every image area priced as one quote, the hold with one redraw each, the areas left out and why, or why it cannot run. |
 | `deckSource.schema.json` | `PUT /api/data-room/:projectUid/files/:uid/deck-source` (#3881): the public opt-in and extraction state, without internal job or billing fields. |
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
+| `deckSaveDoc.schema.json` | `PUT /api/decks/:id/draft-doc` (D4596, #4596): the working copy's deck-level state with its new revision. |
 | `deckSaveAsTemplate.schema.json` | `POST /api/decks/:id/save-as-template` (D1535, #3782): the template a deck was saved as. |
 | `deckSlideAnalytics.schema.json` | `GET /api/decks/:id/investor-links/:shareId/analytics` (D1573, #3820): one investor link's views, its Time per slide consent, seconds per card by uid, the most-read card and the visit timeline; missing is null, never 0. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
 | `deckUnseenBatches.schema.json` | `GET /api/decks/:id/batches?state=done&unseen=1` (D1600, #3879): the finished runs nobody opened, newest first, at most five, each with its count of cards waiting. |
 | `deckUsage.schema.json` | `GET /api/decks/:id/usage` (D1524, #3776): the deck's estimate, its spend from the ledger and the per-run unit prices; unread is `{ available: false }`, never 0. |
+| `deckDocumentImport.schema.json` | `POST /api/decks/imports` (D1563, #3810): what Start from › Import a document made — an outline from a paste, DOCX or PDF, or a .pptx deck's cards — with the venture's proposal it stored and the import's counts. |
 | `deckTemplateImport.schema.json` | `POST /api/decks/templates/import` (D1572, #3819): pd30's mapping report for a .pptx template: colours, fonts with their OFL stand-in, each layout on whole cells or with its reason, and the counts. |
 | `deckTemplates.schema.json` | `GET /api/decks/templates` (D1535, #3782): HQ's Gallery templates, filtered, with New deck's seven audiences. |
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |

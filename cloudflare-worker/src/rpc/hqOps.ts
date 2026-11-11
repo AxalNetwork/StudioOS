@@ -31,7 +31,7 @@ import type { Env } from '../types';
 import { branchOf, BRANCH_CODE_RE } from '../util/branch';
 import { PERIOD_RE } from '../services/statements';
 import { verifySecret } from './secret';
-import { assembleLicenceRecord } from '../services/licencePush';
+import { allocateRevision, assembleLicenceRecord } from '../services/licencePush';
 import { bandForRemaining, dueSoonWindowHours, SLA_DUE_SOON_HOURS } from '../services/slaWindow';
 import {
   CONCERN_KIND, parseRelation, BAD_RELATION, RELATION_NEEDS_ITEM, RELATION_NOT_FOR_KIND,
@@ -615,7 +615,12 @@ export async function licenceForBranch(
 
   // Stamped by HQ at the moment it asserts the content — the branch stores
   // this verbatim rather than the moment its own write lands.
-  return assembleLicenceRecord(env, row, new Date().toISOString());
+  // #4686 — numbered like a push, so a pulled copy cannot be mistaken for the
+  // same revision as a push carrying older content (the branch applies an equal
+  // revision again). Null when HQ has no revision store; the copy then goes
+  // unnumbered and the branch orders it by `pushed_at`, as before.
+  const revision = await allocateRevision(env, Number(row.id));
+  return assembleLicenceRecord(env, row, new Date().toISOString(), revision);
 }
 
 export type UsageFigure = {

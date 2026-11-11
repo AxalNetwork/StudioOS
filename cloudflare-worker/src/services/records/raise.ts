@@ -23,7 +23,7 @@ import { storedPmfChecklist } from '../scoring/pmfStore';
  * creator column (decision 12, `cycleActivity.ts`).
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
-import { activeGrant, dataRoomOwner, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { activeGrant, dataRoomOwner, projectNdaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
 import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
@@ -98,7 +98,7 @@ const refId = (raw: unknown): string | number => (typeof raw === 'number' || typ
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
   try { return await work(); } catch (err) {
     if (err instanceof WriterError) {
-      throw new Response(JSON.stringify({ detail: err.sentence }), { status: err.status, headers: { 'Content-Type': 'application/json' } });
+      throw new Response(JSON.stringify({ detail: err.sentence, ...(err.extra ?? {}) }), { status: err.status, headers: { 'Content-Type': 'application/json' } });
     }
     throw err;
   }
@@ -473,7 +473,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
  * Who can open the file now (decision 6): each active grant, confirmed by
  * `activeGrant`, whose investor the file's tier and expiry admit
  * (`tierAdmits`, with `investorCommitted` for a committed-only file), and,
- * for an `nda` file, only once that investor's NDA is live (`ndaActive`),
+ * for an `nda` file, only once that investor's NDA is live (`projectNdaActive`),
  * the gate `data_room.ts` applies. D1103 — and whose folders hold the file.
  */
 async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id: number; name: string | null }>> {
@@ -488,7 +488,8 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
     if (!grant) continue;
     const committed = f.access_tier === 'committed' ? await investorCommitted(rc.env, rc.projectId, investor) : false;
     if (!tierAdmits(f, committed, Date.now(), await grantFolderScope(rc.env, grant.id))) continue;
-    if (f.visibility === 'nda' && !(await ndaActive(rc.env, grant.granted_by_user_id, investor))) continue;
+    // D4631 part 2: the venture's NDA, by the shared rule, as the data room's own download gate reads it.
+    if (f.visibility === 'nda' && !(await projectNdaActive(rc.env, rc.projectId, investor))) continue;
     out.push({ id: investor, name: g.name });
   }
   return out;
@@ -797,6 +798,8 @@ function splitFields(f: Awaited<ReturnType<typeof loadFunds>> | undefined): Reco
 function splitBody(b: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of ['amount_to_raise_cents', 'runway_months']) if (k in b) out[k] = whole(b[k]);
+  // D5375: the Base revision the drawer was read at; the writer refuses a save without it.
+  if ('expected_revision' in b) out.expected_revision = whole(b.expected_revision);
   if (Array.isArray(b.sections)) return { ...out, sections: b.sections };
   out.sections = FUND_SECTIONS.filter((s) => `pct.${s.key}` in b).map((s) => ({
     key: s.key, pct: whole(b[`pct.${s.key}`]),
@@ -806,10 +809,22 @@ function splitBody(b: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/**
+ * D5069: the Base scenario's revision at the moment a form opens; Save split sends it back as `expected_revision`.
+ * No Base yet reads 0 (the first save creates it at 0). A store that cannot be read sends none, and the save says so.
+ */
+async function baseRevision(rc: RecordContext): Promise<number | null> {
+  try {
+    const r = await rc.env.DB.prepare('SELECT revision FROM uof_scenarios WHERE project_id = ? AND is_base = 1').bind(rc.projectId).first<{ revision: number | null }>();
+    return Number(r?.revision ?? 0);
+  } catch { return null; }
+}
+
 /** Edit split's sections with their current values (decision 9). */
 async function fundsOptions(rc: RecordContext) {
   const f = await loadFunds(ctxOf(rc));
   return {
+    revision: await baseRevision(rc),
     sections: FUND_SECTIONS.map((s, i) => {
       const cells = fundCells(f, i);
       const m = (f.milestones ?? {})[s.key] as { label?: unknown; by?: unknown } | undefined;
@@ -880,7 +895,7 @@ const funds = spec('use_of_funds', 'use-of-funds', async (rc, id) => {
       ],
     };
   }, { side: true }),
-], async (_rc, _id, record): Promise<RecordAction[]> => [
+], async (rc, _id, record): Promise<RecordAction[]> => [
   {
     key: 'add-hire', label: 'Add a hire', kind: 'form',
     form: { title: 'Add a hire', cta: 'Add hire', fields: [
@@ -897,6 +912,10 @@ const funds = spec('use_of_funds', 'use-of-funds', async (rc, id) => {
   {
     key: 'edit-split', label: 'Edit split', kind: 'form', tone: 'primary',
     form: { title: 'Edit split', sub: 'How the round is spent, by category. Each buys a milestone.', cta: 'Save split', fields: splitFields(loadedOf(record).f) },
+    // D5375: the Base revision this drawer was read at. The client sends it back with the form, so a save
+    // (an Eadwyn-worded milestone name included) made after another save is refused, not applied over it.
+    // Unreadable sends none, and the save is refused for want of one.
+    body: await baseRevision(rc).then((revision) => (revision === null ? {} : { expected_revision: revision })),
     execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await saveUseOfFunds(c.env, {
       projectId: c.projectId, userId: userId(c), body: splitBody(json(body)),
     }) })),

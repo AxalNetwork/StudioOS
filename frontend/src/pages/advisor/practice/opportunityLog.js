@@ -29,15 +29,24 @@ export const SYSTEM_CANCELS = new Set(['slot_cancelled', 'capacity_race']);
 /**
  * One booking's place in the decision log.
  *
- * @param {{status?: string, cancel_reason?: string|null, startsAt?: string|null}} view
+ * @param {{status?: string, cancel_reason?: string|null, startsAt?: string|null,
+ *          advisor_decision?: string|null, cancelled_by?: string|null}} view
  *   a booking already through `bookingView`.
  * @param {number} nowMs
- * @returns {'awaiting'|'accepted'|'declined'|'expired'|'withdrawn'}
+ * @returns {'awaiting'|'accepted'|'declined'|'expired'|'withdrawn'|'unrecorded'}
  *
  * `no_show` counts as ACCEPTED, because it is: the advisor said yes and the
  * session was booked. What happened at the session belongs to Engagements, and
  * the row carries the detail so the log does not quietly upgrade a no-show
  * into a clean accept.
+ *
+ * #4702 (D4702): THE ADVISOR'S ANSWER IS A FACT OF ITS OWN. `advisor_decision`
+ * records it when it is given, so a client cancelling an accepted session
+ * afterwards is still an ACCEPT (it was accepted), and a request the client
+ * withdrew before any answer is a withdrawal, not a decline. A cancelled row
+ * from before the answer was recorded, with no `advisor_decision` and no
+ * system reason, is `unrecorded`: it could be either, so it is left out of the
+ * rate rather than counted as a decline.
  */
 export function classifyBooking(view, nowMs) {
   const v = view || {};
@@ -49,7 +58,72 @@ export function classifyBooking(view, nowMs) {
   if (status === 'pending') return started ? 'expired' : 'awaiting';
   if (status === 'confirmed' || status === 'completed' || status === 'no_show') return 'accepted';
   if (status === 'cancelled') {
-    return SYSTEM_CANCELS.has(String(v.cancel_reason || '')) ? 'withdrawn' : 'declined';
+    if (v.advisor_decision === 'accepted') return 'accepted';
+    if (v.advisor_decision === 'declined') return 'declined';
+    if (SYSTEM_CANCELS.has(String(v.cancel_reason || '')) || v.cancelled_by === 'system' || v.cancelled_by === 'client') return 'withdrawn';
+    return 'unrecorded';
   }
   return 'withdrawn';
+}
+
+/**
+ * The advisor's acceptance rate: accepted of the requests they ANSWERED, as a
+ * whole percent, or null when none has been answered. Awaiting, expired,
+ * withdrawn and unrecorded rows are not answers; a later client cancellation of
+ * an accepted session does not make the accept a decline (`classifyBooking`).
+ */
+export function acceptanceRate(counts) {
+  const decided = Number(counts?.accepted ?? 0) + Number(counts?.declined ?? 0);
+  return decided > 0 ? Math.round((Number(counts.accepted) / decided) * 100) : null;
+}
+
+/**
+ * #4714 (D4714): WHEN A ROW IS DATED BY ITS DECISION, AND WHEN IT IS NOT.
+ * `advisor_decided_at` (D4702) is written when the advisor accepts or
+ * declines; `updated_at` moves on every later edit, billing included. A row
+ * shows "Decided" only from the first, and "Last changed" from the second.
+ *
+ * @param {{advisor_decided_at?: string|null, updated_at?: string|null}} raw
+ * @returns {{kind: 'decided'|'changed', at: string}|null}
+ */
+export function decisionMoment(raw) {
+  if (raw?.advisor_decided_at) return { kind: 'decided', at: String(raw.advisor_decided_at) };
+  if (raw?.updated_at) return { kind: 'changed', at: String(raw.updated_at) };
+  return null;
+}
+
+/**
+ * The median time from request to the advisor's answer, over the rows whose
+ * answer time is recorded. Rows answered before `advisor_decided_at` existed
+ * carry none, so the result says how many answers it covers out of how many
+ * were given; with none recorded the median is null, not zero.
+ *
+ * @param {Array<{created_at?: string|null, advisor_decision?: string|null, advisor_decided_at?: string|null}>} raws
+ * @returns {{ms: number|null, counted: number, answered: number}}
+ */
+export function medianDecision(raws) {
+  const spans = [];
+  let answered = 0;
+  for (const r of raws || []) {
+    if (r?.advisor_decision !== 'accepted' && r?.advisor_decision !== 'declined') continue;
+    answered += 1;
+    const from = Date.parse(String(r.created_at || ''));
+    const to = Date.parse(String(r.advisor_decided_at || ''));
+    if (Number.isFinite(from) && Number.isFinite(to) && to >= from) spans.push(to - from);
+  }
+  if (!spans.length) return { ms: null, counted: 0, answered };
+  spans.sort((a, b) => a - b);
+  const mid = Math.floor(spans.length / 2);
+  const ms = spans.length % 2 ? spans[mid] : Math.round((spans[mid - 1] + spans[mid]) / 2);
+  return { ms, counted: spans.length, answered };
+}
+
+/** A span as the tile says it: minutes under an hour, hours under two days, else days. */
+export function spanText(ms) {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  const min = ms / 60000;
+  if (min < 60) return `${Math.max(1, Math.round(min))} min`;
+  const h = min / 60;
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${Math.round(h / 24)} d`;
 }

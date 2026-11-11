@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Check, Timer, X } from 'lucide-react';
 import { Card, Pill, Stat, StatGrid, Unrecorded } from '../../ui';
 import { LearningLoading, LearningUnreadable, SectionCard, stateBlock } from './LearningStates';
+import { DRAFT_WORDS } from './learningDrafts';
+import { useLearningDraft } from './useLearningDraft';
+import { startFrom, useServerExamDraft } from './examServerDraft';
+import { saveExamDraft } from './assessmentReads';
 import { NOT_LIVE, attemptsLeft as attemptsLeftOf, byPosition, formatClock, formatDay, minutesLabel } from './learningModel';
 import {
-  answerIndexes, attemptOutcome, attemptSecondsLeft, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
+  answerIndexes, attemptOutcome, attemptSecondsLeft, isLearningPath, openAttemptOf, optionRows, perQuestionResults, revealedAnswers, reviewLine, reviewRows, scoreOf,
 } from './assessmentModel';
 
 /** The clock: a prop when a test pins it, otherwise a tick a second while an attempt runs. */
@@ -53,7 +58,7 @@ const SECONDARY = `${BUTTON} border border-axal-hairline text-axal-ink hover:bor
 export default function ExamFlow({
   status, exam, attempts = [], attemptsLeft, attemptsStatus = 'ready', onRetryAttempts,
   attempt, result, now, onStart, onSubmit, busy = false, error = '', errorCode = '', errorUnreadable = false,
-  reason = NOT_LIVE.exams, onRetry,
+  reason = NOT_LIVE.exams, onRetry, saveDraft = saveExamDraft,
 }) {
   const clock = useClock(now, Boolean(attempt));
   const block = stateBlock({
@@ -75,7 +80,7 @@ export default function ExamFlow({
       {step === 'intro' && (
         <ExamIntro exam={exam} attempts={attempts} left={left} attemptsStatus={attemptsStatus} onRetryAttempts={onRetryAttempts} onStart={onStart} busy={busy} />
       )}
-      {step === 'taking' && <ExamTaking key={attempt.uid || 'attempt'} exam={exam} attempt={attempt} clock={clock} onSubmit={onSubmit} busy={busy} />}
+      {step === 'taking' && <ExamTaking key={attempt.uid || 'attempt'} exam={exam} attempt={attempt} clock={clock} onSubmit={onSubmit} busy={busy} saveDraft={saveDraft} />}
       {step === 'result' && (
         <ExamResult exam={exam} attempts={attempts} left={left} attemptsStatus={attemptsStatus} onRetryAttempts={onRetryAttempts} result={result} onStart={onStart} busy={busy} />
       )}
@@ -120,7 +125,7 @@ function ExamIntro({ exam, attempts, left, attemptsStatus, onRetryAttempts, onSt
       {open && (
         <p className="mt-2 text-[12.5px] leading-relaxed text-axal-ink dark:text-gray-200" data-testid="exam-open-attempt">
           You have an attempt open, started {formatDay(open.started_at) || 'on a date not recorded'}.
-          {limit ? ' Its clock has run since then.' : ''} Choices are not saved until you submit, so a resumed attempt starts with none chosen.
+          {limit ? ' Its clock has run since then.' : ''} Your choices are kept on this device as you make them, so reopening this attempt here restores them. They are not sent until you submit.
         </p>
       )}
       {draft && (
@@ -172,9 +177,37 @@ function AttemptList({ attempts, status, onRetry, title, except, resultLabels = 
   );
 }
 
-function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
+/**
+ * The choices saved for an attempt, kept only where they still fit it: a question that is in the attempt, an option that
+ * belongs to that question. Anything else (a stale draft, an edited exam) is dropped, never sent.
+ */
+export function restoredAnswers(saved, questions) {
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+  const out = {};
+  for (const q of Array.isArray(questions) ? questions : []) {
+    const had = saved[q.uid];
+    if (!Array.isArray(had)) continue;
+    const keys = new Set(optionRows(q.options).map((o) => o.key));
+    const kept = had.filter((k) => keys.has(k));
+    if (kept.length) out[q.uid] = q.kind === 'multiple' ? kept : kept.slice(0, 1);
+  }
+  return out;
+}
+
+function ExamTaking({ exam, attempt, clock, onSubmit, busy, saveDraft = saveExamDraft }) {
   const [index, setIndex] = useState(0);
-  const [answers, setAnswers] = useState({});
+  // #4646: this learner's choices for THIS attempt come back after a refresh, a closed tab or a lost connection, kept on
+  // this device under the attempt's own uid. The server still owns the clock and the submission; resuming reuses the
+  // open attempt and consumes no allowance.
+  const saved = useLearningDraft({ kind: 'exam', uid: exam?.uid, attempt: attempt?.uid });
+  // D5356 part 2: the choices are also held on the server; a resume opens with the newer of the two copies.
+  const [answers, setAnswers] = useState(() => startFrom({
+    device: restoredAnswers(saved.initial, attempt?.questions), deviceAt: saved.initialAt, server: attempt?.draft, questions: attempt?.questions,
+  }).answers);
+  useEffect(() => { saved.write(answers); }, [answers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const server = useServerExamDraft({ examUid: exam?.uid, attempt, questions: attempt?.questions, answers, save: saveDraft });
+  // Once the server has the attempt's answers, the copy on the device goes.
+  useEffect(() => { if (attempt?.submitted_at) saved.clear(); }, [attempt?.submitted_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [review, setReview] = useState(false);
   const sending = useRef(false);
   useEffect(() => { if (!busy) sending.current = false; }, [busy]);
@@ -237,6 +270,11 @@ function ExamTaking({ exam, attempt, clock, onSubmit, busy }) {
     <Card padding="none" className="min-w-0 max-w-[760px]" data-testid="exam-taking">
       <div className="flex items-center justify-between gap-3 border-b border-axal-hairline px-4 py-2.5 dark:border-gray-800">
         <span className="text-[12px] tabular-nums text-axal-muted dark:text-gray-400">Question {at + 1} of {total} · {answered} answered</span>
+        {server.state !== 'idle' ? (
+          <span role="status" className={`text-[11.5px] ${server.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint dark:text-gray-500'}`} data-testid="exam-server-state" data-state={server.state}>{server.words}</span>
+        ) : saved.state !== 'none' && (
+          <span role="status" className={`text-[11.5px] ${saved.state === 'failed' ? 'text-amber-800 dark:text-amber-300' : 'text-axal-faint dark:text-gray-500'}`} data-testid="exam-draft-state" data-state={saved.state}>{DRAFT_WORDS[saved.state]}</span>
+        )}
         <span className={`inline-flex items-center gap-1 text-[13px] font-semibold tabular-nums ${left === 0 ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-gray-100'}`} data-testid="text-exam-clock">
           <Timer size={14} aria-hidden="true" /> {clockLabel}
         </span>
@@ -314,7 +352,7 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
           </ol>
         </Card>}
         <Card><AttemptList attempts={attempts} status={attemptsStatus} onRetry={onRetryAttempts} title="Your attempts" resultLabels />
-          <p className="mt-3 text-[12px] text-axal-muted dark:text-gray-400">No explanations or certificate</p>
+          <p className="mt-3 text-[12px] text-axal-muted dark:text-gray-400">No certificate</p>
         </Card>
       </div>
       {revealed ? (
@@ -329,6 +367,21 @@ function ExamResult({ exam, attempts, left, attemptsStatus, onRetryAttempts, res
               </p>
               <p className="mt-1 text-axal-muted dark:text-gray-400">Your answer: {a.chosen.join(', ') || 'none'}</p>
               <p className="text-emerald-700 dark:text-emerald-300">Correct: {a.correct.join(', ') || 'not recorded'}</p>
+              {/* D4650 (#4650, part 3): why, and where to revise, when the author recorded it. */}
+              {a.explanation && <p className="mt-1.5 text-axal-ink dark:text-gray-200" data-testid={`exam-explanation-${a.uid}`}>{a.explanation}</p>}
+              {a.revision.length > 0 && (
+                <p className="mt-1 text-axal-muted dark:text-gray-400" data-testid={`exam-revision-${a.uid}`}>
+                  Revise:{' '}
+                  {a.revision.map((l, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && ' · '}
+                      {isLearningPath(l.url)
+                        ? <Link to={l.url} className="font-semibold text-axal-violet hover:underline">{l.title}</Link>
+                        : <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-axal-violet hover:underline">{l.title}</a>}
+                    </React.Fragment>
+                  ))}
+                </p>
+              )}
             </li>
           ))}
         </ol>

@@ -82,7 +82,6 @@ const SHARED = (P) => [
   off('/referrals', key(P, 'Referrals')),
   // D4289 P7 (#4296): the Influencer section, for an admitted influencer in any profile; its tabs by prefix.
   off('/influencer', key(P, 'Influencer')),
-  off('/company-settings', key(P, 'Company settings')),
   off('/updates', key(P, 'Updates')),
   off('/legal/send', key(P, 'Send for signature')),
   off('/studio/archetype', key(P, 'Archetype')),
@@ -306,6 +305,7 @@ const ADMIN = [
   alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
   alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
   alias('/admin/programs/influencer', key(AD, 'Programs'), 'Influencers, one program page under Programs (D4298).'),
+  alias('/admin/programs/:key', key(AD, 'Programs'), 'Any program the registry holds, one generic page under Programs (D4808).'),
   alias('/admin/programs/propose', key(AD, 'Programs'), 'Programs › Propose a program, a studio’s proposal (D964).'),
   alias('/admin/programs/proposals', key(AD, 'Programs'), 'Programs › Proposals, HQ’s queue of studio proposals (D964).'),
   own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
@@ -349,8 +349,8 @@ const SUPER = [
   off('/hq', key(SA, 'Home')),
   off('/admin/analytics', key(SA, 'Analytics')),
   own('/admin/licences', key(SA, 'Licences')),
-  alias('/admin/licences/programs', key(SA, 'Licences'), 'Program grants, the Licences strip’s second item (D981).'),
-  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program grants’ History tab (D1126).'),
+  alias('/admin/licences/programs', key(SA, 'Licences'), 'Program access by licence (D981’s Program grants, renamed by D4819), the Licences strip’s second item.'),
+  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program access by licence’s History tab (D1126).'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),
@@ -453,10 +453,16 @@ const parsed = (route) => {
 function score(entry, path, tab, hash) {
   const r = parsed(entry.route);
   if (r.segments.length > path.length || (entry.exact && r.segments.length !== path.length)) return -1;
-  for (let i = 0; i < r.segments.length; i += 1) if (r.segments[i] !== path[i]) return -1;
+  // D4808: a `:param` segment matches any one segment and scores below a literal one, so a literal address always wins.
+  let score = 0;
+  for (let i = 0; i < r.segments.length; i += 1) {
+    if (r.segments[i].startsWith(':')) { score += 5; continue; }
+    if (r.segments[i] !== path[i]) return -1;
+    score += 10;
+  }
   if (r.tab && r.tab !== tab) return -1;
   if (r.hash && r.hash !== hash) return -1;
-  return r.segments.length * 10 + (r.tab || r.hash ? 5 : 0);
+  return score + (r.tab || r.hash ? 5 : 0);
 }
 
 function best(pages, path, tab, hash) {
@@ -490,6 +496,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/investor-workspace', railCount: 0, pageTestIds: ['investor-workspace-axal-vc-fund'], roles: ['investor'], why: 'Owner request: the LP investor workspace has no AI side rail; its content and access gates remain.' },
   { route: '/spinout-lab/apply', roles: ['investor', 'advisor', 'partner'], why: 'The Spin-Out Lab application, before a lane is chosen: a founder’s or an exploring member’s page, keyed under their own profile; the other profiles have no key for it (D1408: `authOnly` routes are now checked for every profile).' },
+  { route: '/spinout-lab/certificate', roles: ['investor', 'advisor', 'partner'], why: 'D4661 (#4661): a graduate keeps their own certificate whatever their account role, so the route admits any signed-in account; it is a founder\u2019s or an exploring member\u2019s page, keyed under their own profile, and the other profiles have no key for it.' },
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },
   { route: '/advisors/:uid', roles: [], why: 'An advisor’s public profile.' },
   { route: '/b/*', roles: [], why: 'A public booking page.' },

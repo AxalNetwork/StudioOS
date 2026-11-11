@@ -3,8 +3,8 @@
  * rules, pure: the sharing setting (RI1, RI7), "Who knows them" on a record
  * (RI2), the ask (RI3), the introducer's inbox (RI4), the log (RI5) and
  * follow-ups (RI6). No React and no fetch: `SharingCard.jsx`,
- * `WhoKnowsStrip.jsx` and `IntroductionsDesk.jsx` draw it, over
- * `relationshipsApi` (D1356, D4329).
+ * `WhoKnowsStrip.jsx`, `IntroductionsDesk.jsx` and `DraftFlow.jsx` draw it,
+ * over `relationshipsApi` (D1356, D4329, D4464, D4330).
  *
  * THE RULES (D1357 §2):
  *   · nothing is shared until the member turns it on, one switch per team;
@@ -13,6 +13,13 @@
  *   · Axal never contacts the person: an introduction is asked of the teammate;
  *   · Accept and Made are two steps; Made is recorded when the intro is sent;
  *   · an outcome is what someone recorded; until then "Not recorded".
+ *
+ * D4464: `summaryField` reads the Network canvas's caller-scoped summary
+ * (`relationshipsApi.summary`) one field at a time. A field the read could
+ * not record (`recording[key].recorded === false`) is always "Not recorded",
+ * never 0 — the Worker's own 503 carries the same `recording` map, so a
+ * degraded read and a healthy one holding a zero look identical to this
+ * function and only differ in the one flag it checks.
  */
 import { NOT_RECORDED } from '../../lib/absence';
 
@@ -95,7 +102,10 @@ export const REASON_HELP = (teammate) => `${firstName(teammate)} sees this.`;
 export const CONTEXT_LABEL = (person) => `Context for ${firstName(person)} (optional)`;
 export const CONTEXT_HELP = (teammate) => `A short note ${firstName(teammate)} can forward. Only the two of you read it.`;
 export const ASK_SENDS = (teammate, person) => `Axal sends your request to ${firstName(teammate)} only. Nobody contacts ${firstName(person)} unless ${firstName(teammate)} does.`;
-export const DRAFT_LATER = 'Draft from this record · coming with Eadwyn’s drafts';
+// D4330 (#4330, part 8b, merged): "Ask", never "Fill" — Eadwyn drafts only once asked, and the quote
+// (`estimate: true`) always runs before the draft itself. `useDraftFlow` (`DraftFlow.jsx`) is the shared
+// two-press behaviour; these are only the words on the button.
+export const ASK_DRAFT_FROM_RECORD = 'Ask Eadwyn to draft from this record';
 export const SENT_TITLE = 'Request sent';
 export const SENT_LINE = (teammate) => `${firstName(teammate)} decides. You will see their answer in Network › Introductions.`;
 export const NOTE_MAX = 1000;
@@ -121,8 +131,35 @@ export const INBOX_EMPTY = 'Nobody has asked you for an introduction.';
 export const NOT_NOW = 'Not now';
 export const WRITE_INTRO = 'Write the intro';
 export const SENDS_NOTHING = 'Axal sends nothing itself. The intro goes from your own mailbox, to the address you choose.';
-export const DRAFT_INTRO_LATER = 'Draft with Eadwyn · coming with Eadwyn’s drafts';
-export const DRAFT_FOLLOW_LATER = 'Draft a follow-up · coming with Eadwyn’s drafts';
+export const ASK_DRAFT_INTRO = 'Ask Eadwyn to draft the intro';
+export const ASK_DRAFT_FOLLOW_UP = 'Ask Eadwyn to draft a follow-up';
+// D4329's introLink (`?intro=<uid>`): the one it names may have left the desk
+// (declined elsewhere, or not this caller's to see) by the time it is opened.
+export const INTRO_GONE = 'That introduction request is no longer on your desk.';
+// D4330: the quote line before any draft runs — never $0, and nothing is charged until it is confirmed.
+export const DRAFT_REFUSED = 'Eadwyn could not draft this. Try again.';
+export function draftEstimateLine(estimate) {
+  const n = Number(estimate?.hold_microusd);
+  if (estimate?.hold_microusd == null || !Number.isFinite(n) || n <= 0) return null;
+  const usd = n / 1_000_000;
+  return `Holds up to $${usd.toFixed(usd < 1 ? 4 : 2)} in AI tokens. Nothing is charged until you confirm.`;
+}
+
+// D4604: an accepted intro's delivery attempt, as the Worker records it (`delivery`, the teammate's own only).
+// Delivered and recorded are two facts: a send the mail server took can still be waiting for its record.
+export const DELIVERY_LINE = Object.freeze({
+  sending: 'This intro is being sent. Reload in a moment to see whether it went.',
+  unconfirmed: 'Your mail server may or may not have taken this intro. Look in your Sent folder, then say which. Sending it again before you know could deliver it twice.',
+  record_pending: 'Sent: your mail server took this intro. Its record here is not updated yet. Updating it sends nothing.',
+  not_sent: 'The last send of this intro did not go out. You can write it again.',
+});
+export const UPDATE_RECORD = 'Update the record';
+/** The delivery state of a request, or null. `canWrite` is false while a send is in flight, unconfirmed or delivered. */
+export function deliveryOf(r) {
+  const state = r?.status === 'accepted' ? r?.delivery?.state ?? null : null;
+  if (!state || !DELIVERY_LINE[state]) return { state: null, line: null, operationUid: null, canWrite: true };
+  return { state, line: DELIVERY_LINE[state], operationUid: r.delivery.operation_uid ?? null, canWrite: state === 'not_sent' };
+}
 
 /** "Omar Reyes → Lena Hart": who asked, and who was asked. */
 export const whoLine = (r) => `${r?.requester?.name || 'A teammate'} → ${r?.teammate?.name || 'A teammate'}`;
@@ -143,6 +180,40 @@ export function introSubject(r, askerCompany = null) {
 export const teamLabelOf = (r, teams = []) => (teams.find((t) => t.key === r?.team_key)?.label) || 'Your team';
 
 /**
+ * #4611 finding 11 — THE NOTE THE DECLINE FORM PROMISES, AND WHO MAY READ IT.
+ *
+ * The decline form's own label is "A note they will read (optional)". The note
+ * is stored on `relationship_interactions.decision_note`, and
+ * `interactionView` has always returned it to BOTH people on the request — and
+ * nothing in `frontend/src/` referenced the field. `grep decision_note` over
+ * the whole frontend returned nothing. So the teammate typed an explanation,
+ * the product told them the asker would read it, the Worker served it, and the
+ * asker's log had no column and no cell for it. The notification only said
+ * "There is a note for you", pointing at a page that would not show it.
+ *
+ * WHAT THE DECISION CONTEXT IS. A bare note is not an explanation; it is a
+ * sentence with no subject. The line pairs the note with the verdict and its
+ * date — "Declined on 2026-11-04" — so the asker reads WHY beside WHAT, which
+ * is the finding's "with the relevant decision context".
+ *
+ * WHO. Only the two people on a request can read it, which is already true at
+ * the API: every read names the caller in its WHERE clause, so a third party's
+ * request is 404 and is in no response this function ever sees. Nothing is
+ * widened here; the field that was already being served is finally drawn.
+ *
+ * A NOTE ON AN ACCEPTANCE IS SHOWN TOO. The same column holds it, the same
+ * person wrote it for the same reader, and suppressing it would be a second
+ * version of this bug.
+ */
+export function decisionLine(r) {
+  const note = String(r?.decision_note || '').trim();
+  if (!note) return null;
+  const verdict = STATUS_LABEL[r?.status] || r?.status || 'Answered';
+  const on = String(r?.decided_at || '').slice(0, 10);
+  return { note, context: on ? `${verdict} on ${on}` : verdict };
+}
+
+/**
  * The log's rows, newest first: sent and received together, each with who for,
  * the team, the status, the outcome and the caller's own follow-up.
  */
@@ -152,7 +223,7 @@ export function logRows(read, teams = []) {
     uid: r.uid, side: r.side, when: String(r.created_at || '').slice(0, 10) || NOT_RECORDED,
     who: whoLine(r), person: personOf(r), team: teamLabelOf(r, teams),
     status: STATUS_LABEL[r.status] || r.status, statusKey: r.status, outcome: outcomeOf(r),
-    followUp: followUpLine(r.follow_up), row: r,
+    followUp: followUpLine(r.follow_up), decision: decisionLine(r), row: r,
   }));
 }
 
@@ -183,4 +254,21 @@ export function dayAfter(from, n) {
   const d = new Date(`${String(from).slice(0, 10)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+// ────────────────────────────────────────────────────────────── D4464 summary
+
+export const SUMMARY_UNREAD = 'Your network summary could not be read.';
+export const SUMMARY_TITLE = 'Your network';
+
+/**
+ * One field of `relationshipsApi.summary()`'s body, by its `recording` key
+ * ("sharing.teams_shared", "teammates_sharing", "requests.made_90d", …).
+ * "Not recorded" whenever that key's own read failed, whatever the value is
+ * standing in for it — never the 0 a failed count happens to default to.
+ */
+export function summaryField(data, key, value) {
+  const rec = data?.recording?.[key];
+  if (rec && rec.recorded === false) return NOT_RECORDED;
+  return Number.isFinite(value) ? value : NOT_RECORDED;
 }

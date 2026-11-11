@@ -4,7 +4,8 @@ import type { Env } from '../types';
 import { decryptColumn, encryptColumn } from '../services/columnCipher';
 import { settleAiReservation, reserveAiBudget, aiPaused } from '../services/aiBudget';
 import { constantTimeEqual } from '../rpc/secret';
-import { withDeadline } from '../util/deadline';
+import { withDeadline, DeadlineExceeded } from '../util/deadline';
+import { MeetingBotRuntimeError, RUN_START_MS, runtimeVersion, type MeetingBotRuntimeStage, type RuntimeErrorCode } from '../services/meetingBotStartup';
 import { meetingBotRuntime, runtimeKey, runtimeUid } from '../services/meetingBotRuntime';
 import { putChunk, isUploadWav, MAX_CHUNK_BYTES, WAV_HEADER_BYTES, UPLOAD_BYTES_PER_SECOND } from '../services/interviewSessions';
 import {
@@ -81,10 +82,11 @@ export class MeetingBotRun implements DurableObject {
         if (action === '/init') { await this.state.storage.setAlarm(Date.now()+1000); await this.tick(run); }
         else if (action === '/drain') await this.drain(run,'stopped');
         else if (action === '/stop') await this.finish(run,'stopped',null);
-        else if (action === '/event') return await this.event(req,run);
+        else if (action === '/event') { await this.callbackSeen(uid); return await this.event(req,run); }
         else if (action === '/chunk') return await this.upload(req,run);
         else if (action === '/zoom-credentials') {
           if (!await this.allowed(run) || !['joining','waiting_room'].includes(run.status) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'zoom_run_inactive','The Zoom runtime is not available.');
+          await this.callbackSeen(uid);
           const last=await this.state.storage.get<number>('credentials_requested_at')??0;
           if (Date.now()-last<2500) throw new BotError(429,'bot_zoom_rate','The runtime must wait before retrying.');
           await this.state.storage.put('credentials_requested_at',Date.now());
@@ -102,6 +104,7 @@ export class MeetingBotRun implements DurableObject {
           const { credentialStep, meetCredentials }=await import('../services/meetBotGoogle');
           const step=credentialStep(await req.text());
           if (!step) throw new BotError(400,'invalid_bot_event','The runtime request is not valid.');
+          await this.callbackSeen(uid);
           if (run.platform!=='google_meet' || run.status!=='joining' || !await this.allowed(run) || (await this.lease()??0)<=Date.now())
             throw new BotError(403,'meet_run_inactive','The Meet runtime is not available.');
           const last=await this.state.storage.get<number>('meet_credentials_at')??0;
@@ -136,6 +139,26 @@ export class MeetingBotRun implements DurableObject {
       .bind(status,code,now,run.uid,run.status).run();
     run.status=status; run.failure_code=code; run.heartbeat_at=now;
     await this.state.storage.put('snapshot',run);
+  }
+  /**
+   * D5153: the operator's startup facts on the run's row (migration 202611090953). Codes and
+   * stages come only from the closed vocabularies; a database before that migration
+   * keeps working without them, as D1368's failure_detail does.
+   */
+  private async startupFacts(uid: string, f: { stage: MeetingBotRuntimeStage | null; code?: RuntimeErrorCode | null; version?: string | null; ms?: number }) {
+    const now=Date.now();
+    try {
+      await this.env.DB.prepare(`UPDATE meeting_bots SET runtime_stage = COALESCE(?, runtime_stage), runtime_stage_at = ?, runtime_error_code = ?,
+        runtime_version = COALESCE(?, runtime_version), runtime_start_ms = COALESCE(?, runtime_start_ms) WHERE uid = ?`)
+        .bind(f.stage,now,f.code ?? null,f.version ?? null,typeof f.ms==='number' && Number.isSafeInteger(f.ms) && f.ms>=0 ? f.ms : null,uid).run();
+    } catch (e) { if (!/no such column|no column named/i.test(String((e as Error)?.message ?? e))) throw e; }
+  }
+  /** D5153: the first signed runtime callback, recorded once. Proof the runtime started and spoke. */
+  private async callbackSeen(uid: string) {
+    if (await this.state.storage.get('runtime_callback_seen')) return;
+    try { await this.env.DB.prepare('UPDATE meeting_bots SET runtime_callback_seen_at = ? WHERE uid = ? AND runtime_callback_seen_at IS NULL').bind(Date.now(),uid).run(); }
+    catch (e) { if (!/no such column|no column named/i.test(String((e as Error)?.message ?? e))) throw e; }
+    await this.state.storage.put('runtime_callback_seen',true);
   }
   private async allowed(run: BotRun) {
     if (!botConfigured(this.env,run.platform) || await aiPaused(this.env,run.user_id)) return false;
@@ -254,10 +277,22 @@ export class MeetingBotRun implements DurableObject {
       if (!link) return this.finish(run,'failed','runtime_unavailable');
       run.started_at=(await this.state.storage.get<BillingBlock[]>('billing'))![0].start;
       await this.env.DB.prepare('UPDATE meeting_bots SET started_at = ? WHERE uid = ? AND started_at IS NULL').bind(run.started_at,run.uid).run();
-      await this.update(run,'joining');
+      // D5153: the run stays `queued` while its runtime starts; `joining` means the runtime accepted the command.
+      await this.startupFacts(run.uid,{stage:'dispatch_accepted'});
+      const began=Date.now();
+      let started: Awaited<ReturnType<ReturnType<typeof meetingBotRuntime>['start']>>;
       try {
-        await withDeadline(meetingBotRuntime(this.env).start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),25_000,'bot start');
-      } catch { return this.finish(run,'failed','runtime_unavailable'); }
+        started=await withDeadline(meetingBotRuntime(this.env).start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),RUN_START_MS,'bot start');
+      } catch (e) {
+        const known=e instanceof MeetingBotRuntimeError ? e : e instanceof DeadlineExceeded ? new MeetingBotRuntimeError('runtime_command_timeout',null) : null;
+        await this.startupFacts(run.uid,{stage:known?.stage ?? null,code:known?.code ?? null,version:known?.runtimeVersion ?? null,ms:Date.now()-began});
+        // Nothing reached the provider: release every held minute instead of billing the startup wait.
+        const first=(await this.state.storage.get<BillingBlock[]>('billing'))?.[0];
+        if (first) await this.settleBlocks(run,first.start);
+        return this.finish(run,'failed','runtime_unavailable');
+      }
+      await this.startupFacts(run.uid,{stage:'runtime_command_accepted',version:started && typeof started==='object' ? runtimeVersion(started.runtime_version) : null,ms:Date.now()-began});
+      await this.update(run,'joining');
     }
     const now=Date.now();
     if (run.status === 'processing') {

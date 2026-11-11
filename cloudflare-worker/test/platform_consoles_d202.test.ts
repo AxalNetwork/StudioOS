@@ -86,6 +86,9 @@ const CONSOLE_TABLES = [
 /** Migration 283, off disk — the operator switch store post-dates the baseline. */
 const SWITCHES_MIGRATION = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/migrations/283_platform_switches.sql'), 'utf8',
+) + '\n' + readFileSync(
+  // D4703 (#4703): the revision column, applied after 283 as production applies it.
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611062212_platform_switch_revision.sql'), 'utf8',
 );
 
 function freshDb() {
@@ -198,7 +201,8 @@ test('the incident cutoff goes through datetime() on BOTH sides', () => {
   // test needs a row on the cutoff's date but before it, and at 00:00:00 UTC
   // no such moment exists — so it would fail one second a day. The rows the
   // table actually holds are covered behaviourally above.
-  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/routes/admin_platform.ts'), 'utf8');
+  // D4859: the incident reader moved to services/platformSummary.ts.
+  const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/services/platformSummary.ts'), 'utf8');
   assert.ok(src.includes("WHERE datetime(created_at) >= datetime('now', ?)"),
     'the incident window no longer normalises the stored value before comparing it');
 });

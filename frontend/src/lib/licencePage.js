@@ -10,8 +10,10 @@
 // that a read does not carry: a renewal mode HQ has not recorded is not
 // guessed, and seats used on HQ, which nothing counts, is not drawn as zero.
 import { NOT_RECORDED } from './absence';
+import { TOKEN_SPLIT_OWN_DETAIL } from './tokenSplit';
 import { bpsPercent } from './bps';
 import { LICENCE_TERM_FIELDS, TERM_GROUP_TITLES, displayValue } from './licenceTermsForm';
+import { formatMinor } from './money';
 
 export { NOT_RECORDED };
 
@@ -64,17 +66,14 @@ export function longDate(value) {
 const addYears = (d, n) => new Date(Date.UTC(d.getUTCFullYear() + n, d.getUTCMonth(), d.getUTCDate()));
 const today = (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-/** Whole cents in the licence's own currency: "€90,000", or "Not recorded". */
+/**
+ * An amount in the licence's own currency at that currency's own decimals: "€90,000", "¥90,000", "KWD 1.235", or
+ * "Not recorded". A currency we cannot price in is named with the stored count of minor units, never read as euros.
+ */
 export function money(cents, currency) {
   if (cents === null || cents === undefined || !Number.isFinite(Number(cents))) return NOT_RECORDED;
-  const amount = Number(cents) / 100;
-  try {
-    return new Intl.NumberFormat('en-GB', {
-      style: 'currency', currency: currency || 'EUR', maximumFractionDigits: amount % 1 ? 2 : 0,
-    }).format(amount);
-  } catch {
-    return `${amount.toLocaleString('en-GB')} ${currency || ''}`.trim();
-  }
+  const shown = formatMinor(Number(cents), currency, { locale: 'en-GB', trimWhole: true });
+  return shown ?? `${Number(cents).toLocaleString('en-GB')} minor units (currency ${currency ? `"${currency}" is not one we can price in` : 'not recorded'})`;
 }
 
 export const percent = (bps) => bpsPercent(bps) ?? NOT_RECORDED;
@@ -188,7 +187,7 @@ export function feeCard(licence, now = new Date()) {
 
 /** The Revenue share card: the share, the AI token split and, when D797 records it, the royalty on licences sold. */
 export function shareCard(licence, terms = null) {
-  const parts = [`AI token split ${percent(licence?.token_split_bps)}`];
+  const parts = [`${TOKEN_SPLIT_OWN_DETAIL} ${percent(licence?.token_split_bps)}`];
   if (terms && 'royalty_platform_licence_bps' in terms) {
     parts.push(`royalty on licences sold ${percent(terms.royalty_platform_licence_bps)}`);
   }

@@ -32,7 +32,7 @@ import PackSheet from '../components/checkout/PackSheet';
 import { planKeyOf } from '../components/checkout/checkoutModel';
 import {
   PRICING_TABS, compareCell, heldCard, initialTab, lpStorageLine, modelGroups, modelPrices, modelsTab, needsPlanStatus, packCards, planCards,
-  storageGroup, modelUsage,
+  storageGroup, modelUsage, priceOf, usd,
 } from '../lib/pricingModel';
 import {
   AI_BAND, CLOSING, COMPARE, FAQ, FAQ_INVESTOR, HERO, LP_ACCESS, MODEL_GROUPS, MODELS_LINE, PACKS, PLAN_CARDS, STORAGE_COMPARE, TOKENS_BAND,
@@ -148,7 +148,7 @@ function Compare({ tab, cards, storage = null }) {
   const cell = (v, key, cn = 'axp-cell') => {
     const c = compareCell(v);
     return (
-      <span key={key} className={cn}>
+      <span key={key} role="cell" className={cn}>
         {c.tick && <span className="axp-tick" aria-label="Included">{TICK}</span>}
         {c.dash && <span className="axp-dash" aria-label="Not included">—</span>}
         {c.text}
@@ -159,14 +159,14 @@ function Compare({ tab, cards, storage = null }) {
   return (
     <section className="axp-sec axp-compare" aria-labelledby="axp-compare-h">
       <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>
-      <div className="axp-desk axp-table">
-        <div className="axp-thead" style={cols}><span />{cards.map((c) => <span key={c.id} className={`axp-th${D}`}>{c.name}</span>)}</div>
+      <div className="axp-desk axp-table" role="table" aria-labelledby="axp-compare-h">
+        <div className="axp-thead" role="row" style={cols}><span role="columnheader">Feature</span>{cards.map((c) => <span key={c.id} role="columnheader" className={`axp-th${D}`}>{c.name}</span>)}</div>
         {groups.map(([t, rows, meta]) => (
           <React.Fragment key={t}>
-            <GroupHead t={t} meta={meta} />
+            <div role="row"><div role="cell" aria-colspan={cards.length + 1}><GroupHead t={t} meta={meta} /></div></div>
             {rows.map((r) => (
-              <div key={r[0]} className="axp-row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
-                <span className="axp-row-l">{r[0]}</span>
+              <div key={r[0]} className="axp-row" role="row" style={cols} data-testid={meta?.fresh ? `pricing-storage-${r[0] === STORAGE_COMPARE.best ? 'best' : 'row'}` : undefined}>
+                <span className="axp-row-l" role="rowheader">{r[0]}</span>
                 {r.slice(1).map((v, i) => cell(v, i, cellClass(meta, r[0])))}
               </div>
             ))}
@@ -179,16 +179,37 @@ function Compare({ tab, cards, storage = null }) {
             <button key={c.id} type="button" role="tab" aria-selected={i === at} className={`axp-chip${i === at ? ' is-on' : ''}`} onClick={() => setPick(i)}>{c.name}</button>
           ))}
         </div>
-        <div className="axp-table">
+        <div className="axp-table" role="table" aria-label={`${cards[at]?.name ?? ''} plan features`}>
           {groups.map(([t, rows, meta]) => (
             <React.Fragment key={t}>
-              <GroupHead t={t} meta={meta} />
+              <div role="row"><div role="cell" aria-colspan={2}><GroupHead t={t} meta={meta} /></div></div>
               {rows.map((r) => (
-                <div key={r[0]} className="axp-row axp-row-phone"><span className="axp-row-l">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
+                <div key={r[0]} className="axp-row axp-row-phone" role="row"><span className="axp-row-l" role="rowheader">{r[0]}</span>{cell(r[1 + at], 'v', cellClass(meta, r[0]))}</div>
               ))}
             </React.Fragment>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * #4651: back from sign-up or sign-in, the plan the visitor chose is said plainly when the price is not the one
+ * they saw, or when the plan or its yearly price is no longer sold. Nothing is chosen for them instead.
+ */
+function ReturnedNotice({ notice, onClose }) {
+  const D = useContext(Face);
+  const text = notice.kind === 'price'
+    ? `The price of ${notice.name} is now ${notice.now}${notice.interval === 'yearly' ? ' a year' : ' a month'}; it was ${notice.was} when you chose it. Checkout shows today’s price: review it before you pay.`
+    : notice.kind === 'interval'
+      ? `Yearly billing is not offered for ${notice.name} right now. Choose monthly or another plan below; nothing was chosen for you.`
+      : 'The plan you chose is no longer offered here. Choose a plan below; nothing was chosen for you.';
+  return (
+    <section className="axp-sec" role="status" data-testid={`pricing-returned-${notice.kind}`}>
+      <div className="axp-unavail">
+        <div><div className={`axp-unavail-t${D}`}>{text}</div></div>
+        <button type="button" className="axp-btn" onClick={onClose}>OK</button>
       </div>
     </section>
   );
@@ -465,26 +486,39 @@ export function PricingBody({ user = null }) {
 
   const specs = PLAN_CARDS[tab] || [];
   const built = roleTab && plans.status === 'ready'
-    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user })
+    ? planCards(plans.body, specs, { billing, held: heldCard(user, role, tab, planRead), signedIn: !!user, tab })
     : null;
   const ready = built && !built.unreadable;
   const D = user ? '' : ' ax-display';
 
   // D1053 (#2904, PAYX19a): back from sign-in, the sheet opens on the plan the member chose
   // (`?checkout=<plan key>&interval=`), and the address drops the request so Back does not reopen it.
+  // #4651: `seen` is the amount the card showed when it was chosen. A different price now, or a plan
+  // or interval no longer sold, is said before the sheet, and nothing else is chosen instead.
   const wanted = new URLSearchParams(location.search).get('checkout');
+  const [returned, setReturned] = useState(null);
+  // #4651: only a member's Pricing takes the ask. The Google return lands here signed out until its forced /me
+  // answers; taking it then read signed-out cards (none opens checkout), dropped the ask from the address, and the
+  // member's Pricing that mounts a moment later had nothing to open. A visitor's address keeps it untouched.
   useEffect(() => {
-    if (!wanted || !ready) return;
+    if (!wanted || !ready || !user) return;
     const q = new URLSearchParams(location.search);
     const iv = q.get('interval');
-    q.delete('checkout'); q.delete('interval');
+    const seen = Number(q.get('seen'));
+    q.delete('checkout'); q.delete('interval'); q.delete('seen');
     navigate({ pathname: location.pathname, search: q.toString() ? `?${q}` : '', hash: location.hash }, { replace: true });
     const card = built.cards.find((c) => c.button?.checkout && planKeyOf(c.plan) === wanted);
-    if (!card) return;
+    if (!card) { setReturned({ kind: 'gone' }); return; }
+    const interval = iv === 'yearly' ? 'yearly' : 'monthly';
+    const now = priceOf(card.plan, interval === 'yearly' ? 'year' : 'month');
+    if (interval === 'yearly' && !now) { setReturned({ kind: 'interval', name: card.name }); return; }
     if (iv === 'yearly' || iv === 'monthly') setBilling(iv);
+    if (Number.isSafeInteger(seen) && seen > 0 && now && now.unit_amount !== seen) {
+      setReturned({ kind: 'price', name: card.name, was: usd(seen), now: usd(now.unit_amount), interval });
+    }
     setCheckout(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wanted, ready]);
+  }, [wanted, ready, !!user]);
 
   // D1288 (#3371): `ADD_TOKENS_PATH` (Models with `ADD_TOKENS_HASH`, and `&pack=<uid>` from an
   // old address) opens the sheet on Models for a member, once; the address then drops the ask so
@@ -519,6 +553,8 @@ export function PricingBody({ user = null }) {
           </div>
         )}
       </section>
+
+      {roleTab && returned && <ReturnedNotice notice={returned} onClose={() => setReturned(null)} />}
 
       {roleTab && (
         <section className="axp-sec axp-plans">

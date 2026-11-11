@@ -2566,3 +2566,68 @@ Both hashes match S1's decode, so this is the content S1 read. The font link was
 | D711 | S14 | #1865 | L0–L7: every library document passes the paper rules |
 
 **Counts unchanged: 97 / 28 / 26**, recounted. Nothing entered `canvases/`.
+
+## Landed 2026-11-07 — Admin v2 redesigns: Approvals, Community, Contracts and Platform (#4814, #4820, #4811, #4860)
+
+The owner's Claude Design canvas "Axal VC – platform design" carries four new board sets, drawn on 2026-11-07 from the issue briefs. Each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Approvals v2 Page.dc.html`**, **`Approvals v2 · Boards.dc.html`**: boards AP-01 to AP-19 (D4814).
+- **`Community v2 Page.dc.html`**, **`Community v2 · Boards.dc.html`**: boards CM01 to CM12e (D4820).
+- **`Contracts v2 Page.dc.html`**, **`Contracts v2 · Boards.dc.html`**: boards CT01 to CT16 and spec boards CT90 to CT94 (D4811).
+- **`Platform v2 Page.dc.html`**, **`Platform v2 · Boards.dc.html`**: boards PL01 to PL12 (D4860).
+
+The v1 `Approvals` and `Community` canvases stay in place: the live pages are built to them, and their tests read them. Each v2 replaces its v1 when its build lands. None is built yet; each surface's build is its own task. The canvases' figures are sample content: the decision files list which figures need a read or a store confirmed.
+
+## Landed 2026-11-07 — HQ and Research v2 redesigns: Security, Research, Programs, Fund administration and Licences (#4803, #3701, #4873, #4812, #4819)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs. As before, each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Security v2 Page.dc.html`**, **`Security v2 · Boards.dc.html`**: boards SE01 to SE12 and spec boards SEA to SEE (D4803, covering #4800 to #4803).
+- **`Research v2 Page.dc.html`**, **`Research v2 · Boards.dc.html`**: boards RS01 to RS12 and spec boards RSA to RSC (D3701, the canonical V2 prompt).
+- **`Programs v2 Page.dc.html`**, **`Programs v2 · Boards.dc.html`**: boards PG01 to PG08 (D4873).
+- **`Fund Admin v2 Page.dc.html`**, **`Fund Admin v2 · Boards.dc.html`**: boards FA01 to FA14 (D4812).
+- **`Licences v2 Page.dc.html`**, **`Licences v2 · Boards.dc.html`**: boards L00 to L22 (D4819).
+
+None is built yet; each surface's build is its own task. Figures are sample content, except where a decision file says a board shows the live state (Licences L0, the zero-licence ledger). Each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-08 — HQ Support and Revenue v2 (#5034, #5039)
+
+Two more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-08 from the issue briefs, each as a page plus its boards under the names Claude Design gave them:
+- **`Support v2 Page.dc.html`**, **`Support v2 · Boards.dc.html`**: boards SU01a to SU14 (D5034).
+- **`Revenue v2 Page.dc.html`**, **`Revenue v2 · Boards.dc.html`**: boards RV01 to RV15 (D5039).
+
+Neither is built yet. Subsidiaries, people, tickets, customers and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Deals, Delivery, Practice, Pipeline and Cohorts v2 (#4815, #4822, #4874, #4838, #4813)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs, each as a page plus its boards under the names Claude Design gave them:
+- **`Deals v2 Page.dc.html`**, **`Deals v2 · Boards.dc.html`**: boards DE01 to DE18 (D4815). The shell follows the owner's #3704 rule over the prompt's account switcher.
+- **`Delivery v2 Page.dc.html`**, **`Delivery v2 · Boards.dc.html`**: boards DL01 to DL09 (D4822).
+- **`Practice v2 Page.dc.html`**, **`Practice v2 · Boards.dc.html`**: boards PX00 to PX13 (D4874).
+- **`Pipeline v2 Page.dc.html`**, **`Pipeline v2 · Boards.dc.html`**: boards PP01 to PP10 (D4838).
+- **`Cohorts v2 Page.dc.html`**, **`Cohorts v2 · Boards.dc.html`**: boards CH01 to CH19 (D4813).
+
+None is built yet. Companies, people, clients and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Company settings, Skill library and Portfolio v2 (#4966, #4956, #4817)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them:
+- **`Company Settings v2 Page.dc.html`**, **`Company Settings v2 · Boards.dc.html`**: boards CS-00 to CS-16, drawn 2026-11-08 (D4966).
+- **`Skill Library v2 Page.dc.html`**, **`Skill Library v2 · Boards.dc.html`**: boards SK-01 to SK-16 and specs SK-A to SK-D, drawn 2026-11-08 (D4956). It extends `Agents Skills v2` (D4116) rather than replacing it.
+- **`Portfolio v2 Page.dc.html`**, **`Portfolio v2 · Boards.dc.html`**: boards PF-01 to PF-12, drawn 2026-11-07 (D4817). The shell follows #3704: Portfolio opens from the Account menu.
+
+None is built yet. Companies, people, skills and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Pitch Studio v2, Platform States, and the Licences and Contracts v2 addendum (#4839, #5129, #5303)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10, each as a page plus its boards under the names Claude Design gave them:
+- **`Pitch Studio v2 Page.dc.html`**, **`Pitch Studio v2 · Boards.dc.html`**: sections PS-00 to PS-13, 42 frames (D4839). A design and interaction pass over Pitch Deck Studio v2 (D1604), which stays the baseline.
+- **`Platform States Page.dc.html`**, **`Platform States · Boards.dc.html`**: boards ST-00 to ST-14 (D5129). The shared data-state vocabulary every surface cites; drawn to Question 2's pick A.
+- **`Licences and Contracts v2 Addendum Page.dc.html`**, **`Licences and Contracts v2 Addendum · Boards.dc.html`**: boards L23 to L40 and CT-17 to CT-20 (#5303; addendum sections in D4819 and D4811). Extends the Licences v2 and Contracts v2 canvases rather than forking them.
+
+None is built yet. Ventures, people, investors and amounts are sample content, except the addendum's package names, programs, base fees and guidance ranges, which are the seeded ones; each decision lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Admin › Deals (#5459)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10 and revised the same day for the owner's two amendments, as a page plus its boards under the names Claude Design gave them:
+- **`Administrator Deal Preparation Page.dc.html`**, **`Administrator Deal Preparation · Boards.dc.html`**: sections ADPW-00 to ADPW-26, 56 frames (D5459). The Admin profile's **Deals** workspace at `/admin/deals`; the investor Deals redesign stays `Deals v2` (D4815).
+
+Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.

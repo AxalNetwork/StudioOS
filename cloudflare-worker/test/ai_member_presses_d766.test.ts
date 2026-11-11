@@ -46,6 +46,11 @@ function world(ai: any, { balance = 5_000_000 } = {}) {
              CREATE TABLE metrics_snapshots(id INTEGER PRIMARY KEY,deal_id INTEGER,snapshot_date TEXT,key_metrics TEXT,traction_score REAL,ai_review TEXT,created_by INTEGER);
              INSERT INTO metrics_snapshots(deal_id,snapshot_date,key_metrics,traction_score) VALUES(7,'2026-10-24','{}',0);`);
   f.db.prepare("UPDATE users SET role = 'partner' WHERE id = ?").run(MEMBER);
+  // D4676: a partner reviews a venture's gate only as an accepted owner or
+  // co-founder member of THAT venture. This file is about who is charged for
+  // the run, so the partner is given the membership the review now requires.
+  f.db.exec(`CREATE TABLE IF NOT EXISTS project_members(id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'cofounder', status TEXT NOT NULL DEFAULT 'accepted', source TEXT, invitation_id INTEGER, cofounder_connection_id INTEGER, added_by_user_id INTEGER, accepted_at TEXT, removed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  f.db.prepare("INSERT INTO project_members(project_id,user_id,role,status) VALUES(7,?,'cofounder','accepted')").run(MEMBER);
   setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(MEMBER, balance);
   // What the guard was asked to check, as the guard stub hands it its input.
@@ -150,7 +155,7 @@ test('a budget stop answers 402 in the budget\'s words; a model that cannot be r
   const gate = w.f.db.prepare('SELECT status, ai_recommendation, ai_explanation FROM decision_gates').get();
   assert.equal(gate.status, 'pending', 'a gate is a recommendation for a person to decide');
   assert.equal(gate.ai_recommendation, 'iterate', 'a recorded zero still supports the rule-based gate');
-  assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/100/);
+  assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/110 \(formula v1\)/);
   // #3938 (IN2): Clef decides first; with no decision there is nothing for gpt-oss-120b to explain.
   assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['module_decision', 'review:decision-gate', 'deal:7', '/pipeline']]);
 });

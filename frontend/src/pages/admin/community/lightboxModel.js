@@ -10,12 +10,17 @@
  *   - Events     `GET /api/admin/events`, D918's paged list (#2701): the
  *                Worker filters, sorts and pages, 25 rows a page, and each
  *                row carries its own counts. D915's Guard G is retired here.
- *   - Jobs       `GET /api/admin/jobs`, every page, every status.
- *   - Circles    `GET /api/admin/circles`. Members and Activity are typed by
- *                an admin, so they carry the "As entered" tag.
+ *   - Jobs       `GET /api/admin/community/jobs` (#4717 package 4): the
+ *                Worker searches, filters, sorts and pages, 25 rows a page,
+ *                with the total that matched.
+ *   - Circles    `GET /api/admin/community/circles` (#4717), the same way.
+ *                Members and Activity are typed by an admin, so they carry
+ *                the "As entered" tag.
  *   - Activity   `GET /api/admin/community/activity` (D932), paged by the
  *                Worker, 25 rows a page. It names no member.
- * Jobs and Circles are read whole and paged here, 25 rows a page.
+ * Every lightbox now reads one page; none reads a whole dataset into the
+ * browser. A search waits for the typing to stop (`SEARCH_WAIT_MS`), and an
+ * answer to an older query is never drawn over a newer one.
  */
 
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
@@ -31,6 +36,8 @@ export { NOT_RECORDED };
 /** The boxes, by the value `?open=` takes. */
 export const BOXES = ['events', 'jobs', 'circles', 'activity'];
 export const ROWS = 25;
+/** #4717: how long a lightbox's search waits after the last keystroke before it reads. */
+export const SEARCH_WAIT_MS = 300;
 
 /** `?open=` when it names a lightbox, else null. */
 export function openFrom(search) {
@@ -47,42 +54,10 @@ export function searchWith(search, box) {
 }
 
 const nf = (n) => Number(n).toLocaleString('en-US');
-const lower = (v) => String(v ?? '').toLowerCase();
-const has = (needle, ...fields) => !needle || fields.some((f) => lower(f).includes(needle));
 
 /** "1–25 of 41". An empty list says what it is empty of. */
 export function rangeLine({ from, to, total }, none) {
   return total ? `${nf(from)}–${nf(to)} of ${nf(total)}` : none;
-}
-
-/** One page of `rows`, 1-based, clamped to the pages there are. */
-export function pageOf(rows, page, size = ROWS) {
-  const pages = Math.max(1, Math.ceil(rows.length / size));
-  const at = Math.min(Math.max(1, Number(page) || 1), pages);
-  const from = rows.length ? (at - 1) * size + 1 : 0;
-  const to = Math.min(at * size, rows.length);
-  return { rows: rows.slice(from ? from - 1 : 0, to), page: at, pages, from, to, total: rows.length };
-}
-
-/** Numbers first, largest first; an unknown (null) sorts after every known one. */
-const byCount = (a, b) => (a === null ? (b === null ? 0 : 1) : b === null ? -1 : b - a);
-const byText = (a, b) => lower(a).localeCompare(lower(b));
-
-/**
- * A list read whole: searched, filtered, sorted, then paged. `spec` is one of
- * the three below; `state` is `{ q, filters: { [key]: value }, sort }`. An
- * empty filter value is "All".
- */
-export function listView(spec, rows, state, ctx = {}) {
-  const needle = lower(state.q).trim();
-  let out = (rows || []).filter((r) => spec.search(r, needle));
-  for (const f of spec.filters) {
-    const v = state.filters?.[f.key];
-    if (v) out = out.filter((r) => f.test(r, v, ctx));
-  }
-  const sort = spec.sorts.find((s) => s.key === state.sort) || spec.sorts[0];
-  out = sort.order ? sort.order(out, ctx) : [...out].sort((a, b) => sort.compare(a, b, ctx));
-  return pageOf(out, state.page);
 }
 
 /** The filter and sort state a lightbox opens with. */
@@ -177,6 +152,30 @@ export function eventsPage(answer, page) {
   return { rows: answer.events, page: at, pages: Math.max(1, Math.ceil(total / ROWS)), from, to: from ? from + answer.events.length - 1 : 0, total };
 }
 
+/**
+ * #4717: a Community list's answer (`{ rows, total }`) as a page, or null when
+ * it is not a list with a whole-number total, so it is drawn as unreadable,
+ * never as an empty list.
+ */
+export function listPage(answer, page) {
+  const total = answer?.total;
+  if (!answer || !Array.isArray(answer.rows) || typeof total !== 'number' || !Number.isInteger(total) || total < 0) return null;
+  const at = Math.max(1, Number(page) || 1);
+  const from = answer.rows.length ? (at - 1) * ROWS + 1 : 0;
+  return { rows: answer.rows, page: at, pages: Math.max(1, Math.ceil(total / ROWS)), from, to: from ? from + answer.rows.length - 1 : 0, total };
+}
+
+/** The page, filters, sort and search a Community list sends. Only what is set travels. */
+function listQuery(spec, state, keys) {
+  const page = Math.max(1, Number(state.page) || 1);
+  const sort = spec.sorts.find((s) => s.key === state.sort) || spec.sorts[0];
+  const out = { limit: ROWS, offset: (page - 1) * ROWS, sort: sort.key };
+  for (const k of keys) if (state.filters?.[k]) out[k] = state.filters[k];
+  const q = String(state.q || '').trim();
+  if (q) out.q = q;
+  return out;
+}
+
 /* ------------------------------------------------------------------ *
  * CM4 · Job postings
  * ------------------------------------------------------------------ */
@@ -196,13 +195,6 @@ export const JOBS_FOOT = 'Posted is the day an admin last approved the posting, 
 function postedText(j) {
   if (j.published_at) return dayLabel(j.published_at);
   return j.status === 'published' || j.status === 'closed' ? NOT_RECORDED : 'Not published';
-}
-
-/** How long it has been open, as a sortable number (the older the approval, the larger); null when not open or not recorded. */
-function openFor(j) {
-  if (j.status !== 'published') return null;
-  const t = stamp(j.published_at);
-  return Number.isNaN(t) ? null : -t;
 }
 
 function daysOpenCell(j, now) {
@@ -237,20 +229,23 @@ export const JOBS = {
   title: 'Job postings',
   placeholder: 'Search role or company',
   none: 'No postings',
-  search: (j, needle) => has(needle, j.title, j.project_name),
+  // #4717: searched, filtered and sorted by the Worker (`services/communityLists.ts`).
   filters: [
-    { key: 'status', label: 'Status', all: 'All statuses', options: JOB_STATUSES.map(([value, label]) => ({ value, label })), test: (j, v) => j.status === v },
-    { key: 'place', label: 'Remote or on-site', all: 'Remote or on-site', options: [{ value: 'remote', label: 'Remote' }, { value: 'onsite', label: 'On-site' }], test: (j, v) => Boolean(j.remote) === (v === 'remote') },
-    { key: 'seniority', label: 'Seniority', all: 'All levels', options: Object.entries(SENIORITY_LABELS).map(([value, label]) => ({ value, label })), test: (j, v) => j.seniority === v },
+    { key: 'status', label: 'Status', all: 'All statuses', options: JOB_STATUSES.map(([value, label]) => ({ value, label })) },
+    { key: 'place', label: 'Remote or on-site', all: 'Remote or on-site', options: [{ value: 'remote', label: 'Remote' }, { value: 'onsite', label: 'On-site' }] },
+    { key: 'seniority', label: 'Seniority', all: 'All levels', options: Object.entries(SENIORITY_LABELS).map(([value, label]) => ({ value, label })) },
   ],
   sorts: [
-    { key: 'applications', label: 'Applications', compare: (a, b) => byCount(appsOf(a), appsOf(b)) || byText(a.title, b.title) },
-    { key: 'created', label: 'Newest', compare: (a, b) => (stamp(b.created_at) || 0) - (stamp(a.created_at) || 0) },
+    { key: 'applications', label: 'Applications' },
+    { key: 'created', label: 'Newest' },
     // D1121: longest open first; a posting not open, or not recorded, sorts last.
-    { key: 'days_open', label: 'Days open', compare: (a, b) => byCount(openFor(a), openFor(b)) || byText(a.title, b.title) },
-    { key: 'title', label: 'Role', compare: (a, b) => byText(a.title, b.title) },
+    { key: 'days_open', label: 'Days open' },
+    { key: 'title', label: 'Role' },
   ],
 };
+
+/** One page of the Jobs list: the query the client sends (#4717). */
+export const jobsQuery = (state) => listQuery(JOBS, state, ['status', 'place', 'seniority']);
 
 /* ------------------------------------------------------------------ *
  * CM5 · Circles
@@ -285,18 +280,21 @@ export const CIRCLES = {
   title: 'Circles',
   placeholder: 'Search by name',
   none: 'No circles',
-  search: (c, needle) => has(needle, c.name),
+  // #4717: searched, filtered and sorted by the Worker (`services/communityLists.ts`).
   filters: [
-    { key: 'type', label: 'Type', all: 'All types', options: CIRCLE_TYPES.map((t) => ({ value: t.id, label: CIRCLE_TYPE_WORD[t.id] || t.short })), test: (c, v) => c.type === v },
-    { key: 'access', label: 'Access', all: 'All access', options: ACCESS_TYPES.map((a) => ({ value: a.id, label: a.label })), test: (c, v) => c.access === v },
-    { key: 'published', label: 'Published', all: 'Published or not', options: YES_NO, test: (c, v) => Boolean(c.published) === (v === 'yes') },
-    { key: 'featured', label: 'Featured', all: 'Featured or not', options: YES_NO, test: (c, v) => Boolean(c.featured) === (v === 'yes') },
+    { key: 'type', label: 'Type', all: 'All types', options: CIRCLE_TYPES.map((t) => ({ value: t.id, label: CIRCLE_TYPE_WORD[t.id] || t.short })) },
+    { key: 'access', label: 'Access', all: 'All access', options: ACCESS_TYPES.map((a) => ({ value: a.id, label: a.label })) },
+    { key: 'published', label: 'Published', all: 'Published or not', options: YES_NO },
+    { key: 'featured', label: 'Featured', all: 'Featured or not', options: YES_NO },
   ],
   sorts: [
-    { key: 'name', label: 'Name', compare: (a, b) => byText(a.name, b.name) },
-    { key: 'members', label: 'Members, as entered', compare: (a, b) => byCount(Number(a.members) || 0, Number(b.members) || 0) || byText(a.name, b.name) },
+    { key: 'name', label: 'Name' },
+    { key: 'members', label: 'Members, as entered' },
   ],
 };
+
+/** One page of the Circles list: the query the client sends (#4717). */
+export const circlesQuery = (state) => listQuery(CIRCLES, state, ['type', 'access', 'published', 'featured']);
 
 /* ------------------------------------------------------------------ *
  * CM6 · Recent activity (D932's read, paged by the Worker)
@@ -340,6 +338,44 @@ export function whenLabel(at) {
   return `${dayLabel(at)} · ${time} UTC`;
 }
 
+/** D4820 part 5 (CM08): a row's kind, as the chips name it. */
+const KIND_WORD = { events: 'Event', jobs: 'Job', circles: 'Circle', wellbeing: 'Wellbeing' };
+
+/** "Today", "Yesterday" or "Mon 9 Nov", in UTC, from the page's clock. */
+export function dayHeading(day, now = Date.now()) {
+  if (!day) return 'Date not recorded';
+  const today = new Date(now).toISOString().slice(0, 10);
+  const yesterday = new Date(now - 86_400_000).toISOString().slice(0, 10);
+  if (day === today) return 'Today';
+  if (day === yesterday) return 'Yesterday';
+  return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+/** The page's rows, grouped by UTC day in their order (the read is newest first); an undated row is its own group, last. */
+export function groupsOf(rows) {
+  const out = [];
+  for (const r of rows) {
+    const last = out.at(-1);
+    if (last && last.day === r.day) last.rows.push(r);
+    else out.push({ day: r.day, rows: [r] });
+  }
+  return out;
+}
+
+/**
+ * D4820 part 5 (CM08): the kind chips' counts, from the read's `by_kind`
+ * (D932, sent only when no kind is chosen). Each count is a whole number or
+ * null (its source could not be read); a missing or odd `by_kind` is null for
+ * every kind, so a chip never shows a count the Worker did not send.
+ */
+export function activityKindCounts(answer) {
+  const b = answer?.by_kind;
+  const ok = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
+  const counts = Object.fromEntries(['events', 'jobs', 'circles', 'wellbeing'].map((k) => [k, b && typeof b === 'object' ? ok(b[k]) : null]));
+  const all = Number.isInteger(answer?.total) && answer.total >= 0 && b ? answer.total : null;
+  return { all, ...counts, admin: null };
+}
+
 /**
  * The activity read's answer as a page. A source that failed is named, and
  * its rows and count are absent, never zero. The Worker's paging stops at
@@ -354,6 +390,22 @@ export function activityPage(answer, page) {
   const from = answer.rows.length ? (at - 1) * ROWS + 1 : 0;
   const to = from ? from + answer.rows.length - 1 : 0;
   const failed = (answer.unreadable || []).map((u) => SOURCE_WORD[u?.source] || 'one source');
+  const rows = answer.rows.map((r, i) => {
+    const t = stamp(r.at);
+    const dated = !Number.isNaN(t);
+    return {
+      key: `${at}-${i}`,
+      icon: r.icon || '•',
+      kind: KIND_WORD[r.kind] || null,
+      sentence: String(r.sentence || ''),
+      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
+      when: whenLabel(r.at),
+      lastChange: r.dated_by === 'last_change',
+      day: dated ? new Date(t).toISOString().slice(0, 10) : null,
+      // A registration row counts a whole day (one row per event per day), so it has no time of its own.
+      time: !dated ? NOT_RECORDED : r.count != null ? 'All day' : new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }),
+    };
+  });
   return {
     state: 'ready',
     page: at,
@@ -361,15 +413,61 @@ export function activityPage(answer, page) {
     from,
     to,
     total,
-    rows: answer.rows.map((r, i) => ({
-      key: `${at}-${i}`,
-      icon: r.icon || '•',
-      sentence: String(r.sentence || ''),
-      href: typeof r.href === 'string' && r.href.startsWith('/admin') ? r.href : null,
-      when: whenLabel(r.at),
-      lastChange: r.dated_by === 'last_change',
-    })),
+    rows,
+    // D4820 part 5 (CM08): the page's rows grouped by UTC day, newest first, the time first in each row.
+    groups: groupsOf(rows),
     partial: failed.length ? `Could not be read: ${[...new Set(failed)].join(', ')}. Those rows are not here and not in the count, which is not a claim that nothing happened.` : null,
     capped: total > ACTIVITY_CAP ? `Pages stop at ${nf(ACTIVITY_CAP)} rows. Narrow the kind or the dates to reach older ones.` : null,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * D4820 part 4 (#4820) · CM05, the Events lightbox's summary strip and tabs
+ * ------------------------------------------------------------------ */
+
+/** CM05's three tabs. The list is the default; events by type moved here from the overview. */
+export const EVENTS_TABS = [
+  { key: 'list', label: 'Events' },
+  { key: 'participation', label: 'Participation' },
+  { key: 'by-type', label: 'By type' },
+];
+
+/**
+ * CM05's summary strip, from the Community read the overview already holds
+ * (its tiles and `buildEventsFunnel`), so the strip and the overview cannot
+ * disagree. Each item answers alone: a value, `Reading…`, `Unreadable`, or
+ * (Confirmed from an older read) `Not in this read`. Never a zero for a part
+ * that was not read.
+ */
+export function eventsSummary({ ev, fig }) {
+  const fromTile = (t, label) => {
+    if (!t || t.state === 'loading') return { key: t?.key || label, label, state: 'loading' };
+    if (t.state !== 'ready') return { key: t.key, label, state: 'unreadable' };
+    return { key: t.key, label, state: 'ready', value: t.value, sub: t.sub || null };
+  };
+  const f = ev?.funnel;
+  const step = (i, key, label, sub) => {
+    if (!f || f.state === 'loading') return { key, label, state: 'loading' };
+    if (f.state !== 'ready') return { key, label, state: 'unreadable' };
+    const v = f.steps[i].value;
+    return v === null ? { key, label, state: 'unrecorded', note: 'Not in this read' }
+      : { key, label, state: 'ready', value: Number(v).toLocaleString('en-US'), sub };
+  };
+  const ended = f?.state === 'ready' ? `${Number(f.events).toLocaleString('en-US')} ended event${f.events === 1 ? '' : 's'}` : null;
+  const wl = ev?.waitlisted;
+  let waitlisted;
+  if (!wl || wl.state === 'loading') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'loading' };
+  else if (wl.state !== 'ready') waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'unreadable' };
+  else waitlisted = { key: 'waitlisted', label: 'Waitlisted', state: 'ready', value: wl.value.toLocaleString('en-US'), sub: `across ${wl.events.toLocaleString('en-US')} upcoming event${wl.events === 1 ? '' : 's'}` };
+  return [
+    fromTile(fig?.upcoming, 'Upcoming'),
+    fromTile(fig?.registrations, 'Registrations'),
+    step(1, 'confirmed', 'Confirmed', ended),
+    step(2, 'attended', 'Attended', ended),
+    fromTile(fig?.['show-up'], 'Show-up'),
+    waitlisted,
+  ];
+}
+
+/** The By type tab's count: how many of the stored types had an event, or null when the part was not read. */
+export const typesWithEvents = (byType) => (byType?.state === 'ready' ? byType.shown.length : null);

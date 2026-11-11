@@ -4,6 +4,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_d1178.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -201,6 +202,17 @@ test('a scenario card, Make this the base\'s warning, and an Edit body with no r
   assert.equal(scenarioBody({ name: 'Seed', raise: '1', target: '18', shares: { ...shares, reserve: '5' } }).error, 'The shares add to 95%. They must add to 100%.');
   assert.equal(scenarioBody({ name: '', raise: '1', target: '18' }).error, 'Name the scenario.');
   assert.match(scenarioBody({ name: 'x', raise: '1', target: '0' }).error, /1 to 120/);
+});
+
+test('scenario amounts use the recorded currency exponent', () => {
+  const form = { name: 'Seed', target: '18' };
+  assert.equal(scenarioBody({ ...form, raise: '1,234' }, 'jpy').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.25' }, 'JPY').error);
+  assert.equal(scenarioBody({ ...form, raise: '1.234' }, 'kwd').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, 'USD').error);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, null).error);
+  assert.equal(scenarioCard({ ...BASE, currency: 'jpy', amount_to_raise_cents: 1234 }).raise, '¥1,234');
+  assert.match(scenarioCard({ ...BASE, currency: undefined }).raise, /minor units.*currency not recorded/);
 });
 
 test('compare: Today is the record, each scenario Modelled, and nothing unrecorded is a zero', () => {

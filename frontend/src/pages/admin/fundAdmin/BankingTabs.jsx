@@ -1,15 +1,17 @@
 import { ReadFailure as Unreadable } from './parts';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Lightbox, Pill, Unrecorded } from '../../../ui';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { MercuryEntityConnections } from './MercuryEntitySheet';
 import {
-  NOT_OURS_NOTE_MAX, NOT_OURS_REASONS, PAYMENT_INSTRUCTIONS_ADMIN, PAYMENT_INSTRUCTIONS_LINK, REJECT_REASON_MIN, actRow, balanceText, ending,
+  NOT_OURS_NOTE_MAX, NOT_OURS_REASONS, PAYMENT_INSTRUCTIONS_ADMIN, PAYMENT_INSTRUCTIONS_LINK, REJECT_REASON_MIN, accountBalanceLine, actRow, balanceText, ending,
   money, notOursText, refusalText,
 } from './fundAdminModel';
-import { Line, NUM, Note, Panel, Section, Table } from './parts';
+import { ActFlow } from './MoneyFlow';
+import { actButton, matchEffects, matchOutcome } from './moneyFlowModel';
+import { Line, NUM, TAP_LINK, Note, Panel, Section, Table } from './parts';
 import { useRead } from './useRead';
 
 /**
@@ -93,6 +95,9 @@ function Transactions({ apis, accounts = [] }) {
         <label className="text-xs text-axal-muted dark:text-gray-400">From<input type="date" className={INPUT} aria-label="Transactions from" value={filters.from || ''} onChange={e => change('from', e.target.value)} /></label>
         <label className="text-xs text-axal-muted dark:text-gray-400">To<input type="date" className={INPUT} aria-label="Transactions to" value={filters.to || ''} onChange={e => change('to', e.target.value)} /></label>
       </div>
+      <p className={`m-0 px-4 pb-3 text-[12.5px] text-axal-muted sm:px-5 dark:text-gray-400 ${NUM}`} data-testid="transactions-balance">
+        {accountBalanceLine(accounts.find((a) => a.uid === filters.account) || null)}
+      </p>
       {read.status === 'loading' ? <div className="px-4 py-3 sm:px-5"><LoadingRows lines={3} /></div>
         : read.status === 'unreadable' ? <ReadFailed read={read} what="The transactions" claim="This is not a claim that no money moved." />
           : items.length === 0 ? <Note>{query ? 'No transaction on this page matches the search.' : 'No transaction recorded for these filters. Lines appear after a sync.'}</Note>
@@ -114,7 +119,7 @@ export function BankingTab({ apis, access }) {
       <Panel label="Payment instructions" testId="banking-payment-instructions">
         {actRow(access, 'bank_account.see')?.allowed === true
           ? <Line a="The entities' bank accounts" b="Entered, retired and revealed from the bank accounts console, behind your step-up."
-            action={<Link className={BTN.link} to={PAYMENT_INSTRUCTIONS_LINK.href} data-testid="payment-instructions-link">{PAYMENT_INSTRUCTIONS_LINK.text}</Link>} />
+            action={<Link className={TAP_LINK} to={PAYMENT_INSTRUCTIONS_LINK.href} data-testid="payment-instructions-link">{PAYMENT_INSTRUCTIONS_LINK.text}</Link>} />
           : <Line a="The entities' bank accounts" b={<span data-testid="payment-instructions-admin">{PAYMENT_INSTRUCTIONS_ADMIN}</span>} />}
       </Panel>
       </div>
@@ -126,13 +131,55 @@ export function BankingTab({ apis, access }) {
 
 /** The brief's groups, in its order, with Needs review (a proposal whose line changed) beside Proposed. */
 const GROUPS = [['proposed', 'Proposed'], ['needs_review', 'Needs review'], ['confirmed', 'Confirmed'], ['rejected', 'Rejected']];
-const targetName = (m) => (m.target_kind === 'fee_period' ? `Fee period #${m.target_id}` : `Capital-call line #${m.target_id}`);
+const targetName = (m) => {
+  const l = m.ledger;
+  if (m.target_kind === 'fee_period') return l?.quarter ? `Fee period ${l.quarter}` : `Fee period #${m.target_id}`;
+  if (!l) return `Capital-call line #${m.target_id}`;
+  return `${l.call_number != null ? `Call ${l.call_number}` : 'Capital call'} · ${l.lp_name || 'LP name not recorded'}`;
+};
+
+/** D4812 part 6 (FA-07 B): the bank side and the ledger side of one open match, side by side, then its effect. */
+function MatchPair({ m }) {
+  const l = m.ledger;
+  const side = 'flex min-w-0 flex-col gap-0.5 rounded-axal-sm border border-axal-hairline px-3 py-2.5 dark:border-gray-800';
+  const eye = 'text-[10.5px] font-bold uppercase tracking-[.08em] text-axal-muted dark:text-gray-400';
+  const outcome = matchOutcome(m);
+  return (
+    <div className="flex flex-col gap-2 px-4 pb-3 sm:px-5" data-testid={`match-pair-${m.uid}`}>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+        <div className={side} data-testid={`match-bank-${m.uid}`}>
+          <span className={eye}>Bank</span>
+          <b className="text-[13px] text-axal-ink dark:text-gray-100">{m.counterparty_name || 'No counterparty recorded'}</b>
+          <b className={`${NUM} text-[13px] text-axal-ink dark:text-gray-100`}>{money(m.amount_cents) ?? 'Not recorded'}</b>
+          <span className={`${NUM} text-[12px] text-axal-muted dark:text-gray-400`}>{`${m.posted_on || 'not posted'} · ${m.entity_key} ${ending(m.last_four)}`}</span>
+        </div>
+        <span aria-hidden="true" className="hidden text-center text-axal-muted sm:block">⇄</span>
+        <div className={side} data-testid={`match-ledger-${m.uid}`}>
+          <span className={eye}>Ledger</span>
+          <b className="text-[13px] text-axal-ink dark:text-gray-100">{targetName(m)}</b>
+          {!l ? <span className="text-[12px] text-axal-muted dark:text-gray-400"><Unrecorded reason={m.ledger_unavailable || 'The ledger side was not read.'}>— Not recorded</Unrecorded></span>
+            : m.target_kind === 'fee_period'
+              ? <b className={`${NUM} text-[13px] text-axal-ink dark:text-gray-100`}>{l.net_cents != null ? `${money(l.net_cents)} net fee` : 'Net fee not recorded'}</b>
+              : <>
+                <b className={`${NUM} text-[13px] text-axal-ink dark:text-gray-100`}>{l.outstanding_cents != null ? `${money(l.outstanding_cents)} outstanding` : 'Outstanding not recorded'}</b>
+                <span className={`${NUM} text-[12px] text-axal-muted dark:text-gray-400`}>{l.due_on ? `Due ${l.due_on}` : 'No due date recorded'}</span>
+              </>}
+        </div>
+      </div>
+      <p className="m-0 rounded-axal-sm bg-amber-50 px-3 py-2 text-[12.5px] text-axal-ink dark:bg-amber-950/30 dark:text-gray-100" data-testid={`match-effect-${m.uid}`}>
+        <span className="font-bold">Effect · </span>{typeof outcome === 'string' ? outcome : outcome.reason}
+      </p>
+    </div>
+  );
+}
 const ERR = 'px-4 pb-2.5 text-[12px] text-red-700 sm:px-5 dark:text-red-300';
 const LABEL = 'text-[11.5px] font-semibold text-zinc-700 dark:text-gray-200';
 
 function MatchRow({ m, apis, access, onChanged }) {
   const [rejecting, setRejecting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // D4812 part 5: the list is read again when the receipt closes, so a reload never unmounts the receipt.
+  const confirmedRef = useRef(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -155,11 +202,15 @@ function MatchRow({ m, apis, access, onChanged }) {
       <Line a={`${money(m.amount_cents) ?? 'Not recorded'} · ${targetName(m)}`}
         b={<span className={NUM}>{`${m.posted_on || 'not posted'} · ${m.counterparty_name || 'No counterparty recorded'} · ${m.entity_key} ${ending(m.last_four)}${m.reason ? ` · ${m.reason}` : ''}`}</span>}
         chip={<Pill tone={m.state === 'needs_review' ? 'warn' : m.state === 'confirmed' ? 'ok' : m.state === 'rejected' ? 'danger' : 'neutral'}>{GROUPS.find(([k]) => k === m.state)?.[1] || m.state}</Pill>} action={actions} />
-      {confirming && <Lightbox phone="sheet" title="Confirm this match?" label="Confirm bank match" testId={`match-dialog-${m.uid}`} onClose={() => { if (!busy) setConfirming(false); }}>
-        <Note>Links this bank transaction to {targetName(m)}. It records a match and moves no money.</Note>
-        <FundActControl access={access} act="mercury.reconcile"><div className="p-4"><button type="button" className={BTN.primary} disabled={busy} data-testid={`match-confirm-submit-${m.uid}`} onClick={() => run(async () => { await apis.mercury.confirmMatch(m.uid); setConfirming(false); }, 'The match could not be confirmed.')}>Confirm match</button></div></FundActControl>
-        {error && <p role="alert" className={ERR}>{error}</p>}
-      </Lightbox>}
+      {open && <MatchPair m={m} />}
+      {/* D4812 part 5: confirming a match goes through the flow; an Admin's act, so no code. */}
+      {confirming && <ActFlow apis={apis} access={access} act="mercury.reconcile" testId={`match-flow-${m.uid}`} title="Confirm bank match"
+        sub="Links this bank transaction to what it pays." effects={matchEffects(m, targetName(m))}
+        label={m.target_kind === 'capital_call_line' ? actButton('Confirm match and record', m.amount_cents, 'receipt') : actButton('Confirm', m.amount_cents, 'match')}
+        consequences={[`Links this transaction to ${targetName(m)}.`, ...(m.target_kind === 'capital_call_line' ? ['Records the receipt on that line. It moves no money: the money has already arrived.'] : ['Marks the fee period collected. It moves no money.'])]}
+        run={() => apis.mercury.confirmMatch(m.uid)}
+        receipt={() => [['Match', `${money(m.amount_cents) ?? 'Not recorded'} · ${targetName(m)}`], ['Audit', 'Recorded as mercury.reconcile']]}
+        onClose={() => { setConfirming(false); if (confirmedRef.current) onChanged(); }} onDone={() => { confirmedRef.current = true; }} />}
       {rejecting && (
         <Lightbox phone="sheet" title="Reject this match?" label="Reject bank match" onClose={() => { if (!busy) setRejecting(false); }}><Note>Rejects the proposed pair. The transaction stays recorded; a reason is kept.</Note>
         <form className="flex flex-col gap-2 border-b border-axal-hairline bg-[#faf9fc] px-4 py-3 sm:px-5 dark:border-gray-800 dark:bg-gray-950/40" onSubmit={(e) => { e.preventDefault(); run(() => apis.mercury.rejectMatch(m.uid, reason.trim()), 'The match could not be rejected.'); }}>

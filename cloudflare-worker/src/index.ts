@@ -205,6 +205,8 @@ import './integrations/providers/mercury';
 // D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
 import './integrations/providers/notion';
 import './integrations/providers/posthog';
+// D2407 (#2407) — a founder's own Beehiiv newsletter, read-only, through Beehiiv's MCP server: sign-in only.
+import './integrations/providers/beehiiv';
 // D855 §4 (#3733 part 1) — a member's own Linear, read-only, through Linear's read-only MCP server: sign-in only, not listed yet.
 import './integrations/providers/linear';
 // D855 §4 (#3733 part 2) — a member's own Cloudflare, read-only, through Cloudflare's REST API: sign-in only, not listed yet.
@@ -834,6 +836,14 @@ const COOL_OFF_PREFIXES = [
   // exclusive grant over whole countries. Same class as promos: pause it for a
   // freshly-recovered admin.
   '/api/admin/licences',
+  // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
+  '/api/admin/licence-pricing',
+  // D5018 (#5018) — the reference prices behind every program's recommended fee. Same class.
+  '/api/admin/program-pricing',
+  // D5019 (#5019) — named sub-territories that exclusivity scopes are drawn on. Same class.
+  '/api/admin/territory-regions',
+  // D5048 (#5048) — a licence's package and program agreements. Same class.
+  '/api/admin/licence-agreements',
   // D708 — each Axal entity's bank accounts: the payment instructions every
   // notice prints. Pause them for a freshly-recovered admin.
   '/api/admin/bank-accounts',
@@ -905,6 +915,8 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/support-session',
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
+  // D5043 — finishing a move is the move's second leg, paused as the move is.
+  '/api/admin/account-moves/:uid/retry-invitation',
   '/api/admin/users/:userId/demote-admin',
   // D714 — the three fund routes that are wholly Super Admin acts: issuing a
   // capital call, executing a distribution, and assigning a fund's ledger
@@ -926,6 +938,11 @@ const COOL_OFF_ROUTES = [
   // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
   // route, so D710's entity reads under `/api/admin/mercury` stay open.
   '/api/admin/mercury/safe-basis-repair',
+  // D5039 — recording a payment against a subsidiary statement and voiding one
+  // change what HQ is owed: the money class, behind the step-up. The exact
+  // routes, so the statement ledger and the dispute entry stay open.
+  '/api/admin/statements/:uid/payments',
+  '/api/admin/statements/:uid/void',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
@@ -2252,6 +2269,15 @@ export default {
       const cronStartedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
       let cronSummary: string[] = [];
       let cronError: string | null = null;
+      // D4703 (#4703): every sub-task below catches its own failure so the next
+      // one runs. That kept the tick alive and made the row read `completed`
+      // over a sub-task that had failed. Each catch now names itself here, and
+      // the row is `partial` with those names in `error`.
+      const cronTaskFailures: string[] = [];
+      const taskFailed = (task: string, ...detail: unknown[]) => {
+        cronTaskFailures.push(task);
+        console.error('[cron] sub-task failed:', task, ...detail);
+      };
 
       // D239 — EVERY GATE BELOW ASKS "WHICH SCHEDULED MINUTE IS THIS?", so it
       // reads the event's own time, fixed BEFORE the queue drain. It read the
@@ -2296,7 +2322,7 @@ export default {
             const r = await sendSubprocessorNotices(env, { now: now.getTime() });
             if (r.sent || r.failed) console.info(`[cron] subprocessor notices sent=${r.sent} failed=${r.failed}`);
           } catch {
-            console.error('[cron] subprocessor notices unreadable');
+            taskFailed('subprocessor notices');
           }
         }
         // D1528 (#3847): the agent sweep. Its own minute (% 5 === 1), under
@@ -2312,7 +2338,7 @@ export default {
             const r = await sweepAgents(env, now);
             if (r.resent || r.admitted || r.cap_resumed) cronSummary.push(`agents resent=${r.resent} admitted=${r.admitted} cap_resumed=${r.cap_resumed}`);
           } catch {
-            console.error('[cron] agent sweep unreadable');
+            taskFailed('agent sweep');
           }
           if (env.AGENT_ENGINE && env.AGENT_ENGINE !== 'off') {
             // D1530 (#3849, E5): the due duties, claim before act.
@@ -2323,7 +2349,7 @@ export default {
                 cronSummary.push(`agent duties tasks=${d.task_created} skipped=${d['skipped:agent_paused'] + d['skipped:no_tokens'] + d['skipped:scope_gone']}`);
               }
             } catch {
-              console.error('[cron] agent duties unreadable');
+              taskFailed('agent duties');
             }
             // #3851 (E7): the engine's alerts (caps, blocked tasks, waiting approvals, DLQ, gateway), each once per its window.
             try {
@@ -2332,7 +2358,7 @@ export default {
               const sent = Object.values(a).reduce((x, y) => x + y, 0);
               if (sent) cronSummary.push(`agent alerts ${Object.entries(a).filter(([, n]) => n).map(([k, n]) => `${k}=${n}`).join(' ')}`);
             } catch {
-              console.error('[cron] agent alerts unreadable');
+              taskFailed('agent alerts');
             }
           }
         }
@@ -2345,7 +2371,7 @@ export default {
             const r = await continuePublication(env, now.toISOString().slice(0, 10));
             if (r.scored || r.failed) cronSummary.push(`venture model recompute scored=${r.scored} failed=${r.failed}`);
           } catch {
-            console.error('[cron] venture model recompute unreadable');
+            taskFailed('venture model recompute');
           }
         }
         // D886 B10: counts-only alerts in the existing HQ notification inbox.
@@ -2360,7 +2386,18 @@ export default {
             const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
             await sweepMeetingBotOperations(env, now.getTime());
           } catch {
-            console.error('[cron] meeting bot operations unreadable');
+            taskFailed('meeting bot operations');
+          }
+        }
+        // D4559 (#4559) part 2: platform capacity. Every 15 minutes at :11 the
+        // alert episodes move; at 04:11 the day's snapshot is also kept. HQ only:
+        // the alerts go to HQ's Super Admins. It never throws into the tick.
+        if (hqCadences && now.getUTCMinutes() % 15 === 11) {
+          try {
+            const { sweepPlatformCapacity } = await import('./services/platformCapacityHistory');
+            await sweepPlatformCapacity(env, now, { snapshot: now.getUTCHours() === 4 && now.getUTCMinutes() === 11 });
+          } catch {
+            taskFailed('platform capacity');
           }
         }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
@@ -2386,7 +2423,7 @@ export default {
               console.info(`[cron] venture score fairness written=${r.written} gaps=${r.gaps}`);
             }
           } catch {
-            console.error('[cron] venture scores unreadable');
+            taskFailed('venture scores');
           }
         }
         // D561 — Learning videos no item uses any more, and the videos of
@@ -2397,14 +2434,31 @@ export default {
             const r = await sweepLearningVideos(env, now);
             if (r.deleted || r.stream_deleted || r.kept_unverified) console.info(`[cron] learning video sweep checked=${r.checked} deleted=${r.deleted} copied_deleted=${r.copied_deleted} kept_unverified=${r.kept_unverified} stream_deleted=${r.stream_deleted}`);
           } catch (e) {
-            console.error('[cron] learning video sweep failed', e);
+            taskFailed('learning video sweep', e);
           }
         }
         // D684 — interview channels. Every five minutes, each provider that
         // must poll (Google Meet transcripts) runs its sweep; at 03:50 the
         // pending-conversation store is purged past its 30 days. Every tier:
         // a branch's members and their conversations are its own.
+        // D4703 (#4703): failed calendar deletes are retried hourly, oldest first.
+        if (now.getUTCMinutes() === 17) {
+          try {
+            const { retryFailedCalendarDeletes } = await import('./services/calendar/sync');
+            const r = await retryFailedCalendarDeletes(env, 20);
+            if (r.tried) cronSummary.push(`calendar delete retries tried=${r.tried} cleared=${r.cleared}`);
+          } catch (e) {
+            taskFailed('calendar delete retry', e instanceof Error ? e.message : 'error');
+          }
+        }
         if (now.getUTCMinutes() % 5 === 2) {
+          try {
+            const { retryCalendarCopies } = await import('./services/calendar/sync');
+            const tried = await retryCalendarCopies(env);
+            if (tried) cronSummary.push(`calendar copy retries tried=${tried}`);
+          } catch {
+            taskFailed('calendar copy retry', 'calendar_copy_retry_failed');
+          }
           try {
             const { runChannelSweeps } = await import('./services/channels/jobs');
             await runChannelSweeps(env, now);
@@ -2413,7 +2467,7 @@ export default {
             const { sweepQuietChats } = await import('./services/sessionAutoStructure');
             await sweepQuietChats(env, now);
           } catch (e) {
-            console.error('[cron] channel sweeps failed', e instanceof Error ? e.message : 'error');
+            taskFailed('channel sweeps', e instanceof Error ? e.message : 'error');
           }
           // D1580 F1 (#3827) — a rehearsal's audio once its hour is up, unless the founder kept it.
           try {
@@ -2421,7 +2475,7 @@ export default {
             const r = await purgeRehearsalAudio(env, now);
             if (r.deleted) console.info(`[cron] rehearsal audio purge deleted=${r.deleted}`);
           } catch (e) {
-            console.error('[cron] rehearsal audio purge failed', e instanceof Error ? e.message : 'error');
+            taskFailed('rehearsal audio purge', e instanceof Error ? e.message : 'error');
           }
         }
         // D685 §5.6 — recordings a closed tab left behind: drafts never
@@ -2434,7 +2488,7 @@ export default {
           const r = await sweepInterviewSessions(env, now);
           if (r.drafts || r.paused || r.resumed || r.recovered) console.info(`[cron] interview sessions drafts=${r.drafts} paused=${r.paused} resumed=${r.resumed} recovered=${r.recovered}`);
         } catch (e) {
-          console.error('[cron] interview session sweep failed', e instanceof Error ? e.message : 'error');
+          taskFailed('interview session sweep', e instanceof Error ? e.message : 'error');
         }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 50) {
           try {
@@ -2442,7 +2496,7 @@ export default {
             const r = await purgeExpired(env, now);
             if (r.threads || r.messages) console.info(`[cron] channel purge threads=${r.threads} messages=${r.messages}`);
           } catch (e) {
-            console.error('[cron] channel purge failed', e instanceof Error ? e.message : 'error');
+            taskFailed('channel purge', e instanceof Error ? e.message : 'error');
           }
           // D877 (#2524) — a call's audio past its founder's retention; the text stays.
           try {
@@ -2450,7 +2504,7 @@ export default {
             const r = await purgeExpiredCallAudio(env, now);
             if (r.sessions) console.info(`[cron] call audio purge sessions=${r.sessions} objects=${r.objects}`);
           } catch (e) {
-            console.error('[cron] call audio purge failed', e instanceof Error ? e.message : 'error');
+            taskFailed('call audio purge', e instanceof Error ? e.message : 'error');
           }
         }
         // D572 part 3b — the partner leaderboard's daily standings, so the
@@ -2466,7 +2520,7 @@ export default {
             if (r.reminders || r.alerts) console.info(`[cron] grow daily reminders=${r.reminders} alerts=${r.alerts}`);
             cronSummary.push(`grow daily reminders=${r.reminders} alerts=${r.alerts}`);
           } catch (e) {
-            console.error('[cron] grow daily failed', e instanceof Error ? e.message : 'error');
+            taskFailed('grow daily', e instanceof Error ? e.message : 'error');
           }
         }
         // D1539 (#3789) — the deck card blob prune: a blob no version names,
@@ -2477,7 +2531,7 @@ export default {
             if (r.deleted) console.info(`[cron] deck card blobs pruned=${r.deleted}`);
             cronSummary.push(`deck card blobs pruned=${r.deleted}`);
           } catch (e) {
-            console.error('[cron] deck card blob prune failed', e instanceof Error ? e.message : 'error');
+            taskFailed('deck card blob prune', e instanceof Error ? e.message : 'error');
           }
         }
         // D1058 (#2928) — Reporting's daily step: duties a closing missed, the
@@ -2490,7 +2544,7 @@ export default {
             if (r.duties || r.periods || r.reminders) console.info(`[cron] reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
             cronSummary.push(`reporting daily duties=${r.duties} periods=${r.periods} reminders=${r.reminders}`);
           } catch (e) {
-            console.error('[cron] reporting daily failed', e instanceof Error ? e.message : 'error');
+            taskFailed('reporting daily', e instanceof Error ? e.message : 'error');
           }
         }
         if (now.getUTCHours() === 5 && now.getUTCMinutes() === 25) {
@@ -2499,7 +2553,7 @@ export default {
             const r = await writeLeaderboardSnapshots(env, now.getTime());
             if (r.written || r.failed.length) console.info(`[cron] leaderboard snapshots written=${r.written} failed=${r.failed.length}`);
           } catch (e) {
-            console.error('[cron] leaderboard snapshots failed', e);
+            taskFailed('leaderboard snapshots', e);
           }
         }
         // D4292 (#4292) — the influencer commission hold: pending subscription
@@ -2511,7 +2565,7 @@ export default {
             const r = await sweepPendingCommissions(env, now.getTime());
             if (r.payable || r.bonuses || r.custom) console.info(`[cron] influencer commissions payable=${r.payable} bonuses=${r.bonuses} custom=${r.custom}`);
           } catch (e) {
-            console.error('[cron] influencer commission sweep failed', e instanceof Error ? e.message : 'error');
+            taskFailed('influencer commission sweep', e instanceof Error ? e.message : 'error');
           }
         }
         // D484 — publish approved articles whose scheduled time has passed.
@@ -2522,7 +2576,7 @@ export default {
           const p = await publishDueArticles(env, now);
           if (p.published) console.info(`[cron] scheduled articles published=${p.published} of due=${p.due}`);
         } catch (e) {
-          console.error('[cron] scheduled article publish failed', e);
+          taskFailed('scheduled article publish', e);
         }
         // Cohort Timing & Gating — every-minute tick: materializes monthly
         // cycles, unlocks weeks at their Delaware-midnight boundaries,
@@ -2534,7 +2588,7 @@ export default {
           const { runCohortTimingTick } = await import('./services/cohortTiming');
           await runCohortTimingTick(env, now);
         } catch (e) {
-          console.error('[cron] cohort timing tick failed', e);
+          taskFailed('cohort timing tick', e);
         }
         // Task #5 — Cohort application lifecycle tick: closes application
         // windows 7 days before the 1st (23:59:59 ET), sends 3d/24h close
@@ -2546,7 +2600,33 @@ export default {
           const { runCohortApplicationsTick } = await import('./services/cohortApplications');
           await runCohortApplicationsTick(env, now);
         } catch (e) {
-          console.error('[cron] cohort applications tick failed', e);
+          taskFailed('cohort applications tick', e);
+        }
+        // D4657 (#4657): Lab progress reconciliation. A few enrolled founders
+        // per tick: record milestones their saved work proves but no request
+        // recorded (a closed tab), and pay grants an interrupted request left
+        // unpaid. Idempotent; bounded by RECONCILE_TICK_LIMIT.
+        try {
+          const { runLabReconcileTick } = await import('./services/labProgress');
+          await runLabReconcileTick(env, { nowMs: now.getTime() });
+        } catch (e) {
+          taskFailed('lab reconcile tick', e);
+        }
+        // D4663 (#4663, owner decision A): graduation closes the Lab, so the
+        // reconciler above never sees a graduate whose final request died
+        // before the credential was issued. A few such graduates per tick get
+        // the credential and its bonus here. Idempotent; bounded by
+        // CERT_BACKFILL_TICK_LIMIT; recorded in spinout_certificate_backfill_*.
+        try {
+          const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
+          const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
+          // D5360: the same tick pays lost graduation bonuses; a tick that only paid bonuses is logged too.
+          if (b.scanned || b.bonus.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid} bonus_skipped=${b.bonus.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid}`);
+          }
+        } catch (e) {
+          taskFailed('certificate backfill tick', e);
         }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
@@ -2574,7 +2654,7 @@ export default {
             const r = await runRefresh(env);
             console.info(`[cron] signals ingested promoted=${r.promoted} held=${r.held} evidence=${r.evidence_written}`);
           } catch (e) {
-            console.error('[cron] signals ingestion failed', e);
+            taskFailed('signals ingestion', e);
           }
         }
         // D712 (#1777) — the fund reporting queue at 05:20 UTC, HQ only: it
@@ -2589,7 +2669,7 @@ export default {
             const built = r.results.filter((x) => x.result === 'built').map((x) => x.fund_id);
             console.info('[cron] fund reporting', r.quarter, 'due', r.due, 'built funds', JSON.stringify(built));
           } catch (e) {
-            console.error('[cron] fund reporting failed', (e as Error)?.message);
+            taskFailed('fund reporting', (e as Error)?.message);
           }
         }
         // D1536 (#3785) — Monday 05:55 UTC, HQ only: the Workers AI catalogue
@@ -2600,7 +2680,7 @@ export default {
             const { runCatalogueDrift } = await import('./services/ai/catalogueDrift');
             await runCatalogueDrift(env);
           } catch (e) {
-            console.error('[cron] ai catalogue drift failed', (e as Error)?.message);
+            taskFailed('ai catalogue drift', (e as Error)?.message);
           }
         }
         // Task #3 (Y-1) — nightly Trust Center housekeeping at 04:35 UTC:
@@ -2618,7 +2698,7 @@ export default {
             if (r.claimed || r.notified) {
               console.info(`[cron] renewal notices scanned=${r.scanned} claimed=${r.claimed} notified=${r.notified}`);
             }
-          } catch (e) { console.error('[cron] renewal sweep failed', e); }
+          } catch (e) { taskFailed('renewal sweep', e); }
         }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 35) {
           try {
@@ -2630,7 +2710,7 @@ export default {
             if (k.scanned) {
               console.info(`[cron] trust kyc resync scanned=${k.scanned} updated=${k.updated}`);
             }
-          } catch (e) { console.error('[cron] trust expiry failed', e); }
+          } catch (e) { taskFailed('trust expiry', e); }
         }
         // D122 — close the audit row an HQ support session leaves on a branch.
         // NOT gated on `hqCadences`, and that is the design rather than an
@@ -2646,7 +2726,7 @@ export default {
             const { closeExpiredSupportSessions } = await import('./util/supportSessionSweep');
             const s = await closeExpiredSupportSessions(env);
             if (s.closed) console.info(`[cron] support sessions closed=${s.closed}`);
-          } catch (e) { console.error('[cron] support session sweep failed', e); }
+          } catch (e) { taskFailed('support session sweep', e); }
         }
         // D135 — the compliance ladder's middle rung. A notice whose deadline
         // has passed unanswered freezes the account it was addressed to.
@@ -2680,7 +2760,7 @@ export default {
             } else if (f.froze || f.suspended) {
               console.info(`[cron] compliance froze=${f.froze} suspended=${f.suspended} notified=${f.notified}`);
             }
-          } catch (e) { console.error('[cron] compliance sweep failed', e); }
+          } catch (e) { taskFailed('compliance sweep', e); }
         }
         // D143 — a breached HQ SLA tells somebody. `hq_escalations.due_at` has
         // been written since migration 259 and read by nothing: `slaBand()`
@@ -2712,7 +2792,7 @@ export default {
             } else if (s.reported) {
               console.info(`[cron] hq SLA breached=${s.breached} reported=${s.reported} notified=${s.notified}`);
             }
-          } catch (e) { console.error('[cron] hq SLA sweep failed', e); }
+          } catch (e) { taskFailed('hq SLA sweep', e); }
         }
         // D200 — the security_events ledger keeps 90 days. Migration 282's own
         // seal refuses any delete INSIDE that window, so this sweep can only
@@ -2733,7 +2813,7 @@ export default {
             const p = await pruneSecurityEvents(env);
             if (!p.readable) console.warn('[cron] security_events prune could not read the ledger');
             else if (p.deleted) console.info(`[cron] security_events pruned=${p.deleted}`);
-          } catch (e) { console.error('[cron] security_events prune failed', e); }
+          } catch (e) { taskFailed('security_events prune', e); }
         }
         // D250 — SCHEDULED TELEGRAM AND X POSTS ARE SENT. Both consoles have
         // offered "Schedule" since they were built and nothing sent a
@@ -2751,7 +2831,7 @@ export default {
               console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} stale_unknown=${p.stale_unknown} unreadable_failed=${p.unreadable_failed} unreadable_draft=${p.unreadable_draft} left_for_next_tick=${p.left_for_next_tick}`);
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
-          } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }
+          } catch (e) { taskFailed('scheduled posts sweep', e); }
         }
         // D1319 (#3480) — a founder's publish left `sending` for 10 minutes is
         // `unknown`: not known whether it arrived. Never re-sent, never
@@ -2762,7 +2842,7 @@ export default {
             const { releaseStrandedSends } = await import('./services/publishCore');
             const n = await releaseStrandedSends(env);
             if (n) console.info(`[cron] publish stranded=${n}`);
-          } catch (e) { console.error('[cron] publish stranded sweep failed', (e as Error)?.name); }
+          } catch (e) { taskFailed('publish stranded sweep', (e as Error)?.name); }
         }
         // D710 (#1775) — Mercury's read-only sync of each Axal entity's
         // accounts and transactions, then the matchers. Hourly at minute 17, a
@@ -2774,7 +2854,7 @@ export default {
             const { syncAllMercuryEntityConnections } = await import('./services/mercury/sync');
             const r = await syncAllMercuryEntityConnections(env);
             if (r.scanned > 0) console.info(`[cron] mercury sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
-          } catch (e) { console.error('[cron] mercury sync failed', e); }
+          } catch (e) { taskFailed('mercury sync', e); }
         }
         // D272 — licence pushes that did not land are re-sent, each at most
         // once per hour (LICENCE_PUSH_RETRY_WINDOW_MINUTES, per row), so a
@@ -2788,7 +2868,23 @@ export default {
             const r = await retryPendingLicencePushes(env, now);
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
-          } catch (e) { console.error('[cron] licence push retry failed', e); }
+          } catch (e) { taskFailed('licence push retry', e); }
+          // D5361 — incomplete termination consequences use the same five-minute
+          // lease as a manual resume, so a crashed request no longer waits for
+          // an operator and a racing clock cannot repeat an event or notice.
+          try {
+            const { resumeIncompleteLicenceTerminations } = await import('./routes/admin_licences_lifecycle');
+            const r = await resumeIncompleteLicenceTerminations(env, now);
+            if (!r.available) console.warn('[cron] licence termination resume', r.reason);
+            else if (r.tried || r.skipped) console.info(`[cron] licence termination resume tried=${r.tried} complete=${r.complete} incomplete=${r.incomplete} skipped=${r.skipped}`);
+          } catch (e) { taskFailed('licence termination resume', e); }
+          // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
+          try {
+            const { retryOutbox } = await import('./services/programOutbox');
+            const o = await retryOutbox(env, now);
+            if (!o.available) console.warn('[cron] program outbox retry', o.reason);
+            else if (o.tried) console.info(`[cron] program outbox retry tried=${o.tried} sent=${o.sent}`);
+          } catch (e) { taskFailed('program outbox retry', e); }
         }
         // D237 — cron_run_history keeps 30 days, and always each trigger's
         // newest row (the reasons and the batch cap are in
@@ -2802,7 +2898,7 @@ export default {
             const p = await pruneCronRunHistory(env);
             if (!p.readable) console.warn('[cron] cron_run_history prune could not read the table');
             else if (p.deleted || p.capped) console.info(`[cron] cron_run_history pruned=${p.deleted} batches=${p.batches} kept=${p.kept}${p.capped ? ' capped' : ''}`);
-          } catch (e) { console.error('[cron] cron_run_history prune failed', e); }
+          } catch (e) { taskFailed('cron_run_history prune', e); }
         }
         // D358 — the Profiling v2 evolution loop (PROFILING_V2.md §7.8). Every
         // minute of 03:00–03:59 UTC except :15 and :45 (heavier jobs), one
@@ -2820,7 +2916,7 @@ export default {
               if (t.processed || t.failed) {
                 console.info(`[cron] profile evolution stage=${t.stage} processed=${t.processed} evaluated=${t.evaluated} events=${t.events} failed=${t.failed}${t.pass_complete ? ' pass_complete' : ''}`);
               }
-            } catch (e) { console.error('[cron] profile evolution failed', e); }
+            } catch (e) { taskFailed('profile evolution', e); }
           }
         }
         // D148 — the anonymised platform median, computed at HQ and pushed to
@@ -2854,7 +2950,7 @@ export default {
             } else {
               console.info(`[cron] benchmarks period=${r.period} published=${r.published} answered=${r.answered}/${r.total}`);
             }
-          } catch (e) { console.error('[cron] benchmark publish failed', e); }
+          } catch (e) { taskFailed('benchmark publish', e); }
         }
         // D266 — a branch reports its previous and current quarter to HQ at
         // 05:10 UTC, so HQ's statements say "reported, unmeasurable" rather
@@ -2877,7 +2973,7 @@ export default {
             const detail = r.periods.map((p) => `${p.period}=${p.sent ? 'sent' : 'not sent'}`).join(' ');
             if (r.sent) console.info(`[cron] usage report ${detail}`);
             else console.warn(`[cron] usage report not sent ${detail}: ${r.reason}`);
-          } catch (e) { console.error('[cron] usage report failed', e); }
+          } catch (e) { taskFailed('usage report', e); }
         }
         // D1156: each branch reports only program aggregates daily, independent of revenue.
         if (!hqCadences && now.getUTCHours() === 5 && now.getUTCMinutes() === 15) {
@@ -2885,7 +2981,7 @@ export default {
             const { pushProgramUsage } = await import('./services/programUsage');
             const r = await pushProgramUsage(env, now);
             console.info(`[cron] program report sent=${r.sent} programs=${r.sent ? r.programs : 0}`);
-          } catch { console.error('[cron] program report failed'); }
+          } catch { taskFailed('program report'); }
         }
         // D492 / D493 — the nightly consent sweeps at 05:05 UTC, per
         // deployment (both act on this deployment's own rows). Both are
@@ -2898,18 +2994,18 @@ export default {
             const { syncCohortAdvisorNotices } = await import('./services/cohortAdvisorAccess');
             const r = await syncCohortAdvisorNotices(env, { limit: 2000 });
             if (r.started || r.ended) console.info(`[cron] cohort advisor notices started=${r.started} ended=${r.ended}`);
-          } catch (e) { console.error('[cron] cohort advisor notices failed', e); }
+          } catch (e) { taskFailed('cohort advisor notices', e); }
           // D959 — investor cohort access: closes grants past their last day, then tells founders.
           try {
             const { syncInvestorCohortNotices } = await import('./services/investorCohortAccess');
             const r = await syncInvestorCohortNotices(env, { limit: 2000 });
             if (r.started || r.ended || r.expired) console.info(`[cron] investor cohort notices started=${r.started} ended=${r.ended} expired=${r.expired}`);
-          } catch (e) { console.error('[cron] investor cohort notices failed', e); }
+          } catch (e) { taskFailed('investor cohort notices', e); }
           try {
             const { noticeLegacyRelationships } = await import('./routes/partnernet');
             const r = await noticeLegacyRelationships(env, 500);
             if (r.rows) console.info(`[cron] legacy relationship notices rows=${r.rows} notices=${r.notices}`);
-          } catch (e) { console.error('[cron] legacy relationship notices failed', e); }
+          } catch (e) { taskFailed('legacy relationship notices', e); }
         }
         // The 04:50 UTC Refer & Earn payout auto-approval sweep was removed
         // with Stripe Connect in the referrals redesign. Referral rewards are
@@ -2931,7 +3027,7 @@ export default {
                 `redemptions_revoked=${r.redemptions_revoked}`,
               );
             }
-          } catch (e) { console.error('[cron] partner deal expiry failed', e); }
+          } catch (e) { taskFailed('partner deal expiry', e); }
         }
         // Task #38 — daily rev-share attribution-window warning sweep
         // at 04:45 UTC. Finds deal_sourcing_revshare redemptions whose
@@ -2949,7 +3045,7 @@ export default {
                 `partner_emails=${r.partner_emails_sent} admin_digest=${r.admin_digest_sent}`,
               );
             }
-          } catch (e) { console.error('[cron] revshare window warnings failed', e); }
+          } catch (e) { taskFailed('revshare window warnings', e); }
         }
         // Task #6 (W-1) — daily investor trial downgrade at 04:25 UTC.
         // Idempotent: only flips users whose trial_ends_at is in the past
@@ -2961,7 +3057,7 @@ export default {
               console.info(`[cron] investor trial downgrade scanned=${r.scanned} downgraded=${r.downgraded}`);
             }
           } catch (e) {
-            console.error('[cron] investor trial downgrade failed', e);
+            taskFailed('investor trial downgrade', e);
           }
         }
         // Task #5 — daily assistant retention sweep at 04:10 UTC. Drops
@@ -2978,7 +3074,7 @@ export default {
               const r = await sweepExpiredConversations(env);
               console.info(`[cron] assistant retention sweep deleted_free=${r.deleted_free} deleted_paid=${r.deleted_paid}`);
             } catch (e) {
-              console.error('[cron] assistant retention sweep failed', e);
+              taskFailed('assistant retention sweep', e);
             }
           }
         }
@@ -2995,7 +3091,7 @@ export default {
               console.info(`[cron] totp remediation scanned=${r.scanned} migrated=${r.migrated} emailed=${r.emailed} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] totp remediation failed', e);
+            taskFailed('totp remediation', e);
           }
         }
         // Task #7 (AM) — daily project trash sweep at 04:30 UTC. Hard-deletes
@@ -3012,7 +3108,7 @@ export default {
         // flipped `mi_contribution_optout=1` since the last sweep.
         if ([2, 8, 14, 20].includes(now.getUTCHours()) && now.getUTCMinutes() === 15) {
           try { await Jobs.enqueue(env, 'mi_reduce', {}); }
-          catch (e) { console.error('[cron] mi_reduce enqueue failed', e); }
+          catch (e) { taskFailed('mi_reduce enqueue', e); }
         }
         // Task #2 — funnel_events retention purge at 04:20 UTC. First-party
         // funnel rows are pseudonymous but still subject to GDPR storage
@@ -3027,7 +3123,7 @@ export default {
             const purged = (r as any)?.meta?.changes || 0;
             if (purged) console.info(`[cron] funnel_events purge deleted=${purged}`);
           } catch (e) {
-            console.error('[cron] funnel_events purge failed', e);
+            taskFailed('funnel_events purge', e);
           }
         }
         // Task #5 (IE) — Daily KV snapshot to R2 at 02:00 UTC. D1
@@ -3050,7 +3146,7 @@ export default {
               });
             }
           } catch (e) {
-            console.error('[cron] kv snapshot failed', e);
+            taskFailed('kv snapshot', e);
           }
         }
         if (now.getUTCHours() === 4 && now.getUTCMinutes() === 30) {
@@ -3061,7 +3157,7 @@ export default {
               console.info(`[cron] project trash sweep scanned=${r.scanned} deleted=${r.deleted} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] project trash sweep failed', e);
+            taskFailed('project trash sweep', e);
           }
         }
         // Task #5 (AV) — hourly Vectorize re-embed for axal-search.
@@ -3110,7 +3206,7 @@ export default {
                   `INSERT INTO system_metrics (metric_name, value, labels) VALUES ('reembed', ?, ?)`,
                 ).bind(enqueued, JSON.stringify({ type, enqueued, failed, skipped })).run();
               } catch (e) {
-                console.error('[cron] reembed metric write failed', (e as Error).message);
+                taskFailed('reembed metric write', (e as Error).message);
               }
             };
             for (const type of ALL_ENTITY_TYPES) {
@@ -3164,11 +3260,20 @@ export default {
                 console.info(`[cron] axal-search re-embed type=${type} ok=${okCount} failed=${failed} watermark=${lastOk}`);
                 await recordReembed(type, okCount, failed, 0);
               } catch (e) {
-                console.error('[cron] axal-search re-embed failed', type, e);
+                taskFailed('axal-search re-embed', type, e);
               }
             }
+            try {
+              const { sweepResearchIndex } = await import('./services/researchIndexSweep');
+              const r = await sweepResearchIndex(env, now);
+              if (r.pending_scanned || r.legacy_scanned || r.pending_failed) {
+                console.info(`[cron] research index recovery pending=${r.pending_scanned} enqueued=${r.pending_enqueued} requeued=${r.pending_requeued} failed=${r.pending_failed} legacy=${r.legacy_scanned}/${r.legacy_enqueued}`);
+              }
+            } catch (e) {
+              taskFailed('research index recovery', e);
+            }
           } catch (e) {
-            console.error('[cron] axal-search re-embed failed', e);
+            taskFailed('axal-search re-embed', e);
           }
         }
         // Task #2 — HubSpot 30-minute reconcile. Drift between StudioOS
@@ -3181,7 +3286,7 @@ export default {
               console.info(`[cron] hubspot sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] hubspot sync failed', e);
+            taskFailed('hubspot sync', e);
           }
         }
         // Task #3 — Calendly 15-minute reconcile. Webhooks deliver real-time
@@ -3194,7 +3299,7 @@ export default {
               console.info(`[cron] calendly sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] calendly sync failed', e);
+            taskFailed('calendly sync', e);
           }
         }
         // Task #4 — Salesforce 30-minute polling fallback. Mirrors stage
@@ -3207,7 +3312,7 @@ export default {
               console.info(`[cron] salesforce sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] salesforce sync failed', e);
+            taskFailed('salesforce sync', e);
           }
         }
         // Task #5 — Carta cap-table sync every 6 hours at HH:00 (00/06/12/18 UTC).
@@ -3219,7 +3324,7 @@ export default {
               console.info(`[cron] carta sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] carta sync failed', e);
+            taskFailed('carta sync', e);
           }
         }
         // Task #2 — DocuSign reconcile sweep every 30 minutes (HH:05 / HH:35).
@@ -3235,7 +3340,7 @@ export default {
               console.info(`[cron] docusign sync scanned=${r.scanned} ok=${r.ok} failed=${r.failed}`);
             }
           } catch (e) {
-            console.error('[cron] docusign sync failed', e);
+            taskFailed('docusign sync', e);
           }
         }
         // Task #14 (AA-1) — Market Intelligence aggregator cron.
@@ -3298,7 +3403,7 @@ export default {
             console.info(`[cron] mi quarterly_pdf eligible_period=${now.getUTCFullYear()}Q${Math.floor(now.getUTCMonth() / 3) + 1} (renderer pending AA-2)`);
           }
         } catch (e) {
-          console.error('[cron] market intel failed', e);
+          taskFailed('market intel', e);
         }
         // D670 — the market-intel watchlist digest (Task #30: a weekly email on
         // Mondays and a monthly one on the 1st, 09:00 UTC) is retired with the
@@ -3314,7 +3419,7 @@ export default {
             console.info(`[cron] notification digest sent users=${r.sent} rows=${r.rows}`);
           }
         } catch (e) {
-          console.error('[cron] notification digest failed', e);
+          taskFailed('notification digest', e);
         }
         // Task #6 — event reminder sweep every 5 minutes. Walks events
         // starting within 24h and fires reminder_24h / reminder_1h to each
@@ -3329,7 +3434,7 @@ export default {
               console.info(`[cron] event reminders events=${r.events} sent=${r.sent} skipped=${r.skipped}`);
             }
           } catch (e) {
-            console.error('[cron] event reminder sweep failed', e);
+            taskFailed('event reminder sweep', e);
           }
           // #3959: learning plan reminders, one per item and occurrence (insert-ledger-first), through notify().
           try {
@@ -3337,7 +3442,7 @@ export default {
             const sent = await sendPlanReminders(env, now.getTime());
             if (sent > 0) console.info(`[cron] learning plan reminders sent=${sent}`);
           } catch (e) {
-            console.error('[cron] learning plan reminder sweep failed', e);
+            taskFailed('learning plan reminder sweep', e);
           }
         }
         // Task #14's watchlist follow-up reminder sweep stood here (and its
@@ -3358,7 +3463,7 @@ export default {
               console.error(`[cron] analytics snapshot skipped for ${r.snapshot_date}: ${r.reason}`);
             }
           } catch (e) {
-            console.error('[cron] analytics snapshot failed', e);
+            taskFailed('analytics snapshot', e);
           }
         }
       } catch (e: any) {
@@ -3373,6 +3478,7 @@ export default {
             triggerName: triggerKey,
             startedAt: cronStartedAt,
             cronError,
+            failedTasks: cronTaskFailures,
             summary: cronSummary,
           });
         } catch (dbErr) {

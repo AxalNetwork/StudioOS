@@ -33,6 +33,7 @@ import {
 import adminCohort from '../src/routes/admin_cohort.ts';
 import certificates from '../src/routes/spinout_certificates.ts';
 import { BRANCH_SUSPENDED } from '../src/util/branch.ts';
+import { labEnrollmentSchema, graduate } from './_lab_evidence.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ADMIN = 900, FOUNDER = 117;
@@ -52,6 +53,7 @@ function freshDb() {
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)`);
   u.run(ADMIN, 'admin', 'Admin One', 'admin@example.test');
   u.run(FOUNDER, 'founder', 'Ada Graduate', 'ada@example.test');
+  labEnrollmentSchema(db); // D4657: the activation writes the founder's enrollment
   return db;
 }
 
@@ -183,7 +185,7 @@ function branchDb(status: string) {
   const db = freshDb();
   db.exec(`CREATE TABLE branch_licence (id INTEGER PRIMARY KEY, status TEXT, suspended_at TEXT, suspended_note TEXT);`);
   db.prepare(`INSERT INTO branch_licence (id, status) VALUES (1, ?)`).run(status);
-  db.prepare(`INSERT INTO spinout_lab_milestones (user_id, week, milestone_key, completed_at) VALUES (?, 4, 'incorporation_completed', '2026-07-31 14:00:00')`).run(FOUNDER);
+  graduate(db, FOUNDER, '2026-07-31 14:00:00'); // D4659: the whole programme on record
   return db;
 }
 

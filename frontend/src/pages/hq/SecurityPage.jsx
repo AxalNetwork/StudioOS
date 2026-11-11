@@ -1,10 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import SecurityTabs from './security/SecurityTabs.jsx';
+import OverviewWorkspace from './security/OverviewWorkspace.jsx';
+import SourceAvailability from './security/SourceAvailability.jsx';
+import AccessWorkspace from './security/AccessWorkspace.jsx';
+import EventsWorkspace from './security/EventsWorkspace.jsx';
+import { activeCount, feedQuery } from './security/eventsModel.js';
+import ResilienceWorkspace from './security/ResilienceWorkspace.jsx';
+import { otherNotRecorded } from './security/resilienceModel.js';
+import AiSafetyWorkspace from './security/AiSafetyWorkspace.jsx';
+import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
+import TrustWorkspace from './security/TrustWorkspace.jsx';
+import StatusBadge from './security/StatusBadge.jsx';
+import { buildOverview, clockOf } from './security/overviewModel.js';
+import { tabFromSearch, tabOf } from './security/securityTabs.js';
 
 /**
  * HQ · Security — canvas H23 (Admin · Super), which "completes Y2/H7".
@@ -53,6 +67,8 @@ import HeaderAsk from '../../ui/HeaderAsk.jsx';
  * what HQ did, which is not a branch's to show.
  */
 export const UNAVAILABLE = Symbol('unavailable');
+/** Workspaces that say for themselves what could not be read (D4803), so the page banner stays off there. */
+const OWN_UNREADABLE = new Set(['overview', 'resilience', 'ai-safety', 'privacy', 'trust']);
 
 const day = (v) => (v ? String(v).slice(0, 16).replace('T', ' ') : null);
 // A number, formatted — or null when there is no number. Never a default.
@@ -74,34 +90,29 @@ const GOV_FILTERS = [
   { key: 'auth', label: 'Sign-ins and step-ups' },
 ];
 
+/** D4803 — the Events filter bar, untouched: exactly the read the ledger always made. */
+export const EMPTY_CONTROLS = Object.freeze({ q: '', range: 'any', custom: {}, actor: '', outcome: '', source: '' });
+
+
 /**
- * The artboard's one piece of decoration: "Rows involving impersonation or a
- * licence suspension carry a tint — the only decoration on the page, and it
- * is there to be scanned for." Three tones, and `note` is deliberately no
- * tint at all rather than a fourth colour. A refused sign-in is `alert` too.
+ * D4691 — every actor on this page arrives in one shape (`actor_identity`,
+ * services/securityIdentity.ts) and is drawn with its kind, so a support
+ * operator never reads as the account holder, a refused attempt never reads
+ * as the account it named, and an act with no account reads as the platform
+ * rather than as a blank.
  */
-const ROW_TINT = {
-  alert: 'bg-red-50/40 dark:bg-red-950/20',
-  warn: 'bg-amber-50/40 dark:bg-amber-950/20',
-  note: '',
+export const IDENTITY_KIND_LABEL = {
+  user: 'account',
+  support: 'support',
+  system: 'system',
+  network: 'network',
 };
-const ACTION_INK = {
-  alert: 'text-red-700 dark:text-red-300',
-  warn: 'text-amber-800 dark:text-amber-300',
-  note: 'text-axal-ink dark:text-white',
-};
-/**
- * H23's fifth column. `refused` and `not closed` are the two that want
- * finding; `live` is a state worth a second look; `ok` and `ended` are the
- * quiet majority.
- */
-const OUTCOME_INK = {
-  refused: 'text-red-700 dark:text-red-300',
-  'not closed': 'text-red-700 dark:text-red-300',
-  live: 'text-amber-800 dark:text-amber-300',
-  ok: 'text-axal-muted',
-  ended: 'text-axal-muted',
-};
+export function identityLine(identity) {
+  if (!identity || typeof identity !== 'object') return null;
+  const kind = IDENTITY_KIND_LABEL[identity.kind] || 'unknown';
+  const behalf = identity.kind === 'support' && identity.on_behalf_of ? ` for ${identity.on_behalf_of.label}` : '';
+  return { kind, text: `${identity.label}${behalf}` };
+}
 
 function Zone({ title, sub, children, tone = '' }) {
   return (
@@ -113,6 +124,18 @@ function Zone({ title, sub, children, tone = '' }) {
       {children}
     </Card>
   );
+}
+
+/**
+ * D4691 — the "Live support sessions" tile's note. `active` is the shared rule's
+ * `live`, the same rows the Sessions zone offers to End; an open record past
+ * its limit is counted apart, by name, never as live and never dropped.
+ */
+export function impersonationNote(imp) {
+  const nc = Number.isFinite(Number(imp?.not_closed)) ? Number(imp.not_closed) : 0;
+  return nc > 0
+    ? `token could still be valid · ${nc.toLocaleString()} open record${nc === 1 ? '' : 's'} past the limit, not live`
+    : 'token could still be valid';
 }
 
 /**
@@ -136,7 +159,19 @@ function Zone({ title, sub, children, tone = '' }) {
  * own `<Unreadable/>` above says which, and these tiles must not answer a
  * question they were not able to ask.
  */
-function AiSafety({ block }) {
+export function AiSafety({ block }) {
+  // D4691 — a rollup that could not be read is unreadable as a whole, and the
+  // token anomalies and the not-counted list (their own reads) still render.
+  if (block && block.available === false) {
+    return (
+      <div data-testid="hq-ai-safety">
+        <div data-testid="hq-ai-safety-unreadable">
+          <Unreadable what="The AI guardrail counters" claim="This is not a claim that nothing was blocked or flagged." />
+        </div>
+        <TokenAnomalies block={block.token_anomalies} />
+      </div>
+    );
+  }
   const v = block?.verdicts;
   const e = block?.enforcement;
   // `windowNote`, not `window`: a local of that name shadows the browser global
@@ -185,7 +220,15 @@ function AiSafety({ block }) {
         `safe` would be a verdict nothing reached; and the whole block is
         absent, not zeroed, when `advisor_turn_audit` could not be read.
       */}
-      {e?.available && (
+      {e?.available && e.breakdown_available === false && (
+        <div className="mt-3" data-testid="hq-ai-safety-rules-unreadable">
+          <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
+          <p className="mt-1 text-[11px] text-axal-faint">
+            Unreadable — {e.breakdown_reason || 'the breakdown by rule could not be read.'} The totals above were read.
+          </p>
+        </div>
+      )}
+      {e?.available && e.breakdown_available !== false && (
         <div className="mt-3" data-testid="hq-ai-safety-rules">
           <div className="text-[11px] font-semibold text-axal-muted">What tripped the guard</div>
           {e.rules?.length ? (
@@ -343,190 +386,51 @@ export function DsrKindsNotRecorded({ kinds }) {
 }
 
 /**
- * D481 — which route each of the Sessions zone's acts goes to. Sign out
+ * D481 — which route each of the Access workspace's acts goes to. Sign out
  * account is D165's per-account route, reached from a row rather than
- * duplicated; the other three are D481's.
+ * duplicated; the other three are D481's. D4801 — emergency
+ * re-authentication goes through here too, so every write the workspace
+ * makes leaves this page by one door (`security/README.md`: no request from
+ * the workspace files).
  */
+/**
+ * D4699 — whether the operator is still signed in once `kind` succeeds, so the page may re-read.
+ * Emergency re-authentication signs everyone out; signing out an account signs out its holder, so
+ * the operator's own account counts as signed out. Revoking their own current session is refused
+ * by the server, and ending a support session never ends the operator's.
+ */
+export function actLeavesOperatorSignedIn(kind, arg, ownUserId) {
+  if (kind === 'emergency') return false;
+  if (kind === 'sign_out') return ownUserId != null && Number(arg) !== Number(ownUserId);
+  return kind === 'revoke' || kind === 'revoke_selected' || kind === 'end';
+}
+
 export async function runSessionAct(client, kind, arg, reason) {
   if (kind === 'revoke') return client.hqRevokeSession(arg, reason);
   if (kind === 'revoke_selected') return client.hqRevokeSessions(arg, reason);
   if (kind === 'end') return client.hqEndImpersonation(arg, reason);
   if (kind === 'sign_out') return client.hqForceReauthUser(arg, reason);
+  if (kind === 'emergency') return client.hqSecurityForceReauth(reason);
   throw new Error(`Unknown session act: ${kind}`);
 }
 
-/** The write bar's refusal, in words the operator can act on. */
-export function writeBarMessage(err) {
-  const msg = String(err?.message || err || 'Request failed');
-  return msg === 'TOTP required'
-    ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-    : msg;
-}
-
-const MIN_REASON = 8;
-const ACT_BUTTON = 'rounded-md border border-red-200 bg-white px-2 py-0.5 text-[10.5px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30';
-
 /**
- * D481 — the Sessions zone's list, and the acts it said it had.
- *
- * The subtitle read "Revoke is recorded" over a zone with no revoke. Now:
- * live support sessions first (H23: "an impersonation is a session like any
- * other, which is why it sits in this list"), then every active session with
- * Revoke, Sign out account, and a checkbox for Revoke selected. The caller's
- * own session reads Current and offers nothing — the server refuses it too.
- *
- * ONE REASON FOR EVERY ACT, typed once above the list and stored with each
- * act. Every button is disabled until it is long enough, which is the same
- * rule the server enforces and the same length.
- *
- * A FAILED READ IS UNREADABLE, never an empty list and never "Not recorded":
- * "nobody is signed in" is the one answer a security desk must not give by
- * accident. `list` is null while loading, UNAVAILABLE after a failed read.
+ * D481's list, drawn by the Access workspace (D4801). A caller that still
+ * mounts SessionsPanel gets that workspace: the row shows the network bucket,
+ * never the address, and names a support-held session as held.
  */
-export function SessionsPanel({ list, onAct, onRetry }) {
-  const [reason, setReason] = useState('');
-  const [selected, setSelected] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [notice, setNotice] = useState(null);
-
-  if (list === UNAVAILABLE) {
-    return (
-      <div data-testid="hq-sessions-unreadable">
-        <Unreadable what="The session list" claim="This is not a claim that nobody is signed in." onRetry={onRetry} />
-      </div>
-    );
-  }
-  if (!list) return <p className="text-[12px] text-axal-faint">Loading…</p>;
-
-  const ready = reason.trim().length >= MIN_REASON;
-  const act = async (kind, arg) => {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await onAct(kind, arg, reason.trim());
-      setNotice(res?.message || 'Done.');
-      if (kind === 'revoke_selected') setSelected([]);
-    } catch (err) {
-      setError(writeBarMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const toggle = (id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
-  const imp = list.impersonations;
-
-  return (
-    <div className="mt-3" data-testid="hq-sessions">
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required for any act below, stored with it
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="e.g. device reported stolen, ticket SEC-212"
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      {error && <p role="alert" className="mt-2 text-[12px] text-red-700 dark:text-red-300">{error}</p>}
-      {notice && <p role="status" className="mt-2 text-[12px] text-axal-muted">{notice}</p>}
-
-      {imp?.available === false ? (
-        <div className="mt-3" data-testid="hq-live-impersonations-unreadable">
-          <Unreadable what="The support-session list" claim="This is not a claim that no support session is live." />
-        </div>
-      ) : imp?.rows?.length > 0 && (
-        <ul className="mt-3 space-y-1.5" data-testid="hq-live-impersonations">
-          {imp.rows.map((i) => (
-            <li key={i.id} className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50/40 px-3 py-2 text-[11.5px] dark:border-red-900 dark:bg-red-950/20" data-testid={`hq-live-impersonation-${i.id}`}>
-              <span className="min-w-0">
-                <b>{i.admin_name || i.admin_email || `user ${i.admin_user_id}`}</b> · impersonating{' '}
-                <b>{i.target_name || i.target_email || `user ${i.target_user_id}`}</b>
-                <span className="block font-mono text-[10px] text-axal-faint">
-                  started {day(i.started_at)}{i.context ? ` · ${i.context}` : ''}
-                </span>
-              </span>
-              <button type="button" disabled={busy || !ready} onClick={() => act('end', i.id)} className={ACT_BUTTON}>
-                End
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-axal-faint">
-        <span data-testid="hq-sessions-count">
-          {num(list.total)} active · token under {list.token_hours}h old, not revoked, account not signed out
-          {list.rows.length < list.total ? ` · newest ${num(list.rows.length)} shown` : ''}
-        </span>
-        <button
-          type="button"
-          disabled={busy || !ready || selected.length === 0}
-          onClick={() => act('revoke_selected', selected)}
-          className={ACT_BUTTON}
-          data-testid="hq-sessions-revoke-selected"
-        >
-          Revoke selected ({num(selected.length)})
-        </button>
-      </div>
-      {list.rows.length === 0 ? (
-        <p className="mt-2 text-[12px] text-axal-faint" data-testid="hq-sessions-empty">
-          No session was seen in this window. The table was read; it held no active row.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {list.rows.map((s) => (
-            <li key={s.id} className="flex items-start justify-between gap-3 rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]" data-testid={`hq-session-${s.id}`}>
-              <span className="flex min-w-0 items-start gap-2">
-                {s.is_current ? null : (
-                  <input
-                    type="checkbox"
-                    aria-label={`Select session ${s.id}`}
-                    checked={selected.includes(s.id)}
-                    onChange={() => toggle(s.id)}
-                    className="mt-0.5"
-                  />
-                )}
-                <span className="min-w-0">
-                  <b>{s.name || s.email || `user ${s.user_id}`}</b>
-                  {s.role ? <span className="ml-1 text-axal-faint">· {titleCase(s.role)}</span> : null}
-                  <span className="block truncate font-mono text-[10px] text-axal-faint">
-                    {s.user_agent ? s.user_agent.slice(0, 70) : 'no device recorded'} · {s.ip || 'no address recorded'}
-                    {' '}· since {day(s.created_at) || 'unstamped'} · seen {day(s.last_seen_at) || 'unstamped'}
-                  </span>
-                </span>
-              </span>
-              {s.is_current ? (
-                <span className="shrink-0 rounded-md border border-axal-hairline px-2 py-0.5 text-[10.5px] font-bold text-axal-muted">Current</span>
-              ) : (
-                <span className="flex shrink-0 gap-1">
-                  <button type="button" disabled={busy || !ready} onClick={() => act('revoke', s.id)} className={ACT_BUTTON}>
-                    Revoke
-                  </button>
-                  <button type="button" disabled={busy || !ready} onClick={() => act('sign_out', s.user_id)} className={ACT_BUTTON}>
-                    Sign out account
-                  </button>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-        Revoke ends one session; its token is refused from its next request. Sign out account ends every session that
-        account holds. Ending a support session closes its record and stops it being extended — its token carries no
-        session id, so it lapses at its own expiry, within {list.expiry_minutes} minutes. Each act is recorded with its
-        reason and the account it touched.
-      </p>
-    </div>
-  );
+export function SessionsPanel(props) {
+  return <AccessWorkspace unavailable={UNAVAILABLE} onRetry={() => {}} {...props} />;
 }
 
-function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white' }) {
+// `unread` (D4801): an absent figure on the Access tiles is a store that could
+// not be read, so it draws the vocabulary's Unavailable, never "Not recorded"
+// and never 0. The other zones' tiles keep their words until their slice.
+function Stat({ label, value, note, tone = 'text-axal-ink dark:text-white', unread = false }) {
   return (
     <div className="rounded-xl border border-axal-hairline bg-axal-ground p-3">
       <div className="text-[8.5px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</div>
-      <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? <Unrecorded />}</div>
+      <div className={`mt-1 text-lg font-extrabold tracking-tight tabular-nums ${tone}`}>{value ?? (unread ? <StatusBadge state="unavailable" /> : <Unrecorded />)}</div>
       {note && <div className="mt-0.5 text-[10px] text-axal-faint">{note}</div>}
     </div>
   );
@@ -618,25 +522,57 @@ export function Sanctions({ block, unreadable }) {
  * own words: "stated in words rather than a green light."
  */
 export function drillSentence(drill) {
+  // D4691 — invalid is its own word: something was read, and it is not a
+  // drill marker this page can believe.
+  if (drill?.state === 'invalid') return `Invalid — ${drill.reason || 'the drill marker is not valid evidence.'}`;
   if (!drill || drill.state === 'unreadable' || drill.available === false) {
     return `Unreadable — ${drill?.reason || 'the drill marker could not be read.'}`;
   }
   if (drill.state === 'never_run') return `Never run — ${drill.reason}`;
   const when = day(drill.at) || 'an unstamped date';
+  // D4691 — a result older than its window is history, said so before the result.
+  const stale = drill.fresh === false
+    ? `Stale — older than ${drill.stale_after_days} days, so it does not vouch for recovery today. `
+    : '';
   if (drill.state === 'last_run_failed') {
     const exit = drill.exit_code === null || drill.exit_code === undefined ? 'no exit code recorded' : `exit ${drill.exit_code}`;
-    return `Last run failed on ${when}, at step ${drill.step || 'not recorded'} (${exit}).`;
+    return `${stale}Last run failed on ${when}, at step ${drill.step || 'not recorded'} (${exit}).`;
   }
   if (drill.state === 'last_run_passed') {
-    return `Last run passed on ${when}, restoring ${drill.backup_key || 'a backup it did not name'}.`;
+    const missed = [drill.rpo_met === false ? 'its recovery-point target' : null, drill.rto_met === false ? 'its recovery-time target' : null]
+      .filter(Boolean);
+    return `${stale}Last run passed on ${when}, restoring ${drill.backup_key || 'a backup it did not name'}.`
+      + (missed.length ? ` It missed ${missed.join(' and ')}.` : '');
   }
   return `Unreadable — the drill marker is in a state this page does not know (${String(drill.state)}).`;
 }
 
+/**
+ * D4691 — the export heartbeat in one sentence, by its own state. A heartbeat
+ * that is not valid evidence, or is older than its window, never reads as a
+ * recorded backup.
+ */
+export function backupSentence(b) {
+  if (!b) return 'Unreadable — the heartbeat could not be read.';
+  if (b.available === false) {
+    if (b.state === 'invalid') return `Invalid — ${b.reason}`;
+    if (b.state === 'never_written') return `Not recorded — ${b.reason}`;
+    return `Unreadable — ${b.reason || 'the heartbeat could not be read.'}`;
+  }
+  const what = `${b.kind === 'kv' ? 'KV' : 'D1'} export of ${day(b.recovery_point || b.at) || 'an unstamped time'}`;
+  if (b.fresh === false) {
+    return `Stale — the last ${what} is older than ${b.stale_after_hours} hours, so it is not a current backup.`;
+  }
+  return `Last ${what}${b.source ? ` · ${b.source}` : ''}${b.size_bytes !== null && b.size_bytes !== undefined ? ` · ${num(b.size_bytes)} bytes` : ''}.`;
+}
+
 function DrillState({ drill }) {
-  const failed = drill?.state === 'last_run_failed';
-  const passed = drill?.state === 'last_run_passed';
-  const tone = failed ? 'text-red-700 dark:text-red-300' : passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted';
+  // D4691 — a stale result is amber whatever it says: it is history, not a status.
+  const stale = drill?.fresh === false;
+  const failed = drill?.state === 'last_run_failed' || drill?.state === 'invalid';
+  const passed = drill?.state === 'last_run_passed' && !stale;
+  const tone = stale ? 'text-amber-800 dark:text-amber-300'
+    : failed ? 'text-red-700 dark:text-red-300' : passed ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted';
   return (
     <p className={`text-[12.5px] leading-relaxed ${tone}`} data-state={drill?.state || 'unreadable'}>
       {drillSentence(drill)}
@@ -661,15 +597,13 @@ export function BackupDr({ block, unreadable }) {
     <div className="space-y-2" data-testid="hq-backup-dr">
       <div>
         <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Nightly export</div>
-        {b?.available ? (
-          <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat">
-            Last {b.kind === 'd1' ? 'D1' : 'KV'} export <b className="font-mono">{day(b.at) || <Unrecorded>unstamped</Unrecorded>}</b>
-            {b.source ? ` · ${b.source}` : ''}
-            {b.size_bytes !== null && b.size_bytes !== undefined ? ` · ${num(b.size_bytes)} bytes` : ''}
+        {b?.available && b.fresh !== false ? (
+          <p className="mt-0.5 text-[12px] text-axal-muted" data-testid="hq-backup-heartbeat" data-state={b.state || 'fresh'}>
+            {backupSentence(b)}
           </p>
         ) : (
-          <p className="mt-0.5 text-[12.5px] leading-relaxed text-axal-muted" data-testid="hq-backup-unreadable">
-            <Unrecorded /> — {b?.reason || 'the heartbeat could not be read.'}
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-amber-800 dark:text-amber-300" data-testid={b?.available ? 'hq-backup-stale' : 'hq-backup-unreadable'} data-state={b?.state || 'unreadable'}>
+            {backupSentence(b)}
           </p>
         )}
       </div>
@@ -683,167 +617,47 @@ export function BackupDr({ block, unreadable }) {
   );
 }
 
-function ForceReauth({ onDone }) {
-  const [reason, setReason] = useState('');
-  const [ack, setAck] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const [done, setDone] = useState(null);
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.hqSecurityForceReauth(reason.trim());
-      setDone(res);
-      onDone?.();
-    } catch (err) {
-      const msg = String(err?.message || err || 'Request failed');
-      setError(msg === 'TOTP required'
-        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-        : msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (done) {
-    return (
-      <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-        {done.message} {num(done.affected) !== null ? `${num(done.affected)} accounts affected.` : ''}{' '}
-        <a href="/login" className="underline">Sign in again →</a>
-      </p>
-    );
-  }
-  return (
-    <form onSubmit={submit} className="mt-3 space-y-2" data-testid="hq-force-reauth">
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required, stored with the action
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="e.g. credential stuffing observed against three admin accounts"
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12.5px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      <label className="flex items-start gap-2 text-[11.5px] text-axal-muted">
-        <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5" />
-        <span>I understand this signs out every active account on every tenant, including my own session.</span>
-      </label>
-      {error && <p role="alert" className="text-[12px] text-red-700 dark:text-red-300">{error}</p>}
-      <button
-        type="submit"
-        disabled={busy || !ack || reason.trim().length < 8}
-        className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-red-700 bg-white px-3 py-1.5 text-[12px] font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-500 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/30"
-      >
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />} Force re-auth · all tenants
-      </button>
-    </form>
-  );
-}
+/** A read as the Overview model takes it: in flight, failed, or answered. */
+const readOf = (v, at) => (v === null ? { state: 'loading' } : v === UNAVAILABLE ? { state: 'unreadable' } : { state: 'ready', value: v, at });
 
 /**
- * D168 — one open erasure request, and the two outcomes HQ may record.
- *
- * WHY THIS EXISTS. Before it, this zone rendered a statutory clock in amber,
- * turned it red when it ran out, and offered nothing: the only way a row left
- * the list was the subject cancelling their own request. HQ watched a legal
- * deadline it could not stop.
- *
- * `withdrawn` IS NOT OFFERED, and the server refuses it too. A withdrawal is
- * the subject's act, recorded when they cancel in their own Settings; a
- * control here would let an operator record that someone changed their mind
- * when they did not.
- *
- * `Fulfilled` RECORDS A MANUAL ACT, IT DOES NOT PERFORM ONE — the platform
- * erases nothing, and the button's own note says so. A control labelled as if
- * it deleted the account would be the `still_an_admin` mistake D134 named, in
- * the one place where the lie is also a compliance record.
+ * D4800 (#4800, D4803) — the page is Security v2's shell: one header, seven
+ * workspaces (`security/securityTabs.js`) at `?tab=`, and the three reads it
+ * has always made. The reads live HERE, once, so moving between workspaces
+ * never re-reads and every workspace sees the same answer. The view below
+ * (`SecurityConsole`) takes them as props so a test can render any workspace
+ * with a payload.
  */
-function DsrClose({ row, onDone }) {
-  const [outcome, setOutcome] = useState('');
-  const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await api.hqCloseDsrRequest(row.id, outcome, reason.trim());
-      onDone?.();
-    } catch (err) {
-      const msg = String(err?.message || err || 'Request failed');
-      setError(msg === 'TOTP required'
-        ? 'This needs a session signed in with your authenticator app. Sign out and back in with a code, then try again.'
-        : msg);
-    } finally {
-      setBusy(false);
-    }
-  };
-  if (!outcome) {
-    return (
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="hq-dsr-actions">
-        <button
-          type="button"
-          onClick={() => setOutcome('fulfilled')}
-          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-        >
-          Record as fulfilled
-        </button>
-        <button
-          type="button"
-          onClick={() => setOutcome('denied')}
-          className="rounded-md border border-axal-hairline bg-white px-2 py-1 text-[11px] font-semibold text-axal-ink hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
-        >
-          Record as denied
-        </button>
-      </div>
-    );
-  }
-  return (
-    <form onSubmit={submit} className="mt-1.5 space-y-1.5" data-testid="hq-dsr-close-form">
-      <p className="text-[11px] leading-relaxed text-axal-muted">
-        {outcome === 'fulfilled'
-          ? 'This records that the erasure was carried out. It does not erase anything — the platform performs no deletion, so what you are recording is the manual act.'
-          : 'This records a refusal, with your reason stored against it. The subject can make a new request.'}
-      </p>
-      <label className="block text-[11px] font-semibold text-axal-muted">
-        Reason · required, stored with the action
-        <input
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={outcome === 'fulfilled'
-            ? 'e.g. records purged from D1 and R2 on 2026-09-19, ticket DSR-14'
-            : 'e.g. retained under an open legal hold, ticket DSR-15'}
-          className="mt-1 w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[12px] font-normal text-axal-ink dark:bg-gray-900"
-        />
-      </label>
-      {error && <p role="alert" className="text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
-      <div className="flex items-center gap-1.5">
-        <button
-          type="submit"
-          disabled={busy || reason.trim().length < 8}
-          className="inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-amber-700 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500 dark:bg-gray-900 dark:text-amber-300 dark:hover:bg-amber-950/30"
-        >
-          {busy ? <Loader2 size={12} className="animate-spin" /> : null} Close as {outcome}
-        </button>
-        <button
-          type="button"
-          onClick={() => { setOutcome(''); setError(null); }}
-          className="rounded-md px-2 py-1 text-[11px] font-semibold text-axal-faint hover:text-axal-ink dark:hover:text-gray-100"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-  );
-}
-
 export default function HqSecurityPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = tabFromSearch(searchParams.get('tab'));
+  const onTab = useCallback((key) => {
+    setSearchParams((cur) => {
+      const next = new URLSearchParams(cur);
+      next.set('tab', key);
+      return next;
+    });
+  }, [setSearchParams]);
+
+  // When each read answered, in the browser — the "Observed" time. The
+  // platform records no per-store collection time (#4800 question C).
+  const [readAt, setReadAt] = useState({ overview: null, feed: null });
+  const stampRead = (k) => setReadAt((cur) => ({ ...cur, [k]: new Date().toISOString() }));
+
+  // D4699 — each read is numbered, and only the newest answer lands. A slow first read that answers
+  // after a retry (or after a filter changed) is dropped instead of overwriting the newer one.
+  const seq = useRef({ overview: 0, sessions: 0, feed: 0 });
+  const latest = (k) => { const n = ++seq.current[k]; return () => n === seq.current[k]; };
+
   const [data, setData] = useState(null);
-  const load = useCallback(() => {
-    setData(null);
-    api.hqSecurityOverview().then(setData, (e) => { reportError('hq-security', e); setData(UNAVAILABLE); });
+  // `soft === true` only: `load` is also an onClick handler, and an event is not a soft re-read.
+  const load = useCallback((soft) => {
+    const current = latest('overview');
+    if (soft !== true) setData(null);
+    api.hqSecurityOverview().then(
+      (r) => { if (current()) { setData(r); stampRead('overview'); } },
+      (e) => { reportError('hq-security', e); if (current() && soft !== true) setData(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -851,17 +665,44 @@ export default function HqSecurityPage() {
   // zone acts on, and an unreadable list must cost that zone alone.
   const [sessionList, setSessionList] = useState(null);
   const loadSessions = useCallback(() => {
+    const current = latest('sessions');
     setSessionList(null);
-    api.hqSecuritySessions().then(setSessionList, (e) => { reportError('hq-sessions', e); setSessionList(UNAVAILABLE); });
+    api.hqSecuritySessions().then(
+      (r) => { if (current()) setSessionList(r); },
+      (e) => { reportError('hq-sessions', e); if (current()) setSessionList(UNAVAILABLE); },
+    );
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
+  // D4699 — Load more: the next page below the last session id, appended once (a re-read or a new
+  // first page in the meantime drops it). Resolves to the merged list, or throws for the caller's Retry.
+  const loadMoreSessions = useCallback(async () => {
+    const list = sessionList;
+    const before = list?.cursor?.before_id;
+    if (!before) return list;
+    const current = seq.current.sessions;
+    const page = await api.hqSecuritySessions(before);
+    if (current !== seq.current.sessions) return list;
+    const seen = new Set((list.rows || []).map((x) => x.id));
+    const merged = { ...list, rows: [...(list.rows || []), ...(page.rows || []).filter((x) => !seen.has(x.id))], cursor: page.cursor || null, total: page.total ?? list.total, appended_to: list };
+    setSessionList(merged);
+    return merged;
+  }, [sessionList]);
+
+  // D4801 — the act; the SESSION LIST IS NOT RE-READ BEHIND IT. The workspace marks
+  // what the server confirmed (a revoked row reads Revoked, in the dialog's
+  // word) and offers Re-read. Re-reading on its own would also be wrong after
+  // the two acts that sign the operator out: the next request answers 401 and
+  // the page leaves for /login before the result could be read.
+  // D4699 — what the act made stale elsewhere IS re-read, softly (the page and the dialog stay drawn):
+  // the overview's counts and the ledger, after an act that leaves the operator signed in. Never after
+  // emergency re-authentication, nor after signing out the operator's own account.
+  const ownUserId = sessionList && sessionList !== UNAVAILABLE ? (sessionList.rows || []).find((x) => x.is_current)?.user_id ?? null : null;
+  const refreshAfter = useRef(() => {});
   const onSessionAct = useCallback(async (kind, arg, reason) => {
-    const res = await runSessionAct(api, kind, arg, reason);
-    // Both reads move: the list loses the row, and the overview's counts change.
-    loadSessions();
-    load();
-    return res;
-  }, [load, loadSessions]);
+    const result = await runSessionAct(api, kind, arg, reason);
+    if (actLeavesOperatorSignedIn(kind, arg, ownUserId)) refreshAfter.current();
+    return result;
+  }, [ownUserId]);
 
   // H23's ledger, its own request. The filter is applied SERVER-side because
   // the feed is a merged page of sixty rows across five stores: filtering
@@ -869,24 +710,62 @@ export default function HqSecurityPage() {
   // and read as "that is all there is".
   const [feed, setFeed] = useState(null);
   const [filter, setFilter] = useState('all');
-  const loadFeed = useCallback(() => {
-    setFeed(null);
-    api.hqGovernance(filter).then(
-      (r) => setFeed(r),
-      (e) => { reportError('hq-governance', e); setFeed(UNAVAILABLE); },
+  // D4803 — the Events workspace's filters, sent with the category. The same
+  // request feeds Overview's source count, which says which filter it counted under.
+  const [controls, setControls] = useState(EMPTY_CONTROLS);
+  const query = JSON.stringify(feedQuery(controls));
+  const loadFeed = useCallback((soft) => {
+    const current = latest('feed');
+    if (soft !== true) setFeed(null);
+    api.hqGovernance(filter, JSON.parse(query)).then(
+      (r) => { if (current()) { setFeed(r); stampRead('feed'); } },
+      (e) => { reportError('hq-governance', e); if (current() && soft !== true) setFeed(UNAVAILABLE); },
     );
-  }, [filter]);
+  }, [filter, query]);
+  refreshAfter.current = () => { load(true); loadFeed(true); };
+  const loadOlder = useCallback((before) => api.hqGovernance(filter, { ...JSON.parse(query), before }), [filter, query]);
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
+
+  return (
+    <SecurityConsole
+      tab={tab}
+      onTab={onTab}
+      data={data}
+      load={load}
+      feed={feed}
+      filter={filter}
+      setFilter={setFilter}
+      controls={controls}
+      setControls={setControls}
+      loadOlder={loadOlder}
+      loadFeed={loadFeed}
+      sessionList={sessionList}
+      loadSessions={loadSessions}
+      loadMoreSessions={loadMoreSessions}
+      onSessionAct={onSessionAct}
+      readAt={readAt}
+    />
+  );
+}
+
+export function SecurityConsole({
+  tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {}, loadMoreSessions = null,
+  controls = EMPTY_CONTROLS, setControls = () => {}, loadOlder = () => Promise.reject(new Error('no cursor reader')),
+}) {
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
 
   const ready = data && data !== UNAVAILABLE;
   const imp = ready ? data.impersonations : null;
   const sessions = ready ? data.sessions : null;
-  const mfa = ready ? data.mfa : null;
-  const kyc = ready ? data.kyc || {} : {};
+  // D4691 — each of these is its own read: `available: false` is drawn as
+  // unreadable in its own tile, never as a zero or an empty list.
+  const mfa = ready && data.mfa?.available !== false ? data.mfa : null;
+  const kycReadable = ready && data.kyc_available !== false && data.kyc;
+  const kyc = kycReadable ? data.kyc : {};
+  const dsrReadable = ready && data.dsr?.available !== false;
   const dsr = ready ? data.dsr?.rows || [] : [];
   const dsrGroups = ready ? data.dsr?.by_branch || [] : [];
   const dsrBranches = ready ? data.dsr?.branches : null;
@@ -923,10 +802,7 @@ export default function HqSecurityPage() {
     : (data.sanctions?.available
       ? `Read from sanctions_screenings — ${num(data.sanctions.runs_total)} run${data.sanctions.runs_total === 1 ? '' : 's'} recorded. Runs happen on request from the Trust Center; nothing schedules one.`
       : (data.sanctions?.reason || 'unreadable'));
-  const backupDetail = !ready ? 'unreadable'
-    : (data.backup_dr?.backup?.available
-      ? `Read from the export heartbeat — last ${day(data.backup_dr.backup.at) || 'unstamped'}.`
-      : (data.backup_dr?.backup?.reason || 'unreadable'));
+  const backupDetail = !ready ? 'unreadable' : backupSentence(data.backup_dr?.backup);
   const drillDetail = !ready ? 'unreadable' : drillSentence(data.backup_dr?.drill);
 
   const rail = (
@@ -937,9 +813,9 @@ export default function HqSecurityPage() {
       note="The security ledger, the admin action log, sessions, KYC, deletion clocks, the sanctions runs and the backup heartbeat are read from their stores. The acts here revoke sessions, sign accounts out and close data-subject requests, and each is recorded with its reason."
       coverage={ready ? [
         se?.available ? `${num(se.today)} security event${se.today === 1 ? '' : 's'} recorded today` : 'Security events: unreadable',
-        `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
+        data.audit?.available === false ? 'Admin actions: unreadable' : `${num(data.audit?.total) ?? 'an unrecorded number of'} admin actions on record`,
         imp?.available ? `${num(imp.active)} impersonation${imp.active === 1 ? '' : 's'} live` : 'Impersonations: unreadable',
-        `${num(dsr.length)} deletion request${dsr.length === 1 ? '' : 's'} open`,
+        dsrReadable ? `${num(dsr.length)} deletion request${dsr.length === 1 ? '' : 's'} open` : 'Deletion requests: unreadable',
       ] : []}
       coverageNote={ready ? undefined : (data === UNAVAILABLE ? 'The security overview could not be read.' : 'Loading…')}
       unavailable={[
@@ -979,6 +855,286 @@ export default function HqSecurityPage() {
     />
   );
 
+  // D4800 — the Overview workspace's findings, clear row, areas and sources,
+  // from the two reads above and nothing else.
+  const overviewModel = buildOverview({ overview: readOf(data, readAt.overview), feed: readOf(feed, readAt.feed) });
+  const categoryLabel = feedReady && feed.filter && feed.filter !== 'all'
+    ? (feed.filters || GOV_FILTERS).find((f) => f.key === feed.filter)?.label || feed.filter
+    : null;
+  // D4803 — a search or date filter narrows the same read, and the count says so.
+  const narrowedBy = feedReady ? activeCount(feed.applied) : 0;
+  const filterLabel = categoryLabel && narrowedBy
+    ? `${categoryLabel} and ${narrowedBy} more`
+    : categoryLabel || (narrowedBy ? `${narrowedBy}-filter` : null);
+  const refreshAll = () => { load(); loadFeed(); loadSessions(); };
+  const observed = clockOf(readAt.overview);
+  const here = tabOf(tab);
+
+  // The implementation notes that used to open the page. They are true and
+  // they stay, behind "Source details" (#4800: out of the primary reading path).
+  const sourceNotes = (
+    <>
+      <p>
+        Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
+        stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
+        impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
+        backup read their own stores; the restore drill reads the marker each run writes. Only a licence
+        event names a subsidiary and only a security event names its deployment — nothing else here is
+        scoped per subsidiary yet, the guardrail counters included.
+      </p>
+      <p>
+        &quot;Observed&quot; is the time this browser received each read. Each store also records its last good read
+        (D5247) and has its own age, set from how often it is written: a store past its age is marked Stale.
+        Sanctions screenings run on request only and have no age, so they are never Stale.
+      </p>
+    </>
+  );
+
+  /**
+   * D4800 — THE WORKSPACES, keyed by `securityTabs.js`. Overview is Security
+   * v2's; the other six hold today's zones for their area, moved here intact
+   * so nothing the page did before has gone. #4801 to #4803 replace an entry
+   * (Access first) rather than adding a second switch.
+   */
+  const workspaces = {
+    overview: (
+      <OverviewWorkspace
+        model={overviewModel}
+        onRetry={{ overview: load, feed: loadFeed }}
+        filterLabel={filterLabel}
+        sourceNotes={sourceNotes}
+      />
+    ),
+    events: (
+      <EventsWorkspace
+        feed={feed}
+        unavailable={UNAVAILABLE}
+        filter={filter}
+        setFilter={setFilter}
+        controls={controls}
+        setControls={setControls}
+        onRetry={loadFeed}
+        loadOlder={loadOlder}
+        se={se}
+        categories={GOV_FILTERS}
+      />
+    ),
+    access: (
+      <>
+        <Zone title="Sessions and access" sub="each act recorded with its reason">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <Stat unread label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
+            <Stat unread label="Live support sessions" value={imp?.available ? num(imp.active) : null} note={imp?.available ? impersonationNote(imp) : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
+            <Stat unread label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            {/* D200 — this tile was `value={null}` under "no security_events".
+                It reads the ledger now: refused sign-ins in the last 24
+                hours, and its reason when the ledger could not be read. */}
+            <Stat unread label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            Each account can also revoke its own devices under Settings.
+          </p>
+        </Zone>
+        <AccessWorkspace list={sessionList} unavailable={UNAVAILABLE} onAct={onSessionAct} onRetry={loadSessions} onRefresh={refreshAll} onLoadMore={loadMoreSessions} />
+
+
+        {/* H7's own zone. Not "what changed" — who read rows they do not
+            own. The two halves are separate blocks so one unreadable store
+            cannot make the other half look like the whole answer. */}
+        <Zone title="Data access" sub="impersonations and exports">
+          {feed === UNAVAILABLE && (
+            <Unreadable
+              what="The security ledger"
+              claim="This is not a claim that nothing happened."
+              onRetry={loadFeed}
+            />
+          )}
+          {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {access && (
+            <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
+              <div>
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
+                  Impersonations · {access.expiry_minutes}-minute limit
+                </div>
+                {access.impersonations.available ? (
+                  access.impersonations.items.length === 0
+                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
+                    : (
+                      <ul className="mt-1.5 space-y-1.5">
+                        {access.impersonations.items.map((d) => (
+                          <li
+                            key={d.what + d.meta}
+                            className={`rounded-lg border px-3 py-2 text-[11.5px] ${
+                              d.live
+                                ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
+                                : 'border-axal-hairline bg-axal-ground'
+                            }`}
+                          >
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 truncate font-semibold">{d.what}</span>
+                              <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
+                                {d.dur || <Unrecorded>clock unknown</Unrecorded>}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                ) : (
+                  <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.impersonations.reason}</p>
+                )}
+              </div>
+              <div>
+                <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
+                {access.exports.available ? (
+                  access.exports.items.length === 0
+                    ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
+                    : (
+                      <ul className="mt-1.5 space-y-1.5">
+                        {access.exports.items.map((d) => (
+                          <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="min-w-0 truncate font-semibold">{d.what}</span>
+                              <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
+                            </div>
+                            <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                ) : (
+                  <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.exports.reason}</p>
+                )}
+              </div>
+            </div>
+          )}
+          <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
+            A session that ran to its limit is recorded exactly like one ended early — the log does not
+            distinguish diligence from the clock running out, and it should not. A row still open past the
+            limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and
+            &ldquo;0m left&rdquo; would say somebody is still inside.
+          </p>
+        </Zone>
+      </>
+    ),
+    // D4803 slice 3: SE06 leads and owns the one write (Record outcome); the
+    // previous zone stays behind "How this is measured", read-only.
+    privacy: (
+      <PrivacyWorkspace dsr={ready ? data.dsr : null} unreadable={data === UNAVAILABLE} onReread={load}>
+        <Zone title="Data subject requests" sub={`${(ready && data.dsr?.clock?.label) || 'Statutory clock from receipt'} · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
+          {/* D200 — H23 draws the DSR clocks "by territory · runs against the
+              holding branch". Every request this database holds is HQ-held
+              by construction, so the grouping has one group and the sentence
+              below says why there is not a second, from the server. */}
+          {ready && dsrGroups.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-axal-muted" data-testid="hq-dsr-groups">
+              {dsrGroups.map((g) => (
+                <span key={g.branch} className="font-mono">{g.branch} · {num(g.open)} open</span>
+              ))}
+            </div>
+          )}
+          {ready && !dsrReadable && (
+            <div data-testid="hq-dsr-unreadable">
+              <Unreadable what="The open deletion requests" claim="This is not a claim that none are open." />
+            </div>
+          )}
+          {ready && dsrReadable && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
+          {ready && dsr.length > 0 && (
+            <ul className="space-y-1.5" data-testid="hq-dsr">
+              {dsr.map((d) => (
+                <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
+                  <div className="flex items-center justify-between gap-3">
+                    <DsrSubject row={d} />
+                    <span title={d.deadline_at ? `Due by the end of ${String(d.deadline_at).slice(0, 10)} UTC: ${(data.dsr?.clock?.label || 'the statutory clock').toLowerCase()}.` : undefined} className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
+                      {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : d.days_left === 0 ? 'due today' : `${num(d.days_left)}d left`}
+                    </span>
+                  </div>
+                  {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
+                      null, never 0, when the ledger could not be read: "never
+                      asked before" is a claim, and an unreadable store has not
+                      made it. A third ask read as a first is the thing this
+                      line exists to prevent. */}
+                  {d.prior_requests === null ? (
+                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
+                      <Unrecorded>earlier requests unknown</Unrecorded>
+                    </p>
+                  ) : d.prior_requests > 0 ? (
+                    <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
+                      {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
+                      {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
+                      {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
+          {/* D481 — the zone printed "erasure" as a literal on every row.
+              The kinds the ledger does NOT hold are named here, from the
+              payload, each Not recorded with its reason. */}
+          {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
+          {ready && dsrBranches && (
+            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
+              {dsrBranchesSentence(dsrBranches)}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
+            Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
+            than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
+          </p>
+        </Zone>
+      </PrivacyWorkspace>
+    ),
+    // D4803 slice 4: SE07 leads; the previous zones stay behind "How this is measured".
+    trust: (
+      <TrustWorkspace overview={ready ? data : null} unreadable={data === UNAVAILABLE} onRetry={load}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Zone title="Sanctions review" sub="from the store's own runs">
+          <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
+        </Zone>
+        <Zone title="KYC" sub="the review queue">
+          {ready && !kycReadable && (
+            <div className="mb-2" data-testid="hq-kyc-unreadable">
+              <Unreadable what="The KYC queue" claim="This is not a claim that the queue is empty." />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="KYC pending" value={kycReadable ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
+            <Stat label="KYC approved" value={kycReadable ? num(kyc.approved) ?? '0' : null} note="active accounts" />
+            <Stat label="KYC rejected" value={kycReadable ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
+            KYC status is one trust fact; sanctions screening is another and has its own card above, because the
+            two are different stores that fail apart.
+          </p>
+          {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
+        </Zone>
+      </div>
+      </TrustWorkspace>
+    ),
+    // D4803 slice 2: SE08 leads; the previous zone stays whole behind "How this is measured".
+    'ai-safety': (
+      <AiSafetyWorkspace block={ready ? data.ai_safety : null} unreadable={data === UNAVAILABLE} onRetry={load}>
+        <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
+          <AiSafety block={ready ? data.ai_safety : null} />
+        </Zone>
+      </AiSafetyWorkspace>
+    ),
+    // D4803 slice 2: SE09 leads; the previous zone stays whole behind "How this is measured".
+    resilience: (
+      <ResilienceWorkspace block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} onRetry={load}>
+        <Zone title="Backup / DR drill" sub="the backup heartbeat and the restore drill, each read from its own record">
+          <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
+          {/* #5046: failover is drawn above as Unsupported, so it is not listed here as "Not recorded". */}
+          {ready && <NotRecordedList items={otherNotRecorded(data.backup_dr)} testid="hq-dr-not-recorded" />}
+        </Zone>
+      </ResilienceWorkspace>
+    ),
+  };
+
   return (
     <RailFrame rail={rail} data-testid="hq-security-page">
       <div className="min-w-0">
@@ -996,348 +1152,39 @@ export default function HqSecurityPage() {
 
         <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-            <ShieldCheck size={13} /> HQ · Security
+            <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+              <ShieldCheck size={13} /> HQ · Security
+            </div>
+            <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">
+              {tab === 'overview' ? 'Security' : here.label}
+            </h1>
+            <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted" data-testid="security-workspace-sub">{here.sub}</p>
+            <p className="mt-1 text-[12.5px]">
+              <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
+              {' · '}
+              {/* D1079 (#2971): TRU14, the public trust center's content. */}
+              <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
+            </p>
           </div>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Security</h1>
-          <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Was Governance, which described the audit log and nothing else. The ledger here is H23&apos;s: five
-            stores — the security_events ledger of refusals and step-ups, the admin action log, the activity log,
-            impersonation sessions and licence events — merged newest-first into one monospace feed. Sanctions and
-            backup read their own stores; the restore drill reads the marker each run writes. Only a licence
-            event names a subsidiary and only a security event names its deployment — nothing else here is
-            scoped per subsidiary yet, the guardrail counters included.
-          </p>
-          <p className="mt-1 text-[12.5px]">
-            <Link to="/admin/security/obligations" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Trust obligations by role</Link>
-            {' · '}
-            {/* D1079 (#2971): TRU14, the public trust center's content. */}
-            <Link to="/admin/security/trust-center" className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="security-trust-content-link">Trust center content</Link>
-          </p>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <HeaderAsk />
+            {/* SE01's freshness and scope line: when the overview was read,
+                Refresh, and the scope every figure here is drawn from. */}
+            <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-axal-muted" data-testid="security-observed">
+              <span aria-live="polite">{observed ? <>Observed <b>{observed}</b></> : (data === UNAVAILABLE ? 'Not read' : 'Reading…')}</span>
+              <button type="button" onClick={refreshAll} className="font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Refresh</button>
+              <span className="rounded-md border border-axal-hairline px-1.5 py-0.5 text-[10.5px] font-semibold dark:border-gray-700" title="Scope">HQ-held accounts</span>
+            </div>
+            <SourceAvailability sources={overviewModel.sources} onRetry={loadFeed} filterLabel={filterLabel} compact data-testid="security-header-sources" />
           </div>
-          <HeaderAsk />
         </header>
 
-        {data === UNAVAILABLE && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
+        <SecurityTabs current={tab} onSelect={onTab} marks={overviewModel.marks} />
 
-        <div className="mt-4 space-y-4">
-          {/* Canvas H23's ledger. ts · actor · branch · event · outcome, one
-              filter bar, monospace on every cell, and NO tile above it — H7's
-              rule, which H23 restates: a summary tile over an audit log is a
-              dashboard, and legibility is not the property you want from a
-              log. */}
-          <Zone
-            title="Security events"
-            sub={feedReady
-              ? `${feed.rows.length} newest${feed.more ? ' of more' : ''} · ${feed.sources.filter((x) => x.available).length} of ${feed.sources.length} stores read`
-              : 'five stores, one ledger · append-only'}
-          >
-            <div className="flex flex-wrap items-center gap-2" data-testid="hq-gov-filters">
-              {(feedReady ? feed.filters : GOV_FILTERS).map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setFilter(f.key)}
-                  aria-pressed={filter === f.key}
-                  title={f.reads ? `reads ${f.reads}` : undefined}
-                  className={`rounded-lg border px-3 py-1.5 text-[11.5px] font-semibold ${
-                    filter === f.key
-                      ? 'border-rose-200 bg-rose-50 text-[#881337] dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200'
-                      : 'border-axal-hairline bg-white text-axal-muted hover:bg-axal-ground dark:bg-gray-900 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+        {data === UNAVAILABLE && !OWN_UNREADABLE.has(tab) && <div className="mt-4"><Unreadable what="The security overview" claim="This is not a claim that nothing happened." onRetry={load} /></div>}
 
-            {feed === UNAVAILABLE && (
-              <div className="mt-3">
-                <Unreadable
-                  what="The security ledger"
-                  claim="This is not a claim that nobody did anything."
-                  onRetry={() => setFilter((f) => f)}
-                />
-              </div>
-            )}
-            {feed === null && <p className="mt-3 text-[12px] text-axal-faint">Loading…</p>}
-
-            {feedReady && feed.rows.length === 0 && (
-              <p className="mt-3 text-[12px] text-axal-faint" data-testid="hq-gov-empty">
-                No event matches this filter. Every store below was read and none held a row —
-                which is a different fact from a store that could not be read.
-              </p>
-            )}
-
-            {feedReady && feed.rows.length > 0 && (
-              <div className="mt-3 overflow-x-auto">
-                <table className="w-full font-mono text-[11px]" data-testid="hq-gov-feed">
-                  <thead>
-                    <tr className="text-left text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                      <th className="py-1 pr-3">ts</th>
-                      <th className="py-1 pr-3">actor</th>
-                      <th className="py-1 pr-3">branch</th>
-                      <th className="py-1 pr-3">event</th>
-                      <th className="py-1">outcome</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {feed.rows.map((r) => (
-                      <tr key={r.key} className={`border-t border-axal-hairline align-top ${ROW_TINT[r.tone] || ''}`}>
-                        <td className="py-1.5 pr-3 font-mono text-[10.5px] text-axal-faint">
-                          {day(r.at) || <Unrecorded>no timestamp</Unrecorded>}
-                        </td>
-                        <td className="py-1.5 pr-3 font-mono font-semibold">{r.actor || <Unrecorded>unnamed</Unrecorded>}</td>
-                        <td className="py-1.5 pr-3 font-mono text-axal-muted">{r.tenant || <Unrecorded />}</td>
-                        <td className={`py-1.5 pr-3 font-mono font-bold ${ACTION_INK[r.tone] || ACTION_INK.note}`}>
-                          {r.action}
-                          {r.target ? <span className="ml-2 font-normal text-axal-muted">{r.target}</span> : null}
-                        </td>
-                        <td className={`py-1.5 font-mono font-semibold ${OUTCOME_INK[r.outcome] || 'text-axal-muted'}`}>
-                          {r.outcome || <Unrecorded />}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {feedReady && (
-              <>
-                <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-reason">
-                  <b>Branch.</b> {feed.tenant_reason}
-                </p>
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-axal-faint" data-testid="hq-gov-sources">
-                  {feed.sources.map((src) => (
-                    <li key={src.table} className={src.available ? 'font-mono' : 'font-mono text-red-700 dark:text-red-300'}>
-                      {src.table} ·{' '}
-                      {src.available ? `${num(src.rows)} read` : (src.reason || 'unreadable')}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                  Newest first, no pagination above the fold, and no summary tile over it: the first question of
-                  an audit log is what just happened, never page four, and a count of refusals is a dashboard
-                  where the refusals themselves are the record. Refused sign-ins, impersonations and suspensions
-                  carry a tint — the only decoration here, and it is there to be scanned for. A refusal is one row
-                  per minute per email address and network, carrying the first reason in that minute: the ledger records
-                  that someone was refused, not how many times. Whether an HQ act landed on its branch is on
-                  Platform → Deployments, which reads the audit mirror.
-                </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-gov-tenant-view">
-                  <b>Viewing as a branch.</b> {feed.tenant_view_reason}
-                </p>
-              </>
-            )}
-            {(se?.not_counted || []).length > 0 && (
-              <ul className="mt-3 space-y-1.5" data-testid="hq-security-events-not-counted">
-                {se.not_counted.map((n) => (
-                  <li key={n.what} className="text-[11px] leading-relaxed text-axal-faint">
-                    <b className="text-axal-muted">{n.what}</b> — <Unrecorded />. {n.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {se && !se.available && (
-              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-unreadable">
-                The ledger&apos;s counts could not be read: {se.reason} The feed above still shows what the other
-                stores hold; a security_events row absent from it is a store that answered nothing, not a quiet day.
-              </p>
-            )}
-            {se?.available && (
-              <p className="mt-3 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-security-events-retention">
-                Kept for {se.retention_days} days, and the ledger&apos;s own seal refuses any delete inside that window.
-              </p>
-            )}
-          </Zone>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Sanctions review" sub="from the store's own runs">
-              <Sanctions block={ready ? data.sanctions : null} unreadable={data === UNAVAILABLE} />
-            </Zone>
-            <Zone title="Backup / DR drill" sub="two facts, each its own state">
-              <BackupDr block={ready ? data.backup_dr : null} unreadable={data === UNAVAILABLE} />
-              {ready && <NotRecordedList items={data.backup_dr?.not_recorded} testid="hq-dr-not-recorded" />}
-            </Zone>
-          </div>
-
-          <Zone title="Sessions and access" sub="each act recorded with its reason">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-              <Stat label="Active sessions" value={sessions?.available ? num(sessions.active) : null} note={sessions?.available ? `token under ${sessions.token_hours}h old, not revoked or signed out` : (sessions?.reason || 'unreadable')} />
-              <Stat label="Impersonations live" value={imp?.available ? num(imp.active) : null} note={imp?.available ? 'no ended_at yet' : (imp?.reason || 'unreadable')} tone={imp?.available && imp.active ? 'text-red-700 dark:text-red-300' : 'text-axal-ink dark:text-white'} />
-              <Stat label="Admins with MFA" value={mfa ? `${num(mfa.admins_with_mfa)} of ${num(mfa.admins_total)}` : null} note={withoutMfa === null ? 'unreadable' : withoutMfa > 0 ? `${num(withoutMfa)} without` : 'every admin enrolled'} tone={withoutMfa ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-              {/* D200 — this tile was `value={null}` under "no security_events".
-                  It reads the ledger now: refused sign-ins in the last 24
-                  hours, and its reason when the ledger could not be read. */}
-              <Stat label="Failed sign-ins" value={se?.available ? num(se.failed_signins_24h) : null} note={se?.available ? 'refused in 24 hours, from security_events' : (se?.reason || 'unreadable')} tone={se?.available && se.failed_signins_24h ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-            </div>
-            <SessionsPanel list={sessionList} onAct={onSessionAct} onRetry={loadSessions} />
-            <ForceReauth onDone={load} />
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              An impersonation is a session like any other, which is why it sits in this list. Each account can
-              also revoke its own devices under Settings. The platform-wide action above bumps every
-              account&apos;s token floor.
-            </p>
-          </Zone>
-
-          <Zone title="Data subject requests" sub={`${ready ? data.dsr?.clock_days : 30}-day clock from receipt · by territory`} tone="border-amber-200 bg-amber-50/30 dark:border-amber-900 dark:bg-amber-950/20">
-            {/* D200 — H23 draws the DSR clocks "by territory · runs against the
-                holding branch". Every request this database holds is HQ-held
-                by construction, so the grouping has one group and the sentence
-                below says why there is not a second, from the server. */}
-            {ready && dsrGroups.length > 0 && (
-              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold text-axal-muted" data-testid="hq-dsr-groups">
-                {dsrGroups.map((g) => (
-                  <span key={g.branch} className="font-mono">{g.branch} · {num(g.open)} open</span>
-                ))}
-              </div>
-            )}
-            {ready && dsr.length === 0 && <p className="text-[12px] text-axal-faint">No deletion request is open.</p>}
-            {ready && dsr.length > 0 && (
-              <ul className="space-y-1.5" data-testid="hq-dsr">
-                {dsr.map((d) => (
-                  <li key={d.id} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-[12px] dark:border-amber-900 dark:bg-gray-900">
-                    <div className="flex items-center justify-between gap-3">
-                      <DsrSubject row={d} />
-                      <span className={`shrink-0 font-bold tabular-nums ${d.days_left === null ? 'text-axal-faint' : d.days_left < 0 ? 'text-red-700 dark:text-red-300' : d.days_left <= 14 ? 'text-amber-800 dark:text-amber-300' : 'text-axal-ink dark:text-white'}`}>
-                        {d.days_left === null ? <Unrecorded>clock unknown</Unrecorded> : d.days_left < 0 ? `${num(-d.days_left)}d overdue` : `${num(d.days_left)}d left`}
-                      </span>
-                    </div>
-                    {/* D168 — HAS THIS SUBJECT ASKED BEFORE? `prior_requests` is
-                        null, never 0, when the ledger could not be read: "never
-                        asked before" is a claim, and an unreadable store has not
-                        made it. A third ask read as a first is the thing this
-                        line exists to prevent. */}
-                    {d.prior_requests === null ? (
-                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history-unreadable">
-                        <Unrecorded>earlier requests unknown</Unrecorded>
-                      </p>
-                    ) : d.prior_requests > 0 ? (
-                      <p className="mt-0.5 text-[11px] text-axal-faint" data-testid="hq-dsr-history">
-                        {num(d.prior_requests)} earlier request{d.prior_requests === 1 ? '' : 's'}
-                        {d.last_outcome ? ` · last ${d.last_outcome}` : ''}
-                        {d.last_outcome_at ? ` on ${String(d.last_outcome_at).slice(0, 10)}` : ''}
-                      </p>
-                    ) : null}
-                    <DsrClose row={d} onDone={load} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {!ready && data !== UNAVAILABLE && <p className="text-[12px] text-axal-faint">Loading…</p>}
-            {/* D481 — the zone printed "erasure" as a literal on every row.
-                The kinds the ledger does NOT hold are named here, from the
-                payload, each Not recorded with its reason. */}
-            {ready && <DsrKindsNotRecorded kinds={data.dsr?.kinds} />}
-            {ready && dsrBranches && (
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-dsr-branches">
-                {dsrBranchesSentence(dsrBranches)}
-              </p>
-            )}
-            <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-              The clock is statutory — one month from receipt, not from triage. Requests come from each account&apos;s own
-              Settings; <b>erasure itself is still a manual act</b>, and closing a request here records that act rather
-              than performing one. A withdrawal is the subject&apos;s own and is recorded when they cancel.
-            </p>
-          </Zone>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="AI safety" sub="guardrail hits · Advisor-AI outputs the screen caught">
-              <AiSafety block={ready ? data.ai_safety : null} />
-            </Zone>
-            <Zone title="KYC" sub="the review queue">
-              <div className="grid grid-cols-2 gap-2">
-                <Stat label="KYC pending" value={ready ? num(kyc.pending) ?? '0' : null} note="documents submitted, unverified" tone={kyc.pending ? 'text-amber-700 dark:text-amber-300' : 'text-axal-ink dark:text-white'} />
-                <Stat label="KYC approved" value={ready ? num(kyc.approved) ?? '0' : null} note="active accounts" />
-                <Stat label="KYC rejected" value={ready ? num(kyc.rejected) ?? '0' : null} note="active accounts" />
-              </div>
-              <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">
-                KYC status is one trust fact; sanctions screening is another and has its own card above, because the
-                two are different stores that fail apart.
-              </p>
-              {ready && <NotRecordedList items={data.kyc_not_recorded} testid="hq-kyc-not-recorded" />}
-            </Zone>
-          </div>
-
-          {/* H7's own zone. Not "what changed" — who read rows they do not
-              own. The two halves are separate blocks so one unreadable store
-              cannot make the other half look like the whole answer. */}
-          <Zone title="Data access" sub="impersonations and exports">
-            {feed === UNAVAILABLE && (
-              <Unreadable
-                what="The security ledger"
-                claim="This is not a claim that nothing happened."
-                onRetry={loadFeed}
-              />
-            )}
-            {feed === null && <p className="text-[12px] text-axal-faint">Loading…</p>}
-            {access && (
-              <div className="grid gap-3 md:grid-cols-2" data-testid="hq-data-access">
-                <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                    Impersonations · {access.expiry_minutes}-minute limit
-                  </div>
-                  {access.impersonations.available ? (
-                    access.impersonations.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No support session is on record.</p>
-                      : (
-                        <ul className="mt-1.5 space-y-1.5">
-                          {access.impersonations.items.map((d) => (
-                            <li
-                              key={d.what + d.meta}
-                              className={`rounded-lg border px-3 py-2 text-[11.5px] ${
-                                d.live
-                                  ? 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
-                                  : 'border-axal-hairline bg-axal-ground'
-                              }`}
-                            >
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className={`shrink-0 font-mono text-[10px] ${d.overdue ? 'text-red-700 dark:text-red-300' : 'text-axal-faint'}`}>
-                                  {d.dur || <Unrecorded>clock unknown</Unrecorded>}
-                                </span>
-                              </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                  ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.impersonations.reason}</p>
-                  )}
-                </div>
-                <div>
-                  <div className="text-[9.5px] font-extrabold uppercase tracking-[.07em] text-axal-faint">Exports</div>
-                  {access.exports.available ? (
-                    access.exports.items.length === 0
-                      ? <p className="mt-1.5 text-[12px] text-axal-faint">No export is on record.</p>
-                      : (
-                        <ul className="mt-1.5 space-y-1.5">
-                          {access.exports.items.map((d) => (
-                            <li key={d.what + d.meta} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]">
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="min-w-0 truncate font-semibold">{d.what}</span>
-                                <span className="shrink-0 font-mono text-[10px] text-axal-faint">{d.dur}</span>
-                              </div>
-                              <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{d.meta}</div>
-                            </li>
-                          ))}
-                        </ul>
-                      )
-                  ) : (
-                    <p className="mt-1.5 text-[12.5px] text-axal-muted"><Unrecorded /> — {access.exports.reason}</p>
-                  )}
-                </div>
-              </div>
-            )}
-            <p className="mt-3 text-[11px] leading-relaxed text-axal-faint">
-              A session that ran to its limit is recorded exactly like one ended early — the log does not
-              distinguish diligence from the clock running out, and it should not. A row still open past the
-              limit reads <b>not closed</b>: the token expired on time, the closing write is best-effort, and
-              &ldquo;0m left&rdquo; would say somebody is still inside.
-            </p>
-          </Zone>
+        <div className="mt-4 space-y-4" data-testid={`security-ws-${tab}`}>
+          {workspaces[tab] || workspaces.overview}
         </div>
       </div>
 

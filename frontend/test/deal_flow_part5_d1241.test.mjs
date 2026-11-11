@@ -124,6 +124,10 @@ function stubs(over = {}) {
     keepCompareNote: rec('keepCompareNote', { saved: { uid: 'n1', text: 'Acme Robotics has the stronger band on Team.' } }),
   });
   api.listDeals = rec('listDeals', DEALS());
+  // D4815: the "Other deal activity" line's two zone reads.
+  was.screening = api.dealScreening; was.commitRoom = api.icCommitRoom;
+  api.dealScreening = rec('screening', { desk: { available: true, rows: [] } });
+  api.icCommitRoom = rec('commitRoom', { decisions: { available: true, rows: [] } });
   Object.assign(ventureScoresApi, { batch: rec('batch', BATCH()), weights: rec('weights', { weights: null, equal: true }), deal: rec('deal', { locked: true }) });
   Object.assign(dealViewsApi, { fit: rec('fit', FIT()), list: rec('views', { items: [], default_uid: null }) });
   for (const [k, v] of Object.entries(over)) {
@@ -132,7 +136,7 @@ function stubs(over = {}) {
   }
   return { calls, restore: () => {
     for (const n of names) dealFlowApi[n] = was[n];
-    api.listDeals = was.listDeals;
+    api.listDeals = was.listDeals; api.dealScreening = was.screening; api.icCommitRoom = was.commitRoom;
     Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights, deal: was.deal });
     Object.assign(dealViewsApi, { fit: was.fit, list: was.list });
   } };
@@ -391,4 +395,125 @@ test('wiring: the waits retired, no browser pop-up, dark pairs, the clients on W
   }
   const readme = read(`${dir}README.md`);
   for (const f of ['NewForYou.jsx', 'PeekDrawer.jsx', 'Compare.jsx', 'StageDialogs.jsx', 'movesModel.js', 'compareModel.js']) assert.ok(readme.includes(f), f);
+});
+
+// ---------------------------------------------------------------- D4635 (#4635): weights, read states, notes, scorecards, thesis
+
+const order = (t) => t.all(/^dealflow-row-\d+$/).map((n) => t.props(n)['data-testid'].replace('dealflow-row-', ''));
+
+test('D4635: a saved weighting that reverses two ventures reverses the visible order at once; a failed save keeps the order', async () => {
+  let accepted = { team: 5, market: 0 };
+  let failSave = false;
+  const t = harness();
+  const s = stubs({
+    'ventureScoresApi.weights': async () => ({ weights: accepted, equal: false }),
+    'dealFlowApi.flow': async () => ({ scope: 'firm', by_stage: {}, items: [entry({ deal_id: 1 }), entry({ deal_id: 2, venture: 'Northwind Labs', stage: 'screening' })] }),
+  });
+  const wasSave = ventureScoresApi.saveWeights;
+  ventureScoresApi.saveWeights = async (w) => { if (failSave) throw Object.assign(new Error('The weighting could not be saved.'), { status: 503 }); accepted = w ? { team: 0, market: 5 } : null; return { weights: accepted }; };
+  try {
+    await act(async () => t.root.render(page('/deals?view=table&sort=weighting&dir=desc')));
+    await t.settle();
+    assert.deepEqual(order(t).slice(0, 2), ['1', '2'], 'Team weighted: Acme (Strong team) first');
+    // A save that fails keeps the accepted weighting, and so the order.
+    failSave = true;
+    await t.click('scorecard-weighting-edit');
+    await t.click('scorecard-weighting-go');
+    assert.deepEqual(order(t).slice(0, 2), ['1', '2'], 'a failed save changes nothing');
+    // A save that succeeds re-reads the accepted weighting, and the order follows without a refresh.
+    failSave = false;
+    await t.click('scorecard-weighting-go');
+    await t.settle();
+    assert.deepEqual(order(t).slice(0, 2), ['2', '1'], 'Market weighted: Northwind (Strong market) first');
+  } finally { ventureScoresApi.saveWeights = wasSave; s.restore(); await t.close(); }
+});
+
+test('D4635: a weighting that cannot be read is said when the order asks for it, and only then', async () => {
+  const t = harness();
+  const s = stubs({ 'ventureScoresApi.weights': async () => { throw new Error('down'); } });
+  try {
+    await act(async () => t.root.render(page('/deals?view=table&sort=weighting')));
+    await t.settle();
+    assert.match(t.text(t.byId('dealflow-weights-failed')), /could not be read, so this order uses equal weights/);
+    await act(async () => t.root.render(page('/deals?view=table&sort=team')));
+    await t.settle();
+    assert.equal(t.byId('dealflow-weights-failed'), undefined, 'not said when the order does not use it');
+  } finally { s.restore(); await t.close(); }
+});
+
+test('D4635 compare: a failed flow read is said, never "Not on your deals"; the scores and fit that were read stay, and each failure has its own retry', async () => {
+  const t = harness();
+  let fitFails = true;
+  let fitReads = 0;
+  const s = stubs({
+    'dealFlowApi.flow': async () => { throw new Error('flow down'); },
+    'dealViewsApi.fit': async () => { fitReads += 1; if (fitFails) throw new Error('fit down'); return FIT(); },
+  });
+  try {
+    await act(async () => t.root.render(h(MemoryRouter, null, h(DealCompare, { ids: ['1', '2'] }))));
+    await t.settle();
+    assert.ok(t.byId('dealflow-compare-flow-failed'), 'the flow failure is named');
+    assert.ok(t.byId('dealflow-compare-1') && t.byId('dealflow-compare-2'), 'the ventures that were read are still compared');
+    assert.match(t.text(t.byId('dealflow-compare-1')), /Stage unreadable/);
+    assert.doesNotMatch(t.text(t.byId('dealflow-compare-page')), /Not on your deals/);
+    assert.equal(t.props(t.byId('dealflow-compare-days-1')).title, 'Your deal flow could not be read.', 'missing days name the failed flow read');
+    assert.notEqual(t.props(t.byId('dealflow-compare-days-1')).title, 'Not on your deals.', 'an unknown flow never implies absence');
+    assert.ok(t.byId('dealflow-compare-fit-failed'), 'the fit failure is its own line');
+    assert.equal(t.byId('dealflow-compare-scores-failed'), undefined, 'the scores were read');
+    fitFails = false;
+    const before = fitReads;
+    await t.click(t.byId('dealflow-compare-fit-failed').childNodes.find((n) => n.nodeName === 'BUTTON'));
+    assert.equal(fitReads, before + 1, 'retry reads the fit again');
+    assert.equal(t.byId('dealflow-compare-fit-failed'), undefined);
+  } finally { s.restore(); await t.close(); }
+});
+
+test('D5357 cells: an unreadable flow is distinct from a successful read where the venture is absent', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { DaysCell, OwnerCell } = await import('../src/pages/investor/dealflow/FlowCells.jsx');
+  const row = { inFlow: false, daysInStage: null, owner: null };
+  for (const Cell of [DaysCell, OwnerCell]) {
+    const unknown = renderToStaticMarkup(h(Cell, { row, flowUnknown: true }));
+    assert.match(unknown, /title="Your deal flow could not be read\."/);
+    assert.doesNotMatch(unknown, /Not on your deals/);
+    const absent = renderToStaticMarkup(h(Cell, { row }));
+    assert.match(absent, /title="Not on your deals\."/);
+    assert.doesNotMatch(absent, /deal flow could not be read/);
+  }
+});
+
+test('D4635 compare notes: a partly unreadable read says how many could not be read and keeps the ones that could', async () => {
+  for (const [answer, shown, line] of [
+    [{ items: [], unreadable: 1 }, 0, /One saved note could not be read\./],
+    [{ items: [{ uid: 'n1', text: 'Synthetic kept note.' }], unreadable: 2 }, 1, /2 saved notes could not be read; the others are below/],
+  ]) {
+    const t = harness();
+    const s = stubs({ 'dealFlowApi.compareNotes': async () => answer });
+    try {
+      await act(async () => t.root.render(h(MemoryRouter, null, h(DealCompare, { ids: ['1', '2'] }))));
+      await t.settle();
+      assert.match(t.text(t.byId('dealflow-compare-note-partial')), line);
+      assert.equal(t.all(/^dealflow-compare-notes$/).length ? t.byId('dealflow-compare-notes').childNodes.length : 0, shown);
+    } finally { s.restore(); await t.close(); }
+  }
+});
+
+test('D4635: Studio scorecards are the scoring strip with its states; every thesis action opens the thesis card', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { ScorecardCell, FitCell } = await import('../src/pages/investor/dealflow/FlowCells.jsx');
+  const { THESIS_PATH } = await import('../src/pages/investor/dealflow/flowModel.js');
+  const { THESIS_PRIMARY } = await import('../src/pages/investor/dealflow/DealFlow.jsx');
+  const html = (scores) => renderToStaticMarkup(h(MemoryRouter, null, h(ScorecardCell, { scores, testId: 'c' })));
+  assert.match(html(scoresOf(BATCH(), 1)), /svg|scope/i, 'a read scorecard draws the strip');
+  assert.match(html(scoresOf({ items: [{ deal_id: 1, locked: true }] }, 1)), /c/, 'locked');
+  assert.match(html(scoresOf({ items: [] }, 1)), /Not shared/);
+  assert.match(html(scoresOf('failed', 1)), /Unreadable/);
+  assert.match(html(scoresOf({ items: [{ deal_id: 1, unreadable: true }] }, 1)), /Unreadable/);
+  assert.match(html(scoresOf(null, 1)), /Reading/);
+  const lens = readFileSync(new URL('../src/pages/investor/dealflow/StudioLens.jsx', import.meta.url), 'utf8');
+  assert.match(lens, /ventureScoresApi\.batch\(lensIds\)/, 'the Studio lens reads the supported batch');
+  assert.doesNotMatch(lens, /\{NOT_YET\}/, 'no longer a fixed "not yet" in every row');
+  assert.equal(THESIS_PRIMARY.to, THESIS_PATH);
+  const fit = renderToStaticMarkup(h(MemoryRouter, null, h(FitCell, { fit: { state: 'not_set' }, testId: 'f' })));
+  assert.match(fit, new RegExp(`href="${THESIS_PATH}"`), 'a Fit cell with no thesis opens the same thesis card');
 });

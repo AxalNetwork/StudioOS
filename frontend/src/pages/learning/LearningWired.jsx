@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { RailFrame } from '../../ui';
 import { titleCase } from '../../lib/absence';
@@ -10,7 +10,7 @@ import MyLearning from './MyLearning';
 import { LearningEmpty, LearningHeader, NotLiveYet, SectionCard } from './LearningStates';
 import { AssessmentLesson } from './LearningAssessments';
 import { findLesson, lessonHref, resumeAt, videoPlayback } from './learningModel';
-import { markItemComplete, markLessonComplete, readCourse, readItem, readItemCaption, readMe, readMyAttempts, readMySubmissions, recordItemPosition } from './learningReads';
+import { markItemComplete, markLessonComplete, readCourse, readItem, readItemCaption, readMe, readMyAttempts, readMySubmissions, recordItemPosition, recordLessonStarted } from './learningReads';
 import useLearningRead from './useLearningRead';
 import { AddToPlan } from './PlanSheet';
 import { videoStartAt } from './videoLibraryModel';
@@ -96,6 +96,7 @@ function LessonElsewhere({ lesson, slug }) {
 export function LessonView({ courseState, itemState, lessonUid, onMark, marking, markError, onRetryCourse, onRetryItem, completionInHeader = false }) {
   const course = courseState.status === 'ready' ? courseState.course : null;
   const found = course ? findLesson(courseState.modules, lessonUid) : null;
+  const startedRef = useRef(new Set());
   const step = (l) => (l ? { title: l.title, href: lessonHref(course.slug, l) } : null);
   let main;
   if (statusOf(courseState) !== 'ready') {
@@ -129,7 +130,14 @@ export function LessonView({ courseState, itemState, lessonUid, onMark, marking,
         next={step(found.next)}
         completed={found.lesson.progress?.status === 'completed'}
         resumeFrom={resumeAt(itemState.progress?.position_seconds, item.duration_seconds)}
-        onPosition={(s, p) => recordItemPosition(item.uid, s, p)}
+        onPosition={(s, p) => {
+          // #4646: the first position of a lesson also records that the course is under way.
+          if (course && !found.lesson.progress?.status && !startedRef.current.has(lessonUid)) {
+            startedRef.current.add(lessonUid);
+            recordLessonStarted({ courseUid: course.uid, lessonUid }).catch(() => startedRef.current.delete(lessonUid));
+          }
+          return recordItemPosition(item.uid, s, p);
+        }}
         loadCaption={(language) => readItemCaption(item.uid, language)}
         onMarkComplete={onMark}
         marking={marking}

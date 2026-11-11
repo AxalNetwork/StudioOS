@@ -134,7 +134,7 @@ test('Performance stays an investor\'s page and Fund admin\'s tab; Accounting an
   // D1160 (#3067): Fund Ops is retired. An investor's /funds/performance draws the page itself; an admin's forwards to Fund admin.
   assert.ok(!existsSync('frontend/src/pages/FundOpsWorkspace.jsx'));
   const app = scan(read('frontend/src/App.jsx'));
-  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\}/);
+  assert.match(app, /path="\/funds\/performance" element=\{guard\(\['admin', 'investor'\], holds\('investor'\) \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>\)\}/);
   // D1164 (#3071): Fund admin's tab is NAV & performance (FND10–FND12); FundPerformanceView stays the investor's page.
   assert.match(scan(read('frontend/src/pages/admin/fundAdmin/FundAdminConsole.jsx')), /<PerformanceTab /);
   assert.match(scan(read('frontend/src/pages/FundPerformancePage.jsx')), /export function FundPerformanceView/);

@@ -40,11 +40,13 @@ routes live in the D528 module `frontend/src/routes/learning.jsx`, which
 | `planReads.js` | D3959: every client call the plan's pages make: `learningPlanApi`, and the picker's lists from Learning's own reads (a course resolves its uid on pick). |
 | `PlanSheet.jsx` | D3959: the "Add to my plan" sheet (from the Calendar's create dialog, CAL7), the button on each course, lesson, video, webinar, exercise and exam page, and the picker the Calendar's New › Plan learning opens. |
 | `PlanRowActions.jsx` | D3959: a plan item's Mark done, Reschedule, Open in Learning and Remove, with the Calendar's Reschedule and Cancel dialogs (CAL19). On `/learning/plan` and on a Learning entry in the Calendar. |
+| `NextForYou.jsx` | D4650 (#4650): My learning's "Next for you" card. It shows the member's next learning action from `GET /api/learning/plan/next` with the reason it was chosen and "Add to my plan" (D3959's sheet), or the empty state naming what was checked. |
 | `LearningPlanPage.jsx` | D3959: `/learning/plan`, My learning plan: goals, Upcoming and the past 30 days, and Add a study block (from LR12 "My learning" and LR1's "Your progress"). |
 | `VideosLibrary.jsx`, `videoLibraryModel.js` | D4477 LR7: recorded video filters, transcript-hit banner, poster cards and bounded open-at-time links. |
 | `LessonFooter.jsx`, `lessonFooterModel.js`, `lessonFooter.css` | D4478: the accessible lesson position/completion footer and its phone bar. |
 | `lessonPositionWriter.js`, `useOnline.js` | D4478: the browser connection and latest-position offline queue around the existing progress throttle. |
 | `LearningHomeActions.jsx` | D4481 (#4481): the home’s shared registration action and current seat refresh, structured refusals, phone course primary and webinar rows. |
+| `CurriculumCoverage.jsx`, `coverageModel.js` | D4650 (#4650, part 4): the studio's curriculum coverage record, below the content table. Each of the founder, investor, advisor and partner journeys as Published, Not reachable, Unknown or Missing, with the courses behind it, from `GET /api/admin/learning/coverage`. A course with no audience makes a journey Unknown, never Missing; a failed read is Unreadable. It reads the catalogue only. |
 
 ## The rules for adding here
 
@@ -107,8 +109,8 @@ The Learning home now owns its gutters like Help: its decorative hero uses
 `/site/home-hero.webp` with light/dark overlays, and its content has 16px/32px
 insets. Desktop and phone render the same `LearningHero`; the phone frame's
 optional header wraps its default bar, retaining Back, its subtitle and the
-conditional Eadwyn control, with one heading. The temporary
-coming-soon gate, links, searches and reads are unchanged.
+conditional Eadwyn control, with one heading. Links, searches and reads are
+unchanged, and the coming-soon gate stays dormant (lifted 2026-11-04).
 
 
 ## Video on Stream (#4177, L2 of #3726, on L1's routes, D4176)
@@ -130,15 +132,29 @@ coming-soon gate, links, searches and reads are unchanged.
   anything is sent) and chapters (times must increase, at most 100, saved by
   the item's PATCH; read from `GET /api/learning/items/:uid`, the only read
   that sends them).
-- **The content table's Video column** reads Stream · Ready only when the item
-  list carries `stream_uid`, which it does not yet; "None" is claimed only for
-  `stream_uid: null`, else a video with no file or link is "Not recorded".
-- **L4 is not built.** Copy to Stream, Copying…, Verified, "Copy failed · Try
-  again" and the banner "[n] uploaded videos still play from storage." draw
-  only when the list carries `stream_copy`, a name and shape guessed here
-  pending #4179 (`videoUpload.js`), and the buttons only when the page passes
-  `onCopyToStream`. No page does: there is no client method and no route for
-  the copy yet, so today none of it is drawn.
+- **The content table's Video column** reads Stream · Ready once the item list
+  carries a truthy `stream_uid`, which `GET /admin/learning/items` has sent
+  since #4742 (`admin_learning.ts`'s `ITEM_SELECT`; before that it was absent
+  from every row, so "Stream · Ready" never drew even for a copied or
+  natively-uploaded Stream video); "None" is claimed only for `stream_uid:
+  null`, else a video with no file or link is "Not recorded".
+- **L4 (#4179) copies an uploaded file to Stream**, and #4742 wired it into the
+  Studio. `GET /items` sends `stream_copy: { state: 'none' | 'copying' |
+  'verified' | 'failed', stream_uid?, error_code?, error_message? }` for every
+  `r2` item (`copyStates`, `cloudflare-worker/src/services/learningStream.ts`); `streamCopyOf`
+  (`videoUpload.js`) reads `state: 'none'` and a bare `null` the same way,
+  "Copy to Stream". The button, "Try again" and the banner "[n] uploaded
+  videos still play from storage." draw because `LearningStudio.jsx` passes
+  `onCopyToStream`, which calls `studioActions.copyToStream` →
+  `adminLearningApi.migrateVideoToStream` → `POST
+  /admin/learning/stream/migrations`; a refusal updates the row's own
+  `stream_copy` to `{ state: 'failed', error_message }`, read only from the
+  route's `error.data.message`, never `e.message`.
+- **One copy per click, and an unreadable copy table (#4649, D4649).** While
+  the POST is in flight the row reads "Starting copy…" with no button, and a
+  second click or "Try again" starts nothing. A copy table the Worker could not
+  read is `stream_copy: { state: 'unreadable' }`: no button on the row, and the
+  banner says the count could not be read (with Try again), never a number.
 - **The Ask triggers on a blank Title, Summary and Topic (#3706) are not
   wired here.** #3706's field triggers come from `GET /api/fills/sheet`, whose
   `FILL_FIELDS` has no Learning form;

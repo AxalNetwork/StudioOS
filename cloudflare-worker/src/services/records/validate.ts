@@ -24,7 +24,7 @@ import {
 } from '../cycleValidate';
 import { getPainGroupsView, loadPainGroupModel, normPhrase, resolvePhrase, safeParseStrings, severityLevel, type PainGroupModel } from '../painGroups';
 import { linkCandidatesToDirectory } from '../competitorDirectoryLink';
-import { KPI_LABEL, evidenceFor } from '../validateEvidence';
+import { KPI_LABEL, POSTHOG_ROLE, evidenceFor } from '../validateEvidence';
 import { logCycleWrite } from '../cycleActivity';
 import { setInterviewIcpFit } from '../../routes/_founder_validate_writes';
 import { deleteInterview, updateInterviewDetails } from '../interviewWriters';
@@ -40,6 +40,7 @@ import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordConte
 import { acceptedPerModule, findingKindsOf, findingsFor } from '../interviewSuggestions';
 import { lovablePart, type LovablePart } from '../lovableAppLinks';
 import type { FindingKind } from '../interviewFindings';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 type Any = Record<string, any>;
 type Body = Record<string, unknown> | FormData;
@@ -68,7 +69,7 @@ const userId = (ctx: RecordContext) => Number(ctx.user.id);
 const field = (body: Body, key: string): unknown => (body instanceof FormData ? body.get(key) ?? undefined : body[key]);
 const refId = (raw: unknown): string | number => (typeof raw === 'number' || typeof raw === 'string' ? raw : '');
 const money = (cents: number | null | undefined, currency: string | null | undefined) =>
-  cents == null ? null : `${(Number(cents) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(currency || 'usd').toUpperCase()}`;
+  cents == null ? null : suffixAmount(Number(cents), String(currency || 'usd').toUpperCase(), { trimWhole: true });
 
 /** A writer's refusal, as the status and sentence the route answers with. */
 async function refusing(work: () => Promise<ActionResult>): Promise<ActionResult> {
@@ -102,10 +103,24 @@ const vctx = (ctx: RecordContext) => ({ env: ctx.env, projectId: ctx.projectId, 
 const SEVERITY: Record<string, [string, string]> = { severe: ['Severe', 'bad'], real: ['Real', 'amb'], mild: ['Mild', 'grey'] };
 const FIT: Record<string, [string, string]> = { strong: ['Strong', 'ok'], partial: ['Partial', 'vio'], none: ['Weak', 'grey'] };
 const CLAIM: Record<ClaimStatus, [string, string]> = {
-  untested: ['Untested', 'grey'], testing: ['Testing', 'vio'], supported: ['Supported', 'ok'],
+  untested: ['Untested', 'grey'], testing: ['Testing', 'vio'], supported: ['Supported', 'ok'], contested: ['Contested', 'amb'],
   refuted: ['Refuted', 'bad'], inconclusive: ['Inconclusive', 'grey'], not_recorded: ['Fit not recorded', 'amb'],
 };
 const STRENGTH: Record<string, string> = { anecdote: 'Anecdote', pattern: 'Pattern', measured: 'Measured' };
+
+type ClaimCounts = { supporting: number; contradicting: number; fit_unrecorded: number; both: number; interviews: number; interviewees: number | null; organizations: number | null };
+/** D4586: "5 for · 3 against · 2 fit not recorded · 1 in both". The status's three inputs are never shown apart. */
+export function claimSupport(c: ClaimCounts): string {
+  return joined(`${c.supporting} for`, `${c.contradicting} against`,
+    c.fit_unrecorded > 0 ? `${c.fit_unrecorded} fit not recorded` : null,
+    c.both > 0 ? `${c.both} in both` : null);
+}
+/** D4586 § 2: distinct interviews, interviewees and organizations; a breadth not recorded on every interview says so. */
+export function claimBreadth(c: ClaimCounts): string {
+  return joined(plural(c.interviews, 'interview', 'interviews'),
+    c.interviews === 0 ? null : c.interviewees == null ? 'interviewees not recorded' : plural(c.interviewees, 'interviewee', 'interviewees'),
+    c.interviews === 0 ? null : c.organizations == null ? 'organizations not recorded' : plural(c.organizations, 'organization', 'organizations'));
+}
 const DIRECTION: Record<string, string> = { supports: 'Supporting', contradicts: 'Contradicting' };
 
 /** The venture's owners, the only people a claim may name (decision 12). */
@@ -1358,7 +1373,11 @@ const experiments: ModuleSpec = {
       facts: [
         fact('Proves it', h.success_bar, 'No success bar written'),
         fact('Disproves it', h.disproof, 'No condition written'),
-        { label: 'Evidence', value: `${claim?.supporting ?? 0} for · ${claim?.contradicting ?? 0} against` },
+        // D4585 (#4585): the status counts interviews only (pain-theme links, D690); the Evidence section below also
+        // lists directly linked signals, metrics and experiments, so this figure says which population it counts.
+        // D4586 (#4586): support, contradiction and unknown fit together, then breadth (display only). One fact, so the
+        // record keeps the canvas's four.
+        fact('Interview support', claim ? joined(claimSupport(claim), claimBreadth(claim)) : null, 'Not recorded'),
         fact('Strength', claim?.strength ? STRENGTH[claim.strength] : null, 'No strength recorded'),
       ],
       createdBy: h.created_by ?? null, createdAt: h.created_at ?? null,
@@ -1561,9 +1580,9 @@ const experiments: ModuleSpec = {
   },
 };
 
-/** Add evidence's candidates (decision 4): interviews, demand records, KPI keys and experiments. */
+/** Add evidence's candidates (decision 4): interviews, demand records, KPI keys, valued PostHog metrics (D4585) and experiments. */
 async function evidenceChoices(ctx: RecordContext): Promise<Array<{ kind: string; value: string; label: string }>> {
-  const [ivs, signals, revenue, signups, kpis, exps] = await Promise.all([
+  const [ivs, signals, revenue, signups, kpis, exps, posthog] = await Promise.all([
     ctx.env.DB.prepare('SELECT id, interviewee_name, interview_date, done_at, created_at FROM discovery_interviews WHERE project_id = ? ORDER BY id DESC LIMIT 200')
       .bind(ctx.projectId).all<Any>(),
     ctx.env.DB.prepare('SELECT id, kind, who, signal_date FROM demand_signals WHERE project_id = ? ORDER BY signal_date DESC, id DESC LIMIT 200')
@@ -1575,6 +1594,12 @@ async function evidenceChoices(ctx: RecordContext): Promise<Array<{ kind: string
     latestKpis(ctx.env, ctx.projectId),
     ctx.env.DB.prepare('SELECT id, title FROM hypothesis_experiments WHERE project_id = ? ORDER BY id DESC LIMIT 200')
       .bind(ctx.projectId).all<Any>(),
+    // The same population addEvidence accepts (D1605): a tracked metric PostHog has given a value.
+    ctx.env.DB.prepare(
+      `SELECT DISTINCT m.uid, m.insight_name, m.role FROM posthog_tracked_metrics m
+       JOIN posthog_metric_facts f ON f.project_id = m.project_id AND f.kind = 'metric' AND f.fact_key = 'metric:' || m.uid AND f.value IS NOT NULL
+       WHERE m.project_id = ? ORDER BY m.uid LIMIT 200`,
+    ).bind(ctx.projectId).all<Any>(),
   ]);
   return [
     ...(ivs.results || []).map((i) => ({ kind: 'interview', value: String(i.id), label: joined(i.interviewee_name, dMon(heldOf(i))) })),
@@ -1582,6 +1607,7 @@ async function evidenceChoices(ctx: RecordContext): Promise<Array<{ kind: string
     ...(revenue.results || []).map((r) => ({ kind: 'signal', value: `revenue-${r.id}`, label: joined('Pre-sale', r.customer, dMon(r.received_on)) })),
     ...(signups.results || []).map((w) => ({ kind: 'signal', value: `waitlist-${w.id}`, label: joined('Waitlist sign-up', w.name, dMon(w.created_at)) })),
     ...KPI_KEYS.filter((k) => kpis.has(k)).map((k) => ({ kind: 'metric', value: k, label: KPI_LABEL[k] })),
+    ...(posthog.results || []).map((m) => ({ kind: 'metric', value: `posthog-${m.uid}`, label: `${m.insight_name || POSTHOG_ROLE[m.role] || 'PostHog metric'} (PostHog)` })),
     ...(exps.results || []).map((x) => ({ kind: 'experiment', value: String(x.id), label: String(x.title) })),
   ];
 }

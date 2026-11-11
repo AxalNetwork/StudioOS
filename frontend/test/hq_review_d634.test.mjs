@@ -116,7 +116,8 @@ test('Q5: both Stripe states, and neither shows a figure', () => {
 test('Q5: money to the cent with its code, dates in UTC, and the Disputes card opens each dispute', () => {
   assert.equal(disputeMoney(120000, 'eur'), '€1,200.00 EUR');
   assert.equal(disputeMoney(50, 'usd'), 'US$0.50 USD');
-  assert.match(disputeMoney(1999, 'zzz'), /^ZZZ\s19\.99$/, 'the code is said once');
+  // D5373: a code that is not a listed currency has no known decimals, so the Stripe count is named, never divided by 100.
+  assert.equal(disputeMoney(1999, 'zzz'), '1,999 minor units (currency "ZZZ" is not one we can price in)');
   assert.equal(disputeMoney(null, 'eur'), null);
   assert.equal(stripeDate(1760832000), '19 Oct 2025');
   assert.equal(stripeDate(0), null);
@@ -125,7 +126,8 @@ test('Q5: money to the cent with its code, dates in UTC, and the Disputes card o
     disputes: { disputes: [D, { ...D, id: 'dp_won', status: 'won' }] },
     nowSec: 1760000000,
   }));
-  const link = /<a ([^>]*)>Dispute<\/a>/.exec(card);
+  // D5039 (canvas RV08): the row's action reads "Review dispute".
+  const link = /<a ([^>]*)>Review dispute<\/a>/.exec(card);
   assert.ok(link, 'the dispute row is a link');
   assert.match(link[1], /href="\/admin\/revenue\/disputes\/dp_1"/);
   assert.match(link[1], /data-testid="hq-revenue-dispute-link"/);

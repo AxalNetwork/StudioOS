@@ -277,22 +277,32 @@ test('without `decide` the rows stay plain text, as the queue draws on its own',
 // ──────────────────────────────────────────────────────────────── the page ──
 
 test('the page wires the panel, keeps the session list, and reloads quietly after a decision', () => {
-  assert.ok(CODE.includes('escalationCardProps(ready, failed, decide)'), 'the escalation card is drawn without its panels');
+  // D5034 (#5034) — the escalations are Support v2's banded rows, and each row's Review opens the same panel.
+  assert.match(CODE, /<EscalationQueue[\s\S]*?decide=\{decide\}/, 'the escalation rows are drawn without their panels');
   assert.ok(CODE.includes('<RecordedList'), 'the session list is not drawn');
   assert.match(CODE, /<RecordedList\s+recorded=\{recorded\}\s+onResend=\{/);
   const at = CODE.indexOf('const onRecorded = useCallback(');
   assert.ok(at > 0);
   const fn = CODE.slice(at, CODE.indexOf('}, [fetchSupport]);', at));
-  assert.ok(fn.includes('setOpenUid(null)'), 'the panel stays open after its decision is recorded');
+  // D5034 part 2 — the sheet stays open on its outcome (recorded, then
+  // delivered or not), so recording does not close it; closing is the
+  // operator's, and focus then moves to the next row.
+  assert.ok(!fn.includes('setOpen(null)'), 'the sheet closes before its outcome is shown');
   assert.ok(fn.includes('fetchSupport(false)'), 'the refresh after a decision blanks the page');
+  const close = CODE.slice(CODE.indexOf('const closeSheet = useCallback('), CODE.indexOf('}, [open]);'));
+  assert.ok(close.includes('if (decided && open?.next) setFocusAfter(open.next);'), 'after a decision, focus does not move to the next row');
   assert.ok(!fn.includes('load()'), 'the refresh after a decision blanks the page');
-  assert.ok(CODE.includes('if (clear) setData(null);'));
+  // D5031 (#5031) — two reads now, HQ's own desk and the branch hosts; each
+  // blanks only on a retry, never after a decision.
+  assert.ok(CODE.includes('if (clear) setLocal(null);'));
+  assert.ok(CODE.includes('if (clear) setFull(null);'));
 });
 
 test('the rail says the page acts, once, and the old refusal is gone', () => {
   assert.ok(!SUPPORT_UNAVAILABLE.some(([t]) => /Answering an escalation/.test(t)), 'the rail still says no screen answers');
   assert.doesNotMatch(CODE, /nothing calls it/);
-  assert.ok(CODE.includes('stance="Read-only, except answering an escalation"'));
+  // D5032 (#5032) — the page also sets the ticket SLA hours, and says so.
+  assert.ok(CODE.includes('stance="Read-only, except answering an escalation and setting the ticket SLA hours"'));
   assert.match(CODE, /Recording an answer sends it to the branch\. Send again resends the decision already stored\./);
   assert.ok(CODE.includes('api.escalationResend(uid)'), 'Send again does not call the resend route');
   assert.ok(!CODE.includes('escalationResend(uid,') && !CODE.includes('escalationResend(uid, '),

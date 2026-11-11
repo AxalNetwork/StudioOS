@@ -15,6 +15,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { dayLabel } from './pitchStudioModel.js';
 
 export const SHARE_TITLE = 'Share this deck';
@@ -145,8 +146,7 @@ export function shareUrl(result, origin = globalThis.location?.origin ?? '') {
 
 /** A refusal as one sentence: the Worker's own words when it sent any. */
 export function shareFailure(error) {
-  const said = error?.data?.detail || error?.data?.error || (typeof error?.message === 'string' && error.status ? error.message : '');
-  return said ? `${said} No link was made.` : 'The link could not be made. Nothing was sent.';
+  return userFacingRaiseError(error, { fallback: 'The link could not be made. Nothing was sent.', scope: 'raise:pitch:share' });
 }
 
 // ---------------------------------------------------------------------------

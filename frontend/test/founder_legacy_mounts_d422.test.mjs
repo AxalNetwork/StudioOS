@@ -103,7 +103,7 @@ test('an editor stays mounted while a founder zone lacks any of its writes', () 
 });
 
 test('the editors keep their deep links: ?mode=workspace and the Research landing', () => {
-  assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
+  assert.match(app, /const founderExecutionEditor = holds\('founder'\)\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
   // Discovery's `?mode=workspace` and `?tab=` went with its editor (#2335).
   assert.ok(!app.includes('founderDiscoveryEditor'), 'the retired Discovery editor switch is back');
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.

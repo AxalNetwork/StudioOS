@@ -257,6 +257,10 @@ function Timeline({ spec, label }) {
 const TILE = {
   connected: ['Connected', 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'],
   failing: ['Failing', 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300'],
+  // D5065 (#5065): a mapped connection the connector no longer reports as
+  // active. Without its own tile it fell back to Not connected, which read as
+  // "nothing was ever connected" beside a record that said Connected.
+  disconnected: ['Reconnect required', 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300'],
   not_connected: ['Not connected', 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400'],
 };
 

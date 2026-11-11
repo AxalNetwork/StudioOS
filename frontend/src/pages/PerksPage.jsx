@@ -5,6 +5,7 @@ import {
   ClipboardCheck, Send, Star, Quote, ArrowRight, Grid3x3,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import OfferPages from '../ui/OfferPages.jsx';
 import { reportError } from '../lib/log';
 import { Card, Pill, SectionLabel, Unrecorded, Unreadable, usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
@@ -19,6 +20,7 @@ import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 import { useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions';
+import { perkState, matchesPerkChip, perkListingBook, perkListingName, PERK_REVIEW_LABEL, PERK_STATE_LABEL } from '../lib/perkListings.js';
 
 /**
  * Perks & Products — built from `design/canvases/backlog/Perks & Products.dc.html`
@@ -260,6 +262,7 @@ function Marketplace({ data, onOpen }) {
 
   return (
     <div className="space-y-6">
+      {(data.has_more || data.page > 1) && <p className="text-sm text-gray-500">Marketplace counts and filters apply to this page.</p>}
       {featured.length > 0 && (
         <section data-testid="perks-featured">
           <div className="flex flex-wrap items-end justify-between gap-2">
@@ -664,14 +667,14 @@ function ClaimedCard({ c, onRated }) {
   );
 }
 
-function MyPerks({ data, onRated }) {
+function MyPerks({ data, onRated, onPage, onLedgerPage }) {
   const items = data.items;
   const ledger = data.ledger;
   // Running balance, newest first: the top row ends at today's balance and
   // each older row ends where the next one started. Read off the rows the
   // Worker returned — the balance is their sum, never a stored number.
   const balances = [];
-  let bal = Number(data.balance);
+  let bal = Number(data.ledger_balance ?? data.balance);
   for (const l of ledger) { balances.push(bal); bal -= Number(l.delta); }
 
   return (
@@ -701,6 +704,7 @@ function MyPerks({ data, onRated }) {
       {items.length === 0
         ? <p className="text-sm text-gray-600">Nothing claimed yet.</p>
         : <div className="space-y-3">{items.map((c) => <ClaimedCard key={c.uid} c={c} onRated={onRated} />)}</div>}
+      <OfferPages label="My claims" result={data} onPage={onPage} />
 
       <Card padding="none" data-testid="perks-ledger">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-800">
@@ -718,6 +722,7 @@ function MyPerks({ data, onRated }) {
             {ledger.map((l, i) => <LedgerLine key={l.id ?? i} l={l} balanceAfter={balances[i]} />)}
           </div>
         )}
+        <OfferPages label="Credit ledger" result={{ page: data.ledger_page, has_more: data.ledger_has_more }} onPage={onLedgerPage} />
       </Card>
     </div>
   );
@@ -727,45 +732,11 @@ function MyPerks({ data, onRated }) {
  * Partner: submissions                                                *
  * ------------------------------------------------------------------ */
 
-/**
- * `live` | `expiring` | `expired` for one listing, as the worker computed it.
- *
- * NEVER RECOMPUTED HERE. `routes/perks.ts` owns the thirty-day window and
- * serves `lifecycle` on every row; `routes/research.ts` imports the same helper
- * for the AI gather. A copy of the arithmetic in this file is how the strip and
- * the chips come to disagree about which perks are ending.
- *
- * The fallback is `live` rather than a guess, and it is only reachable against a
- * response that predates the field.
- */
-export function perkState(p) {
-  const s = String(p?.lifecycle || '');
-  return s === 'expiring' || s === 'expired' ? s : 'live';
-}
+// `perkState` and `matchesPerkChip` live in lib/perkListings.js (#4696): the
+// Offers overview board draws the same listings through the same functions.
+export { perkState, matchesPerkChip };
 
-/**
- * Which chip a listing answers to.
- *
- * `Live` IS BOTH THINGS, and this is the correction migration 228 made
- * possible. It used to be `status === 'live'` alone — the REVIEW state, "an
- * admin approved it" — while the artboard's own note for the word is
- * "accepting redemptions". A perk approved in March and ended in June is not
- * accepting anything.
- *
- * A draft with a far-off end date answers to `All` and to nothing else. That is
- * a real fourth state with no word on the artboard, and the two wrong homes for
- * it would each claim something untrue: `Live` claims a review that has not
- * happened, `Expiring` claims an urgency it does not have.
- */
-export function matchesPerkChip(p, chip) {
-  const state = perkState(p);
-  if (chip === 'live') return p.status === 'live' && state === 'live';
-  if (chip === 'expiring') return state === 'expiring';
-  if (chip === 'expired') return state === 'expired';
-  return true;
-}
-
-const STATE_LABEL = { live: 'Live', expiring: 'Expiring', expired: 'Expired' };
+const STATE_LABEL = PERK_STATE_LABEL;
 const STATE_TONE = { live: 'ok', expiring: 'warn', expired: 'danger' };
 const REVIEW_NOTE = {
   draft: 'draft — not submitted',
@@ -822,7 +793,7 @@ function ExtendModal({ rows, busy, onSave, onClose, note }) {
             <div className="mt-3 space-y-3">
               {rows.map((p) => (
                 <div key={p.uid} className="rounded-md border border-gray-200 p-3 dark:border-gray-800">
-                  <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
+                  <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{perkListingName(p)}</div>
                   <div className="mt-0.5 text-[11px] text-gray-500">
                     {STATE_LABEL[perkState(p)]} · ends {String(p.ends_at || '').slice(0, 10)}
                     {p.grant_scope ? ` · grants ${p.grant_scope}` : ''}
@@ -880,7 +851,13 @@ const pct = (r) => `${Math.round(Number(r) * 100)}%`;
  */
 function ListingPerformance({ rows, onChanged }) {
   const first = rows.find((p) => p.status === 'live') || rows[0];
-  const [uid, setUid] = useState(first.uid);
+  const [selectedUid, setUid] = useState(first.uid);
+  const listing = rows.find((p) => p.uid === selectedUid) || first;
+  return <ListingPerformanceDetail key={listing.uid} {...{ rows, listing, setUid, onChanged }} />;
+}
+
+function ListingPerformanceDetail({ rows, listing, setUid, onChanged }) {
+  const uid = listing.uid;
   const [stats, setStats] = useState(null);
   const [claims, setClaims] = useState(null);
   const [readErr, setReadErr] = useState('');
@@ -888,15 +865,29 @@ function ListingPerformance({ rows, onChanged }) {
   const [cap, setCap] = useState('');
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(false);
-  const listing = rows.find((p) => p.uid === uid) || first;
+  const request = React.useRef(0);
+  const currentPage = React.useRef(1);
 
-  const load = useCallback(() => {
+  const load = useCallback((page = currentPage.current) => {
+    const generation = ++request.current;
     setReadErr('');
-    Promise.all([api.perkStats(uid), api.perkClaimsForListing(uid)])
-      .then(([s, c]) => { setStats(s); setClaims(c); })
-      .catch((e) => { reportError('perk_performance_failed', e); setReadErr(e?.message || 'Could not read this listing.'); });
+    Promise.all([api.perkStats(uid), api.perkClaimsForListing(uid, page)])
+      .then(([s, c]) => {
+        if (generation !== request.current) return;
+        setStats(s);
+        setClaims(c);
+        currentPage.current = page;
+      })
+      .catch((e) => {
+        if (generation !== request.current) return;
+        reportError('perk_performance_failed', e);
+        setReadErr(e?.message || 'Could not read this listing.');
+      });
   }, [uid]);
-  useEffect(() => { setStats(null); setClaims(null); setNote(null); load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { request.current++; };
+  }, [load]);
 
   async function redeem(body) {
     setBusy(true); setNote(null);
@@ -953,7 +944,7 @@ function ListingPerformance({ rows, onChanged }) {
         </select>
       </div>
 
-      {readErr && <Unreadable what="This listing’s performance" claim="It is not a sign nobody claimed it." onRetry={load} />}
+      {readErr && <Unreadable what="This listing’s performance" claim="It is not a sign nobody claimed it." onRetry={() => load()} />}
       {!s && !readErr && <p className="text-sm text-gray-500"><Loader2 size={13} className="inline animate-spin" /> Reading…</p>}
 
       {s && (
@@ -1065,6 +1056,7 @@ function ListingPerformance({ rows, onChanged }) {
                     </div>
                   ))}
                 </div>
+                <OfferPages label="Claims" result={claims} busy={busy} onPage={load} />
                 <p className="mt-2 text-[10.5px] leading-relaxed text-gray-500">
                   <Unrecorded reason={s.absent?.bd_console}>No BD console</Unrecorded> — {s.absent?.bd_console}
                 </p>
@@ -1106,11 +1098,26 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
   const [extending, setExtending] = useState(false);
   const [extendNote, setExtendNote] = useState(null);
   const offerRef = React.useRef(null);
+  const [listingPage, setListingPage] = useState(null);
+  const listingRequest = React.useRef(0);
+  const currentListingPage = React.useRef(1);
 
-  const load = useCallback(() => {
-    api.perkSubmissions()
-      .then((d) => { setItems(d?.items || []); setAbsent(d?.absent || {}); })
-      .catch((e) => { reportError('perk_submissions_failed', e); setLoadErr(e?.message || 'Could not load your listings.'); });
+  const load = useCallback((page = currentListingPage.current) => {
+    const generation = ++listingRequest.current;
+    api.perkSubmissions(typeof page === 'number' ? page : currentListingPage.current)
+      .then((d) => {
+        if (generation !== listingRequest.current) return;
+        setItems(d?.items || []);
+        setAbsent(d?.absent || {});
+        setListingPage(d);
+        currentListingPage.current = d?.page ?? 1;
+        setLoadErr('');
+      })
+      .catch((e) => {
+        if (generation !== listingRequest.current) return;
+        reportError('perk_submissions_failed', e);
+        setLoadErr(e?.message || 'Could not load your listings.');
+      });
   }, []);
   useEffect(load, [load]);
 
@@ -1172,9 +1179,8 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
   // ══ THE ARTBOARD'S FOUR TILES, COUNTED OVER THE WHOLE BOOK ═══════════════
   // Never over `visible`: a figure that changes because a chip was clicked is
   // not reporting what its label claims.
-  const live = rows.filter((p) => p.status === 'live' && perkState(p) === 'live');
-  const expiring = rows.filter((p) => perkState(p) === 'expiring');
-  const expired = rows.filter((p) => perkState(p) === 'expired');
+  // One definition, shared with the Offers overview (`lib/perkListings.js`).
+  const { live, expiring, expired } = perkListingBook(rows);
   // `Grants revoked` COUNTS WHAT THIS BOOK NAMES, and the distinction is the
   // artboard's own: a perk whose expiry took something back is one that RECORDED
   // what it granted. A perk with no grant recorded contributes nothing — not
@@ -1270,7 +1276,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
             return {
               key: p.uid,
               cells: [
-                { text: p.offer, sub: REVIEW_NOTE[p.status] || undefined },
+                { text: perkListingName(p), sub: REVIEW_NOTE[p.status] || undefined },
                 { pill: STATE_LABEL[state], pillTone: STATE_TONE[state] },
                 // THE BAR IS DRAWN ONLY WHERE THERE IS A DENOMINATOR. An
                 // uncapped offer has a redemption count and no ratio, and a bar
@@ -1320,6 +1326,8 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
 
       {loadErr && <Unreadable what="Your listings" claim="This is not a sign you have none." onRetry={load} />}
 
+      {listingPage && (listingPage.has_more || listingPage.page > 1) && <p className="text-sm text-gray-500">Listing figures and filters apply to this page.</p>}
+      <OfferPages label="Listings" result={listingPage} busy={busy} onPage={load} />
       {rows.length > 0 && <ListingPerformance rows={rows} onChanged={load} />}
 
       <section data-testid="perk-submit" className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -1490,12 +1498,12 @@ function PartnerConsole({ zoneActions, zoneFilters, role, user = null }) {
                     <div key={p.uid} className="border-b border-gray-100 px-4 py-3 last:border-0 dark:border-gray-800">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{p.offer}</div>
+                          <div className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">{perkListingName(p)}</div>
                           <div className="mt-0.5 text-[11px] text-gray-500">
                             {p.category} · submitted {String(p.created_at || '').slice(0, 10)} · {p.claim_cap == null ? 'uncapped' : `cap ${p.claim_cap}`}
                           </div>
                         </div>
-                        <Pill tone={STATUS_PILL[p.status]}>{String(p.status).replace('_', ' ')}</Pill>
+                        <Pill tone={STATUS_PILL[p.status]}>{PERK_REVIEW_LABEL[p.status] || String(p.status).replace('_', ' ')}</Pill>
                       </div>
                       {p.status === 'rejected' && p.review_note && (
                         <p className="mt-2 rounded bg-red-50 p-2 text-xs text-red-700">{p.review_note}</p>
@@ -1625,17 +1633,39 @@ function PerksMarket({ user }) {
   const [mineErr, setMineErr] = useState('');
   const [open, setOpen] = useState(null);
 
-  const loadCatalog = useCallback(() => {
+  const marketPage = React.useRef(1);
+  const minePages = React.useRef([1, 1]);
+  const marketRequest = React.useRef(0);
+  const mineRequest = React.useRef(0);
+  const loadCatalog = useCallback((page = marketPage.current) => {
+    const generation = ++marketRequest.current;
     setCatalogErr('');
-    api.perksCatalog()
-      .then(setCatalog)
-      .catch((e) => { reportError('perks_catalog_failed', e); setCatalogErr(e?.message || 'Could not load the marketplace.'); });
+    api.perksCatalog(typeof page === 'number' ? page : marketPage.current)
+      .then((data) => {
+        if (generation !== marketRequest.current) return;
+        marketPage.current = data.page ?? 1;
+        setCatalog(data);
+      })
+      .catch((e) => {
+        if (generation !== marketRequest.current) return;
+        reportError('perks_catalog_failed', e);
+        setCatalogErr(e?.message || 'Could not load the marketplace.');
+      });
   }, []);
-  const loadMine = useCallback(() => {
+  const loadMine = useCallback((page = minePages.current[0], ledgerPage = minePages.current[1]) => {
+    const generation = ++mineRequest.current;
     setMineErr('');
-    api.perksMine()
-      .then(setMine)
-      .catch((e) => { reportError('perks_mine_failed', e); setMineErr(e?.message || 'Could not load your perks.'); });
+    api.perksMine(typeof page === 'number' ? page : minePages.current[0], ledgerPage)
+      .then((data) => {
+        if (generation !== mineRequest.current) return;
+        minePages.current = [data.page ?? 1, data.ledger_page ?? 1];
+        setMine(data);
+      })
+      .catch((e) => {
+        if (generation !== mineRequest.current) return;
+        reportError('perks_mine_failed', e);
+        setMineErr(e?.message || 'Could not load your perks.');
+      });
   }, []);
   useEffect(() => { loadCatalog(); loadMine(); }, [loadCatalog, loadMine]);
 
@@ -1686,11 +1716,15 @@ function PerksMarket({ user }) {
         {tab === 'market' && (catalogErr
           ? <Unreadable what="The marketplace" claim="It is not a sign nothing is listed." onRetry={loadCatalog} />
           : !catalog ? <p className="text-sm text-gray-500">Loading…</p>
-            : <Marketplace data={catalog} onOpen={openPerk} />)}
+            : <>
+                <Marketplace data={catalog} onOpen={openPerk} />
+                <OfferPages label="Marketplace" result={catalog} onPage={loadCatalog} />
+              </>)}
         {tab === 'mine' && (mineErr
           ? <Unreadable what="Your perks" claim="It is not a sign you have claimed nothing." onRetry={loadMine} />
           : !mine ? <p className="text-sm text-gray-500">Loading…</p>
-            : <MyPerks data={mine} onRated={() => { loadMine(); loadCatalog(); }} />)}
+            : <MyPerks data={mine} onPage={loadMine} onLedgerPage={(page) => loadMine(mine.page, page)}
+                onRated={() => { loadMine(); loadCatalog(); }} />)}
       </div>
     </>
   );

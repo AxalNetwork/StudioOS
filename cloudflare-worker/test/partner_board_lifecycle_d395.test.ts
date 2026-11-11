@@ -75,6 +75,9 @@ function freshDb() {
       budget_min REAL, budget_max REAL, timeline TEXT, status TEXT NOT NULL DEFAULT 'open',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    -- #4673: an engagement's founder_id is a founder profile (founders.id); the client's name is read
+    -- from it. This fixture keeps the founder's id equal to the user's on purpose.
+    CREATE TABLE founders (id INTEGER PRIMARY KEY, uid TEXT, name TEXT NOT NULL, email TEXT);
     CREATE TABLE engagements (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
       need_id INTEGER NOT NULL, quote_id INTEGER NOT NULL UNIQUE,
@@ -102,6 +105,7 @@ function freshDb() {
   u.run(THEIRS, 'partner', 2, 'Theirs', 'theirs@example.com');
   u.run(UNLINKED, 'partner', null, 'Nobody', 'nobody@example.com');
   u.run(FOUNDER, 'founder', null, 'Verwood', 'fran@example.com');
+  db.prepare('INSERT INTO founders (id, name, email) VALUES (?, ?, ?)').run(FOUNDER, 'Verwood', 'fran@example.com');
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(1, 'p-1', 'Ours', 'ours@example.com');
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(2, 'p-2', 'Theirs', 'theirs@example.com');
   const n = db.prepare('INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description) VALUES (?,?,?,?,?,?,?)');
@@ -171,4 +175,48 @@ test('D395: the other firm reads its own cancellation, and not our invoice', asy
 test('D395: a sign-in with no firm is refused the board', async () => {
   const r = await board(freshDb(), UNLINKED);
   assert.ok(r.status >= 400, `a sign-in with no firm read the board (${r.status})`);
+});
+
+// ─────────────────────────────────────────────── D4822 (#4822): what Board v2 reads beside the work
+
+test('D4822: a row carries its owner, scope assessment, overdue milestones, open blockers, deliverables and this period’s report', async () => {
+  const db = freshDb();
+  const r0 = await board(db, OURS);
+  const bare = r0.body.items.find((i: any) => i.engagement_id === OUR_ENG);
+  // Nothing recorded: every one is absent or zero-counted, never invented.
+  assert.deepEqual(
+    [bare.owner_user_id, bare.owner_name, bare.scope_state, bare.report_state, bare.milestones_overdue, bare.open_blockers, bare.deliverables_sent],
+    [null, null, null, null, 0, 0, 0],
+  );
+  assert.equal(bare.report_period, r0.body.period);
+
+  const past = '2020-01-01';
+  const future = '2999-01-01';
+  const m = db.prepare('INSERT INTO engagement_milestones (uid, engagement_id, title, due_at, completed_at) VALUES (?, ?, ?, ?, ?)');
+  m.run('m1', OUR_ENG, 'Overdue, open', past, null);
+  m.run('m2', OUR_ENG, 'Overdue, done', past, '2020-01-02');
+  m.run('m3', OUR_ENG, 'Later', future, null);
+  m.run('m4', OUR_ENG, 'Undated', null, null);
+  const b = db.prepare('INSERT INTO engagement_blockers (uid, engagement_id, side, summary, cleared_at) VALUES (?, ?, ?, ?, ?)');
+  b.run('b1', OUR_ENG, 'client', 'Waiting on data access', null);
+  b.run('b2', OUR_ENG, 'ours', 'Cleared one', '2026-10-01');
+  const d = db.prepare('INSERT INTO engagement_deliverables (uid, engagement_id, title, sent_at, signed_off_at) VALUES (?, ?, ?, ?, ?)');
+  d.run('d1', OUR_ENG, 'GTM plan', '2026-10-01', '2026-10-03');
+  d.run('d2', OUR_ENG, 'Pricing model', '2026-10-05', null);
+  d.run('d3', OUR_ENG, 'Not sent yet', null, null);
+  db.prepare('INSERT INTO partner_engagement_health (engagement_id, owner_user_id, scope_state) VALUES (?, ?, ?)').run(OUR_ENG, OURS, 'drift');
+  db.prepare("INSERT INTO engagement_status_reports (uid, engagement_id, period, state) VALUES ('r1', ?, ?, 'draft')").run(OUR_ENG, r0.body.period);
+  // Another firm's report for the same period must not reach our row.
+  db.prepare("INSERT INTO engagement_status_reports (uid, engagement_id, period, state, sent_at) VALUES ('r2', ?, ?, 'sent', '2026-11-01')").run(THEIR_ENG, r0.body.period);
+
+  const r = await board(db, OURS);
+  const row = r.body.items.find((i: any) => i.engagement_id === OUR_ENG);
+  assert.equal(row.milestones_overdue, 1, 'a completed or undated milestone counted as overdue');
+  assert.deepEqual([row.open_blockers, row.open_blockers_client_side], [1, 1], 'a cleared blocker counted as open');
+  assert.deepEqual([row.deliverables_sent, row.deliverables_signed_off], [2, 1]);
+  assert.deepEqual([row.owner_user_id, row.owner_name, row.scope_state], [OURS, 'Ours', 'drift']);
+  assert.equal(row.report_state, 'draft');
+  assert.ok(!r.body.items.some((i: any) => i.engagement_id === THEIR_ENG));
+  db.prepare("UPDATE engagement_status_reports SET state = 'sent', sent_at = '2026-11-02' WHERE uid = 'r1'").run();
+  assert.equal((await board(db, OURS)).body.items.find((i: any) => i.engagement_id === OUR_ENG).report_state, 'sent');
 });

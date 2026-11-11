@@ -1611,6 +1611,10 @@ billing.post('/stripe/webhook', async (c) => {
     } catch (e: any) {
       console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
     }
+    // D5299 (#5299): the revenue ledger's row for this event, once. A failed write throws, so the receipt stays
+    // unfinished and the 503 below makes Stripe retry; a replay writes nothing new.
+    const { recordStripeFinancialEvent } = await import('../services/financialEvents');
+    await recordStripeFinancialEvent(c.env, event as Parameters<typeof recordStripeFinancialEvent>[1]);
     const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
       SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
       WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)
@@ -1628,7 +1632,7 @@ billing.post('/stripe/webhook', async (c) => {
 
 async function handleStripeEvent(
   env: Env,
-  event: { id?: string; type: string; data: { object: Record<string, unknown> } },
+  event: { id?: string; type: string; created?: number; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
   // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
@@ -1735,7 +1739,8 @@ async function handleStripeEvent(
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
       // D783: what the member pays for this plan, for its AI allowance. Never fails the webhook.
-      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }); }
+      // D4703: ordered by the event's own `created`, so a late older event cannot overwrite a newer amount.
+      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }, typeof event.created === 'number' ? event.created : null); }
       catch (e) { console.warn('[billing] subscription amount not recorded:', (e as Error).message); }
       const customer = obj.customer as string | null;
       const status = (obj.status as string) ?? 'active';
@@ -2070,6 +2075,15 @@ async function handleStripeEvent(
             currency: typeof obj.currency === 'string' ? obj.currency : null,
           },
         });
+      }
+      // D4855: the discount this payment took stops being a hold on the licence's
+      // promotion ceiling and counts for good. Idempotent: a re-delivered event
+      // commits a row that is already committed. A PI with no reservation (HQ,
+      // or made before this) names none and this does nothing.
+      const reservationRef = (meta.promo_reservation_ref || '').trim();
+      if (reservationRef) {
+        const { commitPromoReservation } = await import('../services/promoRedemption');
+        await commitPromoReservation(env, reservationRef);
       }
       // Task #8 — universal referral commission. ANY PI stamped at creation
       // with referral attribution (referral_code + referrer_user_id + price_id)

@@ -175,16 +175,35 @@ test('2: rule order — no interview, then a session to review, then the next co
     why: 'Validate starts with one interview. Everything else in the venture builds on what it finds.',
     cta: { label: 'Record a session', href: `/validate/record?project=${P}` },
     then: 'Write the claim you most need to be true.',
+    // D4589 (#4589): the shared next-action shape.
+    secondary: [], state: 'ok',
   });
   const iv = interview(db, P);
   session(db, iv, 'transcribed', `${day(-1)} 10:00:00`);
   const review = (await vRead(db)).body.focus;
   assert.equal(review.rule, 'review');
   // D704 (#1783) moved rule 2's href to the interview's record (D-b).
-  assert.equal(review.cta.href, `/validate/customer-research/${iv}?session=1`);
+  assert.equal(review.cta.href, `/validate/customer-research/${iv}?project_id=${P}&session=1`);
   assert.ok(routed(review.cta.href, routesOf()), 'the review href is a route');
   db.exec("UPDATE interview_sessions SET status = 'reviewed'");
   assert.equal((await vRead(db)).body.focus.rule, 'next_interview');
+});
+
+test('2: a newer completed or cleared session does not hide older actionable review work', async () => {
+  const db = fixture(null);
+  const older = interview(db, P);
+  const newer = interview(db, P);
+  db.prepare(`INSERT INTO interview_sessions (id, uid, project_id, interview_id, created_by_user_id, channel, status, stopped_at)
+    VALUES (11, 'older-review', ?, ?, ?, 'video', 'transcribed', ?),
+           (12, 'newer-done', ?, ?, ?, 'video', 'reviewed', ?),
+           (13, 'newer-draft', ?, ?, ?, 'video', 'draft', ?)`)
+    .run(P, older, FOUNDER, `${day(-3)} 10:00:00`, P, newer, FOUNDER, `${day(-1)} 10:00:00`, P, newer, FOUNDER, `${day(0)} 10:00:00`);
+  const focus = (await vRead(db)).body.focus;
+  assert.equal(focus.rule, 'review');
+  assert.equal(focus.cta.href, `/validate/customer-research/${older}?project_id=${P}&session=11`);
+
+  db.prepare("UPDATE interview_sessions SET status = 'reviewed' WHERE id = 11").run();
+  assert.equal((await vRead(db)).body.focus.rule, 'next_interview', 'completing the item advances past the cleared queue');
 });
 
 test('3: a partner on Validate gets the card rule, never a write; with no card next, no focus', async () => {
@@ -360,7 +379,7 @@ test('7: Build\'s index is the canvas\'s seven rows with Tools first, from the s
   assert.deepEqual(r.body.index.map((x: any) => x.key),
     ['tools', 'solution-design', 'prototype-mvp', 'product-roadmap', 'founding-team', 'company-creation', 'operating-systems']);
   assert.deepEqual(row(r.body, 'tools'), { key: 'tools', title: 'Tools', detail: '2 connected · 1 failing', value: '3', href: `/build/operating-systems?project=${P}#tools` });
-  assert.deepEqual([row(r.body, 'solution-design').detail, row(r.body, 'solution-design').value], ['2 features linked to a pain', '']);
+  assert.deepEqual([row(r.body, 'solution-design').detail, row(r.body, 'solution-design').value], ['2 features linked to a pain or hypothesis', '']);
   assert.deepEqual([row(r.body, 'company-creation').detail, row(r.body, 'company-creation').value], [`Next filing ${dayMonth(day(20))}`, '']);
   assert.deepEqual([row(r.body, 'operating-systems').detail, row(r.body, 'operating-systems').value], ['Systems connected', '1 of 5']);
   for (const x of r.body.index) assert.equal(new URL(x.href, 'https://unit.test').searchParams.toString(), `project=${P}`, x.key);
@@ -681,7 +700,12 @@ test('11: a throwing query in one part leaves that part null and the rest of the
     NEEDLE = needle;
     try {
       const x = (await vRead(v)).body;
-      assert.equal(x[nulled], null, `validate ${nulled}`);
+      if (nulled === 'focus') {
+        // D4589 (#4589): the session read failing is said, never a step it did not check.
+        assert.equal(x.focus.rule, 'unavailable');
+        assert.equal(x.focus.cta, null);
+        assert.match(x.focus.why, /could not be read\. This is not a claim that nothing is waiting\./);
+      } else assert.equal(x[nulled], null, `validate ${nulled}`);
       for (const k of ['focus', 'meter', 'index'].filter((y) => y !== nulled)) assert.notEqual(x[k], null, `validate ${k}`);
       assert.deepEqual(x.figures, whole.figures);
       // The demand card reads its bar with the meter's own statement text, so

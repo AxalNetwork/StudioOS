@@ -221,7 +221,45 @@ export function slotView(slot) {
     // `is_cancelled` is the worker's word; `status` is the dev backend's.
     cancelled: s.status ? s.status === 'cancelled' : Boolean(s.is_cancelled),
     meetingUrl: s.meeting_url ?? s.location_uri ?? null,
+    // #4715: anyone but the slot's advisor, or a founder with a confirmed
+    // booking on it, is told only whether a link exists.
+    hasMeetingLink: Boolean(s.has_meeting_link ?? (s.meeting_url || s.location_uri)),
+    // #4692: the booking's own verdict on this hour, as `GET /:uid/slots`
+    // answers it. Absent (an older response, or the dev backend) reads as no
+    // verdict, never as a refusal.
+    unavailableCode: s.unavailable_code ?? null,
+    paidCapReached: Boolean(s.paid_cap_reached),
   };
+}
+
+/**
+ * #4692: WHY a published hour cannot be booked, in the founder's words.
+ *
+ * `GET /api/advisors/:uid/slots` answers the booking's own availability rules
+ * for every slot it lists (D4692, #4695): `unavailable_code` is what
+ * `POST /slots/:id/book` would refuse for any session type — minimum notice, a
+ * blackout, or the buffer around a session the advisor already holds — and
+ * `paid_cap_reached` says the slot's week has reached the advisor's weekly paid
+ * cap, which stops a paid session only.
+ *
+ * Nothing read those two fields, so the list went on offering hours the
+ * booking was certain to refuse and the founder met the refusal at the click.
+ * The hour stays listed either way: a time the founder can see and cannot take
+ * is worth more than a gap, as long as it says why.
+ *
+ * `offer` is the chosen session type as `offerFromType` reads it. With none
+ * chosen the paid cap is not yet this hour's answer, so it is not given as one.
+ * An unrecognised code returns null rather than a guess.
+ */
+export function slotUnavailableReason(slot, offer = null) {
+  const v = slotView(slot);
+  if (v.unavailableCode === 'min_notice') return 'Too soon — this advisor asks for more notice than this hour leaves.';
+  if (v.unavailableCode === 'blackout') return 'The advisor does not hold sessions at this hour.';
+  if (v.unavailableCode === 'buffer') return 'Too close to another session this advisor already holds.';
+  if (v.paidCapReached && offer?.pricing === 'price') {
+    return 'This advisor has taken all the paid sessions they accept in that week.';
+  }
+  return null;
 }
 
 /** A slot a founder can actually book: published, not cancelled, not full. */
@@ -272,6 +310,44 @@ export function bookingView(booking) {
     counterpartyEmail: b.client_email || b.founder_email || null,
     note: b.client_message || b.questions || b.notes || null,
   };
+}
+
+/**
+ * D4715 (#4715) — the offer a booking is made on, in the worker's shape
+ * (`offerSnapshot` in routes/advisors.ts): name, length, pricing mode
+ * (`free` | `included` | `price` | `unset`) and price. `offerFromType` builds it
+ * from a session type before booking, so the page shows the same terms the
+ * worker will copy; a booking's own `offer` is the copy the worker took.
+ */
+export function offerFromType(type) {
+  if (!type || typeof type.name !== 'string') return null;
+  const pricing = type.is_free_intro ? 'free' : type.is_included ? 'included'
+    : type.price_cents == null || type.price_cents === '' ? 'unset' : 'price';
+  return {
+    session_type_id: type.id ?? null, name: type.name,
+    duration_minutes: type.duration_minutes ?? null,
+    pricing, price_cents: pricing === 'price' ? Number(type.price_cents) : null,
+    cadence_note: type.cadence_note ?? null,
+  };
+}
+
+/** The offer's price in words: never a general hourly rate. */
+export function offerPrice(offer) {
+  if (!offer) return null;
+  if (offer.pricing === 'free') return 'Free intro';
+  if (offer.pricing === 'included') return 'Included, no separate charge';
+  if (offer.pricing === 'price' && Number.isFinite(Number(offer.price_cents))) {
+    const cents = Number(offer.price_cents);
+    return `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  }
+  return 'Price not set';
+}
+
+/** "Strategy call · 45 min · $150": the whole offer on one line. */
+export function offerLine(offer) {
+  if (!offer) return null;
+  return [offer.name, offer.duration_minutes != null ? `${offer.duration_minutes} min` : null, offerPrice(offer)]
+    .filter(Boolean).join(' · ');
 }
 
 /**

@@ -167,7 +167,7 @@ test('the sales page overlays live fund metrics with the workspace fallback sema
 /* ------------------------------------------- shell and router cannot drift */
 
 test('both the shell and the router resolve the active role through the shared helper', () => {
-  assert.match(app, /import \{ resolveActiveRole \} from '\.\/lib\/activeRole'/);
+  assert.match(app, /import \{ resolveActiveRole, resolveHeldLicences \} from '\.\/lib\/activeRole'/);
   const calls = app.match(/resolveActiveRole\(\{/g) || [];
   assert.equal(
     calls.length,
@@ -188,7 +188,7 @@ test('both the shell and the router resolve the active role through the shared h
 test('the investor Home nav keeps its Spin-Out Lab entry', () => {
   // Same item, same place as the founder and exploring navs — it just resolves
   // to the LP product now. Removing it would hide the fund from LPs entirely.
-  assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: Rocket, label: 'Spin-Out Lab'/);
+  assert.match(sidebar, /investor: \[[\s\S]{0,1600}to: '\/spinout-lab', icon: \w+, label: 'Spin-Out Lab'/);
 });
 
 test('the duplicate LP Workspace nav item is gone, and its route is a redirect', () => {

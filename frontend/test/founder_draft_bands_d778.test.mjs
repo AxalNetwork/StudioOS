@@ -22,7 +22,7 @@ const h = React.createElement;
 const PART3 = [
   'build/roadmap', 'build/this-week', 'build/retro', 'build/kpi',
   'raise/data-room', 'raise/legal', 'raise/narrative-fix', 'raise/capital', 'raise/liquidity',
-  'grow/customers', 'grow/talent', 'network/re-engagement', 'network/intro-email', 'research/funds',
+  'grow/talent', 'network/re-engagement', 'network/intro-email', 'research/funds',
 ];
 
 async function mount(props, overrides = {}) {

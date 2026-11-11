@@ -213,6 +213,49 @@ test('a partner\'s own listings narrow to the active agency', async () => {
   assert.deepEqual(ids((await call('/partner', partner, AGENCY_B)).body.items), [2, 3]);
 });
 
+test('#4835: tied listing timestamps paginate within the selected agency', async () => {
+  const db = freshDb();
+  const insert = db.prepare(`INSERT INTO perks (uid, partner_user_id, partner_name, category, offer, status, kind, credits, company_id, created_at)
+    VALUES (?, ?, 'Acme', 'Cloud', 'An offer', 'live', 'credits', 0, ?, '2026-01-01')`);
+  for (let i = 0; i < 199; i++) insert.run(`page-${i}`, PARTNER, AGENCY_A);
+  const e = env(db);
+  const first = (await call('/partner?page=1', partner, AGENCY_A, {}, e)).body;
+  const second = (await call('/partner?page=2', partner, AGENCY_A, {}, e)).body;
+  assert.equal(first.has_more, true);
+  assert.equal(second.has_more, false);
+  assert.equal(first.items.length, 200);
+  assert.equal(second.items.length, 1);
+  const keys = new Set([...first.items, ...second.items].map((row) => row.uid));
+  assert.equal(keys.size, 201);
+  assert.equal(keys.has('perk-b'), false);
+  assert.equal(keys.has('perk-other'), false);
+});
+
+test('#4835: older claim and ledger pages keep account totals and the historical balance', async () => {
+  const db = freshDb();
+  const claim = db.prepare(`INSERT INTO perk_claims (uid, perk_id, user_id, credits_spent, created_at)
+    VALUES (?, 1, ?, 2, '2026-01-01')`);
+  const ledger = db.prepare(`INSERT INTO perk_credit_ledger (user_id, delta, kind, source_ref, created_at)
+    VALUES (?, 3, 'grant', ?, '2026-01-01')`);
+  for (let i = 0; i < 201; i++) {
+    claim.run(`claim-${i}`, FOUNDER);
+    ledger.run(FOUNDER, `grant-${i}`);
+  }
+  const e = env(db);
+  const first = (await call('/mine', founder, undefined, {}, e)).body;
+  assert.equal(first.has_more, true);
+  assert.equal(first.ledger_has_more, true);
+  const second = (await call('/mine?page=2&ledger_page=2', founder, undefined, {}, e)).body;
+  assert.deepEqual(second.items.map((row) => row.uid), ['claim-0']);
+  assert.deepEqual(second.ledger.map((row) => row.source_ref), ['grant-0']);
+  assert.equal(second.has_more, false);
+  assert.equal(second.ledger_has_more, false);
+  assert.equal(second.stats.claimed, 201);
+  assert.equal(second.stats.credits_spent, 402);
+  assert.equal(second.balance, 603);
+  assert.equal(second.ledger_balance, 3);
+});
+
 test('with no agency selected, the whole partner catalog shows', async () => {
   assert.deepEqual(ids((await call('/partner', partner)).body.items), [1, 2, 3]);
 });

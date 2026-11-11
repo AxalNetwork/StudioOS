@@ -6,6 +6,13 @@ import { Card } from '../../ui';
 import { AdvisorDetail } from '../AdvisorsPage';
 import { AdvisorProfileView } from './AdvisorProfilePage';
 import { LINK_SLUG } from './practice/practiceTools';
+import { offerLine } from './advisory/kit';
+
+/** D4715: the confirmation names the offer the worker recorded on the booking. */
+export function bookedNotice(booking) {
+  const line = offerLine(booking?.offer);
+  return line ? `Your booking request was recorded: ${line}.` : 'Your booking request was recorded.';
+}
 
 /** D573: the approved A5 profile and existing directory booking dialog. */
 export default function PublicAdvisorBookingPage() {
@@ -43,6 +50,6 @@ export default function PublicAdvisorBookingPage() {
     {notice && <p role="status" className="mb-3 text-sm text-axal-muted">{notice}</p>}
     <AdvisorProfileView state={state} onRetry={load} onBook={book} />
     {booking && <AdvisorDetail advisor={state.advisor} sessionType={booking.type} bookingLinkSlug={booking.link.slug}
-      onClose={() => setBooking(null)} onBooked={() => { setBooking(null); setNotice('Your booking request was recorded.'); }} />}
+      onClose={() => setBooking(null)} onBooked={(b) => { setBooking(null); setNotice(bookedNotice(b)); }} />}
   </>;
 }

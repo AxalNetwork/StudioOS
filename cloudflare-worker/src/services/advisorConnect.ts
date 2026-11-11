@@ -35,10 +35,12 @@
  */
 import type { Env } from '../types';
 import { stripeCall } from '../routes/billing';
-import { cutCents, derivePayoutState, settlementMode, takeRate } from './advisorMoney';
+import { derivePayoutState, settlementMode } from './advisorMoney';
 
 export interface PayoutAccountRow {
   id: number;
+  /** The local row's own id; D4703 keys the provider's account create on it. */
+  uid: string;
   advisor_id: number;
   state: string;
   provider: string;
@@ -139,11 +141,26 @@ export async function connectLink(
       // wellbeing account are indistinguishable in the dashboard and in any
       // reconciliation built on top of it.
       'metadata[axal_product]': 'advisory',
+    }, {
+      // D4703 (#4703): ONE ACCOUNT PER LOCAL ROW. Two starts at once (two tabs,
+      // a double click) both read no account and both created one; the last
+      // UPDATE won and the other was orphaned at the provider, possibly after
+      // the advisor had begun onboarding into it. The key is the local row's
+      // own uid, so a repeat within the provider's window returns the same
+      // account rather than a new one.
+      idempotencyKey: `connect:advisory:${account.uid}`,
     });
-    accountId = acct.id;
-    await env.DB.prepare(
-      'UPDATE advisor_payout_accounts SET provider_account_id = ?, updated_at = ? WHERE advisor_id = ?',
-    ).bind(accountId, nowIso(), account.advisor_id).run();
+    // ATTACHED ONLY WHERE NONE IS: if another start attached one first, that
+    // one stands and this request uses it.
+    const attached = await env.DB.prepare(
+      'UPDATE advisor_payout_accounts SET provider_account_id = ?, updated_at = ? WHERE advisor_id = ? AND provider_account_id IS NULL',
+    ).bind(acct.id, nowIso(), account.advisor_id).run();
+    if (Number((attached as any)?.meta?.changes ?? 0) > 0) {
+      accountId = acct.id;
+    } else {
+      const now = await loadPayoutAccount(env, account.advisor_id);
+      accountId = now?.provider_account_id || acct.id;
+    }
   }
   const link = await stripeCall<{ url: string }>(env, '/account_links', {
     account: accountId,
@@ -198,10 +215,9 @@ export async function refreshAccount(
  *
  * A DESTINATION CHARGE with an application fee: the platform takes the fee and
  * `transfer_data[destination]` routes the rest to the advisor's connected
- * account. The fee comes from `takeRate()` — the admin-configurable setting —
- * through `cutCents`, which is the SAME function the ledger totals with. Two
- * functions computing a platform fee is how a client is charged one number and
- * an advisor is shown another.
+ * account. The fee comes from the booking's STORED snapshot (#4679), the same figures the ledger totals
+ * with. A second computation of the platform fee is how a client is charged one
+ * number and an advisor is shown another.
  *
  * THREE REFUSALS, ALL LOUD, and the order matters:
  *
@@ -215,6 +231,11 @@ export async function refreshAccount(
  *      and not an error to swallow; a caller that reaches here with one has a
  *      bug upstream.
  */
+/** The booking has no usable fee snapshot, so a charge would have to guess one. */
+export class FeeSnapshotMissing extends Error {
+  constructor() { super('advisory_charge_fee_snapshot_missing'); this.name = 'FeeSnapshotMissing'; }
+}
+
 export async function chargeSession(
   env: Env,
   args: {
@@ -226,6 +247,13 @@ export async function chargeSession(
     currency?: string;
     description?: string;
     customerId: string;
+    /**
+     * #4679 — THE FEE THE ADVISOR PRICED THE LINE WITH, from the booking's own
+     * stored snapshot (`take_rate_bps`, `platform_cut_cents`). Required: a
+     * charge that recomputed the fee from today's setting would take a
+     * different cut than the line the advisor and the ledger already show.
+     */
+    feeSnapshot: { bps: number | null; cutCents: number | null };
   },
 ): Promise<{
   client_secret: string; payment_intent_id: string;
@@ -243,9 +271,15 @@ export async function chargeSession(
     throw new Error('advisory_charge_amount_missing');
   }
 
-  const rate = await takeRate(env);
-  const fee = cutCents(gross, rate.bps);
-  if (fee == null) throw new Error('advisory_charge_fee_uncomputable');
+  // THE STORED SNAPSHOT, NEVER THE CURRENT SETTING (#4679). A missing or
+  // impossible snapshot is refused, not repaired from today's rate.
+  const snap = args.feeSnapshot;
+  const fee = snap?.cutCents;
+  const bps = snap?.bps;
+  if (fee == null || bps == null || !Number.isInteger(fee) || !Number.isInteger(bps)
+    || fee < 0 || fee > gross || bps < 0) {
+    throw new FeeSnapshotMissing();
+  }
 
   const intent = await stripeCall<{ id: string; client_secret: string }>(
     env, '/payment_intents',
@@ -264,7 +298,7 @@ export async function chargeSession(
       // THE RATE THAT WAS APPLIED, on the intent itself. A dispute six months
       // later is settled by what Stripe recorded, not by what the setting says
       // then — the same reason 241 stamps it on the line.
-      'metadata[take_rate_bps]': String(rate.bps),
+      'metadata[take_rate_bps]': String(bps),
       'metadata[axal_product]': 'advisory',
     },
     // One intent per booking, replayed rather than duplicated. A double-submit
@@ -277,7 +311,7 @@ export async function chargeSession(
     client_secret: intent.client_secret,
     payment_intent_id: intent.id,
     application_fee_cents: fee,
-    take_rate_bps: rate.bps,
+    take_rate_bps: bps,
     mode,
   };
 }
@@ -302,8 +336,8 @@ export async function markSessionCharged(
   const uid = meta.booking_uid;
   if (!uid) return;
   const row = await env.DB.prepare(
-    'SELECT id, billing_state FROM advisor_bookings WHERE uid = ? LIMIT 1',
-  ).bind(uid).first<{ id: number; billing_state: string }>();
+    'SELECT id, billing_state, status FROM advisor_bookings WHERE uid = ? LIMIT 1',
+  ).bind(uid).first<{ id: number; billing_state: string; status: string }>();
   if (!row) return;
   if (row.billing_state === 'collected') return;
 
@@ -323,6 +357,19 @@ export async function markSessionCharged(
             updated_at = ?
       WHERE id = ?`,
   ).bind(amount, fee, bps, nowIso(), row.id).run();
+
+  // D4703 (#4703): a charge that lands on a cancelled or missed booking. The
+  // money was collected, so the booking says so; under the no-cancellation-fee
+  // policy it is owed back, and this row says that where HQ reads it. Nothing
+  // refunds it automatically. A failure here throws: the webhook is retried,
+  // and the INSERT is keyed by booking, so a retry writes one row.
+  if (row.status === 'cancelled' || row.status === 'no_show') {
+    await env.DB.prepare(
+      `INSERT INTO advisory_refunds_due (booking_id, booking_uid, booking_status, payment_intent_id, amount_cents, currency)
+       VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(booking_id) DO NOTHING`,
+    ).bind(row.id, uid, row.status, typeof pi.id === 'string' ? pi.id : null, amount,
+      typeof (pi as any).currency === 'string' ? String((pi as any).currency) : null).run();
+  }
 
   // The slot that was held because nothing could be charged is no longer
   // held. Best-effort and scoped to the booking's own slot: a slot that was

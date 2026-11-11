@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pill, Skeleton, Unrecorded } from '../../ui';
-import { AgentIdentity, AgentTile } from './AgentMark.jsx';
+import { AgentArchetypeBadge, AgentAvatar } from './AgentCard.jsx';
+import { AgentTile } from './AgentMark.jsx';
 import SkillsLink from './SkillsLink.jsx';
 import { BTN_PRIMARY, BTN_TEXT, HeadRow, HonestBlock, MONO, MUTED, TeamCard } from './teamUi.jsx';
 import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamModel.js';
@@ -23,14 +24,14 @@ import { AGENTS_FOOT, agentGroups, agentsFootLine, refusalWords } from './teamMo
  *                                 `include=projects` groups each project's
  *                                 agents under its name, with the scope filter (TM1e)
  *
- * Every agent is drawn with its tile and the "AI agent" pill; spend and last
+ * The row shows the agent portrait and Studio archetype; spend and last
  * activity the Worker did not answer read "Not recorded", never "$0". A paused
  * pill is amber with brown text, never red, with its reason and its one fix;
  * D4387: the fix opens the profile on its dialog (`onOpen(row, action)`:
  * Choose a new sponsor, or Edit cap).
  *
  * Below `md` a row keeps what the canvas's phone row keeps (TM9d1): the name
- * and pill, then one line with the role and this month's spend (or that it is
+ * and archetype, then one line with the role and this month's spend (or that it is
  * not recorded) and the status pill.
  *
  * #4363: the header carries a Skills link to this scope's Skills tab
@@ -64,7 +65,14 @@ function AgentRow({ row, onOpen }) {
       className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] ${GRID} items-center gap-3 border-b border-axal-hairline py-2.5 last:border-b-0 hover:bg-axal-ground/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-axal-violet/50 dark:border-gray-800 dark:hover:bg-gray-800/50`}
       data-testid={`agent-${row.uid}`}>
       <span role="cell" className="min-w-0">
-        <AgentIdentity name={row.name} role={row.role} roleClassName="hidden md:block" />
+        <span className="flex min-w-0 items-center gap-2.5">
+          <AgentAvatar persona={{ ...row.persona, name: row.name }} size={32} />
+          <span className="min-w-0">
+            <b className="block truncate text-[13.5px] font-extrabold text-axal-ink dark:text-gray-100">{row.name}</b>
+            <AgentArchetypeBadge persona={row.persona} />
+            {row.role ? <span className="hidden md:block truncate text-[12px] text-axal-muted dark:text-gray-400">{row.role}</span> : null}
+          </span>
+        </span>
         <span className="mt-1 flex flex-wrap items-center gap-1.5 pl-[42px] md:hidden" data-testid="agent-phone-line">
           <span className="text-[12px] text-axal-ink dark:text-gray-200">{row.role || <Unrecorded />} · {row.spend ? <span className="font-mono">{row.spend}</span> : <>this month <Unrecorded /></>}</span>
           <StatusPill row={row} />
@@ -104,7 +112,7 @@ function AgentTable({ rows, onOpen, label }) {
   );
 }
 
-export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
+export default function AgentsCard({ block, loading, kind, scope = null, companyName, canAdd, addOff = null, planLocked = false, onAdd, onOpen, onRetry, now = new Date() }) {
   // The grouped footer's company reach is said only once it is live (#3697 part 2), as the page's managed note is.
   const [hidden, setHidden] = useState(() => new Set());
   const aside = <SkillsLink scope={scope} testId="team-agents-skills" />;
@@ -140,7 +148,8 @@ export default function AgentsCard({ block, loading, kind, scope = null, company
         <div className="flex flex-col items-center gap-3 rounded-axal-md border border-dashed border-axal-hairline px-6 py-8 text-center dark:border-gray-700" data-testid="team-agents-empty">
           <AgentTile size={40} />
           <p className={`m-0 max-w-md ${MUTED}`}>No agent works here yet. Add one in a role, like a CFO who drafts your runway note. It will only propose; you decide.</p>
-          {canAdd ? <button type="button" className={BTN_PRIMARY} onClick={onAdd} data-testid="team-agents-add">Add an AI agent</button> : null}
+          {canAdd ? <button type="button" className={`${BTN_PRIMARY} disabled:opacity-50`} onClick={onAdd} disabled={!!addOff} title={addOff || undefined} data-testid="team-agents-add">Add an AI agent</button> : null}
+          {canAdd && addOff ? <p role="status" className={`m-0 ${MUTED}`} data-testid="team-agents-add-off">{addOff}</p> : null}
           {planLocked ? <PlanLine /> : null}
         </div>
       </TeamCard>

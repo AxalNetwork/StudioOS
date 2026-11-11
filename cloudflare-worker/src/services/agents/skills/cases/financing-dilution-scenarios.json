@@ -1,0 +1,74 @@
+{
+  "skill": "financing-dilution-scenarios",
+  "version": 1,
+  "note": "Synthetic cents-based ordinary-equivalent share scenario. USD 10 million divided by 10 million fully diluted shares gives USD 1 per share; USD 2.5 million adds 2.5 million shares. Founders move from 60% to 48%, a 12 percentage-point change and 20% relative dilution. Pool top-up is unresolved.",
+  "input": {
+    "records": {
+      "cap_table.read": {
+        "id": "cap-ember-0630",
+        "company": "Ember Relay",
+        "as_of": "2026-06-30",
+        "basis": "Fully diluted, including all reserved options",
+        "share_unit": "ordinary-equivalent shares",
+        "holdings": [
+          {
+            "holder": "Founders",
+            "shares": 6000000
+          },
+          {
+            "holder": "Existing investors",
+            "shares": 3000000
+          },
+          {
+            "holder": "Unissued option reserve",
+            "shares": 1000000
+          }
+        ],
+        "total_fully_diluted_shares": 10000000,
+        "outstanding_convertibles": [],
+        "convertibles_status": "Reviewed complete register: none outstanding"
+      },
+      "raise.records": {
+        "terms": [
+          {
+            "id": "terms-ember-0630",
+            "company": "Ember Relay",
+            "as_of": "2026-06-30",
+            "status": "indicative, unsigned",
+            "currency": "USD",
+            "premoney_valuation_cents": 1000000000,
+            "primary_new_cash_cents": 250000000,
+            "secondary_cash_cents": 0,
+            "valuation_share_basis": "cap-ember-0630 fully diluted shares",
+            "option_pool_top_up": null,
+            "fees_in_shares": 0
+          }
+        ],
+        "requested_scenario": {
+          "id": "ember-cash-only",
+          "basis": "Model primary cash only with the existing option reserve unchanged; any negotiated top-up remains unresolved."
+        }
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "cap-ember-0630",
+      "12,500,000",
+      "48%",
+      "20%",
+      "12 percentage points",
+      "conditional",
+      "Propose"
+    ],
+    "must_say_not_recorded": [
+      "top-up"
+    ],
+    "must_not_include": [
+      "The final cap table is approved",
+      "Founders retain 60% after the financing",
+      "The new shares have been issued"
+    ]
+  }
+}

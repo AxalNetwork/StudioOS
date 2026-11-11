@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import {
   NothingYet, Pill, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, ghostButtonClass, inputClass, money,
+  buttonClass, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
-import { bookingView, formatDateTime } from '../advisory/kit';
-import { classifyBooking } from './opportunityLog';
+import { bookingView, formatDateTime, offerLine } from '../advisory/kit';
+import { acceptanceRate, classifyBooking, decisionMoment, medianDecision, spanText } from './opportunityLog';
+import { partialLine, readEveryPage } from './everyPage';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -45,10 +47,11 @@ const VIEW_LABEL = {
   accepted: 'Accepted',
   declined: 'Declined',
   expired: 'Expired unanswered',
-  withdrawn: 'Withdrawn by you',
+  withdrawn: 'Withdrawn',
+  unrecorded: 'Decision not recorded',
 };
 const VIEW_TONE = {
-  awaiting: 'warn', accepted: 'ok', declined: 'neutral', expired: 'danger', withdrawn: 'neutral',
+  awaiting: 'warn', accepted: 'ok', declined: 'neutral', expired: 'danger', withdrawn: 'neutral', unrecorded: 'neutral',
 };
 const KIND_LABEL = { fixed: 'Fixed', package: 'Package', retainer: 'Retainer' };
 
@@ -68,19 +71,21 @@ export default function OpportunitiesZone() {
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const bookings = await api.listMyAdvisorBookings();
+      // #4714 (D4714): every page, so the rate and counts cover every request.
+      const bookings = await readEveryPage((page) => api.listMyAdvisorBookings(undefined, page));
       // The templates are a SECOND source and must not take the page down with
       // them: an advisor with no service definitions still has a decision log.
       const services = await api.listMyAdvisorServices().catch(() => null);
       setState({
         loading: false, error: '',
         bookings: bookings?.items || [],
+        partial: partialLine(bookings),
         services: services?.items || [],
         servicesUnavailable: services === null,
       });
     } catch (error) {
       setState({
-        loading: false, error: error?.message || 'The request log could not be read.',
+        loading: false, error: zoneError(error, error?.message || 'The request log could not be read.', 'practice'),
         bookings: [], services: [], servicesUnavailable: true,
       });
     }
@@ -98,14 +103,18 @@ export default function OpportunitiesZone() {
   }), [state.bookings, now]);
 
   const counts = useMemo(() => {
-    const out = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0 };
+    const out = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0, unrecorded: 0 };
     for (const r of rows) out[r.bucket] += 1;
     return out;
   }, [rows]);
-  // DECIDED EXCLUDES the withdrawn and the never-answered. An accept rate over
-  // requests the advisor never answered would report silence as a refusal.
+  // DECIDED EXCLUDES the withdrawn, the never-answered and the unrecorded. An
+  // accept rate over requests the advisor never answered would report silence as
+  // a refusal; and (#4702) a client cancelling a session the advisor had accepted
+  // is still an accept, and a cancelled row from before the answer was recorded
+  // is neither, so it is counted apart rather than as a decline.
   const decided = counts.accepted + counts.declined;
-  const acceptRate = decided > 0 ? Math.round((counts.accepted / decided) * 100) : null;
+  const acceptRate = acceptanceRate(counts);
+  const median = useMemo(() => medianDecision(state.bookings), [state.bookings]);
 
   // The queue the artboard asks for: "sorted by what expires first, not what
   // arrived first". A row whose slot is gone cannot expire, so it sorts last.
@@ -118,7 +127,7 @@ export default function OpportunitiesZone() {
 
   const history = useMemo(
     () => rows.filter((r) => r.bucket !== 'awaiting')
-      .sort((a, b) => String(b.raw.updated_at || '').localeCompare(String(a.raw.updated_at || ''))),
+      .sort((a, b) => String(decisionMoment(b.raw)?.at || '').localeCompare(String(decisionMoment(a.raw)?.at || ''))),
     [rows],
   );
   const visible = filter === 'all' ? history : history.filter((r) => r.bucket === filter);
@@ -145,6 +154,7 @@ export default function OpportunitiesZone() {
       empty={<NothingYet
         title="No request has ever arrived"
         body="This log fills as founders book your published office-hour slots. It is empty because nothing has been requested, not because anything was lost — and with no availability published there is nothing to request."
+        action={<Link to="/practice/sessions#publish-availability" className="text-emerald-700 underline dark:text-emerald-300">Publish availability →</Link>}
       />}
     >
       <ZoneToolbar
@@ -153,16 +163,17 @@ export default function OpportunitiesZone() {
         filters={advisorZoneFilters('practice/opportunities', { value: filter, onChange: setFilter })}
         actions={advisorZoneActions('practice/opportunities', {
           view: {
-            header: ['Requester', 'Decision', 'When', 'Reason', 'Asked for'],
+            header: ['Requester', 'Decision', 'Decided at', 'Last changed', 'Reason', 'Asked for'],
             rows: exportRows,
             cells: (r) => [
-              r.counterpartyName, VIEW_LABEL[r.bucket], r.raw.updated_at,
+              r.counterpartyName, VIEW_LABEL[r.bucket], r.raw.advisor_decided_at || '', r.raw.updated_at || '',
               r.raw.cancel_reason, r.raw.topic || r.note,
             ],
           },
         })}
       />
 
+      {state.partial && <p className="mb-2 text-[11px] text-axal-faint" data-testid="opportunities-partial">{state.partial}</p>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Awaiting you" value={counts.awaiting}
           note={counts.awaiting === 0 ? 'Nothing is waiting on an answer'
@@ -170,13 +181,14 @@ export default function OpportunitiesZone() {
               : `${soon} ${soon === 1 ? 'reaches its slot' : 'reach their slots'} within a day`} />
         <Stat label="Accept rate" value={acceptRate == null ? <Unrecorded>Not recorded</Unrecorded> : `${acceptRate}%`}
           note={decided === 0 ? 'No request has been answered yet' : `${counts.accepted} of ${decided} answered`} />
-        {/* NOT COMPUTED, AND THE TILE SAYS WHY RATHER THAN SHOWING A NUMBER
-            FROM THE WRONG COLUMN. `advisor_bookings` has no decided_at:
-            `updated_at` is a LAST-TOUCHED stamp, and `routes/advisors.ts:1287`
-            moves it again whenever Sessions edits a booking's amount. A median
-            off that column would report the billing edit, not the decision. */}
-        <Stat label="Median decision" value={<Unrecorded>Not recorded</Unrecorded>}
-          note="No decision timestamp is stored" />
+        {/* #4714 (D4714): FROM `advisor_decided_at` (D4702), NEVER FROM
+            `updated_at`, which Sessions moves again on every billing edit.
+            Answers given before that column existed carry no time, so the
+            tile says how many of the answers it covers. */}
+        <Stat label="Median decision" value={median.ms == null ? <Unrecorded>Not recorded</Unrecorded> : spanText(median.ms)}
+          note={median.answered === 0 ? 'No request has been answered yet'
+            : median.counted === 0 ? 'No answer here has its time recorded'
+              : `Over ${median.counted} of ${median.answered} answers with a recorded time`} />
         <Stat label="Expired unanswered" value={counts.expired}
           note={counts.expired === 0 ? 'Every request got an answer' : 'Slot passed with no answer given'} />
       </div>
@@ -198,6 +210,8 @@ export default function OpportunitiesZone() {
                     <Pill tone="neutral">Founder</Pill>
                   </div>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-axal-muted">{r.raw.topic || r.note || 'No question was written with the request.'}</p>
+                  {/* D4715: the offer the founder asked for, as recorded on the booking. */}
+                  {r.raw.offer && <p data-testid={`request-offer-${r.raw.id}`} className="mt-1 text-[12px] font-medium">{offerLine(r.raw.offer)}</p>}
                   <p className="mt-1 text-[11px] text-axal-faint">
                     Arrived {formatDateTime(r.raw.created_at)} · slot {r.startsAt ? formatDateTime(r.startsAt) : 'not recorded'}
                   </p>
@@ -218,7 +232,7 @@ export default function OpportunitiesZone() {
                   </label>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">
                     The reason is stored on the request and shown in the log below. A decline with a
-                    reason keeps the relationship; the artboard&rsquo;s point is that saying nothing does not.
+                    reason keeps the relationship; saying nothing does not.
                   </p>
                   <button type="button" className={`${buttonClass} mt-2`} disabled={busy === r.raw.id}
                     onClick={() => decide(r, 'decline')}>Record the decline</button>
@@ -239,7 +253,7 @@ export default function OpportunitiesZone() {
             : 'No request sits under this view.'}</p>
           : <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-[12px]">
             <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-              <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">When</th><th className="pb-2">Reason</th>
+              <th className="pb-2">Requester</th><th className="pb-2">Decision</th><th className="pb-2">Decided / last changed</th><th className="pb-2">Reason</th>
             </tr></thead>
             <tbody>{visible.map((r) => (
               <tr key={r.raw.id} data-testid={`row-pr1-history-${r.raw.id}`} className="border-t border-axal-hairline dark:border-gray-700">
@@ -247,11 +261,18 @@ export default function OpportunitiesZone() {
                 <td className="py-2 pr-3"><Pill tone={VIEW_TONE[r.bucket]}>{VIEW_LABEL[r.bucket]}</Pill>
                   {r.raw.status === 'no_show' && <span className="mt-1 block text-[10.5px] text-axal-faint">Accepted, then recorded a no-show</span>}
                 </td>
-                <td className="py-2 pr-3 text-axal-muted">{r.raw.updated_at ? formatDateTime(r.raw.updated_at) : <Unrecorded />}</td>
+                <td className="py-2 pr-3 text-axal-muted">{(() => {
+                  // #4714: "Decided" only from the decision's own time.
+                  const m = decisionMoment(r.raw);
+                  if (!m) return <Unrecorded />;
+                  return <span data-testid={`when-${r.raw.id}`}>{m.kind === 'decided' ? 'Decided ' : 'Last changed '}{formatDateTime(m.at)}</span>;
+                })()}</td>
                 <td className="py-2 text-axal-muted">{
                   r.bucket === 'expired' ? 'Never answered. The slot passed.'
-                    : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : 'You withdrew the whole slot.')
-                      : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
+                    : r.bucket === 'withdrawn' ? (r.raw.cancel_reason === 'capacity_race' ? 'The last seat went to someone else.' : r.raw.cancelled_by === 'client' ? 'The client withdrew the request.' : 'You withdrew the whole slot.')
+                      : r.bucket === 'unrecorded' ? 'Cancelled before the answer was recorded, so it is not counted as accepted or declined.'
+                        : r.raw.status === 'cancelled' && r.bucket === 'accepted' ? (r.raw.cancelled_by === 'client' ? 'Accepted, then the client cancelled.' : 'Accepted, then cancelled.')
+                          : r.raw.cancel_reason || <Unrecorded>No reason recorded</Unrecorded>
                 }</td>
               </tr>
             ))}</tbody>
@@ -296,20 +317,18 @@ export default function OpportunitiesZone() {
 
       <StatedLimit title="What this log cannot say">
         <p>
-          <strong>Every requester is a founder.</strong> `advisor_bookings` records the counterparty as
-          `founder_user_id` and there is no investor path to a booking, so the artboard&rsquo;s
-          investor-side request — an expert call bought by a fund — has no row to be. The kind is shown
-          rather than hidden, because it is the only kind there is.
+          <strong>Every requester is a founder.</strong> Only founders can book you today; an investor
+          buying an expert call is not a booking Axal takes yet. The kind is shown rather than hidden,
+          because it is the only kind there is.
         </p>
         <p className="mt-2">
-          <strong>Nothing records where a request came from.</strong> No column carries a referral or a
-          cohort, so &ldquo;Referred by&rdquo; and &ldquo;From the Lab cohort&rdquo; are drawn on the artboard and cannot be
-          drawn here. Accepting also attaches no terms: <em>Accept</em> confirms the booking, and the
+          <strong>Nothing records where a request came from.</strong> A request does not carry a
+          referral or a cohort, so this log cannot say who sent it. Accepting also attaches no terms: <em>Accept</em> confirms the booking, and the
           template you would have sent stays a template.
         </p>
         <p className="mt-2">
-          <strong>A template carries no usage count.</strong> The artboard marks each one &ldquo;used 6&times;&rdquo;;
-          no booking references a service, so there is nothing to count. Times are the slot&rsquo;s, not the
+          <strong>A template carries no usage count.</strong> No booking records which service it was
+          answered with, so there is nothing to count. Times are the slot&rsquo;s, not the
           request&rsquo;s: a request has no deadline of its own, so it expires when its slot starts.
         </p>
       </StatedLimit>

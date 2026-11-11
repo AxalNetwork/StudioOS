@@ -26,6 +26,7 @@ import { SignJWT } from 'jose';
 import build from '../src/routes/cycle_build.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
 import { hasRecords } from '../src/services/records/index.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { declarationsFor } from '../../scripts/check-migration-declarations.mjs';
 import { migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
@@ -187,7 +188,9 @@ test('test 11: filters read each row\'s keys, never a hidden cell', async () => 
   const db = seeded();
   const ids = async (slug: string, filter: string) => (await read(db, slug, `&filter=${encodeURIComponent(filter)}`)).body.records.rows.map((r: any) => r.id);
   // In the default sort: Impact, High first.
-  assert.deepEqual(await ids('solution-design', 'linked:no'), [3, 2]);
+  // #5067: feature 2 has a hypothesis (no pain theme) and now counts as linked.
+  assert.deepEqual(await ids('solution-design', 'linked:no'), [3]);
+  assert.deepEqual(await ids('solution-design', 'linked:yes'), [1, 4, 2]);
   assert.deepEqual(await ids('solution-design', 'impact:high'), [1, 4]);
   assert.deepEqual(await ids('solution-design', 'effort:high'), [4, 2], 'an old XL is High');
   assert.deepEqual(await ids('prototype-mvp', 'state:in_progress'), [2], 'an old Review is In progress');
@@ -216,9 +219,12 @@ test('test 11: cells read the canvas\'s words', async () => {
   assert.deepEqual(founders.map((r: any) => [r.id, r.cells.vesting, r.cells.agreement]),
     [['h-1', '4y · cliff 12 Mar 2027', 'Signed'], ['h-2', '3y · no cliff', 'Awaiting'], ['h-3', null, null]]);
   const filings = (await read(db, 'company-creation')).body.records.rows;
+  // D5066 (#5066): four explicit proof states, never the ambiguous dash —
+  // step-3's typed, pre-461 key is Unreadable (it opens nothing); step-4,
+  // not yet due, is Not expected yet rather than Missing.
   assert.deepEqual(filings.map((r: any) => [r.id, r.cells.state, r.cells.proof, r.cells.jurisdiction]), [
-    ['step-1', 'Issued', 'Missing', 'US'], ['step-3', 'Overdue', 'Key recorded', 'DE'], ['obligation-1', 'Due in 5 days', 'Missing', 'DE'],
-    ['step-2', 'Due in 10 days', 'Missing', 'US'], ['step-5', 'Upcoming', 'Stored', 'DE'], ['step-4', 'Upcoming', '—', null],
+    ['step-1', 'Issued', 'Missing', 'US'], ['step-3', 'Overdue', 'Unreadable', 'DE'], ['obligation-1', 'Due in 5 days', 'Missing', 'DE'],
+    ['step-2', 'Due in 10 days', 'Missing', 'US'], ['step-5', 'Upcoming', 'Stored', 'DE'], ['step-4', 'Upcoming', 'Not expected yet', null],
   ]);
   const systems = (await read(db, 'operating-systems')).body.records.rows;
   assert.deepEqual(systems.map((r: any) => [r.id, r.cells.used_by]),
@@ -400,7 +406,8 @@ function recorded() {
   db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, shares, ownership_pct, founder_role) VALUES (4, ${FOUNDER}, ${P}, 'Seed fund', 50, 5, NULL)`);
   db.exec(`INSERT INTO formation_step_checks (step_id, key, done_at) VALUES (2, 'fill', '2026-10-10')`);
   db.exec(`INSERT INTO incorporations (id, user_id, project_id, jurisdiction_id, company_name, amount_cents, status, paid_at, packet_ready_at, filed_on) VALUES
-    (8, ${FOUNDER}, ${P}, 'DE', 'Kestrel Works Inc', 50000, 'filed', '2026-09-01', '2026-09-05', NULL)`);
+    (8, ${FOUNDER}, ${P}, 'DE', 'Kestrel Works Inc', 50000, 'filed', '2026-09-01', '2026-09-05', NULL),
+    (18, 20, ${P_OTHER}, 'DE', 'Harbour Labs Inc', 50000, 'filed', '2026-09-02', '2026-09-06', NULL)`);
   // The founder's HubSpot is enabled for this company, one the founder is also in, and one the founder is not in.
   db.exec(`INSERT INTO company_profiles (id, uid, company_name) VALUES (${COMPANY}, 'c5', 'Kestrel Works'), (98, 'c98', 'Wren Holdings'), (99, 'c99', 'Okafor Ventures')`);
   db.exec(`INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('l3', ${FOUNDER}, 98), ('l4', 12, 99)`);
@@ -421,9 +428,10 @@ records.onError((e, c) => c.json({ error: e.message }, 500));
 async function call(db: DatabaseSync, path: string, user = FOUNDER, init: { method?: string; body?: unknown } = {}) {
   const token = await new SignJWT({ user_id: user, role: ROLE[user] })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const r = await records.request(path, { method: init.method ?? 'GET',
+  // A thrown Response is the response, as the Worker's entry point answers it (util/thrownResponse.ts).
+  const r = await withThrownResponses(() => records.request(path, { method: init.method ?? 'GET',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: init.body === undefined ? undefined : JSON.stringify(init.body) },
-  { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any);
+  { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' } as any));
   return { status: r.status, body: await r.json().catch(() => null) as any };
 }
 const one = (db: DatabaseSync, slug: string, id: string | number, user = FOUNDER, project = P) =>
@@ -480,7 +488,8 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
     ['Figma', 'Sync not recorded: Figma’s connector is not built'], ['GitHub', 'issue #7 · synced 12 Oct 2026'],
     ['GitHub', 'issue #8 · Not synced'], ['GitHub', 'pull request #9 · synced 11 Oct 2026']], 'another venture\'s ledger row never reads synced');
   assert.deepEqual(section(must, 'release').rows[0], { a: 'Done', b: '1 of 2' });
-  assert.equal(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run').value, null);
+  // #5067: a measured zero (no session is done yet) stays 0, not Not recorded.
+  assert.equal(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run').value, 0);
   const item = (await one(db, 'product-roadmap', 3)).body;
   assert.deepEqual(section(item, 'dependencies').rows.map((r: any) => [r.a, r.b, r.c]), [
     ['Waits on Pricing page', 'Next', 'Open'], ['Blocks Approval rules v1', 'Later', undefined]]);
@@ -495,7 +504,11 @@ test('test 1: each of the six records returns its canvas title, sub, four facts 
 
 test('test 2: filings read decision 8, and a lab- or obligation- row declares no write', async () => {
   const db = recorded();
-  assert.deepEqual(factOf((await one(db, 'company-creation', 'step-4')).body, 'Proof'), { label: 'Proof', value: null, reason: 'Not filed yet' });
+  // D5066 (#5066): four explicit proof states, never null+reason for "not
+  // due yet" (step-4) or a vague "Key recorded" for a pre-461 typed key that
+  // opens nothing (step-3, Unreadable, matching the list's own word).
+  assert.deepEqual(factOf((await one(db, 'company-creation', 'step-4')).body, 'Proof'), { label: 'Proof', value: 'Not expected yet' });
+  assert.equal(factOf((await one(db, 'company-creation', 'step-3')).body, 'Proof').value, 'Unreadable');
   assert.equal(factOf((await one(db, 'company-creation', 'step-5')).body, 'Proof').value, 'Stored');
   assert.deepEqual(pillText((await one(db, 'company-creation', 'step-1')).body), ['Issued'], 'a done EIN reads Issued');
   db.exec(`UPDATE formation_steps SET state = 'done' WHERE id = 5`);
@@ -517,7 +530,7 @@ test('test 2: filings read decision 8, and a lab- or obligation- row declares no
   assert.deepEqual(lab.body.actions, [], 'a lab- row declares no action');
   assert.deepEqual(pillText(lab.body), ['Filed']);
   assert.deepEqual(pillText((await one(db, 'company-creation', 'lab-8-2')).body), ['Upcoming'], 'a step with no date is Upcoming');
-  assert.deepEqual(section(lab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: '/raise/legal-engine/incorporation' });
+  assert.deepEqual(section(lab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P}` });
   assert.equal((await one(db, 'company-creation', 'lab-8-3')).status, 404, 'a lab step is 0 to 2');
   db.close();
 });
@@ -582,7 +595,7 @@ test('test 4: a founder record gates Documents, needs a founder role, and vests 
   assert.deepEqual(section(ana, 'contributions').rows, [{ a: 'Closed the first pilot', b: '9 Oct 2026' }]);
   assert.deepEqual(section(ana, 'cap_table').rows, [{ a: 'Shares', b: '600 shares' }]);
   // #1695 adds the writes after it (Log, Edit); Edit split stays the cap table's link.
-  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', '/raise/cap-table']);
+  assert.deepEqual(ana.actions.map((a: any) => [a.key, a.kind, a.href])[0], ['edit-split', 'link', `/raise/cap-table?project_id=${P}`]);
   assert.equal(factOf((await one(db, 'founding-team', 'h-2')).body, 'Vested today').value, '25%', 'stored vested shares over shares');
   db.close();
 });
@@ -594,8 +607,10 @@ test('test 5: the role table, for the read and its writer-only sections, and a f
     const r = await one(db, 'operating-systems', 'crm', user);
     assert.equal(r.status, 200, `user ${user}`);
     assert.deepEqual(writerOnly(r.body), [true, true], `user ${user}`);
-    // #1695 adds Choose connector and Disconnect after it; Reconnect stays the tool's link.
-    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.href])[0], ['reconnect', `/build/connect?tool=hubspot&project_id=${P}`]);
+    // #1695 adds Choose connector and Disconnect after it; the primary action
+    // stays the tool's link. D5065 (#5065): this CRM's connection is active, so
+    // the primary action manages it rather than offering to repair it.
+    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.label, a.href])[0], ['manage', 'Manage connection', `/build/connect?tool=hubspot&project_id=${P}`]);
   }
   const partner = await one(db, 'operating-systems', 'crm', PARTNER);
   assert.equal(partner.status, 200);
@@ -666,5 +681,151 @@ test('test 11: records.linkable is false until Build registers, then true on eve
   assert.equal(hasRecords('build'), true);
   const db = recorded();
   for (const slug of SLUGS) assert.equal((await read(db, slug)).body.records.linkable, true, slug);
+  db.close();
+});
+
+// D5068 (#5068): Edit split and the Lab's Incorporation row carry the
+// venture that read them, not a stale one from an earlier call in the same
+// process. P is read first so a cached/default venture would leak P's id
+// into P_OTHER's links if either href were built without its own project.
+test('test 12 (D5068): Edit split and Incorporation keep the venture that read them, venture A after venture B', async () => {
+  const db = recorded();
+  const ana = (await one(db, 'founding-team', 'h-1')).body;
+  assert.equal(ana.actions.find((a: any) => a.key === 'edit-split')?.href, `/raise/cap-table?project_id=${P}`);
+  const other = (await one(db, 'founding-team', 'h-9', OTHER_FOUNDER, P_OTHER)).body;
+  assert.equal(other.actions.find((a: any) => a.key === 'edit-split')?.href, `/raise/cap-table?project_id=${P_OTHER}`,
+    'venture B\'s edit-split stays venture B\'s, read right after venture A\'s');
+  const kestrelLab = await one(db, 'company-creation', 'lab-8-1');
+  assert.deepEqual(section(kestrelLab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P}` });
+  const harbourLab = await one(db, 'company-creation', 'lab-18-1', OTHER_FOUNDER, P_OTHER);
+  assert.deepEqual(section(harbourLab.body, 'linked').rows[0], { a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${P_OTHER}` },
+    'venture B\'s Incorporation link names venture B even though venture A\'s read came first');
+  db.close();
+});
+
+/** A D1 binding that throws on any statement containing `needle` (as cycle_focus_d692.test.ts's). */
+function failingDB(db: DatabaseSync, needle: string) {
+  const inner = d1Over(db);
+  return {
+    ...inner,
+    prepare(sql: string) {
+      if (!sql.includes(needle)) return inner.prepare(sql);
+      const boom = async () => { throw new Error('injected failure'); };
+      const api: any = { bind: () => api, all: boom, first: boom, run: boom, raw: boom };
+      return api;
+    },
+  };
+}
+
+test('test 13 (#5067): Tests run keeps a measured 0 distinct from both Not recorded and Unreadable', async () => {
+  const db = recorded();
+  // Feature 3 has no session at all: a measured, legitimate zero stays 0.
+  assert.deepEqual(factOf((await one(db, 'prototype-mvp', 3)).body, 'Tests run'), { label: 'Tests run', value: 0 });
+  // Feature 1 has exactly one done session (seeded by recorded()).
+  assert.equal(factOf((await one(db, 'prototype-mvp', 1)).body, 'Tests run').value, 1);
+  // A genuine read failure stays Unreadable: never 0, and a different reason
+  // than "no session is done yet" so the two states are never the same shape.
+  const token = await new SignJWT({ user_id: FOUNDER, role: 'founder' })
+    .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const r = await records.request(`/api/cycles/build/modules/prototype-mvp/records/1?project=${P}`, { headers: { Authorization: `Bearer ${token}` } },
+    { DB: failingDB(db, "FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'"), JWT_SECRET, ENVIRONMENT: 'development' } as any);
+  const body = await r.json() as any;
+  assert.equal(r.status, 200, JSON.stringify(body));
+  const fact = factOf(body, 'Tests run');
+  assert.equal(fact.value, null);
+  assert.match(fact.reason, /^Unreadable:/);
+  // The sessions section still reads: only the one fact's own query failed.
+  assert.equal(section(body, 'sessions').rows.length, 2);
+  db.close();
+});
+
+test('test 14 (#5067): the Feedback it answers section says so past 20, with a complete "View all" path', async () => {
+  const db = recorded();
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective, kanban_status, sort_order) VALUES (5, ${P}, 'Feedback test item', 'now', 5)`);
+  const ins = db.prepare(`INSERT INTO product_feedback (uid, project_id, body, source, roadmap_item_ref) VALUES (?, ${P}, ?, 'customer', '5')`);
+  for (let i = 1; i <= 20; i += 1) ins.run(`fx-${i}`, `Feedback number ${i}`);
+  const at20 = (await one(db, 'product-roadmap', 5)).body;
+  const rows20 = section(at20, 'feedback').rows;
+  assert.equal(rows20.length, 20, 'exactly 20: no overflow row');
+  assert.ok(!rows20.some((row: any) => row.a === 'View all feedback'));
+  ins.run('fx-21', 'Feedback number 21');
+  const at21 = (await one(db, 'product-roadmap', 5)).body;
+  const rows21 = section(at21, 'feedback').rows;
+  assert.equal(rows21.length, 21, '20 feedback rows plus the trailing "View all" row');
+  const overflow = rows21.at(-1);
+  assert.deepEqual(overflow, { a: 'View all feedback', b: 'Showing the latest 20 of 21', href: `/grow/product-improvement?project=${P}` });
+  assert.ok(rows21.slice(0, 20).every((row: any) => row.a !== '“Feedback number 1”'), 'the 20 shown are the latest, not the oldest');
+  db.close();
+});
+
+test('test 15 (#5067): the dependency picker says so past 200, and 201+ is still a reachable choice', async () => {
+  const db = seeded();
+  const addOther = db.prepare(`INSERT INTO roadmap_okrs (project_id, objective, sort_order) VALUES (${P}, ?, ?)`);
+  // seeded() already gives item 3 three others (1, 2, 4); 197 more makes exactly 200.
+  for (let i = 1; i <= 197; i += 1) addOther.run(`Extra item ${i}`, 10 + i);
+  const field = (body: any, key: string) => body.actions.find((a: any) => a.key === 'add-dependency')?.form.fields.find((f: any) => f.key === key);
+  const at200 = (await one(db, 'product-roadmap', 3)).body;
+  assert.equal(field(at200, 'waits_on_id').options.length, 200);
+  assert.equal(field(at200, 'waits_on_id').note, undefined, 'no overflow note at exactly 200');
+  assert.equal(field(at200, 'waits_on_other'), undefined, 'no typed fallback at exactly 200');
+  // One more tips it to 201; sort_order puts it last, so it is genuinely past the 200 shown.
+  addOther.run('Extra item 198', 999);
+  const extraId = (db.prepare(`SELECT id FROM roadmap_okrs WHERE objective = 'Extra item 198'`).get() as any).id;
+  const at201 = (await one(db, 'product-roadmap', 3)).body;
+  const waits201 = field(at201, 'waits_on_id');
+  assert.equal(waits201.options.length, 200, 'the picker never raises the number');
+  assert.match(waits201.note, /Showing the first 200 of 201/);
+  assert.ok(!waits201.options.some((o: any) => o.value === String(extraId)));
+  assert.ok(field(at201, 'waits_on_other'), 'a typed fallback appears once more than 200 exist');
+  // Typing its exact title still links it: the write path was never capped at 200.
+  const picked = await call(db, `/api/cycles/build/modules/product-roadmap/records/3/actions/add-dependency?project=${P}`, FOUNDER,
+    { method: 'POST', body: { waits_on_other: 'Extra item 198' } });
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.deepEqual({ ...db.prepare('SELECT okr_id, blocks_okr_id FROM okr_dependencies WHERE okr_id = ?').get(extraId) }, { okr_id: extraId, blocks_okr_id: 3 });
+  // Project-scoped: another venture's item, typed by its exact title, resolves to nothing.
+  db.exec(`INSERT INTO roadmap_okrs (id, project_id, objective) VALUES (9001, ${P_OTHER}, 'Their item')`);
+  const leak = await call(db, `/api/cycles/build/modules/product-roadmap/records/4/actions/add-dependency?project=${P}`, FOUNDER,
+    { method: 'POST', body: { blocks_on_other: 'Their item' } });
+  assert.equal(leak.status, 400);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM okr_dependencies WHERE blocks_okr_id = 4').get() as any).n, 0);
+  db.close();
+});
+
+// ── D5066 (#5066): Company creation's next action and obligations list ─────
+
+test('test 16 (D5066): no open obligation silently disappears past the old cap of 3', async () => {
+  const db = recorded();
+  // recorded() already gives entity ENTITY one open obligation (id 1); four more makes five, well past the old LIMIT 3.
+  const ins = db.prepare(`INSERT INTO entity_obligations (id, uid, entity_id, title, due_date, status, kind, cadence) VALUES (?, ?, ${ENTITY}, ?, ?, 'open', 'franchise_tax', 'annual')`);
+  for (let i = 2; i <= 5; i += 1) ins.run(i, `o${i}`, `Obligation ${i}`, day(i));
+  const body = (await read(db, 'company-creation')).body;
+  const obligationIds = body.records.rows.filter((r: any) => String(r.id).startsWith('obligation-')).map((r: any) => r.id);
+  assert.deepEqual(new Set(obligationIds), new Set(['obligation-1', 'obligation-2', 'obligation-3', 'obligation-4', 'obligation-5']));
+  // Every row (3 Lab steps + 5 formation steps + 5 obligations) fits on one page: the list's own total says so, not a silent cap.
+  assert.equal(body.records.total, body.records.rows.length);
+  assert.equal(body.records.total, 13);
+  db.close();
+});
+
+test('test 17 (D5066): the next action is the highest-priority open item across Lab, step and obligation sources', async () => {
+  const db = recorded();
+  // Close every other source so only the Lab's unfinished "Filed with state" step is open.
+  db.exec(`UPDATE formation_steps SET state = 'done' WHERE project_id = ${P}`);
+  db.exec(`UPDATE entity_obligations SET status = 'waived', resolved_on = '${day(0)}' WHERE entity_id = ${ENTITY}`);
+  const onlyLab = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(onlyLab?.text, 'Complete Filed with state', 'an unfinished Lab step produces the next action when nothing else is open');
+
+  // An overdue obligation outranks an unfinished Lab step at once (the mixed case).
+  db.exec(`INSERT INTO entity_obligations (id, uid, entity_id, title, due_date, status, kind, cadence) VALUES
+    (9, 'o9', ${ENTITY}, 'Overdue franchise filing', '${day(-3)}', 'open', 'franchise_tax', 'annual')`);
+  const withOverdue = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(withOverdue?.text, 'Complete Overdue franchise filing', 'the overdue obligation wins over the open Lab step');
+
+  // A due-soon obligation is prioritized ahead of a general open step with no due date at all.
+  db.exec(`UPDATE entity_obligations SET status = 'waived', resolved_on = '${day(0)}' WHERE id = 9`);
+  db.exec(`UPDATE entity_obligations SET status = 'open', resolved_on = NULL WHERE id = 1`); // recorded()'s own obligation, due in 5 days: due soon.
+  db.exec(`UPDATE formation_steps SET state = 'todo', due_date = NULL WHERE id = 4`); // a general open step, no date: upcoming.
+  const dueSoonWins = (await read(db, 'company-creation')).body.card.next;
+  assert.equal(dueSoonWins?.text, 'Complete Franchise tax', 'the due-soon obligation outranks the general open step and the open Lab step alike');
   db.close();
 });

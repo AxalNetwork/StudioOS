@@ -172,7 +172,7 @@ const grace = { user: OTHER_ADVISOR_USER, role: 'advisor' };
 /** Create one work product. Defaults to the LINKED engagement. */
 async function create(e: any, who = ada, over: Record<string, unknown> = {}) {
   const r = await call(e, 'POST', '/me/deliverables', who,
-    { title: 'Q2 advisory review', engagement_id: 1, ...over });
+    { title: 'Q2 advisory review', engagement_id: 1, summary: 'First pass', link_url: 'https://docs.example/work', ...over });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   return r.body;
 }
@@ -202,7 +202,8 @@ test('the only writer of opened_at is the client\'s own route', () => {
   // file is split at that handler: everything before it is the advisor's side
   // and may not touch either stamp, and the one writer after it must be the
   // founder's route and must be guarded so a reload cannot move the stamp.
-  const src = readFileSync(resolve(HERE, '../src/routes/advisors.ts'), 'utf8');
+  // #4715: the advisor routes split into routes/advisors_*.ts; this code lives in advisors_deliverables.ts.
+  const src = readFileSync(resolve(HERE, '../src/routes/advisors_deliverables.ts'), 'utf8');
   const CLIENT_ROUTE = "advisors.post('/received/deliverables/:uid/open'";
   const at = src.indexOf(CLIENT_ROUTE);
   assert.ok(at > 0, 'the client\'s open route must exist, or this file has no writer at all');
@@ -277,7 +278,7 @@ test('creating and versioning stay open to an unlinked client — only the send 
   const e = env(freshDb());
   const d = await create(e, ada, { engagement_id: 2, title: 'Board brief' });
   const v2 = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada,
-    { summary: 'Second pass', label: 'v2 draft' });
+    { summary: 'Second pass', label: 'v2 draft', link_url: 'https://docs.example/work-v2' });
   assert.equal(v2.status, 201);
   assert.equal(v2.body.version, 2);
   assert.equal(v2.body.label, 'v2 draft');
@@ -316,7 +317,7 @@ test('versions are a sequence, and the ordinal is never reused', async () => {
   const d = await create(e);
   for (const expected of [2, 3, 4]) {
     const r = await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada,
-      { summary: `Pass ${expected}` });
+      { summary: `Pass ${expected}`, link_url: `https://docs.example/work-v${expected}` });
     assert.equal(r.status, 201);
     assert.equal(r.body.version, expected);
   }
@@ -410,7 +411,7 @@ test('the median measures the FIRST open of a work product, not the latest', asy
   const e = env(db);
   const d = await create(e, ada, { title: 'Pricing tier model' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/1/send`, ada);
-  await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Second pass' });
+  await call(e, 'POST', `/me/deliverables/${d.id}/versions`, ada, { summary: 'Second pass', link_url: 'https://docs.example/work-v2' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/2/send`, ada);
 
   const t0 = await listOf(e);
@@ -446,12 +447,12 @@ test('a reversed pair of stamps is dropped rather than counted as negative time'
     'but it contributes no duration, so the median reports nothing rather than a negative');
 });
 
-test('an unopened row can lose its address, which is why addressable is its own number', async () => {
-  // The send rule means every row is addressable AT THE MOMENT IT IS SENT, so
-  // `unopened` and `addressable` are equal in the ordinary case — and that is
-  // exactly what makes this gap invisible without staging the unordinary one.
-  // Unlinking the engagement after a send leaves a row that went out and can
-  // never be nudged, and the tile has to be able to say so.
+test('#4684: unlinking after a send keeps the row addressable through the account it was sent to', async () => {
+  // Before #4684 a sent version belonged to whoever the engagement named, so
+  // unlinking the work product left a row nobody could open or be nudged
+  // about. Now the version keeps its recipient: the work product shows no
+  // client account (nothing new can be sent), but what already went out still
+  // reaches the person it went to.
   const e = env(freshDb());
   const d = await create(e, ada, { engagement_id: 1, title: 'Sent then unlinked' });
   await call(e, 'POST', `/me/deliverables/${d.id}/versions/1/send`, ada);
@@ -464,8 +465,9 @@ test('an unopened row can lose its address, which is why addressable is its own 
 
   const after = await listOf(e);
   assert.equal(after.totals.unopened, 1, 'it was still sent and still unread');
-  assert.equal(after.totals.addressable, 0, 'but nothing can reach the client any more');
-  assert.equal(after.items[0].client_user_email, null);
+  assert.equal(after.totals.addressable, 1, 'its recipient can still be reached');
+  assert.equal(after.items[0].client_user_email, null, 'but nothing new can be sent: there is no client account now');
+  assert.ok(after.items[0].latest_version.recipient_name, 'the version names who it went to');
 });
 
 test('the table refuses two versions with the same ordinal', () => {
@@ -517,7 +519,7 @@ test('never opened excludes anything that was ever opened, and names the oldest'
   assert.equal(t.totals.oldest_never_opened.sent_at, '2026-08-22T00:00:00.000Z');
   // A deliverable with an OPENED version is out, even though it also has unsent
   // ones — the work product was read.
-  await call(e, 'POST', `/me/deliverables/${read.id}/versions`, ada, { summary: 'v2' });
+  await call(e, 'POST', `/me/deliverables/${read.id}/versions`, ada, { summary: 'v2', link_url: 'https://docs.example/work-v2' });
   t = await listOf(e);
   assert.equal(t.totals.never_opened, 2, 'a later unsent version does not un-read a deliverable');
 });
@@ -598,7 +600,8 @@ test('an account with no advisor profile cannot reach the store at all', async (
     ['POST', '/me/deliverables', { title: 'X', client_name: 'Y' }],
   ] as const) {
     const r = await call(e, method, path, fran, body);
-    assert.equal(r.status, 400, `${method} ${path}`);
-    assert.match(String(r.body.detail), /No advisor profile/);
+    // #5363: a founder holds no Advisor licence, so the coded licence refusal.
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.error, 'advisor_licence_required');
   }
 });

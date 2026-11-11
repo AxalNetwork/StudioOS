@@ -1,5 +1,5 @@
 /**
- * D1419 (#3698) — the module map (SM6): this Studio's catalogue
+ * D1419 (#3698) — the Artifact map (SM6): this Studio's catalogue
  * (`GET /api/studio/modules`, D1418) in its groups, with search,
  * "Recommended for you" (unplaced defaults, `in_default`), and Add, ✓ Added
  * or a lock with "Included in <plan>".
@@ -11,18 +11,46 @@
 import { useState } from 'react';
 import { Check, Info, Lock } from 'lucide-react';
 import { Lightbox } from '../../ui';
+import StudioArtifactMark from './StudioArtifactMark';
 import { CAP_LINE, STUDIO_MAX, canAdd, grouped, includedIn, recommended, search } from './studioLayoutModel';
 
 const PROFILE_NAME = { founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating partner' };
 
+// Reuse the public landing page’s tool artwork where it depicts the module.
+const ARTWORK = new Map([
+  ['validate_problem_discovery', 'tool-discovery'],
+  ['validate_customer_research', 'tool-discovery'],
+  ['validate_market_intelligence', 'tool-market'],
+  ['build_company_creation', 'tool-incorporate'],
+  ['raise_pitch_deck', 'tool-pitch'],
+  ['raise_cap_table', 'tool-captable'],
+  ['raise_data_room', 'tool-capital'],
+  ['raise_capital_relationships', 'tool-capital'],
+  ['scored_opportunities', 'tool-scoring'],
+]);
+
+function ArtifactCover({ mod }) {
+  const image = ARTWORK.get(mod.key);
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="sm-artifact-cover" aria-hidden="true">
+      {image && !failed
+        ? <img src={`/site/${image}.webp`} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />
+        : <StudioArtifactMark group={mod.group} />}
+    </div>
+  );
+}
+
 function Entry({ mod, placed, full, onAdd, onLocked }) {
   const added = placed.has(mod.key);
   return (
-    <div className="sm-entry" data-locked={mod.locked_by_plan ? 'true' : undefined} data-testid={`studio-map-${mod.key}`}>
-      <span className="sm-preview" aria-hidden="true" />
-      <b>{mod.title}</b>
-      {mod.purpose && <p>{mod.purpose}</p>}
-      <div>
+    <article className="sm-entry sm-artifact" data-locked={mod.locked_by_plan ? 'true' : undefined} data-testid={`studio-map-${mod.key}`}>
+      <ArtifactCover mod={mod} />
+      <div className="sm-artifact-details">
+        <h4>{mod.title}</h4>
+        {mod.purpose && <p>{mod.purpose}</p>}
+      </div>
+      <div className="sm-entry-actions">
         {mod.locked_by_plan ? (
           <button type="button" className="sm-locked sm-btn-t" onClick={() => onLocked(mod.key)}>
             <Lock size={12} aria-hidden="true" /> {includedIn(mod.plan)}
@@ -39,7 +67,7 @@ function Entry({ mod, placed, full, onAdd, onLocked }) {
           >+ Add</button>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -83,8 +111,8 @@ export default function ModuleMapLightbox({ studio }) {
   const close = () => studio.setMapOpen(false);
   return (
     <Lightbox
-      label="Module map"
-      title="Module map"
+      label="Artifact map"
+      title="Artifact map"
       width={960}
       onClose={close}
       testId="studio-module-map-lightbox"

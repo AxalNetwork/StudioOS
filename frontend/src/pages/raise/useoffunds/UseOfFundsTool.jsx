@@ -13,7 +13,7 @@ import {
   runwayTodayView, sectionOf, sectionRows, tabHref, tabSearch, tiesRows,
 } from './useOfFundsModel';
 import {
-  AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditSplitDialog,
+  AddMilestoneDialog, AdminBanner, BTN, BTN_GHOST, BlockError, Card, CashLine, ChartToggle, Columns, EYEBROW, EditHireDialog, EditSplitDialog,
   FIELD, H3, LINK, MONO, MUTED, NotRecorded, Pill, RoundSizeDialog, SECTION_BG, Skeleton, Source, StackBar, WhereUsedDialog,
   useRead, usePlan,
 } from './UseOfFundsParts';
@@ -366,6 +366,7 @@ function Milestones({ projectId, search, api }) {
   const [q, setQ] = useState('');
   const [section, setSection] = useState('');
   const [adding, setAdding] = useState(false);
+  const [editingHire, setEditingHire] = useState(null);
   const [notice, setNotice] = useState('');
   return (
     <PlanFrame read={read} testId="uof-milestones">
@@ -427,7 +428,7 @@ function Milestones({ projectId, search, api }) {
                 {!hiresOk ? <BlockError text={base?.hires?.reason || 'Hires could not be read.'} onRetry={read.reload} />
                   : hires.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>No hires planned. A hire is added on its section’s page.</p> : (
                     <div className="overflow-x-auto"><table className="w-full min-w-[440px] border-collapse text-left text-[12.5px]">
-                      <thead><tr>{['Role', 'Section', 'From', 'Cost a year', 'A month'].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
+                      <thead><tr>{['Role', 'Section', 'From', 'Cost a year', 'A month', ...(plan.viewer?.can_write ? [''] : [])].map((h) => <th key={h} className={`border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800 ${EYEBROW}`}>{h}</th>)}</tr></thead>
                       <tbody>{hires.map((h) => (
                         <tr key={h.id} data-testid="uof-hire-row">
                           <td className="border-b border-axal-hairline px-2 py-1.5 font-bold dark:border-gray-800">{h.role || NOT_RECORDED}</td>
@@ -435,13 +436,15 @@ function Milestones({ projectId, search, api }) {
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{h.start_month || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{money(h.annual_cents, h.currency) || <NotRecorded />}</td>
                           <td className={`border-b border-axal-hairline px-2 py-1.5 ${MONO} dark:border-gray-800`}>{typeof h.annual_cents === 'number' ? money(Math.round(h.annual_cents / 12), h.currency) : <NotRecorded />}</td>
+                          {plan.viewer?.can_write ? <td className="border-b border-axal-hairline px-2 py-1.5 dark:border-gray-800"><button type="button" className={BTN_GHOST} onClick={() => setEditingHire(h)} data-testid="uof-hire-edit-open">Edit</button></td> : null}
                         </tr>
                       ))}</tbody>
                     </table></div>
                   )}
               </Card>
             </div>
-            {adding ? <AddMilestoneDialog projectId={projectId} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
+            {editingHire ? <EditHireDialog key={editingHire.id} projectId={projectId} hire={editingHire} api={api} onClose={() => setEditingHire(null)} onSaved={(t) => { setEditingHire(null); setNotice(t); read.reload(); }} /> : null}
+            {adding ? <AddMilestoneDialog projectId={projectId} revision={base?.revision} api={api} onClose={() => setAdding(false)} onSaved={(t) => { setAdding(false); setNotice(t); read.reload(); }} /> : null}
           </>
         );
       }}

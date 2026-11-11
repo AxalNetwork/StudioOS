@@ -12,9 +12,9 @@ import { railPressHeaders } from '../../../lib/railPage';
 import { refusalOf } from './newDeckModel';
 import {
   ADD_TOKENS, ASK_FIX, BUILD, DIRTY_LINE, DISMISS, FIX_FIRST, FIX_WAITING, FREE_LINE, GROUPS, GROUP_NOTES, HELD_HERE, KEEP_EDITING, LATER,
-  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
+  NOTHING_TO_FIX, NOT_A_PASS, NOT_KEPT, OUT_OF_DATE, READER_LINE, RECHECK, RECHECK_NOW, RETRYING, SAVE_FIRST, SHOW_ME, STALE_LINE, TITLE, TOKENS_OUT, TRY_AGAIN, UNDO,
   canAskFix, chargedLine, checkingLine, countsLine, fixBody, fixedLine, fixedSince, holdLine, notYet, passedLine, percent, retryLabel, slideState, stepOf,
-  subLine, uncheckedBanner,
+  sentLine, subLine, uncheckedBanner,
 } from './preflightUiModel';
 
 /**
@@ -294,45 +294,59 @@ export function PreflightPanel({ pf, version, readOnly = false, deckId = null, t
 }
 
 /**
+ * D4598 (#4598) part 2 — the gate's own body (what is to fix, and the warnings
+ * left), without the Sheet around it: `PreflightGate` draws it in the pre-dialog
+ * check (unchanged below); Export and Share draw it again, inline in their own
+ * dialog, for the check on the artifact's exact effective content, where there
+ * is no slide to jump to (`onShow` is left out there). One body, so both checks
+ * read the same, and `prefix` only tells their rows apart in a test.
+ */
+export function GateBody({ gate, progress = null, onShow = null, prefix = 'pitch-preflight-gate' }) {
+  const [openLook, setOpenLook] = useState(false);
+  if (progress) return <Checking progress={progress} testId={`${prefix}-checking`} />;
+  if (!gate) return null;
+  const showLook = !gate.fix.length || openLook;
+  return (
+    <>
+      {gate.fix.length ? (
+        <Group title="To fix first" count={gate.fix.length} testId={`${prefix}-fix-list`}>
+          {gate.fix.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />)}
+        </Group>
+      ) : <span className="text-[14px] font-extrabold text-emerald-700 dark:text-emerald-300" data-testid={`${prefix}-nothing`}>✓ {NOTHING_TO_FIX}</span>}
+      {gate.look.length && gate.fix.length ? (
+        <button type="button" className={`self-start text-[12.5px] font-bold ${INK}`} aria-expanded={openLook} onClick={() => setOpenLook((o) => !o)} data-testid={`${prefix}-look-toggle`}>
+          {gate.look.length} worth a look {openLook ? '▾' : '▸'}
+        </button>
+      ) : null}
+      {gate.look.length && showLook ? (
+        <Group title={GROUPS.look} note={GROUP_NOTES.lookGate} count={gate.look.length} testId={`${prefix}-look`}>
+          {gate.look.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`${prefix}-row-${r.id}`} />)}
+        </Group>
+      ) : null}
+      {gate.waitLine ? <span className={MUTED} data-testid={`${prefix}-wait`}>{gate.waitLine}</span> : null}
+    </>
+  );
+}
+
+/**
  * The gate before Share and Export (pf1c, pf1d): what is to fix, and the
  * warnings left. `gate` is `gateOf()`'s; "Send anyway" / "Export anyway" is
  * there only with nothing to fix.
  */
-export function PreflightGate({ gate, progress = null, version, dirty = false, onShow, onFix, onAnyway, onClose }) {
-  const [openLook, setOpenLook] = useState(false);
+export function PreflightGate({ gate, progress = null, version, dirty = false, onShow, onSave = null, onFix, onAnyway, onClose }) {
   const title = gate?.title || (gate?.kind === 'share' ? 'Before you share' : 'Before you export');
   const footer = progress ? null : (
     <div className="flex flex-wrap justify-end gap-2">
+      {onSave ? <button type="button" className={GHOST} onClick={onSave} data-testid="pitch-preflight-gate-save">{SAVE_FIRST}</button> : null}
       {gate?.anyway ? <button type="button" className={GHOST} onClick={onAnyway} data-testid="pitch-preflight-gate-anyway">{gate.anyway}</button> : null}
       <button type="button" className={PRIMARY} onClick={onFix} data-testid="pitch-preflight-gate-fix">{FIX_FIRST}</button>
     </div>
   );
-  const showLook = gate && (!gate.fix.length || openLook);
   return (
-    <Sheet label={title} title={title} eyebrow={TITLE} sub={version != null ? `v${version}` : undefined} width={480} onClose={onClose} footer={footer} testId="pitch-preflight-gate">
+    <Sheet label={title} title={title} eyebrow={TITLE} sub={sentLine(version)} width={480} onClose={onClose} footer={footer} testId="pitch-preflight-gate">
       <div className="flex flex-col gap-3">
-        {progress ? <Checking progress={progress} testId="pitch-preflight-gate-checking" /> : null}
-        {!progress && gate ? (
-          <>
-            {gate.fix.length ? (
-              <Group title="To fix first" count={gate.fix.length} testId="pitch-preflight-gate-fix-list">
-                {gate.fix.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`pitch-preflight-gate-row-${r.id}`} />)}
-              </Group>
-            ) : <span className="text-[14px] font-extrabold text-emerald-700 dark:text-emerald-300" data-testid="pitch-preflight-gate-nothing">✓ {NOTHING_TO_FIX}</span>}
-            {gate.look.length && gate.fix.length ? (
-              <button type="button" className={`self-start text-[12.5px] font-bold ${INK}`} aria-expanded={openLook} onClick={() => setOpenLook((o) => !o)} data-testid="pitch-preflight-gate-look-toggle">
-                {gate.look.length} worth a look {openLook ? '▾' : '▸'}
-              </button>
-            ) : null}
-            {gate.look.length && showLook ? (
-              <Group title={GROUPS.look} note={GROUP_NOTES.lookGate} count={gate.look.length} testId="pitch-preflight-gate-look">
-                {gate.look.map((r) => <FindingRow key={r.id} row={r} compact onShow={onShow} testId={`pitch-preflight-gate-row-${r.id}`} />)}
-              </Group>
-            ) : null}
-            {gate.waitLine ? <span className={MUTED} data-testid="pitch-preflight-gate-wait">{gate.waitLine}</span> : null}
-            {dirty ? <span className={MUTED} data-testid="pitch-preflight-gate-dirty">{DIRTY_LINE}</span> : null}
-          </>
-        ) : null}
+        <GateBody gate={gate} progress={progress} onShow={onShow} />
+        {!progress && gate && dirty ? <span className={MUTED} data-testid="pitch-preflight-gate-dirty">{DIRTY_LINE}</span> : null}
       </div>
     </Sheet>
   );

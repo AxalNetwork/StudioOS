@@ -149,7 +149,8 @@ test('account/me contracts preserve primary, expose ordered held grants and cont
     await grantLicence(f.DB,change('partner'));
     const r=await f.call('/api/account/licences'); assert.equal(r.status,200);
     assert.equal(r.body.primary,'founder'); assert.deepEqual(r.body.held.map((x:any)=>x.licence),['founder','partner']);
-    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true});
+    assert.deepEqual(r.body.held[0],{licence:'founder',label:'Founder',granted_at:null,source:'primary',is_primary:true,plan:{key:'founder:free',name:'Free'}}); // D4729: the plan it stands on
+    assert.deepEqual(r.body.held[1].plan,{key:'partner:free',name:'Partner Basic'});
     assert.equal(r.body.held[1].label,'Operating Partner'); assert.equal(r.body.held[1].source,'admin'); assert.ok(r.body.held[1].granted_at);
     assert.deepEqual(r.body.addable,[{licence:'investor',label:'Investor',how:'contact'},{licence:'advisor',label:'Advisor',how:'contact'}]);
     const me=await f.call('/api/auth/me'); assert.equal(me.status,200); assert.equal(me.body.role,'founder'); assert.deepEqual(me.body.licences,['founder','partner']);
@@ -267,21 +268,35 @@ test('secondary investor diligence and fund reads stay scoped; revoked Advisor a
     await grantLicence(f.DB,change('advisor'));
     const profile=await f.call('/api/advisors/me'); assert.equal(profile.status,200); assert.ok(profile.body);
     await revokeLicence(f.DB,change('advisor'));
-    assert.equal((await f.call('/api/advisors/me')).body,null);
+    // D4670 (#4670): a revoked Advisor is refused, never told "no profile"; the row is retained.
+    const revoked=await f.call('/api/advisors/me');
+    assert.deepEqual([revoked.status,revoked.body?.error],[403,'advisor_licence_required']);
     assert.equal(count(f.db,'advisors'),1);
   } finally { f.db.close(); }
 });
 
-test('an additional investor grant opens pipeline fanout only while active; personal notifications are independent', async () => {
+test('an additional investor grant opens the public vote fanout only while active; board events follow read access; personal notifications are independent', async () => {
+  // D4676 (#4676) restated this test. It used to show an investor grant
+  // opening EVERY board event (`stage_change`, naming no deal) — exactly the
+  // leak D4676 closes: a board event now goes only to an account that may read
+  // the deal it names, and an investor-only account reads none. What the test
+  // was for still holds and is still pinned: licences are read live at each
+  // event, not snapshotted at connect, an inactive account receives nothing,
+  // and personal notifications follow their recipient alone. The socket now
+  // carries the session facts the room re-checks (a socket without them is
+  // closed and reconnects).
   const f=fixture(); try {
     const frames:string[]=[];
-    const socket={deserializeAttachment:()=>({userId:'9001',role:'founder'}),send:(frame:string)=>frames.push(frame)};
+    const session={iat:Math.floor(Date.now()/1000),jti:null,sid:null,impersonated_by:null};
+    const socket={deserializeAttachment:()=>({userId:'9001',role:'founder',session}),send:(frame:string)=>frames.push(frame),close:()=>{}};
     const room=new PipelineRoom({getWebSockets:()=>[socket]} as any,f.env);
     const publish=async (body:any)=>room.fetch(new Request('https://room/broadcast',{method:'POST',body:JSON.stringify(body)}));
-    await publish({type:'stage_change'}); assert.equal(frames.length,0);
-    await grantLicence(f.DB,change('investor')); await publish({type:'stage_change'}); assert.equal(frames.length,1);
-    f.db.exec('UPDATE users SET is_active=0 WHERE id=9001'); await publish({type:'stage_change'}); assert.equal(frames.length,1); f.db.exec('UPDATE users SET is_active=1 WHERE id=9001');
-    await revokeLicence(f.DB,change('investor')); await publish({type:'stage_change'}); assert.equal(frames.length,1);
+    const tally={type:'vote_updated',deal_id:1,tally:{up:1}};
+    await publish(tally); assert.equal(frames.length,0, 'a founder-only account received a vote tally');
+    await grantLicence(f.DB,change('investor')); await publish(tally); assert.equal(frames.length,1, 'the grant was not read live');
+    await publish({type:'stage_change'}); assert.equal(frames.length,1, 'an event naming no deal reached a non-admin');
+    f.db.exec('UPDATE users SET is_active=0 WHERE id=9001'); await publish(tally); assert.equal(frames.length,1); f.db.exec('UPDATE users SET is_active=1 WHERE id=9001');
+    await revokeLicence(f.DB,change('investor')); await publish(tally); assert.equal(frames.length,1, 'the revocation was not read live');
     await publish({type:'notification',user_id:9001}); assert.equal(frames.length,2);
     await publish({type:'notification',user_id:9002}); assert.equal(frames.length,2);
   } finally { f.db.close(); }
