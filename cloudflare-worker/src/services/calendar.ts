@@ -1570,9 +1570,43 @@ function googlePayload(ev: CalendarEvent): any {
   return body;
 }
 
+// Google Calendar returns some rate limits as 403 instead of 429.
+async function isGoogleCalendarRateLimit(response: Response): Promise<boolean> {
+  if (response.status !== 403) return false;
+  const reader = response.body?.getReader();
+  if (!reader) return false;
+  const limit = 8_192;
+  const decoder = new TextDecoder();
+  let size = 0;
+  let body = '';
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => {});
+  }, 10_000);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) return false;
+      body += decoder.decode(value, { stream: true });
+    }
+    if (timedOut) return false;
+    const reasons = JSON.parse(body + decoder.decode())?.error?.errors;
+    return Array.isArray(reasons) && reasons.some((entry) =>
+      entry?.reason === 'rateLimitExceeded' || entry?.reason === 'userRateLimitExceeded');
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+    void reader.cancel().catch(() => {});
+  }
+}
+
 export async function pushEventToGoogle(
   accessToken: string, ev: CalendarEvent, googleEventId: string | null,
-  createKey?: string, refused?: (status: number) => void,
+  createKey?: string, refused?: (status: number, rateLimited: boolean) => void,
 ): Promise<string | null> {
   if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
@@ -1587,7 +1621,7 @@ export async function pushEventToGoogle(
       if (r.status === 404) {
         // Remote was deleted — fall through to a fresh insert.
       } else if (!r.ok) {
-        refused?.(r.status);
+        refused?.(r.status, await isGoogleCalendarRateLimit(r));
         console.warn('[CAL] gcal patch', r.status);
         return null;
       } else {
@@ -1601,11 +1635,11 @@ export async function pushEventToGoogle(
     if (r.status === 409 && createKey) {
       const saved = await patchEvent(createKey);
       if (saved.ok) return createKey;
-      refused?.(saved.status);
+      refused?.(saved.status, await isGoogleCalendarRateLimit(saved));
       return null;
     }
     if (!r.ok) {
-      refused?.(r.status);
+      refused?.(r.status, await isGoogleCalendarRateLimit(r));
       console.warn('[CAL] gcal insert', r.status);
       return null;
     }

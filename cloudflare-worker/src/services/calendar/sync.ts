@@ -159,8 +159,8 @@ async function pushOneUserOneProvider(
       AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
   ` as any[])[0];
   const key = await calendarCopyKey(env, userId, provider, ev);
-  const refused = (status: number) => failure?.(
-    status === 401 || status === 403 ? 'parked'
+  const refused = (status: number, rateLimited = false) => failure?.(
+    rateLimited ? 'pending' : status === 401 || status === 403 ? 'parked'
       : status === 408 || status === 409 || status === 429 || status >= 500 ? 'pending' : 'refused',
   );
   if (stillCurrent && !await stillCurrent()) return 'write_refused';
@@ -208,6 +208,8 @@ export async function calendarCopyKey(env: Env, userId: number, provider: Provid
 async function enqueueCopy(env: Env, userId: number, provider: Provider, ev: CalendarEvent, update: boolean) {
   const now = Date.now();
   const day = new Date(ev.start_at).toISOString().slice(0, 10);
+  // Older jobs stored preference suppression as a cancellation. Only an
+  // authorized update may revive one of those rows.
   await env.DB.prepare(`
     INSERT INTO calendar_copy_jobs (user_id, provider, source_kind, source_id, source_day, next_attempt_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -215,7 +217,7 @@ async function enqueueCopy(env: Env, userId: number, provider: Provider, ev: Cal
       source_day = excluded.source_day, generation = calendar_copy_jobs.generation + 1,
       attempts = 0, state = CASE WHEN calendar_copy_jobs.state = 'parked' THEN 'parked' ELSE 'pending' END,
       next_attempt_at = excluded.next_attempt_at, updated_at = excluded.updated_at
-    WHERE calendar_copy_jobs.state <> 'cancelled' AND ?
+    WHERE (calendar_copy_jobs.state <> 'cancelled' OR calendar_copy_jobs.outcome_code = 'not_selected') AND ?
   `).bind(userId, provider, ev.kind, ev.source_id, day, now, now, Number(update)).run();
 }
 
@@ -254,7 +256,7 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
         }
       } else {
         outcome = decision.outcome!;
-        if (outcome === 'not_selected') state = 'cancelled';
+        if (outcome === 'not_selected') state = 'refused';
       }
     }
   } catch {
