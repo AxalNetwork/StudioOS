@@ -63,6 +63,7 @@ with the ones ahead of it is taken out of the queue with the reason.
 | api ↔ worker drift | `ci.yml` | runs |
 | applied migrations unchanged | `migration-immutability.yml` | diffs against `merge_group.base_sha` |
 | scan | `gitleaks.yml` | scans `merge_group.base_sha..head_sha` |
+| `merge-control-deploy.yml` | D5618: independent SQLite DO/Queue control Worker; main only and disabled until explicitly enabled | main pushes touching Merge Control, manual | `MERGE_CONTROL_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; `MERGE_CONTROL_DEPLOY_ENABLED` |
 
 Only these three workflows listen for `merge_group`. Nothing else runs in the
 queue: no preview, no Claude review, no comment, and no deploy; the deploy
