@@ -91,7 +91,8 @@ export function buildPlan(scripts, timings = {}, root = process.cwd(), shards = 
 
 export function validatePlan(plan, scripts, root = process.cwd()) {
   const expected = partsOf(scripts);
-  if (plan.version !== 1 || JSON.stringify(plan.parts.map((p) => p.name)) !== JSON.stringify(expected.map((p) => p.name))) throw new Error('plan part names do not match SHARDS');
+  const identity = (p) => ({ name: p.name, script: p.script });
+  if (plan.version !== 1 || JSON.stringify(plan.parts.map(identity)) !== JSON.stringify(expected.map(identity))) throw new Error('plan part names/scripts do not match SHARDS');
   for (const script of Object.keys(SHARDS)) assertExactOnce(plan.parts.filter((p) => p.script === script), suiteFiles(scripts[script], root));
   // Execute commands derived from current package scripts, never artifact command text.
   return expected.map((p) => p.script ? { ...p, commands: [plannedCommand(scripts[p.script], plan.parts.find((q) => q.name === p.name).files)] } : p);

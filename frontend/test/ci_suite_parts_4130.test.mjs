@@ -32,6 +32,9 @@ test('real tree glob expansion and every generated file list cover the same file
   assert.equal(JSON.stringify(plan), JSON.stringify(buildPlan(pkg.scripts)));
   assert.equal(new Set(plan.parts.map((p) => p.name)).size, plan.parts.length);
   assert.equal(validatePlan(plan, pkg.scripts).length, plan.parts.length);
+  const misplaced = structuredClone(plan);
+  misplaced.parts[0].script = 'test:worker';
+  assert.throws(() => validatePlan(misplaced, pkg.scripts), /names\/scripts/);
   for (const mutation of ['drop', 'repeat', 'extra']) {
     const bad = structuredClone(plan);
     if (mutation === 'drop') bad.parts[0].files.pop();
