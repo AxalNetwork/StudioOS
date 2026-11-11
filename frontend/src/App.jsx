@@ -3535,7 +3535,7 @@ function AppInner() {
         Every legacy address still resolves, to the ticket or to the article:
         `/tickets`, `/tickets/<id>`, `/help/<id>`, `/docs`, `/docs/admin/*`.
       */}
-      <Route path="/help" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      <Route path="/help" element={<HelpCenterPage />} />
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
@@ -3555,7 +3555,7 @@ function AppInner() {
           children (`/help/tickets/:id`, `/help/admin/*`) outrank this by React
           Router's own ranking; the page reads the role-filtered manifest, so a
           guide the viewer may not read answers "not found". */}
-      <Route path="/help/:area/:guide" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <HelpCenterPage />)} />
+      <Route path="/help/:area/:guide" element={<HelpCenterPage />} />
       <Route path="/help/admin/*" element={<AdminDocsPathGuard />} />
       <Route path="/help/:id" element={<HelpTicketIdRedirect />} />
       <Route path="/tickets/:id" element={<TicketsRedirect />} />
