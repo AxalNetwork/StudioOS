@@ -1,0 +1,5 @@
+{
+  "ids(interviewIds.length) @ services/interviewSuggestions.ts": 1,
+  "ids(kinds.length) @ services/interviewSuggestions.ts": 1,
+  "ids(sessionIds.length) @ services/interviewSuggestions.ts": 1
+}
