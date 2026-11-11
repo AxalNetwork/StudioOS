@@ -815,6 +815,16 @@ function expertisePage(page, extra = {}) {
   return s ? `?${s}` : '';
 }
 
+/**
+ * #5314 part 3 — a Delivery DELETE states the revision it was shown in the
+ * query. `undefined` sends nothing (the Worker then guards on its own read);
+ * `null` says the read found no record.
+ */
+function deliveryRevisionQuery(revision) {
+  if (revision === undefined) return '';
+  return `?expected_revision=${revision === null ? 'none' : encodeURIComponent(String(revision))}`;
+}
+
 export const api = {
   // Task #19 — Best-Fit consultations + admin report.
   bookConsultation: (data) =>
@@ -4608,6 +4618,10 @@ export const api = {
   // when nothing is recorded — never 'on_track'. There is no method to set it,
   // because green-because-empty is the failure the zone was written against.
   getPartnerDeliveryHealth: () => request('/partner/delivery/health'),
+  // #5314 part 3 (D4822): every Delivery edit states the version it was read
+  // at — `expected_revision` in a body, or the query below for a DELETE (and
+  // `null` / `none` where the read found no record). A stale one answers 409
+  // `delivery_changed` with `current_version` and changes nothing.
   // What the firm STATES about an engagement — owner, scope assessment, and
   // the client's score with where it was said. None of the three is derivable
   // from the five stores health is read across. An omitted key is untouched;
@@ -4631,8 +4645,8 @@ export const api = {
     }),
   updatePartnerMilestone: (id, data) =>
     request(`/partner/delivery/milestones/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerMilestone: (id) =>
-    request(`/partner/delivery/milestones/${id}`, { method: 'DELETE' }),
+  deletePartnerMilestone: (id, revision) =>
+    request(`/partner/delivery/milestones/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // `side` is what lets a report name a client-side blocker plainly. A blockers
   // list with no side would make every delay the firm's.
@@ -4644,8 +4658,8 @@ export const api = {
     }),
   updatePartnerBlocker: (id, data) =>
     request(`/partner/delivery/blockers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerBlocker: (id) =>
-    request(`/partner/delivery/blockers/${id}`, { method: 'DELETE' }),
+  deletePartnerBlocker: (id, revision) =>
+    request(`/partner/delivery/blockers/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // NOTE WHAT IS ABSENT: nothing here sets `opened_at` or `signed_off_at`.
   // Those are the client's to set — only the founder side can truthfully say a
@@ -4658,8 +4672,8 @@ export const api = {
     }),
   updatePartnerDeliverable: (id, data) =>
     request(`/partner/delivery/deliverables/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deletePartnerDeliverable: (id) =>
-    request(`/partner/delivery/deliverables/${id}`, { method: 'DELETE' }),
+  deletePartnerDeliverable: (id, revision) =>
+    request(`/partner/delivery/deliverables/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   // Returns `people` (project, seat and internal hours split), `seats`, and
   // `cap_hours` — the number THIS FIRM stated, or null with the reason. Nothing
@@ -4683,8 +4697,10 @@ export const api = {
     request(`/partner/delivery/seats/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   // Revoking is a state, not a delete: a struck-through seat stays on the page
   // rather than the fact that access once existed silently disappearing.
-  revokePartnerSeat: (id) =>
-    request(`/partner/delivery/seats/${id}/revoke`, { method: 'POST' }),
+  revokePartnerSeat: (id, revision) =>
+    request(`/partner/delivery/seats/${id}/revoke`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
   savePartnerHours: (engagementId, personId, period, data) =>
     request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
       method: 'PUT', body: JSON.stringify(data),
@@ -4692,8 +4708,8 @@ export const api = {
   // D637 — client hours by entry, this month and the two before it.
   listPartnerHourEntries: (period) =>
     request(`/partner/delivery/capacity/hours${period ? `?period=${encodeURIComponent(period)}` : ''}`),
-  deletePartnerHours: (engagementId, personId, period) =>
-    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}`, {
+  deletePartnerHours: (engagementId, personId, period, revision) =>
+    request(`/partner/delivery/engagements/${engagementId}/hours/${personId}/${period}${deliveryRevisionQuery(revision)}`, {
       method: 'DELETE',
     }),
 
@@ -4709,10 +4725,12 @@ export const api = {
     }),
   // Records that a PERSON sent it. Nothing here delivers anything — no email,
   // no notification, no client-side surface exists.
-  sendPartnerStatusReport: (id) =>
-    request(`/partner/delivery/status-reports/${id}/send`, { method: 'POST' }),
-  deletePartnerStatusReport: (id) =>
-    request(`/partner/delivery/status-reports/${id}`, { method: 'DELETE' }),
+  sendPartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}/send`, {
+      method: 'POST', body: JSON.stringify({ expected_revision: revision ?? null }),
+    }),
+  deletePartnerStatusReport: (id, revision) =>
+    request(`/partner/delivery/status-reports/${id}${deliveryRevisionQuery(revision)}`, { method: 'DELETE' }),
 
   listMyAdvisorCohorts: () => request('/advisors/me/cohort'),
   listMyAdvisorCohortFounders: (cycleId) => request(`/advisors/me/cohort/${cycleId}/founders`),
