@@ -230,6 +230,58 @@ for (const { reason, path, expected } of [
   });
 }
 
+for (const recovers of [true, false]) {
+  test(`5207: Google quotaExceeded ${recovers ? 'recovers after hours' : 'stops after six attempts'}`, async () => {
+    const f = fixture();
+    const original = globalThis.fetch;
+    const hour = 3_600_000;
+    let writes = 0;
+    let quotaExceeded = true;
+    try {
+      setTarget(f, 'google');
+      f.db.prepare(`INSERT INTO founder_checkins
+        (id, uid, title, start_at, duration_min, status, founder_user_id)
+        VALUES (41, 'checkin-41', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+      globalThis.fetch = (async (input: string, init: RequestInit) => {
+        const url = new URL(input);
+        if (url.hostname === 'oauth2.googleapis.com') return json({ access_token: 'synthetic-access' });
+        assert.equal(url.hostname, 'www.googleapis.com');
+        assert.equal(init.method, 'POST');
+        writes++;
+        return quotaExceeded
+          ? json({ error: { errors: [{ domain: 'usageLimits', reason: 'quotaExceeded' }] } }, 403)
+          : json({ id: 'google-copy' });
+      }) as typeof fetch;
+
+      const readJob = () => f.db.prepare(`
+        SELECT state, attempts, next_attempt_at, updated_at FROM calendar_copy_jobs
+        WHERE user_id = 1 AND provider = 'google' AND source_kind = 'founder_checkin' AND source_id = 41
+      `).get() as { state: string; attempts: number; next_attempt_at: number; updated_at: number };
+
+      await onAxalSessionCreated(f.env, SESSION);
+      const delays = recovers ? [1, 2, 4] : [1, 2, 4, 6, 6];
+      for (const [index, delay] of delays.entries()) {
+        const job = readJob();
+        assert.equal(job.state, 'pending');
+        assert.equal(job.attempts, index + 1);
+        assert.equal(job.next_attempt_at - job.updated_at, delay * hour);
+        assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at - 1), 0);
+        assert.equal(writes, index + 1);
+        if (recovers && index === delays.length - 1) quotaExceeded = false;
+        assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at), 1);
+      }
+      assert.equal(writes, delays.length + 1);
+      const job = readJob();
+      assert.equal(job.state, recovers ? 'complete' : 'refused');
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at + hour), 0);
+      assert.equal(writes, delays.length + 1);
+    } finally {
+      globalThis.fetch = original;
+      f.close();
+    }
+  });
+}
+
 for (const scenario of ['preference restored', 'legacy suppression', 'source cancelled']) {
   test(`5207: a booking update after ${scenario}`, async () => {
     const f = fixture();
