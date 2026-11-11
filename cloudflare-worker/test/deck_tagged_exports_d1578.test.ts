@@ -24,6 +24,7 @@ import { checkDeckPdf, finishTaggedPdf, pdfLangOf, SLIDE_SIZES } from '../src/se
 import { AI_COMPOSITE_TYPE, aiImagesOf, imageRefsOf, isMarked, markImages, pdfXmp, UNKNOWN_MODEL } from '../src/services/decks/aiMarking.ts';
 import { AI_SOURCE_TYPE, xmpOf } from '../src/services/decks/imageBytes.ts';
 import { DECORATIVE_EXT, decorative, writeEditableDeck } from '../src/services/decks/pptxEditable.ts';
+import { iconGeometryFromDisk } from './_icon_geometry.ts';
 import { writeOdp } from '../src/services/decks/odp.ts';
 import { imageDataUri, writeOfflineDeck } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -215,7 +216,8 @@ test('PowerPoint: areas in reading order, decor and washes decorative, alt text 
     ],
   }];
   const images = new Map<string, any>([[URL_AI, { kind: 'png', bytes: PNG }]]);
-  const out = unzip((await writeEditableDeck({ slides, renderable: [{ title: 'Plan', fields: [] }] as any, brand: BRAND, notes: false, images, today: '2026-11-03', meta: { title: 'Synthetic plan', lang: 'de' } })).bytes);
+  // D4574 H3 (#4574): the icon's nodes are a static asset now, so the writer is given them.
+  const out = unzip((await writeEditableDeck({ slides, renderable: [{ title: 'Plan', fields: [] }] as any, brand: BRAND, notes: false, images, today: '2026-11-03', icons: iconGeometryFromDisk(), meta: { title: 'Synthetic plan', lang: 'de' } })).bytes);
   const slide = txt(out, 'ppt/slides/slide1.xml');
   const at = (s: string) => slide.indexOf(s);
   assert.ok(at('Read first') < at('descr="A synthetic skyline"') && at('descr="A synthetic skyline"') < at('Read second'), 'top to bottom, then start to end');

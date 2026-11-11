@@ -263,6 +263,64 @@ test('a stale expert decision cannot overwrite the winning version or add a seco
   assert.equal(sent.length, 1); assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 1);
 }));
 
+test('co-marketing rolls back the decision when its durable activity event cannot be written', async () => {
+  const f = fixture(); pitch(f, 41);
+  const batch = f.env.DB.batch.bind(f.env.DB);
+  f.env.DB.batch = (statements: any[]) => batch([
+    ...statements,
+    f.env.DB.prepare('INSERT INTO synthetic_missing_decision_event (id) VALUES (1)'),
+  ]);
+  const result = await call(f, 1, 'POST', `${cm}/admin/pitches/pitch-41/approve`, {});
+  assert.equal(result.status, 503);
+  assert.equal(one(f, "SELECT status FROM comarketing_pitches WHERE uid='pitch-41'").status, 'proposed');
+  assert.equal(one(f, "SELECT COUNT(*) AS n FROM activity_logs WHERE action='comarketing_approved'").n, 0);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0);
+});
+
+test('expert review rolls back the state when its durable decision event cannot be written', async () => {
+  const f = fixture();
+  const batch = f.env.DB.batch.bind(f.env.DB);
+  f.env.DB.batch = (statements: any[]) => batch([
+    ...statements,
+    f.env.DB.prepare('INSERT INTO synthetic_missing_expert_event (id) VALUES (1)'),
+  ]);
+  const result = await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, {
+    verified: true, credentials_checked: true, expected_version: 0,
+  });
+  assert.equal(result.status, 503);
+  assert.equal(expert(f).decision_state, 'pending');
+  assert.equal(expert(f).review_version, 0);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, 0);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0);
+});
+
+test('notification failure reports delivery pending without failing either committed decision', async () => {
+  const f = fixture(); pitch(f, 42);
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (/INSERT INTO notifications_inbox/.test(sql)) {
+      statement.run = async () => { throw new Error('Synthetic notification failure'); };
+    }
+    return statement;
+  };
+
+  const pitchResult = await call(f, 1, 'POST', `${cm}/admin/pitches/pitch-42/approve`, {});
+  assert.equal(pitchResult.status, 200);
+  assert.equal(pitchResult.body.notified, false);
+  assert.equal(one(f, "SELECT status FROM comarketing_pitches WHERE uid='pitch-42'").status, 'approved');
+  assert.equal(one(f, "SELECT COUNT(*) AS n FROM activity_logs WHERE action='comarketing_approved'").n, 1);
+
+  const expertResult = await call(f, 1, 'POST', `${wb}/admin/experts/expert-a/verify`, {
+    verified: true, credentials_checked: true, expected_version: 0,
+  });
+  assert.equal(expertResult.status, 200);
+  assert.equal(expertResult.body.notified, false);
+  assert.equal(expert(f).decision_state, 'verified');
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM expert_review_decisions').n, 1);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0);
+});
+
 test('concurrent uploads cannot pass the file ceiling or invalidate a record when their insert is refused', async () => {
   const f = fixture(); const id = expert(f).id; const original = f.env.DB.batch.bind(f.env.DB);
   f.env.DB.batch = async (stmts: any[]) => {

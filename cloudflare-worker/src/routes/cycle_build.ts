@@ -27,6 +27,7 @@ import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
 import { isKpiKey, CUSTOM_PREFIX } from '../services/growKpis';
+import { SYSTEM_STATE_LABEL, SYSTEM_STATE_ORDER, systemNeedsReconnect, systemStateOf } from '../services/systemsState';
 import { pageBuildRows, unreadableBuildCard, type BuildFigure, type BuildRecords, type Cell, type ChartSpec, type RecordRow } from '../services/buildCycleRecords';
 import { mvpVercel, roadmapVercel } from '../services/vercel/buildReads';
 
@@ -898,7 +899,9 @@ async function company(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = FU
 const SYSTEM_KINDS = ['bank', 'accounting', 'payroll', 'crm', 'workspace'] as const;
 type SystemKind = typeof SYSTEM_KINDS[number];
 const SYSTEM_LABEL: Record<SystemKind, string> = { bank: 'Bank', accounting: 'Accounting', payroll: 'Payroll', crm: 'CRM', workspace: 'Workspace' };
-const SYSTEM_STATE: Record<string, string> = { failing: 'Failing', connected: 'Connected', not_connected: 'Not connected' };
+// D5065: the states, their labels and their order come from services/systemsState.ts,
+// so this module's rows, tiles and card cannot disagree with the record.
+const SYSTEM_STATE: Record<string, string> = Object.fromEntries(SYSTEM_STATE_ORDER.map(state => [state, SYSTEM_STATE_LABEL[state]]));
 type Viewer = Awaited<ReturnType<typeof requireAuth>>;
 export function fitsKind(kind: SystemKind, providerKey: string): boolean {
   return kind === 'workspace' ? ['google_calendar', 'microsoft_365'].includes(providerKey)
@@ -987,7 +990,7 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     const href = descriptor && /^[a-z0-9_]{1,80}$/.test(descriptor.key) ? connectHref(descriptor.key, p.id) : null;
     return record(`tool-${index}`, {
       tool: descriptor?.display_name ?? 'Unknown tool', category: metadata?.category ?? 'Not recorded',
-      state: tool.status === 'active' ? 'Connected' : tool.status === 'error' ? 'Failing' : 'Not connected',
+      state: SYSTEM_STATE_LABEL[systemStateOf(tool, tool.status)],
       last_sync: tool.last_synced_at ?? null,
       failed_at: tool.last_error_at ?? null,
       feeds: metadata?.feeds.map(key => MODULE_LABELS[key] ?? key).join(' · ') || 'Not recorded',
@@ -1009,23 +1012,32 @@ async function operating(env: Env, p: Project, viewer: Viewer, opts: ReadOpts = 
     `SELECT run_date, state FROM ritual_runs WHERE project_id = ?
       AND run_date >= date('now', '-84 days') ORDER BY run_date, id`,
   ).bind(p.id).all<any>());
-  const connected = SYSTEM_KINDS.filter(k => byKind.get(k)?.status === 'active').length;
-  const tiles = SYSTEM_KINDS.map(k => ({ label: SYSTEM_LABEL[k], state: !byKind.has(k) ? 'not_connected' : byKind.get(k)?.status === 'error' ? 'failing' : byKind.get(k)?.status === 'active' ? 'connected' : 'not_connected' }));
+  const stateOf = (k: SystemKind) => systemStateOf(byKind.get(k) ?? null, byKind.get(k)?.status);
+  const connected = SYSTEM_KINDS.filter(k => stateOf(k) === 'connected').length;
+  const tiles = SYSTEM_KINDS.map(k => ({ label: SYSTEM_LABEL[k], state: stateOf(k) }));
   const reviews = rituals.map(r => r.state === 'done');
   const series: ChartSpec[] = [{ kind: 'tiles', items: tiles }];
   if (reviews.length) series.push({ kind: 'dots', values: reviews, label: 'Weekly reviews held' });
-  const failing = SYSTEM_KINDS.find(k => byKind.get(k)?.status === 'error');
+  // D5065: a system whose connection is mapped but no longer active needs the
+  // same recovery action as a failing one, so the card offers it rather than
+  // falling through to a tool or to nothing.
+  const failing = SYSTEM_KINDS.find(k => stateOf(k) === 'failing') ?? SYSTEM_KINDS.find(k => systemNeedsReconnect(stateOf(k)));
   const failedSystem = failing ? byKind.get(failing) : null;
+  // D5065: "failing since <date>" is only true of a failing system. A revoked
+  // or disabled connection can still carry the `last_error_at` of an earlier
+  // failure, and naming that date would say it is failing on the same card
+  // that says it needs reconnecting.
+  const failedSince = failing && stateOf(failing) === 'failing' ? failedSystem?.last_error_at : null;
   const toolNext = failingTool ? reconnect(failingTool.provider_key, failingTool.last_error_at, p.id) : null;
   const empty = p.company_id != null && mapped === 0 && rituals.length === 0 && toolCounts!.total === 0;
-  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!]) : toolNext),
+  return { card: card('operating-systems', p.company_id == null ? 'not_recorded' : empty ? 'empty' : 'ok', p.company_id == null || empty ? [] : series, 'Last 12 weeks', p.company_id == null ? 'This project has no company scope for connectors.' : empty ? 'No systems connected yet. Each system and its state appear here.' : null, empty ? { text: 'Connect a system', href: `/build/connect?project_id=${p.id}` } : failedSystem ? reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!]) : toolNext),
     cols: [['system', 'System'], ['provider', 'Provider'], ['state', 'State'], ['last_sync', 'Last sync'], ['used_by', 'Used by']].map(([key, label]) => ({ key, label })),
     // Used by shows the recorded Used by, else what the system feeds.
-    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k), edit = systemEdit(k)!; const state = !c ? 'not_connected' : c.status === 'error' ? 'failing' : c.status === 'active' ? 'connected' : 'not_connected';
+    rows: SYSTEM_KINDS.map(k => { const c = byKind.get(k), edit = systemEdit(k)!; const state = stateOf(k);
       return record(k, { system: SYSTEM_LABEL[k], provider: c ? (c.user_id === viewer.id ? c.display_name : getDescriptor(c.provider_key)?.display_name) ?? c.provider_key : null, state: SYSTEM_STATE[state], last_sync: c?.last_synced_at ?? null,
         used_by: (edit.used_by as string | null) ?? ((edit.feeds as string[]).map(key => FEEDS_LABEL[key]).join(' · ') || null) }, { state }, edit); }),
     list: { filters: [{ key: 'state', label: 'State', options: options(Object.entries(SYSTEM_STATE)) }], sort: { key: 'state', label: 'State' },
-      orders: { state: ['failing', 'connected', 'not_connected'] } },
+      orders: { state: [...SYSTEM_STATE_ORDER] } },
     facts: { connected, mapped, reviews: rituals.length, total: SYSTEM_KINDS.length, tools_connected: toolCounts?.connected ?? null,
       tools_failing: toolCounts?.failing ?? null, tools_total: toolCounts?.total ?? null },
     ...(opts.parts ? { parts: { tools: {
@@ -1207,7 +1219,7 @@ async function writeContext(c: any): Promise<{ project: Project; user: Awaited<R
  * satisfies; `actionCall()` gives an action's record id and body the same
  * shape and answers as the route would.
  */
-export type WriteCall = { env: Env; req: { json(): Promise<unknown>; param(key: string): string | undefined }; json(body: unknown, status?: number): Response };
+export type WriteCall = { env: Env; req: { json(): Promise<unknown>; param(key: string): string | undefined; header?(key: string): string | undefined }; json(body: unknown, status?: number): Response };
 export type WriteCtx = { project: Project; user: Viewer };
 export function actionCall(env: Env, params: Record<string, string>, body: unknown): WriteCall {
   return { env, req: { json: async () => body, param: key => params[key] },
@@ -1767,6 +1779,7 @@ const FILING_KINDS: Record<string, string> = {
   formation: 'Formation', ein: 'EIN', '83b': '83(b) election', annual_report: 'Annual report', franchise_tax: 'Franchise tax', other: 'Other',
 };
 const FILING_STATE_IN: Record<string, string> = { upcoming: 'todo', due_soon: 'todo', filed: 'done', todo: 'todo', doing: 'doing', done: 'done' };
+const FILING_IDEMPOTENCY_KEY = /^[A-Za-z0-9_-]{8,128}$/;
 type FilingFields = { kind?: string | null; jurisdiction?: string | null; holderId?: number | null; holderName?: string | null; state?: string };
 /** The new filing fields a body carries, each undefined when absent. */
 async function filingFields(c: WriteCall, p: Project, body: Record<string, unknown>, due: string | null): Promise<FilingFields | Response> {
@@ -1804,6 +1817,16 @@ app.post('/formation-steps', async c => {
   return postFormationStep(c, ctx);
 });
 async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response> {
+  const idempotencyKey = c.req.header?.('Idempotency-Key')?.trim() || null;
+  if (idempotencyKey && !FILING_IDEMPOTENCY_KEY.test(idempotencyKey)) {
+    return c.json({ error: 'idempotency_key_invalid', message: 'Send an idempotency key of 8 to 128 letters, digits, - or _.' }, 400);
+  }
+  if (idempotencyKey) {
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM formation_steps WHERE project_id = ? AND created_by = ? AND idempotency_key = ?',
+    ).bind(ctx.project.id, ctx.user.id, idempotencyKey).first<{ id: number }>();
+    if (existing) return c.json({ id: Number(existing.id), replayed: true });
+  }
   const body = await jsonBody(c);
   if (!body) return c.json({ detail: 'Body required' }, 400);
   const due = dateValue(body.due_date);
@@ -1813,14 +1836,34 @@ async function postFormationStep(c: WriteCall, ctx: WriteCtx): Promise<Response>
   const named = Object.hasOwn(body, 'title') && body.title != null && body.title !== '' ? text(body.title) : null;
   const title = named ?? (fields.kind === '83b' && fields.holderName ? `${kindLabel} · ${fields.holderName}` : kindLabel);
   if (!title || named === false) return c.json({ detail: 'Valid title and due date required' }, 400);
-  const [result] = await c.env.DB.batch([
-    c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id),
-    // An 83(b) row reads "83(b) election", never the founder's name (decision 15).
-    loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', kindLabel ? `Filing added: ${kindLabel}` : 'Filing added'),
+  if (!idempotencyKey) {
+    const [result] = await c.env.DB.batch([
+      c.env.DB.prepare('INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id),
+      // An 83(b) row reads "83(b) election", never the founder's name (decision 15).
+      loggedInserted(c.env, ctx.project.id, ctx.user.id, 'company-creation', 'formation_steps', 'step-', 'build_formation_step_created', kindLabel ? `Filing added: ${kindLabel}` : 'Filing added'),
+    ]);
+    return c.json({ id: Number(result.meta.last_row_id) }, 201);
+  }
+  const summary = kindLabel ? `Filing added: ${kindLabel}` : 'Filing added';
+  const [insert] = await c.env.DB.batch([
+    c.env.DB.prepare(`INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by, idempotency_key)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id, created_by, idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING`)
+      .bind(ctx.project.id, title, due, fields.state ?? 'todo', fields.kind ?? null, fields.jurisdiction ?? null, fields.holderId ?? null, ctx.user.id, idempotencyKey),
+    c.env.DB.prepare(`INSERT INTO activity_logs (project_id, user_id, entity_type, entity_id, action, details, actor)
+      SELECT ?, ?, 'build.company-creation', 'step-' || CAST(f.id AS TEXT), 'build_formation_step_created', ?, ?
+      FROM formation_steps f WHERE f.project_id = ? AND f.created_by = ? AND f.idempotency_key = ?
+      AND NOT EXISTS (SELECT 1 FROM activity_logs a WHERE a.project_id = f.project_id
+        AND a.entity_type = 'build.company-creation' AND a.entity_id = 'step-' || CAST(f.id AS TEXT)
+        AND a.action = 'build_formation_step_created')`)
+      .bind(ctx.project.id, ctx.user.id, summary, `user:${ctx.user.id}`, ctx.project.id, ctx.user.id, idempotencyKey),
   ]);
-  const id = Number(result.meta.last_row_id);
-  return c.json({ id }, 201);
+  const row = await c.env.DB.prepare(
+    'SELECT id FROM formation_steps WHERE project_id = ? AND created_by = ? AND idempotency_key = ?',
+  ).bind(ctx.project.id, ctx.user.id, idempotencyKey).first<{ id: number }>();
+  if (!row) throw new Error('Formation step idempotency row missing after create');
+  const created = Number(insert.meta.changes ?? 0) === 1;
+  return c.json({ id: Number(row.id), ...(created ? {} : { replayed: true }) }, created ? 201 : 200);
 }
 
 app.patch('/formation-steps/:id', async c => {

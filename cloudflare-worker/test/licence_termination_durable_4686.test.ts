@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { SignJWT } from 'jose';
 import { DatabaseSync } from 'node:sqlite';
@@ -38,8 +38,10 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { applyLicenceCopy, unbindAdmin } from '../src/rpc/branchOps.ts';
 import { sha256Hex } from '../src/rpc/secret.ts';
 import {
-  pushLicenceToBranch, retryPendingLicencePushes, allocateRevision, LICENCE_PUSH_RETRY_WINDOW_MINUTES,
+  pushLicenceToBranch, retryPendingLicencePushes, allocateRevision, recordPushOutcome,
+  LICENCE_PUSH_RETRY_WINDOW_MINUTES,
 } from '../src/services/licencePush.ts';
+import { resumeIncompleteLicenceTerminations } from '../src/routes/admin_licences_lifecycle.ts';
 
 const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
   + 'export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } } '
@@ -47,7 +49,7 @@ const STUB = 'export class WorkerEntrypoint { constructor(ctx, env) { this.ctx =
   + ' export const exports = {}; export class WorkflowEvent {} export class EmailMessage {}';
 const out = join(mkdtempSync(join(tmpdir(), 'd4686-')), 'worker.mjs');
 await build({
-  entryPoints: [new URL('../src/index.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../src/index.ts', import.meta.url))],
   bundle: true, format: 'esm', platform: 'node', outfile: out, logLevel: 'silent',
   loader: { '.woff2': 'binary', '.png': 'binary' }, target: 'node22',
   mainFields: ['module', 'main'], conditions: ['workerd', 'worker', 'import'],
@@ -214,6 +216,9 @@ const syncState = (db: DB) => db.prepare('SELECT * FROM licence_sync_state WHERE
 const licStatus = (db: DB) => (db.prepare('SELECT status FROM territory_licences WHERE id = ?').get(LIC_ID) as any).status;
 const role = (db: DB, id: number) => db.prepare('SELECT role, is_active FROM users WHERE id = ?').get(id) as any;
 const boundAdmins = (db: DB) => Number((db.prepare('SELECT COUNT(*) AS n FROM licence_admins WHERE licence_id = ?').get(LIC_ID) as any).n);
+const reseeds = (db: DB) => db.prepare(
+  'SELECT user_id, state, attempts, failure_code FROM licence_termination_reseeds WHERE licence_id = ? ORDER BY user_id',
+).all(LIC_ID) as any[];
 const quiet = <T>(fn: () => Promise<T>) => {
   const m = ['info', 'warn', 'error', 'log'].map((k) => mock.method(console, k as any, () => {}));
   return fn().finally(() => m.forEach((x) => x.mock.restore()));
@@ -355,6 +360,72 @@ test('(b) a resume does not repeat a step that is done', async () => {
   assert.equal(r.body.operation.status, 'complete');
   assert.equal(bb.calls.filter((c) => c.method === 'applyLicence').length, pushes, 'a done push was sent again');
   assert.deepEqual(r.body.pushed, { ok: true, already_done: true });
+});
+
+test('(b) a trust re-seed that fails once is durable, completed by manual resume, and not repeated', async () => {
+  const db = hqDb();
+  const d1 = flaky(db);
+  let failSeed = true;
+  d1.rule.fail = (sql) => failSeed && /SELECT role FROM users WHERE id = \?/.test(sql);
+  const env = makeEnv(d1, { BRANCH_FR: branchBinding(branchDb()).stub });
+  const first = await terminate(env);
+  assert.equal(first.body.operation.status, 'incomplete');
+  assert.equal(first.body.operation.failure_code, 'trust_reseed_failed');
+  assert.deepEqual(reseeds(db).map((row) => row.state), ['failed', 'failed']);
+
+  failSeed = false;
+  const resumed = await terminate(env, {});
+  assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+  assert.equal(resumed.body.operation.status, 'complete');
+  assert.deepEqual(reseeds(db).map((row) => [row.state, row.attempts]), [['done', 2], ['done', 2]]);
+  const again = await terminate(env, {});
+  assert.equal(again.status, 409);
+  assert.deepEqual(reseeds(db).map((row) => row.attempts), [2, 2], 'a completed re-seed ran again');
+});
+
+test('(b) the scheduled resume completes a failed re-seed with one event and no second notification', async () => {
+  const db = hqDb();
+  const d1 = flaky(db);
+  let failSeed = true;
+  d1.rule.fail = (sql) => failSeed && /SELECT role FROM users WHERE id = \?/.test(sql);
+  const env = makeEnv(d1, { BRANCH_FR: branchBinding(branchDb()).stub });
+  await terminate(env);
+  const notified = Number((db.prepare("SELECT COUNT(*) AS n FROM notifications_inbox WHERE type = 'licence_terminated'").get() as any).n);
+  failSeed = false;
+  const sweep = await resumeIncompleteLicenceTerminations(env, new Date());
+  assert.deepEqual(sweep, { available: true, tried: 1, complete: 1, incomplete: 0, skipped: 0 });
+  assert.equal(termEvents(db), 1);
+  assert.equal(Number((db.prepare("SELECT COUNT(*) AS n FROM notifications_inbox WHERE type = 'licence_terminated'").get() as any).n), notified);
+  assert.deepEqual(reseeds(db).map((row) => row.state), ['done', 'done']);
+  const later = await resumeIncompleteLicenceTerminations(env, new Date());
+  assert.deepEqual(later, { available: true, tried: 0, complete: 0, incomplete: 0, skipped: 0 });
+  assert.deepEqual(reseeds(db).map((row) => row.attempts), [2, 2]);
+});
+
+test('(b) the HQ scheduled handler invokes termination resume beside the pending-push retry', () => {
+  const source = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const cadence = source.slice(source.indexOf('// D272 — licence pushes'), source.indexOf('// D237 — cron_run_history'));
+  assert.match(cadence, /if \(hqCadences && now\.getUTCMinutes\(\) % 10 === 3\)/);
+  assert.match(cadence, /resumeIncompleteLicenceTerminations\(env, now\)/);
+});
+
+test('(f) two scheduled runs and a manual resume race under one lease holder', async () => {
+  const db = hqDb();
+  const d1 = flaky(db);
+  let failSeed = true;
+  d1.rule.fail = (sql) => failSeed && /SELECT role FROM users WHERE id = \?/.test(sql);
+  const env = makeEnv(d1, { BRANCH_FR: branchBinding(branchDb()).stub });
+  await terminate(env);
+  failSeed = false;
+  const [clockA, clockB, manual] = await Promise.all([
+    resumeIncompleteLicenceTerminations(env, new Date()),
+    resumeIncompleteLicenceTerminations(env, new Date()),
+    terminate(env, {}),
+  ]);
+  assert.equal(ops(db).status, 'complete');
+  assert.equal(ops(db).attempts, 2, 'more than one racer claimed the operation');
+  assert.equal(termEvents(db), 1);
+  assert.ok([clockA, clockB].filter((result: any) => result.tried === 1).length + (manual.status === 200 ? 1 : 0) === 1);
 });
 
 test('(b) a legacy terminated licence with no ledger row keeps its old refusal', async () => {
@@ -610,6 +681,20 @@ test('(d) retry intent is persisted when the licence reread is temporarily unava
   const r = await pushLicenceToBranch(env, LIC_ID, '2026-11-07T10:00:00Z');
   assert.equal(r.failure_code, 'licence_unreadable');
   assert.deepEqual([pending(hq)?.code, pending(hq)?.failure_code], ['', 'licence_unreadable']);
+});
+
+test('(d) a superseded code-less failure writes no pending row', async () => {
+  const db = hqDb();
+  db.prepare(
+    'INSERT INTO licence_sync_state (licence_id, hq_revision, branch_revision) VALUES (?, 2, 2)',
+  ).run(LIC_ID);
+  await recordPushOutcome(makeEnv(flaky(db)), LIC_ID, {
+    ok: false,
+    retry: true,
+    failure_code: 'deployment_unreadable',
+    reason: 'not persisted',
+  }, '2026-11-10T10:00:00.000Z', 2);
+  assert.equal(pending(db), undefined);
 });
 
 test('(d) a licence with cleanly NO deployment owes nothing, and an old row for it is cleared', async () => {

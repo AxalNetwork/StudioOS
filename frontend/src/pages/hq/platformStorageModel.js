@@ -21,7 +21,7 @@ export const STORAGE_HQ = Object.freeze({
   byStateFoot: 'Members on each plan, by how much of their allowance they use.',
   table: 'By plan',
   populations: 'Who holds the bytes',
-  populationsFoot: 'Members, staff and anything whose owner is no account; the total is their sum.',
+  populationsFoot: 'Members, staff and files whose owner is missing or is no account; the total is their sum.',
   tableFoot: 'Totals only. A member’s files are theirs; HQ sees sums. No member or file is named here.',
   reading: 'Reading platform storage…',
   noMembers: 'No members on this plan',
@@ -93,7 +93,7 @@ export function populationRows(read) {
     unknown: countText(p?.unknown_size_files),
   });
   const rows = [row('members', 'Members', pops.members), row('staff', 'Staff', pops.staff)];
-  if ((count(pops.unattributed?.files) ?? 0) > 0) rows.push(row('unattributed', 'Not an account', pops.unattributed));
+  if ((count(pops.unattributed?.files) ?? 0) > 0) rows.push(row('unattributed', 'Unattributed', pops.unattributed));
   rows.push({ ...row('total', 'Total', pops.total), accounts: null });
   return rows;
 }

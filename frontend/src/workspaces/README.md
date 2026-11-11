@@ -48,6 +48,7 @@ modules that mount bodies into it. The pages themselves live in
 | `advisor/` | `AdvisorBucketRoutes.jsx` — `/practice/*`, `/cohorts/*`, `/expertise/*`. |
 | `partner/` | `PartnerBucketRoutes.jsx` — `/pipeline/*`, `/delivery/*`, `/offers/*`. |
 | `boards/` | One registry per composed bucket root, keyed `role:prefix` in `index.js`. Plain object literals, never JSX — `_codeOnly.mjs` cannot strip a JSX comment, so prose in a component file can match a ban before the code does. A section declares either a `source` or a `gap`, never both; `summary`, `rows` and `footnote` take the source payload as their **only** argument, which is why a gapped section cannot print a figure. |
+| `partner/OfferReadiness.jsx` | D4841 (#4841): the `/offers` root as an Offer Readiness dashboard (Offers V2 canvas OF-01, OF-09a), drawn from `boards/offerReadiness.js` over the Offers board's sources. The Offers bucket's `groups` in `shellConfig.js` are what `ZoneNav` draws as Sell · Prove · Target · Test. |
 
 ## The rule for adding to it
 
