@@ -146,6 +146,57 @@ test('D1612 D: the starter cases ship with their skills and pass the case check'
   assert.equal(starterCase('no-such-skill'), null);
 });
 
+test('D5334: a live copy replaces the starter run by content, while a different live case still runs', async () => {
+  const w = world();
+  const starter = starterCase('board-meeting-brief')!;
+  const insert = w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by)
+    VALUES (?, 1, ?, ?, ?, ?)`);
+  insert.run('case-same-content', 'The seeded display name is different', JSON.stringify(starter.input), JSON.stringify(starter.expect), SUPER);
+  insert.run('case-different-content', 'A genuinely different case', JSON.stringify({ records: { 'mercury.balances': { cash_usd: 1 } } }),
+    JSON.stringify({ output: 'brief', must_include: ['cash'], must_say_not_recorded: [], must_not_include: [] }), SUPER);
+
+  const cases = await casesOf(w.env, { id: 1, slug: 'board-meeting-brief' });
+  // Mutation checked: treating the display name as content puts `starter` back and makes this three cases.
+  assert.deepEqual(cases.map((c) => c.key), ['case-same-content', 'case-different-content']);
+  const seen: string[] = [];
+  const deps = {
+    runCase: async (_env: any, _parts: any, _input: any, expect: any, model: string) => {
+      seen.push(`${expect.must_include.includes('cash') ? 'different' : 'starter-content'}|${model}`);
+      return { result: 'pass', detail: null, usage_log_id: null };
+    },
+    tellHq: async () => 1,
+  };
+  w.env.RATE_LIMITS = { get: async () => null, put: async () => {} };
+  const models = [RUN_MODEL, '@cf/meta/llama-3.3-70b-instruct-fp8-fast'];
+  const result = await evaluatePublished(w.env, SUPER, models, deps as any, 1);
+  assert.deepEqual([result.skills, result.results, seen.length], [1, 4, 4], 'two distinct contents, once per model');
+  assert.equal(seen.filter((unit) => unit.startsWith('starter-content|')).length, 2, 'the duplicated starter content ran only once per model');
+  const [board] = await skillBoard(w.env, [1]);
+  assert.deepEqual([board.pass, board.total, board.not_run], [4, 4, 0], 'the board counts each content/model once');
+});
+
+test('D5334: a pass on v1 followed by a fail on v2 is compare evidence, not a v2 regression alert', async () => {
+  const w = world();
+  const starter = starterCase('board-meeting-brief')!;
+  const { caseSha } = await import('../src/services/agents/skillLifecycle.ts');
+  const { compareResults } = await import('../src/services/agents/skillEvalCompare.ts');
+  w.db.prepare(`INSERT INTO agent_skill_version_evals
+      (skill_id, version, case_key, case_name, model_id, result, run_by, evaluator_version, case_sha256)
+      VALUES (1, 1, ?, ?, ?, 'pass', ?, 3, ?)`)
+    .run(starter.key, starter.name, RUN_MODEL, SUPER, await caseSha(starter));
+  const told: any[] = [];
+  w.env.RATE_LIMITS = { get: async () => null, put: async () => {} };
+  const result = await evaluatePublished(w.env, SUPER, [RUN_MODEL], {
+    runCase: async () => ({ result: 'fail', detail: 'It left out the required fact.', usage_log_id: null }),
+    tellHq: async (_env: any, notice: any) => { told.push(notice); return 1; },
+  } as any, 1);
+  // Mutation checked: dropping `version = ?` from the before-read turns this into a regression and sends a notice.
+  assert.deepEqual([result.regressions.length, told.length], [0, 0]);
+  const rows = w.db.prepare(`SELECT case_key, case_name, case_sha256, model_id, result, evaluator_version, detail, run_at
+    FROM agent_skill_version_evals WHERE skill_id = 1 ORDER BY version`).all() as any[];
+  assert.equal(compareResults([rows[0]], [rows[1]]).pairs[0].outcome, 'regressed', 'the explicit candidate-versus-baseline read still reports the difference');
+});
+
 test('D1612 D: the board runs each published Axal skill\'s cases on its current version; a pass turned fail is a regression, told once', async () => {
   const w = world();
   w.db.prepare(`INSERT INTO agent_skill_cases (uid, skill_id, name, input_json, expect_json, created_by) VALUES ('case-live-1', 1, 'Live case', ?, ?, ?)`)
