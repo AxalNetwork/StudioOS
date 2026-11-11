@@ -2,6 +2,7 @@
 // Needs you, who owns by holder and by class, the tiles and bars, CT2, and the
 // states (CT16, CT19–CT22, CT24). Fixtures follow the Worker's shapes
 // (services/capTableRecord.ts readRecord, D1017) and are worked out by hand.
+import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -244,7 +245,7 @@ function handlerFor(o = {}) {
   return (url, options = {}) => {
     if (/\/captable\/record\/3\/proposals\/[^/]+\/(accept|dismiss)/.test(url)) return o.decide ? o.decide(url, options) : response({ issuance: {} });
     if (/\/captable\/record\/3\/proposals$/.test(url)) return o.propose ? o.propose(url, options) : response({ issuance: {} }, 201);
-    if (url.includes('/captable/record/3')) return send(at.record);
+    if (url.includes('/captable/record/3')) return send(withCapabilities(at.record, at.user, at.grants));
     if (url.includes('/compare')) return send(at.compare);
     if (url.includes('/captable/409a/')) return send(at.v409a);
     if (url.includes('/captable/access/3/grants')) return send(at.grants);
