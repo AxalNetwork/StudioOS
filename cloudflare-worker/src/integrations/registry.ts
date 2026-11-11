@@ -29,7 +29,7 @@ import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
 import { PUBLISH_TARGETS } from './publishTargets';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
@@ -837,8 +837,8 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
       'updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
       'UNIQUE(user_id, provider_key))',
     );
-    try { await env.DB.exec('ALTER TABLE integrations ADD COLUMN last_error_at TEXT'); }
-    catch (e) { if (!/duplicate column name/i.test(e instanceof Error ? e.message : String(e))) throw e; }
+    // #5343: asked first (`runSchemaBootstrap`), so a migrated database issues no ALTER.
+    await runSchemaBootstrap(env, ['ALTER TABLE integrations ADD COLUMN last_error_at TEXT']);
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_user ON integrations(user_id)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_provider ON integrations(provider_key)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status)');

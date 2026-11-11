@@ -4,8 +4,6 @@
  * another in Analytics. Pure functions; nothing here reads the database.
  *
  *   quoteOutcome / winRate      what a quote's status means, and the one win rate
- *   isActiveRetainer            which retainers are current revenue
- *   monthlyCents                what a retainer pays per month
  *   negotiationIsOpen / label   which negotiations are live, and what to call a stage
  *   companyBinds                the company predicate every partner query repeats
  *
@@ -55,46 +53,6 @@ export function winRateBasis(won: number, lost: number, open: number, withdrawn:
     : 'No quotes decided yet, so there is no win rate to report.';
 }
 
-// ---------------------------------------------------------------------------
-// Retainers: current revenue
-// ---------------------------------------------------------------------------
-
-export type RetainerCadence = 'monthly' | 'quarterly';
-
-/**
- * Is this retainer current recurring revenue? It is until it ends. `ended_at`
- * on or before today (or an unreadable date) ends it; a date in the future is a
- * scheduled end and the retainer is still paying. A cancelled engagement
- * (`cancelled_at`, or status `cancelled`) is not revenue either.
- */
-export function isActiveRetainer(
-  r: { ended_at?: string | null },
-  engagement: { status?: string | null; cancelled_at?: string | null } = {},
-  today: string = new Date().toISOString().slice(0, 10),
-): boolean {
-  if (engagement.cancelled_at || engagement.status === 'cancelled') return false;
-  const end = r.ended_at ? String(r.ended_at).slice(0, 10) : null;
-  if (!end) return true;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return false;
-  return end > today;
-}
-
-/**
- * What a retainer pays per month, in whole cents: a monthly amount as it is, a
- * quarterly one divided by three (rounded to the cent). No amount, or a cadence
- * this function does not know, is `null`: a figure under a "monthly" heading
- * must never be a raw quarterly amount, and an unknown cadence is not assumed to
- * be monthly.
- */
-export function monthlyCents(amountCents: number | null | undefined, cadence: unknown): number | null {
-  if (amountCents == null || !Number.isFinite(Number(amountCents))) return null;
-  const cents = Number(amountCents);
-  if (cadence === 'monthly') return cents;
-  if (cadence === 'quarterly') return Math.round(cents / 3);
-  return null;
-}
-
-// ---------------------------------------------------------------------------
 // Negotiations
 // ---------------------------------------------------------------------------
 

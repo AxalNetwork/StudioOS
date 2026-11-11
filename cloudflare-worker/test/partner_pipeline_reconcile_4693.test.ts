@@ -34,8 +34,10 @@ import partnerPipeline from '../src/routes/partner_pipeline.ts';
 import { quotesRouter } from '../src/routes/needs.ts';
 import pipeline from '../src/routes/pipeline.ts';
 import { analysePipeline } from '../src/services/bdAnalytics.ts';
+import { isRetainerActive, monthlyAmountCents, retainerProjection } from '../src/routes/_partner_workspace_helpers.ts';
+import { MATCH_DEPS } from '../src/services/ai/matchRows.ts';
 import {
-  companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+  companyBinds, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
 } from '../src/services/partnerPipelineRules.ts';
 import {
   COMPONENT_CAPS_V2, FORMULA_KEY, formulaVersionOf, scaleOf, scoreTraction, validateKeyMetrics,
@@ -248,6 +250,33 @@ async function call(e: any, method: string, path: string, company: number | null
 }
 const get = (e: any, path: string, company: number | null) => call(e, 'GET', path, company);
 
+test('lead ranking only hands eligible marketplace needs to the ranker', async (t) => {
+  const db = freshDb();
+  t.after(() => db.close());
+  db.exec("UPDATE founder_needs SET status = 'closed'");
+  const need = db.prepare('INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description) VALUES (?, ?, 9, ?, ?, ?, ?)');
+  for (const [id, title] of ['Eligible design', 'Gambling project', 'Mainframe support', 'Already bid', 'Already passed'].entries()) {
+    need.run(900 + id, `rank-${id}`, FOUNDER_USER, 'design', title, 'Marketplace fixture');
+  }
+  db.exec(`INSERT INTO partner_fit_rules (uid, partner_id, kind, value) VALUES
+      ('declined', 1, 'sector_declined', 'gambling'), ('missing', 1, 'capability_absent', 'mainframe');
+    INSERT INTO quotes (uid, need_id, partner_id, price, deliverables) VALUES ('bid-rank', 903, 1, 100, '[]');
+    INSERT INTO partner_lead_passes (partner_id, need_id, reason) VALUES (1, 904, 'timing');`);
+  const rerank = t.mock.fn(async (_query: string, _contexts: string[]) => null);
+  t.mock.method(MATCH_DEPS, 'make', () => ({ embed: async () => null, rerank, write: async () => assert.fail('ranking must not write') }));
+  const response = await call(env(db), 'POST', '/api/partner/pipeline/leads/rank', CO_A, { query: 'design' });
+  assert.equal(response.status, 200, JSON.stringify(response.body));
+  assert.deepEqual(response.body.rows.map((row: { need_id: number }) => row.need_id), [900]);
+  assert.equal(rerank.mock.callCount(), 1);
+  assert.match(rerank.mock.calls[0].arguments[1].join('\n'), /^Eligible design\./);
+  assert.equal(rerank.mock.calls[0].arguments[1].length, 1);
+  const leads = await get(env(db), '/api/partner/pipeline/leads', CO_A);
+  assert.equal(leads.status, 200, JSON.stringify(leads.body));
+  assert.equal(leads.body.open_count, 3);
+  assert.equal(leads.body.excluded_count, 2);
+  assert.match(leads.body.population_note, /including fit exclusions, except needs already bid on or passed/);
+});
+
 // 1 ───────────────────────────────────────────────────────────────────────────
 test('the overview and the proposal zone count the same populations and print the same win rate, with and without a company', async () => {
   // Mutations checked: the zone not narrowed by company; decided_at making a withdrawn quote a decision; the win rate not from winRate().
@@ -333,13 +362,18 @@ test('the rules, as pure functions', () => {
   assert.match(winRateBasis(0, 0, 3, 1), /^No quotes decided yet/);
   assert.match(winRateBasis(4, 1, 2, 1), /^4 won of 5 decided\. 2 still open and 1 withdrawn are excluded/);
 
-  assert.equal(isActiveRetainer({ ended_at: null }, {}, '2026-11-07'), true);
-  assert.equal(isActiveRetainer({ ended_at: '2026-11-07' }, {}, '2026-11-07'), false, 'ending today is ended');
-  assert.equal(isActiveRetainer({ ended_at: '2026-12-31' }, {}, '2026-11-07'), true, 'a scheduled end is not an end yet');
-  assert.equal(isActiveRetainer({ ended_at: 'soon' }, {}, '2026-11-07'), false, 'an unreadable end date is not active');
-  assert.equal(isActiveRetainer({}, { status: 'cancelled' }), false);
-  assert.equal(isActiveRetainer({}, { cancelled_at: '2026-01-01' }), false);
-  assert.deepEqual([monthlyCents(100000, 'monthly'), monthlyCents(300000, 'quarterly'), monthlyCents(100000, 'annual'), monthlyCents(null, 'monthly')], [100000, 100000, null, null]);
+  const now = new Date('2026-11-07T12:00:00Z');
+  assert.equal(isRetainerActive({ ended_at: null }, now), true);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07' }, now), false);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07 13:00:00' }, now), true);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07 12:00:00' }, now), false);
+  assert.equal(isRetainerActive({ ended_at: 'soon' }, now), false);
+  assert.equal(isRetainerActive({ engagement_status: 'cancelled' }, now), false);
+  assert.equal(isRetainerActive({ cancelled_at: '2026-01-01' }, now), false);
+  assert.equal(monthlyAmountCents({ amount_cents: 1200000, cadence: 'annual' }), 100000);
+  assert.equal(monthlyAmountCents({ amount_cents: 100000, cadence: 'unknown' }), null);
+  const projected = retainerProjection({ retainer_id: 1, cadence: 'quarterly', amount_cents: 300000, engagement_status: 'cancelled' }, [], now);
+  assert.deepEqual([projected.retainer?.active, projected.retainer?.monthly_cents, projected.retainer?.current_monthly_cents], [false, 100000, null]);
 
   assert.equal(negotiationIsOpen('terms', 'submitted'), true);
   assert.equal(negotiationIsOpen('closed', 'submitted'), false);
@@ -423,7 +457,7 @@ test('POST /pipeline/metrics/snapshot: invalid metrics are refused and stored no
     }, e, { waitUntil() {}, passThroughOnException() {} } as any);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   };
-  const rowsIn = () => (db.prepare('SELECT key_metrics, traction_score FROM metrics_snapshots').all() as any[]).map((r) => ({ ...r }));
+  const rowsIn = () => (db.prepare('SELECT key_metrics, traction_score, traction_formula_version FROM metrics_snapshots').all() as any[]).map((r) => ({ ...r }));
 
   for (const km of [{ users: true }, { users: -5 }, { retention: 400 }, { growth: null }, { users: '1e3' }, {}]) {
     const r = await post({ deal_id: 1, key_metrics: km });
@@ -437,6 +471,7 @@ test('POST /pipeline/metrics/snapshot: invalid metrics are refused and stored no
   assert.match(ok.body.score_basis, /Not recorded, so not scored: revenue, growth\./);
   const stored = rowsIn();
   assert.equal(stored.length, 1);
+  assert.equal(stored[0].traction_formula_version, 2);
   assert.deepEqual(JSON.parse(stored[0].key_metrics), { users: 999, engagement: 50, [FORMULA_KEY]: 2 });
   assert.equal(formulaVersionOf(JSON.parse(stored[0].key_metrics)), 2);
 });

@@ -88,12 +88,10 @@ test('a refusal reads Not recorded with its reason; a failed read reads Unreadab
   try { assert.match(m.text(m.by('from-mercury-reason')), /^Unreadable: /); } finally { await m.unmount(); restore(); }
 });
 
-test('Portfolio gets nothing, and the part says so with the Worker\'s own sentence', async () => {
+test('Portfolio explains the data boundary without internal implementation copy', async () => {
   const m = await mount({ section: 'portfolio' });
   try {
-    const worker = readFileSync(new URL('../../cloudflare-worker/src/integrations/mercuryFeeds.ts', import.meta.url), 'utf8');
-    const note = /PORTFOLIO_NOTE = '([^']+)'/.exec(worker)[1];
-    assert.equal(m.text(m.by('from-mercury-portfolio-none')), note);
+    assert.equal(m.text(m.by('from-mercury-portfolio-none')), 'Portfolio figures come from company and investment records; bank data is not used for this book.');
   } finally { await m.unmount(); }
 });
 

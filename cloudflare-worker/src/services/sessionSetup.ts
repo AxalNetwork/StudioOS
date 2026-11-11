@@ -36,7 +36,8 @@ const PROVIDER_NAMES: Record<string, string> = {
 const MEETING_HOSTS: Record<string, (host: string) => boolean> = {
   zoom: (h) => h === 'zoom.us' || h.endsWith('.zoom.us'),
   google_meet: (h) => h === 'meet.google.com',
-  teams: (h) => h === 'teams.microsoft.com' || h === 'teams.live.com',
+  // D1451 (#5297): the same three Teams hosts as botPlatform, teamsMeet and the bot's teamsJoinUrl.
+  teams: (h) => h === 'teams.microsoft.com' || h === 'teams.live.com' || h === 'teams.cloud.microsoft',
 };
 
 /**

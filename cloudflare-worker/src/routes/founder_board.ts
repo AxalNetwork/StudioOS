@@ -30,6 +30,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
 
 const founderBoard = new Hono<{ Bindings: Env }>();
@@ -94,9 +95,12 @@ async function scope(
 /**
  * Migration 253's table and column, bootstrapped at runtime.
  *
- * The ALTER is separate and its failure is IGNORED, because `ADD COLUMN` on a column
- * that exists throws "duplicate column name" — which is the success case on every
- * request after the first. Keyed on `env.DB` for the reason #203 found.
+ * #5343 (#4568 R2-04): the column goes through `runSchemaBootstrap`, which reads
+ * `mvp_tasks`' columns once per binding and issues no ALTER when `lane` is there.
+ * It used to be tried blind on every fresh isolate with its error ignored, a
+ * missing table included, and the schema marked ready. A genuine failure now
+ * answers false (the routes say "Lane store unavailable", 503) and is retried.
+ * Keyed on `env.DB` for the reason #203 found.
  */
 const LANES_READY = new WeakMap<object, boolean>();
 export async function ensureLanesSchema(env: Env): Promise<boolean> {
@@ -118,9 +122,7 @@ export async function ensureLanesSchema(env: Env): Promise<boolean> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_project_lanes_project ON project_lanes(project_id, sort_order)',
     );
-    // Separate, and swallowed: "duplicate column name" is what success looks like
-    // from the second request onward.
-    try { await env.DB.exec('ALTER TABLE mvp_tasks ADD COLUMN lane TEXT'); } catch (e) { void e; }
+    await runSchemaBootstrap(env, ['ALTER TABLE mvp_tasks ADD COLUMN lane TEXT']);
     LANES_READY.set(key, true);
     return true;
   } catch (e) {

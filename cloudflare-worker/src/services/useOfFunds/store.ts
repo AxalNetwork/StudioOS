@@ -1,5 +1,6 @@
 /** D1176: scoped, bound scenario writes. Each change and its audit commit together. */
 import type { Env, User } from '../../types';
+import { majorToMinor, toMajorString } from '../../../../frontend/src/lib/money.js';
 import { copyLegacyBase, SECTION_LABELS, UofStoreError } from './legacy';
 import { plan, SECTION_KEYS, type PlanInputs, type SectionKey, type Source } from './plan';
 
@@ -170,10 +171,18 @@ function recordedSplit(raw:string|null) {
   if(!Array.isArray(rows)||rows.some(l=>!SECTION_KEYS.some(k=>l?.key===k||l?.label===SECTION_LABELS[k]))) throw legacyRepair();
   return JSON.stringify(SECTION_KEYS.map(k=>rows.find(l=>l?.key===k||l?.label===SECTION_LABELS[k])?.pct??0));
 }
+// The legacy project and milestone stores both use numeric USD major units.
+const legacyDollars = (minor: number | null): number | null => {
+  const text = toMajorString(minor, 'USD');
+  return text === null ? null : Number(text);
+};
+const legacyMinor = (value: unknown): number | null =>
+  value == null || (typeof value === 'string' && !value.trim()) ? null : majorToMinor(value, 'USD') ?? NaN;
+
 function milestoneProjection(milestones:any[]) {
   const projected:Record<string,Record<string,any>>={milestones:{},milestone_costs:{}};
   for (const m of milestones) {
-    if (m.okr_id != null) projected.milestone_costs[String(m.okr_id)]={cost:m.cost_cents===null?null:m.cost_cents/100,bucket:m.category_key?legacyBucket[m.category_key as SectionKey]:null};
+    if (m.okr_id != null) projected.milestone_costs[String(m.okr_id)]={cost:legacyDollars(m.cost_cents),bucket:m.category_key?legacyBucket[m.category_key as SectionKey]:null};
     else if(m.category_key&&!projected.milestones[m.category_key]) projected.milestones[m.category_key]={label:m.label,by:m.due_on};
   }
   return projected;
@@ -181,9 +190,8 @@ function milestoneProjection(milestones:any[]) {
 function sameMilestoneEntry(a:any,b:any,cost:boolean) {
   if (!obj(a)||!obj(b)) return false;
   if (!cost) return a.label===b.label&&(a.by||null)===(b.by||null);
-  const amount=(v:any)=>v==null||(typeof v==='string'&&!v.trim())?null:Math.round(Number(v)*100);
   const bucket=(v:any)=>v==null||v===''?null:legacyBucket[v as SectionKey]??v;
-  return amount(a.cost)===amount(b.cost)&&bucket(a.bucket)===bucket(b.bucket);
+  return legacyMinor(a.cost)===legacyMinor(b.cost)&&bucket(a.bucket)===bucket(b.bucket);
 }
 /** Replace only the old Base's projection; other legacy writers' entries survive. */
 async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milestones: any[]) {
@@ -200,7 +208,7 @@ async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milest
   const previousParts=previous?await scenarioParts(env,previous.id):{lines:[],milestones:[]};
   if(previous) {
     const storedAmount=project.funding_needed;
-    const recordedAmount=storedAmount==null||(typeof storedAmount==='string'&&!storedAmount.trim())?null:Math.round(Number(storedAmount)*100);
+    const recordedAmount=legacyMinor(storedAmount);
     if(recordedAmount!==previous.amount_to_raise_cents&&recordedAmount!==r.amount_to_raise_cents) throw legacyRepair(true);
     if(recordedTarget!==previous.target_runway_months&&recordedTarget!==r.target_runway_months) throw legacyRepair(true);
     if(complete&&hasCompleteSplit(previousParts.lines)) {
@@ -231,7 +239,7 @@ async function legacyStatements(env: Env, s: Scope, r: any, lines: any[], milest
       .bind(s.projectId,project?.use_of_funds_meta??null,project?.use_of_funds??null,project?.funding_needed??null),
     env.DB.prepare(`UPDATE projects SET use_of_funds = CASE WHEN ?=1 THEN ? ELSE use_of_funds END, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?
     AND EXISTS(SELECT 1 FROM uof_scenarios WHERE id=? AND project_id=? AND is_base=1)`)
-    .bind(complete?1:0,split === null ? null : JSON.stringify(split), r.amount_to_raise_cents === null ? null : r.amount_to_raise_cents / 100, JSON.stringify(meta), s.projectId,r.id,s.projectId)];
+    .bind(complete?1:0,split === null ? null : JSON.stringify(split), legacyDollars(r.amount_to_raise_cents), JSON.stringify(meta), s.projectId,r.id,s.projectId)];
 }
 function readLines(b: unknown) {
   if (!Array.isArray(b) || b.length !== 5) throw bad();

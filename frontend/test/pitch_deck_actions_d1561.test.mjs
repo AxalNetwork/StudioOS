@@ -104,7 +104,8 @@ test('Check claims › Wording: the hold on the button, one press, each finding 
     assert.equal(m.text(m.by('pitch-wording-check')), 'Check wording · holds $0.0100');
     assert.equal(runs, 0, 'opening the sheet charges nothing');
     await m.press(m.by('pitch-wording-check'));
-    assert.match(m.text(m.by('pitch-wording-failed')), /could not run/);
+    // D5070 (#5376): a 503 is not a Worker refusal (rule 2 is 4xx), so the page's fallback is shown.
+    assert.match(m.text(m.by('pitch-wording-failed')), /That did not work\. Nothing was changed\./);
     await m.press(m.by('pitch-wording-retry'));
     assert.equal(runs, 2);
     assert.equal(m.by('pitch-wording-failed'), undefined);

@@ -145,6 +145,12 @@ test('D5317: an empty history says Not recorded and recorded runs retain their o
   const out = text(h(ResilienceWorkspace, { block }));
   assert.ok(out.indexOf('View run 101') < out.lastIndexOf('Stale'));
   assert.match(out, /Failed step.*Restore.*Exit code.*2.*restore_failed/i);
+  assert.doesNotMatch(out, /Some restore drill records could not be read/);
+  block.drill_history.partial = true;
+  const partial = text(h(ResilienceWorkspace, { block, onRetry: () => {} }));
+  assert.match(partial, /Some restore drill records could not be read/);
+  assert.match(partial, /Retry/);
+  assert.match(partial, /View run 101/);
 });
 
 test('Resilience unreadable says what is not claimed, and pending reads as reading', () => {

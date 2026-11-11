@@ -17,6 +17,7 @@ import { deckImagesApi } from '../../../lib/api/deckImages';
 import { ChartLibrary } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH } from './newDeckModel';
+import { deckSaveFailure } from './pitchSafeErrors.js';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import DeckBar from './DeckBar';
@@ -1104,7 +1105,7 @@ function AddBlockDialog({ deckId = null, initialFrom = null, card: given, model,
     uploadVideoAdapter(deckId, file).then((r) => {
       const v = r?.available ? r.value?.video : null;
       setVideo(v ? { status: 'ok', data: { ...v, poster_url: null, title: fields.title || '' } }
-        : { status: 'error', data: null, error: { message: r?.reason ? `The video was not added: ${r.reason}` : 'The video could not be uploaded. Nothing was added.' } });
+        : { status: 'error', data: null, error: { text: r?.reason ? `The video was not added: ${r.reason}` : 'The video could not be uploaded. Nothing was added.' } });
     });
   };
   // D1604: from a selected empty range, that range is the first size and place.
@@ -1228,7 +1229,7 @@ function AddBlockDialog({ deckId = null, initialFrom = null, card: given, model,
                 {video.status === 'loading' ? <span className={MUTED} role="status">Uploading…</span> : null}
               </>
             )}
-            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.message || (videoFrom === 'file' ? 'The video could not be uploaded.' : 'The link could not be checked.')}</span> : null}
+            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.text || (videoFrom === 'file' ? 'The video could not be uploaded.' : 'The link could not be checked.')}</span> : null}
             {video.status === 'ok' ? (
               <span className="flex items-center gap-2" data-testid="pitch-editor-video-ok">
                 {video.data.poster_url ? <img src={video.data.poster_url} alt="" className="h-12 w-20 rounded object-cover" /> : null}
@@ -1353,7 +1354,7 @@ function SaveDialog({ changes, save, onSaved, onClose, named = false, initialNam
     setBusy(true); setError(null);
     save(named ? (name.trim() || initialName) : undefined).then(
       (r) => { setBusy(false); onSaved(r); },
-      (e) => { setBusy(false); setError(e?.message || 'The deck could not be saved.'); reportError('pitch-editor:save', e); },
+      (e) => { setBusy(false); setError(deckSaveFailure(e)); reportError('pitch-editor:save', e); },
     );
   };
   return (

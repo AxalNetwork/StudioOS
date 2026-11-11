@@ -500,6 +500,8 @@ export interface Env {
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
   MEETING_BOT?: string;
+  // D1451 (#5297): a var, not a secret. Only 'on' lets the bot take a Teams link; missing or anything else is off.
+  MEETING_BOT_TEAMS?: string;
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;

@@ -7,6 +7,7 @@
  * module turns the correction form into that request and the history into
  * lines a person can read.
  */
+import { centsToInput } from '../../../lib/moneyInput.js';
 import { dollarsToCents, money } from '../expertise/kit';
 
 /** The terms the form edits, as the engagement holds them. */
@@ -15,7 +16,7 @@ export function correctionForm(e) {
     scope_label: e?.scope_label ?? '',
     scope_includes: e?.scope_includes ?? '',
     scope_excludes: e?.scope_excludes ?? '',
-    amount: e?.amount_cents == null ? '' : String(Number(e.amount_cents) / 100),
+    amount: centsToInput(e?.amount_cents),
     term_ends_at: e?.term_ends_at ?? '',
     reason: '',
   };

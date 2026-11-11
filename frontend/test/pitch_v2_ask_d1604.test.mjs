@@ -315,7 +315,8 @@ test('an edit that no longer fits when it is placed says so and records nothing;
     await m.press(m.by('pitch-ask'));
     await m.press(m.by('pitch-ask-edit-accept'));
     assert.deepEqual(undone, ['e1']);
-    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard gone$/, 'the refusal is said on the edit');
+    // D5070 (#5376): a code-less 409 reads as the conflict sentence.
+    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard That conflicts with what is already recorded\. Review it, then try again\.$/, 'the refusal is said on the edit');
   } finally { await m.close(); }
 });
 
@@ -463,7 +464,8 @@ test('in the editor, a refused decision takes the placed edit back and says so',
     await m.press(m.by('pitch-ask-edit-accept'));
     assert.match(m.text(m.by('pitch-editor-block-b1')), /Synthetic customers love it/, 'back as it was');
     assert.ok(!m.by('pitch-editor-save'), 'nothing left to save'); // D1604: Save version shows only while there is something to save
-    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard not open$/, 'the refusal is said on the edit');
+    // D5070 (#5376): a code-less 409 reads as the conflict sentence.
+    assert.match(m.text(m.by('pitch-ask-edit')), /Accept Discard That conflicts with what is already recorded\. Review it, then try again\.$/, 'the refusal is said on the edit');
   } finally { await m.close(); }
 });
 

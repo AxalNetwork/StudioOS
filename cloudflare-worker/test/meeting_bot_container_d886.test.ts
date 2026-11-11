@@ -17,7 +17,9 @@ const UID='00000000-0000-4000-8000-000000000001',OTHER='00000000-0000-4000-8000-
 const SECRET=randomBytes(32).toString('hex');
 test('B8 incomplete container/Zoom configuration is refused before dispatch can reserve a budget',()=>{
   const env={MEETING_BOT:'on',MEETING_BOT_SECRET:SECRET,APP_URL:'https://worker.example.test',MEETING_BOT_RUN:{},MEETING_BOT_CONTAINER:{}} as Env;
-  assert.equal(botConfigured(env,'google_meet'),true);assert.equal(botConfigured(env,'teams'),true);assert.equal(botConfigured(env,'zoom'),false);
+  assert.equal(botConfigured(env,'google_meet'),true);assert.equal(botConfigured(env,'teams'),false);assert.equal(botConfigured(env,'zoom'),false);
+  // D1451: Teams has its own switch, on only when exactly 'on'.
+  env.MEETING_BOT_TEAMS='true';assert.equal(botConfigured(env,'teams'),false);env.MEETING_BOT_TEAMS='on';assert.equal(botConfigured(env,'teams'),true);
   env.MEETING_BOT_ZOOM_CLIENT_ID='synthetic-sdk-client';env.MEETING_BOT_ZOOM_CLIENT_SECRET='synthetic-sdk-secret';assert.equal(botConfigured(env,'zoom'),true);
   const binding=env.MEETING_BOT_CONTAINER;delete env.MEETING_BOT_CONTAINER;assert.equal(botConfigured(env,'google_meet'),false);env.MEETING_BOT_CONTAINER=binding;
   env.APP_URL='http://worker.example.test';assert.equal(botConfigured(env,'google_meet'),false);

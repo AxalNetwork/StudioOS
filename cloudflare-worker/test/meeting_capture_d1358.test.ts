@@ -212,7 +212,10 @@ test('capabilities: connected Zoom imports after the call and says RTMS is not c
 
 test('capabilities: a deployed bot adds the bot mode on every platform, Teams included', async (t) => {
   mockFetch(t, {});
-  const f = world(DEPLOYED);
+  // D1451: Teams joins only with its own switch on.
+  const off = await request(world(DEPLOYED), 'GET', '/meetings/capabilities');
+  assert.deepEqual(off.body.providers.teams.capture_modes, [], 'MEETING_BOT_TEAMS off: no bot mode for Teams');
+  const f = world({ ...DEPLOYED, MEETING_BOT_TEAMS: 'on' });
   await zoomConnected(f);
   const r = await request(f, 'GET', '/meetings/capabilities');
   assert.equal(r.body.bot.available, true);

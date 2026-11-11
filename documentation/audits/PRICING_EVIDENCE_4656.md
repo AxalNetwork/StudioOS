@@ -4,12 +4,12 @@ First-party list-price snapshot retrieved 2026-11-10. Each row is one offer, wit
 
 | Offer | Buying situation | Monthly billing | Annual commitment | Scope and free access |
 | --- | --- | --- | --- | --- |
-| [Visible Core](https://visible.vc/pricing/) | Direct founder fundraising and investor updates | $69 | $708 ($59/mo) | Founder fundraising workflow, free Starter available |
-| [Foundersuite Gold](https://foundersuite.com/pricing) | Direct active-raise investor CRM | Monthly toggle unverified | $1,069 | Free Basic available. Optional consulting advertised at $480/hour. Vendor says cancel anytime. |
-| [DocSend Standard](https://www.docsend.com/pricing/) | Specialist secure multi-file sharing | $45/user | Unverified | Seat-based. Document sharing and engagement analytics. Free start advertised, enduring free tier unverified. |
-| [Gamma Pro](https://gamma.app/pricing) | Specialist presentation creation | Unverified | USD $216 ($18/mo) | Free tier available. Presentation customization and AI generation. |
-| [Papermark Business](https://www.papermark.com/pricing) | Specialist secure document sharing | Unverified | €708 (€59/mo) | Additional teammates advertised at €20/mo each. Free tier available. |
-| [folk Standard](https://www.folk.app/pricing) | Specialist relationship CRM | $30/member | $288/member ($24/mo) | Per-member pricing. Long-term free access unverified. |
+| [Visible Core](https://visible.vc/pricing/) | Direct founder fundraising and investor updates | $149 | $1,548 ($129/mo) | Updates to 500 investors, three data rooms and three KPI integrations. Free Starter available. Monthly customers can cancel anytime; annual customers can cancel at term end. |
+| [Foundersuite Gold](https://foundersuite.com/pricing) | Direct active-raise investor CRM | Monthly toggle unverified | $1,069 | 1,000 investors per pipeline. Free Basic available. Optional consulting advertised at $480/hour. Vendor says cancel anytime; refund terms unverified. |
+| [DocSend Standard](https://www.docsend.com/pricing/) | Specialist secure multi-file sharing | $45/user displayed | Unverified | One included user, multi-file sharing, analytics and unlimited e-signatures. The explicitly advertised 14-day trial is for Advanced Data Rooms. |
+| [Gamma Pro](https://gamma.app/pricing) | Specialist presentation creation | Unverified | USD $216 ($18/mo) | 4,000 monthly credits, paid credit top-ups available, and additional accepted seats are billed. Free tier available. Cancellation preserves access through the current billing period. |
+| [Papermark Business](https://www.papermark.com/pricing) | Specialist secure document sharing | Unverified | €708 (€59/mo) | Three teammates and 1,000 documents included. Extra teammates advertised at €20/mo each. Free tier available. Page says cancel or pause anytime; refund terms unverified. |
+| [folk Standard](https://www.folk.app/pricing) | Specialist relationship CRM | $30/member | $288/member ($24/mo) | Per-member pipeline, campaigns and enrichment. Trial available. Cancel by downgrading in plan settings. |
 
 Unless stated, seat inclusions, usage caps, overages, service components, refund and cancellation terms are unverified. These offers cover different portions of the workflow. Their prices establish neither equivalent functionality nor willingness to pay for Axal.
 

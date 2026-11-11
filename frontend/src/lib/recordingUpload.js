@@ -45,6 +45,7 @@ export const MESSAGES = Object.freeze({
   undecodable: 'This file could not be read as audio on this device. Export the call as MP3, M4A, MP4 or WAV, and try again.',
   empty: 'This file has no sound in it.',
   upload_too_long: 'A recording can be at most 3 hours long. Trim it, or upload it in parts.',
+  setup_incomplete: 'Session setup did not finish. Try again; your recording has not been uploaded.',
 });
 
 export class UploadError extends Error {
@@ -153,6 +154,7 @@ export async function uploadRecording({
     ...target, channel, source: 'upload', attestation: attested, duration_ms: durationMs, client_key: uploadKey(file),
     ...(finalModel ? { final_model: finalModel } : {}),
   });
+  if (opened?.detail === 'setup_incomplete') throw new UploadError('setup_incomplete', opened.message || MESSAGES.setup_incomplete);
   const sessionId = opened.session.id;
   const held = new Set(((await api.get(sessionId)).chunks || []).map((c) => Number(c.seq)));
   const parts = planParts(samples.length);
