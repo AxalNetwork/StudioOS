@@ -12,7 +12,7 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase } from '../../lib/absence';
-import { currencyCode } from '../../lib/money';
+import { currencyFromLabel } from '../../lib/money';
 import { companyHref } from '../cycles/reportingModel';
 import PortfolioReports from './PortfolioReports';
 
@@ -40,7 +40,7 @@ export const kpiValue = (key, value, units) => {
   const numeric = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : Number.NaN;
   if (!Number.isFinite(numeric)) return String(value);
   const unit = unitFor(key, units);
-  const currency = currencyCode(String(unit || '').toUpperCase());
+  const currency = currencyFromLabel(unit);
   if (currency) return money(numeric, currency);
   if (/^(%|pct|percent)$/i.test(unit || '')) return `${numeric.toLocaleString()}%`;
   if (unit === 'months') return `${numeric.toLocaleString()} ${numeric === 1 ? 'month' : 'months'}`;
