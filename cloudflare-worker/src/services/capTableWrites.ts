@@ -32,12 +32,11 @@
  * because its edits spread the entry and the inputs.
  */
 import type { Env, User } from '../types';
+import { toMajorString, toMinorSafe } from '../../../frontend/src/lib/money.js';
 import { simulate, validateInputs, type Inputs } from './captable';
 import type { SafeBasis } from './safeConversion';
 import { ensureTier } from '../middleware/requireTier';
 import { ensureCapTableVariantColumn } from './captableSchema';
-import { currencyOf, DEFAULT_CURRENCY } from './capTableRecord';
-import { exponentOf } from '../../../frontend/src/lib/money.js';
 import { hashEmail } from '../util/hashEmail';
 
 export type ScenarioRow = {
@@ -426,46 +425,25 @@ async function recompute(env: Env, actor: User, projectId: number, base: Scenari
 
 export type SafeTerms = { amount: number; cap?: number; discount?: number };
 
-/**
- * D5373: the currency the model's SAFE amounts are in: the venture's (`cap_table_currency`; none stored reads
- * `DEFAULT_CURRENCY`). A database from before migration 573 has no such table, and reads as the default.
- */
-async function ventureCurrency(env: Env, projectId: number): Promise<string> {
-  try { return (await currencyOf(env, projectId)).code; } catch (e) {
-    if (/no such table: (main\.)?cap_table_currency/i.test(String((e as Error)?.message ?? e))) return DEFAULT_CURRENCY;
-    throw e;
+function modelDollars(value: unknown, field: 'amount_cents' | 'cap_cents', requireWhole: boolean) {
+  const minor = toMinorSafe(value);
+  if (typeof value !== 'number' || minor === null || minor === 0) {
+    throw new HolderError(400, `${field} must be a positive whole number of cents`);
   }
+  const major = Number(toMajorString(minor, 'USD'));
+  if (requireWhole && !Number.isSafeInteger(major)) {
+    throw new HolderError(400, `${field} must represent whole US dollars in the saved model`);
+  }
+  return major;
 }
 
-/**
- * D5373: a count of the currency's own minor units as the saved model's whole major units (the model keeps `amount` and
- * `cap` in major units, so its stored format is unchanged): 12,345 USD cents is 123.45, 5,000 yen is 5000, 1,250
- * thousandths of a dinar is 1.25. A currency the layer does not list refuses the write: no amount is saved at a guessed
- * factor.
- */
-export function majorUnits(minor: number, currency: string): number {
-  const exp = exponentOf(currency);
-  if (exp === null) {
-    throw new HolderError(400, `The venture's currency "${currency}" is not one we can price in, so an amount in it cannot be saved. Set the cap table currency to a listed ISO 4217 code first.`);
-  }
-  return minor / 10 ** exp;
-}
-
-/**
- * The terms `safeEntry` stores: major units from the currency's minor units,
- * a fraction from a percentage, and no `cap` or `discount` key when none is
- * given. Throws the `HolderError` a write answers. D966's repair compares an
- * entry with them.
- */
-export function safeTerms(a: { amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null }, currency: string): SafeTerms {
-  const amount = posInt(a.amount_cents);
-  if (amount == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
-  const t: SafeTerms = { amount: majorUnits(amount, currency) };
-  if (a.cap_cents != null) {
-    const cap = posInt(a.cap_cents);
-    if (cap == null) throw new HolderError(400, 'cap_cents must be a positive whole number of cents');
-    t.cap = majorUnits(cap, currency);
-  }
+/** Decode historical SAFE terms for D966. New writes require whole model dollars. */
+export function safeTerms(
+  a: { amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null },
+  requireWhole = false,
+): SafeTerms {
+  const t: SafeTerms = { amount: modelDollars(a.amount_cents, 'amount_cents', requireWhole) };
+  if (a.cap_cents != null) t.cap = modelDollars(a.cap_cents, 'cap_cents', requireWhole);
   if (a.discount_pct != null) {
     if (typeof a.discount_pct !== 'number' || !(a.discount_pct >= 0 && a.discount_pct <= 90)) throw new HolderError(400, 'discount_pct must be 0..90');
     t.discount = a.discount_pct / 100;
@@ -473,8 +451,8 @@ export function safeTerms(a: { amount_cents?: number | null; cap_cents?: number 
   return t;
 }
 
-function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }, currency: string) {
-  const e: Record<string, unknown> = { name, ...safeTerms(a, currency) };
+function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
+  const e: Record<string, unknown> = { name, ...safeTerms(a, true) };
   if (a.basis != null) {
     if (a.basis !== 'pre_money' && a.basis !== 'post_money') throw new HolderError(400, 'basis must be pre_money or post_money');
     e.basis = a.basis;
@@ -496,7 +474,7 @@ export async function addHolder(env: Env, args: AddHolderArgs): Promise<{ id: st
   const stored: Record<string, any> = storedInputs(base) || {};
 
   if (args.group === 'investors') {
-    const entry = safeEntry(name, { ...args, prospect_id: prospectId }, await ventureCurrency(env, args.projectId));
+    const entry = safeEntry(name, { ...args, prospect_id: prospectId });
     const safes = [...(Array.isArray(stored.safes) ? stored.safes : []), entry];
     const inputs = { ...stored, safes } as Inputs;
     checkInputs(inputs);
@@ -623,13 +601,11 @@ export async function updateHolder(env: Env, args: UpdateHolderArgs): Promise<{ 
     const entry = safes[si];
     if (name !== undefined) entry.name = name;
     if (args.amount_cents !== undefined) {
-      const a = posInt(args.amount_cents);
-      if (a == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
-      entry.amount = majorUnits(a, await ventureCurrency(env, args.projectId));
+      entry.amount = modelDollars(args.amount_cents, 'amount_cents', true);
     }
     if (args.cap_cents !== undefined) {
       if (args.cap_cents == null) delete entry.cap;
-      else { const c = posInt(args.cap_cents); if (c == null) throw new HolderError(400, 'cap_cents must be a positive whole number of cents'); entry.cap = majorUnits(c, await ventureCurrency(env, args.projectId)); }
+      else entry.cap = modelDollars(args.cap_cents, 'cap_cents', true);
     }
     if (args.discount_pct !== undefined) {
       if (args.discount_pct == null) delete entry.discount;

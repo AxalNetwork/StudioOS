@@ -18,7 +18,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { HOME_PATH, dollars, pct, shares, symbolOf, tabSearch } from './capTableModel';
+import { HOME_PATH, dollars, pct, shares, sourceCurrency, symbolOf, tabSearch } from './capTableModel';
 import { userFacingRaiseError, raiseValidationErrors } from '../../../lib/raiseErrors.js';
 
 export { foundersAfter, scenarioCard, scenarioCards } from './capTableModel';
@@ -583,7 +583,8 @@ export function compareExits(scenarios) {
  * says so in every row rather than drawing a figure.
  */
 export function compareRows(today, cols, price = null, currency = 'USD') {
-  const series = [{ result: today, today: true }, ...cols.map((c) => ({ result: c.result, status: c.status }))];
+  // D5497: Today is the record (its currency); a column is in the record's currency only when it starts from Today, else USD.
+  const series = [{ result: today, today: true, code: sourceCurrency(true, currency) }, ...cols.map((c) => ({ result: c.result, status: c.status, code: sourceCurrency(!!c.fromToday, currency) }))];
   const cell = (s, fn) => (s.status && s.status !== 'ready' ? (s.status === 'loading' ? 'Reading…' : 'Could not be read') : s.result ? fn(s.result, s.today) : NOT_RECORDED);
   const groupPct = (types) => (r, isToday) => {
     const l = isToday ? r.founding : lastLedger(r) || r.founding;
@@ -602,8 +603,8 @@ export function compareRows(today, cols, price = null, currency = 'USD') {
   }
   for (const g of GROUPS.slice(1)) rows.push({ label: g.label, bold: true, cells: series.map((s) => cell(s, groupPct(g.types))) });
   const lastRound = (r) => (r.rounds || [])[(r.rounds || []).length - 1];
-  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? price?.text ?? NOT_RECORDED : lastRound(r) ? `${symbolOf(currency)}${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
-  rows.push({ label: 'Post-money', cells: series.map((s) => cell(s, (r, isToday) => (isToday || !lastRound(r) ? 'No round modelled' : dollars(lastRound(r).post_money, currency)))) });
+  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? price?.text ?? NOT_RECORDED : lastRound(r) ? `${symbolOf(s.code)}${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
+  rows.push({ label: 'Post-money', cells: series.map((s) => cell(s, (r, isToday) => (isToday || !lastRound(r) ? 'No round modelled' : dollars(lastRound(r).post_money, s.code)))) });
   for (const n of instruments) {
     rows.push({ label: `${n} · shares`, cells: series.map((s) => cell(s, (r, isToday) => {
       if (isToday) return NOT_CONVERTED;
@@ -646,11 +647,13 @@ export function exitPanels(cols, exits, currency = 'USD') {
     rows: cols.map((c) => {
       const wf = waterfallsOf(c.result).find((w) => w.exit === exit)?.wf || null;
       const by = payoutByGroup(wf);
-      if (!by) return { label: c.short, value: 0, open: true, text: NOT_RECORDED, by: null };
+      const code = sourceCurrency(!!c.fromToday, currency);
+      if (!by) return { label: c.short, value: 0, open: true, text: NOT_RECORDED, by: null, currency: code };
       return {
         label: c.short,
+        currency: code,
         value: by.founders + by.investors + by.people,
-        text: `F ${short(by.founders, currency)}`,
+        text: `F ${short(by.founders, code)}`,
         parts: [{ value: by.founders, tone: 'violet' }, { value: by.investors, tone: 'sky' }, { value: by.people, tone: 'muted' }],
         by,
       };
@@ -685,9 +688,10 @@ export function swipeCards(rows, cols) {
  */
 export function exitTable(col, exits, currency = 'USD') {
   const head = ['Exit', ...GROUPS.slice(0, 3).map((g) => g.label)];
+  const code = sourceCurrency(!!col?.fromToday, currency);
   const rows = exits.map((exit) => {
     const by = payoutByGroup(waterfallsOf(col?.result).find((w) => w.exit === exit)?.wf || null);
-    return { exit, cells: [dollars(exit, currency), ...(by ? [by.founders, by.investors, by.people].map((v) => dollars(v, currency)) : [NOT_RECORDED, NOT_RECORDED, NOT_RECORDED])] };
+    return { exit, cells: [dollars(exit, code), ...(by ? [by.founders, by.investors, by.people].map((v) => dollars(v, code)) : [NOT_RECORDED, NOT_RECORDED, NOT_RECORDED])] };
   });
   return { head, rows };
 }

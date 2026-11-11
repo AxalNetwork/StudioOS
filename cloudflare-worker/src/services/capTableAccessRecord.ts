@@ -1,20 +1,9 @@
 /** D1130: venture grants and links read recorded issuances, never scenarios or proposals. */
+import { toMajorString } from '../../../frontend/src/lib/money.js';
 import type { AccessLevel } from './captableShare';
 import type { readRecord } from './capTableRecord';
-import { DEFAULT_CURRENCY } from './capTableRecord';
-import { exponentOf } from '../../../frontend/src/lib/money.js';
 type RecordRead = Awaited<ReturnType<typeof readRecord>>;
 type Holder = { holder_id: number | null; name: string | null };
-/**
- * D5373: a recorded count of minor units as the whole-major figure the access view has always carried (an amount of
- * 12,345 cents is 123.45; 5,000 yen is 5000; 1,250 thousandths of a dinar is 1.25). It reads the currency's OWN
- * decimals. A currency the layer does not list is not read at all: the amount is null (not recorded), never a figure
- * divided by a guessed factor.
- */
-export function majorOf(minor: number | null | undefined, currency: string | null | undefined): number | null {
-  const exp = exponentOf(typeof currency === 'string' ? currency.toUpperCase() : currency);
-  return minor == null || exp === null ? null : minor / 10 ** exp;
-}
 const key = (h: Holder) => h.holder_id != null ? `holder:${h.holder_id}` : `name:${String(h.name).trim().toLowerCase()}`;
 
 /** Old name grants remain valid only when they resolve to exactly one recorded identity. */
@@ -49,14 +38,20 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
   const copyPosition = (h: typeof positions[number]) => ({ holder: h.holder, type: h.type, shares: h.shares, pct: h.pct,
     ...(selected && h.identity === key(selected) ? { mine: true } : {}) });
   const mine = (h: Holder | null | undefined) => h != null && selected != null && key(h) === key(selected);
-  const instrument = (i: RecordRead['instruments']['rows'][number]) => ({
-    // The instrument's own currency; one with none recorded is the venture's (as the Overview reads it), and a venture
-    // with no row reads DEFAULT_CURRENCY.
-    instrument: i.kind, amount: majorOf(i.amount_cents, i.currency ?? record.currency?.code ?? DEFAULT_CURRENCY),
-    currency: i.currency, cap: majorOf(i.terms.cap_cents, i.currency ?? record.currency?.code ?? DEFAULT_CURRENCY),
-    discount: i.terms.discount_bps == null ? null : i.terms.discount_bps / 10000,
-    basis: i.terms.basis, issue_date: i.issued_on,
-  });
+  const major = (value: number | null, currency: string | null) => {
+    const text = toMajorString(value, currency);
+    return text === null ? null : Number(text);
+  };
+  const instrument = (i: RecordRead['instruments']['rows'][number]) => {
+    // Old native rows without a code used USD cents. Linked SAFEs carry their own terms.
+    const code = i.currency ?? (i.safe_issuance_uid ? null : 'USD');
+    return {
+      instrument: i.kind, amount: major(i.amount_cents, code),
+      currency: i.currency, cap: major(i.terms.cap_cents, code),
+      discount: i.terms.discount_bps == null ? null : i.terms.discount_bps / 10000,
+      basis: i.terms.basis, issue_date: i.issued_on,
+    };
+  };
   if (level === 'own_position') return {
     level, holder: selected?.name || 'Not recorded',
     position: selected ? positions.filter(h => h.identity === key(selected)).map(copyPosition) : [],

@@ -21,8 +21,8 @@
  * record cannot compute says the Worker's sentence and draws no number. On
  * record and Modelled never share a figure without their tag.
  */
+import { majorToMinor } from '../../../lib/money.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { exponentOf } from '../../../lib/money.js';
 import { day, harbour, money, pct, shares } from './capTableModel';
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -374,30 +374,19 @@ export function needsYou(record) {
   };
 }
 
-/** The sentence that says why the model's SAFEs and notes are not proposed: the venture's currency is not one the layer lists. Null otherwise. */
-export function modelMoneyNote(scenario, currency = 'USD') {
-  const code = String(currency || 'USD').toUpperCase();
-  const safes = Array.isArray(scenario?.inputs?.safes) ? scenario.inputs.safes : [];
-  return exponentOf(code) === null && safes.length ? `The venture's currency "${code}" is not one we can price in, so the model's SAFEs and notes are not proposed.` : null;
-}
-
-/**
- * The proposals "Record them from the model" makes (CT19b): each founder's shares and each SAFE, as the model holds them.
- * D5373: the model's amounts are whole major units of the venture's `currency` (USD when none is given); the record counts
- * that currency's own minor unit (JPY none, KWD three). A currency the layer does not list proposes no SAFE or note.
- */
-export function proposalsFromModel(scenario, currency = 'USD') {
-  const exp = exponentOf(String(currency || 'USD').toUpperCase());
-  const scale = exp === null ? null : 10 ** exp;
+/** The proposals "Record them from the model" makes (CT19b): each founder's shares and each SAFE, as the model holds them. */
+export function proposalsFromModel(scenario, recordCurrency = 'USD') {
   const inputs = scenario?.inputs || {};
   const founders = (Array.isArray(inputs.founders) ? inputs.founders : []).filter((f) => String(f?.name || '').trim() && num(f?.shares) > 0)
     .map((f) => ({ kind: 'founding', holder_name: String(f.name).trim(), shares: Math.round(f.shares), note: 'From your saved model (Cap table · model).' }));
-  const safes = (scale === null ? [] : Array.isArray(inputs.safes) ? inputs.safes : []).filter((s) => String(s?.name || '').trim())
+  const safes = (recordCurrency === 'USD' && Array.isArray(inputs.safes) ? inputs.safes : []).filter((s) => String(s?.name || '').trim())
     .map((s) => {
       const body = { kind: s.instrument === 'note' ? 'note' : 'safe', holder_name: String(s.name).trim(), note: 'From your saved model (Cap table · model).' };
-      // The model is in whole major units and fractions; the record is minor units and basis points.
-      if (num(s.amount) > 0) body.amount_cents = Math.round(s.amount * scale);
-      if (num(s.cap) > 0) body.cap_cents = Math.round(s.cap * scale);
+      // The model is in whole dollars and fractions; the record is cents and basis points.
+      const amount = majorToMinor(s.amount, 'USD');
+      const cap = majorToMinor(s.cap, 'USD');
+      if (amount > 0) body.amount_cents = amount;
+      if (cap > 0) body.cap_cents = cap;
       if (num(s.discount) > 0) body.discount_bps = Math.round(s.discount * 10000);
       if (s.basis === 'post_money' || s.basis === 'pre_money') body.basis = s.basis;
       if (s.instrument === 'note' && num(s.interest_rate) > 0) body.interest_bps = Math.round(s.interest_rate * 10000);

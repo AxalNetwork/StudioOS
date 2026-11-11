@@ -172,9 +172,12 @@ const GROUP = { founder: 'Founder', preferred: 'Investor', safe: 'Investor', opt
 /**
  * D5373: a whole-major-unit amount at its currency's own decimals, as the access view has always shown it ("100.00" for a
  * two-decimal currency): JPY none ("5,000"), KWD three ("1.250"). A currency the layer does not list, or none, shows the
- * number as stored (no decimals guessed); the Worker sends no amount at all for one it cannot price.
+ * number as stored (no decimals guessed); the Worker sends no amount at all for one it cannot price. D5497: the access
+ * projection's amounts are the record's, in each instrument's own currency.
  */
 export const amountIn = (n, currency) => {
+  // No currency recorded (a native legacy row, USD by D5497): the two decimals this view always showed.
+  if (currency == null || currency === '') return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   const exp = exponentOf(typeof currency === 'string' ? currency.toUpperCase() : currency);
   return exp === null ? String(n) : new Intl.NumberFormat('en-US', { minimumFractionDigits: exp, maximumFractionDigits: exp }).format(n);
 };

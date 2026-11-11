@@ -9,15 +9,15 @@
  *   usd / eur   the currency is fixed by contract (the ledger, the fund, the pack is sold in it); the file must name it.
  *   not-money   the line is a percentage, a ratio or a rounding to two places that a money word sits beside.
  *
- * There is no `pending` kind any more: part 2 of D5373 moved the last variable-currency group (the cap-table models, the
- * access record and the cap-table writes) onto the money layer, so a flagged path is either migrated or fixed by contract.
- * The kind list is asserted exactly, so a `pending` entry cannot be added back without changing this test.
+ * There is no `pending` kind any more: the last groups moved onto the money layer in D5496 (Use of Funds), D5497 (the cap
+ * table) and D5498 (advisor ledger, partner forms, pitch sources, Stripe MRR), so a flagged path is either migrated or fixed
+ * by contract. The kind list is asserted exactly, so a `pending` entry cannot be added back without changing this test.
  *
  * The count is exact, so a NEW `/ 100` in a listed file fails (the count goes up) and so does removing one without
  * lowering it here (the list never carries slack a later line could hide in). A file that is not listed at all fails on
  * its first flagged line. Mutations checked, both ways: `/ 100` added to a migrated file (money.js's callers); `* 100`
  * added to a listed file; a listed file's conversion removed without editing the count; a `usd` entry whose file never
- * names the currency; a `pending` group put back (the kind test fails); a `toLocaleString` quotient line added to a file.
+ * names the currency; a `pending` kind put back (the kind test fails); a `toLocaleString` quotient line added to a file.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -262,7 +262,16 @@ test('a fixed-currency entry names the currency in its file, and every entry say
       assert.match(text, NAMES[g.kind], `${file}: listed as ${g.kind.toUpperCase()} by contract but never names that currency`);
     }
   }
+  // The three pending groups are migrated: Use of Funds (D5496), the cap table (D5497) and the
+  // advisor ledger, partner forms, pitch sources and Stripe MRR import (D5498). The allow-list
+  // now holds only a fixed currency or a line that is not money.
   assert.deepEqual([...new Set(ALLOW.map((g) => g.kind))].sort(), ['eur', 'not-money', 'usd']);
+});
+
+test('every pending file is named in the decision file, so the follow-up list is explicit', () => {
+  const decision = readFileSync(new URL('../../documentation/architecture/decisions/D5373.md', import.meta.url), 'utf8');
+  const missing = [...listed].filter(([, g]) => g.kind === 'pending').map(([f]) => f).filter((f) => !decision.includes(f));
+  assert.deepEqual(missing, [], 'a pending path is not named in D5373.md');
 });
 
 test('the surfaces D5373 migrated whole are off the allow-list and use the money layer (checkout, payModel and wellbeing keep USD-only lines, so they are listed and tested in money_surfaces_5373)', () => {
@@ -288,16 +297,16 @@ test('the surfaces D5373 migrated whole are off the allow-list and use the money
     'cloudflare-worker/src/services/licenceContract.ts:exponentOf',
     'cloudflare-worker/src/services/orders.ts:suffixAmount',
     'cloudflare-worker/src/services/influencer/payoutReadiness.ts:suffixAmount',
-    // Part 2: the Use of Funds source text, the sweep's finds and the cap-table five.
+    'frontend/src/pages/raise/captable/instrumentsModel.js:toMajorString',
+    'frontend/src/pages/raise/captable/overviewModel.js:majorToMinor',
+    'cloudflare-worker/src/services/capTableAccessRecord.ts:toMajorString',
+    'cloudflare-worker/src/services/capTableToday.ts:majorToMinor',
+    'cloudflare-worker/src/services/capTableWrites.ts:toMajorString',
+    // Part 2: the Use of Funds source text and the sweep's finds (the cap-table five are D5497's, listed above).
     'cloudflare-worker/src/services/useOfFunds/eadwyn.ts:codeAmount',
     'cloudflare-worker/src/services/capRelReads.ts:majorToMinor',
     'frontend/src/pages/deal/dealAudienceModel.js:majorToMinor',
     'frontend/src/pages/admin/programs/referralPartnersModel.js:exponentOf',
-    'frontend/src/pages/raise/captable/instrumentsModel.js:exponentOf',
-    'frontend/src/pages/raise/captable/overviewModel.js:exponentOf',
-    'cloudflare-worker/src/services/capTableAccessRecord.ts:exponentOf',
-    'cloudflare-worker/src/services/capTableToday.ts:exponentOf',
-    'cloudflare-worker/src/services/capTableWrites.ts:exponentOf',
   ];
   for (const entry of migrated) {
     const [file, fn] = entry.split(':');

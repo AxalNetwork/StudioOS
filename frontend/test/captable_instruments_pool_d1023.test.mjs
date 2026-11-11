@@ -194,6 +194,15 @@ test('which price won, in words, for each case the engine answers', () => {
   assert.equal(price(0.0123), '$0.0123');
 });
 
+test('the conversion calculation uses the instrument currency exponent', () => {
+  const [north] = recordInstruments({
+    ...RECORD,
+    instruments: { rows: [{ ...RECORD.instruments.rows[0], currency: 'JPY' }] },
+  });
+  const view = instrumentView(north, { sim: SIM });
+  assert.equal(view.steps.lines[0], 'Cap price = ¥1,000,000,000 ÷ 1,219,512,195 shares = 0.82 JPY');
+});
+
 test('the instrument drawer: terms with their source, the conversion in steps, MFN against later SAFEs, the exit before conversion', () => {
   const [north, , , note] = recordInstruments(RECORD);
   const v = instrumentView(north, { today: TODAY, sim: SIM });

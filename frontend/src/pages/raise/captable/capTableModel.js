@@ -103,6 +103,13 @@ export function codeOf(currency) {
   return String(c || 'USD').toUpperCase();
 }
 
+/**
+ * D5497: the currency a cap-table figure is in. A saved model (and any scenario that starts from it) is whole US dollars by
+ * contract; a figure that comes from the RECORD (Today, a recorded instrument, a scenario that starts from Today) is in the
+ * record's own currency. `fromRecord` says which; where it cannot be told, the caller passes false and the figure is USD.
+ */
+export const sourceCurrency = (fromRecord, recordCurrency) => (fromRecord ? codeOf(recordCurrency) : 'USD');
+
 /** The mark that goes before an amount: "$" for USD, the code and a space for any other currency (as the option pool does). */
 export const symbolOf = (currency) => { const c = codeOf(currency); return c === 'USD' ? '$' : `${c} `; };
 
@@ -177,6 +184,8 @@ export function foundersAfter(result) {
 
 /** One scenario card (CT6), every figure Modelled. The saved model is "Cap table · model" (CT19b). */
 export function scenarioCard(s, { model = false, currency = 'USD' } = {}) {
+  // `currency` is the RECORD's; only a scenario that starts from Today is in it (the saved model and model scenarios are USD, D5497).
+  const cur = sourceCurrency(!model && !!s?.inputs?.start, currency);
   const round = s?.inputs?.rounds?.[0];
   const after = foundersAfter(s?.result);
   return {
@@ -186,7 +195,7 @@ export function scenarioCard(s, { model = false, currency = 'USD' } = {}) {
     // D1024: where the scenario starts — the record (D1018's `start`), or a model typed by hand.
     start: model ? 'Your saved model' : s?.inputs?.start ? 'Starts from Today' : 'Starts from your model',
     round: round
-      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money, currency)} · raise ${dollars(round.investment, currency)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
+      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money, cur)} · raise ${dollars(round.investment, cur)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
       : 'No round is planned.',
     founders: after == null ? NOT_RECORDED : pct(after),
     changed: day(s?.updated_at),

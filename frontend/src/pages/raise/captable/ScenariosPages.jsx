@@ -11,7 +11,7 @@ import CapTableDialog, { useWrite } from './CapTableDialog';
 import { Tag } from './CapTableTag';
 import { VariantEditor } from './ScenarioModelEditor';
 import { PLAN_LINE } from './overviewModel';
-import { codeOf, dollars, tabSearch } from './capTableModel';
+import { codeOf, dollars, sourceCurrency, tabSearch } from './capTableModel';
 import {
   ASSUMPTIONS_FALLBACK, COMPARE, READ_SOURCE, GROUPS, MAX_COMPARE, MAX_EXITS, MODEL_LOCKED, READ_ONLY, SAVED, SCENARIOS_PATH,
   attachRead, attachedRead, beforeAfter, todayPrice, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
@@ -461,12 +461,14 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
   const [own, setOwn] = useState(0);
   const read = useRead(readScenario, uid, `${reload}-${own}`);
   const today = useRead(readToday, projectId, reload);
-  // D5373: the venture's currency, from Today's read (always sent), for every figure on the page.
-  const currency = codeOf(today.status === 'ready' ? today.data?.currency : null);
+  // D5373/D5497: the record's currency, from Today's read (always sent). Only a scenario that starts from Today is in it; the
+  // saved model and a scenario typed from it are whole US dollars, so their figures keep "$".
+  const recordCurrency = codeOf(today.status === 'ready' ? today.data?.currency : null);
   const { plan, writes } = useWrites(projectId);
   const scenario = read.status === 'ready' ? read.data : null;
   const model = scenario && !scenario.is_variant;
   const today_ = fromToday(scenario);
+  const currency = sourceCurrency(today_, recordCurrency);
   const [draft, setDraft] = useState(null);
   const [saved, setSaved] = useState(false);
   const [saveErrors, setSaveErrors] = useState([]);
@@ -694,17 +696,19 @@ function PhoneCompare({ rows, cols, exits, todayError, assumptions, currency }) 
 
 function CompareBody({ projectId, scenarios, today, search, writes, onAttached }) {
   const { runs, exits } = useCompareRuns(projectId, scenarios);
-  const currency = codeOf(today.status === 'ready' ? today.data?.currency : null);
+  const recordCurrency = codeOf(today.status === 'ready' ? today.data?.currency : null);
   const [attaching, setAttaching] = useState(null);
   const phone = usePhoneWidth();
   const todayResult = today.status === 'ready' && today.data?.today?.available ? today.data.today.result : null;
   const cols = scenarios.map((s, k) => ({ name: s.is_variant ? s.name : 'Cap table · model', short: shortName(s.is_variant ? s.name : 'Model'), fromToday: fromToday(s), result: runs[k]?.result || null, status: runs[k]?.status || 'loading' }));
-  const rows = compareRows(todayResult, cols, todayPrice(today, true, currency), currency);
+  const rows = compareRows(todayResult, cols, todayPrice(today, true, recordCurrency), recordCurrency);
   const panels = founderPanels(cols);
-  const exitsDrawn = exitPanels(cols, exits, currency);
+  const exitsDrawn = exitPanels(cols, exits, recordCurrency);
+  // The exit values are typed once for every column: in the record's currency only when every column starts from Today, else USD.
+  const exitCurrency = sourceCurrency(cols.length > 0 && cols.every((c) => c.fromToday), recordCurrency);
   const assumptions = today.status === 'ready' && Array.isArray(today.data?.assumptions) ? today.data.assumptions : ASSUMPTIONS_FALLBACK;
   const first = scenarios[0];
-  const firstRead = runs[0]?.status === 'ready' ? roundReadBack(runs[0].result, currency) : null;
+  const firstRead = runs[0]?.status === 'ready' ? roundReadBack(runs[0].result, sourceCurrency(!!cols[0]?.fromToday, recordCurrency)) : null;
   const head = ['', todayResult ? '┊ Today · on record' : '┊ Today · nothing recorded', ...cols.map((c) => c.name)];
   const readBack = (
     <>
@@ -721,7 +725,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
   if (phone) {
     return (
       <>
-        <PhoneCompare rows={rows} cols={cols} exits={exits} todayError={today.status === 'error'} assumptions={assumptions} currency={currency} />
+        <PhoneCompare rows={rows} cols={cols} exits={exits} todayError={today.status === 'error'} assumptions={assumptions} currency={recordCurrency} />
         {readBack}
       </>
     );
@@ -730,7 +734,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
     <>
       <Block title="Scenarios compared" tags={<><Tag kind="record" /><Tag kind="modelled" /></>} testId="captable-compare-table-block"
         aside={<Link className={`${LINK} text-[12px]`} to={`${SCENARIOS_PATH}${search}`} data-testid="captable-compare-change">Change the selection</Link>}
-        foot={`The Today column is the record. The ${cols.length === 1 ? 'scenario column is' : `${cols.length} scenario columns are`} Modelled.${exits.length ? ` Each is run at the same exits: ${exits.map((v) => dollars(v, currency)).join(', ')}.` : ''}`}>
+        foot={`The Today column is the record. The ${cols.length === 1 ? 'scenario column is' : `${cols.length} scenario columns are`} Modelled.${exits.length ? ` Each is run at the same exits: ${exits.map((v) => dollars(v, exitCurrency)).join(', ')}.` : ''}`}>
         {today.status === 'error' ? <Unreadable what="Today, from the record" claim="The scenarios still draw." /> : null}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse" data-testid="captable-compare-table">
@@ -764,9 +768,9 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
           )}
       </ChartBlock>
       <ChartBlock title="Exit waterfall" testId="captable-compare-exits"
-        alt={exitsDrawn.map((e) => `At a ${dollars(e.exit, currency)} exit: ${e.rows.map((r) => (r.by ? `${r.label}, founders ${short(r.by.founders, currency)}` : `${r.label} not calculated`)).join('; ')}`).join('. ')}
+        alt={exitsDrawn.map((e) => `At a ${dollars(e.exit, exitCurrency)} exit: ${e.rows.map((r) => (r.by ? `${r.label}, founders ${short(r.by.founders, r.currency)}` : `${r.label} not calculated`)).join('; ')}`).join('. ')}
         legend={GROUPS.slice(0, 3).map((g) => ({ label: g.label, tone: g.tone }))}
-        table={{ head: ['Exit · scenario', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: exitsDrawn.flatMap((e) => e.rows.map((r) => [`${dollars(e.exit, currency)} · ${r.label}`, ...(r.by ? [r.by.founders, r.by.investors, r.by.people].map((v) => dollars(v, currency)) : ['not recorded', 'not recorded', 'not recorded'])])) }}
+        table={{ head: ['Exit · scenario', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: exitsDrawn.flatMap((e) => e.rows.map((r) => [`${dollars(e.exit, exitCurrency)} · ${r.label}`, ...(r.by ? [r.by.founders, r.by.investors, r.by.people].map((v) => dollars(v, r.currency)) : ['not recorded', 'not recorded', 'not recorded'])])) }}
         foot={`Assumptions: ${assumptions.join(' ')} Over each bar, F is what founders take.`}>
         {exits.length === 0
           ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-compare-no-exits">None of these scenarios sets an exit value, so no waterfall is drawn.</p>
@@ -774,7 +778,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {exitsDrawn.map((e) => (
                 <div key={e.exit} className="flex min-w-0 flex-col gap-1" data-testid="captable-compare-exit">
-                  <span className={`text-[12px] font-bold ${INK}`}>{dollars(e.exit, currency)} exit</span>
+                  <span className={`text-[12px] font-bold ${INK}`}>{dollars(e.exit, exitCurrency)} exit</span>
                   <Columns rows={e.rows} height={200} />
                 </div>
               ))}

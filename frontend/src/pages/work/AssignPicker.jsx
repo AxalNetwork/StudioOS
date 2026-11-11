@@ -9,11 +9,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BTN_SECONDARY, BTN_TEXT, MUTED, HonestBlock } from '../team/teamUi.jsx';
 import { workAdapter } from './workAdapter.js';
+import { agentEngineApi } from '../../lib/api/agentEngine.js';
 import { assigneeGroups, refusalWords } from './workModel.js';
 
 export const NO_TEAM = 'Nobody is on this Team yet. Add people or agents on the Team page first.';
 
-export default function AssignPicker({ projectId, taskUid, current = null, onAssigned, onCancel }) {
+export default function AssignPicker({ projectId, taskUid, module, current = null, onAssigned, onCancel }) {
   const [read, setRead] = useState({ status: 'loading' });
   const [busy, setBusy] = useState(null);
   const [refusal, setRefusal] = useState(null);
@@ -32,6 +33,11 @@ export default function AssignPicker({ projectId, taskUid, current = null, onAss
     setBusy(assignee ? `${assignee.kind}:${assignee.uid}` : 'none');
     setRefusal(null);
     try {
+      if (module) {
+        const result = await agentEngineApi.updateTask(taskUid, { module, assignee: assignee ?? { kind: 'none' } });
+        onAssigned?.(result.task);
+        return;
+      }
       const r = await workAdapter.assign(taskUid, assignee);
       if (!r.available) { setRefusal(r.reason); return; }
       onAssigned?.(r.data);

@@ -18,9 +18,9 @@
  * "Cap table · model" and never written to the record.
  */
 import type { Env } from '../types';
+import { majorToMinor, toMajorString } from '../../../frontend/src/lib/money.js';
 import { readRecord } from './capTableRecord';
 import { simulate, type Inputs, type SimulateResult, type StartHolder } from './captable';
-import { exponentOf } from '../../../frontend/src/lib/money.js';
 
 /** The name the canonical model is read under once the record exists (CT19b). */
 export const MODEL_SCENARIO_NAME = 'Cap table · model';
@@ -35,7 +35,7 @@ const NOT_MODELLED: Record<string, string> = {
   no_cap_or_discount: 'It has neither a cap nor a discount, so no conversion price can be set.',
   issue_date_not_recorded: 'It accrues interest, and its issue date is not recorded.',
   other_currency: 'It is recorded in another currency than the venture’s.',
-  currency_not_priced: 'The venture’s currency is not one we can price in, so its amounts are not read.',
+  currency_unreadable: 'Its recorded currency cannot be used to model the amount.',
 };
 
 export type Start =
@@ -81,6 +81,11 @@ export function priceOnRecord(record: RecordRead): PriceOnRecord | null {
   return cls ? { micros: cls.price_per_share_micros, as_of: null, instrument: String(cls.name), source: 'class' } : null;
 }
 
+function recordedMajor(value: unknown, currency: unknown): number | null {
+  const text = toMajorString(value, currency);
+  return text === null ? null : Number(text);
+}
+
 /**
  * The record as the engine's starting point. Holders take their recorded
  * shares by class kind: common, preferred, and options granted from a pool.
@@ -92,10 +97,6 @@ export function startFromRecord(record: RecordRead): Start {
   // Fully diluted is unavailable whenever the holders are (nothing recorded, a negative balance), and for a pool it cannot count.
   const fd = record.fully_diluted as { available: boolean; reason?: string; sentence?: string; unallocated_pool?: number | null };
   if (!fd.available) return { available: false, reason: String(fd.reason), sentence: String(fd.sentence ?? '') };
-  // D5373: the model is in whole major units; the record counts the venture's currency's own minor unit (USD 2 decimals,
-  // JPY none, KWD three). A currency the layer does not list is never read at a guessed factor.
-  const exp = exponentOf(record.currency.code);
-  const scale = exp === null ? null : 10 ** exp;
   const classes = (record.by_class as { rows?: any[] }).rows ?? [];
   const kindOf = new Map<string, string>(classes.map((c: any) => [String(c.uid), String(c.kind)]));
 
@@ -106,9 +107,10 @@ export function startFromRecord(record: RecordRead): Start {
   for (const r of (record.issuances as { rows: any[] }).rows) {
     if (r.status !== 'recorded' || !r.class_uid || kindOf.get(r.class_uid) !== 'preferred') continue;
     const k = keyOf(r.holder?.holder_id, r.holder?.name);
-    if (r.kind === 'priced' && r.amount_cents != null && r.currency === record.currency.code && scale !== null) {
+    if (r.kind === 'priced' && r.amount_cents != null && r.currency === record.currency.code) {
       const prev = paid.get(k);
-      if (prev !== null) paid.set(k, (prev ?? 0) + Number(r.amount_cents) / scale);
+      const amount = recordedMajor(r.amount_cents, r.currency);
+      if (prev !== null) paid.set(k, amount === null ? null : (prev ?? 0) + amount);
     } else if (r.kind !== 'cancellation') paid.set(k, null);
   }
 
@@ -140,14 +142,18 @@ export function startFromRecord(record: RecordRead): Start {
     const t = r.terms ?? {};
     const skip = (reason: string) => notModelled.push({ uid: r.uid, name, kind: r.kind, reason, sentence: NOT_MODELLED[reason] });
     if (r.amount_cents == null) { skip('amount_not_recorded'); continue; }
-    if (r.currency && r.currency !== record.currency.code) { skip('other_currency'); continue; }
-    if (scale === null) { skip('currency_not_priced'); continue; }
+    // Native rows without a currency predate the venture currency. A linked SAFE owns its terms.
+    const currency = r.currency ?? (r.safe_issuance_uid ? null : 'USD');
+    if (currency && currency !== record.currency.code) { skip('other_currency'); continue; }
+    const amount = recordedMajor(r.amount_cents, currency);
+    const cap = recordedMajor(t.cap_cents, currency);
+    if (amount === null || (t.cap_cents != null && cap === null)) { skip('currency_unreadable'); continue; }
     if (t.basis !== 'pre_money' && t.basis !== 'post_money') { skip('basis_not_recorded'); continue; }
     if (!(Number(t.cap_cents) > 0) && !(Number(t.discount_bps) > 0)) { skip('no_cap_or_discount'); continue; }
     if (r.kind === 'note' && Number(t.interest_bps) > 0 && !r.issued_on) { skip('issue_date_not_recorded'); continue; }
     safes.push({
-      name, amount: Number(r.amount_cents) / scale,
-      ...(Number(t.cap_cents) > 0 ? { cap: Number(t.cap_cents) / scale } : {}),
+      name, amount,
+      ...(cap !== null && cap > 0 ? { cap } : {}),
       ...(Number(t.discount_bps) > 0 ? { discount: Number(t.discount_bps) / 10000 } : {}),
       basis: t.basis, instrument: r.kind === 'note' ? 'note' : 'safe',
       ...(r.kind === 'note' && Number(t.interest_bps) > 0 ? { interest_rate: Number(t.interest_bps) / 10000 } : {}),
@@ -203,9 +209,6 @@ export function offerFromModel(inputs: Inputs | null, record: RecordRead) {
     held.add(`${r.kind === 'note' || r.kind === 'safe' ? r.kind : 'founding'}:${String(r.holder?.name ?? '').trim().toLowerCase()}`);
   }
   const rows: Record<string, unknown>[] = [];
-  // D5373: a saved model's amounts are whole major units of the venture's currency; the record counts its minor unit.
-  const exp = exponentOf(record.currency.code);
-  const scale = exp === null ? null : 10 ** exp;
   for (const f of inputs.founders || []) {
     const name = String(f?.name ?? '').trim();
     if (!name || held.has(`founding:${name.toLowerCase()}`)) continue;
@@ -215,15 +218,18 @@ export function offerFromModel(inputs: Inputs | null, record: RecordRead) {
       shares: Math.round(Number(f.shares)), source: 'typed', note: `From the model "${MODEL_SCENARIO_NAME}".`,
     });
   }
-  for (const s of inputs.safes || []) {
+  const safes = inputs.safes || [];
+  const modelCurrencyMatches = record.currency.code === 'USD';
+  for (const s of modelCurrencyMatches ? safes : []) {
     const name = String(s?.name ?? '').trim();
     const kind = s.instrument === 'note' ? 'note' : 'safe';
     if (!name || held.has(`${kind}:${name.toLowerCase()}`)) continue;
-    // A currency the layer does not list prices no SAFE or note: nothing is offered at a guessed factor.
-    if (scale === null) continue;
+    const amount = majorToMinor(s.amount, 'USD');
+    const cap = Number(s.cap) > 0 ? majorToMinor(s.cap, 'USD') : null;
+    if (amount === null || amount <= 0 || (Number(s.cap) > 0 && cap === null)) continue;
     rows.push({
-      kind, holder_name: name, amount_cents: Math.round(Number(s.amount) * scale), source: 'typed',
-      ...(Number(s.cap) > 0 ? { cap_cents: Math.round(Number(s.cap) * scale) } : {}),
+      kind, holder_name: name, amount_cents: amount, source: 'typed',
+      ...(cap !== null ? { cap_cents: cap } : {}),
       ...(Number(s.discount) > 0 ? { discount_bps: Math.round(Number(s.discount) * 10000) } : {}),
       // The model's default is a pre-money SAFE (services/captable.ts); its basis is stated, not guessed.
       basis: s.basis === 'post_money' ? 'post_money' : 'pre_money',
@@ -235,8 +241,10 @@ export function offerFromModel(inputs: Inputs | null, record: RecordRead) {
   const pool = Number(inputs.option_pool_pct || 0);
   return {
     available: true, reason: null, rows,
+    ...(modelCurrencyMatches || !safes.length ? {} : {
+      currency_note: 'The saved model uses US dollars. Its instruments cannot be proposed in another currency.',
+    }),
     // A pool is a class with a size on the record (D1017), not an issuance, so the model's percentage is not offered.
-    ...(scale === null && (inputs.safes || []).length ? { money_note: `The venture’s currency “${record.currency.code}” is not one we can price in, so the model’s SAFEs and notes are not offered.` } : {}),
     pool_note: pool > 0 ? `The model's ${pool}% option pool is a class on the record: create it with its size.` : null,
   };
 }
