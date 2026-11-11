@@ -418,8 +418,9 @@ function Reading() {
   );
 }
 
-function FromModel({ projectId, scenario, onClose, onDone }) {
-  const list = proposalsFromModel(scenario);
+function FromModel({ projectId, scenario, recordCurrency, onClose, onDone }) {
+  const list = proposalsFromModel(scenario, recordCurrency);
+  const currencyMismatch = recordCurrency !== 'USD' && scenario?.inputs?.safes?.length > 0;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const run = async () => {
@@ -446,8 +447,9 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
         <p className={`m-0 ${INK}`} data-testid="captable-from-model-says">
           {list.length
             ? `${founders} founder${founders === 1 ? '' : 's'}' shares and ${list.length - founders} SAFE${list.length - founders === 1 ? '' : 's'} or note${list.length - founders === 1 ? '' : 's'} from your saved model become proposals, with the figures the model holds.`
-            : 'Your saved model holds no founder or SAFE to propose.'}
+            : currencyMismatch ? 'There are no founders to propose from your saved model.' : 'Your saved model holds no founder or SAFE to propose.'}
         </p>
+        {currencyMismatch ? <p className={MUTED}>The saved model uses US dollars. Its instruments require a cap-table record in USD.</p> : null}
         <p className={`m-0 ${MUTED}`}>Nothing counts until you record each one in Needs you, where you add its class, date and document. You and your co-founders see the proposals; nobody else does.</p>
         {error ? <p role="alert" className="m-0 font-semibold text-red-700 dark:text-red-400" data-testid="captable-from-model-error">{error}</p> : null}
       </div>
@@ -587,7 +589,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
         <ProposalDrawer projectId={projectId} id={open.id} role={role} record={{ ...record, retry }} onClose={closeDrawer} onDone={leave} />
       ) : null}
       {rowDialogs}
-      {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
+      {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} recordCurrency={record.data?.currency?.code ?? null} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
       {holderDrawer}
     </div>
   );

@@ -213,13 +213,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/useOfFunds/read.ts": 1,
     "cloudflare-worker/src/services/useOfFunds/store.ts": 4,
   } },
-  { kind: 'pending', reason: "Cap table instruments and the cap-table model: an instrument carries its own currency, but the saved model and the access record are in whole major units. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/raise/captable/instrumentsModel.js": 1,
-    "frontend/src/pages/raise/captable/overviewModel.js": 2,
-    "cloudflare-worker/src/services/capTableAccessRecord.ts": 2,
-    "cloudflare-worker/src/services/capTableToday.ts": 5,
-    "cloudflare-worker/src/services/capTableWrites.ts": 4,
-  } },
   { kind: 'pending', reason: "Advisor practice ledger, partner pipeline retainers and proposals, pitch chart sources and the Stripe MRR import hold amounts whose currency is a column of the row; the forms were not rebuilt here. Named in D5373 as a follow-up.", files: {
     "frontend/src/pages/advisor/practice/EarningsZone.jsx": 2,
     "frontend/src/pages/advisor/practice/SessionsZone.jsx": 1,
@@ -296,6 +289,11 @@ test('the surfaces D5373 migrated whole are off the allow-list and use the money
     'cloudflare-worker/src/services/licenceContract.ts:exponentOf',
     'cloudflare-worker/src/services/orders.ts:suffixAmount',
     'cloudflare-worker/src/services/influencer/payoutReadiness.ts:suffixAmount',
+    'frontend/src/pages/raise/captable/instrumentsModel.js:toMajorString',
+    'frontend/src/pages/raise/captable/overviewModel.js:majorToMinor',
+    'cloudflare-worker/src/services/capTableAccessRecord.ts:toMajorString',
+    'cloudflare-worker/src/services/capTableToday.ts:majorToMinor',
+    'cloudflare-worker/src/services/capTableWrites.ts:toMajorString',
   ];
   for (const entry of migrated) {
     const [file, fn] = entry.split(':');

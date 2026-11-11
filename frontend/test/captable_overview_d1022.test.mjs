@@ -205,6 +205,7 @@ test('"Record them from the model" proposes each founder and SAFE in the record\
     { kind: 'note', holder_name: 'Angel Note', note: 'From your saved model (Cap table · model).', amount_cents: 10000000, interest_bps: 800, issued_on: '2025-08-01' },
   ]);
   assert.deepEqual(proposalsFromModel(null), []);
+  assert.deepEqual(proposalsFromModel(CANONICAL, 'JPY'), proposalsFromModel(CANONICAL).filter((r) => r.kind === 'founding'));
 });
 
 test('the holder drawer: positions, issuances with documents or "No document", vesting, 83(b) and access', () => {
