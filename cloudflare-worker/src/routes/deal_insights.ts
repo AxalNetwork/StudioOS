@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { userMayReadDeal } from './deals';
-import { dealAudience, hasActiveDealNda, ndaExempt } from '../services/dealAccess';
+import { hasActiveDealNda, ndaExempt } from '../services/dealAccess';
 import { effectiveFlags } from './public';
 import { effectiveVisibility } from '../services/userSettings';
 import { ARCHETYPES } from '../services/archetypeScoring';
@@ -166,8 +166,7 @@ function handler(section: 'team' | 'market' | 'traction') {
       // Canonical deal access is necessary, but external partners also need an NDA for these sections.
       // D4631: the exemption is the admin, or the caller's relationship to THIS deal (its own venture's founder),
       // never a primary role: a founder reading another venture's deal through an investor licence needs the NDA.
-      const audience = await dealAudience(c.env, user as any, id, project.founder_id);
-      if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), project.founder_id))) {
+      if (!ndaExempt(user, project.founder_id) && !(await hasActiveDealNda(c.env, Number(user.id), project.founder_id))) {
         return c.json({ masked: true, reason: 'no_pairwise_nda',
           project: { name: project.name, sector: project.sector, stage: project.stage, headline: project.headline } });
       }

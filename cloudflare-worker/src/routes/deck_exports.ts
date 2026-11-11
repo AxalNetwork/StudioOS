@@ -45,6 +45,7 @@ import { context as workspaceContext, member } from './google_workspace';
 import { WorkspaceError } from '../services/google/workspace';
 import { createPresentation, driveName } from '../services/google/driveCreate';
 import { writeEditableDeck, type ChartShot } from '../services/decks/pptxEditable';
+import { loadIconGeometry } from '../services/decks/iconGeometry';
 import type { ResolvedSeries } from '../services/decks/pptxChart';
 import { readSeries } from '../services/decks/chartSeries';
 import { dirOf } from '../services/decks/designSystem';
@@ -353,6 +354,8 @@ deckExports.post('/:id/export/google-slides', async (c) => {
   // D1574 (#3821): the same writer as the PowerPoint download — native charts from the stores' points.
   const series = await boundSeries(c.env, Number(row.project_id), slides);
   const deck = await writeEditableDeck({ slides, renderable: renderable.slides, brand, notes: opts.notes, images, chartShot, compliance: deckCompliance(slides, themeOfRow(row)), dir: dirOf(themeOfRow(row)?.lang, themeOfRow(row)?.dir), series,
+    // D4574 H3 (#4574): the icon set's nodes are a static asset now, so the writer is given them.
+    icons: await loadIconGeometry(c.env),
     meta: { title: row.title || 'Pitch deck', lang: pdfLangOf(themeOfRow(row)) } });
   const hash = await sha256Hex(deck.bytes);
 
@@ -460,6 +463,8 @@ deckExports.post('/:id/export', async (c, next) => {
     slides, renderable: renderable.slides, brand: await deckOwnerBrand(c.env, projectId), notes: opts.notes,
     images: await markedImages(c.env, projectId, slides), chartShot: await chartShotFor(c, row, opts, copied.imageCopies),
     compliance: deckCompliance(slides, theme), dir: dirOf(theme?.lang, theme?.dir), series: await boundSeries(c.env, projectId, slides),
+    // D4574 H3 (#4574): the icon set's nodes are a static asset now, so the writer is given them.
+    icons: await loadIconGeometry(c.env),
     meta: { title: row.title || 'Pitch deck', lang: pdfLangOf(theme) },
   });
   await auditDeckWrite(c, user, projectId, 'deck_exported', 'Deck exported');

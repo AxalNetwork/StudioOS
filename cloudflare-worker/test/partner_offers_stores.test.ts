@@ -75,9 +75,16 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
     async batch(x: any[]) {
-      const out = [];
-      for (const st of x || []) out.push(await st.run().catch(() => ({})));
-      return out;
+      db.exec('SAVEPOINT d1_batch');
+      try {
+        const out = [];
+        for (const st of x) out.push(await st.run());
+        db.exec('RELEASE d1_batch');
+        return out;
+      } catch (error) {
+        db.exec('ROLLBACK TO d1_batch; RELEASE d1_batch');
+        throw error;
+      }
     },
   };
 }
@@ -285,6 +292,33 @@ test('deleting a surface takes its attributions and leaves the engagement', asyn
   assert.equal(r.unattributed_count, 1);
 });
 
+test('#4835: a failed surface delete rolls back its attribution deletes', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const s = await call(e, 'POST', '/surfaces', ours, { name: 'Directory' });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/source`, ours, { surface_id: s.body.id });
+  db.exec("CREATE TRIGGER reject_surface_delete BEFORE DELETE ON partner_surfaces BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
+  const result = await call(e, 'DELETE', `/surfaces/${s.body.id}`, ours);
+  assert.ok(result.status >= 400);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM engagement_sources').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_surfaces').get<any>().c, 1);
+});
+
+test('#4835: attribution exposes a second page with timestamp ties', async () => {
+  const db = freshDb();
+  const insert = db.prepare(`INSERT INTO engagements (uid, need_id, quote_id, partner_id, founder_id, project_id, price, created_at)
+    VALUES (?, 401, ?, 1, ?, 9, 1, '2026-01-01')`);
+  for (let i = 0; i < 200; i++) insert.run(`extra-${i}`, 900 + i, FOUNDER_USER);
+  const e = env(db);
+  const first = (await call(e, 'GET', '/attribution?page=1', ours)).body;
+  const second = (await call(e, 'GET', '/attribution?page=2', ours)).body;
+  assert.equal(first.items.length, 200);
+  assert.equal(first.has_more, true);
+  assert.equal(second.items.length, 1);
+  assert.equal(second.has_more, false);
+  assert.equal(new Set([...first.items, ...second.items].map((item) => item.engagement_id)).size, 201);
+});
+
 test('retiring a surface keeps it and everything it produced', async () => {
   const e = env(freshDb());
   const s = await call(e, 'POST', '/surfaces', ours, { name: 'Old listing' });
@@ -317,6 +351,23 @@ test('a proof item is self-stated until a live consent exists', async () => {
   const list = (await call(e, 'GET', '/proof', ours)).body;
   assert.equal(list.published_count, 0);
   assert.equal(list.self_stated_count, 1);
+});
+
+test('#4835: a failed proof delete preserves its consent and code', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
+  const ask = await call(e, 'POST', `/proof/${item.body.id}/consent-request`, ours, {
+    consenter_name: 'Dana', consenter_email: 'dana@client.example', consenter_role: 'CTO',
+  });
+  assert.equal(ask.status, 200);
+  assert.equal((await call(e, 'POST', `/proof-consents/${ask.body.invite_token}/code`, null, {})).status, 200);
+  db.exec("CREATE TRIGGER reject_proof_delete BEFORE DELETE ON partner_proof_items BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END");
+  const result = await call(e, 'DELETE', `/proof/${item.body.id}`, ours);
+  assert.ok(result.status >= 400);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_items').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_consents').get<any>().c, 1);
+  assert.equal(db.prepare('SELECT COUNT(*) c FROM partner_proof_consent_codes').get<any>().c, 1);
 });
 
 test('the firm has no route that can grant consent', async () => {
@@ -372,6 +423,64 @@ test('the firm can read its link back, and the link alone answers nothing', asyn
   });
   assert.equal(own.status, 403);
   assert.equal((await call(e, 'GET', '/proof', ours)).body.items[0].is_published, false);
+});
+
+test('#4835: proof reads only page history and reports whole-firm publication counts', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const old = (await call(e, 'POST', '/proof', ours, { title: 'Old confirmed result' })).body;
+  const foreign = (await call(e, 'POST', '/proof', theirs, { title: 'Another firm' })).body;
+  for (const [owner, item, email] of [[ours, old, 'client@example.test'], [theirs, foreign, 'other@example.test']] as const) {
+    const ask = await call(e, 'POST', `/proof/${item.id}/consent-request`, owner, {
+      consenter_name: 'Client', consenter_email: email,
+    });
+    assert.equal(ask.status, 200);
+    assert.equal((await answer(e, ask.body.invite_token, { consent_text: 'Agreed' })).status, 200);
+  }
+  db.prepare("UPDATE partner_proof_items SET created_at = '2026-01-01' WHERE id = ?").run(old.id);
+  const insert = db.prepare(`INSERT INTO partner_proof_items (uid, partner_id, kind, title, created_at)
+    VALUES (?, 1, 'case_study', 'New result', '2026-02-01')`);
+  for (let i = 0; i < 200; i++) insert.run(`new-proof-${i}`);
+
+  const fetched: number[][] = [];
+  const prepare = e.DB.prepare.bind(e.DB);
+  e.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (/SELECT k\.\*/.test(sql)) {
+      const bind = statement.bind;
+      statement.bind = (partner: number, ids: string) => {
+        fetched.push(JSON.parse(ids));
+        return bind(partner, ids);
+      };
+    }
+    return statement;
+  };
+  const first = (await call(e, 'GET', '/proof', ours)).body;
+  assert.equal(first.total, 201);
+  assert.equal(first.published_count, 1);
+  assert.equal(first.self_stated_count, 200);
+  assert.equal(first.has_more, true);
+  assert.deepEqual(fetched[0], first.items.map((item: any) => item.id));
+  assert.equal(first.items.length, 200);
+  assert.ok(first.items.every((item: any, index: number) => index === 0 || first.items[index - 1].id > item.id));
+
+  const next = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.deepEqual(fetched[1], [old.id]);
+  assert.equal(next.has_more, false);
+  assert.equal(next.published_count, 1);
+  assert.deepEqual(next.items.map((item: any) => [item.id, item.consents[0].state]), [[old.id, 'confirmed']]);
+
+  const empty = (await call(e, 'GET', '/proof?page=3', ours)).body;
+  assert.deepEqual(empty.items, []);
+  assert.equal(empty.total, 201);
+  assert.equal(fetched.length, 2);
+
+  assert.equal((await call(e, 'GET', '/proof?page=0', ours)).status, 400);
+  assert.equal((await call(e, 'PATCH', `/proof/${old.id}`, ours, { title: 'Edited result' })).status, 200);
+  const changed = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.equal(changed.published_count, 0);
+  assert.equal(changed.self_stated_count, 201);
+  assert.equal(changed.items[0].consents[0].state, 'superseded');
 });
 
 test('the client answers unauthenticated, and that is what publishes it', async () => {

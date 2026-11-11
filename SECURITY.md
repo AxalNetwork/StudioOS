@@ -92,9 +92,12 @@ severity bucket we assigned and why.
   production Advisor surface runs on Cloudflare Workers AI only; the
   dev/eval-only provider toggle and its gating contract are documented
   in [`docs/dev/ANTHROPIC_DEV.md`](docs/dev/ANTHROPIC_DEV.md). Any
-  finding that bypasses the mount gate or the
-  `scripts/ci/no-anthropic-in-prod.mjs` CI guard to reach a non-WAI
-  provider from a production stage is in scope.
+  `scripts/ci/no-anthropic-in-prod.mjs` guard runs in `npm run test:guards`.
+  It walks the Personal Advisor route/service import graph, refuses a path to
+  D851's provider service or adapters, restricts Anthropic references to a
+  reviewed file allowlist, and pins the dev assistant's production-and-flag
+  mount gate. A finding that bypasses those controls to reach a non-WAI
+  provider from a production Advisor stage is in scope.
 - Trust Center, Due Diligence, Admin Console, and Monitoring &
   Observability surfaces.
 

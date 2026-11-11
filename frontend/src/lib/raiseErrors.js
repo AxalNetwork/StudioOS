@@ -65,6 +65,8 @@ export function isSentence(text) {
   const t = text.trim();
   if (t.length < 3 || t.length > 300) return false;
   if (CODE_SHAPE.test(t)) return false;
+  // A bare status or number ("409") is not a sentence: the publish panel showed "Publish 409" (#5376).
+  if (!/[a-z]{2}/i.test(t)) return false;
   return !INTERNAL.test(t);
 }
 

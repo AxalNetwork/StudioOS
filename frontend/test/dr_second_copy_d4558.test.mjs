@@ -16,6 +16,7 @@ import { resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { describe } from '../../scripts/d1-backup-manifest.mjs';
+import { keypair, fakeAws } from './_dr_fakes.mjs';
 
 const COPY = resolve(process.cwd(), 'scripts/dr-second-copy.sh');
 const DRILL = resolve(process.cwd(), 'scripts/dr-drill.sh');
@@ -25,13 +26,6 @@ const SQL = `CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT);\nINSERT INTO
 const KEY = 'd1/studioos-db/backup-2026-11-07.sql';
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
-function keypair(dir) {
-  const id = join(dir, 'owner.key');
-  execFileSync('age-keygen', ['-o', id], { stdio: 'ignore' });
-  const recipient = readFileSync(id, 'utf8').match(/public key: (age1[0-9a-z]+)/)[1];
-  return { id, recipient };
-}
-
 function manifest(sql, { ageHours = 2 } = {}) {
   const d = describe(sql);
   return {
@@ -40,45 +34,6 @@ function manifest(sql, { ageHours = 2 } = {}) {
     time_travel_bookmark: null, size_bytes: Buffer.byteLength(sql), sha256: sha(sql),
     statements: d.statements, tables: d.tables, migrations: d.migrations,
   };
-}
-
-/** A fake `aws s3api`: objects on disk under store/, every call in calls.log. */
-function fakeAws(dir) {
-  const src = `#!/usr/bin/env node
-const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
-const a = process.argv.slice(2);
-fs.appendFileSync(${JSON.stringify(join(dir, 'calls.log'))}, JSON.stringify(a) + '\\n');
-const arg = (n) => { const i = a.indexOf(n); return i >= 0 ? a[i + 1] : null; };
-const store = ${JSON.stringify(join(dir, 'store'))};
-const at = (k) => path.join(store, arg('--bucket'), k);
-if (a[0] !== 's3api') { console.error('unexpected'); process.exit(64); }
-const op = a[1]; const key = arg('--key');
-if (op === 'put-object') {
-  const f = at(key);
-  if (arg('--if-none-match') === '*' && fs.existsSync(f)) { console.error('An error occurred (PreconditionFailed) when calling the PutObject operation (412)'); process.exit(254); }
-  const body = fs.readFileSync(arg('--body'));
-  if (arg('--checksum-sha256') !== crypto.createHash('sha256').update(body).digest('base64')) { console.error('An error occurred (BadDigest) when calling the PutObject operation'); process.exit(254); }
-  const meta = Object.fromEntries((arg('--metadata') || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
-  fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(f, body); fs.writeFileSync(f + '.meta', JSON.stringify(meta));
-  console.log('{}'); process.exit(0);
-}
-if (op === 'head-object') {
-  const f = at(key);
-  if (!fs.existsSync(f)) { console.error('An error occurred (404) when calling the HeadObject operation: Not Found'); process.exit(254); }
-  const meta = JSON.parse(fs.readFileSync(f + '.meta', 'utf8'));
-  if (process.env.CORRUPT_HEAD && key.endsWith('.age')) meta.sha256 = '0'.repeat(64);
-  console.log(JSON.stringify({ ContentLength: fs.statSync(f).size, Metadata: meta })); process.exit(0);
-}
-if (op === 'get-object') {
-  const f = at(key); const out = a[a.indexOf(key) + 1];
-  if (!fs.existsSync(f)) { console.error('An error occurred (NoSuchKey)'); process.exit(254); }
-  fs.copyFileSync(f, out); console.log('{}'); process.exit(0);
-}
-console.error('fake aws: unexpected ' + op); process.exit(64);
-`;
-  writeFileSync(join(dir, 'aws'), src);
-  chmodSync(join(dir, 'aws'), 0o755);
 }
 
 function world() {

@@ -71,6 +71,14 @@ function seedDb({ holders = [] as number[], withSuperAdmins = true, withLicenceA
       id INTEGER PRIMARY KEY, email TEXT, name TEXT, role TEXT, is_active INTEGER DEFAULT 1);
     CREATE TABLE activity_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, details TEXT, actor TEXT, user_id INTEGER);
+    -- D5361 (#5361): the demotion batch also records the trust re-seed each
+    -- former administrator is owed, so the batch needs its table.
+    CREATE TABLE licence_termination_reseeds (
+      licence_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+      failure_code TEXT, last_attempt_at TEXT, completed_at TEXT,
+      created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      PRIMARY KEY (licence_id, user_id));
   `);
   if (withLicenceAdmins) {
     db.exec('CREATE TABLE licence_admins (licence_id INTEGER, user_id INTEGER UNIQUE, admin_role TEXT)');

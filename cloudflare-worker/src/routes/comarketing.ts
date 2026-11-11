@@ -17,6 +17,7 @@ import { refuse } from '../util/refusal';
 import { logActorAct } from '../services/actorLog';
 import { notify } from '../services/notify';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -467,15 +468,25 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
   const publishedBy = next === 'published' ? user.id : (p.published_by_user_id ?? null);
   // D1132: only from the status this read saw, so a second admin deciding in
   // between is refused with who decided, never overwritten.
-  const written = await c.env.DB.prepare(
-    `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
-       attribution_code=?, published_at=?, published_url=?, published_by_user_id=?, updated_at=? WHERE id=? AND status=?`
-  ).bind(next, reviewNotes, reviewedBy, reviewedAt, setAttribCode, publishedAt, publishedUrl, publishedBy, stampedAt, p.id, p.status).run();
+  const action = `comarketing_${next}`;
+  const details = JSON.stringify({ pitch_uid: p.uid, partner_id: p.partner_id });
+  const actor = await hashEmail(String(user.email || ''));
+  const committed = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
+         attribution_code=?, published_at=?, published_url=?, published_by_user_id=?, updated_at=? WHERE id=? AND status=?`
+    ).bind(next, reviewNotes, reviewedBy, reviewedAt, setAttribCode, publishedAt, publishedUrl, publishedBy, stampedAt, p.id, p.status),
+    c.env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+       SELECT NULL, ?, ?, ?, ? WHERE changes() > 0`,
+    ).bind(user.id, action, details, actor),
+  ]);
+  if (committed.some((row) => 'success' in row && !row.success)) throw new Error('Decision batch failed');
+  const written = committed[0];
   if (Number(written?.meta?.changes ?? 0) !== 1) {
     const now = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
     return alreadyDecided(c, now ?? p, target);
   }
-  await logActorAct(c.env, user, `comarketing_${next}`, { pitch_uid: p.uid, partner_id: p.partner_id });
   // D4814 (AP-18f): the decision is committed above, so a notice that does
   // not go out is reported (`notified: false`), never thrown as a failure
   // that would invite a second decision.

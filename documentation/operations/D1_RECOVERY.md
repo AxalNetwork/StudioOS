@@ -91,26 +91,96 @@ created, so nothing has to be re-requested.
 
 ## 3. The nightly export
 
-`backup-d1.yml` runs `wrangler d1 export` at **02:10 UTC daily** and puts the
-file in R2 under `studioos-backups`, keyed per database. `restore-d1.sh` walks
-an operator through importing one.
+`backup-d1.yml` runs `wrangler d1 export` daily and puts the file in R2 under
+`studioos-backups`, keyed per database, with a manifest beside it (§5, D4558).
+`scripts/restore-d1.sh` imports one into a database you name. Since D5337 it
+runs **the drill's own code** (`scripts/dr-restore-lib.sh`): the same manifest
+check, chunked import and row-count comparison, so a green drill (§5) is
+evidence that this script works.
 
-**Two things about that script an operator must know before running it.**
+### Before you run it: create the target
 
-**It does not truncate.** Its own header says so, and it is not a nicety: the
-import fails at the first duplicate primary key, so the target has to be empty.
-There is no `--force`, and adding one would be worse than the failure.
+There is **no default target**: the old one, `studioos-db-preview`, is not in
+the account. Create an empty, EU-resident database (§4):
 
-**Its default target does not exist.** The script defaults to
-`studioos-db-preview`, and that database is **not in the account** — the
-account holds six D1 databases and it is not one of them. `wrangler.toml` still
-carries `database_id = "REPLACE_WITH_PREVIEW_D1_ID"` for it. So the default is
-not a safe default; it is a database you must create first, which brings you
-to §4.
+```
+npx wrangler d1 create studioos-db-restore --jurisdiction eu
+npx wrangler d1 info studioos-db-restore --json    # expect "jurisdiction": "eu"
+```
 
-`INCIDENT_RESPONSE.md`'s RTO row promises *"a one-liner against a
-freshly-provisioned preview DB"*. Nothing provisions one. Under time pressure,
-create it deliberately — and with the flag.
+### Run it
+
+From the primary backup in R2, or a local export with its
+`.manifest.json` beside it (or named by `DR_MANIFEST_FILE`):
+
+```
+scripts/restore-d1.sh r2://studioos-backups/d1/studioos-db/backup-2026-11-09.sql studioos-db-restore
+scripts/restore-d1.sh ./backup-2026-11-09.sql studioos-db-restore
+```
+
+From the independent encrypted copy (§7), with a **read** key for its bucket
+and the owner's key file on a local disk for the run:
+
+```
+DR_SOURCE=independent \
+DR_AGE_IDENTITY_FILE=/path/to/d1-recovery.key \
+DR_COPY_ENDPOINT=https://… DR_COPY_BUCKET=… \
+AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… \
+scripts/restore-d1.sh d1/studioos-db/daily/2026-11-07T08-12-00Z studioos-db-restore
+```
+
+It needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and `wrangler`,
+`node` and `jq` on the path (`aws` and `age` too for the independent copy).
+
+### What it does, in order
+
+1. **Refuses the target by name** when it is missing or is production
+   (`studioos-db`, or a name or id in `wrangler.toml`'s production tables).
+2. **Fetches the backup and its manifest** into a private temp directory.
+   - For the independent copy, it checks the ciphertext's sha256 against the
+     copy manifest, then decrypts it with `age`.
+   - `age` reads the key file where it is. The key is never copied or printed.
+3. **Checks the backup against its manifest** (sha256, size, key, last
+   migration known to this checkout). This happens before the target is read.
+   - Any backup age is accepted (`DR_MAX_BACKUP_AGE_HOURS`, default 9600 h).
+     An old export is what this path is for.
+4. **Checks the target.** It must exist, report `jurisdiction: eu`, not carry
+   production's id, and be empty. D1's own `_cf_` tables do not count.
+   - **It does not truncate.** A populated target is refused, never cleared.
+     There is no `--force`.
+5. **Asks you to type the target's name.**
+6. **Imports in chunks** (D523). The schema goes first, then the data with
+   parent tables first and foreign-key cycles broken at a nullable column,
+   then indexes, views and triggers. Each chunk is its own
+   `wrangler d1 execute --remote --file`.
+7. **Compares every table's row count** with the manifest.
+
+The backup, the plaintext and the chunks are removed on every exit. The script
+prints names, counts, sizes, hashes and times only. It never prints a row, and
+never prints wrangler's error text, which can quote a statement.
+
+### When it stops
+
+It exits non-zero and prints one `reason=<code>` line:
+
+| Exit | Reasons |
+| --- | --- |
+| 1, before anything is imported | `target_unnamed`, `target_invalid`, `target_is_production`, `target_missing`, `target_not_eu`, `target_not_empty`, `target_unreadable`, `confirmation_mismatch`, `key_missing`, `point_invalid`, `copy_unconfigured`, `age_missing`, `tool_missing`, `source_invalid`, `source_missing` |
+| 2, before anything is imported | `manifest_missing`, `manifest_invalid`, `key_mismatch`, `size_mismatch`, `sha256_mismatch`, `migration_unknown`, `stale` (older than `DR_MAX_BACKUP_AGE_HOURS`), `ciphertext_missing`, `ciphertext_mismatch`, `decrypt_failed` |
+| 2, during the import | `split_failed`; `chunk_<n>_of_<total>` (the log names the tables that chunk writes, and their parents); `chunks_incomplete` |
+| 3, after the import | `row_counts_differ` (the log names the tables); `row_counts_unreadable` (a table in the manifest is missing) |
+
+After a failed import, the target is partly written. Delete it and create a
+new one before trying again.
+
+### After it passes
+
+Point a preview Worker at the restored database and run the smoke suite. Then
+cut production over by setting `database_id` in both `[[d1_databases]]` and
+`[[env.production.d1_databases]]` in `wrangler.toml`, and deploy.
+
+`INCIDENT_RESPONSE.md`'s RTO row covers this path: 4 hours, with the target
+created first.
 
 ---
 
@@ -119,7 +189,7 @@ create it deliberately — and with the flag.
 **Production is EU-resident, and that fact lives nowhere in this repository.**
 Read from the account: `studioos-db` reports `jurisdiction: eu`. Every other
 database in the account reports `null`. `wrangler.toml` contains no
-`jurisdiction` key at all, and neither does `restore-d1.sh`.
+`jurisdiction` key at all.
 
 A jurisdiction is fixed **when a database is created** and cannot be changed
 afterwards. So:
@@ -133,11 +203,10 @@ Restore into the first and you have recovered the data into the wrong
 jurisdiction, with no way to move it — you would have to create a third
 database and import again.
 
-**The repo already knows how to do this and does not do it here.**
 `branch-provision.yml` passes `--jurisdiction` when it creates a branch
-database. `restore-d1.sh` never creates a database, so the flag has nowhere to
-live in it — which is exactly why the operator has to supply it, and why it is
-written down here.
+database, and the drill passes it for its throwaway. `restore-d1.sh` never
+creates a database: the operator creates the target with the flag, and the
+script refuses a target that does not report `jurisdiction: eu` (D5337).
 
 **Verify after creating, before importing:**
 
@@ -153,9 +222,10 @@ npx wrangler d1 info studioos-db-restore --json    # expect "jurisdiction": "eu"
 backup's key from `heartbeat-d1.json`, creates a throwaway EU database, imports
 the backup, counts rows and tables, and deletes the database, on failure too.
 Every run writes `drill-d1.json` to the backups bucket, pass or fail, and HQ's
-Security page reads it (D263). It **re-implements** the import rather than
-calling `restore-d1.sh`, so the two paths can drift; the drill is the one that
-runs.
+Security page reads it (D263). Since D5337 it fetches, verifies, imports and
+compares through `scripts/dr-restore-lib.sh`, the same code `restore-d1.sh`
+runs, so the two paths cannot drift. Only the target differs: the drill
+creates and deletes a throwaway; the operator names one.
 
 **Until D263 it had never reached the import.** The four runs from June to
 September 2026 failed before it: two on unset secrets, one at the preflight,

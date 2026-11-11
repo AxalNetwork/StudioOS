@@ -7,6 +7,7 @@
  * row of zeros; a Mismatch names both figures and both sources and presumes
  * neither right.
  */
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 export const STATE_ORDER = ['backed', 'founders_figure', 'mismatch', 'not_backed', 'stale'];
 export const STATE_LABELS = {
@@ -100,8 +101,7 @@ export function lastChecked(at) {
 
 /** A refusal in our words: the Worker's sentence when it gave one. */
 export function refusalText(e, fallback) {
-  const m = typeof e?.message === 'string' ? e.message.trim() : '';
-  return m || fallback;
+  return userFacingRaiseError(e, { fallback, scope: 'raise:pitch:check' });
 }
 
 /**

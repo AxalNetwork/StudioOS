@@ -18,6 +18,7 @@ keep theirs without a condition anywhere naming them.
 | `advisorExpertise.js` | V4 — profile, services, proof, thinking, and Visibility as a gap. |
 | `network.js` | P6 and V5, one factory for both licences. The role decides only whether Organizations has a store. |
 | `research.js` | P7 and V6. Both artboards draw two sections; Ask, Markets and Companies are link cards because the design drew no section for them. |
+| `offerReadiness.js` | D4841 (#4841): the Offers root's readiness figures, what needs attention (at most three, each from a recorded state) and the per-zone previews, as pure functions over `partnerOffers.js`'s own sources. Not a registry; `index.js` does not key it. |
 
 ## The rule for adding to it
 

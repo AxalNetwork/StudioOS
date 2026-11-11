@@ -607,8 +607,10 @@ test('test 5: the role table, for the read and its writer-only sections, and a f
     const r = await one(db, 'operating-systems', 'crm', user);
     assert.equal(r.status, 200, `user ${user}`);
     assert.deepEqual(writerOnly(r.body), [true, true], `user ${user}`);
-    // #1695 adds Choose connector and Disconnect after it; Reconnect stays the tool's link.
-    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.href])[0], ['reconnect', `/build/connect?tool=hubspot&project_id=${P}`]);
+    // #1695 adds Choose connector and Disconnect after it; the primary action
+    // stays the tool's link. D5065 (#5065): this CRM's connection is active, so
+    // the primary action manages it rather than offering to repair it.
+    assert.deepEqual(r.body.actions.map((a: any) => [a.key, a.label, a.href])[0], ['manage', 'Manage connection', `/build/connect?tool=hubspot&project_id=${P}`]);
   }
   const partner = await one(db, 'operating-systems', 'crm', PARTNER);
   assert.equal(partner.status, 200);

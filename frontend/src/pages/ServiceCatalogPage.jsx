@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
+import OfferPages from '../ui/OfferPages.jsx';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { FillFormBar, FillLabel, useScopedFill } from '../ui/useScopedFill.jsx';
 import { SCOPED_FORMS } from '../lib/fillScoped.js';
@@ -24,6 +25,7 @@ const CAT_LABEL = {
   legal: 'Legal', accounting: 'Accounting', design: 'Design', recruiting: 'Recruiting',
   fractional_cfo: 'Fractional CFO', gtm: 'GTM', engineering: 'Engineering', marketing: 'Marketing',
 };
+
 
 /**
  * The Offers · Catalog zone body (`/offers/catalog`): `MineTab` alone, inside a
@@ -56,24 +58,25 @@ export function BrowseTab({ user, isFounder }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [result, setResult] = useState(null);
+  const applied = React.useRef({});
+  const request = React.useRef(0);
 
-  async function load() {
+  async function load(page = 1, query = applied.current) {
+    const generation = ++request.current;
     setLoading(true); setError(null);
     try {
-      const params = {};
-      if (filters.category) params.category = filters.category;
-      const r = await api.listServiceOfferings(params);
+      const r = await api.listServiceOfferings({ ...query, page });
       // `.items`, not `.offerings`. GET /services/offerings answers
       // `c.json({ items })` (services.ts) and always has; reading `.offerings`
       // resolved to undefined, fell through the `|| []`, and rendered the
       // browse catalogue as "no offerings published yet" however many were.
-      let list = r.items || [];
-      if (filters.q) {
-        const q = filters.q.toLowerCase();
-        list = list.filter((o) => `${o.title} ${o.summary || ''} ${o.partner_name || ''}`.toLowerCase().includes(q));
-      }
-      setRows(list);
+      if (generation !== request.current) return;
+      setRows(r.items || []);
+      setResult(r);
+      applied.current = query;
     } catch (e) {
+      if (generation !== request.current) return;
       // 404 = catalogue route missing on this deployment (stale worker).
       // The empty-state card already covers "no offerings published yet" —
       // don't double up with a raw red banner above it.
@@ -81,7 +84,7 @@ export function BrowseTab({ user, isFounder }) {
       if (e?.status === 404 || msg === 'not found') setRows([]);
       else setError(e.message);
     }
-    finally { setLoading(false); }
+    finally { if (generation === request.current) setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
 
@@ -91,14 +94,14 @@ export function BrowseTab({ user, isFounder }) {
         <Filter size={14} className="text-gray-500" />
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-          <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search title / partner"
+          <input value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} placeholder="Search title or description"
             className="pl-8 border border-gray-300 rounded-md px-3 py-1.5 text-sm dark:border-gray-700" />
         </div>
         <select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm bg-white dark:border-gray-700 dark:bg-gray-900">
           <option value="">All categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}
         </select>
-        <button onClick={load} className="ml-auto bg-violet-600 hover:bg-violet-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Apply</button>
+        <button onClick={() => load(1, filters)} className="ml-auto bg-violet-600 hover:bg-violet-700 text-white rounded-md px-4 py-1.5 text-sm font-medium">Apply</button>
       </div>
 
       {error && <ErrorBox message={error} />}
@@ -108,6 +111,7 @@ export function BrowseTab({ user, isFounder }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {rows.map((o) => <OfferingCard key={o.id} o={o} onClick={() => setSelected(o)} />)}
       </div>
+      <OfferPages label="Catalogue" result={result} busy={loading} onPage={load} />
 
       {selected && (
         <OfferingDetailModal
@@ -288,8 +292,11 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [result, setResult] = useState(null);
+  const request = React.useRef(0);
 
-  async function load() {
+  async function load(page = result?.page ?? 1) {
+    const generation = ++request.current;
     setLoading(true); setError(null);
     try {
       // `?mine=1` scopes on owner_user_id and includes inactive drafts — the
@@ -299,14 +306,20 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       // tab reported "0 offerings" to a partner with a full catalogue. It also
       // returned early on a missing `partner_id`, which is not the key this
       // store uses — an offering belongs to a user, not to a partner org row.
-      const r = await api.listServiceOfferings({ mine: 1 });
+      let r = await api.listServiceOfferings({ mine: 1, page });
+      if (!r.items?.length && page > 1) {
+        r = await api.listServiceOfferings({ mine: 1, page: Math.max(1, Math.ceil(r.total / r.page_size)) });
+      }
+      if (generation !== request.current) return;
       setRows(r.items || []);
+      setResult(r);
     } catch (e) {
+      if (generation !== request.current) return;
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg === 'not found') setRows([]);
       else setError(e.message);
     }
-    finally { setLoading(false); }
+    finally { if (generation === request.current) setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-line */ }, []);
 
@@ -317,7 +330,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     } catch (e) { setError(e.message); }
   }
   async function remove(o) {
-    if (!window.confirm(`Delete "${o.title}"? If any engagements reference it, it will be unlisted instead.`)) return;
+    if (!window.confirm(`Remove "${o.title}"? If it has service requests or market readings, it will be unlisted and those records will be kept. Otherwise it will be deleted.`)) return;
     try { await api.deleteServiceOffering(o.id); load(); } catch (e) { setError(e.message); }
   }
 
@@ -332,7 +345,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
   const visible = NARROW[filter] ? rows.filter(NARROW[filter]) : rows;
   const choose = (key) => setFilter((current) => (current === key ? 'all' : key));
 
-  // COUNTED OVER THE WHOLE CATALOG, NEVER OVER THE CHIP-NARROWED LIST.
+  // The tiles describe this page before its local chip filter.
   const priced = rows.filter((o) => o.price_cents != null);
   const drafts = rows.filter((o) => o.price_cents == null);
   const live = rows.filter((o) => catalogState(o) === 'Live');
@@ -392,7 +405,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       {error && <ErrorBox message={error} />}
       {loading && <div className="text-sm text-gray-500">Loading…</div>}
 
-      {/* THE ARTBOARD'S FOUR TILES. */}
+      {result?.total > result?.page_size && <p className="text-sm text-gray-600 dark:text-gray-400">Figures and filters below apply to this page.</p>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <CatalogTile
           label="Live services" value={String(live.length)}
@@ -418,9 +431,9 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
       <div className="rounded-[10px] border border-cyan-200 bg-cyan-50/50 p-3 text-[11.5px] leading-relaxed text-gray-700 dark:border-cyan-900 dark:bg-cyan-950/20 dark:text-gray-300">
         <strong className="text-cyan-700 dark:text-cyan-300">Reads through to Pipeline:</strong>{' '}
         Pipeline · Leads computes each lead’s match score against these entries.
-        {drafts.length
+        {result?.total <= result?.page_size && (drafts.length
           ? ` The ${drafts.length === 1 ? 'unpriced entry scores' : `${drafts.length} unpriced entries score`} as a capability but not as a fit, so leads shaped like ${drafts.length === 1 ? 'it' : 'them'} currently read lower than they should — a pricing decision, surfacing as a pipeline symptom.`
-          : ' Every entry carries a price, so every one of them can be scored as a fit rather than only as a capability.'}
+          : ' Every entry carries a price, so every one of them can be scored as a fit rather than only as a capability.')}
       </div>
 
       {!loading && rows.length === 0 ? (
@@ -474,6 +487,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
         />
       )}
 
+      <OfferPages label="Catalogue" result={result} busy={loading} onPage={load} />
       {!visible.length && rows.length > 0 && (
         <p className="text-[12px] text-gray-600 dark:text-gray-300">
           Nothing in the catalog is charged this way. The engagement model is set on the service itself.

@@ -625,7 +625,7 @@ export function underModule(modules, path, cycle = 'validate', action = 'record'
  * switching either while a read is in flight can never show or apply the
  * earlier one.
  */
-export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage, read = (id) => api.listInterviews(id), lightboxProps }) {
+export function RecordMount({ projectId, interviewId, setupKey, onClose, onStarted, asPage, read = (id) => api.listInterviews(id), lightboxProps }) {
   const { recorder } = useActiveRecording();
   // D768: while Record a session is open, the rail is that option's (transcription).
   useRailOption('transcribe:interview', 'Record a session');
@@ -647,7 +647,7 @@ export function RecordMount({ projectId, interviewId, onClose, onStarted, asPage
       .catch(() => settle({ status: 'error', interview: null }));
     return () => { alive = false; };
   }, [key, projectId, interviewId, attempt]); // eslint-disable-line react-hooks/exhaustive-deps -- `read` is a test seam, not a trigger
-  const lightbox = (interview) => <RecordLightbox projectId={projectId} interview={interview} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} {...lightboxProps} />;
+  const lightbox = (interview) => <RecordLightbox projectId={projectId} interview={interview} initialClientKey={setupKey} onClose={onClose} onStarted={onStarted} recorder={recorder} asPage={asPage} {...lightboxProps} />;
   if (!key) return lightbox(null);
   if (newFor === key) return lightbox(null);
   const current = result?.key === key ? result : null;
@@ -703,7 +703,7 @@ export function finishPath(session, where, projectId) {
  * around any of them: two dialogs must never nest.
  */
 function ValidateMount({ projectId, searchParams, onClose, onDone, asPage }) {
-  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
+  return <RecordMount projectId={projectId} interviewId={searchParams.get('interview')} setupKey={searchParams.get('setup_key')} onClose={onClose} onStarted={onDone} asPage={asPage} />;
 }
 // D686 §5.4 (#1597): the sheet connects for this project's company, and a
 // change re-reads the Build page once the lightbox closes.
@@ -1445,7 +1445,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
-    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} key={projectId} aiOff={!fillsOn} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;

@@ -107,6 +107,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `dataroomFormats.ts` | D1602: bounded CSV/XLSX/DOCX readers and schema/citation validation; no formula or URL execution. |
 | `dataroomExtract.ts` | D1602: owner-approved, quoted current-version extraction through the existing queue and metered AI router. |
 | `gridHealth.ts` | D1537 (#3786, deck v2 B10): the Grid's health for HQ. `gridMetrics` (per element and model from the run steps: error rate, p95 against its target, cost, fallbacks, drift; eval score not recorded), `errorBudget` and `noteErrorBudgetAlert` (99% of batches over 28 days; a quarter burned in an hour tells each active HQ admin once, from the hourly cron), and `funnelKpis` (decks with 3+ generations, quote conversion by price band, the accept rate, first deck to first share, 4-week retention). Counts and ids only; nothing to count is null. |
+| `iconGeometry.ts` | D4574 H3 (#4574): the icon set's NODES, read from a static asset (`/deck-icons/lucide-<version>.json`) through the Worker's own assets binding instead of being bundled — they were 395.5 KiB of the Worker script, its largest single input. `elements.ts` keeps only the names, so naming, searching and checking an icon stay synchronous; the two callers that draw (the elements route and the PowerPoint writer, through the deck export routes) load the geometry first. Read once per isolate; a failed read is not remembered, and its caller says the set could not be read. |
 
 ## The rule
 

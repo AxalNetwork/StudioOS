@@ -75,7 +75,7 @@ export default function partnerPipelineBoard(role, api) {
         ]),
         // The worker's own sentence: what the score is counted from, or that
         // nothing is scored because the firm has stated no rule to score with.
-        footnote: (d) => d?.scoring_note || null,
+        footnote: (d) => summary(d?.population_note, d?.scoring_note) || null,
       },
       {
         slug: 'proposals',

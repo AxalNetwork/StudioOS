@@ -19,6 +19,10 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const BASELINE = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../sql/schema_baseline.sql'), 'utf8');
+const ONE_ACCEPTED = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../sql/migrations/202611101051_quotes_one_accepted.sql'),
+  'utf8',
+);
 const SCORE_TABLE = BASELINE.slice(BASELINE.indexOf('CREATE TABLE score_snapshots'), BASELINE.indexOf(');', BASELINE.indexOf('CREATE TABLE score_snapshots')) + 2)
   .replace(/REFERENCES \w+\(\w+\)/g, '');
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -28,7 +32,7 @@ const OPERATOR = 2;
 function coerce(a: any[]): any[] {
   return a.map((v) => (v === undefined ? null : v === true ? 1 : v === false ? 0 : v));
 }
-function makeD1(db: InstanceType<typeof DatabaseSync>, hooks: { failOn?: RegExp } = {}) {
+function makeD1(db: InstanceType<typeof DatabaseSync>, hooks: { failOn?: RegExp; failureMessage?: string } = {}) {
   return {
     prepare(sql: string) {
       let b: any[] = [];
@@ -37,7 +41,7 @@ function makeD1(db: InstanceType<typeof DatabaseSync>, hooks: { failOn?: RegExp 
         async first() { return db.prepare(sql).get(...b) ?? null; },
         async all() { return { results: db.prepare(sql).all(...b) }; },
         async run() {
-          if (hooks.failOn?.test(sql)) throw new Error('simulated write failure');
+          if (hooks.failOn?.test(sql)) throw new Error(hooks.failureMessage || 'simulated write failure');
           const r = db.prepare(sql).run(...b);
           return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } };
         },
@@ -96,6 +100,7 @@ function freshDb() {
   db.prepare("INSERT INTO projects (id, name, stage, status) VALUES (42, 'Orbit Notes', 'idea', 'active')").run();
   db.prepare("INSERT INTO founder_needs (id, uid, project_id, founder_id) VALUES (7, 'need_7', 42, 9)").run();
   db.prepare("INSERT INTO quotes (id, uid, need_id, partner_id, price) VALUES (11, 'q11', 7, 1, 1000), (12, 'q12', 7, 2, 2000)").run();
+  db.exec(ONE_ACCEPTED);
   return db;
 }
 
@@ -109,7 +114,7 @@ async function token(userId: number, role: string) {
   return new SignJWT({ user_id: userId, role, jti: `t-${userId}` })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 }
-async function call(db: InstanceType<typeof DatabaseSync>, method: string, path: string, body?: unknown, as: { id: number; role: string } = { id: ADMIN, role: 'admin' }, hooks: { failOn?: RegExp } = {}) {
+async function call(db: InstanceType<typeof DatabaseSync>, method: string, path: string, body?: unknown, as: { id: number; role: string } = { id: ADMIN, role: 'admin' }, hooks: { failOn?: RegExp; failureMessage?: string } = {}) {
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db, hooks) };
   const res = await app.request(path, {
     method, headers: { Authorization: `Bearer ${await token(as.id, as.role)}`, 'Content-Type': 'application/json' },
@@ -140,6 +145,36 @@ test('two different quotes accepted for one need: exactly one wins, one engageme
   assert.equal(rows(db, 'SELECT id FROM engagements').length, 1);
   const loser = a.status === 409 ? a : b;
   assert.match(loser.body.error, /decided/);
+});
+
+test('the database refuses a direct second accepted quote for one need', () => {
+  const db = freshDb();
+  db.prepare("UPDATE quotes SET status = 'accepted' WHERE id = 11").run();
+  assert.throws(
+    () => db.prepare("INSERT INTO quotes (uid, need_id, partner_id, price, status) VALUES ('q13', 7, 3, 3000, 'accepted')").run(),
+    /UNIQUE constraint failed: quotes\.need_id/,
+  );
+  assert.equal(rows(db, "SELECT id FROM quotes WHERE need_id = 7 AND status = 'accepted'").length, 1);
+});
+
+test('the migration fails closed when a database already has duplicate accepted quotes', () => {
+  const db = freshDb();
+  db.exec('DROP INDEX uq_quotes_one_accepted_per_need');
+  db.prepare("UPDATE quotes SET status = 'accepted' WHERE id IN (11, 12)").run();
+  assert.throws(() => db.exec(ONE_ACCEPTED), /UNIQUE constraint failed: quotes\.need_id/);
+  assert.equal(rows(db, "SELECT id FROM quotes WHERE status = 'accepted'").length, 2,
+    'the migration does not guess which commercial acceptance to reject');
+});
+
+test('a racing unique-index loser receives the claim statement\'s 409, never a 500', async () => {
+  const db = freshDb();
+  const r = await call(db, 'POST', '/api/quotes/11/accept', undefined, { id: ADMIN, role: 'admin' }, {
+    failOn: /UPDATE quotes SET status='accepted'/,
+    failureMessage: 'D1_ERROR: UNIQUE constraint failed: quotes.need_id: SQLITE_CONSTRAINT',
+  });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.error, 'need_already_decided');
+  assert.deepEqual(rows(db, 'SELECT status FROM quotes ORDER BY id').map((q) => q.status), ['submitted', 'submitted']);
 });
 
 test('a stale accept of the rival after the need is decided is refused and changes nothing', async () => {

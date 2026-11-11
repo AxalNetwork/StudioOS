@@ -79,7 +79,7 @@ import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
 import { screeningSummary } from '../services/sanctions';
-import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
+import { readBackupHeartbeat, readRestoreDrill, readRestoreDrillHistory } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import {
   emergencyScope, deploymentOutcomes, signOutOnBranches, type BranchSignOutTarget,
@@ -524,6 +524,7 @@ r.get('/overview', async (c) => {
       // read with the same validation. KV has no restore drill.
       kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
+      drill_history: await readRestoreDrillHistory(env, now),
       not_recorded: DR_NOT_RECORDED,
     },
   };

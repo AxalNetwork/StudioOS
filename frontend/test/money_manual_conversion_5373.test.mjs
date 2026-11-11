@@ -19,10 +19,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { scanFile, scanTree } from './_moneyConversionScan.mjs';
 
 const root = new URL('../../', import.meta.url);
-const rootPath = root.pathname;
+const rootPath = fileURLToPath(root);
 
 /** [kind, reason, files] groups: file -> exact number of flagged lines. */
 const ALLOW = [
@@ -62,6 +63,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/roundMath.ts": 1,
     "cloudflare-worker/src/services/secondaryProceeds.ts": 1,
     "cloudflare-worker/src/services/ventureScoring/collectors.ts": 2,
+    "cloudflare-worker/src/integrations/providers/stripe.ts": 1,
   } },
   { kind: 'eur', reason: "Research directory sizes are recorded in euros only (the EUR_SOURCE rule); the read refuses any other size currency.", files: {
     "frontend/src/pages/research/GeographyProfile.jsx": 1,
@@ -149,7 +151,6 @@ const ALLOW = [
     "frontend/src/components/spinout/SafeIssuancesCard.jsx": 1,
   } },
   { kind: 'usd', reason: "Admin, advisor-firm, partner, network and founder surfaces that name US dollars in the column or the copy (`price_usd`, `hourly_rate_usd`, \"in dollars\", `$` in the string).", files: {
-    "frontend/src/lib/moneyInput.js": 1,
     "frontend/src/lib/partnerSettlements.js": 1,
     "frontend/src/pages/ServiceCatalogPage.jsx": 2,
     "frontend/src/pages/admin/advisors/apOverviewModel.js": 1,
@@ -185,7 +186,8 @@ const ALLOW = [
     "cloudflare-worker/src/routes/partner_pipeline.ts": 1,
     "cloudflare-worker/src/routes/partnernet.ts": 2,
     "cloudflare-worker/src/routes/research.ts": 7,
-    "cloudflare-worker/src/routes/services.ts": 3,
+    // #4680 snapshots a legacy USD-only price in the atomic INSERT … SELECT.
+    "cloudflare-worker/src/routes/services.ts": 4,
     "cloudflare-worker/src/services/conversationItems.ts": 1,
     "cloudflare-worker/src/services/decks/newDeck.ts": 1,
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
@@ -203,33 +205,12 @@ const ALLOW = [
     "cloudflare-worker/src/services/subscriptionPlans.ts": 1,
     "cloudflare-worker/src/services/captable.ts": 1,
   } },
-  { kind: 'pending', reason: "Use of Funds money paths (scenario and hire amounts carry a currency column). Owned by #5375, which edits these files; migrating them here would collide. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/scenariosForecastModel.js": 5,
-    "frontend/src/pages/raise/useoffunds/useOfFundsModel.js": 3,
-    "cloudflare-worker/src/services/useOfFunds/legacy.ts": 2,
-    "cloudflare-worker/src/services/useOfFunds/read.ts": 1,
-    "cloudflare-worker/src/services/useOfFunds/store.ts": 4,
-  } },
   { kind: 'pending', reason: "Cap table instruments and the cap-table model: an instrument carries its own currency, but the saved model and the access record are in whole major units. Named in D5373 as a follow-up.", files: {
     "frontend/src/pages/raise/captable/instrumentsModel.js": 1,
     "frontend/src/pages/raise/captable/overviewModel.js": 2,
     "cloudflare-worker/src/services/capTableAccessRecord.ts": 2,
     "cloudflare-worker/src/services/capTableToday.ts": 5,
     "cloudflare-worker/src/services/capTableWrites.ts": 4,
-  } },
-  { kind: 'pending', reason: "Advisor practice ledger, partner pipeline retainers and proposals, pitch chart sources and the Stripe MRR import hold amounts whose currency is a column of the row; the forms were not rebuilt here. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/advisor/practice/EarningsZone.jsx": 2,
-    "frontend/src/pages/advisor/practice/SessionsZone.jsx": 1,
-    "frontend/src/pages/advisor/practice/engagementCorrection.js": 1,
-    "frontend/src/pages/advisor/practice/practiceTools.js": 2,
-    "frontend/src/pages/partner/offers/AudienceFitZone.jsx": 1,
-    "frontend/src/pages/partner/pipeline/ProposalsZone.jsx": 2,
-    "frontend/src/pages/partner/pipeline/RetainersZone.jsx": 2,
-    "frontend/src/pages/raise/pitch/chartModel.js": 1,
-    "frontend/src/pages/raise/pitch/sourcesModel.js": 1,
-    "cloudflare-worker/src/integrations/providers/stripe.ts": 3,
   } },
 ];
 
@@ -281,6 +262,13 @@ test('every pending file is named in the decision file, so the follow-up list is
 
 test('the surfaces D5373 migrated whole are off the allow-list and use the money layer (checkout, payModel and wellbeing keep USD-only lines, so they are listed and tested in money_surfaces_5373)', () => {
   const migrated = [
+    'frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/scenariosForecastModel.js:parseMinor',
+    'frontend/src/pages/raise/useoffunds/useOfFundsModel.js:formatMinorOrCount',
+    'cloudflare-worker/src/services/useOfFunds/legacy.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/read.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/store.ts:toMajorString',
     'frontend/src/lib/partnerEarnings.js:formatMinor',
     'frontend/src/pages/events/myEventsModel.js:formatMinorOrCount',
     'frontend/src/pages/events/eventDrawersModel.js:formatMinorOrCount',

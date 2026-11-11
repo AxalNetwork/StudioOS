@@ -76,7 +76,8 @@ function fixture() {
     ${migrationTable('034_unmounted_routes', 'service_engagements')}
   `);
   for (const m of ['188_engagement_invoices', '209_partner_offers_stores', '227_service_offering_model_and_cents',
-    '229_fit_rule_signal', '233_partner_lead_passes']) db.exec(migration(m));
+    '229_fit_rule_signal', '233_partner_lead_passes',
+    '202611101748_4680_service_request_history']) db.exec(migration(m));
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(OUR_PARTNER_ID, 'p-1', 'Acme Studio', 'u10@example.test');
   db.prepare('UPDATE users SET partner_id = ? WHERE id = ?').run(OUR_PARTNER_ID, PARTNER);
   db.prepare('INSERT INTO founders (id, name, email) VALUES (?,?,?)').run(FOUNDER_USER, 'Fran', 'f@example.test');
@@ -111,6 +112,25 @@ function offersBoard(env, spy = []) {
   return boardFor('partner', '/offers', api)       ;
 }
 const sectionOf = (board, slug) => board.sections.find((s) => s.slug === slug);
+
+test('#4835: catalogue pages are stable and search finds a match outside the first page', async () => {
+  const db = fixture();
+  const insert = db.prepare('INSERT INTO service_offerings (id, owner_user_id, title, is_active) VALUES (?, ?, ?, 1)');
+  for (let id = 1; id <= 201; id++) insert.run(id, PARTNER, id === 1 ? 'Rare match' : 'Ordinary offer');
+  const env = envOf(db);
+  const list = async (query) => (await ask(services, env, 'GET', `/offerings?mine=1&${query}`, PARTNER)).body;
+  const first = await list('page=1');
+  assert.equal(first.items.length, 200);
+  assert.equal(first.total, 201);
+  assert.equal(first.has_more, true);
+  assert.equal(first.measures_scope, 'page');
+  const next = await list('page=2');
+  assert.deepEqual(next.items.map((item) => item.id), [1]);
+  assert.equal(next.has_more, false);
+  const searched = await list('q=RARE');
+  assert.equal(searched.total, 1);
+  assert.deepEqual(searched.items.map((item) => item.id), [1]);
+});
 
 // ── 1. root and destination reconcile ───────────────────────────────────────
 
@@ -188,7 +208,8 @@ test('catalogue requests are counts by status; a pending request is not booked a
   assert.deepEqual(r.measures, r.items[0].requests, 'the total is not the sum of the rows');
   // No historical monetary measure: null, not zero and not requests x price.
   assert.equal(r.booked_value_cents, null);
-  assert.match(r.booked_value_note, /Not recorded/);
+  assert.equal(r.requests_without_recorded_amount, 7);
+  assert.match(r.booked_value_note, /quoted USD/);
   assert.ok(r.measures_basis.booked && r.measures_basis.paid, 'the basis of each measure is not served');
   // The shared frontend total is the worker's total.
   assert.deepEqual(requestTotals(r.items), r.measures);

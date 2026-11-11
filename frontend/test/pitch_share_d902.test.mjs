@@ -104,7 +104,7 @@ test('the dialog says what Create link writes before it writes, and the link it 
   for (const path of [null, '', 'https://evil.example/x', '/share/deck/a b', '/share/deck/../x/y', '//evil.example/share/deck/x']) {
     assert.equal(shareUrl({ share_path: path }, 'https://axal.vc'), null, String(path));
   }
-  assert.equal(shareFailure({ status: 400, data: { detail: 'include has an unknown key' } }), 'include has an unknown key No link was made.');
+  assert.equal(shareFailure({ status: 400, data: { detail: 'include has an unknown key' } }), 'Check what you entered. Nothing was saved.');
   assert.equal(shareFailure(new Error('network')), 'The link could not be made. Nothing was sent.');
 });
 
@@ -207,7 +207,7 @@ test('a failed prospects read falls back to a typed name, and a refusal makes no
     assert.equal(m.pr(m.by('pitch-share-create')).disabled, true, 'no name, no link');
     await m.change('pitch-share-label', 'Fund Z');
     await m.press('pitch-share-create');
-    assert.match(m.text(), /view_limit is 1 to 100 No link was made\./);
+    assert.match(m.text(), /Check what you entered\. Nothing was saved\./);
     assert.equal(m.created.length, 0);
     assert.equal(m.by('pitch-share-made'), undefined);
   } finally { await m.unmount(); }

@@ -26,7 +26,9 @@ const uidOf = (n: number) => n.toString(16).padStart(32, 'a');
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '708_calendar_source_prefs.sql', '202611101741_5207_calendar_copy_jobs.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  }
   // 1 admin · 2, 3 founders · 4, 5, 6 investors · 7 cofounder · 8 removed advisor ·
   // 9 advisor with a sessions grant · 10 someone else's person · 11 lead partner ·
   // 12 a partner with a commitment row (not a party: only an investor commits) ·

@@ -36,6 +36,8 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { isSentence, userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { newDeckFailure } from './pitchSafeErrors.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckActionsApi } from '../../../lib/api/deckActions.js';
@@ -166,8 +168,8 @@ export async function through(call, issue) {
     if (status === 404) return unavailable(issue);
     // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` on a
     // Worker without its binding) is still "Coming later", with the Worker's own sentence.
-    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
-    const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
+    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, isSentence(e?.message) ? e.message.trim() : NOT_ON);
+    const message = status === 402 ? newDeckFailure(e) : userFacingRaiseError(e, { fallback: 'could not be read', scope: 'raise:pitch:adapter' });
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
     return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
@@ -264,7 +266,10 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
  * generate, icons: { total, offset, items } }`.
  */
-export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
+// D4574 H3 (#4574): the icon nodes are a static asset the Worker reads, so a
+// page of icons can come back `unreadable`. It is passed on, never flattened
+// to an empty list: the panel says the set could not be read.
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null, unreadable: page?.unreadable === true, reason: page?.reason ?? null } })), SURFACES.elementsLibrary.issue);
 /**
  * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
  * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
