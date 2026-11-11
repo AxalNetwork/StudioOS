@@ -145,6 +145,11 @@ The pieces they draw with:
   (S-RUN), each page's header, facts, tabs and How it runs text, Guard L, the
   bands, Waiting for you, the mentor counts (S-CNT, S-COV), the Refer & Earn,
   Perks and Learning figures, the scope chip and the refusals.
+- `ProgramShellSections.jsx` — D5313 (#5313): the generic program shell's
+  sections (PG03), shared by `GenericProgramPage.jsx` and every built-in
+  program moved into the shell (Perks first): Capability modules,
+  Availability & grants, Participation, Settings (member access), and
+  `OnRegistry`, which marks a section whose registry read is out or failed.
 
 The redirects, each the route's whole element:
 

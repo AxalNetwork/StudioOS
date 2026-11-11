@@ -4,7 +4,8 @@ import { SignJWT, jwtVerify } from 'jose';
 import type { Env, User, JWTPayload } from './types';
 import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
-import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, FREEZING_STATUSES } from './util/authErrors';
+import { hasMfaEnrolled, readAdminMfaPolicy } from './services/adminMfaPolicy';
 import { recordSecurityEvent } from './services/securityEvents';
 import { heldLicences, holdsLicence, isLicence, type Licence } from './services/accountLicences';
 
@@ -690,8 +691,36 @@ export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> 
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
   if (user.role !== 'admin') throw new Error('Admin required');
+  await refuseWithoutRequiredMfa(c, user);
   await refuseWhileFrozen(c, user);
   return user;
+}
+
+// One setting read per request, however many gates ask.
+const requestMfaPolicy = new WeakMap<Context<{ Bindings: Env }>, Promise<boolean>>();
+
+/**
+ * D5249 — "Require MFA for admins", option B (enrol-first). While the HQ
+ * setting is on, an admin without MFA reaches no route behind `requireAdmin`
+ * (and so none behind `requireSuperAdmin`, which is layered on it), reads
+ * included: the answer is a 403 naming where to enrol. Enrolment itself is
+ * `requireAuth` (`/api/settings/totp/*`, passkeys), so the refusal cannot
+ * close the way back.
+ *
+ * WHAT IT COSTS: nothing for an admin with MFA, which the user row already
+ * says; one keyed `platform_settings` read per request for one without.
+ * On a branch it does nothing: the setting is HQ's, and only HQ's Super Admin
+ * route writes it. An unreadable setting reads as off (services/adminMfaPolicy.ts).
+ */
+async function refuseWithoutRequiredMfa(c: Context<{ Bindings: Env }>, user: User): Promise<void> {
+  if (hasMfaEnrolled(user as any)) return;
+  if (branchOf(c.env)) return;
+  let on = requestMfaPolicy.get(c);
+  if (!on) {
+    on = readAdminMfaPolicy(c.env).then((p) => p.on);
+    requestMfaPolicy.set(c, on);
+  }
+  if (await on) throw new Error(ADMIN_MFA_REQUIRED);
 }
 
 /**
