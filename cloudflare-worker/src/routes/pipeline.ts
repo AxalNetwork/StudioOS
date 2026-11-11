@@ -98,6 +98,7 @@ async function ensureSchema(env: Env) {
       snapshot_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       key_metrics TEXT,
       traction_score REAL,
+      traction_formula_version INTEGER,
       ai_review TEXT,
       created_by INTEGER
     )`,
@@ -471,8 +472,8 @@ pipeline.post('/metrics/snapshot', async (c) => {
   const scored = scoreTraction(km);
   const stored = { ...km, [FORMULA_KEY]: scored.formula_version };
 
-  const r: any = await c.env.DB.prepare(`INSERT INTO metrics_snapshots (deal_id, key_metrics, traction_score, created_by) VALUES (?, ?, ?, ?) RETURNING *`)
-    .bind(dealId, JSON.stringify(stored), scored.score, user.id).first();
+  const r: any = await c.env.DB.prepare(`INSERT INTO metrics_snapshots (deal_id, key_metrics, traction_score, traction_formula_version, created_by) VALUES (?, ?, ?, ?, ?) RETURNING *`)
+    .bind(dealId, JSON.stringify(stored), scored.score, scored.formula_version, user.id).first();
   await logAction(c.env, 'metrics_snapshot', user.id, { deal_id: dealId, score: scored.score, formula_version: scored.formula_version });
   return c.json({
     ...r, key_metrics: km, traction_score: scored.score,
@@ -512,7 +513,7 @@ pipeline.post('/decision-gate/review', async (c) => {
   const traction = Number(latestMetric.traction_score);
   // D4693: the formula this snapshot was scored with. A snapshot from before versions is formula 1 (a 0-110 scale); its
   // score keeps that meaning and the review says so, rather than reading it as "/100".
-  const formulaVersion = formulaVersionOf(km);
+  const formulaVersion = latestMetric.traction_formula_version ?? formulaVersionOf(km);
   const scoreMax = scaleOf(formulaVersion);
 
   // Rule-based recommendation as fallback / safety floor

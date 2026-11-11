@@ -409,7 +409,10 @@ partnerPipeline.get('/leads', async (c) => {
  * written none of these down.
  */
 export function audienceFitQuery(rules: any[], offerings: any[], extra: string): string {
-  const fit = rules.filter((r) => r.kind === 'best_fit' && String(r.value ?? '').trim()).map((r) => String(r.value).trim());
+  const fit = rules
+    .filter((r) => r.kind === 'best_fit' && r.signal !== 'weak_intent')
+    .map((r) => String(r.value ?? '').trim())
+    .filter(Boolean);
   const sells = offerings.map((o) => String(o.title ?? '').trim()).filter(Boolean);
   return [
     extra,

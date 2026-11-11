@@ -15,6 +15,7 @@ import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isFounder, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { issueInvoice, invoiceDto } from '../services/engagementInvoices';
 import { logActorAct } from '../services/actorLog';
+import { companyBinds } from '../services/partnerPipelineRules';
 import {
   analysePipeline, weightedPipeline, analyseDelivery, analyseByShape, analyseByQuarter,
   analyseLossReasons, inDecisionPeriod, quarterOf,
@@ -321,15 +322,11 @@ quotesRouter.get('/me', async (c) => {
     const rows = await (
       isAdmin(user)
         ? c.env.DB.prepare('SELECT * FROM quotes ORDER BY created_at DESC LIMIT 200')
-        : companyId !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT * FROM quotes
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL)
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?)
                 ORDER BY created_at DESC LIMIT 200`,
-            ).bind(user.partner_id ?? -1, companyId)
-          : c.env.DB.prepare(
-              'SELECT * FROM quotes WHERE partner_id = ? ORDER BY created_at DESC LIMIT 200',
-            ).bind(user.partner_id ?? -1)
+            ).bind(user.partner_id ?? -1, ...companyBinds(companyId))
     ).all<Quote>();
     const items: any[] = [];
     for (const q of rows.results || []) items.push(await quoteDto(c.env, q));
@@ -466,33 +463,23 @@ quotesRouter.get('/analytics', async (c) => {
               WHERE q.id > ?
               ORDER BY q.id LIMIT ?`,
           ).bind(afterId, ANALYTICS_CHUNK)
-        : analyticsCompany !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
                  FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND (q.company_id = ? OR q.company_id IS NULL) AND q.id > ?
+                WHERE q.partner_id = ? AND (? IS NULL OR q.company_id IS NULL OR q.company_id = ?) AND q.id > ?
                 ORDER BY q.id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
-          : c.env.DB.prepare(
-              `SELECT q.id, q.status, q.price AS amount, q.created_at, q.decided_at, q.loss_reason, n.category AS shape
-                 FROM quotes q LEFT JOIN founder_needs n ON n.id = q.need_id
-                WHERE q.partner_id = ? AND q.id > ? ORDER BY q.id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
     ).all<QuoteAnalyticsRow & { id: number }>();
     const readEngagements = (afterId: number) => (
       admin
         ? c.env.DB.prepare(
             'SELECT id, status, price AS amount FROM engagements WHERE id > ? ORDER BY id LIMIT ?',
           ).bind(afterId, ANALYTICS_CHUNK)
-        : analyticsCompany !== null
-          ? c.env.DB.prepare(
+        : c.env.DB.prepare(
               `SELECT id, status, price AS amount FROM engagements
-                WHERE partner_id = ? AND (company_id = ? OR company_id IS NULL) AND id > ?
+                WHERE partner_id = ? AND (? IS NULL OR company_id IS NULL OR company_id = ?) AND id > ?
                 ORDER BY id LIMIT ?`,
-            ).bind(user.partner_id ?? -1, analyticsCompany, afterId, ANALYTICS_CHUNK)
-          : c.env.DB.prepare(
-              'SELECT id, status, price AS amount FROM engagements WHERE partner_id = ? AND id > ? ORDER BY id LIMIT ?',
-            ).bind(user.partner_id ?? -1, afterId, ANALYTICS_CHUNK)
+            ).bind(user.partner_id ?? -1, ...companyBinds(analyticsCompany), afterId, ANALYTICS_CHUNK)
     ).all<EngagementAnalyticsRow & { id: number }>();
     const quoteRows = await readAllByIdChunks(readQuotes);
 
@@ -708,10 +695,8 @@ engagementsRouter.get('/', async (c) => {
     // theirs to be tested against. Admin stays wide.
     const companyId = isAdmin(user) ? null : await activeCompanyFor(c, user);
     if (isPartner(user)) {
-      where = 'e.partner_id = ?'; params.push(user.partner_id ?? -1);
-      if (companyId !== null) {
-        where += ' AND (e.company_id = ? OR e.company_id IS NULL)'; params.push(companyId);
-      }
+      where = 'e.partner_id = ? AND (? IS NULL OR e.company_id IS NULL OR e.company_id = ?)';
+      params.push(user.partner_id ?? -1, ...companyBinds(companyId));
     }
     else if (isFounder(user)) {
       where = 'e.founder_id = ?'; params.push(user.founder_id ?? -1);

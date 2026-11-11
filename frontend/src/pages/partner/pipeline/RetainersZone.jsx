@@ -547,11 +547,7 @@ export default function PartnerRetainersZone() {
           rows={[
             ...visible.map((r) => {
               const u = r.utilisation_pct;
-              const monthly = r.retainer?.amount_cents == null
-                ? null
-                : (r.retainer.cadence === 'quarterly'
-                  ? Math.round(Number(r.retainer.amount_cents) / 3)
-                  : Number(r.retainer.amount_cents));
+              const monthly = r.retainer?.active === false ? null : r.retainer?.monthly_amount_cents;
               const days = r.retainer?.days_to_renewal;
               return {
                 key: r.engagement_id,

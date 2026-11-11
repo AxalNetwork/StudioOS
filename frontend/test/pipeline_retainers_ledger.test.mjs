@@ -298,8 +298,9 @@ test('utilisation is the artboard’s bar, capped, and quarterly is divided by t
     'the worker stopped converting a quarterly amount to a monthly one');
   assert.ok(/monthly_cents = monthly/.test(worker) && !/\/ 3\b/.test(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:')),
     'the retainers route divides by three itself instead of calling the shared rule');
-  assert.ok(/Math\.round\(Number\(r\.retainer\.amount_cents\) \/ 3\)/.test(inst),
-    'the ledger row stopped converting a quarterly amount to a monthly one');
+  assert.match(inst, /r\.retainer\?\.active === false \? null : r\.retainer\?\.monthly_amount_cents/,
+    'the ledger row uses the Worker amount and leaves ended amounts absent');
+  assert.doesNotMatch(inst, /amount_cents\)\s*\/|cadence === 'quarterly'/);
   assert.ok(flat(zone).includes('Quarterly amounts are divided by three'),
     'the stated limits stopped saying how a quarterly retainer is counted');
   assert.ok(flat(zone).includes('nothing is annualised, because a renewal date is not a commitment to renew'),
