@@ -130,6 +130,15 @@ async function scopeSession(c: any): Promise<{ user: User; session: SessionRow; 
   return { ...s, session };
 }
 
+/** D5353 — an inserted session is not usable until the atomic setup batch stamped it complete. */
+function incompleteSetup(session: SessionRow): Response | null {
+  return session.setup_complete_at ? null : json({
+    detail: 'setup_incomplete',
+    message: 'This session setup has not finished. Finish setup or delete it before recording.',
+    session_id: session.id,
+  }, 409);
+}
+
 const text = (v: unknown, max: number): string | null => {
   if (typeof v !== 'string') return null;
   const t = v.trim();
@@ -235,6 +244,7 @@ const botFailure = (e: unknown) => e instanceof BotError
 sessions.post('/sessions/:id/bot', async (c) => {
   const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
   if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  const unfinished = incompleteSetup(scoped.session); if (unfinished) return unfinished;
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ code: 'invalid_body', message: 'Provide a meeting link.' }, 400);
   try { return json({ bot: await dispatchBot(c.env, scoped.user, scoped.session, body) }, 202); }
@@ -930,6 +940,7 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
   sessions.post(`/sessions/:id/${action}`, async (c) => {
     const s = await scopeSession(c);
     if (s instanceof Response) return s;
+    const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
     if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
     if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_control_required', message: 'Use the meeting bot controls for this session.' }, 409);
     // THE WORKER ENFORCES CONSENT. A page that hides the button is not the gate.
@@ -974,6 +985,7 @@ async function uploadChunkRefusal(env: Env, sessionId: number, seq: number, mime
 sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_upload_required', message: 'Bot audio uses its one-time upload permission.' }, 409);
@@ -1107,6 +1119,7 @@ sessions.get('/sessions/:id/live', async (c) => {
 sessions.post('/sessions/:id/finish', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;

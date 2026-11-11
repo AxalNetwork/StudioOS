@@ -127,6 +127,25 @@ test('a resumed upload sends only what the Worker does not hold, under the same 
   assert.deepEqual(again.calls.finish, [{ id: 42, lastSeq: 9, auto: false }]);
 });
 
+test('D5353: setup_incomplete uploads no bytes and retry opens the same file key', async () => {
+  const api = fakeApi();
+  let attempt = 0;
+  api.open = async (body) => {
+    api.calls.open.push(body);
+    attempt += 1;
+    return attempt === 1
+      ? { detail: 'setup_incomplete', message: 'This upload setup has not finished.', session: { id: 42, setup_complete_at: null } }
+      : { session: { id: 42, setup_complete_at: '2026-11-10 10:00:00' } };
+  };
+  const args = { file: file(), api, target: { project_id: 7 }, attestation: ATTESTED, decode: decodedOf(10) };
+  await assert.rejects(uploadRecording(args), (e) => e instanceof UploadError && e.code === 'setup_incomplete');
+  assert.equal(api.calls.put.length, 0, 'audio bytes were uploaded before setup finished');
+  assert.equal(api.calls.finish.length, 0, 'finish ran before setup finished');
+  await uploadRecording(args);
+  assert.equal(api.calls.open[1].client_key, api.calls.open[0].client_key);
+  assert.equal(api.calls.put.length, 1);
+});
+
 test('longer than three hours, or silent, is refused before any request', async () => {
   for (const [decode, code] of [[decodedOf(MAX_UPLOAD_MS / 1000 + 1), 'upload_too_long'], [decodedOf(0), 'empty']]) {
     const api = fakeApi();
