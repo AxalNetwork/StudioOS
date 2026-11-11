@@ -30,3 +30,8 @@ test('ending an engagement on the board sends the reason the Worker requires', (
   assert.match(ENGAGEMENTS, /decision\.decision === 'ended' && !END_REASON_LABEL\[decision\.end_reason\]/);
   assert.match(ENGAGEMENTS, /data-testid="end-reason-select"/);
 });
+
+test('a version is marked ready, and unmarked, through the Worker; neither call sends', () => {
+  assert.match(API, /markMyAdvisorDeliverableVersionReady: \(id, version\) =>\s*request\(`\/advisors\/me\/deliverables\/\$\{id\}\/versions\/\$\{version\}\/ready`, \{ method: 'POST' \}\)/);
+  assert.match(API, /clearMyAdvisorDeliverableVersionReady: \(id, version\) =>\s*request\(`\/advisors\/me\/deliverables\/\$\{id\}\/versions\/\$\{version\}\/ready`, \{ method: 'DELETE' \}\)/);
+});

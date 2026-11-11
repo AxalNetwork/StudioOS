@@ -4406,6 +4406,13 @@ export const api = {
   // would sit in Unopened forever and bias the median.
   sendMyAdvisorDeliverableVersion: (id, version) =>
     request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+  // #5316 (D5316): mark a version ready to send, or take the mark off. NEITHER SENDS ANYTHING; the send
+  // clears the mark. A sent version is a 409 `already_sent`; one with no content a 422 `empty_version`.
+  // Each answers the version with `ready_at`, `ready_by_user_id` and `ready_by_name`.
+  markMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'POST' }),
+  clearMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'DELETE' }),
 
   // Migration 240 — the three things that decide what the calendar contains.
   // A price here is what the advisor ASKS FOR; nothing in this group charges

@@ -384,6 +384,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
       ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
       ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
+      // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
+      ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
+      ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
     ]);
     await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
