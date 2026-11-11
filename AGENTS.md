@@ -12,8 +12,8 @@ in one format, so no person has to relay it.
 
 ## Slots
 
-Work belongs to a slot, not to a session. There are thirty slots, `S01`
-to `S30`. Each has a label, `slot:SNN`, and its queue is the open issues that
+Work belongs to a slot, not to a session. There are thirty-seven standard slots, `S01`
+to `S37`. Each has a label, `slot:SNN`, and its queue is the open issues that
 carry it. Session 1 is slot `S01` and orchestrates: it writes the tasks and
 answers STATUS comments on the same thread.
 
@@ -35,8 +35,15 @@ because only Session 1 makes a task ready.
 1. **Pull.** Take the oldest open issue labelled with your slot and
    `state:ready`, one task at a time. Over the REST API that is
    `GET /repos/AxalNetwork/StudioOS/issues?labels=slot:SNN,state:ready&state=open&sort=created&direction=asc`.
-2. **Claim.** Swap `state:ready` for `state:in-progress` and post a STATUS
-   comment.
+2. **Claim.** Run `node scripts/claim.mjs claim <issue> --slot <SLOT> --agent
+   <AGENT> --session <SESSION>` to create the atomic `claim/<issue>` ref.
+   Exit 0 won; exit 3 means another holder: leave it alone. Renew before the
+   24-hour TTL with `renew` and the same identity. On exit 4 (HTTP 403), fall
+   back to the label claim and say so in STATUS. Then swap `state:ready` for
+   `state:in-progress` and post a STATUS comment. Release with `release` and
+   the same identity on DONE or hand-back; never delete another holder's ref.
+   An expired ref remains held until its holder releases it or the owner
+   explicitly hands it back. The reaper only comments.
 3. **Work.** Branch `agent/<agent>/<issue>-<slug>` from the latest `main`. If
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains
