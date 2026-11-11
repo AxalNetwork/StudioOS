@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { scanSource, entriesOf, parseAllowlist, compareAllowlist, compareGrowth, needsBaseCheck, readMainAllowlist, main as clockMain } from '../../scripts/check-test-clock.mjs';
+import { scanSource, entriesOf, parseAllowlist, compareAllowlist, compareGrowth, needsBaseCheck, readMainAllowlist, scanTree, main as clockMain } from '../../scripts/check-test-clock.mjs';
 const scan = (s) => scanSource(s, 'frontend/test/fixture.test.mjs');
 
 test('date flags real reads with exact line numbers, including bare Date calls', () => {
@@ -59,7 +59,10 @@ test('allowlist is sorted and unique; growth fails, shrink passes', () => {
 });
 
 test('PR and merge_group both compare main; only main pushes are exempt', () => {
-  for (const GITHUB_EVENT_NAME of ['pull_request', 'merge_group', 'workflow_dispatch']) assert.equal(needsBaseCheck({ CI: 'true', GITHUB_EVENT_NAME, GITHUB_REF: 'refs/heads/main' }), true);
+  for (const flags of [{ CI: 'true' }, { GITHUB_ACTIONS: 'true' }, { CI: 'false', GITHUB_ACTIONS: 'true' }]) {
+    for (const GITHUB_EVENT_NAME of ['pull_request', 'merge_group', 'workflow_dispatch']) assert.equal(needsBaseCheck({ ...flags, GITHUB_EVENT_NAME, GITHUB_REF: 'refs/heads/main' }), true);
+    assert.equal(needsBaseCheck({ ...flags, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main' }), false);
+  }
   assert.equal(needsBaseCheck({ CI: 'true', GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main' }), false);
   assert.equal(needsBaseCheck({ CI: 'true', GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/other' }), true);
   assert.equal(needsBaseCheck({}), false);
@@ -80,13 +83,37 @@ test('a shallow checkout fetches main; a missing main list fails closed', () => 
     git(root, ['clone','--depth=1',`file://${remote}`,checkout]);
     assert.equal(git(checkout, ['rev-parse','--is-shallow-repository']).trim(), 'true');
     assert.deepEqual(readMainAllowlist(checkout), ['date frontend/test/a.test.mjs']);
-    for (const event of ['pull_request', 'merge_group']) assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: event }), 0);
+    for (const event of ['pull_request', 'merge_group']) {
+      assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: event }), 0);
+      assert.equal(clockMain(checkout, { CI: 'false', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: event }), 0);
+    }
     writeFileSync(join(checkout, 'frontend/test/b.test.mjs'), 'Date.now();');
     writeFileSync(join(checkout, 'scripts/test-clock-allowlist.txt'), 'date frontend/test/a.test.mjs\ndate frontend/test/b.test.mjs\n');
-    for (const event of ['pull_request', 'merge_group']) assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: event }), 1);
+    for (const event of ['pull_request', 'merge_group']) {
+      assert.equal(clockMain(checkout, { CI: 'true', GITHUB_EVENT_NAME: event }), 1);
+      assert.equal(clockMain(checkout, { CI: 'false', GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: event }), 1);
+    }
     rmSync(join(checkout, 'frontend/test/b.test.mjs'));
     writeFileSync(join(checkout, 'scripts/test-clock-allowlist.txt'), 'date frontend/test/a.test.mjs\n');
     git(seed, ['rm','scripts/test-clock-allowlist.txt']);commit();git(seed, ['push','origin','main']);
     assert.throws(() => readMainAllowlist(checkout), /cannot read origin\/main allowlist/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('adjacent CommonJS, JSX and typed module helpers are scanned with the suite', () => {
+  const root = mkdtempSync(join(tmpdir(), 'clock-helper-'));
+  try {
+    mkdirSync(join(root, 'frontend/test'), { recursive: true });
+    writeFileSync(join(root, 'frontend/test/a.test.mjs'), 'export {};');
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ scripts: Object.fromEntries(['test:frontend','test:worker','test:meeting-bot','test:retention'].map((key) => [key, "node --test 'frontend/test/*.test.mjs'"])) }));
+    const helpers = {
+      '_clock.cjs': 'module.exports = Date.now();',
+      '_view.jsx': 'export default () => <span>{Date.now()}</span>;',
+      '_module.mts': 'export const stamp: number = Date.now();',
+      '_common.cts': 'const stamp: number = Date.now(); module.exports = stamp;',
+    };
+    for (const [file, source] of Object.entries(helpers)) writeFileSync(join(root, 'frontend/test', file), source);
+    assert.deepEqual(entriesOf(scanTree(root)), Object.keys(helpers).map((file) => `date frontend/test/${file}`).sort());
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

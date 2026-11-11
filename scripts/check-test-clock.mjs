@@ -22,7 +22,7 @@ const nameOf = (node) => {
 
 export function scanSource(source, path = 'fixture.test.mjs') {
   // Node's strip mode preserves offsets and comments. TypeScript 7 has no JS parser API.
-  const code = path.endsWith('.ts') ? stripTypeScriptTypes(source, { mode: 'strip' }) : source;
+  const code = /\.(?:[cm]?ts|tsx)$/.test(path) ? stripTypeScriptTypes(source, { mode: 'strip' }) : source;
   const comments = [];
   let ast;
   try { ast = parse.parse(code, { ecmaVersion: 'latest', sourceType: 'module', locations: true, onComment: comments }); }
@@ -110,7 +110,7 @@ export function suiteFiles(root) {
     if (!matches.length) throw new Error(`no test files for ${key}`);
     for (const file of matches) { files.add(file); dirs.add(posix.dirname(file)); }
   }
-  for (const dir of dirs) for (const file of globSync(`${dir}/_*`, { cwd: root })) if (/\.(?:mjs|js|ts)$/.test(file) && statSync(resolve(root, file)).isFile()) files.add(file);
+  for (const dir of dirs) for (const file of globSync(`${dir}/_*`, { cwd: root })) if (/\.(?:[cm]?[jt]s|[jt]sx)$/.test(file) && statSync(resolve(root, file)).isFile()) files.add(file);
   return [...files].sort();
 }
 
@@ -140,7 +140,7 @@ export function compareGrowth(current, base) {
   return current.filter((entry) => !original.has(entry)).map((entry) => `allowlist growth is forbidden: ${entry}`);
 }
 
-export const needsBaseCheck = (env) => /^(?:true|1)$/i.test(env.CI || env.GITHUB_ACTIONS || '') && !(env.GITHUB_EVENT_NAME === 'push' && env.GITHUB_REF === 'refs/heads/main');
+export const needsBaseCheck = (env) => (/^(?:true|1)$/i.test(env.CI || '') || /^(?:true|1)$/i.test(env.GITHUB_ACTIONS || '')) && !(env.GITHUB_EVENT_NAME === 'push' && env.GITHUB_REF === 'refs/heads/main');
 
 export function readMainAllowlist(root) {
   const fetch = spawnSync('git', ['fetch', 'origin', '+main:refs/remotes/origin/main', '--depth=1'], { cwd: root, encoding: 'utf8', timeout: 60_000 });
