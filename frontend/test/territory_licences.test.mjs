@@ -146,7 +146,7 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   const s = licencePageSource();
   // D4694: the conversion moved into the form's pure module (lib/licenceCoreTermsForm.js) with the dirty-field logic.
   const form = readFileSync(resolve(root, 'frontend/src/lib/licenceCoreTermsForm.js'), 'utf8');
-  assert.match(form, /Math\.round\(n\.value \* 100\)/, 'entered units → integer cents');
+  assert.match(form, /parseMinor\(String\(form\[k\]\)/, 'entered units → integer minor units of the licence\'s own currency (D5373)');
   // D4819: the page's Terms section builds its save in its model, beside the page.
   const model = readFileSync(resolve(root, 'frontend/src/pages/admin/licenceTermsAmendModel.js'), 'utf8');
   assert.match(model, /buildCoreSave\(/, 'the page saves through it');
@@ -160,7 +160,9 @@ test('the page converts entered currency to cents and shows bps as a percentage'
   // asserted across all of `frontend/src` by `bps_single_definition.test.mjs`.
   // A guard scoped to the file a helper happens to live in cannot see the copy
   // in the next file, which is how six of them accumulated.
-  assert.match(s, /import \{ bpsPercent as pct \} from '(\.\.\/)+lib\/bps'/);
+  // D4819 part 3: the detail's rates are drawn by the Overview's model, beside the page.
+  const overview = readFileSync(resolve(root, 'frontend/src/pages/admin/licenceOverviewModel.js'), 'utf8');
+  assert.match(s + overview, /import \{ bpsPercent as pct \} from '(\.\.\/)+lib\/bps'/);
   assert.ok(
     !/\/ 100\)\.toFixed\(/.test(s),
     'bps → percent is lib/bps.js\'s, not a copy in this page',

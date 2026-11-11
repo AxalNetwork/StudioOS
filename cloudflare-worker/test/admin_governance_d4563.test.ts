@@ -48,6 +48,8 @@ function fixture({ branch = false } = {}) {
   u.run(FOUNDER, 'founder', 'Fay Made-up', 'fay@example.test');
   // The Super Admin is an elevation on admin: a super_admins row (migration 199).
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
+  // D4811 part 6: executing or archiving needs a recent step-up; each admin's session signed in with TOTP just now.
+  for (const id of [SUPER, ADMIN, FOUNDER]) db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, ?, 'totp', datetime('now'))").run(id, `sess-${id}`);
   db.prepare("INSERT INTO legal_templates (slug, title, category, body_md) VALUES ('operating_agreement_v1', 'Operating Agreement', 'gp', 'x')").run();
   db.prepare("INSERT INTO esign_envelopes (id, envelope_uuid, document_type, document_title, document_body, body_sha256, created_by, status) VALUES (40, 'env-40', 'other', 'Holdings OA', 'synthetic', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 1, 'completed'), (41, 'env-41', 'other', 'GP consent', 'synthetic', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 1, 'sent')").run();
   const files = new Map<string, { bytes: Uint8Array; type: string }>();
@@ -64,9 +66,11 @@ function fixture({ branch = false } = {}) {
   return { db, app, env, files, audits };
 }
 type F = ReturnType<typeof fixture>;
+// D4811 part 6: what a high-risk move carries (reason and typed word); the evidence is passed beside it.
+const HIGH = (confirm: string) => ({ reason: 'Recorded in a synthetic test, no real document.', confirm });
 
 async function call(f: F, who: number, method: string, path: string, body?: unknown, form?: FormData) {
-  const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const jwt = await new SignJWT({ user_id: who, jti: `sess-${who}` }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const headers: Record<string, string> = { Authorization: `Bearer ${jwt}` };
   if (body !== undefined) headers['content-type'] = 'application/json';
   const res = await f.app.request(`/api/admin/governance${path}`, { method, headers, body: form ?? (body === undefined ? undefined : JSON.stringify(body)) }, f.env);
@@ -77,7 +81,7 @@ async function call(f: F, who: number, method: string, path: string, body?: unkn
 const upload = (bytes: Uint8Array, o: { signed?: boolean; note?: string } = {}) => {
   const fd = new FormData();
   fd.append('file', new File([bytes], 'up.bin'));
-  if (o.signed) fd.append('signed', 'true');
+  if (o.signed) { fd.append('signed', 'true'); fd.append('signed_on', '2026-11-01'); fd.append('signatory', 'S. Example, Manager'); fd.append('attest', 'true'); }
   if (o.note) fd.append('note', o.note);
   return fd;
 };
@@ -155,18 +159,18 @@ test('versions: upload a PDF and a .docx, preview inline, download as a file, ev
 test('never executed unsigned: a draft cannot jump, an approved one needs a signed version or a completed envelope', async () => {
   const f = fixture();
   const { body: { document: d } } = await call(f, ADMIN, 'POST', '/documents', { entity_key: 'management', category: 'signing_authority', title: 'Signing authority' });
-  const jump = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed' });
+  const jump = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed', ...HIGH('EXECUTED'), evidence: { kind: 'version', version: 1 } });
   assert.equal(jump.status, 409);
   assert.equal(jump.body.error, 'status_move_refused');
   for (const s of ['review', 'approved']) assert.equal((await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: s })).status, 200, s);
   await call(f, ADMIN, 'POST', `/documents/${d.uid}/versions`, undefined, upload(PDF_BYTES));
-  const unsigned = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed' });
+  const unsigned = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed', ...HIGH('EXECUTED'), evidence: { kind: 'version', version: 1 } });
   assert.equal(unsigned.status, 409);
   assert.equal(unsigned.body.error, 'not_signed', 'an unsigned upload is not a signature');
-  const pending = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed', envelope_id: 41 });
+  const pending = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed', envelope_id: 41, ...HIGH('EXECUTED'), evidence: { kind: 'envelope' } });
   assert.equal(pending.body.error, 'not_signed', 'an envelope that has not completed is not a signature');
   await call(f, ADMIN, 'POST', `/documents/${d.uid}/versions`, undefined, upload(PDF_BYTES, { signed: true }));
-  const done = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed' });
+  const done = await call(f, ADMIN, 'PATCH', `/documents/${d.uid}`, { status: 'executed', ...HIGH('EXECUTED'), evidence: { kind: 'version', version: 2 } });
   assert.equal(done.status, 200, JSON.stringify(done.body));
   assert.deepEqual([done.body.document.status, done.body.document.executed_version], ['executed', 2]);
   assert.equal((await call(f, ADMIN, 'POST', `/documents/${d.uid}/versions`, undefined, upload(PDF_BYTES))).status, 409, 'an executed document takes no new version');
@@ -174,7 +178,7 @@ test('never executed unsigned: a draft cannot jump, an approved one needs a sign
   // A completed envelope is evidence too.
   const { body: { document: e } } = await call(f, ADMIN, 'POST', '/documents', { entity_key: 'holdings', category: 'operating_agreement', title: 'OA' });
   for (const s of ['review', 'approved']) await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { status: s });
-  const viaEnvelope = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { status: 'executed', envelope_id: 40 });
+  const viaEnvelope = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { status: 'executed', envelope_id: 40, ...HIGH('EXECUTED'), evidence: { kind: 'envelope' } });
   assert.deepEqual([viaEnvelope.status, viaEnvelope.body.document.envelope_id, viaEnvelope.body.document.executed_version], [200, 40, null]);
   // The envelope it was signed in stays while it is executed: unlinking it is refused, not a table error.
   const unlink = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { envelope_id: null });
@@ -182,7 +186,7 @@ test('never executed unsigned: a draft cannot jump, an approved one needs a sign
   assert.equal((f.db.prepare('SELECT envelope_id FROM governance_documents WHERE uid = ?').get(e.uid) as any).envelope_id, 40);
   const kept = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { envelope_id: 40, template_slug: null });
   assert.equal(kept.status, 200, 'resending the same envelope is no change to it');
-  const archived = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { status: 'archived' });
+  const archived = await call(f, ADMIN, 'PATCH', `/documents/${e.uid}`, { status: 'archived', ...HIGH('ARCHIVE') });
   assert.equal(archived.status, 200);
   assert.throws(() => f.db.prepare("UPDATE governance_documents SET status = 'executed', executed_version = NULL, envelope_id = NULL WHERE uid = ?").run(d.uid), /CHECK/, 'the table refuses an executed row with no evidence too');
 });

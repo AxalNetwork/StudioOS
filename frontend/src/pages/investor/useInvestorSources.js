@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { INVESTOR_AGENDA_KINDS } from '../studio/studioAgenda';
 
 export function useInvestorSources({ previewing = false, client = api } = {}) {
   const [records, setRecords] = useState({ portfolio: undefined, events: undefined });
@@ -25,7 +26,8 @@ export function useInvestorSources({ previewing = false, client = api } = {}) {
   const sequence = useRef({ portfolio: 0, events: 0 });
   // listCalendarEvents has no "upcoming" flag contract; filtering locally
   // retains only dated future records and never invents a calendar item.
-  const sources = useMemo(() => ({ portfolio: () => client.positionsAnalytics(), events: () => client.listCalendarEvents() }), [client]);
+  // D5203 (#5203): it asks only for the kinds the tile depends on, not every source.
+  const sources = useMemo(() => ({ portfolio: () => client.positionsAnalytics(), events: () => client.listCalendarEvents({ kinds: INVESTOR_AGENDA_KINDS.join(',') }) }), [client]);
 
   const read = useCallback((key) => {
     const mine = (sequence.current[key] += 1);

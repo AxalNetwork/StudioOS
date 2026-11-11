@@ -308,3 +308,48 @@ export async function collectedFor(env: Env, feePeriodIds: number[]): Promise<Ma
   for (const row of r.results || []) out.set(Number(row.target_id), { collected_on: row.posted_on, last_four: row.last_four });
   return out;
 }
+
+/**
+ * D4812 part 6 (FA-07 B) — the ledger side of each match, for the
+ * reconciliation's bank-and-ledger pair: a capital-call line's LP, call,
+ * due date and what it still owes; a fee period's quarter and net. A target
+ * no longer on the ledger is `null` with its reason, never an empty side.
+ */
+export interface LedgerSide {
+  kind: 'capital_call_line' | 'fee_period';
+  fund_id: number | null; lp_name: string | null; call_number: number | null; due_on: string | null;
+  outstanding_cents: number | null; quarter: string | null; net_cents: number | null;
+}
+
+export async function ledgerSides(env: Env, rows: Array<{ target_kind: string; target_id: number }>): Promise<Map<string, LedgerSide>> {
+  const out = new Map<string, LedgerSide>();
+  const ids = (kind: string) => JSON.stringify([...new Set(rows.filter((r) => r.target_kind === kind).map((r) => Number(r.target_id)))]);
+  const lines = rows.some((r) => r.target_kind === 'capital_call_line') ? (await env.DB.prepare(
+    `SELECT cc.id, lp.fund_id, lp.name AS lp_name, fcc.call_number, cc.due_date,
+            COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER))
+              - COALESCE((SELECT SUM(r.amount_cents) FROM capital_call_receipts r WHERE r.capital_call_id = cc.id), 0) AS outstanding_cents
+       FROM capital_calls cc
+       JOIN limited_partners lp ON lp.id = cc.limited_partner_id
+       LEFT JOIN fund_capital_calls fcc ON fcc.id = cc.fund_call_id
+      WHERE cc.id IN (SELECT value FROM json_each(?))`,
+  ).bind(ids('capital_call_line')).all<any>()).results || [] : [];
+  for (const l of lines) {
+    const owed = Number(l.outstanding_cents);
+    out.set(`capital_call_line:${Number(l.id)}`, {
+      kind: 'capital_call_line', fund_id: l.fund_id == null ? null : Number(l.fund_id), lp_name: l.lp_name || null,
+      call_number: l.call_number == null ? null : Number(l.call_number),
+      due_on: typeof l.due_date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(l.due_date) ? l.due_date.slice(0, 10) : null,
+      outstanding_cents: Number.isSafeInteger(owed) ? Math.max(0, owed) : null, quarter: null, net_cents: null,
+    });
+  }
+  const periods = rows.some((r) => r.target_kind === 'fee_period') ? (await env.DB.prepare(
+    'SELECT id, fund_id, quarter, net_cents FROM fund_fee_periods WHERE id IN (SELECT value FROM json_each(?))',
+  ).bind(ids('fee_period')).all<any>()).results || [] : [];
+  for (const p of periods) {
+    out.set(`fee_period:${Number(p.id)}`, {
+      kind: 'fee_period', fund_id: p.fund_id == null ? null : Number(p.fund_id), lp_name: null, call_number: null, due_on: null,
+      outstanding_cents: null, quarter: p.quarter || null, net_cents: p.net_cents == null ? null : Number(p.net_cents),
+    });
+  }
+  return out;
+}

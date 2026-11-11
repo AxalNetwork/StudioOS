@@ -116,7 +116,8 @@ test('Q5: both Stripe states, and neither shows a figure', () => {
 test('Q5: money to the cent with its code, dates in UTC, and the Disputes card opens each dispute', () => {
   assert.equal(disputeMoney(120000, 'eur'), '€1,200.00 EUR');
   assert.equal(disputeMoney(50, 'usd'), 'US$0.50 USD');
-  assert.match(disputeMoney(1999, 'zzz'), /^ZZZ\s19\.99$/, 'the code is said once');
+  // D5373: a code that is not a listed currency has no known decimals, so the Stripe count is named, never divided by 100.
+  assert.equal(disputeMoney(1999, 'zzz'), '1,999 minor units (currency "ZZZ" is not one we can price in)');
   assert.equal(disputeMoney(null, 'eur'), null);
   assert.equal(stripeDate(1760832000), '19 Oct 2025');
   assert.equal(stripeDate(0), null);

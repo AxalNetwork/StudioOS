@@ -54,7 +54,9 @@ function world(o: { events?: boolean } = {}) {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   if (o.events !== false) db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
@@ -241,7 +243,11 @@ test('D4534: a company skill\'s publish and retirement are in the admin audit; a
   const co = (await call(w, EDITOR, 'POST', '/skills', update({ scope: 'company', company: 'co-uid-1', name: 'Acme audit skill', roles: ['cfo'] }))).body.skill.uid;
   assert.equal((await call(w, EDITOR, 'POST', `/skills/${co}/publish`)).status, 200);
   assert.equal((await call(w, EDITOR, 'PATCH', `/skills/${co}`, { status: 'retired' })).status, 200);
-  const rows = audit().filter((r) => r.action.startsWith('company_skill_'));
+  // D4533 (F1): the draft's creation is the first row, under the company's own action name.
+  const created = audit().filter((r) => r.action.startsWith('company_skill_draft_'));
+  assert.deepEqual(created.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_draft_created']]);
+  assert.equal(JSON.parse(created[0].filters_json).company_id, 1);
+  const rows = audit().filter((r) => r.action.startsWith('company_skill_') && !r.action.startsWith('company_skill_draft_'));
   assert.deepEqual(rows.map((r) => [r.admin_user_id, r.action]), [[EDITOR, 'company_skill_published'], [EDITOR, 'company_skill_retired']]);
   assert.equal(JSON.parse(rows[0].filters_json).skill_uid, co);
   assert.equal(JSON.parse(rows[0].filters_json).company_id, 1);

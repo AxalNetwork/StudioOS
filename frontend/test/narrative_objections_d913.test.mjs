@@ -284,7 +284,7 @@ test('mounted option A: a save its answer makes refused saves nothing and says s
     await m.click('story-proposal-accept');
     await m.click('story-save-open');
     await m.click('story-save-confirm');
-    assert.match(m.textOf('story-save-failed'), /Objection not found/);
+    assert.match(m.textOf('story-save-failed'), /That could not be found\. It may have been removed\.$/);
     assert.ok(!m.has('story-answer-not-recorded'), 'nothing was half saved, so there is no half-saved notice');
     assert.equal(m.props('story-save-confirm').disabled, false, 'the dialog stays; the accepted draft is still pending');
   } finally { await m.close(); }
@@ -353,7 +353,7 @@ test('mounted option A: Mark answered and Clear answer each open a dialog first,
   try {
     await refused.click(`story-objection-mark-${K_MARKET}`);
     await refused.click('story-objection-mark-dialog-confirm');
-    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed: Version not found.');
+    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed. That could not be found. It may have been removed.');
   } finally { await refused.close(); }
 });
 

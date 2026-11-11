@@ -17,6 +17,8 @@
 //   node scripts/migrate-d1.mjs --preview          # preview env D1
 //   node scripts/migrate-d1.mjs --branch fr        # one subsidiary's D1 (studioos-fr)
 //   node scripts/migrate-d1.mjs --branch fr --bootstrap  # build a freshly created branch DB
+//   node scripts/migrate-d1.mjs --rehearsal <run>-src --bootstrap  # #4591: a throwaway DB
+//                                                  # scripts/schema-rehearsal.mjs created
 //   node scripts/migrate-d1.mjs --remote --baseline  # one-time adoption (see below)
 //   node scripts/migrate-d1.mjs --local --bootstrap # build an empty DB from the baseline
 //   node scripts/migrate-d1.mjs --local --bootstrap --persist-to /tmp/d1-check
@@ -273,7 +275,7 @@ function main() {
   }
   if (!target) {
     fail(
-      'no target selected. Pass one of --local | --remote | --preview | --branch <code> ' +
+      'no target selected. Pass one of --local | --remote | --preview | --branch <code> | --rehearsal <id> ' +
         '(or --audit for an idempotency report).',
     );
   }
@@ -282,6 +284,13 @@ function main() {
       `no generated config for branch ${target.branch}.\n` +
       `  Run: node scripts/gen-branch-wrangler.mjs ${target.branch}\n` +
       `  (${branchConfigPath(target.branch)} declares the database this would migrate.)`,
+    );
+  }
+
+  if (target.kind === 'rehearsal' && !existsSync(path.join(ROOT, `wrangler.rehearsal.${target.rehearsal}.toml`))) {
+    fail(
+      `no generated config for rehearsal ${target.rehearsal}.\n` +
+      '  scripts/schema-rehearsal.mjs writes it after creating the database it declares.',
     );
   }
 

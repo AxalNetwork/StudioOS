@@ -906,7 +906,8 @@ export const api = {
   // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
   // same 202 (no account-existence leak); the link in the email hits the
   // worker's GET /magic/verify which sets cookies and 302s into the SPA.
-  magicStart: (email) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  // #4578: `purpose: 'signup'` asks for the new-account wording of the same link; anything else is a sign-in link.
+  magicStart: (email, { purpose } = {}) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify(purpose === 'signup' ? { email, purpose } : { email }) }),
   // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
   stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
   // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).
@@ -2364,18 +2365,19 @@ export const api = {
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
-  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id, client_secret }),
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   // Task #3 — Rotate the secret in place (client_id stays the same).
-  adminRotateIntegrationKeys: (provider, client_secret) =>
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
       method: 'POST',
-      body: JSON.stringify({ client_secret }),
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
@@ -3359,6 +3361,8 @@ export const api = {
   updateProfileSettings: (data) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
   getPrivacySettings: () => request('/settings/privacy'),
   updatePrivacySettings: (data) => request('/settings/privacy', { method: 'PUT', body: JSON.stringify(data) }),
+  // D4615 — public-profile switches, field by field, with the revision read: { fields: { name: true }, expected_revision }.
+  updatePublicProfileSwitches: (data) => request('/settings/privacy/public-profile', { method: 'PUT', body: JSON.stringify(data) }),
   getAppearanceSettings: () => request('/settings/appearance'),
   updateAppearanceSettings: (data) => request('/settings/appearance', { method: 'PUT', body: JSON.stringify(data) }),
   getNotificationSettings: () => request('/settings/notifications'),
@@ -3616,10 +3620,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.
-  hqSecuritySessions: () => request('/admin/security/sessions'),
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
   hqRevokeSession: (sessionId, reason) =>
     request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
@@ -4560,17 +4576,22 @@ export const api = {
     request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePartnerProof: (id) =>
     request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the firm hands the link over by whatever channel it already
-  // has with the client, and no later read returns it.
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
   requestPartnerProofConsent: (id, data) =>
     request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
   // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
   // is the token holder's alone, which is what makes the record worth anything.
   withdrawPartnerProofConsent: (id, consentId) =>
     request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
-  // The client's own answer. Unauthenticated on purpose — the token is the
-  // credential, and the counterparty on an engagement is often not a user here.
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToPartnerProofConsent: (token, data) =>
     request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4984,6 +5005,12 @@ export const api = {
   // freeze at 'promised' exactly as `investor_introductions`'s does.
   portfolioSupportUpdate: (uid, data) =>
     request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D4642 (#4642): the entry's amendment history — one row per accepted
+  // amendment, with the revision it produced and who made it. The desk needs
+  // it because `recorded_by` only says who created the entry: an amendment by
+  // a second member was otherwise unattributable from the page.
+  portfolioSupportHistory: (uid) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}/history`),
   positionMarkCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
@@ -4996,11 +5023,19 @@ export const api = {
     request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
+  // #4611 finding 8: `project_id` is a SERVER filter now, applied inside the
+  // authorized scope and before the page, and the read is paginated. The
+  // response carries `total`, `counts`, `has_more` and `next_cursor`, whose
+  // scopes the Worker documents; a caller that passes none of these behaves as
+  // it did, on a page rather than on a 500-row cap.
   contactsList: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.audience) qs.set('audience', opts.audience);
     if (opts.status) qs.set('status', opts.status);
     if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    if (opts.project_id != null && opts.project_id !== '') qs.set('project_id', String(opts.project_id));
+    if (opts.limit != null) qs.set('limit', String(opts.limit));
+    if (opts.cursor) qs.set('cursor', String(opts.cursor));
     const s = qs.toString();
     return request(`/contacts${s ? `?${s}` : ''}`);
   },
@@ -5239,8 +5274,17 @@ export const api = {
     // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
     // back, in the page, because both are predicates over `reason` and
     // `citations` rather than a different read.
-    askSessions: (scope = 'session', sessionUid) => {
-      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+    // #4610: `cursor` and `limit`. The history is paginated, with `totals`
+    // covering the whole selected scope and `next_cursor`/`has_more` saying
+    // whether more of it exists — a caller passing neither gets the first page,
+    // which for every scope is the NEWEST rows.
+    askSessions: (scope = 'session', sessionUid, opts = {}) => {
+      const q = new URLSearchParams({
+        scope,
+        ...(sessionUid ? { session: sessionUid } : {}),
+        ...(opts.cursor ? { cursor: String(opts.cursor) } : {}),
+        ...(opts.limit != null ? { limit: String(opts.limit) } : {}),
+      }).toString();
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),

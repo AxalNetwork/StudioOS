@@ -226,6 +226,7 @@ function raiseFixture() {
   }
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  db.exec(sqlOf('202611091000_readiness_input_hash.sql')); // D5071
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec(sqlOf('463_raise_record_stores.sql'));
   raiseEvidenceTables(db);

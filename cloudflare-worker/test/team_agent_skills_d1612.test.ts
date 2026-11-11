@@ -51,7 +51,9 @@ function world() {
   db.exec(sql('migrations/202611022326_agent_skill_context_tokens.sql')); // D4121: publishing stores each version's context_tokens
   db.exec(sql('migrations/202611022055_agent_skill_moderation.sql')); // D4161: the attach gate reads it
   db.exec(sql('migrations/202611022140_hq_skill_lifecycle.sql')); // D4160: the HQ publish gate reads it
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(sql('migrations/202611081919_skill_release_evidence.sql')); // D4533: release evidence, written on every publish
+  db.exec(sql('migrations/202611092030_skill_version_release_note.sql')); // D4533 (B1): the release note, written on every publish
   db.exec(sql('migrations/202611070826_team_agent_skill_events.sql')); // D4534: the skills_changed kind
   db.exec(sql('migrations/091_user_skill_profile.sql'));
   db.exec(`CREATE TABLE project_members (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL, user_id INTEGER NOT NULL,

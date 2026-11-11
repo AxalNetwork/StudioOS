@@ -95,9 +95,10 @@ test('the wiring: the compare route, the root rendering Deal flow over today’s
   assert.ok(app.includes(`<Route path="/deals/compare" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />`));
   assert.ok(app.indexOf('path="/deals/compare"') < app.indexOf('path="/deals/:dealId"'), 'declared before the deal page');
   const routes = read('frontend/src/workspaces/investor/InvestorDealsRoutes.jsx');
-  assert.ok(routes.includes('<DealFlow view={view} scope={scope} board={today} />'));
+  // D4815: the root is My Deal Flow; the zones and the deal rooms are DealFlow's "Other deal activity" line.
+  assert.ok(routes.includes('<DealFlow view={view} scope={scope} />'));
   assert.ok(routes.includes('<DealCompare ids={compareIds(location.search)} />'));
-  assert.ok(routes.includes('<DealRoomsPanel />'), 'the rooms panel stays under the board');
+  assert.ok(routes.includes('<DealRoomsPanel />'), 'the rooms panel has a route (/deals/rooms)');
   for (const f of ['Deal Flow List Page.dc.html', 'Deal flow · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);
   assert.ok(read('design/incoming/Deal flow · Boards.dc.html').includes('name="Deal Flow List Page"'));
   assert.ok(existsSync('documentation/architecture/decisions/D1236.md'));

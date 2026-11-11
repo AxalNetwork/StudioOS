@@ -55,7 +55,7 @@ export async function growDb() {
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
   for (const t of ['partners', 'raise_prospects', 'deals', 'commitments', 'entities', 'compliance_events']) db.exec(tableFromBaseline(baseline, t));
   for (const p of ['034', '119', '127', '132', '326']) db.exec(ddl(p));
-  db.exec(ddl('125')); db.exec(file('437'));
+  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055'));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
   db.exec(file('443'));

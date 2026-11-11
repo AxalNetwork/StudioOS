@@ -9,6 +9,8 @@ import DataRoomSearch from './DataRoomSearch.jsx';
 import {
   GATES, OWNER_ONLY, endCopy, fileHref, folderChoices, gateCopy, matchCopy, moveCopy, removeCopy, tableRows, treeRows,
 } from './filesModel.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { roomCan } from './dataRoomModel.js';
 
 /**
  * D1106 (#2986) — Files (DR2): the folder tree beside the table, search, the
@@ -66,7 +68,10 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   const [newFolder, setNewFolder] = useState(false);
   const [done, setDone] = useState(null);
   const navigate = useNavigate();
-  const owner = room?.role !== 'cofounder';
+  // D5074: each control is the Worker's capability for this caller (`roomCan`), never the role.
+  const can = (k) => roomCan(room, k);
+  const canGate = can('set_gate');
+  const canDelete = can('delete');
   const tree = useMemo(() => treeRows(room), [room]);
   const rows = useMemo(() => tableRows(room, { folder, q }), [room, folder, q]);
   const files = (room?.files || []).filter((f) => picked.has(f.uid));
@@ -93,7 +98,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   if (dialog?.kind === 'move') {
     const copy = moveCopy(room, files, dialog.target);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-move"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-move"
         onConfirm={async () => { await patchAll(copy.patch); finish(`Moved ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <label className="flex flex-col gap-1"><span className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted">To</span>
           <select className={INPUT} value={dialog.target} onChange={(e) => setDialog({ ...dialog, target: e.target.value })} data-testid="dataroom-move-target">
@@ -105,7 +110,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'gate') {
     const copy = gateCopy(room, files, dialog);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-gate"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-gate"
         onConfirm={async () => { await patchAll(copy.patch); finish(`Gate set on ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0"><legend className="sr-only">Who it is for</legend>
           {GATES.map((g) => (
@@ -119,7 +124,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'end') {
     const copy = endCopy(room, files, dialog.until || null);
     open = (
-      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-end"
+      <DataRoomDialog copy={copy} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-end"
         onConfirm={async () => { await patchAll(copy.patch); finish(dialog.until ? 'End date set.' : 'End date removed.'); }}>
         <label className="flex flex-col gap-1"><span className="text-[11px] font-bold uppercase tracking-[.06em] text-axal-muted">Access ends on</span>
           <input type="date" className={INPUT} value={dialog.until} onChange={(e) => setDialog({ ...dialog, until: e.target.value })} data-testid="dataroom-end-date" /></label>
@@ -130,7 +135,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
     const copy = chosen ? matchCopy(files, chosen.label) : { title: `Mark ${files.length === 1 ? files[0].name : `${files.length} files`} as answering…`, body: 'Who can open it does not change.', action: 'Match' };
     const body = (v) => (v.startsWith('request-') ? { dd_request_id: Number(v.slice(8)) } : { checklist_item: v.slice(5) });
     open = (
-      <DataRoomDialog copy={copy} disabled={!chosen} onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-match"
+      <DataRoomDialog copy={copy} disabled={!chosen} onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-match"
         onConfirm={async () => { await patchAll(body(dialog.answer)); finish(`Marked as answering ${chosen.label}.`); }}>
         {dialog.options === null ? <span className={`text-[12px] ${MUTED}`}>Reading the checklist…</span> : null}
         {dialog.options === 'unreadable' ? <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="dataroom-match-unreadable">The checklist and the open requests could not be read. That is not a claim there are none.</p> : null}
@@ -145,7 +150,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
   } else if (dialog?.kind === 'remove') {
     const copy = removeCopy(files);
     open = (
-      <DataRoomDialog copy={copy} danger onClose={() => setDialog(null)} refusalOf={(e) => e.message} testId="dataroom-remove"
+      <DataRoomDialog copy={copy} danger onClose={() => setDialog(null)} refusalOf={(e) => userFacingRaiseError(e, { fallback: 'That did not go through. Nothing changed.' })} testId="dataroom-remove"
         onConfirm={async () => { await eachFile(files, (f) => api.dataRoomDeleteFile(projectUid, f.uid)); finish(`Removed ${files.length} file${files.length === 1 ? '' : 's'}.`); }}>
         <p className={`m-0 rounded-[8px] border border-axal-hairline px-3 py-2 text-[12.5px] ${MUTED} dark:border-gray-700`} data-testid="dataroom-remove-trash">{copy.trash}</p>
       </DataRoomDialog>
@@ -158,8 +163,8 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
         <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Files</h2>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={BTN} onClick={() => setNewFolder(true)} data-testid="dataroom-new-folder">New folder</button>
-          <Link className={`${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500`} to={`/raise/data-room/new${search}`} data-testid="dataroom-upload">Upload</Link>
+          {can('edit') ? <button type="button" className={BTN} onClick={() => setNewFolder(true)} data-testid="dataroom-new-folder">New folder</button> : null}
+          {can('upload') ? <Link className={`${BTN} border-axal-violet bg-axal-violet text-white hover:bg-axal-violet-deep dark:bg-violet-600 dark:hover:bg-violet-500`} to={`/raise/data-room/new${search}`} data-testid="dataroom-upload">Upload</Link> : null}
         </div>
       </div>
       {done ? <p role="status" className={`m-0 border-b border-axal-hairline bg-axal-lavender px-4 py-2 text-[12.5px] font-semibold ${INK} dark:border-gray-800 dark:bg-violet-950/40`} data-testid="dataroom-files-done">{done}</p> : null}
@@ -167,7 +172,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
       {none ? null : (
         <DataRoomSearch
           projectUid={projectUid}
-          canIndex
+          canIndex={can('search_index')}
           onOpen={(uid) => { const f = (room?.files || []).find((x) => x.uid === uid); if (f) navigate(fileHref(f.id, search)); }}
         />
       )}
@@ -184,13 +189,13 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
             {picked.size ? (
               <div className="flex flex-wrap items-center gap-2 rounded-[10px] bg-axal-lavender px-3 py-2 dark:bg-violet-950/40" data-testid="dataroom-bulk">
                 <span className={`text-[12.5px] font-bold ${INK}`}>{picked.size} selected</span>
-                <button type="button" className={BTN} onClick={() => ask('move')} data-testid="dataroom-bulk-move">Move</button>
-                <button type="button" className={BTN} onClick={() => ask('gate')} disabled={!owner} title={owner ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-gate">Set gate</button>
-                <button type="button" className={BTN} onClick={() => ask('end')} disabled={!owner} title={owner ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-end">Set end date</button>
-                <button type="button" className={BTN} onClick={() => ask('match')} data-testid="dataroom-bulk-match">Match to checklist</button>
-                <button type="button" className={`${BTN} text-red-700 dark:text-red-300`} onClick={() => ask('remove')} disabled={!owner} title={owner ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-remove">Remove</button>
+                {can('edit') ? <button type="button" className={BTN} onClick={() => ask('move')} data-testid="dataroom-bulk-move">Move</button> : null}
+                <button type="button" className={BTN} onClick={() => ask('gate')} disabled={!canGate} title={canGate ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-gate">Set gate</button>
+                <button type="button" className={BTN} onClick={() => ask('end')} disabled={!canGate} title={canGate ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-end">Set end date</button>
+                {can('edit') ? <button type="button" className={BTN} onClick={() => ask('match')} data-testid="dataroom-bulk-match">Match to checklist</button> : null}
+                <button type="button" className={`${BTN} text-red-700 dark:text-red-300`} onClick={() => ask('remove')} disabled={!canDelete} title={canDelete ? undefined : OWNER_ONLY} data-testid="dataroom-bulk-remove">Remove</button>
                 <button type="button" className={`${BTN} border-transparent bg-transparent`} onClick={() => setPicked(new Set())} data-testid="dataroom-bulk-clear">Clear</button>
-                {!owner ? <span className={`basis-full text-[11.5px] ${MUTED}`} data-testid="dataroom-bulk-owner">{OWNER_ONLY}</span> : null}
+                {!canGate || !canDelete ? <span className={`basis-full text-[11.5px] ${MUTED}`} data-testid="dataroom-bulk-owner">{OWNER_ONLY}</span> : null}
               </div>
             ) : null}
             {rows.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-files-nomatch">No file here matches.</p> : (
@@ -223,7 +228,7 @@ export default function DataRoomFiles({ room, projectUid, projectId, reload, sea
       )}
       {open}
       {newFolder ? <NewFolderDialog room={room} projectUid={projectUid} onClose={() => setNewFolder(false)} onDone={(line) => { setNewFolder(false); setDone(line); reload(); }} /> : null}
-      {openFolder ? <FolderLightbox room={room} uid={openFolder} projectUid={projectUid} owner={owner} onClose={() => setOpenFolder(null)} onDone={(line) => { setOpenFolder(null); setDone(line); reload(); }} /> : null}
+      {openFolder ? <FolderLightbox room={room} uid={openFolder} projectUid={projectUid} onClose={() => setOpenFolder(null)} onDone={(line) => { setOpenFolder(null); setDone(line); reload(); }} /> : null}
     </section>
   );
 }

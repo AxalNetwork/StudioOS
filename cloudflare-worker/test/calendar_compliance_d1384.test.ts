@@ -56,7 +56,7 @@ test('the registry reads compliance as one more source, and no feed or file kind
   // D1484 (#3977): D1208's three readers and the manual reader joined it, all page only; #3959: so is Learning;
   // D1486 §b (#3981): so are Publish's sends and Grow's planned content; #3982 (§c): a round's close and an NDA's expiry; #3983 (§d): the four task stores;
   // D1485 (#3979): and the member's own Google and Outlook events; #3957: and the team's AI agent sessions.
-  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'external_google', 'external_microsoft', 'work_item', 'agent_session']); // D1614 W4 (#3972): work items, page only.
+  assert.deepEqual([...PAGE_ONLY_KINDS], ['compliance_due', 'interview_call', 'cohort_date', 'deal_closing', 'manual', 'learning', 'publish_send', 'content_planned', 'bot_call', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'external_google', 'external_microsoft', 'work_item', 'agent_session', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step']); // D1614 W4 (#3972): work items, page only; #5131 (D1486 §e): Grow's four dated stores.
   assert.ok(!FEED_KINDS.includes('compliance_due'));
   assert.deepEqual([...FEED_KINDS, ...PAGE_ONLY_KINDS].sort(), [...KNOWN_KINDS].sort());
 });
@@ -65,7 +65,9 @@ test('the page read: the founder\'s own deadlines, open and done, each with its 
   const { db, env } = fixture();
   try {
     const { events, sources } = await page(env, 1);
-    assert.deepEqual(sources, [{ kind: 'compliance_due', ok: true, error: null }]);
+    // D5202 (#5202): a source row also carries safe health (reason, latency_ms, items, at), so these compare
+    // the fields this test is about rather than the whole row.
+    assert.deepEqual(sources.map(({ kind, ok, error }) => ({ kind, ok, error })), [{ kind: 'compliance_due', ok: true, error: null }]);
     assert.deepEqual(events.map((e) => e.source_uid), ['filing-open', 'filing-done', 'filing-company']);
     const open = events[0] as any, done = events[1] as any;
     assert.deepEqual([open.id, open.kind, open.start_at, open.end_at, open.project_id, open.notes], ['compliance_due:filing-open', 'compliance_due', '2026-11-10', '2026-11-11', 10, 'File with the state.']);
@@ -142,7 +144,7 @@ test('an admin\'s staff scope keeps what /compliance showed them, read-only, for
     env.BRANCH_CODE = 'fr'; env.APP_URL = 'https://fr.axal.vc';
     db.exec("INSERT INTO branch_licence (id,licence_uid,brand_name,status,pushed_at) VALUES (1,'fixture-studio','Fixture studio','active',datetime('now'))");
     const body = await fetchCalendarScope(env, { id: 5, role: 'admin' } as any, 'studio', FROM, TO, ['compliance_due']);
-    assert.deepEqual(body.sources, [{ kind: 'compliance_due', ok: true, error: null }]);
+    assert.deepEqual(body.sources.map(({ kind, ok, error }: any) => ({ kind, ok, error })), [{ kind: 'compliance_due', ok: true, error: null }]);
     const rows = body.events.map((e: any) => [e.source_id, e.start_at, e.status, e.compliance?.state, e.read_only]);
     assert.deepEqual(rows.map((r) => r[0]).sort(), [1, 2, 3, 4]);
     assert.ok(rows.every((r) => r[4] === true), 'every row is read-only');

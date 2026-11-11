@@ -1,16 +1,14 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Skeleton, WorkerRail } from '../../ui';
 import WorkspaceShell from '../WorkspaceShell';
-import BucketBoard from '../BucketBoard';
-import BucketOverview from '../BucketOverview';
-import MyTasks from '../../pages/work/MyTasks.jsx';
-import { boardFor } from '../boards';
 import { bucketForPath, zoneForPath } from '../shellConfig';
-import { api } from '../../lib/api';
-import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, TITLE as DEAL_FLOW_TITLE, compareIds, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { COMPARE, PAGE_LINE as DEAL_FLOW_LINE, ROOMS, TITLE as DEAL_FLOW_TITLE, compareIds, dealsPageTitle, viewOf as dealFlowViewOf } from '../../pages/investor/dealflow/dealFlowModel';
+import { STATES as ROOM_STATES } from '../../components/deals/dealRoomCopy';
 
 const COMPARE_TITLE = 'Compare';
+const ROOMS_TITLE = 'Deal rooms';
+// D4815 (#4815): the deal rooms at their own route, `/deals/rooms` (owner's pick B, 2026-11-09).
 const DealRoomsPanel = lazy(() => import('../../components/deals/DealRoomsPanel'));
 // D1236 (#2423): Deal flow at the root and Compare at /deals/compare.
 const DealFlow = lazy(() => import('../../pages/investor/dealflow/DealFlow'));
@@ -72,26 +70,18 @@ const ZONES = {
  * the wrong one is clicked.
  */
 /**
- * One line per zone. Module scope rather than a local, because two surfaces
- * print them: the shell's intro on a zone route, and the root's card grid when
- * no board is registered. Two copies could describe the same zone differently.
+ * One line per zone, printed by the shell's intro on a zone route.
+ *
+ * D4815 (canvas DX6–DX8): each line says what the zone is for, in the
+ * reader's words. WAS a sentence of method per zone ("a tally without reasons
+ * is not a record a fund can defend"; "the platform records the movement of
+ * money; it does not move it"); the canvas keeps that under the zone's own
+ * "How this works", and once at the first transfer, rather than in the intro.
  */
 const ZONE_LINES = {
-  // WAS "the deal on the desk now", which described the one-record panel
-  // rather than the artboard. ID2 is a desk over every scored deal, its
-  // flags and the fund's pass memory.
-  screening: 'Every deal that has been scored, what the rubric said, and every pass the fund has recorded.',
-  // WAS "what the committee decided, and what the decision was based on",
-  // over a panel that showed three deal columns and no vote at all. ID3
-  // is the ledger: every vote with the reason its author wrote.
-  commit: 'Every vote on the decision, with the reason its author wrote beside it. '
-    + 'A tally without reasons is not a record a fund can defend.',
-  // WAS "signed terms, wired capital, and what is still outstanding" — over
-  // three hard-coded rows, one of which said wired capital is not recorded
-  // here. ID4 is the paper: every envelope raised against a deal at
-  // closing, with its signature state.
-  closing: 'Every document raised against a deal at closing, and how far through signature it is. '
-    + 'The platform records the movement of money; it does not move it.',
+  screening: 'Decide which ventures deserve deeper work.',
+  commit: 'Decisions, votes, reasons and conditions.',
+  closing: 'Paper, conditions and recorded transfers required to complete each investment.',
 };
 
 export default function InvestorDealsRoutes() {
@@ -103,9 +93,14 @@ export default function InvestorDealsRoutes() {
   // would get its first zone lit in the pill row as if they had asked for it.
   const isRoot = Boolean(bucket) && location.pathname === bucket.prefix;
   const isCompare = location.pathname === COMPARE;
+  // D4815: the deal rooms are a page of the bucket with no pill of their own,
+  // as Compare is; the canvas's zone row is Deal flow, Screening, Commit, Closing.
+  const isRooms = location.pathname === ROOMS;
   const zone = zoneForPath(bucket, location.pathname);
 
   const Zone = ZONES[zone?.slug];
+  const pageTitle = dealsPageTitle({ isRoot, isCompare, isRooms, slug: zone?.slug });
+  useEffect(() => { document.title = pageTitle; }, [pageTitle]);
 
   // NO `scope` PROP. It read `scope="One fund"` — a literal, on one of only
   // three surfaces in the product that passed the prop at all. `WorkspaceShell`
@@ -115,16 +110,16 @@ export default function InvestorDealsRoutes() {
   return (
     <WorkspaceShell
       role="investor"
-      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : undefined}
-      activeSlug={isRoot || isCompare ? null : undefined}
-      intro={isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
+      title={isRoot ? DEAL_FLOW_TITLE : isCompare ? COMPARE_TITLE : isRooms ? ROOMS_TITLE : undefined}
+      activeSlug={isRoot || isCompare || isRooms ? null : undefined}
+      intro={isRooms ? ROOM_STATES.pipeline.intro : isRoot || isCompare ? DEAL_FLOW_LINE : (ZONE_LINES[zone?.slug] || DEAL_FLOW_LINE)}
       rail={(
         <WorkerRail
           workspace="Deals"
           role="investor"
           stance="Manual workspace"
           note="Your pipeline, deal rooms, votes and invitations work without AI. Scores appear only when they exist in the live deal record. Eadwyn drafts only when you ask. This view never invents a memo, cost, model, or result."
-          coverage={[`${isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
+          coverage={[`${isRooms ? ROOMS_TITLE : isRoot || isCompare ? DEAL_FLOW_TITLE : zone?.label || DEAL_FLOW_TITLE} · live deal records only`]}
           coverageNote="Founder-sourced and shared objects retain their provenance. Existing server access controls remain authoritative."
           unavailable={[
             // WAS "Nothing on this page drafts a memo or produces a score" —
@@ -137,24 +132,10 @@ export default function InvestorDealsRoutes() {
         />
       )}
     >
-      {/* THE ROOT IS THE BOARD, AND THAT IS A REPAIR RATHER THAN AN ADDITION.
-          What stood here sent the root to `InvestorDealsWorkspace` with
-          `zone={null}`, under a note reading "all four sections derive from it,
-          so `/deals` still stacks them as the bucket overview". True when it was
-          written. ID1–ID4 then moved each of those four sections onto its own
-          zone page, one at a time, and that file's closing comment records where
-          it ended: "All four decision panels are gone." So the root stacked
-          nothing — an investor with no pending invitation saw a heading, a pill
-          row and an empty column, which is exactly how it was reported.
-
-          `boardFor` is the same overview every partner and advisor bucket root
-          already uses, reading the four zones' own endpoints so the board cannot
-          report a number the page behind it cannot reproduce. The
-          `BucketOverview` fall-through beside it is written out rather than left
-          to the registry's "a root whose key is absent falls through" sentence,
-          because `BucketBoard` answers a null board with `return null` — the
-          fall-through only happens if a caller performs it, and a caller that
-          did not is how this route came to render nothing in the first place.
+      {/* THE ROOT IS MY DEAL FLOW (D4815, canvas DX1). It was the zones'
+          bucket board under the flow, which read as several applications
+          stacked on one page; the zones are now one line inside `DealFlow`,
+          each linking to its route, and `DealsRoot` below says what else stays.
 
           `embedded`: the shell above already draws the heading, the zone row and
           the rail. Without it the workspace drew all three again inside them —
@@ -162,8 +143,10 @@ export default function InvestorDealsRoutes() {
       <Suspense fallback={<div className="space-y-3"><Skeleton className="h-8" /><Skeleton className="h-64" /></div>}>
         {isCompare
           ? <DealCompare ids={compareIds(location.search)} />
+          : isRooms
+          ? <DealRoomsPanel />
           : isRoot
-          ? <DealsRoot bucket={bucket} search={location.search} />
+          ? <DealsRoot search={location.search} />
           : (Zone ? <Zone /> : <InvestorDealsWorkspace embedded zone={zone?.slug} />)}
       </Suspense>
     </WorkspaceShell>
@@ -171,28 +154,16 @@ export default function InvestorDealsRoutes() {
 }
 
 /**
- * The `/deals` root: the board when one is registered, the zone cards when not.
+ * The `/deals` root: My Deal Flow (D4815, canvas DX1).
  *
- * The card grid's descriptions are `ZONE_LINES` — the same lines the shell
- * prints above a zone — so the two overviews cannot describe one zone twice and
- * differently.
+ * WAS the zones' bucket board (Screening desk, Commit room, Closing) and the
+ * deal rooms, under a disclosure beneath the flow; then (slice 1) the deal
+ * rooms (D630) and My tasks (D1614 W8) collapsed under the "Other deal
+ * activity" line. Slice 2 gave the deal rooms their own route, `/deals/rooms`,
+ * and moved the investor's My tasks to Studio, so the root draws the flow and
+ * nothing under it but that line.
  */
-function DealsRoot({ bucket, search }) {
-  const board = boardFor('investor', bucket.prefix, api);
+function DealsRoot({ search }) {
   const { view, scope } = dealFlowViewOf(search);
-  // D630 (#1388) — canvas `dr-pipeline`: the deal rooms to join, with the
-  // quota, under the board. `/deals` already serves this page, so the screen
-  // is a panel here rather than a new address.
-  // D1236: the canvas's Deal flow, with today's zone board and the rooms under its Board view.
-  const today = (
-    <>
-      {board
-        ? <BucketBoard bucket={bucket} role="investor" board={board} />
-        : <BucketOverview bucket={bucket} role="investor" descriptions={ZONE_LINES} />}
-      <DealRoomsPanel />
-      {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
-      <MyTasks licence="investor" testId="deals-my-tasks" />
-    </>
-  );
-  return <DealFlow view={view} scope={scope} board={today} />;
+  return <DealFlow view={view} scope={scope} />;
 }

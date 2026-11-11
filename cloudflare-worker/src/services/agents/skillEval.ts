@@ -32,7 +32,7 @@
  * the admin who pressed Run. Neither prompts nor outputs are stored.
  */
 import type { Env } from '../../types';
-import { checkCase, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
+import { EVALUATOR, caseSha, checkCase, runCase, type CaseExpect, type CaseInput, type DraftParts } from './skillLifecycle';
 import { missingTools, type OutputKind } from './skills';
 import { versionOf, versionTools, toolLabel, type SkillRow, type VersionRow } from './skillLinks';
 import { skillRunRefusal } from './skillModeration';
@@ -75,6 +75,13 @@ export function starterCase(slug: string): GoldenCase | null {
 }
 export const starterSlugs = (): string[] => STARTER_FILES.map((f) => f.skill);
 
+/**
+ * D5334: execution identity ignores a case's display name. `caseSha` keeps the
+ * name for compare/history attribution; this derivative answers only whether
+ * two entries would run the same input and expectations.
+ */
+export const caseContentSha = (c: GoldenCase): Promise<string> => caseSha({ ...c, name: '' });
+
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
 
 /** A published version as the parts a case runs on. */
@@ -116,6 +123,13 @@ export async function skillForRun(env: Env, a: Pick<AgentRow, 'id' | 'tool_grant
   return { ok: true, skill: s, version: v, tools };
 }
 
+/**
+ * The closing rule of a skill's part of the system prompt, on both skill
+ * runtimes (D4555 addendum, #5340): `skillPrompt()` ends with it and the SDK
+ * path's text (`skillRuntime.ts`) ends with it, from this one constant.
+ */
+export const NO_INVENTED_FIGURE_RULE = 'Never invent a figure: write "Not recorded" for anything the records do not hold.';
+
 /** The skill's part of the system prompt: the pinned version's steps and its allow-list. */
 export function skillPrompt(v: VersionRow): string {
   const p = versionParts(v);
@@ -124,7 +138,7 @@ export function skillPrompt(v: VersionRow): string {
     `It proposes ${p.output_kind === 'record_change' ? 'a record change' : `a ${p.output_kind}`}; a named person decides.`,
     'Follow its steps:', ...p.steps.map((s, i) => `${i + 1}. ${s}`),
     p.tools.length ? `It may read only: ${p.tools.join(', ')}.` : 'It reads nothing beyond what you are given.',
-    'Never invent a figure: write "Not recorded" for anything the records do not hold.',
+    NO_INVENTED_FIGURE_RULE,
   ].join('\n');
 }
 
@@ -152,18 +166,20 @@ export async function skillOfUsage(env: Env, usageLogId: number | null): Promise
 
 // ── The board ───────────────────────────────────────────────────────────────
 
-/** The golden cases of a published Axal skill: its starter case, then HQ's live ones. */
+/** The distinct golden-case contents of a published Axal skill: starter first unless a live row carries it. */
 export async function casesOf(env: Env, s: Pick<SkillRow, 'id' | 'slug'>): Promise<GoldenCase[]> {
-  const out: GoldenCase[] = [];
-  const starter = starterCase(s.slug);
-  if (starter) out.push(starter);
+  const live: GoldenCase[] = [];
   const rows = (await env.DB.prepare('SELECT uid, name, input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
     .bind(s.id).all<{ uid: string; name: string; input_json: string; expect_json: string }>()).results ?? [];
   for (const r of rows) {
     const c = checkCase({ name: r.name, input: parse(r.input_json, null), expect: parse(r.expect_json, null) });
-    if (c.ok) out.push({ key: r.uid, name: c.name, input: c.input, expect: c.expect });
+    if (c.ok) live.push({ key: r.uid, name: c.name, input: c.input, expect: c.expect });
   }
-  return out;
+  const starter = starterCase(s.slug);
+  if (!starter) return live;
+  const starterSha = await caseContentSha(starter);
+  const liveShas = new Set(await Promise.all(live.map(caseContentSha)));
+  return liveShas.has(starterSha) ? live : [starter, ...live];
 }
 
 export type Regression = { skill_uid: string; skill: string; version: number; case: string; model: string; detail: string | null };
@@ -188,8 +204,8 @@ async function evaluateSkill(env: Env, s: SkillRow, v: VersionRow, models: strin
     for (const model of models) {
       if (skip.has(`${c.key}|${model}`)) continue;
       const before = await env.DB.prepare(
-        'SELECT result FROM agent_skill_version_evals WHERE skill_id = ? AND case_key = ? AND model_id = ? AND result <> ? ORDER BY id DESC LIMIT 1',
-      ).bind(s.id, c.key, model, 'not_run').first<{ result: 'pass' | 'fail' }>();
+        'SELECT result FROM agent_skill_version_evals WHERE skill_id = ? AND version = ? AND case_key = ? AND model_id = ? AND result <> ? ORDER BY id DESC LIMIT 1',
+      ).bind(s.id, v.version, c.key, model, 'not_run').first<{ result: 'pass' | 'fail' }>();
       const r = await d.runCase(env, parts, c.input, c.expect, model, adminId);
       await record(s, v, c, model, r);
       out.results += 1;
@@ -210,7 +226,9 @@ async function evaluateSkill(env: Env, s: SkillRow, v: VersionRow, models: strin
   return out;
 }
 
-const EVAL_INSERT = `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+// D4531 slice 3: each row names the evaluator that judged it and the case text it ran (migration 202611090904).
+const EVAL_INSERT = `INSERT INTO agent_skill_version_evals (skill_id, version, case_key, case_name, model_id, result, detail, usage_log_id, run_by, evaluator_version, case_sha256)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * Run every golden case of each published Axal skill (at most `SKILLS_PER_RUN`)
@@ -227,7 +245,7 @@ export async function evaluatePublished(env: Env, adminId: number, models: strin
     `SELECT * FROM agent_skills WHERE scope = 'hq' AND status = 'published' AND current_version >= 1 AND (? IS NULL OR id = ?) ORDER BY id LIMIT ?`,
   ).bind(onlySkillId, onlySkillId, SKILLS_PER_RUN).all<SkillRow>()).results ?? [];
   const record: Record_ = async (s, v, c, model, r) => {
-    await env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId).run();
+    await env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, c.key, c.name, model, r.result, r.detail, r.usage_log_id, adminId, EVALUATOR.version, await caseSha(c)).run();
   };
   const regressions: Regression[] = [];
   let results = 0;
@@ -345,7 +363,7 @@ export async function continueCampaign(env: Env, adminId: number, uid: unknown, 
   const batch: CampaignBatch = { ...empty, regressions: [], evaluated: [], campaign: null as unknown as CampaignProgress };
   const record: Record_ = async (s, v, k, model, r) => {
     await env.DB.batch([
-      env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, k.key, k.name, model, r.result, r.detail, r.usage_log_id, adminId),
+      env.DB.prepare(EVAL_INSERT).bind(s.id, v.version, k.key, k.name, model, r.result, r.detail, r.usage_log_id, adminId, EVALUATOR.version, await caseSha(k)),
       env.DB.prepare(`INSERT INTO agent_skill_eval_campaign_items (campaign_id, skill_id, version, case_key, model_id, eval_id)
         VALUES (?, ?, ?, ?, ?, last_insert_rowid())`).bind(c.id, s.id, v.version, k.key, model),
     ]);
@@ -416,20 +434,29 @@ export type SkillBoardRow = {
 export async function skillBoard(env: Env, skillIds: number[]): Promise<SkillBoardRow[]> {
   if (!skillIds.length) return [];
   const skills = (await env.DB.prepare(
-    'SELECT id, uid, name, current_version FROM agent_skills WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) ORDER BY name, id',
-  ).bind(JSON.stringify(skillIds)).all<{ id: number; uid: string; name: string; current_version: number }>()).results ?? [];
+    'SELECT id, uid, slug, name, current_version FROM agent_skills WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?)) ORDER BY name, id',
+  ).bind(JSON.stringify(skillIds)).all<{ id: number; uid: string; slug: string; name: string; current_version: number }>()).results ?? [];
   const out: SkillBoardRow[] = [];
   for (const s of skills) {
     const rows = (await env.DB.prepare(
-      'SELECT id, version, case_key, case_name, model_id, result, run_at FROM agent_skill_version_evals WHERE skill_id = ? ORDER BY id DESC LIMIT 2000',
-    ).bind(s.id).all<{ id: number; version: number; case_key: string; case_name: string; model_id: string; result: 'pass' | 'fail' | 'not_run'; run_at: string }>()).results ?? [];
+      'SELECT id, version, case_key, case_name, case_sha256, model_id, result, run_at FROM agent_skill_version_evals WHERE skill_id = ? ORDER BY id DESC LIMIT 2000',
+    ).bind(s.id).all<{ id: number; version: number; case_key: string; case_name: string; case_sha256: string | null; model_id: string; result: 'pass' | 'fail' | 'not_run'; run_at: string }>()).results ?? [];
+    const currentCases = await casesOf(env, s);
+    const contentByKey = new Map<string, string>();
+    for (const c of currentCases) contentByKey.set(c.key, await caseContentSha(c));
+    const starter = starterCase(s.slug);
+    if (starter) contentByKey.set(STARTER_KEY, await caseContentSha(starter));
+    const contentKey = (r: typeof rows[number]) => contentByKey.get(r.case_key) ?? (r.case_sha256 ? `recorded:${r.case_sha256}` : `case:${r.case_key}`);
     const latest = new Map<string, typeof rows[number]>();
-    for (const r of rows) if (r.version === s.current_version && !latest.has(`${r.case_key}|${r.model_id}`)) latest.set(`${r.case_key}|${r.model_id}`, r);
+    for (const r of rows) {
+      const key = `${contentKey(r)}|${r.model_id}`;
+      if (r.version === s.current_version && !latest.has(key)) latest.set(key, r);
+    }
     const regressed: Array<{ case: string; model: string }> = [];
     for (const [k, r] of latest) {
       if (r.result !== 'fail') continue;
       // It stays regressed until it passes again: its latest result fails and it passed before on this version.
-      if (rows.some((x) => `${x.case_key}|${x.model_id}` === k && x.id < r.id && x.version === s.current_version && x.result === 'pass')) {
+      if (rows.some((x) => `${contentKey(x)}|${x.model_id}` === k && x.id < r.id && x.version === s.current_version && x.result === 'pass')) {
         regressed.push({ case: r.case_name, model: r.model_id });
       }
     }

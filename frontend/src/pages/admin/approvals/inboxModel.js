@@ -119,6 +119,7 @@ export function inboxRows(reply) {
     who: it.who || 'Profile name not recorded',
     what: humanWhat(it.what),
     age: ageText(it.age_hours) || 'Age not recorded',
+    ageHours: Number.isFinite(Number(it.age_hours)) && it.age_hours !== null ? Number(it.age_hours) : null,
     sla: it.sla || 'unknown',
     band: slaBand(it.sla),
     assignee: assigneeOf(it),
@@ -296,8 +297,15 @@ export function workViewCounts(inbox) {
   };
 }
 
+/** D4814 part 5: an item waiting this long is stale backlog (the issue's ">30d"), drawn in its own band. */
+export const STALE_HOURS = 30 * 24;
+
 /** The band a row sits in, as the queue's band row says it (AP-01). */
 export const BAND_ROWS = {
+  // D4814 part 5: the live audit's oldest item waited 204 days, so every item
+  // read as one red band. Past 30 days an item is drawn apart, as backlog to
+  // check is still actionable, and the 72-hour bands stay for live work.
+  stale: { key: 'stale', text: '◌ Stale · waiting over 30 days · check each is still actionable', tone: 'bad' },
   past: { key: 'past', text: '! Overdue · over 72 hours', tone: 'bad' },
   due_soon: { key: 'due_soon', text: '◷ Due soon · 24–72 hours', tone: 'warn' },
   ok: { key: 'ok', text: 'Under 24 hours', tone: null },
@@ -313,7 +321,7 @@ export function bandedRows(rows, sort) {
   const out = [];
   let last = null;
   for (const row of rows) {
-    const b = row.sla || 'ok';
+    const b = row.sla === 'past' && row.ageHours != null && row.ageHours >= STALE_HOURS ? 'stale' : (row.sla || 'ok');
     if (b !== last) { out.push({ kind: 'band', band: BAND_ROWS[b] || BAND_ROWS.ok }); last = b; }
     out.push({ kind: 'row', row });
   }
@@ -469,10 +477,11 @@ export function weekChart(reply) {
   ];
   const last = (v) => (Array.isArray(v) ? v[v.length - 1] : null);
   const first = (v) => (Array.isArray(v) ? v[0] : null);
+  const period = (n) => (n === null || n === undefined ? 'Not recorded' : nf(n));
   const sum = [
     'Items that arrived and were decided each week for eight weeks.',
-    t.arrived ? `Arrivals went from ${nf(first(t.arrived))} to ${nf(last(t.arrived))} a week.` : 'Arrivals are not counted.',
-    t.decided ? `Decisions went from ${nf(first(t.decided))} to ${nf(last(t.decided))}.` : 'Decisions are not counted.',
+    t.arrived ? `Arrivals went from ${period(first(t.arrived))} to ${period(last(t.arrived))} a week.` : 'Arrivals are not counted.',
+    t.decided ? `Decisions went from ${period(first(t.decided))} to ${period(last(t.decided))}.` : 'Decisions are not counted.',
     'This week is not finished.',
   ].join(' ');
   const out = [...new Set([...(t.decided_leaves_out || [])])];
@@ -809,6 +818,8 @@ export function decidedQueryOf(search) {
   if (/^[1-9]\d*$/.test(p.get('decided_by') || '')) out.decided_by = p.get('decided_by');
   if (DAY.test(p.get('from') || '')) out.from = p.get('from');
   if (DAY.test(p.get('to') || '')) out.to = p.get('to');
+  // D4814: "Include HQ lanes" off. The page drops it for a plain Admin, who never has HQ's lanes.
+  if (p.get('hq') === '0') out.hq = '0';
   return out;
 }
 
@@ -818,12 +829,17 @@ const OUTCOME_TONE = { approved: 'good', declined: 'bad', other: null };
 export function decidedRows(reply) {
   return (Array.isArray(reply?.items) ? reply.items : []).map((r) => ({
     key: `${r.lane}:${r.item_id}:${r.decided_at}`,
+    laneKey: r.lane,
+    itemId: Number.isInteger(Number(r.item_id)) ? Number(r.item_id) : null,
+    itemUid: r.item_uid || null,
     when: stampText(r.decided_at) || 'Not recorded',
     lane: laneLabelOf(r.lane, r.lane_label),
     who: r.who || 'Not recorded',
     outcome: { word: r.outcome_word || 'Not recorded', tone: OUTCOME_TONE[r.outcome] ?? null },
     by: r.decided_by?.name || 'Not recorded',
     wait: ageText(r.wait_hours) || 'Not recorded',
+    // D4814 (AP-07): a wait the lane did not record is a dash, never 0.
+    waitKnown: r.wait_hours !== null && r.wait_hours !== undefined,
     note: r.note || null,
     shown: !!r.note && !!r.note_shown,
   }));

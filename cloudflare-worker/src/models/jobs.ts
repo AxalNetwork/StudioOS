@@ -14,7 +14,6 @@ export type JobType =
   | 'spinout_processing'
   | 'metrics_aggregation'
   | 'capital_call'
-  | 'pipeline_advance'
   | 'traction_review'
   | 'liquidity_valuation'
   | 'liquidity_matching'

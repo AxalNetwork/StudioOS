@@ -47,8 +47,10 @@ test('the committed library passes with no error, and the manifest covers every 
   const { findings, manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
   assert.deepEqual(errors(findings), []);
   assert.equal(manifest.length, Object.keys(REAL.definitions).length, 'one line per definition, whatever the total');
-  assert.ok(manifest.every((m) => m.draft_hash && m.cases.length === 1));
-  assert.equal(new Set(manifest.flatMap((m) => m.cases.map((c) => c.case_id))).size, manifest.length, 'distinct case identities');
+  // D5336: every skill has its golden case; a skill with a scenario pack has its scenarios too, each a case of its own.
+  assert.ok(manifest.every((m) => m.draft_hash && m.cases.length >= 1 && m.cases[0].revision === null));
+  const all = manifest.flatMap((m) => m.cases.map((c) => c.key));
+  assert.equal(new Set(all).size, all.length, 'distinct case identities');
   // `refuse_when` is carried but never evaluated: a warning, so nobody reads it as an assertion.
   assert.ok(findings.some((f) => f.rule === 'expect_key_unknown' && f.field === 'expect.refuse_when'));
   // #4531: `numbers` is judged, so a case that asserts one is not told it proves nothing.
@@ -122,6 +124,8 @@ function world() {
     + AI_LOG_SCHEMA + sql('migrations/506_ai_rail_proposals.sql'));
   for (const m of ['199_super_admin', '089_skills_values_taxonomy', '090_seed_skills_values_taxonomy', '712_team_agents', '759_agent_skills',
     '202611022046_ai_admin_audit', '202611022055_agent_skill_moderation', '202611022140_hq_skill_lifecycle']) db.exec(sql(`migrations/${m}.sql`));
+    db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
+  db.exec(sql('migrations/202611100853_skill_case_source_identity.sql')); // D5336: the source identity a seeded case came from
   db.prepare("INSERT INTO users (id, uid, email, name, role) VALUES (1, 'u-super', 'super@example.test', 'Sue Super', 'admin')").run();
   db.exec("INSERT INTO company_profiles (id, uid, company_name) VALUES (7, 'co-7', 'Acme')");
   return { db, env: { DB } as any };

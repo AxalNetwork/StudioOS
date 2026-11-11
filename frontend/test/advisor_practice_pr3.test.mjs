@@ -206,8 +206,11 @@ test('the draft row is the alarming one, as the canvas draws it', () => {
   assert.notEqual(STATE_TONE.sent, 'danger');
   assert.equal(STATE_TONE.opened, 'ok');
   assert.deepEqual(Object.keys(STATE_LABEL).sort(), ['not_started', 'opened', 'sent']);
-  // And the page tints that row rather than only labelling it.
-  assert.match(P, /state === 'not_started'/);
+  // #4833 (D4833): the Practice v2 cards carry the LATEST version's status
+  // instead, and a draft is the amber pill rather than a red-tinted row
+  // (`practice_delivery_4833.test.mjs`); the folded state above still feeds
+  // the nudge and the receipt tiles.
+  assert.match(P, /cardStatus\(i\) === 'draft'/);
 });
 
 // ---------------------------------------------------------------------------
@@ -265,25 +268,30 @@ test('the four tiles and five chips are the artboard\'s, in its order', () => {
   assert.ok(chips, 'the artboard must declare its chip row');
   const labels = [...chips[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['All', 'Unopened', 'Opened', 'Draft', 'By client']);
+  // #4833 (D4833): THE CHIP ROW IS THE PRACTICE V2 CANVAS'S NOW, without its
+  // unrecorded `Ready`. `practice_delivery_4833.test.mjs` reads that canvas
+  // and `profile_zone_filters.test.mjs` compares the table with it; here the
+  // PR3 row is only proved gone, so the two canvases cannot both be claimed.
   const row = FILTERS.slice(FILTERS.indexOf("'practice/delivery': ["));
   const declared = [...row.slice(0, row.indexOf('],')).matchAll(/canvas: '([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(declared, labels, 'the chip row must be the canvas\'s own, in order');
+  assert.notDeepEqual(declared, labels, 'the PR3 chip row was replaced by the v2 canvas\'s');
+  assert.deepEqual(declared, ['Draft', 'Sent', 'Opened', 'Accepted', 'All']);
 });
 
 test('the canvas\'s Draft chip is resolved to a state the store can answer', () => {
-  // THE CANVAS CONTRADICTS ITSELF HERE AND THE PAGE PICKS A SIDE. It offers a
-  // `Draft` chip and defines a `Draft` pill, but its own draft row is
-  // `state:'Not started'` — so the chip as drawn matches nothing. Migration 239
-  // makes the state real: a latest version never sent IS the draft.
+  // THE PR3 CANVAS CONTRADICTED ITSELF HERE. It offered a `Draft` chip and
+  // defined a `Draft` pill, but its own draft row was `state:'Not started'`.
+  // The v2 canvas settles it the way migration 239 always allowed: a latest
+  // version never sent IS the draft (#4833, `cardStatus`).
   assert.match(DATA, /version:'v2 draft', versions:'2 versions', sent:'Not sent', state:'Not started'/);
   assert.ok(!/state:'Draft'/.test(DATA), 'no row in the artboard carries the chip\'s own state');
-  // The page maps the chip onto the state, in the page, where the chip row is
-  // mounted — `profile_zone_filters.test.mjs` requires the page that declares a
-  // filter live to be the page that names its key.
-  assert.match(P, /filter === 'draft'\) return rows\.filter\(\(i\) => i\.state === 'not_started'\)/);
-  assert.match(P, /filter === 'unopened'\) return rows\.filter\(\(i\) => i\.state === 'sent'\)/);
-  // `by_client` REORDERS rather than narrows, as on Engagements.
-  assert.match(P, /filter === 'by_client'/);
+  // The page maps the chip onto the latest version's status, in the page,
+  // where the chip row is mounted — `profile_zone_filters.test.mjs` requires
+  // the page that declares a filter live to be the page that names its key.
+  assert.match(P, /filter === 'draft'\) return rows\.filter\(\(i\) => cardStatus\(i\) === 'draft'\)/);
+  assert.match(P, /filter === 'sent'\) return rows\.filter\(\(i\) => cardStatus\(i\) === 'sent'\)/);
+  // Grouping by client REORDERS rather than narrows, as on Engagements (D571).
+  assert.match(P, /grouped\s*\n?\s*\? <Card padding="md"><DeliverablesByClient items=\{byClient\}/);
   assert.match(P, /localeCompare/);
 });
 
@@ -330,9 +338,13 @@ test('the list card and the trail card carry the artboard\'s own headings', () =
   assert.match(ART, /<span class="zt">All work products<\/span>/);
   assert.match(ART, /Version history and open state · only here/);
   assert.match(ART, /<span class="zt">Version trail<\/span>/);
-  assert.match(P, /title="All work products"/);
-  assert.match(P, /Version history and open state/);
-  assert.match(P, /title="Version trail"/);
+  // #4833 (D4833): the v2 canvas replaced both cards — the list became the
+  // work-product cards and the trail became the detail sheet's immutable
+  // version history (`DeliverableSheet.jsx`).
+  assert.match(P, /title="Work products"/);
+  assert.match(P, /<DeliverableSheet /);
+  assert.match(read('frontend/src/pages/advisor/practice/DeliverableSheet.jsx'), /Version history · immutable/);
+  assert.ok(!/title="Version trail"/.test(P), 'the trail card is the sheet now');
   // ROW CARDS, NOT A TABLE. This artboard draws no `class="th"` — it is a
   // collection of cards — and a table here would be a shape the canvas rejects.
   assert.ok(!/class="th"/.test(ART), 'PR3 draws no table header');

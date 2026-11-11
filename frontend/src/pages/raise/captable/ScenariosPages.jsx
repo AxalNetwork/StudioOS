@@ -20,6 +20,7 @@ import {
   sameInputs, scenarioCards, scenarioHref, scenariosHead, shareSteps, short, shortName, swipeCards, todayBody, todayDraft,
   isChangedSinceOpen, toggleCompare, variantSaveErrors, waterfallTable, waterfallsOf, withNotes,
 } from './scenariosModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1024 (#2861) — Scenarios complete (CT6–CT9): the cards with Compare and
@@ -59,7 +60,7 @@ function useRead(load, key, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(key))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: error?.message || '' }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, key, reload]);
   return state;

@@ -552,9 +552,12 @@ test('the canvas addresses land on the zone sections, behind the zones\' own gua
   assert.match(APP, /const AdvisorProfilePage = lazy\(\(\) => import\('\.\/pages\/advisor\/AdvisorProfilePage'\)\);/);
 
   const delivery = codeOnly(read('frontend/src/pages/advisor/practice/DeliveryZone.jsx'));
-  assert.match(delivery, /const VIEWS = new Set\(\['all', 'by_client', 'unopened', 'opened', 'draft'\]\);/);
+  // #4833 (D4833): `by_client` is still an address the page opens on; it
+  // groups the v2 cards rather than being a chip.
+  assert.match(delivery, /const VIEWS = new Set\(\[[^\]]*'by_client'[^\]]*\]\);/);
   assert.match(delivery, /VIEWS\.has\(searchParams\.get\('view'\)\)/);
-  assert.match(delivery, /filter === 'by_client'\s*\n?\s*\? <DeliverablesByClient/);
+  assert.match(delivery, /useState\(initialView === 'by_client'\)/);
+  assert.match(delivery, /grouped\s*\n?\s*\? <Card padding="md"><DeliverablesByClient/);
   assert.match(delivery, /api\.updateMyAdvisorDeliverable\(item\.id, body\)/);
   const sessions = codeOnly(read('frontend/src/pages/advisor/practice/SessionsZone.jsx'));
   assert.match(sessions, /id="session-types"/);

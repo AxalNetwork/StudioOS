@@ -9,7 +9,9 @@
  * executed one is superseded only when its replacement is executed, so an amendment can be sent while the
  * signed version stays in force.
  *
- * `licence_uid` IS `territory_licences.uid` until #5057's shared licence identity exists; #5057 repoints it.
+ * `licence_uid` IS THE SHARED LICENCE UID (`licences.uid`, D5057). A territory licence's shared uid is its own
+ * `territory_licences.uid`, so every row written before D5057 already names its shared licence; migration
+ * 202611090932 refuses a row that names no shared licence.
  *
  * EVERY WRITE IS A BATCH OF STATEMENTS built here: the history line (`licence_agreement_events`) is inserted
  * from the row as it stands, THEN the row is updated, so the two commit together and the event names the
@@ -325,5 +327,20 @@ export async function onAgreementEnvelopeCompleted(env: Env, envelopeUuid: strin
   if (!before || before.agreement_kind === 'program_schedule') return null;
   await env.DB.batch(agreementSignedStatements(env, envelopeUuid, signedAt));
   const after = await agreementForEnvelope(env, envelopeUuid);
-  return { uid: before.uid, licence_uid: before.licence_uid, status: after?.status ?? before.status, executed: before.status !== 'executed' && after?.status === 'executed' };
+  const executed = before.status !== 'executed' && after?.status === 'executed';
+  if (executed) {
+    // D5052: an executed agreement may satisfy a program's legal gate. Record the gate's new answer, and push the
+    // licence so the branch's copy stops holding the program (`legal_waiting`). Both best effort: the signature
+    // is recorded either way, and a push that does not land is retried (D272).
+    try {
+      const { syncLegalGate } = await import('./agreementPolicies');
+      await syncLegalGate(env, before.licence_uid, { actorId: null, reason: 'Agreement executed.' });
+      const lic = await env.DB.prepare('SELECT id FROM territory_licences WHERE uid = ?').bind(before.licence_uid).first<{ id: number }>();
+      if (lic) {
+        const { pushLicenceToBranch } = await import('./licencePush');
+        await pushLicenceToBranch(env, lic.id);
+      }
+    } catch (e) { console.warn('[programAgreements] gate sync after execution failed', (e as Error)?.message); }
+  }
+  return { uid: before.uid, licence_uid: before.licence_uid, status: after?.status ?? before.status, executed };
 }

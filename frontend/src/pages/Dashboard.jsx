@@ -125,7 +125,7 @@ export default function Dashboard({ activeRole, authUser }) {
           under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
         </InfoStrip>
       )}
-      <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+      <ProductTour role="founder" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
       <FounderStudioHome user={user} />
       {/* D1614 W8 (#3994): every task given to me, across my Teams. */}
       <MyTasks licence="founder" testId="studio-my-tasks" />
@@ -154,7 +154,7 @@ export default function Dashboard({ activeRole, authUser }) {
             </InfoStrip>
           </div>
         )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="admin" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <AdminStudioHome user={authUser} />
       </>
     );
@@ -169,7 +169,7 @@ export default function Dashboard({ activeRole, authUser }) {
     const previewingInvestor = authUser.role !== 'investor';
     return (
       <div className="space-y-6">
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="investor" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <InvestorStudioHome
           user={authUser}
           dashboard={null}
@@ -178,6 +178,8 @@ export default function Dashboard({ activeRole, authUser }) {
           dashboardUnavailable={previewingInvestor ? '' : error}
           onRetryDashboard={() => { setLoading(true); load(); }}
         />
+        {/* D4815 (#4815): the investor's My tasks moved here from /deals; its own read, so a failed summary keeps it. */}
+        <MyTasks licence="investor" testId="studio-investor-my-tasks" />
       </div>
     );
   }
@@ -185,7 +187,7 @@ export default function Dashboard({ activeRole, authUser }) {
     const previewingAdvisor = authUser.role !== 'advisor';
     return (
       <div className="space-y-6">
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="advisor" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <AdvisorStudioHome
           user={authUser}
           dashboard={null}
@@ -200,7 +202,7 @@ export default function Dashboard({ activeRole, authUser }) {
     const previewingPartner = authUser.role !== 'partner';
     return (
       <div className="space-y-6">
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="partner" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <PartnerStudioHome
           user={authUser}
           dashboard={null}
@@ -243,7 +245,7 @@ export default function Dashboard({ activeRole, authUser }) {
             <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="investor" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <InvestorStudioHome
           user={user}
           dashboard={previewingInvestor ? null : data}
@@ -257,6 +259,8 @@ export default function Dashboard({ activeRole, authUser }) {
               .catch((e) => { setInvestorLC(null); reportError('Dashboard:investorLifecycle', e); });
           }}
         />
+        {/* D4815 (#4815): the investor's My tasks moved here from /deals (D1614 W8 placed it there). */}
+        <MyTasks licence="investor" testId="studio-investor-my-tasks" />
         <ProductTestingStudio user={authUser || user} />
       </div>
     );
@@ -271,7 +275,7 @@ export default function Dashboard({ activeRole, authUser }) {
             <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="advisor" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <AdvisorStudioHome
           user={user}
           dashboard={previewingAdvisor ? null : data}
@@ -292,7 +296,7 @@ export default function Dashboard({ activeRole, authUser }) {
             <strong>You're signed in with Google.</strong> Signing out of Axal VC will not sign you out of Google globally — manage connected accounts under <Link to="/account/security" className="underline">Settings → Security</Link>.
           </InfoStrip>
         )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="partner" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <PartnerStudioHome
           user={user}
           dashboard={previewingPartner ? null : data}
@@ -321,7 +325,7 @@ export default function Dashboard({ activeRole, authUser }) {
             under <Link to="/account/security" className="underline">Settings → Security → Connected accounts</Link>.
           </InfoStrip>
         )}
-        <ProductTour enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
+        <ProductTour role="founder" enabled={tourEnabled} onDone={() => setTourEnabled(false)} />
         <FounderStudioHome user={user} />
         <ProductTestingStudio user={authUser || user} />
       </div>

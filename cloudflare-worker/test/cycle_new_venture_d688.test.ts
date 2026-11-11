@@ -75,8 +75,8 @@ async function call(env: any, path: string, user = 1, method = 'GET', body?: unk
 const emptyBuild = [
   ['solution-design', 'No features yet. Linked and unlinked features appear here.', 'Add feature', '/build/solution-design?project=101&add=1'],
   ['prototype-mvp', 'No must-haves yet. The burn-up toward the ship date appears here.', 'Add must-have', '/build/prototype-mvp?project=101&add=1'],
-  ['product-roadmap', 'No roadmap items yet. Now, Next and Later appear here.', 'Add item', '/build/roadmap?project_id=101'],
-  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/cap-table'],
+  ['product-roadmap', 'No roadmap items yet. Now, Next and Later appear here.', 'Add item', '/build/product-roadmap?project=101&add=1'],
+  ['founding-team', 'No founders yet. The equity split and vesting appear here.', 'Add founder', '/raise/cap-table?project=101'],
   ['company-creation', 'No filings yet. Formation steps and their dates appear here.', 'Add filing', '/build/company-creation?project=101&add=1'],
   ['operating-systems', 'No systems connected yet. Each system and its state appear here.', 'Connect a system', '/build/connect?project_id=101'],
 ] as const;
@@ -90,6 +90,29 @@ test('D688: a new Build venture has six actionable empty cards, null figures and
   assert.ok(body.figures.every((f: any) => f.value === null && f.state !== 'ok'));
   assert.deepEqual([body.focus.rule, body.focus.eyebrow, body.focus.headline, body.focus.why, body.focus.cta, body.focus.then],
     ['first_feature', 'Build · Next', 'Add the first feature.', 'Nothing in Build is recorded yet. Each chart fills as you add to its module.', { label: 'Add feature', href: emptyBuild[0][3] }, null]);
+  db.close();
+});
+
+// D5068 (#5068): the Product roadmap and Founding team empty-card links name
+// the venture that read them. Venture B (202) is read first, as a stand-in
+// for a previously/default-selected venture elsewhere in the app, then
+// venture A (101) — its cards must still say 101, not carry over 202's id.
+test('D5068 (#5068): venture A\'s empty-card links stay venture A\'s after venture B was read first', async () => {
+  const { db, env } = fixture();
+  const b = await call(env, '/api/cycles/build/overview?project=202', 2);
+  assert.equal(b.status, 200);
+  const roadmapB = b.body.cards.find((c: any) => c.slug === 'product-roadmap');
+  const foundingB = b.body.cards.find((c: any) => c.slug === 'founding-team');
+  assert.equal(roadmapB.next.href, '/build/product-roadmap?project=202&add=1');
+  assert.equal(foundingB.next.href, '/raise/cap-table?project=202');
+
+  const a = await call(env, '/api/cycles/build/overview?project=101');
+  assert.equal(a.status, 200);
+  const roadmapA = a.body.cards.find((c: any) => c.slug === 'product-roadmap');
+  const foundingA = a.body.cards.find((c: any) => c.slug === 'founding-team');
+  assert.equal(roadmapA.next.href, '/build/product-roadmap?project=101&add=1', 'venture A keeps its own id, not venture B\'s');
+  assert.equal(foundingA.next.href, '/raise/cap-table?project=101', 'venture A keeps its own id, not venture B\'s');
+  assert.ok(!JSON.stringify(a.body.cards).includes('/build/roadmap'), 'no card links to the legacy roadmap route');
   db.close();
 });
 
@@ -201,7 +224,7 @@ async function growFixture() {
   for (const number of ['034', '119', '127', '132', '326']) db.exec(ddl(number));
   db.exec(file('311'));
   db.exec('ALTER TABLE contacts ADD COLUMN utm_json TEXT');
-  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('443'));
+  db.exec(ddl('125')); db.exec(file('437')); db.exec(file('202611091055')); db.exec(file('443'));
   db.exec("INSERT INTO users(id, role, founder_id, name, email) VALUES (1, 'founder', 10, 'Test Founder', 'founder@example.test')");
   db.exec("INSERT INTO projects(id, uid, name, founder_id, company_id) VALUES (7, 'venture7', 'Sample Venture', 10, 70)");
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;

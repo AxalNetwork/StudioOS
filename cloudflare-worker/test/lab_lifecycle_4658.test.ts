@@ -26,7 +26,8 @@ import { SignJWT } from 'jose';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { insertRow } from './_lab_evidence.ts';
-import spinoutLab, { recordMilestone, startLab } from '../src/routes/spinout_lab.ts';
+import spinoutLab from '../src/routes/spinout_lab.ts';
+import { recordMilestone, startLab } from '../src/services/labLifecycle.ts';
 import { runCohortApplicationsTick, retryCohortNotifications, NOTIFY_MAX_ATTEMPTS } from '../src/services/cohortApplications.ts';
 import { decideApplicant, APPLICANT_BY_ID_SQL } from '../src/services/labDecisions.ts';
 

@@ -10,7 +10,7 @@ import {
 import AdminBoardFrame from '../AdminBoardFrame';
 import { useHeldGlance } from '../heldFigures';
 import {
-  DECIDED_LINE, GROUPS, HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANES_LINE, LANE_FAILED, LINE, MOVED_KEY, MOVED_NOTICE,
+  HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANE_FAILED, LINE, MOVED_KEY, MOVED_NOTICE,
   NOT_A_QUEUE, NOT_YET, RAIL_NOTE, TITLE,
   isHqLane, laneViews, tabOf,
 } from './approvalsModel';
@@ -22,7 +22,8 @@ import {
   itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
   waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
-import { FOOT, PhoneBack } from './boardParts';
+import { FOOT, PhoneBack, usePopoverPlace } from './boardParts';
+import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
 /**
@@ -117,6 +118,7 @@ export function HqDoor({ lane }) {
     case 'ai_runs': return <Link to="/admin/platform/allowances" className={LINK}>Platform › AI allowances</Link>;
     case 'notices': return <Link to="/admin/licences" className={LINK}>Licences</Link>;
     case 'support': return <Link to="/admin/hq-support" className={LINK}>Support</Link>;
+    case 'proposals': return <Link to="/admin/programs/proposals" className={LINK}>Programs › Proposals</Link>;
     case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program access by licence › Requests</Link>;
     default: return <span className={SUB}>{lane.waits}</span>;
   }
@@ -138,11 +140,17 @@ function DoorFor({ lane }) {
  */
 function DressedDoor({ lane, before, after, className, plain, testId }) {
   const dest = reviewDestination(lane);
+  const box = useRef(null);
+  // The link's own text is the lane alone; its name is the whole control ("Open in KYC & KYB").
+  useEffect(() => {
+    const a = box.current?.querySelector?.('a');
+    if (a && before) a.setAttribute('aria-label', `${before}${a.textContent}`);
+  }, [before, lane]);
   if (/no review page yet|not built yet|^its own page$/.test(dest)) return <span className={plain} data-testid={testId}>{dest}</span>;
   return (
-    <span data-testid={testId}
+    <span ref={box} data-testid={testId}
       className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
-      {before}<DoorFor lane={lane} />{after}
+      <span>{before}<DoorFor lane={lane} />{after}</span>
     </span>
   );
 }
@@ -235,6 +243,7 @@ function RowActions({ row, onAssign, onCopy }) {
   const trigger = useRef(null);
   const popId = `approvals-pop-${row.lane}-${row.id}`;
   const close = (refocus) => { setOpen(false); if (refocus) trigger.current?.focus?.(); };
+  const place = usePopoverPlace(trigger, open, 140);
   useEffect(() => {
     if (!open) return undefined;
     const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
@@ -249,8 +258,8 @@ function RowActions({ row, onAssign, onCopy }) {
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={popId} aria-label={`More actions for ${row.who}`} onClick={() => setOpen((o) => !o)}
         className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
       {open ? (
-        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
-          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(false); onAssign([row]); }}>Assign…</button>
+        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
+          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
           <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
           <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
@@ -266,11 +275,14 @@ function RowActions({ row, onAssign, onCopy }) {
  * they own now. The button names the person. `line` is what a caller adds
  * (Assign overdue…'s cap).
  */
-function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
+export function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
   const choices = assignChoices(inbox?.reply, callerId);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
+  // D4814 part 6 (AP-05): "Search reviewers", on names; the chosen one stays chosen while it is filtered out.
+  const [find, setFind] = useState('');
   const list = choices.state === 'ready' ? choices.choices : [];
+  const shown = matchReviewers(list, find);
   const send = async () => {
     if (!pick || busy) return;
     setBusy(true);
@@ -299,9 +311,15 @@ function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) 
         {line ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-line">{line}</p> : null}
         {choices.state !== 'ready' ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-unread">{choices.text}</p> : (
           <>
+            <label className="flex flex-col gap-1">
+              <span className="sr-only">Search reviewers</span>
+              <input type="search" value={find} placeholder="Search reviewers" onChange={(e) => setFind(e.target.value)}
+                className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-assign-search" />
+            </label>
+            {!shown.length ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-none">{`No reviewer is called “${find.trim()}”.`}</p> : null}
             <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" data-testid="approvals-assign-list">
               <legend className="sr-only">Reviewer</legend>
-              {list.map((c) => (
+              {shown.map((c) => (
                 <label key={c.id} className={`flex min-h-[44px] items-center gap-2.5 rounded-[8px] border px-3 text-[13px] text-axal-ink dark:text-gray-100 ${pick === c.id ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline dark:border-gray-700'}`} data-testid={`approvals-assign-${c.id}`}>
                   <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
                   <b className="flex-1">{c.name}</b>
@@ -329,13 +347,14 @@ function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
   const ready = v.state === 'ready';
   const row = ready ? [{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }] : null;
   const mine = ready && v.assignee.kind === 'person' && canTake && Number(v.assignee.id) === Number(canTake);
+  const STEP_BOX = 'inline-flex h-11 w-11 items-center justify-center rounded-[7px] border border-axal-hairline bg-white text-[13px] font-bold text-axal-ink hover:bg-gray-50 sm:h-8 sm:w-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
   const stepper = step ? (
     <div className="flex items-center gap-1.5" data-testid="approvals-item-step">
       <span className={`${SUB} ${MONO}`} data-testid="approvals-item-pos">{step.pos}</span>
-      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={BTN_SM} data-testid="approvals-item-prev">‹</Link>
-        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>‹</span>}
-      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={BTN_SM} data-testid="approvals-item-next">›</Link>
-        : <span aria-hidden="true" className={`${BTN_SM} opacity-40`}>›</span>}
+      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={STEP_BOX} data-testid="approvals-item-prev">‹</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>‹</span>}
+      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={STEP_BOX} data-testid="approvals-item-next">›</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>›</span>}
     </div>
   ) : null;
   return (
@@ -439,7 +458,7 @@ function RowCard({ row, search, onMore, onAssign }) {
   return (
     <li className="flex flex-col gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[44px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
         <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what} · {row.laneLabel}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
@@ -547,20 +566,26 @@ function StripCell({ label, testId, t, tone, children }) {
   );
 }
 
-/** D4814: who holds a row. Unassigned is amber with Assign beside it; an unread record is "Not read", never "Unassigned". */
-function OwnerCell({ row, callerId, onAssign }) {
+/**
+ * D4814: who holds a row. Unassigned is amber with Assign beside it; an unread
+ * record is "Not read", never "Unassigned". Part 3: the native boards draw it
+ * too, under their own `prefix`.
+ */
+export function OwnerCell({ row, callerId, onAssign, prefix = 'approvals' }) {
   const a = row.assignee;
-  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={`approvals-owner-${row.key}`}>Not read</span>;
+  const id = `${prefix}-owner-${row.key}`;
+  if (a.kind === 'loading') return <span aria-label="Reading the owner" className={SUB} data-testid={id}>…</span>;
+  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={id}>Not read</span>;
   if (a.kind === 'none') {
     return (
-      <span className="flex flex-wrap items-center gap-2" data-testid={`approvals-owner-${row.key}`}>
+      <span className="flex flex-wrap items-center gap-2" data-testid={id}>
         <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
-        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`approvals-owner-assign-${row.key}`}>Assign</button>
+        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`${prefix}-owner-assign-${row.key}`}>Assign</button>
       </span>
     );
   }
   const you = callerId != null && Number(a.id) === Number(callerId);
-  return <span data-testid={`approvals-owner-${row.key}`}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
+  return <span data-testid={id}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
 }
 
 /** D4814: Review opens the item here; the line under it says where review continues. */
@@ -664,7 +689,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
         <StripCell label="Waiting" testId="approvals-strip-waiting" t={strip.waiting} />
         <StripCell label="Overdue" testId="approvals-strip-overdue" t={strip.overdue} tone={strip.overdue.n > 0 ? 'bad' : null} />
         <StripCell label="Unassigned" testId="approvals-strip-unassigned" t={strip.unassigned} tone={strip.unassigned.n > 0 ? 'warn' : null}>
-          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
+          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
         </StripCell>
         <StripCell label="Oldest" testId="approvals-strip-oldest" t={strip.oldest} />
       </section>
@@ -727,7 +752,7 @@ function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign
               <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
                 {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
                 {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
-                {' '}<button type="button" className="underline" onClick={inbox.reload}>Try again</button>
+                {' '}<button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] underline" onClick={inbox.reload}>Try again</button>
               </p>
             ) : null}
             {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
@@ -886,27 +911,49 @@ function DecidedWeek({ t }) {
   );
 }
 
-function LaneTable({ group, views, glanceLanes, onRetry }) {
-  const rows = views.filter((v) => v.group === group.key);
+/**
+ * D4814 (AP-06): one group of the operations map — Lane · Waiting · Oldest ·
+ * Notifies / owner · Reviewed in. A native board is tagged "Approvals board";
+ * an unread lane says so with Try again, a lane not counted says why.
+ */
+function LaneTable({ group, glanceLanes, onRetry }) {
   return (
-    <section className={`${CARD} overflow-x-auto`} data-testid={`approvals-lanes-${group.key}`}>
-      <h2 className={`${H2} px-3 pt-3`}>{group.label}</h2>
+    <section className={`${CARD} overflow-x-auto`} aria-labelledby={`approvals-lanes-${group.key}-h`} data-testid={`approvals-lanes-${group.key}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-3.5 py-3 dark:border-gray-700">
+        <h2 id={`approvals-lanes-${group.key}-h`} className={H2}>{group.label}</h2>
+        <span className={`${SUB} ${MONO}`} data-testid={`approvals-lanes-${group.key}-count`}>{group.waiting == null ? '…' : `${group.waiting} · ${group.lanes}`}</span>
+      </div>
       <table className="w-full min-w-[760px]">
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Reviewed in</th><th className={TH}>Who decides</th><th className={TH}>Notifies</th></tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th scope="col" className={TH}>Lane</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Oldest</th><th scope="col" className={TH}>Notifies / owner</th><th scope="col" className={TH}>Reviewed in</th></tr></thead>
         <tbody>
-          {rows.map((v) => {
+          {group.rows.map((v) => {
             const notifies = notifiesOf(glanceLanes.find((l) => l.key === v.glance));
             return (
-              <tr key={v.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-lane-${v.key}`}>
-                <td className={TD}>{v.label}{v.isNew ? <span className={NEW_PILL}>New</span> : null}{v.note ? <div className={SUB}>{v.note}</div> : null}</td>
-                <td className={TD}><WaitingCell v={v} onRetry={onRetry} /></td>
-                <td className={TD}>{v.state === 'ready' && v.count > 0 ? <><span className={MONO}>{v.age || 'Age not recorded'}</span><BandPill band={v.band} /></> : <span className={SUB}>—</span>}</td>
-                <td className={TD}><LaneDoor k={v.key} /></td>
-                <td className={TD}>Admin and Super Admin</td>
+              <tr key={v.key} className={`border-b border-axal-hairline last:border-0 dark:border-gray-700 ${v.state === 'unreadable' ? 'bg-axal-destructive-tint/40 dark:bg-red-950/20' : ''}`} data-testid={`approvals-lane-${v.key}`}>
+                <td className={TD}>
+                  <b>{v.label}</b>
+                  {v.native ? <span className={NEW_PILL} data-testid={`approvals-lane-native-${v.key}`}>Approvals board</span> : null}
+                  {v.isNew ? <span className={NEW_PILL}>New</span> : null}
+                  {v.note ? <div className={SUB}>{v.note}</div> : null}
+                </td>
+                <td className={TD}>
+                  {v.state === 'ready' ? (
+                    <>
+                      <span className={MONO} data-testid={`approvals-lane-count-${v.key}`}>{v.count.toLocaleString('en-US')}</span> waiting
+                      {v.overdue ? <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.bad}`} data-testid={`approvals-lane-overdue-${v.key}`}>{`${v.overdue.toLocaleString('en-US')} overdue`}</span> : null}
+                    </>
+                  ) : <WaitingCell v={v} onRetry={onRetry} />}
+                </td>
+                <td className={TD}>
+                  {v.state === 'unreadable' ? <span className={SUB}>— not read</span>
+                    : v.state === 'ready' && v.count > 0 ? (v.age ? <span className={MONO}>{`oldest ${v.age}`}</span> : <><span className={SUB}>Not recorded</span><div className={SUB}>arrival time not kept</div></>)
+                      : <span className={SUB}>—</span>}
+                </td>
                 <td className={TD} data-testid={`approvals-notifies-${v.key}`}>
                   {notifies.warn ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.warn}`}>{notifies.text}</span>
                     : <span className={notifies.state === 'ready' ? '' : SUB}>{notifies.text}</span>}
                 </td>
+                <td className={TD}><DressedDoor lane={v.key} after=" →" className={LINK} plain={SUB} testId={`approvals-lane-door-${v.key}`} /></td>
               </tr>
             );
           })}
@@ -916,55 +963,91 @@ function LaneTable({ group, views, glanceLanes, onRetry }) {
   );
 }
 
-/** Lanes (APR2), plus HQ decides with its counts for a Super Admin (APR9) and the Not-a-queue card. */
-function Lanes({ views, glance, superAdmin }) {
+/**
+ * Lanes (APR2). D4814 (AP-06): an operations map — the banner when a lane
+ * could not be read, the groups with their totals, HQ decides (a Super
+ * Admin's table, a locked line for an Admin), and the five places that are
+ * not approval queues, collapsed at the bottom.
+ */
+function Lanes({ views, glance, inbox, superAdmin }) {
   const ap = glance.hq?.approvals;
   const glanceLanes = ap?.kind === 'ready' ? ap.lanes : [];
   const hq = hqLaneViews(ap?.hqDecides ?? null);
+  const groups = laneGroups(views, inbox.status === 'ready' ? inbox.reply : null);
+  const banner = lanesBanner(views);
   return (
-    <div className="flex flex-col gap-3.5">
-      <p className={`m-0 ${SUB}`}>{LANES_LINE}</p>
-      {GROUPS.map((g) => <LaneTable key={g.key} group={g} views={views} glanceLanes={glanceLanes} onRetry={glance.reload} />)}
+    <div className="flex flex-col gap-3.5" data-testid="approvals-lanes">
+      <div className="flex flex-col gap-0.5">
+        <h2 className={H2}>Approval lanes</h2>
+        <p className={`m-0 ${SUB}`}>Where admin decisions enter the platform and where each one is reviewed.</p>
+      </div>
+      {banner ? (
+        <div role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 border-axal-destructive-edge px-4 py-3 text-[13px] text-axal-destructive dark:border-red-900 dark:text-red-300`} data-testid="approvals-lanes-banner">
+          <span><b>{banner.text}</b> {banner.names}</span>
+          <button type="button" className="font-bold underline" onClick={glance.reload}>Try again</button>
+        </div>
+      ) : null}
+      {groups.map((g) => <LaneTable key={g.key} group={g} glanceLanes={glanceLanes} onRetry={glance.reload} />)}
       {superAdmin ? (
         <section className={`${CARD} overflow-x-auto`} data-testid="approvals-hq-lanes">
-          <h2 className={`${H2} px-3 pt-3`}>HQ decides</h2>
-          <p className={`m-0 px-3 ${SUB}`}>{hqBandLine(ap?.hqDecides ?? null) || 'Only Super Admins see this group.'}</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-3.5 py-3 dark:border-gray-700">
+            <h2 className={H2}>HQ decides — Super Admin only</h2>
+            <span className={SUB}>{hqBandLine(ap?.hqDecides ?? null) || 'Only Super Admins see this group.'}</span>
+          </div>
           <table className="w-full min-w-[640px]">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Reviewed in</th><th className={TH}>Who decides</th></tr></thead>
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th scope="col" className={TH}>Lane</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Oldest</th><th scope="col" className={TH}>Notifies / owner</th><th scope="col" className={TH}>Reviewed in</th></tr></thead>
             <tbody>
               {hq.map((l) => (
                 <tr key={l.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-hq-${l.key}`}>
-                  <td className={TD}>{l.label}</td>
+                  <td className={TD}><b>{l.label}</b></td>
                   <td className={TD} data-testid={`approvals-hq-count-${l.key}`}>
-                    {l.state === 'ready' ? <span className={MONO}>{l.count.toLocaleString('en-US')}</span>
+                    {l.state === 'ready' ? <><span className={MONO}>{l.count.toLocaleString('en-US')}</span> waiting</>
                       : l.state === 'unreadable' ? <span title={l.reason} className="cursor-help text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
                         : <span title={l.reason} className={`cursor-help ${SUB}`}>{NOT_YET}</span>}
                   </td>
-                  <td className={TD}>{l.state === 'ready' && l.count > 0 ? <span className={MONO}>{l.age || 'Age not recorded'}</span> : <span className={SUB}>—</span>}</td>
+                  <td className={TD}>{l.state === 'ready' && l.count > 0 ? <span className={MONO}>{l.age ? `oldest ${l.age}` : 'Not recorded'}</span> : <span className={SUB}>—</span>}</td>
+                  <td className={TD}>{l.notifies?.text || <span className={SUB}>Super Admin</span>}</td>
                   <td className={TD}><HqDoor lane={l} /></td>
-                  <td className={TD}>Super Admin</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
-      ) : null}
-      <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-not-a-queue">
-        <h2 className={H2}>Not a queue</h2>
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+      ) : (
+        <section className={`${CARD} flex flex-wrap items-center justify-between gap-2 px-4 py-3`} data-testid="approvals-hq-locked">
+          <span className="flex flex-wrap items-center gap-2.5">
+            <span className={`${EYE} text-axal-ink dark:text-gray-100`}>HQ decides — Super Admin only</span>
+            <span className={SUB}>{`${HQ_LANES.length} HQ lanes are visible to Super Admins. You are signed in as Admin.`}</span>
+          </span>
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.plain}`}>🔒 Super Admin</span>
+        </section>
+      )}
+      <details className={`${CARD} px-4 py-3`} data-testid="approvals-not-a-queue">
+        <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-2 sm:min-h-0">
+          <b className="text-[13px] text-axal-ink dark:text-gray-100">{`Not approval queues · ${NOT_A_QUEUE.length}`}</b>
+          <span className={SUB}>Nothing in them waits on an admin.</span>
+        </summary>
+        <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
           <li className={SUB}><Link to="/admin/directory" className={LINK}>Directory</Link>: {NOT_A_QUEUE[0].reason}</li>
           <li className={SUB}><Link to="/admin/circles" className={LINK}>Circles</Link>: {NOT_A_QUEUE[1].reason}</li>
           <li className={SUB}><Link to="/admin/partner-invitations" className={LINK}>Partner invitations</Link>: {NOT_A_QUEUE[2].reason}</li>
           <li className={SUB}><Link to="/admin/programs/mentor-cohorts/people" className={LINK}>Mentor cohort access</Link>: {NOT_A_QUEUE[3].reason}</li>
           <li className={SUB}><Link to="/admin/programs/spinout-lab/formation" className={LINK}>83(b) follow-ups and formation packets</Link>: {NOT_A_QUEUE[4].reason}</li>
         </ul>
-      </section>
+      </details>
     </div>
   );
 }
 
-/** Decided (APR10): the log, newest first, with what it cannot say. */
-function Decided({ decided }) {
+/**
+ * Decided (APR10). D4814 (AP-07): an audit trail — filters for lane, outcome,
+ * decided by and a date range, and Include HQ lanes (a Super Admin's; shown
+ * but off for an Admin); each row when, the request, the outcome, who
+ * decided, the wait (a dash when not recorded), whether the person saw the
+ * note, and Open ↗ to the page that decides that lane; About this history
+ * after the log.
+ */
+function Decided({ decided, superAdmin }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const f = decidedQueryOf(loc.search);
@@ -975,64 +1058,96 @@ function Decided({ decided }) {
     const s = p.toString();
     navigate({ pathname: '/admin/approvals/decided', search: s ? `?${s}` : '' }, { replace: true });
   };
+  const clear = () => setParams({ lane: null, outcome: null, decided_by: null, from: null, to: null, hq: null });
   if (decided.status === 'error') {
     return <FailedCard title="We could not load what was decided." line="The Inbox and each lane’s own page still work." error={decided.error} onRetry={decided.reload} testId="approvals-decided-failed" />;
   }
   const reply = decided.status === 'ready' ? decided.reply : null;
   const rows = decidedRows(reply);
   const notes = decidedNotes(reply);
+  const deciders = Array.isArray(reply?.deciders) ? reply.deciders : null;
   const size = Number(reply?.page_size) || 25;
   const more = reply && (reply.total === null || reply.total === undefined ? rows.length === size : f.page * size < reply.total) && f.page < 40;
+  const lanes = superAdmin && f.hq !== '0' ? [...LANES, ...HQ_LANES] : LANES;
+  const nFilters = decidedFilterCount(f);
   return (
     <div className="flex flex-col gap-3.5" data-testid="approvals-decided">
-      <p className={`m-0 ${SUB}`}>{DECIDED_LINE}</p>
-      {notes.since.length || notes.notRecorded.length || notes.caveats.length || notes.unreadable.length ? (
-        <div className={`${CARD} flex flex-col gap-1 px-4 py-3`} data-testid="approvals-decided-notes">
-          {notes.since.map((t) => <p key={t} className={`m-0 ${SUB}`}>{t}</p>)}
-          {notes.notRecorded.map((n) => <p key={n.label} className={`m-0 ${SUB}`}>{n.label}: {n.reason}</p>)}
-          {notes.caveats.map((c) => <p key={c.label} className={`m-0 ${SUB}`}>{c.label}: {c.text}</p>)}
-          {notes.unreadable.length ? <p className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{notes.unreadable.join(', ')} could not be read, so {notes.unreadable.length === 1 ? 'its decisions are' : 'their decisions are'} missing below.</p> : null}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-end gap-3" data-testid="approvals-decided-filters">
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Lane</span>
-          <select className={SELECT} value={f.lane || ''} onChange={(e) => setParams({ lane: e.target.value || null })}>
-            <option value="">Every lane</option>
-            {LANES.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-          </select>
-        </label>
-        <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Outcome">
-          {OUTCOME_FILTERS.map((o) => (
-            <button key={o.label} type="button" aria-pressed={(f.outcome || null) === o.key} className={`${CHIP} ${(f.outcome || null) === o.key ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ outcome: o.key })}>{o.label}</button>
-          ))}
-        </div>
-        <label className="flex flex-col gap-1"><span className={EYE}>From</span><input type="date" className={SELECT} value={f.from || ''} onChange={(e) => setParams({ from: e.target.value || null })} /></label>
-        <label className="flex flex-col gap-1"><span className={EYE}>To</span><input type="date" className={SELECT} value={f.to || ''} onChange={(e) => setParams({ to: e.target.value || null })} /></label>
+      <div className="flex flex-col gap-0.5">
+        <h2 className={H2}>Decided</h2>
+        <p className={`m-0 ${SUB}`}>Recorded admin decisions across approval lanes.</p>
       </div>
-      <section className={`${CARD} overflow-x-auto`}>
+      {notes.unreadable.length ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="approvals-decided-unread">{notes.unreadable.join(', ')} could not be read, so {notes.unreadable.length === 1 ? 'its decisions are' : 'their decisions are'} missing below.</p> : null}
+      <section className={`${CARD} min-w-0`} aria-label="Decision log">
+        <div className="flex flex-wrap items-end gap-3 border-b border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="approvals-decided-filters">
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Lane</span>
+            <select className={SELECT} value={f.lane || ''} onChange={(e) => setParams({ lane: e.target.value || null })} data-testid="approvals-decided-lane">
+              <option value="">All</option>
+              {lanes.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Outcome</span>
+            <select className={SELECT} value={f.outcome || ''} onChange={(e) => setParams({ outcome: e.target.value || null })} data-testid="approvals-decided-outcome">
+              {OUTCOME_FILTERS.map((o) => <option key={o.label} value={o.key || ''}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Decided by</span>
+            <select className={SELECT} value={f.decided_by || ''} disabled={!deciders} title={deciders ? undefined : reply?.deciders_reason} onChange={(e) => setParams({ decided_by: e.target.value || null })} data-testid="approvals-decided-by">
+              <option value="">Anyone</option>
+              {(deciders || []).map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1"><span className={EYE}>From</span><input type="date" className={SELECT} value={f.from || ''} onChange={(e) => setParams({ from: e.target.value || null })} data-testid="approvals-decided-from" /></label>
+          <label className="flex flex-col gap-1"><span className={EYE}>To</span><input type="date" className={SELECT} value={f.to || ''} onChange={(e) => setParams({ to: e.target.value || null })} data-testid="approvals-decided-to" /></label>
+          <label className={`ml-auto flex min-h-[44px] items-center gap-2 text-[12.5px] sm:min-h-0 ${superAdmin ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
+            <input type="checkbox" disabled={!superAdmin} checked={superAdmin && f.hq !== '0'} onChange={(e) => setParams({ hq: e.target.checked ? null : '0', ...(f.lane && HQ_LANES.some((l) => l.key === f.lane) ? { lane: null } : {}) })} data-testid="approvals-decided-hq" />
+            Include HQ lanes <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL.plain}`}>Super Admin</span>
+          </label>
+        </div>
         {!reply ? <div className="px-3 py-3"><Skeleton.Table rows={6} cols={6} /></div>
           : rows.length ? (
-            <table className="w-full min-w-[820px]">
-              <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Decided</th><th className={TH}>Lane</th><th className={TH}>Who</th><th className={TH}>Outcome</th><th className={TH}>Decided by</th><th className={TH}>Wait</th><th className={TH}>Note</th></tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-decided-${r.key}`}>
-                    <td className={TD}><span className={MONO}>{r.when}</span></td>
-                    <td className={TD}>{r.lane}</td>
-                    <td className={TD}>{r.who}</td>
-                    <td className={TD}><span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[r.outcome.tone] || PILL.plain}`}>{r.outcome.word}</span></td>
-                    <td className={TD}>{r.by}</td>
-                    <td className={TD}><span className={MONO}>{r.wait}</span></td>
-                    <td className={TD}>{r.note ? <>{r.note}{r.shown ? <div className={SUB}>◉ They see this</div> : null}</> : <span className={SUB}>—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className={`m-0 px-4 py-5 ${SUB}`} data-testid="approvals-decided-empty">Nothing recorded as decided matches.</p>}
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
+                  <th scope="col" className={TH}>Decided ↓</th><th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Outcome</th><th scope="col" className={TH}>Decided by</th><th scope="col" className={`${TH} text-right`}>Wait</th><th scope="col" className={TH}>Note</th><th scope="col" className={TH}><span className="sr-only">Open</span></th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const kind = noteKind(r);
+                    return (
+                      <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-decided-${r.key}`}>
+                        <td className={`${TD} whitespace-nowrap`}><span className={MONO}>{r.when}</span></td>
+                        <td className={TD}><b>{r.who}</b><div className={SUB}>{r.lane}</div></td>
+                        <td className={TD}><span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[r.outcome.tone] || PILL.plain}`}>{r.outcome.word}</span></td>
+                        <td className={TD}>{r.by}</td>
+                        <td className={`${TD} text-right`}>{r.waitKnown ? <span className={MONO}>{r.wait}</span> : <span className={SUB} title="This lane does not record when the item arrived, so the wait is not known." data-testid={`approvals-decided-wait-${r.key}`}>—</span>}</td>
+                        <td className={TD} data-testid={`approvals-decided-note-${r.key}`}>
+                          {kind === 'none' ? <span className={SUB}>No note</span>
+                            : kind === 'shown' ? <>{r.note}<div className={SUB}>👁 Shown to them</div></>
+                              : <>{r.note}<div className={SUB}>🔒 Internal note</div></>}
+                        </td>
+                        <td className={`${TD} text-right`}>
+                          {/* D4814 part 6: a native board's row opens the item itself; any other lane opens its own page. */}
+                          {decidedItemPath(r) ? <Link to={decidedItemPath(r)} className={BTN_SM} data-testid={`approvals-decided-open-${r.key}`}>Open ↗</Link>
+                            : <DressedDoor lane={r.laneKey} before="Open in " after=" ↗" className={BTN_SM} plain={SUB} testId={`approvals-decided-open-${r.key}`} />}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div role="status" className="flex flex-col items-center gap-2 px-4 py-10 text-center" data-testid="approvals-decided-empty">
+              <b className="text-[14px] text-axal-ink dark:text-gray-100">No recorded decisions match these filters.</b>
+              {nFilters ? <button type="button" className={BTN} onClick={clear} data-testid="approvals-decided-clear">Clear filters</button> : null}
+            </div>
+          )}
         {rows.length ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
-            <span className={`${SUB} ${MONO}`} data-testid="approvals-decided-count">{decidedPageLine(reply)}</span>
+            <span className={`${SUB} ${MONO}`} data-testid="approvals-decided-count">{`${decidedPageLine(reply)} · newest first`}</span>
             <div className="flex gap-2">
               <button type="button" className={BTN} disabled={f.page <= 1} onClick={() => setParams({ page: f.page > 2 ? String(f.page - 1) : null })}>Previous</button>
               <button type="button" className={BTN} disabled={!more} onClick={() => setParams({ page: String(f.page + 1) })}>Next</button>
@@ -1040,6 +1155,14 @@ function Decided({ decided }) {
           </div>
         ) : null}
       </section>
+      {reply && rows.length ? (
+        <section className="flex flex-col gap-1.5 rounded-[12px] border border-dashed border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="approvals-decided-about">
+          <h2 className="m-0 text-[13px] font-extrabold text-axal-ink dark:text-gray-100">About this history</h2>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {aboutHistory(notes).map((t) => <li key={t} className={SUB}>{`· ${t}`}</li>)}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1058,12 +1181,16 @@ export function ApprovalsPage({ viewer = null }) {
   const notice = useMovedNotice({ [MOVED_KEY]: MOVED_NOTICE });
   const onInbox = tab === 'inbox';
   const iq = inboxQueryOf(loc.search, superAdmin);
-  const inbox = useRead(() => adminApprovalsApi.inbox(iq.page, iq.filters), JSON.stringify(iq.filters) + iq.page, onInbox);
+  // D4814 (AP-06): Lanes reads the inbox too, unfiltered, for each lane's overdue count.
+  const inboxKey = tab === 'lanes' ? 'lanes' : JSON.stringify(iq.filters) + iq.page;
+  const inbox = useRead(() => (tab === 'lanes' ? adminApprovalsApi.inbox(1, {}) : adminApprovalsApi.inbox(iq.page, iq.filters)), inboxKey, onInbox || tab === 'lanes');
   const weekly = useRead(() => adminApprovalsApi.weekly(), 'weekly', onInbox);
   // D4814: Waiting on HQ is a studio's outbound list; the HQ-held shell neither draws nor reads it.
   const studio = Boolean(branchOfUser(user));
   const requests = useRead(() => licenceRequestsApi.list(), 'requests', onInbox && studio);
   const dq = decidedQueryOf(loc.search);
+  // D4814: "Include HQ lanes" off is a Super Admin's; a plain Admin never sends hq.
+  if (!decidedHq(loc.search, superAdmin)) delete dq.hq;
   const { page: dPage, ...dFilters } = dq;
   const decided = useRead(() => adminApprovalsApi.decided(dPage, dFilters), JSON.stringify(dq), tab === 'decided');
 
@@ -1130,8 +1257,8 @@ export function ApprovalsPage({ viewer = null }) {
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-approvals">
       <AdminPageHeader title={TITLE} line={LINE} scope notice={{ text: notice.text, onDismiss: notice.dismiss }} tabs={tabs} data-testid="approvals-header" />
       {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} superAdmin={superAdmin} studio={studio} callerId={user?.id ?? null} onAssign={openAssign} toast={setToastText} /> : null}
-      {tab === 'lanes' ? <Lanes views={views} glance={glance} superAdmin={superAdmin} /> : null}
-      {tab === 'decided' ? <Decided decided={decided} /> : null}
+      {tab === 'lanes' ? <Lanes views={views} glance={glance} inbox={inbox} superAdmin={superAdmin} /> : null}
+      {tab === 'decided' ? <Decided decided={decided} superAdmin={superAdmin} /> : null}
       {item ? (
         <ItemDrawer key={`${item.lane}-${item.id}`} at={item} step={onInbox && inbox.status === 'ready' ? queueStep(inbox.reply, item) : null} search={loc.search}
           canTake={canTake} onClose={closeItem} onAssign={openAssign} onTake={take} />
@@ -1150,7 +1277,7 @@ export function ApprovalsPage({ viewer = null }) {
 /** The page inside its rail frame (D774), the frame the page's outermost element. */
 export default function AdminApprovals() {
   return (
-    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} data-testid="admin-board-approvals">
+    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} operations data-testid="admin-board-approvals">
       <ApprovalsPage />
     </AdminBoardFrame>
   );

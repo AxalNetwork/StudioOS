@@ -3,7 +3,10 @@
  *
  * Helpers for the admin publications route:
  *   - loadSectionAggregates(): pulls k≥5 aggregate rows for an MI section
- *   - draftSummary(): calls aiRouter.run('publication', …) to draft 3-5 bullets
+ *   - draftSummary(): calls aiRouter.run('publication', …) to draft 3-5 bullets,
+ *     or, with AI_PROVIDER_GATEWAY_OPENAI exactly 'on', the D4556 gateway
+ *     model first (D4870, off by default), admitted by the gateway's shared
+ *     upstream lease (D5338)
  *   - sectionToCsv(): CSV export with n<5 row suppression
  *   - publicationHtml(): five-page printable HTML for Browser Rendering
  *   - signPublicationToken / verifyPublicationToken: 24h HMAC download tokens
@@ -12,6 +15,9 @@
 import type { Env } from '../types';
 import * as ai from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
+import { runGatewayTextModel, type GatewayDeps, type GatewayRunResult } from './aiProviders';
+import { gatewayTextOn } from './ai/catalogue';
+import { upstreamAdmission } from './upstreamLease';
 
 // k-anonymity floor — mirrors K_MIN in routes/market_intel.ts. Any aggregate
 // row with n<5 is suppressed both server-side (here) AND defensively
@@ -108,6 +114,7 @@ export async function draftSummary(
     // D780: the press's rail context, from the route (`railFor`).
     rail?: { page: string; option?: string | null; record?: string | null };
   },
+  deps: GatewayDeps = {},
 ): Promise<{ summary_text: string; ok: boolean; error?: string; model?: string | null; usageLogId?: number | null }> {
   // Task #31 — headline synthesis runs entirely on Workers AI in
   // production. ROUTE['publication'] is `provider: 'workers-ai'` with
@@ -116,12 +123,21 @@ export async function draftSummary(
   // KV explainer cache can de-duplicate identical-payload requests.
   const systemPrompt = buildSystemPrompt();
   const userMessage = buildUserMessage(opts);
+  const rail = opts.rail ?? { page: 'publications', option: 'draft:publication-summary' };
+  // D4870: the D4556 gateway model, only while its switch is exactly 'on'.
+  if (gatewayTextOn(env as never)) {
+    const g = await draftViaGateway(env, userId, rail, systemPrompt, userMessage, deps);
+    if (g.ok) return { ok: true, summary_text: g.output.trim(), model: PUBLICATION_GATEWAY_MODEL, usageLogId: g.usageLogId };
+    if (!gatewayFallsBack(g)) {
+      return { ok: false, error: g.refusal, summary_text: fallbackSummary(opts.aggregates) };
+    }
+  }
   const r = await ai.run(env, {
     task: 'publication',
     userId,
     surface: AI_SURFACE.adminPublications,
     // D765: the admin's press on Publications; D780: under its inventory key.
-    rail: opts.rail ?? { page: 'publications', option: 'draft:publication-summary' },
+    rail,
     systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 600,
@@ -135,6 +151,53 @@ export async function draftSummary(
     };
   }
   return { ok: true, summary_text: r.output.trim(), model: r.usage.model, usageLogId: r.usageLogId ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// D4870 — the D4556 gateway path for the publication summary
+// ---------------------------------------------------------------------------
+/** The one catalogue model D4556 approves for `publication` over `public` text. */
+export const PUBLICATION_GATEWAY_MODEL = 'openai/gpt-5-mini';
+
+/**
+ * A gateway refusal after which the summary may still run on Workers AI, as it
+ * does with the switch off: the gateway refused before any provider ran and
+ * nothing was charged. Anything else stays a refusal: the member's own state
+ * (assist off, out of tokens, paused) would refuse again, a guard block would
+ * block again, and a timeout or an unreadable answer may have done the work.
+ */
+export function gatewayFallsBack(g: Extract<GatewayRunResult, { ok: false }>): boolean {
+  if (g.refusal === 'misconfigured' || g.refusal === 'capacity_unavailable' || g.refusal === 'model_not_offered') return true;
+  return g.refusal === 'all_models_failed' && g.completion === 'none';
+}
+
+async function draftViaGateway(
+  env: Env, userId: number, rail: { page: string; option?: string | null; record?: string | null },
+  systemPrompt: string, userMessage: string, deps: GatewayDeps,
+): Promise<GatewayRunResult> {
+  try {
+    return await runGatewayTextModel(env, {
+      userId,
+      model: PUBLICATION_GATEWAY_MODEL,
+      task: 'publication',
+      // k≥5 aggregates written for publication: D4556 §5 approves `public` only.
+      dataClass: 'public',
+      surface: AI_SURFACE.adminPublications,
+      railPage: rail.page,
+      railOption: rail.option ?? undefined,
+      recordRef: rail.record ?? undefined,
+      executionId: `publication:draft:${crypto.randomUUID()}`,
+      request: { system: systemPrompt, messages: [{ role: 'user', content: userMessage }], maxTokens: 600 },
+    }, {
+      ...deps,
+      // D5338: the gateway's shared upstream lease. Without the governor binding it refuses, and the
+      // summary goes back to Workers AI (`capacity_unavailable` falls back), a different upstream.
+      admit: deps.admit ?? upstreamAdmission(env, { sleep: deps.sleep }),
+    });
+  } catch {
+    // Never the thrown message. A throw may follow a call, so it is not retried on Workers AI.
+    return { ok: false, refusal: 'all_models_failed', completion: 'unknown' };
+  }
 }
 
 // >1024 tokens of stable scaffolding. Matches the MI publication voice

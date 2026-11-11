@@ -3,11 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { relationshipsApi } from '../../lib/api/relationships.js';
 import { mailApi } from '../../lib/api/mail.js';
 import { reportError } from '../../lib/log';
+import { introTargetIsMine, resolveIntroTarget } from '../../lib/introDestination';
 import RecordCompose from '../email/RecordCompose.jsx';
+import SendUncertain from '../email/SendUncertain.jsx';
 import DraftFlow, { useDraftFlow } from './DraftFlow.jsx';
 import {
-  ASK_DRAFT_FOLLOW_UP, ASK_DRAFT_INTRO, INBOX_EMPTY, INTRO_GONE, LOG_EMPTY, LOG_UNREAD, NOT_NOW, OUTCOMES, SENDS_NOTHING, STATUS_FILTERS, STATUS_LABEL, SUMMARY_TITLE, SUMMARY_UNREAD, WRITE_INTRO,
-  dayAfter, followUps, introSubject, isOpenForMe, logRows, personOf, summaryField,
+  ASK_DRAFT_FOLLOW_UP, ASK_DRAFT_INTRO, INBOX_EMPTY, INTRO_GONE, LOG_EMPTY, LOG_UNREAD, NOTE_MAX, NOT_NOW, OUTCOMES, SENDS_NOTHING, STATUS_FILTERS, STATUS_LABEL, SUMMARY_TITLE, SUMMARY_UNREAD,
+  UPDATE_RECORD, WRITE_INTRO, dayAfter, deliveryOf, followUps, introSubject, isOpenForMe, logRows, personOf, summaryField,
 } from './relationshipsModel';
 
 /**
@@ -28,6 +30,13 @@ import {
  *        filtered by the member's own teams and by status; "Follow-ups due".
  *        A made request takes an outcome from either side; the asker
  *        withdraws a pending one.
+ *
+ * D4604: an accepted request's delivery attempt (`delivery`, the teammate's
+ * own) says what became of the last send. While it is in flight, unconfirmed
+ * or delivered, "Write the intro" is held back: an unconfirmed one takes the
+ * teammate's word (the Email composer's own "It arrived" / "It did not
+ * arrive"), and one the mail server took but whose record lags is updated
+ * with "Update the record", which sends nothing.
  *
  * D4464: a summary card over `relationshipsApi.summary()` — the caller's own
  * sharing, how many teammates share with them, and introductions made in the
@@ -56,7 +65,25 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export default function IntroductionsDesk({ testId = 'introductions' }) {
   const [params] = useSearchParams();
-  const introUid = params.get('intro') || '';
+  /**
+   * #4609 — THE TARGET IS RESOLVED, AND THIS DESK ONLY CLAIMS ITS OWN.
+   *
+   * `?intro=<uid>` is written by two unrelated systems into the same key, and
+   * both of their surfaces render on this one zone: this desk (teammate
+   * requests, `relationship_interactions`) and the licence's proposition body
+   * (`intro_propositions`). The desk matched the uid against its own rows and
+   * reported `introMissing` when it did not find it — so every PROPOSITION
+   * link made this desk announce "that request is no longer here" about a
+   * record that was never its own and is sitting intact on the body below it.
+   *
+   * `kind=request` is this desk's. `kind=proposition` is not, so the desk draws
+   * no highlight and, above all, no missing notice. A link with no `kind` at
+   * all is every notification sent before #4609, and `introTargetIsMine` lets
+   * both surfaces claim it — which is exactly the uid-matching behaviour that
+   * was here before, so an old link is no worse off than it was.
+   */
+  const target = resolveIntroTarget(params);
+  const introUid = introTargetIsMine(target, 'request') ? target.uid : '';
   const [filter, setFilter] = useState({ team: '', status: '' });
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [teams, setTeams] = useState([]);
@@ -203,7 +230,20 @@ export default function IntroductionsDesk({ testId = 'introductions' }) {
                     <td className={`px-2 py-2 text-[12.5px] tabular-nums ${INK}`}>{x.when}</td>
                     <td className="px-2 py-2"><span className={`block text-[12.5px] font-bold ${INK}`}>{x.who}</span><span className={MUTED}>{x.person}</span></td>
                     <td className={`px-2 py-2 text-[12.5px] ${INK}`}>{x.team}</td>
-                    <td className="px-2 py-2"><span className={PILL}>{x.status}</span></td>
+                    {/* #4611 finding 11: the note the decline form promised the
+                        asker would read, beside the verdict that occasioned it.
+                        Drawn only when one was written — an absent note is not
+                        "no reason given", it is a teammate who answered without
+                        typing one, and inventing a sentence for that would be
+                        the honesty rule's own counter-example. */}
+                    <td className="px-2 py-2"><span className={PILL}>{x.status}</span>
+                      {x.decision ? (
+                        <span className="mt-1 block" data-testid={`${testId}-decision-note-${x.uid}`}>
+                          <span className={`block text-[11px] font-bold uppercase tracking-[.04em] text-axal-muted dark:text-gray-400`}>{x.decision.context}</span>
+                          <span className={`block text-[12.5px] ${INK}`}>{x.decision.note}</span>
+                        </span>
+                      ) : null}
+                    </td>
                     <td className={`px-2 py-2 text-[12.5px] ${INK}`} data-testid={`${testId}-outcome-${x.uid}`}>{x.outcome}</td>
                     <td className={`px-2 py-2 text-[12.5px] ${INK}`}>{x.followUp}</td>
                     <td className="px-2 py-2">
@@ -263,15 +303,43 @@ function AskCard({ r, highlighted, setHighlightRef, busy, notice, declining, set
         )
       ) : (
         <div className="flex flex-col gap-1.5">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={PRIMARY} onClick={() => setWriting({ request: r, draft: null })} data-testid={`${testId}-write-${r.uid}`}>{WRITE_INTRO}</button>
-            <button type="button" className={GHOST} disabled={state.status === 'estimating' || state.status === 'running'} onClick={ask} data-testid={`${testId}-draft-intro-${r.uid}`}>{ASK_DRAFT_INTRO}</button>
-          </div>
-          <DraftFlow state={state} onConfirm={onConfirm} onCancel={cancel} testId={`${testId}-draft-intro-${r.uid}`} confirmLabel="Draft the intro" />
-          <span className={MUTED}>{SENDS_NOTHING}</span>
+          <Delivery r={r} busy={busy === r.uid} act={act} testId={`${testId}-delivery-${r.uid}`} />
+          {deliveryOf(r).canWrite ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={PRIMARY} onClick={() => setWriting({ request: r, draft: null })} data-testid={`${testId}-write-${r.uid}`}>{WRITE_INTRO}</button>
+                <button type="button" className={GHOST} disabled={state.status === 'estimating' || state.status === 'running'} onClick={ask} data-testid={`${testId}-draft-intro-${r.uid}`}>{ASK_DRAFT_INTRO}</button>
+              </div>
+              <DraftFlow state={state} onConfirm={onConfirm} onCancel={cancel} testId={`${testId}-draft-intro-${r.uid}`} confirmLabel="Draft the intro" />
+              <span className={MUTED}>{SENDS_NOTHING}</span>
+            </>
+          ) : null}
         </div>
       )}
     </article>
+  );
+}
+
+/** D4604: what became of the last send of an accepted intro, and the one recovery step that fits it. */
+function Delivery({ r, busy, act, testId }) {
+  const d = deliveryOf(r);
+  if (!d.state) return null;
+  if (d.state === 'unconfirmed' && d.operationUid) {
+    return (
+      <div className="flex flex-col gap-1.5" data-testid={testId} data-state={d.state}>
+        <SendUncertain busy={busy} testId={`${testId}-unsure`}
+          onArrived={() => act(r.uid, () => mailApi.resolveSend(d.operationUid, 'arrived'))}
+          onNotArrived={() => act(r.uid, () => mailApi.resolveSend(d.operationUid, 'not_arrived'))} />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-1.5" data-testid={testId} data-state={d.state}>
+      <p className={`m-0 ${MUTED}`} role="status" data-testid={`${testId}-line`}>{d.line}</p>
+      {d.state === 'record_pending' ? (
+        <button type="button" className={GHOST} disabled={busy} onClick={() => act(r.uid, () => relationshipsApi.reconcileIntroDelivery(r.uid))} data-testid={`${testId}-reconcile`}>{UPDATE_RECORD}</button>
+      ) : null}
+    </div>
   );
 }
 
@@ -311,7 +379,7 @@ function DeclineForm({ busy, onSend, onCancel, testId }) {
     <div className="flex flex-col gap-2" data-testid={testId}>
       <label className="flex flex-col gap-1">
         <span className="text-[12px] font-bold text-axal-ink dark:text-gray-100">A note they will read (optional)</span>
-        <textarea className={`${FIELD} min-h-[64px]`} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} data-testid={`${testId}-note`} />
+        <textarea className={`${FIELD} min-h-[64px]`} maxLength={NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} data-testid={`${testId}-note`} />
       </label>
       <div className="flex gap-2">
         <button type="button" className={PRIMARY} disabled={busy} onClick={() => onSend(note.trim() || undefined)} data-testid={`${testId}-send`}>{NOT_NOW}</button>
@@ -366,6 +434,10 @@ function IntroCompose({ request, draft = null, onClose, onSent, testId }) {
       </span>
     );
   }
+  // #4611 finding 10: the read SUCCEEDED here (the `error` arm returned above),
+  // so a null account means no mailbox is connected — which the composer may
+  // now say in those words, with somewhere to go. The failed read never
+  // reaches the composer at all.
   const account = accounts.list.find((a) => a.can_send !== false) || accounts.list[0] || null;
   const body = draft?.body ?? [
     `Hi ${String(request.person?.name || '').split(/\s+/)[0] || 'there'},`, '',
@@ -376,7 +448,7 @@ function IntroCompose({ request, draft = null, onClose, onSent, testId }) {
   const subject = draft?.subject ?? introSubject(request);
   return (
     <span data-testid={testId}>
-      <RecordCompose pack={{ person: { name: request.person?.name || 'them', kind: 'introduction' } }} refs={[]} to="" account={account}
+      <RecordCompose pack={{ person: { name: request.person?.name || 'them', kind: 'introduction' } }} refs={[]} to="" account={account} mailboxes={account ? 'connected' : 'none'}
         title={WRITE_INTRO} introUid={request.uid} initialSubject={subject} initialBody={body} ask={false}
         onClose={onClose} onSent={onSent} />
     </span>

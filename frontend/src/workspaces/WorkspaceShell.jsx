@@ -85,6 +85,15 @@ import ProfileHeaderAsk from './ProfileHeaderAsk';
  * item, a link or a handler). `ask` defaults to `ProfileHeaderAsk`, gated to
  * the three member licences on a railed route, and shut until #3706's panel
  * serves them; pass `ask={null}` to draw none.
+ *
+ * A BUCKET THAT DRAWS ITS OWN SECTION NAV (D4813). `sectionNav` replaces the
+ * zone pill row with the caller's node. Cohorts v2 needs it: its sections are
+ * Overview plus the five zones, every link carries the selected cohort, and
+ * the canvas puts the cohort selector above them. Such a page names its
+ * sections in its own words, so the shell then draws no archetype badge and
+ * stops the crumb at the zone (the page's `title` is the bucket's, and would
+ * otherwise print a third crumb repeating it). Every other caller leaves it
+ * unset and keeps `ZoneNav`.
  */
 export default function WorkspaceShell({
   role = 'founder',
@@ -98,6 +107,8 @@ export default function WorkspaceShell({
   ask,
   rail = null,
   activeSlug,
+  sectionNav,
+  zoneRow = null,
   children,
 }) {
   const location = useLocation();
@@ -125,7 +136,8 @@ export default function WorkspaceShell({
     ? (bucket?.zones?.find((z) => z.slug === activeSlug) || null)
     : null;
   const zone = resolved || namedZone;
-  const crumbTitle = typeof title === 'string' && zone && title !== zone.label ? title : null;
+  const ownNav = sectionNav !== undefined;
+  const crumbTitle = !ownNav && typeof title === 'string' && zone && title !== zone.label ? title : null;
   // BACK TO THE ZONE, NOT THE TOP OF THE BUCKET (D403). Where the root is a
   // board (`boards/index.js`), each zone has a section there with its own
   // anchor, and the crumb returns the reader to it: `/pipeline#pl-proposals`.
@@ -142,7 +154,7 @@ export default function WorkspaceShell({
   // the zone pills (ZoneNav) and the AI rail, which is where a reader looks to
   // tell one licence from another. An earlier draft computed one here and
   // never used it, which CodeQL caught.
-  const arch = zone?.archetype;
+  const arch = ownNav ? null : zone?.archetype;
   const Title = titleAs || 'h1';
 
   return (
@@ -250,7 +262,7 @@ export default function WorkspaceShell({
 
         {intro && <p className="mt-1.5 max-w-3xl text-xs leading-relaxed text-axal-muted">{intro}</p>}
 
-        {bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} className="mt-3" />}
+        {ownNav ? sectionNav : (bucket && <ZoneNav bucket={bucket} role={role} activeSlug={activeSlug} row={zoneRow} className="mt-3" />)}
 
         <div
           className="mt-3.5 border-t pt-3.5"

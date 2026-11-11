@@ -2,6 +2,7 @@ import React from 'react';
 import { contractsApi } from '../../../lib/api/contracts';
 import { ReadState, useRead, Recorded, Missing, button, input, card, Pagination } from './parts';
 import { agreementRowSemantics } from '../../../lib/contractLifecycle';
+import { attentionLabel } from './contractMetrics';
 import { InconsistencyFlag, LifecycleBadge } from './LifecycleBadge';
 import { Link } from 'react-router-dom';
 import {
@@ -34,15 +35,18 @@ export function AgreementContextCell({ agreement }) {
 /**
  * D4811 (board CT02): a row says what state it is in. A missing signature date
  * on an unsigned agreement is expected and not flagged; a missing company link
- * reads "Unlinked recipient" (no link flow exists yet, so no repair action);
- * the one amber warning is a contradiction.
+ * reads "Unlinked recipient", with a quiet dashed Link repair where the page
+ * passes `onLink` (part 11; only stores that can carry a company); the one
+ * amber warning is a contradiction.
  */
-export function AgreementCells({ row }) {
+export function AgreementCells({ row, onLink = null }) {
   const m = agreementRowSemantics(row);
   return <>
     <td className="p-3">{m.company.unlinked
-      ? <span data-testid="agreement-unlinked" className="text-axal-muted">{m.company.label}</span>
-      : m.company.name}<p><Recorded value={row.recipient_name || row.recipient_email} reason="No recipient in this store." /></p></td>
+      ? <span className="flex flex-wrap items-center gap-1"><span data-testid="agreement-unlinked" className="text-axal-muted">{m.company.label}</span>
+        {onLink && <button type="button" data-testid={`agreement-link-${row.uid}`} onClick={() => onLink(row)} aria-label={`Link the recipient of ${row.title} to a company`}
+          className="min-h-[44px] rounded border border-dashed border-violet-400 px-1.5 text-[11px] font-semibold text-violet-700 dark:text-violet-300 md:min-h-0">⚭ Link</button>}</span>
+      : m.company.none ? <span className="text-axal-muted">{m.company.label}</span> : m.company.name}<p><Recorded value={row.recipient_name || row.recipient_email} reason="No recipient in this store." /></p></td>
     <td className="p-3"><div data-testid="agreement-state-line">{m.line}</div>
       {m.sentMissing && <Missing reason="No send event." />}
       {m.days != null && <div className="font-mono text-axal-muted">{m.days} days to sign</div>}</td>
@@ -54,7 +58,7 @@ export function AgreementCells({ row }) {
   </>;
 }
 
-export default function AgreementList({ filters, onFilters, onOpen, revision }) {
+export default function AgreementList({ filters, onFilters, onOpen, revision, onLink = null }) {
   const offset = Number(filters.offset || 0);
   const read = useRead(() => contractsApi.agreements({ ...filters, limit: 25, offset }), [JSON.stringify(filters), revision]);
   const set = (key, value) => onFilters({ ...filters, [key]: value, offset: 0 });
@@ -73,12 +77,15 @@ export default function AgreementList({ filters, onFilters, onOpen, revision }) 
       <label>Sort<select className={input} value={`${filters.sort || 'sent_at'}:${filters.direction || 'desc'}`} onChange={e => { const [sort, direction] = e.target.value.split(':'); onFilters({ ...filters, sort, direction, offset: 0 }); }}>{[['sent_at:desc', 'Sent, newest'], ['sent_at:asc', 'Sent, oldest'], ['title:asc', 'Title'], ['recipient:asc', 'Recipient'], ['signed_at:desc', 'Signed, newest'], ['days_to_sign:asc', 'Days to sign']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <button type="button" className={button} onClick={() => onFilters({})}>Clear filters</button></div>
     {filters.template && <p className="px-3">Template: {filters.template}</p>}
+    {/* D4811 part 3: a metric strip cell's records, named, with a way back to all agreements. */}
+    {attentionLabel(filters.attention) && <p role="status" className="flex flex-wrap items-center gap-2 px-3 text-[12.5px]" data-testid="agreement-attention-filter">Showing: <b>{attentionLabel(filters.attention)}</b>
+      <button type="button" className={button} onClick={() => onFilters({ ...filters, attention: '', offset: 0 })}>Show all agreements</button></p>}
     <ReadState read={read} what="Agreements">{read.data && <>
       {!read.data.items.length ? <p className="p-6">No agreement matches these filters. Use New envelope to send an agreement.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[840px] text-left text-xs"><thead className="border-y border-axal-hairline text-axal-muted"><tr>{['Agreement · store', 'Company · recipient', 'Where it stands', 'Provider', 'Lifecycle'].map(label => <th className="p-3 font-semibold" key={label}>{label}</th>)}</tr></thead><tbody>{read.data.items.map(row => <tr key={`${row.source}:${row.id}`} className="border-b border-axal-hairline align-top">
         <td className="p-3">{['licence_agreement', 'licence_contract'].includes(row.source)
           ? <span className="font-semibold">{row.title}</span>
           : <button type="button" className="text-left font-semibold underline decoration-transparent hover:decoration-current" onClick={() => onOpen(row.uid)}>{row.title}</button>}<p className="text-axal-muted">{row.doc_type_label || row.doc_type}</p><span className="font-mono text-[10px] text-axal-faint">{row.source}</span><AgreementContextCell agreement={row.agreement} /></td>
-        <AgreementCells row={row} />
+        <AgreementCells row={row} onLink={onLink} />
       </tr>)}</tbody></table></div>}
       <Pagination data={read.data} offset={offset} onPage={value => onFilters({ ...filters, offset: value })} />
     </>}</ReadState>

@@ -53,6 +53,12 @@ read), **unit**, **aggregation**, **scope**, **threshold** (warning / critical),
 | `queue.job.backlog_messages`, `queue.agent.backlog_messages` | `Queue.metrics().backlogCount` | on each read | messages | point-in-time | deployment | none set | none | `unavailable` |
 | `queue.*.backlog_bytes` | `Queue.metrics().backlogBytes` | on each read | bytes | point-in-time | deployment | none set | none | `unavailable` |
 | `queue.*.oldest_age_seconds` | `now − Queue.metrics().oldestMessageTimestamp` | on each read | seconds | point-in-time | deployment | 15 min / 60 min, hysteresis 60 s (**proposed**) | none | `unavailable`; empty queue is `none_waiting`; a timestamp ahead of the clock is `unavailable` |
+| `agents.sweep.eligible` | `system_metrics` `agent_sweep_eligible`, trusted only from a batch labelled `scanned: true` (#4592) | each 5-minute sweep; read on each request, stale after 20 min | count (capped at 120 a scan) | the newest sweep | deployment | none | `system_metrics` cleanup (30 days) | `unavailable`; a sweep that did not scan is `not_running`; agents off is `not_running` |
+| `agents.sweep.examined`, `.admitted`, `.refused`, `.resent` | `system_metrics` `agent_sweep_*` (#4592) | same | count | the newest sweep | deployment | none | same | `unavailable`; a sweep that admitted nothing records a real 0 |
+| `agents.sweep.oldest_eligible_age_seconds` | `system_metrics` `agent_sweep_oldest_eligible_age_seconds` (age since the oldest eligible task was created) | same | seconds | the newest scan | deployment | 1 h / 6 h, hysteresis 5 min (**proposed**) | same | `unavailable`; nothing eligible is `none_waiting`; no scan is `not_running` |
+| `agents.repair.pending`, `agents.repair.unresolved` | `system_metrics` `agent_repair_pending`, `agent_repair_ambiguous` (#4593) | each sweep, before its halt and engine checks | count (pending capped at 20 a sweep) | the newest sweep | deployment | none | same | `unavailable` |
+| `agents.repair.oldest_age_seconds` | `system_metrics` `agent_repair_oldest_age_seconds`, counted only while a repair is still owed after the sweep | same | seconds | the newest sweep | deployment | 1 h / 6 h, hysteresis 5 min (**proposed**) | same | `unavailable`; nothing owed is `none_waiting` |
+| `dr.restore.last_verified_age_seconds` | `drill-d1.json` in `BACKUPS`, validated by `readRestoreDrill` (#4558, D263) | monthly drill; read on each request | seconds | the latest drill (the marker keeps only the latest run) | deployment (HQ database) | 32 d (the Security page's rule) / 64 d (**proposed**), hysteresis 1 d | the marker is overwritten each run | `unavailable`; a failed or absent drill is `not_verified` and **critical**; a branch is `not_running` |
 | `bindings[].present` | `env[NAME] != null` | on each read | boolean | — | deployment | — | — | presence is not health |
 | `dlq.backlog` | D1 dead-letter tables (`services/deadLetters`) | HQ · Platform summary | rows | count | deployment | none set | table lifetime | block unreadable |
 | `cron.trigger_state` | `cron_run_history` | HQ · Platform summary | state | latest per trigger | deployment | stale past schedule + grace | table lifetime | `never recorded` |
@@ -129,6 +135,38 @@ lists open episodes and those cleared in the last 30 days.
 the Super Admin write bar, audited) stops an open episode's notices until
 `muted_until`; it is still tracked and still clears.
 
+## 5.1 Signals from other issues (D4559 part 3)
+
+`services/platformCapacitySignals.ts` adds the signals that closed issues
+record for themselves to the capacity read, the daily snapshot and the alert
+episodes. It reads them where they are already written; it adds no table,
+store, vendor or network call. Every signal carries `source`, `window`,
+`sampling`, `unit`, `scope` (`deployment`) and `last_success_at`, the time its
+source last produced the record used.
+
+Two availabilities are new:
+
+| Availability | Means | Level | Alerts |
+| --- | --- | --- | --- |
+| `not_running` | the subsystem that writes the signal is off here (team agents off; a sweep that did not scan; the restore drill on a branch) | `ok` | holds an open episode, opens none, never clears one: turning a feature off is not a recovery |
+| `not_verified` | the source answered that there is nothing verified (the latest restore drill failed, or none ever ran) | `critical` | opens and holds; a passing drill clears it |
+
+**What each issue shipped, and what is read:**
+
+| Issue | Shipped | Read here |
+| --- | --- | --- |
+| #4592 | the sweep writes `agent_sweep_*` to `system_metrics` every 5 minutes | eligible, examined, admitted, refused, resent, oldest eligible age. A sweep that stops at the halt, the engine being off or paused, or manual autonomy records `eligible` 0 without looking, so this part adds a `scanned` label to the sweep's batch and trusts the eligible count and age only from `scanned: true`. Batches written before the label are `unavailable`. |
+| #4593 | `sweepStrandedRuns` writes `agent_repair_*` | repairs found, repairs it could not settle, and the oldest age while one is still owed (a sweep that repaired or settled everything it found owes nothing, unless it hit its 20-run cap) |
+| #4558 | the drill's marker `drill-d1.json`, read by HQ · Security | the age of the last passing drill; a failed or absent drill is `not_verified`, never an age |
+| #4572 | the halt and revocation contract and its tests | **nothing.** The halt is a KV key with no acknowledgement or propagation time. A measured propagation bound is #4594's (open). |
+| #4568 | a build-time ratchet on blind runtime `ALTER`s (`check-runtime-ddl.mjs`) and an audit | **nothing.** The Worker counts no runtime DDL attempt; `runSchemaBootstrap` records none. |
+| #4571 | the probes' outcome line (`EDGE_CHALLENGED` … `VERIFIED_END_TO_END`) | **nothing.** The outcome is printed in the GitHub Actions run of `magic-link-probe.yml`; nothing reaches a Worker binding, and this read makes no outbound call. |
+| #4556 | the AI Gateway slice, its retries counted per call | **nothing.** The slice has no caller and its switch is off, so no attempt is recorded; the shared upstream limits are published figures, not counters. |
+
+These four are listed in the read's `not_read_here`, each with its reason.
+A freshness rule: the sweep runs every 5 minutes, so a newest batch older than
+20 minutes is `unavailable` and still says when it was written.
+
 ## 6. What is not built yet
 
 - **Account analytics** (Workers, D1 query volume and latency, Workflows, R2):
@@ -137,11 +175,10 @@ the Super Admin write bar, audited) stops an open episode's notices until
   approval and its export in `design/incoming/`, so per `AGENTS.md` § Missing UI
   the issue carries `needs-design` and the page is not built. The capacity,
   history and alert routes are ready for it.
-- **Signals owned elsewhere** (second audit comment on #4559): scheduler
-  progress #4592, lifecycle repair #4593, halt acknowledgement #4572, runtime
-  DDL #4568, authentication monitor #4571, schema parity and restore
-  #4591/#4558, provider quotas #4556, hosted evidence #4594. Each becomes a
-  dictionary row when its owner exposes a source.
+- **Signals owned elsewhere.** Part 3 (§5.1) reads #4592, #4593 and #4558.
+  #4572, #4568, #4571 and #4556 shipped no record the Worker can read; each
+  becomes a row when a source exists. Schema parity (#4591) and hosted
+  evidence (#4594) wait on those open issues.
 
 ## 7. Owner items
 
@@ -156,6 +193,11 @@ the Super Admin write bar, audited) stops an open episode's notices until
 3. **Thresholds.** Approve the queue oldest-age thresholds (15 / 60 min,
    proposed) and the D1 critical size (7.5 GB, within #4559's 7–8 GB).
 4. **Canvas** for the capacity panel on HQ · Platform (`needs-design`).
+5. **Part 3 thresholds.** Approve the proposed eligible-work and repair ages
+   (1 h / 6 h each) and the restore drill's critical age (64 days; the 32-day
+   warning is the Security page's existing rule). A failed or absent restore
+   drill is critical from the first sweep after deploy: per D4558 no restore
+   had passed as of 2026-11-06, so expect that episode to open.
 
 ## 7. Detected incidents (D4854)
 
@@ -243,9 +285,54 @@ Steps:
 2. Check the token's scope (owner item 1 above).
 3. Use Retry on the Health zone. The incident clears on the first good read.
 
+### 7.5 The meeting bot is not starting
+
+Read from each run's startup facts on `meeting_bots` (D5153), the latest
+`BOT_START_READ` runs that reached a start outcome in the last seven days
+(`services/meetingBotHealth.ts`, D5370). Two incidents, kept apart (D4857):
+
+- **`meeting_bot:start_failed`, a failed check.** The host or runtime answered
+  with a startup code. **medium** when the latest start failed; **high** when
+  `BOT_START_FAILURE_STREAK` starts failed in a row, or the code is one of the
+  readiness preflight's (`runtime_no_answer`, `runtime_process_exited`,
+  `runtime_health_failed`).
+- **`meeting_bot:unreported`, a report that never arrived.** The run failed
+  with `runtime_unavailable` or `heartbeat_timeout`, no startup code was
+  recorded and the runtime never called back. Same severities.
+
+A start that works clears both. Without the table, or before migration
+`202611090953`, the signal is unknown, never healthy. With `MEETING_BOT` off,
+or on a branch, it is listed as not detected.
+
+Steps:
+
+1. Open **Platform › Meeting bots**. The recent failed runs list each run's
+   stage, startup code and next step.
+2. Follow that row's next step (`RUNTIME_ACTION` in
+   `services/meetingBotStartup.ts`). A preflight code usually means the image
+   or its version is wrong: redeploy the meeting-bot Worker.
+3. Run the staged diagnostic against a meeting you host. A stage that reads
+   Not recorded is a report that never arrived, not a failed check.
+
+### 7.6 A branch is unhealthy or unchecked
+
+Summary reads never ask a branch (D110). This reads the last check that
+Deployments stored on `licence_deployments` (D452) for each branch in a live
+state (`worker_live`, `hostname_active`, `linked`):
+
+- **medium:** the branch answered its last check, and said it was not ok;
+- **low:** no check in `BRANCH_CHECK_STALE_HOURS`, or never. Deployments
+  stores only an answer, so a branch that is down looks like one nobody
+  checked. A low note does not lower the state.
+
+Steps:
+
+1. Open the **Deployments** zone of Platform. Opening it asks every branch
+   and stores each answer, which clears a stale note.
+2. A branch that still does not answer: read its row's live state and HQ's
+   own actions against it (D163), then its Worker's logs.
+
 **Not detected here:**
 
-- **Branch Worker and database health.** Deployments reads it and shows it per
-  branch, because it asks every branch and must not hold up the summary
-  (D110).
-- **The meeting bot.** It is not deployed yet (D886).
+- **The meeting bot's staged diagnostics.** A diagnostic is a check the owner
+  starts, kept per run in R2 with no index. Its stages show on Meeting bots.

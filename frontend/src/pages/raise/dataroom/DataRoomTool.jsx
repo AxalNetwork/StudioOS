@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import DataRoomSupport from './DataRoomSupport.jsx';
@@ -18,9 +18,11 @@ import DataRoomChecklist from './DataRoomChecklist.jsx';
 import DataRoomPreview from './DataRoomPreview.jsx';
 import { noPermission } from './accessModel';
 import { useAuth } from '../../../hooks/useAuthSync';
+import { useVenture } from '../../cycles/VentureContext.jsx';
 import {
-  HOME_PATH, LINE, TABS, TITLE, projectUidOf, tabHref, tabSearch,
+  HOME_PATH, LINE, TABS, TITLE, roomCan, tabHref, tabSearch,
 } from './dataRoomModel';
+import { raiseReadState, raiseToolRefusal, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1101 (#2456) — the Data room tool's tab bar and its tab pages. CycleRoute
@@ -56,17 +58,28 @@ export function DataRoomTabBar({ active, search = '' }) {
   );
 }
 
-/** The venture in the query, as CycleRoute passes it (`?project_id=N`). */
-const projectOf = (search) => { const m = /[?&]project_id=([1-9]\d*)/.exec(String(search || '')); return m ? m[1] : null; };
-
-/** Home's tab bar and its own blocks (D1106, DR1). D1109: the old files tool is retired, so Home links to no other page. */
-export function DataRoomHomeNav({ search = '' }) {
+/**
+ * Home's tab bar and its own blocks (D1106, DR1). D1109: the old files tool is retired, so Home links to no other page.
+ * D5074: the venture is the page's context (`useVenture`), never parsed from `search`, which only builds links.
+ */
+export function DataRoomHomeNav({ search = '', onRefused = null }) {
   const [reload, setReload] = useState(0);
-  const read = useRoom(projectOf(search), reload);
+  const venture = useVenture();
+  const read = useRoom(venture, reload);
+  /**
+   * D5079 (#5079): the room read is this tool's authoritative read. A refusal,
+   * and an admin's `summary` answer (which is not the room), both mean the
+   * page around this block must stop drawing the room's own data. Home drew
+   * `null` for `summary` and left the module page's empty card, Checklist and
+   * Evidence standing, which read as a room with nothing in it.
+   */
+  const withheld = read.status === 'refused' || (read.status === 'ready' && read.room?.mode === 'summary');
+  useEffect(() => { onRefused?.(raiseToolRefusal(withheld, 'this data room')); }, [onRefused, withheld]);
+  useEffect(() => () => onRefused?.(null), [onRefused]);
   return (
     <div className="flex flex-col gap-3">
       <DataRoomTabBar active="home" search={search} />
-      {projectOf(search) ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
+      {venture.projectId ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
     </div>
   );
 }
@@ -76,28 +89,39 @@ function Skeleton({ testId }) {
 }
 
 /**
- * The founder's room, read once for the tab: the venture's uid from the
- * projects list, then `GET /api/data-room/:projectUid`. Loading, ready,
- * refused (403 or 404) or error, never an empty room by default.
+ * The founder's room, read once for the tab: the venture's uid from the shared
+ * venture context (D5074, `useVenture`), then `GET /api/data-room/:projectUid`.
+ * Loading, ready, refused (403 or 404, or a venture not in the caller's list)
+ * or error, never an empty room by default. A failed lookup is an error, never
+ * a refusal: the list said nothing about this room.
  */
-function useRoom(projectId, reload) {
+function useRoom(venture, reload) {
   const [state, setState] = useState({ status: 'loading', room: null });
+  const { projectId, projectUid, status, retry } = venture;
+  // A retry after a failed lookup reads the list again; any other retry re-reads the room.
+  const asked = useRef(reload);
+  useEffect(() => {
+    if (asked.current === reload) return;
+    asked.current = reload;
+    if (status === 'unreadable') retry?.();
+  }, [reload]); // eslint-disable-line react-hooks/exhaustive-deps -- only a retry asks again
   useEffect(() => {
     if (!projectId) return undefined;
+    if (status === 'missing') { setState({ status: 'refused', room: null, message: 'This venture’s data room was not found.' }); return undefined; }
+    if (status === 'unreadable') { setState({ status: 'error', room: null, message: '' }); return undefined; }
+    if (status !== 'ready' || !projectUid) {
+      setState((s) => (s.status === 'ready' && s.projectId === projectId ? s : { status: 'loading', room: null }));
+      return undefined;
+    }
     let alive = true;
     // A re-read after a change keeps the room drawn until the new one arrives (D1106), so a
     // dialog's result line is not lost and nothing flashes. Another venture's room is never kept.
     setState((s) => (s.status === 'ready' && s.projectId === projectId ? { ...s, refreshing: true } : { status: 'loading', room: null }));
-    Promise.resolve().then(() => api.listProjects())
-      .then((projects) => {
-        const uid = projectUidOf(projects, projectId);
-        if (!uid) { const e = new Error('This venture’s data room was not found.'); e.status = 404; throw e; }
-        return api.dataRoom(uid).then((room) => ({ room, uid }));
-      })
-      .then(({ room, uid }) => { if (alive) setState({ status: 'ready', room, uid, projectId }); })
-      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: error?.message || '' }); });
+    Promise.resolve().then(() => api.dataRoom(projectUid))
+      .then((room) => { if (alive) setState({ status: 'ready', room, uid: projectUid, projectId }); })
+      .catch((error) => { if (alive) setState({ status: raiseReadState(error, 'error'), room: null, message: userFacingRaiseError(error, { fallback: '' }) }); });
     return () => { alive = false; };
-  }, [projectId, reload]);
+  }, [projectId, projectUid, status, reload]);
   return state;
 }
 
@@ -152,7 +176,7 @@ function ActivityTab({ read, retry, phone }) {
   return (
     <RoomState read={read} onRetry={retry} testId="dataroom-activity">
       <div className="flex flex-col gap-4">
-        <DataRoomActivity projectUid={read.uid} phone={phone} />
+        <DataRoomActivity projectUid={read.uid} phone={phone} canExport={roomCan(read.room, 'export')} />
         <SupportReadsCard record="data-room" load={load} testId="dataroom-support-reads" />
       </div>
     </RoomState>
@@ -179,7 +203,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
-  const read = useRoom(projectId, reload);
+  const read = useRoom(useVenture(projectId), reload);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.

@@ -26,7 +26,7 @@ import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
 import RailSteps from './RailSteps.jsx';
-import { FOUNDER_RECORD_OFF } from './reasonGate';
+import { FOUNDER_RECORD_OFF } from './reasonGate.js';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -499,6 +499,12 @@ export default function WorkerRail({
    */
   steps = null,
   /**
+   * D5034 part 4 (#5034): a page's own prompts, drawn first among the Ask
+   * panel's chips; pressing one fills the composer with its words and sends
+   * nothing. Without it, nothing changes.
+   */
+  prompts = null,
+  /**
    * D1463 (#3713, Q1 A pending owner): 'founder-record' while an admin reads a
    * founder's private record behind a reason. The rail keeps who and where,
    * and draws no AI switch, no suggestions, no spend and no usage, no Ask and
@@ -513,6 +519,13 @@ export default function WorkerRail({
    * nor writes the shared collapse preference (`ui/railOperations.js`).
    */
   operations = false,
+  /**
+   * D4811 part 9 (#4811, board CT-07 "Eadwyn"): a legal workspace keeps model economics off the page. With a
+   * path here the Usage block is one line that links to it (Account › AI tokens) instead of the allowance,
+   * the balance and Add tokens; no figure is drawn, so none can be read as this page's. Without it, nothing
+   * changes.
+   */
+  usageAt = null,
   'data-testid': testId = 'worker-rail',
 }) {
   const founderRecord = readOnlyFor === 'founder-record';
@@ -749,6 +762,7 @@ export default function WorkerRail({
       label={askState.label}
       crumb={section}
       options={rail.options}
+      prompts={prompts}
       aiOn={aiOn}
       layout={askAt}
       onClose={(why) => askPanelEvent({ type: why || 'close' })}
@@ -979,14 +993,23 @@ export default function WorkerRail({
         )}
         </>
         )}
-        {!(aiOn && groups) && <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(rates) : SAFETY_LINE}</p>}
+        {/* D4811 part 9: with usage elsewhere the guard is named without its price. */}
+        {!(aiOn && groups) && <p className="fwr-safety" data-testid="text-worker-rail-safety">{rates.guardOn ? guardSentence(usageAt ? null : rates) : SAFETY_LINE}</p>}
       </section>
 
       {/* USAGE (AIR:30-36): the allowance ledger, D629. */}
       <section className="fwr-usage" data-testid="worker-rail-usage">
         <span className="fwr-eyebrow">Usage</span>
-        <RailUsage reading={budgetReading} hideHeld={Boolean(groups?.usage?.some((r) => r.id === 'held'))} />
-        {groups ? <RailUsageExtra rows={groups.usage} /> : null}
+        {usageAt ? (
+          <p className="fwr-usage-note" data-testid="text-worker-rail-usage-elsewhere">
+            Models, usage and top-up are in <a href={usageAt} className="underline" data-testid="link-worker-rail-usage-elsewhere">Account › AI tokens</a>.
+          </p>
+        ) : (
+          <>
+            <RailUsage reading={budgetReading} hideHeld={Boolean(groups?.usage?.some((r) => r.id === 'held'))} />
+            {groups ? <RailUsageExtra rows={groups.usage} /> : null}
+          </>
+        )}
       </section>
     </div>
   );

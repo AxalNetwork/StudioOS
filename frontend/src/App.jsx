@@ -5,7 +5,10 @@ import { safeReadJSON } from './lib/storage';
 import { reportError } from './lib/log';
 import { usePageMeta } from './lib/seo';
 import { preserveReloadGuards } from './lib/reloadGuard';
-import { consumePendingNextOnce, loginRedirectFor, markPendingNextRedirected, pendingNextRedirected } from './lib/pendingNext';
+import {
+  clearDestinationAfterSetup, consumePendingNextOnce, destinationAfterSetup, destinationNeedsSetup, keepThroughSetup,
+  loginRedirectFor, markPendingNextRedirected, pendingNextRedirected,
+} from './lib/pendingNext';
 import { Routes, Route, Navigate, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import SidebarNav from './ui/SidebarNav';
 import { AuthProvider, useAuth } from './hooks/useAuthSync';
@@ -19,6 +22,7 @@ import ViewAsBranchContext from './contexts/ViewAsBranchContext';
 // shell picks the sidebar from it and the router picks route elements from it;
 // when those two disagree the nav offers one thing and the route serves another.
 import { resolveActiveRole, resolveHeldLicences } from './lib/activeRole';
+import { multiLicenceSet } from './lib/multiLicencePages.js';
 import { buildLicenceSidebar, isLicence } from './lib/licenceSidebar';
 const SpinoutLabListener = lazy(() => import('./components/SpinoutLabListener'));
 import SafeMount from './components/SafeMount';
@@ -90,6 +94,9 @@ import { keepFirstTouch } from './lib/referralRef';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+// D4474 (#4474): /studio and /spinout-lab for a member who holds more than one licence, one block per licence.
+const MultiLicenceStudio = lazy(() => import('./pages/studio/MultiLicenceStudio'));
+const MultiLicenceSpinoutLab = lazy(() => import('./pages/spinout/MultiLicenceSpinoutLab'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
 
 // The four workspace shells, rebuilt from the design canvases. The IA itself
@@ -482,6 +489,10 @@ const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
 const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
 // D1295 (#3391, ART17b): a member who opens a Content queue address is told it is for studio admins, with the way to their own articles.
 const ContentQueueBoundary = lazy(() => import('./pages/admin/contentQueue/NoPermission'));
+// #4579: who reads Grow's boundary instead of a silent bounce home. Kept in step with
+// GROW_BOUNDARY_ROLES in pages/founder/GrowBoundary.jsx (a test compares them).
+const GrowBoundary = lazy(() => import('./pages/founder/GrowBoundary'));
+const GROW_BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -544,7 +555,8 @@ import { signInPath as assistantSignInPath } from './pages/connect/assistantCons
 import { PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 // D1029 (#2866): the old Cap table addresses forward into the tool.
 import CapTableMovedRedirect from './pages/raise/captable/CapTableMovedRedirect';
-import UseOfFundsMovedRedirect from './pages/raise/useoffunds/UseOfFundsMovedRedirect';
+// #4574 H4: an old address's redirect, loaded when one is hit: its model pulls the whole forecast model into the shell.
+const UseOfFundsMovedRedirect = lazy(() => import('./pages/raise/useoffunds/UseOfFundsMovedRedirect'));
 import { DataRoomMovedRedirect } from './pages/raise/dataroom/DataRoomMoved';
 import { movedKind } from './pages/raise/dataroom/dataRoomModel';
 import {
@@ -1666,6 +1678,22 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     if (pendingRedirect) markPendingNextRedirected();
   }, [pendingRedirect]);
 
+  // #4579 (D4579): a destination that needs a finished account (Grow) does not
+  // exempt the visitor from setup the way an invitation does. The setup gates
+  // below keep it (`keepThroughSetup`) as they redirect, and once setup is
+  // complete the visitor is returned to it here, once. Read in render, cleared
+  // after commit, so StrictMode's two renders agree.
+  const deferPendingToSetup = !!(pendingNext && destinationNeedsSetup(pendingNext));
+  const exemptFromSetup = atPendingNext && !deferPendingToSetup;
+  const afterSetup = user && onboardingLoaded && onboardingComplete ? destinationAfterSetup() : null;
+  const afterSetupDue = !!(afterSetup && location.pathname !== afterSetup.split(/[?#]/)[0]);
+  useEffect(() => {
+    if (afterSetup) clearDestinationAfterSetup();
+  }, [afterSetup]);
+  // Called by each setup gate just before it redirects. Idempotent: the same
+  // safe path written twice by StrictMode's two renders.
+  const keepForAfterSetup = () => keepThroughSetup(`${location.pathname}${location.search}${location.hash}`);
+
   useEffect(() => {
     if (!user) return;
     // A different account must not inherit the previous one's choice. The
@@ -1827,12 +1855,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'chat' &&
     !onboardingComplete &&
     !onChatPath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding/chat" replace />;
   }
 
@@ -1844,12 +1873,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     onboardingFlow === 'licence' &&
     !onboardingComplete &&
     !onLicencePath &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
     accessLevel !== 'limited'
   ) {
+    keepForAfterSetup();
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -1880,7 +1910,7 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   if (
     termsPending &&
     !licenceGateOwnsConsent &&
-    !atPendingNext &&
+    !exemptFromSetup &&
     chatGateRole !== 'admin' &&
     realUser?.role !== 'admin' &&
     !isImpersonating &&
@@ -1920,7 +1950,13 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
     !onWizardPath &&
     chatGateRole !== 'admin'
   ) {
+    keepForAfterSetup();
     return <Navigate to={myWizard} replace />;
+  }
+
+  // #4579: setup is done; return to the destination it was started for, once.
+  if (afterSetupDue) {
+    return <Navigate to={afterSetup} replace />;
   }
 
   // Onboarding gate: only investors must complete KYC before accessing other
@@ -1994,6 +2030,8 @@ const ROUTE_BOUNDARIES = [
   // An admin previewing another role is sent home as before (`notPreview`).
   { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
   { under: /^\/admin\/articles(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: ContentQueueBoundary, notPreview: true },
+  // #4579: an account without the Founder licence reads why Grow is closed to it, and how to open it.
+  { under: /^\/grow(\/|$)/, roles: GROW_BOUNDARY_ROLES, Panel: GrowBoundary },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -2461,6 +2499,10 @@ function AppInner() {
   // Spin-Out Lab) keeps `effectiveRole`, so it renders the primary licence's view.
   const heldLicences = resolveHeldLicences({ user, realUser, viewMode, isImpersonating });
   const holds = (licence) => heldLicences.includes(licence);
+  // D4474 (#4474): the held licences, in licence order, when a member on their own account holds two or more;
+  // null otherwise. Studio and Spin-Out Lab then draw one block per held licence. An admin (with or without a
+  // "View as" preview), an impersonation and an exploring account get null, so they keep today's page.
+  const multiLicence = multiLicenceSet({ user, realUser, isImpersonating, effectiveRole, heldLicences });
 
   // Which shell's Research zone list to render. Admin has no research shell of
   // its own, so it previews the founder one rather than falling through to a
@@ -2591,12 +2633,24 @@ function AppInner() {
           SpinoutLabPage loads founder-scoped Lab state on mount, so an investor
           would fire a request that is not theirs to make; and all three pages
           are lazy, so an investor never downloads the founder chunk (or vice
-          versa). Logged-in visitors get the normal app shell either way. */}
+          versa). Logged-in visitors get the normal app shell either way.
+
+          D4474 (#4474): a member who holds two or more licences gets
+          MultiLicenceSpinoutLab, one block per held part: the Lab block
+          (SpinoutLabPage) for Founder, Advisor or Operating Partner, and the
+          Investor block (SpinoutLabInvestorPage) for Investor. For the same
+          first reason, SpinoutLabPage mounts only inside the Lab block, so a
+          member with no Lab licence never fires the founder-scoped Lab
+          request. An admin preview, an impersonation and an exploring
+          account keep the ternary on effectiveRole below; a signed-out
+          visitor still gets SpinoutLabPage. */}
       <Route
         path="/spinout-lab"
         element={
           user
-            ? authOnly(effectiveRole === 'investor'
+            ? authOnly(multiLicence
+              ? <MultiLicenceSpinoutLab licences={multiLicence} activeRole={effectiveRole} />
+              : effectiveRole === 'investor'
                 ? <SpinoutLabInvestorPage />
                 : <SpinoutLabPage />)
             : <SpinoutLabPage />
@@ -2735,7 +2789,9 @@ function AppInner() {
           stay permissive so deep links keep working during the split. */}
       {/* Spin-Out Lab members (role `exploring`, lab-active) build their skills +
           values profile in Studio too — the lab Profiling page reads from it. */}
-      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <Dashboard activeRole={effectiveRole} authUser={user} />)} />
+      {/* D4474 (#4474): two or more held licences draw one Studio block per licence; everyone else, an admin, a
+          "View as" preview, an impersonation and an exploring Lab member included, keeps Dashboard. */}
+      <Route path="/studio" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), multiLicence ? <MultiLicenceStudio licences={multiLicence} activeRole={effectiveRole} authUser={user} /> : <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/tickets/new" element={guard(['founder'], <Dashboard activeRole={effectiveRole} authUser={user} />)} />
       <Route path="/studio/archetype" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ArchetypeCardPage activeRole={effectiveRole} />)} />
       {/* Task #9 — holding-state dashboard for chat-onboarded users awaiting admin role review. */}
@@ -3581,7 +3637,9 @@ function AppInner() {
           read, and /grow/<module> its module pages. The seven Grow pages
           below are static and win over /grow/:slug; no module slug is one of
           them. */}
-      <Route path="/grow" element={founderGrowLanding
+      {/* #4579: signed out, /grow goes through the guard itself, so sign-in
+          returns here (`next=/grow`) rather than to the page it would forward to. */}
+      <Route path="/grow" element={founderGrowLanding || !user
         ? guard(['admin', 'founder'], <CycleRoute cycle="grow" />)
         : <Navigate to="/grow/focus" replace />} />
       {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}

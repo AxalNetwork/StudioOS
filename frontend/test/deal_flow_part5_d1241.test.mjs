@@ -124,6 +124,10 @@ function stubs(over = {}) {
     keepCompareNote: rec('keepCompareNote', { saved: { uid: 'n1', text: 'Acme Robotics has the stronger band on Team.' } }),
   });
   api.listDeals = rec('listDeals', DEALS());
+  // D4815: the "Other deal activity" line's two zone reads.
+  was.screening = api.dealScreening; was.commitRoom = api.icCommitRoom;
+  api.dealScreening = rec('screening', { desk: { available: true, rows: [] } });
+  api.icCommitRoom = rec('commitRoom', { decisions: { available: true, rows: [] } });
   Object.assign(ventureScoresApi, { batch: rec('batch', BATCH()), weights: rec('weights', { weights: null, equal: true }), deal: rec('deal', { locked: true }) });
   Object.assign(dealViewsApi, { fit: rec('fit', FIT()), list: rec('views', { items: [], default_uid: null }) });
   for (const [k, v] of Object.entries(over)) {
@@ -132,7 +136,7 @@ function stubs(over = {}) {
   }
   return { calls, restore: () => {
     for (const n of names) dealFlowApi[n] = was[n];
-    api.listDeals = was.listDeals;
+    api.listDeals = was.listDeals; api.dealScreening = was.screening; api.icCommitRoom = was.commitRoom;
     Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights, deal: was.deal });
     Object.assign(dealViewsApi, { fit: was.fit, list: was.list });
   } };
@@ -452,6 +456,8 @@ test('D4635 compare: a failed flow read is said, never "Not on your deals"; the 
     assert.ok(t.byId('dealflow-compare-1') && t.byId('dealflow-compare-2'), 'the ventures that were read are still compared');
     assert.match(t.text(t.byId('dealflow-compare-1')), /Stage unreadable/);
     assert.doesNotMatch(t.text(t.byId('dealflow-compare-page')), /Not on your deals/);
+    assert.equal(t.props(t.byId('dealflow-compare-days-1')).title, 'Your deal flow could not be read.', 'missing days name the failed flow read');
+    assert.notEqual(t.props(t.byId('dealflow-compare-days-1')).title, 'Not on your deals.', 'an unknown flow never implies absence');
     assert.ok(t.byId('dealflow-compare-fit-failed'), 'the fit failure is its own line');
     assert.equal(t.byId('dealflow-compare-scores-failed'), undefined, 'the scores were read');
     fitFails = false;
@@ -460,6 +466,20 @@ test('D4635 compare: a failed flow read is said, never "Not on your deals"; the 
     assert.equal(fitReads, before + 1, 'retry reads the fit again');
     assert.equal(t.byId('dealflow-compare-fit-failed'), undefined);
   } finally { s.restore(); await t.close(); }
+});
+
+test('D5357 cells: an unreadable flow is distinct from a successful read where the venture is absent', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { DaysCell, OwnerCell } = await import('../src/pages/investor/dealflow/FlowCells.jsx');
+  const row = { inFlow: false, daysInStage: null, owner: null };
+  for (const Cell of [DaysCell, OwnerCell]) {
+    const unknown = renderToStaticMarkup(h(Cell, { row, flowUnknown: true }));
+    assert.match(unknown, /title="Your deal flow could not be read\."/);
+    assert.doesNotMatch(unknown, /Not on your deals/);
+    const absent = renderToStaticMarkup(h(Cell, { row }));
+    assert.match(absent, /title="Not on your deals\."/);
+    assert.doesNotMatch(absent, /deal flow could not be read/);
+  }
 });
 
 test('D4635 compare notes: a partly unreadable read says how many could not be read and keeps the ones that could', async () => {

@@ -32,7 +32,7 @@ function Board() {
 
 export default function LaneBoards() {
   return (
-    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} data-testid="admin-board-approvals-lanes">
+    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} operations data-testid="admin-board-approvals-lanes">
       <div className="pb-24 lg:pb-10"><Board /></div>
     </AdminBoardFrame>
   );

@@ -13,7 +13,7 @@ booking still requires the existing authenticated role and subscription gates.
 | Subfolder | Contents |
 | --- | --- |
 | `advisory/` | Clients, contracts and retained advisory tabs. |
-| `cohorts/` | Assigned cohort guidance and outcome screens. |
+| `cohorts/` | The Cohorts workspace (D4813): `CohortWorkspace.jsx` holds the one selected cohort (`?cohort=`), the header and the section tabs; `cohortModel.js` decides selection, stale-response discard, founder states and the Overview's items; `OverviewZone.jsx` is `/cohorts`; the five zones read through the shared selection. |
 | `expertise/` | The advisor's own profile, services, proof, thinking and visibility (`VisibilityZone.jsx`, D1597 mounted by D1424: requests per booking link and opens of your writing; profile views "Not recorded"). The four lists read a page at a time through `pages.js` (`usePagedList`, D4689) and show whole-list figures. |
 | `network/` | Relationships, introductions and organisations. |
 | `practice/` | Opportunities, engagements, delivery, sessions and earnings. |

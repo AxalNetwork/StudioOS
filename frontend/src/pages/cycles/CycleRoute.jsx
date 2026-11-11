@@ -88,6 +88,8 @@ import { isDataRoomTab, isOldFileAddress, SLUG as DATA_ROOM } from '../raise/dat
 import { DataRoomMovedRedirect } from '../raise/dataroom/DataRoomMoved';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
 import EvidencePart from './evidence/EvidencePart';
+import { canonicalVentureSearch, legacyVentureRedirect, resolveVenture, ventureRef } from './ventureQuery.js';
+import { VentureProvider } from './VentureContext.jsx';
 import { PublishTo, PublishedFromHere } from './publish/PublishEntry.jsx';
 import RankByFit from '../../ui/RankByFit';
 import { applyRank } from '../../lib/rankByFit';
@@ -511,6 +513,8 @@ export function primaryForModule(cycle, slug, search = '', open) {
 
 export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = false } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   // Writes build on the latest query, never on a render's (react-router hands a
   // functional update the search params of the render that made the setter), and
   // drop `drop`'s keys in the same write: a sign-in's return or `?tool=` that the
@@ -522,12 +526,15 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     const next = new URLSearchParams(latest.current);
     for (const k of dropRef.current || []) next.delete(k);
     for (const k of extraDrop) next.delete(k);
-    next.set('project_id', String(id));
-    setSearchParams(next, { replace: true });
+    // D5074: the one form, so a legacy `?project=` never travels beside it.
+    setSearchParams(new URLSearchParams(canonicalVentureSearch(next, id)), { replace: true });
   }, [setSearchParams]);
-  // The read's own links (`next.href`) say `?project=`; the page's say
-  // `?project_id=`. Either picks the venture.
-  const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  // D5074 (#5074): the address is parsed here and nowhere else (`ventureQuery.js`).
+  // The read's own links (`next.href`) say `?project=`, older ones a project UID;
+  // each names the venture, and the address is then replaced with `?project_id=`.
+  const ref = ventureRef(searchParams);
+  const named = ref?.id ?? null;
+  const namedUid = ref?.uid ?? null;
   // Back from a provider's sign-in at /build/connect with no venture named: the
   // one Build kept before the redirect (D686 §5.4), taken once.
   const [stashed] = useState(() => (named ? null : kept?.() ?? null));
@@ -543,14 +550,23 @@ export function useProject(reloadKey = 0, { kept = null, drop = [], immediate = 
     let alive = true;
     api.listProjects().then((list) => {
       if (!alive) return;
-      const first = (list || [])[0];
+      // A UID names its venture; one not in the list falls back to the first, as an unreadable id always has.
+      const first = (namedUid ? resolveVenture(list, ref)?.project : null) || (list || [])[0];
       setProjectId(first?.id || null);
       setStatus(first ? 'ready' : 'none');
-      if (first) writeProject(first.id);
+      // A UID's address is rewritten by the redirect below, which keeps the hash.
+      if (first && !namedUid) writeProject(first.id);
     }).catch(() => { if (alive) setStatus('unreadable'); });
     return () => { alive = false; };
-  }, [requested, writeProject, reloadKey]);
-  return { projectId: immediate && requested ? requested : projectId, status: immediate && requested ? 'ready' : status, writeProject };
+  }, [requested, writeProject, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps -- `namedUid` is read with `requested`
+  // D5074: a legacy address (`?project=N`, a UID) is replaced with the canonical
+  // one once its venture is known, every other query key and the hash kept.
+  const current = immediate && requested ? requested : projectId;
+  useEffect(() => {
+    const to = legacyVentureRedirect(location, current);
+    if (to) navigate(to, { replace: true, state: location.state });
+  }, [current, location, navigate]);
+  return { projectId: current, status: immediate && requested ? 'ready' : status, writeProject };
 }
 
 /**
@@ -914,6 +930,22 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
   // D1464 (#4021): the access pill and banner say HQ for the Super Admin, Studio admin for an Admin.
   const supportViewer = isSuperAdminUser(user) ? 'super_admin' : 'admin';
+  /**
+   * D5079 (#5079): a sensitive Raise tool's own authoritative read can be
+   * refused while this page's module read succeeds — the two are gated
+   * differently, and an admin passes one and not the other. The tool reports
+   * its refusal here, and this page then draws none of the module's
+   * authoritative data for it. The page's own refused branch is what withholds
+   * it — the card, the records table with its Add and row actions, and the
+   * children: Eadwyn's bands, the module's parts and the Evidence block — so
+   * this flag only has to reach it. Only the tool's own refusal and its tab
+   * row stay, because `subnav` sits outside that branch. "Not allowed to
+   * read" must never be drawn as "read, and empty".
+   */
+  const [toolRefusal, setToolRefusal] = useState(null);
+  const onToolRefused = useCallback((refusal) => setToolRefusal(refusal ?? null), []);
+  useEffect(() => { setToolRefusal(null); }, [cycle, slug, projectId]);
+  const refusedTool = !record && toolRefusal?.refused ? toolRefusal : null;
   const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
   const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
@@ -1009,7 +1041,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   }, [adding, editingId]);
 
   // The table's query resets when the module changes.
-  useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
+  // D5072: when the query already is the default, keep the SAME object. A fresh `{}` on mount re-ran the module
+  // read below (its dependency is `query`), so every module page read its module twice when it opened.
+  useEffect(() => {
+    setQuery((cur) => (cur.q === '' && Object.keys(cur.filter || {}).length === 0 && !cur.sort && cur.page === 1 ? cur : { q: '', filter: {}, sort: '', page: 1 }));
+  }, [slug]);
 
   // D4601: the overview on screen has an identity: its cycle, its venture and a generation that every
   // (re)read, venture switch or page change advances. A card retry applies only to the identity it started under.
@@ -1340,12 +1376,12 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         header={distribution ? null : undefined}
         cards={tabs}
         data={module}
-        status={projectStatus === 'unreadable' ? 'unreadable' : moduleStatus}
-        message={moduleStatus === 'refused' ? moduleMessage : undefined}
+        status={projectStatus === 'unreadable' ? 'unreadable' : refusedTool ? 'refused' : moduleStatus}
+        message={refusedTool ? refusedTool.message : moduleStatus === 'refused' ? moduleMessage : undefined}
         onRetry={() => setReload((n) => n + 1)}
         records={recs}
         showRecords={!distribution}
-        recordsStatus={moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
+        recordsStatus={!refusedTool && moduleStatus === 'ready' ? (recs?.state === 'unreadable' ? 'unreadable' : 'ready') : undefined}
         recordsMessage={recs?.state === 'unreadable' ? recs.reason : undefined}
         query={query}
         onQuery={setQuery}
@@ -1363,10 +1399,10 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} onRefused={onToolRefused} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} onRefused={onToolRefused} />
           : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} /> : undefined}
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} projectId={projectId} onRefused={onToolRefused} /> : undefined}
         // #3938 GR17: the venture's partners ranked against a need the founder types (the route refuses without one), above the table it reorders.
         aboveRecords={rankable ? <RankByFit run={(need) => cyclesWrite.grow.partnerRank(projectId, need)} onRanked={setPartnerRank}
           ranked={ranked ? ranked.ranked : null} total={read.rows.length} label="What do you need a partner for?" needsQuery testid="grow-partners-rank" /> : null}
@@ -1409,7 +1445,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
-    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} key={projectId} aiOff={!fillsOn} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;
@@ -1432,7 +1468,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // The rail sits in the one frame every rail host uses (D556), as the
   // Validate desk's own did; the frame is this page's outermost element so it
   // docks to the edge.
+  // D5074 (#5074): the venture this page resolved, for every tool under it (`useVenture()`).
   return (
+    <VentureProvider projectId={projectId} status={projectStatus} reloadKey={projectsKey}>
     <RailCrumbsProvider section={name} module={moduleName}>
     <RailFrame rail={rail} className={distribution ? 'distribution-frame' : undefined} data-testid={`cycle-route-${cycle}`}>
       {/* Every cycle path is full-bleed (`cyclePaths.js`, D694), so this is the
@@ -1481,5 +1519,6 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
       <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
+    </VentureProvider>
   );
 }

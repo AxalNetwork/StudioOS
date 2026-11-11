@@ -244,8 +244,6 @@ export default function PitchEditor() {
   // Share and Export need only the version on screen, so the page opens them
   // itself, editor or not; every other ⋯ item is the editor's.
   const [shareDialog, setShareDialog] = useState(null);
-  // D4598: the saved version the Share/Export gate checked, `{ id, version }`; null when a dialog opens without one.
-  const [checked, setChecked] = useState(null);
   // D1577 (#3824): the other members on the deck. Null (nothing drawn) until presence is switched on.
   const presence = useDeckPresence(current?.id ?? null, { live: !readOnly && !phone });
   const youId = presence.you?.user_id ?? user?.id ?? null;
@@ -266,11 +264,16 @@ export default function PitchEditor() {
       onAction={onAction} labels={chrome?.labels} outOfTokens={Boolean(chrome?.outOfTokens)} waiting={chrome ? null : EDITOR_WAITING} history={chrome?.history ?? null}
       editors={presence.editors} youId={youId} />
   ) : null;
+  // D4598 (#4598) part 2: Export and Share now run their own check, on the exact content
+  // their action would send, so they need the kit and the stale-figure read `usePreflight`
+  // measures against — the same ones `Editor` passes its own two runs (`pf`, `gatePf`).
+  const kitData = kit.status === 'ok' ? kit.data?.kit ?? null : null;
+  const refreshData = refresh.status === 'ok' ? refresh.data : null;
   const overlay = shareDialog === 'share' && projectId != null && current ? (
-    <ShareDialog projectId={projectId} deck={current} onClose={() => setShareDialog(null)} onCreated={() => {}}
+    <ShareDialog projectId={projectId} deck={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} onCreated={() => {}}
       onReviewCards={(uid) => { setShareDialog(null); actionRef.current?.('review_cards', uid); }} />
   ) : shareDialog === 'export' && current ? (
-    <ExportDialog versions={versionList} current={current} checked={checked} onClose={() => setShareDialog(null)} />
+    <ExportDialog versions={versionList} current={current} kit={kitData} refresh={refreshData} onClose={() => setShareDialog(null)} />
   ) : null;
   // A decision in the header re-reads the versions without blanking them, so the
   // open Editor (keyed to the version) keeps its unsaved cards.
@@ -324,7 +327,7 @@ export default function PitchEditor() {
         onOpenAsk={onOpenAsk}
         onChrome={setChrome}
         actionRef={actionRef}
-        onSend={(kind, cleared) => { setChecked(cleared ?? null); setShareDialog(kind); }}
+        onSend={(kind) => setShareDialog(kind)}
       />
     </Shell>
   );
@@ -418,7 +421,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
   const [deepLink] = useSearchParams();
   // D1558 (#3805): `card` may also be a card uid, and `&area=c1-6r2-4` (or an area id) selects that Grid area once the card is open.
-  const [sel, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const [selected, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const sel = Math.min(selected, Math.max(0, cards.length - 1));
   const linkedArea = useRef(deepLink.get('area'));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
@@ -713,6 +717,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'save') { if (!readOnly && dirty) setDialog({ kind: 'save' }); return; }
     if (id === 'save_named') { if (!readOnly) setDialog({ kind: 'save', named: true }); return; }
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
+    if (id === 'remove_card') {
+      if (!readOnly && card) setDialog({ kind: 'remove-card', uid: cardUid(card) });
+      return;
+    }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     if (id === 'undo') { if (!readOnly) undo(); return; }
@@ -769,13 +777,14 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   };
   const stripRows = pf.groups ? [...pf.groups.fix, ...pf.groups.look, ...pf.groups.unchecked] : [];
   const gateView = gate && !gp.running && gp.current ? gateOf(gp.groups, gate) : null;
-  // The saved version the gate checked, handed to the dialog it opens.
-  const cleared = { id: base.deck.id ?? null, version: base.deck.version ?? null };
   useEffect(() => {
     if (!gate || gp.running) return;
     // A check that finished on an older state of the version (or of the edits) runs again on this one.
     if (!gp.current) { gp.run(); return; }
-    if (gateView && !gateView.open) { setGate(null); onSend?.(gate, cleared); }
+    // D4598 (#4598) part 2: this first-look check is the saved version's cards, before a
+    // variant or "what is included" is chosen; the dialog it opens now runs its own check
+    // on top of this, against the exact combination it ends up with.
+    if (gateView && !gateView.open) { setGate(null); onSend?.(gate); }
   }, [gate, gp.running, gp.current, gateView?.open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const staleMap = useMemo(() => {
@@ -949,7 +958,7 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
       {gate && (gp.running || gateView?.open) ? (
         <PreflightGate gate={gateView} progress={gp.running ? gp.progress : null} version={base.deck.version ?? null} dirty={dirty}
           onShow={dirty ? null : show} onSave={dirty && !readOnly ? () => { setGate(null); setDialog({ kind: 'save' }); } : null}
-          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k, cleared); }} onClose={() => setGate(null)} />
+          onFix={() => { setGate(null); setSheet('preflight'); }} onAnyway={() => { const k = gate; setGate(null); onSend?.(k); }} onClose={() => setGate(null)} />
       ) : null}
       {/* D4598: the saved version's own check, measured off screen like the panel's. */}
       {dirty && gatePf.running && gatePf.running.done < gatePf.running.total ? (
@@ -1007,6 +1016,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             onConfirm={() => { setCard(sel, r.card, { label: 'Layout' }); setPickState(NO_PICK); setDialog(null); setSheet(null); }} />
         );
       })() : null}
+      {dialog?.kind === 'remove-card' && !readOnly ? (
+        <ConfirmDialog title="Remove this card?" testId="pitch-editor-remove-card"
+          lines={['This removes the card from your draft. You can undo it before leaving the editor.']}
+          confirm="Remove card" onClose={() => setDialog(null)}
+          onConfirm={() => {
+            edit((doc) => {
+              const index = cardIndexByUid(doc.cards, dialog.uid);
+              return index < 0 ? null : { type: 'removeCard', index };
+            }, { label: 'Remove card' });
+            setPickState(NO_PICK); setDialog(null);
+          }} />
+      ) : null}
       {dialog?.kind === 'remove-block' && card ? (
         <ConfirmDialog title="Remove this block?" testId="pitch-editor-remove-dialog"
           lines={[`The ${blockLabel(card.blocks.find((b) => b.id === dialog.id))} leaves card ${sel + 1}.`, 'Nothing is saved until you save a version.']}
@@ -1381,6 +1402,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
   return (
     <div className="flex flex-col gap-2.5" data-testid="pitch-editor-phone">
       <span className={MUTED}>{PHONE_NOTE}</span>
+      {!cards.length ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : null}
       <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
         {cards.map((c, i) => (
           <li key={i} className={`${CARD} flex min-h-[44px] items-center gap-2 px-3 ${i === sel ? 'border-axal-violet' : ''}`}>

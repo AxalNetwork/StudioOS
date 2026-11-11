@@ -7,7 +7,7 @@
  * Everything here reads the page's one list (`inRange`); nothing counts a second
  * list, and a count the read did not give is never a 0.
  */
-import { FAMILIES, LAYERS } from './calendarViews';
+import { EXPLORER_KINDS, FAMILIES, LAYERS } from './calendarViews';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -75,14 +75,51 @@ export function isAllDay(ev) {
   return s != null && e != null && e - s >= 86_400_000;
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * D5204 (#5204) — AN ALL-DAY ITEM IS PLACED BY ITS CALENDAR DATE, NEVER BY AN INSTANT.
+ *
+ * `new Date('2026-11-09')` is UTC midnight, and UTC midnight read in a local zone west of UTC is the evening
+ * BEFORE. So a Google all-day event on the 9th was drawn on the 8th for a member in Los Angeles, and on the 9th
+ * for one in Tokyo, from the same row. This takes the date the provider stated and uses it as written.
+ *
+ * `null` when it has no readable day: the caller counts those rather than guessing one.
+ */
+export function dayKeyOf(ev) {
+  if (isAllDay(ev)) {
+    const stated = typeof ev?.start_date === 'string' && DATE_ONLY.test(ev.start_date) ? ev.start_date : null;
+    if (stated) return stated;
+    // D1208's own all-day readers write a bare date into `start_at`; it is a date too, and read as one.
+    if (typeof ev?.start_at === 'string' && DATE_ONLY.test(ev.start_at)) return ev.start_at;
+  }
+  const t = time(ev?.start_at);
+  return t == null ? null : dayKey(new Date(t));
+}
+
+/**
+ * The last date an all-day item covers, inclusive. Providers state `end_date` EXCLUSIVE (a one-day event on the
+ * 9th ends on the 10th), so the exclusive value is kept on the wire and turned inclusive only to be shown.
+ */
+export function allDayLastDate(ev) {
+  const start = dayKeyOf(ev);
+  if (!isAllDay(ev) || !start) return null;
+  const end = typeof ev?.end_date === 'string' && DATE_ONLY.test(ev.end_date) ? ev.end_date : null;
+  if (!end || end <= start) return start;
+  const [y, m, d] = end.split('-').map(Number);
+  const back = new Date(Date.UTC(y, m - 1, d - 1));
+  const last = back.toISOString().slice(0, 10);
+  return last < start ? start : last;
+}
+
 /** The list by local day of its start, each day in time order. An item with no readable start is left out and counted. */
 export function byDay(items = []) {
   const out = new Map();
   let unplaced = 0;
   for (const ev of Array.isArray(items) ? items : []) {
-    const s = time(ev.start_at);
-    if (s == null) { unplaced += 1; continue; }
-    const k = dayKey(new Date(s));
+    // D5204: an all-day row is placed by its stated calendar date, a timed one by its local day.
+    const k = dayKeyOf(ev);
+    if (k == null) { unplaced += 1; continue; }
     if (!out.has(k)) out.set(k, []);
     out.get(k).push(ev);
   }
@@ -166,9 +203,14 @@ export function moveFocus(index, key, len, rowLen = 7) {
  * The Kinds filter (CAL6), and the Explorer's calendar (CAL14)
  * ------------------------------------------------------------------ */
 
-/** The families a profile's calendar carries: an Explorer's is Events and From other calendars (CAL14). */
+/**
+ * The families a profile's calendar carries, each with the kinds it may read. An Explorer's is their events and
+ * their other calendars (CAL14): `EXPLORER_KINDS`, grouped by the registry's families (D5205).
+ */
 export function familiesFor(role) {
-  if (role === 'exploring') return FAMILIES.filter((f) => ['events', 'other'].includes(f.key));
+  if (role === 'exploring') {
+    return FAMILIES.map((f) => ({ ...f, kinds: f.kinds.filter((k) => EXPLORER_KINDS.includes(k)) })).filter((f) => f.kinds.length);
+  }
   return FAMILIES;
 }
 export const kindsOfFamilies = (families) => families.flatMap((f) => f.kinds);

@@ -121,8 +121,9 @@ const groupsOf = (options) => {
   return [...groups];
 };
 
-function Note({ note, values, id, name }) {
-  const content = typeof note === 'function' ? note(values) : note;
+function Note({ note, values, id, name, field = null }) {
+  // D4586: a note may read its field's options too (Record a decision counts distinct sources).
+  const content = typeof note === 'function' ? note(values, field) : note;
   if (!content) return null;
   const href = typeof content === 'object' ? linkOf(content.href) : null;
   return <p id={id} data-testid={'cycle-form-note-' + name} className="m-0 text-xs leading-normal text-axal-muted dark:text-gray-400">
@@ -139,7 +140,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   if (field.parts) return <fieldset className="min-w-0 space-y-1.5">
     <legend className={LABEL}>{field.label}</legend>
     <div className="grid grid-cols-2 gap-2">{field.parts.map((part) => <Field key={part.name} field={part} values={values} errors={errors} setValue={setValue} prefix={prefix} busy={busy} compact search={search} />)}</div>
-    <Note note={field.note} values={values} id={id + '-note'} name={field.name} />
+    <Note note={field.note} values={values} id={id + '-note'} name={field.name} field={field} />
   </fieldset>;
   const common = { id, name: field.name, 'data-testid': 'cycle-form-' + field.name, 'aria-invalid': error ? 'true' : undefined, 'aria-describedby': description, 'aria-required': field.required || undefined, disabled: busy || field.disabled };
   const value = values[field.name];
@@ -179,7 +180,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
       </div>)}
     </div>}
     {error && <p id={id + '-error'} role="alert" className="m-0 text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
-    <Note note={field.note ?? field.hint} values={values} id={id + '-note'} name={field.name} />
+    <Note note={field.note ?? field.hint} values={values} id={id + '-note'} name={field.name} field={field} />
   </div>;
 }
 
@@ -218,7 +219,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const saving = useRef(false);
   // D4600: what a write that half succeeded leaves behind. `memory` outlives one Save (a submit keeps there the
   // id of the record it made); `partial` freezes the form to the one operation left.
-  const memory = useRef({});
+  const memory = useRef(typeof base?.makeMemory === 'function' ? base.makeMemory() : {});
   const [partial, setPartial] = useState(null);
   // D4630: false once this instance unmounts; a later answer acts on nothing.
   const mounted = useRef(true);

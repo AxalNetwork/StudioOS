@@ -2,8 +2,8 @@
  * D4800 (#4800, canvas SE01 and SE11a, D4803) — what the Overview workspace
  * says, derived from the two reads the page already makes and nothing else:
  * `GET /api/admin/security/overview` and `GET /api/admin/security/governance`.
- * No figure here is computed from anything those two do not return, and the
- * Worker is unchanged.
+ * No figure here is computed from anything those two do not return. (D4800's
+ * second slice added the names of administrators without MFA to `/overview`.)
  *
  * FOUR PARTS, IN THE CANVAS'S ORDER:
  *   findings  Action required, most severe first. Each finding has its
@@ -19,9 +19,19 @@
  *
  * A read in flight is `loading`, a failed read is `unreadable`, a returned
  * payload is `ready`. The page passes `{ state, value, at }` for each, where
- * `at` is when the browser received it — the only freshness the platform
- * has (per-store collection times are not recorded, #4800 question C).
+ * `at` is when the browser received it.
+ *
+ * D5247 — PER-STORE FRESHNESS. Each store now records its last good read
+ * (`security_source_reads`), and both reads return it per store with the
+ * store's own age: the ledger's five on `/governance`'s `sources[]`, the
+ * evidence stores (backup heartbeats, restore drill, sanctions) on
+ * `/overview`'s `sources[]`. A store past its age is Stale: a finding of its
+ * own, the area it feeds marked Stale, and never part of "nothing needs
+ * action". A store with no recorded time says "Not recorded", never 0 and
+ * never Stale; a store with no age (sanctions) is never Stale.
  */
+
+import { eventLabel, outcomeState } from './eventsModel.js';
 
 const fmt = (n) => Number(n).toLocaleString();
 const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
@@ -48,7 +58,7 @@ function daysBetween(from, to) {
   return Math.max(0, Math.floor((b - a) / 86400000));
 }
 
-const SEVERITY = { failed: 0, action_required: 1, unavailable: 2 };
+const SEVERITY = { failed: 0, action_required: 1, unavailable: 2, stale: 3 };
 
 /** Where each source's rows come from, in words, for the source list. */
 export const SOURCE_LABELS = Object.freeze({
@@ -57,7 +67,93 @@ export const SOURCE_LABELS = Object.freeze({
   activity_logs: 'Activity log',
   impersonation_sessions: 'Support sessions',
   licence_events: 'Licence events',
+  // D5247 — the evidence stores `/overview` reads, which carry their freshness there.
+  backup_d1: 'D1 backup heartbeat',
+  backup_kv: 'KV snapshot heartbeat',
+  restore_drill: 'Restore drill marker',
+  sanctions_screenings: 'Sanctions screenings',
 });
+
+/** D5247 — which Overview area each store feeds, so a Stale store marks its own card. */
+const AREA_STORES = Object.freeze({
+  sessions: ['impersonation_sessions'],
+  trust: ['sanctions_screenings'],
+  recovery: ['backup_d1', 'restore_drill'],
+  events: ['security_events', 'admin_audit_log', 'activity_logs', 'impersonation_sessions', 'licence_events'],
+});
+
+/** D5247 — the Unavailable findings that already stand for a store that did not answer. */
+const UNREADABLE_FINDINGS = Object.freeze({
+  security_events: ['source-security_events', 'ledger-counts-unreadable'],
+  admin_audit_log: ['source-admin_audit_log'],
+  activity_logs: ['source-activity_logs'],
+  impersonation_sessions: ['source-impersonation_sessions', 'impersonations-unreadable'],
+  licence_events: ['source-licence_events'],
+  restore_drill: ['drill-unreadable'],
+  sanctions_screenings: ['sanctions-unreadable'],
+});
+
+/** D5247 — "6 h", "7 days": a store's age in the unit it was set in. */
+export function ageWords(hours) {
+  if (!isNum(hours)) return null;
+  const h = Number(hours);
+  return h >= 48 && h % 24 === 0 ? `${fmt(h / 24)} days` : `${fmt(h)} h`;
+}
+
+/** D5247 — "8 h", "3 days" since a stamp, or null when it cannot be parsed. */
+function agoWords(iso, now) {
+  const t = Date.parse(iso || '');
+  const n = Date.parse(now || '');
+  if (!Number.isFinite(t) || !Number.isFinite(n)) return null;
+  const h = Math.max(0, Math.floor((n - t) / 3600000));
+  return h >= 48 ? `${fmt(Math.floor(h / 24))} days` : `${fmt(h)} h`;
+}
+
+/**
+ * D5247 — one store's freshness in words, from the fields the Worker returns
+ * (`services/securitySourceFreshness.ts`). `state` is `stale` only for a
+ * store past its own age; everything else is a plain line. An older Worker
+ * that returns no `freshness` gives `null`: nothing is claimed either way.
+ */
+export function freshnessOf(row, now) {
+  if (!row || !row.freshness) return null;
+  const what = row.age_from === 'evidence' ? 'evidence' : 'read';
+  const stamp = stampOf(row.last_good_at);
+  const age = ageWords(row.age_hours);
+  switch (row.freshness) {
+    case 'stale': {
+      const ago = agoWords(row.last_good_at, now);
+      return { state: 'stale', text: `Stale · last good ${what} ${stamp}${ago ? `, ${ago} ago` : ''}; its age is ${age}` };
+    }
+    case 'current':
+      return { state: null, text: `Last good ${what} ${stamp} · age ${age}` };
+    case 'not_recorded':
+      return { state: null, text: `Last good ${what}: Not recorded` };
+    case 'no_age':
+      return { state: null, text: `Last read ${stampOf(row.last_read_at) || 'Not recorded'} · no age: it runs on request` };
+    default:
+      return null;
+  }
+}
+
+/**
+ * D5247 — every store's freshness row, keyed by store. `/governance` and
+ * `/overview` both read three of the ledger's stores; the row with the later
+ * last good read wins, which is the read that answered whenever one did (an
+ * answered read's last good read is its own moment).
+ */
+export function storeRows(ov, fd) {
+  const out = {};
+  const put = (key, row) => {
+    if (!key || !row?.freshness) return;
+    const had = out[key];
+    const later = (Date.parse(row.last_read_at || '') || -Infinity) > (Date.parse(had?.last_read_at || '') || -Infinity);
+    if (!had || later) out[key] = { ...row, key };
+  };
+  for (const r of fd?.sources || []) put(r.table, r);
+  for (const r of ov?.sources || []) put(r.source, r);
+  return out;
+}
 
 export function buildOverview({ overview, feed }) {
   const findings = [];
@@ -154,7 +250,9 @@ export function buildOverview({ overview, feed }) {
         state: 'action_required',
         title: 'Administrators without MFA',
         detail: `${fmt(withMfa)} of ${fmt(total)} HQ administrators have a second factor. `
-          + `${fmt(without)} ${without === 1 ? 'account can' : 'accounts can'} still sign in with a password alone.`,
+          + `${fmt(without)} ${without === 1 ? 'account can' : 'accounts can'} still sign in with a password alone.`
+          + namedAdmins(mfa.admins_without_mfa, without),
+        admins: Array.isArray(mfa.admins_without_mfa) ? mfa.admins_without_mfa : null,
         when: readNote(readOv),
         where: 'Access',
         tab: 'access',
@@ -171,7 +269,8 @@ export function buildOverview({ overview, feed }) {
       couldNot('dsr-unreadable', 'Deletion requests could not be checked', ov.dsr?.reason || 'The deletion-request store could not be read. This is not a claim that none are open.', 'overview', 'privacy');
     }
     const dsr = dsrReadable ? ov.dsr?.rows || [] : [];
-    const clock = isNum(ov.dsr?.clock_days) ? `${ov.dsr.clock_days}-day clock` : 'statutory clock';
+    // D4675 part 2: a calendar month has no fixed day count, so the clock is named, not counted.
+    const clock = ov.dsr?.clock?.rule === 'calendar_month' ? 'one-month clock' : 'statutory clock';
     const overdue = dsr.filter((d) => isNum(d.days_left) && d.days_left < 0).length;
     const near = dsr.filter((d) => isNum(d.days_left) && d.days_left >= 0 && d.days_left <= 14).length;
     if (overdue > 0) {
@@ -239,7 +338,40 @@ export function buildOverview({ overview, feed }) {
     }
   }
 
-  if (fd && sources.length > 0 && sources.every((s) => s.available)) {
+  // ── D5247: a store past its own age. Its own finding, so Stale can never
+  // read as "nothing open"; the drill's own out-of-date finding stands for it.
+  const stores = storeRows(ov, fd);
+  const nowIso = overview?.at || feed?.at || null;
+  const stale = Object.values(stores).filter((r) => r.freshness === 'stale');
+  for (const r of stale) {
+    if (r.key === 'restore_drill' && findings.some((f) => f.id === 'drill-stale')) continue;
+    const words = freshnessOf(r, nowIso);
+    // A store that did not answer already has its Unavailable finding: Stale is
+    // said there, beside it, rather than as a second item for one store.
+    const failed = findings.find((f) => (UNREADABLE_FINDINGS[r.key] || []).includes(f.id));
+    if (failed) {
+      failed.detail = `${failed.detail} ${words.text}.`;
+      failed.stale = true;
+      continue;
+    }
+    const ledger = AREA_STORES.events.includes(r.key);
+    findings.push({
+      id: `stale-${r.key}`,
+      state: 'stale',
+      title: `${SOURCE_LABELS[r.key] || r.key} is out of date`,
+      detail: `${words.text}. ${r.answered ? '' : 'This read did not answer, so nothing newer is known. '}`
+        + (r.basis ? `${r.basis} ` : '')
+        + 'This is not a claim that nothing is open.',
+      when: stampOf(r.last_good_at) || 'Undated',
+      where: ledger ? 'Events' : r.key === 'sanctions_screenings' ? 'Trust' : 'Resilience',
+      tab: ledger ? 'events' : r.key === 'sanctions_screenings' ? 'trust' : 'resilience',
+      action: r.answered
+        ? { label: `Open ${ledger ? 'Events' : 'Resilience'}`, tab: ledger ? 'events' : 'resilience' }
+        : { label: 'Retry', retry: ledger ? 'feed' : 'overview' },
+    });
+  }
+
+  if (fd && sources.length > 0 && sources.every((s) => s.available) && !sources.some((s) => s.freshness === 'stale')) {
     clear.push({ id: 'sources', state: 'healthy', label: `${sources.length} of ${sources.length} sources read`, evidence: readNote(readFeed) });
   }
 
@@ -263,22 +395,94 @@ export function buildOverview({ overview, feed }) {
     findings,
     incomplete,
     clear,
-    areas: buildAreas({ ov, fd, overview, feed, readOv, readFeed }),
+    areas: markStale(buildAreas({ ov, fd, overview, feed, readOv, readFeed }), stores, nowIso),
+    recent: recentEvents(feed),
     sources: {
       state: feed?.state || 'loading',
       read: sources.filter((s) => s.available).length,
       total: sources.length,
       rows: sources,
       filter: fd?.filter || null,
+      // D5247 — the evidence stores `/overview` reads, each with its freshness, and how many stores are Stale.
+      evidence: (ov?.sources || []).filter((r) => !AREA_STORES.events.includes(r.source)),
+      stale: stale.length,
+      now: nowIso,
     },
     marks,
   };
+}
+
+/**
+ * D4800 — " Without one: Ada (ada@…), Grace." from the names `/overview`
+ * returns, or nothing when it returned none (an older Worker): the count above
+ * stands on its own and no name is guessed. Says how many more when the list
+ * was capped.
+ */
+export function namedAdmins(list, without) {
+  if (!Array.isArray(list) || list.length === 0) return '';
+  const words = list.map((a) => {
+    const name = String(a?.name || '').trim();
+    const email = String(a?.email || '').trim();
+    return name && email ? `${name} (${email})` : name || email || `account ${a?.id}`;
+  });
+  const more = isNum(without) && Number(without) > list.length ? ` and ${fmt(Number(without) - list.length)} more` : '';
+  return ` Without one: ${words.join(', ')}${more}.`;
+}
+
+/** D4800 — how many ledger rows the Overview's "Recent security events" shows. */
+export const RECENT_EVENTS = 6;
+
+/**
+ * D4800 (hierarchy item 3, SE01's recent-activity column) — the newest rows of
+ * the ledger read the page already made, in Events' own words (`eventLabel`,
+ * `outcomeState`). Four states, never conflated:
+ *   loading     the read is out;
+ *   unavailable the ledger could not be read — never "no events";
+ *   empty       it was read and holds no row in its window (a measured zero);
+ *   rows        up to RECENT_EVENTS, newest first, with the raw action kept.
+ * When Events has narrowed the read, `filtered` says so: the list is then the
+ * newest matching rows, not the newest rows.
+ */
+export function recentEvents(feed) {
+  if (!feed || feed.state === 'loading') return { state: 'loading', rows: [] };
+  if (feed.state !== 'ready') return { state: 'unavailable', rows: [] };
+  const fd = feed.value || {};
+  const partial = (fd.sources || []).some((s) => !s.available);
+  const filtered = (fd.filter && fd.filter !== 'all') || Object.keys(fd.applied || {}).length > 0;
+  const rows = (fd.rows || []).slice(0, RECENT_EVENTS).map((r, i) => {
+    const { label, raw } = eventLabel(r);
+    const { state, word } = outcomeState(r);
+    return {
+      key: r.key ?? `${r.source}-${r.at}-${i}`,
+      label, raw, state, word,
+      at: stampOf(r.at) || 'No timestamp recorded',
+      actor: r.actor_identity?.label || r.actor || null,
+      source: r.source,
+    };
+  });
+  return { state: rows.length ? 'rows' : 'empty', rows, partial, filtered: !!filtered };
 }
 
 const TAB_LABELS = {
   overview: 'Overview', events: 'Events', access: 'Access', privacy: 'Privacy', trust: 'Trust', 'ai-safety': 'AI Safety', resilience: 'Resilience',
 };
 const labelOfTab = (k) => TAB_LABELS[k] || 'Overview';
+
+/**
+ * D5247 — a card whose store is past its age says so. A card that would
+ * otherwise read as fine (Healthy, Verified, Measured zero) becomes Stale; a
+ * card already in a worse state keeps it, and its freshness line names the
+ * stale store either way, so an old read is never presented as current.
+ */
+const STALE_OVERRIDES = new Set(['healthy', 'verified', 'measured_zero']);
+function markStale(areas, stores, now) {
+  return areas.map((a) => {
+    const old = (AREA_STORES[a.id] || []).map((k) => stores[k]).filter((r) => r?.freshness === 'stale');
+    if (old.length === 0 || !a.state) return a;
+    const line = old.map((r) => `${SOURCE_LABELS[r.key] || r.key}: ${freshnessOf(r, now).text}`).join(' · ');
+    return { ...a, state: STALE_OVERRIDES.has(a.state) ? 'stale' : a.state, stale: true, freshness: line };
+  });
+}
 
 /**
  * Status by area — eight cells, each reporting its own evidence. While a

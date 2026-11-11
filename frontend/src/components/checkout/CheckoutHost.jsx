@@ -4,8 +4,11 @@ import { loadPlans } from '../../lib/planPrices';
 import { heldCard } from '../../lib/pricingModel';
 import { isSuperAdminUser, shellRoleFor } from '../../lib/shellRole';
 import { useViewMode } from '../../contexts/ViewModeContext';
-import CheckoutSheet from './CheckoutSheet';
+import { lazySheet } from './lazySheet';
 import { CHECKOUT_EVENT, TAB_OF_FAMILY, familyOfKey, planForKey } from './checkoutEntry';
+
+// #4574 (H4): loaded when a plan is first asked for, not in every member's first download.
+const CheckoutSheet = lazySheet(() => import('./CheckoutSheet'), 'Checkout');
 
 /**
  * D1054 (#2905) — the one place the checkout sheet opens outside Pricing.

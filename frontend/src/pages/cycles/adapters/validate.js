@@ -18,6 +18,8 @@
  *   real output through every function.
  */
 
+import { formatMinorOrCount } from '../../../lib/money.js';
+
 /**
  * The seven modules, as `services/cycleValidate.ts` lists them. The module page
  * builds its tabs from this rather than reading the whole overview again;
@@ -170,7 +172,7 @@ function demandSignals(s) {
 
 const STATUS_PARTS = [
   ['untested', 'Untested', 'grey'], ['testing', 'Testing', 'v2'], ['supported', 'Supported', 'ok'],
-  ['refuted', 'Refuted', 'bad'], ['inconclusive', 'Inconclusive', 'muted'], ['not_recorded', 'Fit not recorded', 'warn'],
+  ['contested', 'Contested', 'warn'], ['refuted', 'Refuted', 'bad'], ['inconclusive', 'Inconclusive', 'muted'], ['not_recorded', 'Fit not recorded', 'warn'],
 ];
 
 function experiments(s) {
@@ -277,8 +279,11 @@ export function figure(f) {
 
 // ---------- Records ----------------------------------------------------------
 
-const CLAIM_TONE = { supported: 'ok', refuted: 'bad', testing: 'v2', untested: 'grey', inconclusive: 'muted', not_recorded: 'warn' };
-const CLAIM_WORD = { supported: 'Supported', refuted: 'Refuted', testing: 'Testing', untested: 'Untested', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
+// D4586 (#4586): Contested is methodology v2's, for a claim past the bar with material contradiction.
+const CLAIM_TONE = { supported: 'ok', contested: 'warn', refuted: 'bad', testing: 'v2', untested: 'grey', inconclusive: 'muted', not_recorded: 'warn' };
+const CLAIM_WORD = { supported: 'Supported', contested: 'Contested', refuted: 'Refuted', testing: 'Testing', untested: 'Untested', inconclusive: 'Inconclusive', not_recorded: 'Fit not recorded' };
+/** D4586 § 6: a lane move inside 14 days, and one made only by the methodology changing on unchanged evidence. */
+const MOVED_WORD = { recent: ' · Moved', method: ' · Method changed' };
 const FIT = { strong: ['Strong', 'ok'], partial: ['Partial', 'v2'], none: ['None', 'grey'] };
 const CONSENT = { agreed: ['Agreed · deck-eligible', 'ok'], declined: ['Declined', 'bad'] };
 /** #4411: a recording pill never borrows the quote permission. */
@@ -341,7 +346,8 @@ const pill = (map, v) => (map[v] ? { text: map[v][0], tone: map[v][1] } : null);
 const word = (map, v) => (v == null ? null : map[v] || String(v));
 const money = (cents, currency, period) => {
   if (!num(cents)) return null;
-  const amount = (cents / 100).toLocaleString('en-US', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 });
+  // D5373: at the currency's own decimals (a whole amount drops them); a missing or unlisted code names the stored count.
+  const amount = formatMinorOrCount(cents, currency ? String(currency).toUpperCase() : 'USD', { locale: 'en-US', trimWhole: true });
   return `${amount}${PERIOD[period] ?? ''}`;
 };
 const trend = (n) => (!num(n) ? null : n === 0 ? 'no change' : `${n > 0 ? '▲' : '▼'} ${Math.abs(n)}`);
@@ -453,7 +459,7 @@ export const RECORDS = {
       hypothesis: r.hypothesis ?? null,
       // D697: a retired claim reads Retired; one whose lane moved in the last 14 days says so beside its status.
       status: r.retired === true ? { text: 'Retired', tone: 'grey' }
-        : CLAIM_WORD[r.status] ? { text: `${CLAIM_WORD[r.status]}${r.moved === 'recent' ? ' · Moved' : ''}`, tone: CLAIM_TONE[r.status] } : null,
+        : CLAIM_WORD[r.status] ? { text: `${CLAIM_WORD[r.status]}${MOVED_WORD[r.moved] ?? ''}`, tone: CLAIM_TONE[r.status] } : null,
       // D4585: the interviews the status counts, labelled as interviews, and the claim's other linked evidence apart.
       evidence: supportCell(r),
       sprint: r.sprint ?? null,
@@ -462,7 +468,7 @@ export const RECORDS = {
     } }),
     filters: [
       // D697: the Worker's options, in its order. Sprint's are the venture's own, so only the read can list them.
-      { key: 'status', label: 'Status', options: ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded']
+      { key: 'status', label: 'Status', options: ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded']
         .map((value) => ({ value, label: CLAIM_WORD[value] })).concat([{ value: 'retired', label: 'Retired' }]) },
       { key: 'sprint', label: 'Sprint', options: [] },
       { key: 'strength', label: 'Strength', options: [{ value: 'anecdote', label: 'Anecdote' }, { value: 'pattern', label: 'Pattern' }, { value: 'measured', label: 'Measured' }, { value: 'not_recorded', label: 'Not recorded' }] },
@@ -500,10 +506,20 @@ export const RECORDS = {
  * is said apart, as not counted in the status. Nothing at all is null (the table's "Not recorded"), never "0".
  */
 export function supportCell(r) {
-  const n = num(r?.evidence) ? r.evidence : 0;
   const l = r?.linked_evidence || {};
   const other = ['interview', 'signal', 'metric', 'experiment'].reduce((t, k) => t + (num(l[k]) ? l[k] : 0), 0);
+  // D4586 (#4586): with the v2 counts, each interview once, then support, contradiction and unknown fit together.
+  // An interview touching both directions is in both counts and named once more as "in both".
+  const v2 = num(r?.interviews) && num(r?.supporting) && num(r?.contradicting);
+  const n = v2 ? r.interviews : num(r?.evidence) ? r.evidence : 0;
   if (!n && !other) return null;
-  const head = `${n} interview${n === 1 ? '' : 's'}${n && EVIDENCE[r.strength] ? ` · ${EVIDENCE[r.strength][0]}` : ''}`;
-  return other ? `${head} · ${other} other linked, not in status` : head;
+  const parts = [`${n} interview${n === 1 ? '' : 's'}`];
+  if (v2 && n) {
+    parts.push(`${r.supporting} for`, `${r.contradicting} against`);
+    if (num(r.fit_unrecorded) && r.fit_unrecorded > 0) parts.push(`${r.fit_unrecorded} fit not recorded`);
+    if (num(r.both) && r.both > 0) parts.push(`${r.both} in both`);
+  }
+  if (n && EVIDENCE[r.strength]) parts.push(EVIDENCE[r.strength][0]);
+  if (other) parts.push(`${other} other linked, not in status`);
+  return parts.join(' · ');
 }

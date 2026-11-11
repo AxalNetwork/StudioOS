@@ -51,6 +51,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
 | `studio/` | D1419 (#3698): the Studio modularity canvas — the module grid all four `/studio` homes draw below their fixed blocks, Customise with Done as the one save, the module map, the notices, and the tile builders (`studio/tiles/`). Layouts come from the Worker's `/api/studio` through `studioLayoutApi`; Eadwyn's layout proposals wait behind `studio/studioProposalsAdapter.js` (#3864). Start at `studio/README.md`. |
+| `spinout/` | D4474 (#4474, part 3 of #3704): `MultiLicenceSpinoutLab.jsx`, `/spinout-lab` for a member who holds two or more licences: the Lab block (`SpinoutLabPage`) and the Investor block (`SpinoutLabInvestorPage`), in licence order. Start at `spinout/README.md`. |
 | `testing/` | Product testing's owner side (D815): the programme form, the applicants panel with Pick and Decline, and the pure model they share. A partner's zone (`partner/offers/TestingZone.jsx`) and HQ's console (`admin/consoles/ProductTestingConsole.jsx`) both mount them. |
 | `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
 | `subsidiary/` | A territory licence holder's read of their own licence. |

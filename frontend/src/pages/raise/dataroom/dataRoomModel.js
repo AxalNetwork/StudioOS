@@ -28,6 +28,7 @@
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { accessNow, grantAttribution, grantIsActive, noAccessReason, tierOf } from '../dataRoomRead.js';
+import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 
 export const SLUG = 'data-room';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -48,11 +49,9 @@ const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
 /** True when CycleRoute's record id under this module is a tab, not a file. */
 export const isDataRoomTab = (slug, id) => slug === SLUG && TAB_WORDS.has(String(id ?? ''));
 
-/** The query a tab keeps: the venture only. */
+/** The query a tab keeps: the venture only, in the one form (D5074, `ventureQuery.js`). */
 export function tabSearch(search = '') {
-  const from = new URLSearchParams(String(search || '').replace(/^\?/, ''));
-  const project = from.get('project_id') || from.get('project');
-  return project && /^[1-9]\d*$/.test(project) ? `?project_id=${project}` : '';
+  return ventureSearch(ventureRef(search)?.id);
 }
 
 export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch(search)}`;
@@ -100,12 +99,13 @@ export function movedTarget(kind, search = '', hash = '', id = null) {
 /** True for a file record's number under the module: the old record page, never a tab word. */
 export const isOldFileAddress = (slug, id) => slug === SLUG && /^[1-9]\d*$/.test(String(id ?? ''));
 
-/** The venture's uid, which the founder's data-room read is keyed on, from the projects list. */
-export function projectUidOf(projects, projectId) {
-  const list = Array.isArray(projects) ? projects : (projects?.items || []);
-  const hit = list.find((p) => String(p?.id) === String(projectId));
-  return hit?.uid ? String(hit.uid) : null;
-}
+/**
+ * D5074 (#5074): whether the room read allows `capability` (`upload`, `edit`,
+ * `set_gate`, `delete`, `share`, `send_nda`, `deck_source`, …). The map is the
+ * Worker's (`services/dataRoomCapabilities.ts`), the rule its writes enforce;
+ * a read without it allows nothing, and no control is drawn from `role`.
+ */
+export const roomCan = (room, capability) => room?.capabilities?.[capability] === true;
 
 /** "24 Oct 2026" from an ISO date or stamp; anything else is "Not recorded". */
 export function day(s) {
@@ -156,3 +156,10 @@ export function grantRows(room, now = Date.now()) {
   }));
 }
 
+/**
+ * D5079 (#5079) — what Home says when the room is not this viewer's to read.
+ * A refusal and an admin's `summary` answer are both "not shown", not "empty":
+ * neither is a claim about what the room holds.
+ */
+export const ROOM_REFUSED_LINE = 'You do not have access to this venture’s data room.';
+export const ROOM_SUMMARY_LINE = 'This room is not yours to read. Open a tab and give a reason, and it opens read only.';

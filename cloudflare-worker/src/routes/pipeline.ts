@@ -1,7 +1,12 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
-import { requireAuth, canAccessFounderResource } from '../auth';
+import { requireAuth } from '../auth';
+import { holdsLicence } from '../services/accountLicences';
+import {
+  pipelineCan, pipelineProject, readablePipelineScope,
+  type PipelineCapability, type PipelinePrincipal, type PipelineProject,
+} from '../services/pipelineAccess';
 import { notifyPipelineRoom } from '../services/realtime';
 import { decodeCursor, encodeCursor } from '../util/keyset';
 import { clampLimit } from '../util/pagination';
@@ -24,7 +29,35 @@ const STAGES = ['idea', 'mvp_dev', 'traction_review', 'decision_gate', 'spinout_
 // deliberately excluded (Investor UX audit ④): they observe and vote, they do
 // not drive the studio's MVP pipeline or decide Kill gates. Community voting
 // (POST /pipeline/votes/:id) is separate and stays open to any session.
-const ADVANCE_ROLES = new Set(['admin', 'partner']);
+//
+// D4676: that operator rule is now held to the TARGET PROJECT. Every per-project
+// door asks `services/pipelineAccess.ts` (read, edit, review, spin-out), so a
+// partner operates only on a venture they are an accepted owner or co-founder
+// member of, and the list, the detail and the realtime room read the same set.
+// Creating a project has no target yet; it keeps the operator rule, read from
+// the licences the account holds rather than one scalar role.
+const canCreate = (user: PipelinePrincipal) => user.role === 'admin' || holdsLicence(user, 'partner');
+
+const REFUSAL: Record<PipelineCapability, string> = {
+  read: 'You cannot read this venture\'s pipeline.',
+  edit: 'Only an admin, or a partner who is a member of this venture, can change its MVP tasks or metrics.',
+  review: 'Only an admin, or a partner who is a member of this venture, can review or advance it.',
+  spinout: 'Only an admin, or a partner who is a member of this venture, can decide its gate.',
+};
+
+/**
+ * D4676: the one door for a per-project act. A project that does not exist is
+ * 404; one that exists but this account may not act on is 403 for a write and
+ * 404 for a read, so an account that cannot read a venture does not learn from
+ * the read that it exists.
+ */
+async function projectFor(c: any, user: PipelinePrincipal, projectId: number, cap: PipelineCapability): Promise<PipelineProject | Response> {
+  const project = await pipelineProject(c.env, projectId);
+  if (!project) return c.json({ error: 'Not found' }, 404);
+  if (await pipelineCan(c.env, user, project, cap)) return project;
+  if (cap === 'read') return c.json({ error: 'Not found' }, 404);
+  return c.json({ error: REFUSAL[cap], code: 'pipeline_forbidden', capability: cap }, 403);
+}
 const REVIEW_RATE_LIMIT = 60; // per hour
 
 const MIGRATED = new WeakMap<object, boolean>();
@@ -170,8 +203,15 @@ pipeline.get('/active', async (c) => {
   await ensureSchema(c.env);
   // All KYC-approved partners can view; admins see everything; founders see only their own
   const sql = getSQL(c.env);
-  const isAdmin = user.role === 'admin';
-  const isFounder = user.role === 'founder';
+  // D4676: the list is exactly the set the detail read admits — the founder
+  // profile this account owns through, and the ventures it is an accepted
+  // member of — so nothing on a card (its metrics, its gate, its tasks) reaches
+  // an account that could not open the venture. It used to return every
+  // project to any account that was not a founder.
+  const scope = await readablePipelineScope(c.env, user);
+  const isAdmin = scope.all;
+  const scopeFounderId = scope.all ? null : scope.founderId;
+  const memberJson = JSON.stringify(scope.all ? [] : scope.memberIds);
   // D4677: a rejected, archived or spun-out (stage 'spun_out', set when the subsidiary goes independent) venture leaves the active board; its
   // history stays readable (`?include_closed=1`, and every per-deal route).
   const includeClosed = c.req.query('include_closed') === '1' ? 1 : 0;
@@ -184,7 +224,7 @@ pipeline.get('/active', async (c) => {
   // same way /projects and /dashboard do: a founder who switches company in
   // the sidebar expects this list to show only that company's projects, and
   // without the clause the switcher visibly does nothing on the Build desk.
-  const companyId = isFounder ? await activeCompanyFor(c, user) : null;
+  const companyId = scopeFounderId !== null ? await activeCompanyFor(c, user) : null;
 
   // KEYSET PAGE, NOT A SILENT CAP (#4701). The list used to be `LIMIT 100` with
   // nothing after it, so the 101st project was unreachable and nothing said
@@ -202,28 +242,15 @@ pipeline.get('/active', async (c) => {
                 FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
                   AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
                 ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
-    : isFounder
-      ? companyId === null
-        ? await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
-                      p.status as project_status, p.created_at
-                    FROM projects p
-                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                      AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
-                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
-                    ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
-        : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
-                      p.status as project_status, p.created_at
-                    FROM projects p
-                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)
-                      AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
-                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
-                    ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`
-      : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
-                    p.status as project_status, p.created_at
-                  FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
-                    AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
-                  ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`;
+    : await sql`SELECT p.id, p.name, p.sector, p.stage as project_stage, p.founder_id,
+                  p.status as project_status, p.created_at
+                FROM projects p
+                WHERE ((${scopeFounderId} IS NOT NULL AND p.founder_id = ${scopeFounderId}
+                         AND (${companyId} IS NULL OR p.company_id = ${companyId} OR p.company_id IS NULL))
+                       OR p.id IN (SELECT value FROM json_each(${memberJson})))
+                  AND (${afterA} IS NULL OR p.created_at < ${afterA} OR (p.created_at = ${afterA} AND p.id < ${afterB}))
+                  AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))
+                ORDER BY p.created_at DESC, p.id DESC LIMIT ${limit + 1}`;
   const hasMore = (baseRowsPlus as any[]).length > limit;
   const baseRows = hasMore ? (baseRowsPlus as any[]).slice(0, limit) : baseRowsPlus;
   const lastBase: any = (baseRows as any[])[(baseRows as any[]).length - 1];
@@ -232,16 +259,11 @@ pipeline.get('/active', async (c) => {
   // The whole authorized population, whatever page this is.
   const [totalRow] = isAdmin
     ? await sql`SELECT COUNT(*) AS n FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
-    : isFounder
-      ? companyId === null
-        ? await sql`SELECT COUNT(*) AS n FROM projects p
-                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
-        : await sql`SELECT COUNT(*) AS n FROM projects p
-                    WHERE p.founder_id = (SELECT founder_id FROM users WHERE id = ${user.id})
-                      AND (p.company_id = ${companyId} OR p.company_id IS NULL)
-                      AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`
-      : await sql`SELECT COUNT(*) AS n FROM projects p WHERE (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`;
+    : await sql`SELECT COUNT(*) AS n FROM projects p
+                WHERE ((${scopeFounderId} IS NOT NULL AND p.founder_id = ${scopeFounderId}
+                         AND (${companyId} IS NULL OR p.company_id = ${companyId} OR p.company_id IS NULL))
+                       OR p.id IN (SELECT value FROM json_each(${memberJson})))
+                  AND (${includeClosed} = 1 OR (p.status NOT IN ('rejected', 'archived') AND p.stage != 'spun_out'))`;
   const total = Number((totalRow as any)?.n ?? 0);
 
   // Per-project verified read: HMAC re-checked, audit row written. A row
@@ -298,7 +320,7 @@ pipeline.get('/active', async (c) => {
 
 pipeline.post('/projects', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can create pipeline projects' }, 403);
+  if (!canCreate(user)) return c.json({ error: 'Only admins or partners can create pipeline projects' }, 403);
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
@@ -327,9 +349,10 @@ pipeline.post('/projects', async (c) => {
 
 pipeline.post('/projects/:id/advance', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can advance stages' }, 403);
   await ensureSchema(c.env);
   const dealId = parseInt(c.req.param('id'));
+  const gateOrProject = await projectFor(c, user, dealId, 'review');
+  if (gateOrProject instanceof Response) return gateOrProject;
   let data: any;
   try { data = await c.req.json(); } catch { data = {}; }
   const target = data?.stage;
@@ -353,14 +376,12 @@ pipeline.get('/projects/:id/detail', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const dealId = parseInt(c.req.param('id'));
+  // D4676: the same read rule as the list, asked before anything is read.
+  const allowed = await projectFor(c, user, dealId, 'read');
+  if (allowed instanceof Response) return allowed;
   const sql = getSQL(c.env);
   const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
   if (!project) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  // IDOR guard: founders may only see their own pipeline.
-  if (!canAccessFounderResource(user, project.founder_id)) {
-    await sql.end();
-    return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
-  }
   const stages = await sql`SELECT * FROM project_stages WHERE deal_id = ${dealId} ORDER BY id`;
   const tasks = await sql`SELECT * FROM mvp_tasks WHERE deal_id = ${dealId} ORDER BY status, created_at`;
   const metrics = await sql`SELECT * FROM metrics_snapshots WHERE deal_id = ${dealId} ORDER BY snapshot_date DESC LIMIT 30`;
@@ -390,12 +411,13 @@ pipeline.get('/projects/:id/detail', async (c) => {
 
 pipeline.post('/mvp-tasks', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can create MVP tasks' }, 403);
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const dealId = parseInt(data?.deal_id);
   if (!dealId || !data?.title) return c.json({ error: 'deal_id and title required' }, 400);
+  const allowed = await projectFor(c, user, dealId, 'edit');
+  if (allowed instanceof Response) return allowed;
   const r: any = await c.env.DB.prepare(`INSERT INTO mvp_tasks (deal_id, title, description, assigned_to, status, ai_generated, due_date) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`)
     .bind(dealId, String(data.title).slice(0, 300), data.description ? String(data.description).slice(0, 2000) : null, data.assigned_to || null, data.status || 'todo', data.ai_generated ? 1 : 0, data.due_date || null).first();
   await logAction(c.env, 'mvp_task_created', user.id, { deal_id: dealId, task_id: r?.id });
@@ -404,9 +426,16 @@ pipeline.post('/mvp-tasks', async (c) => {
 
 pipeline.patch('/mvp-tasks/:id', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Forbidden' }, 403);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
+  // D4676: a task is changed through ITS venture's rule. It used to be changed
+  // by id alone, so any operator could edit any venture's task.
+  const task = Number.isInteger(id) && id > 0
+    ? await c.env.DB.prepare('SELECT id, deal_id FROM mvp_tasks WHERE id = ?').bind(id).first<{ id: number; deal_id: number }>()
+    : null;
+  if (!task) return c.json({ error: 'Not found' }, 404);
+  const permitted = await projectFor(c, user, Number(task.deal_id), 'edit');
+  if (permitted instanceof Response) return permitted;
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const allowed: Record<string, any> = {};
@@ -416,7 +445,7 @@ pipeline.patch('/mvp-tasks/:id', async (c) => {
   if (!Object.keys(allowed).length) return c.json({ error: 'No valid fields' }, 400);
   const setClauses = Object.keys(allowed).map(k => `${k} = ?`).join(', ');
   const values = Object.values(allowed);
-  await c.env.DB.prepare(`UPDATE mvp_tasks SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, id).run();
+  await c.env.DB.prepare(`UPDATE mvp_tasks SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deal_id = ?`).bind(...values, id, task.deal_id).run();
   return c.json({ ok: true });
 });
 
@@ -426,12 +455,13 @@ pipeline.patch('/mvp-tasks/:id', async (c) => {
 
 pipeline.post('/metrics/snapshot', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can record metrics' }, 403);
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const dealId = parseInt(data?.deal_id);
   if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+  const allowed = await projectFor(c, user, dealId, 'edit');
+  if (allowed instanceof Response) return allowed;
   const v = validateKeyMetrics(data?.key_metrics);
   if (!v.ok) return c.json({ error: v.error }, 400);
   const km = v.clean;
@@ -457,15 +487,17 @@ pipeline.post('/metrics/snapshot', async (c) => {
 
 pipeline.post('/decision-gate/review', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can trigger reviews' }, 403);
   await ensureSchema(c.env);
-  const quota = await aiQuotaGate(c.env, user.id, { limit: REVIEW_RATE_LIMIT });
-  if (!quota.ok) return c.json({ error: quota.error }, quota.status);
-
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
   const dealId = parseInt(data?.deal_id);
   if (!dealId) return c.json({ error: 'deal_id required' }, 400);
+  // D4676: the venture's rule first, so a refused account spends no quota and
+  // no model run on a venture it may not review.
+  const allowed = await projectFor(c, user, dealId, 'review');
+  if (allowed instanceof Response) return allowed;
+  const quota = await aiQuotaGate(c.env, user.id, { limit: REVIEW_RATE_LIMIT });
+  if (!quota.ok) return c.json({ error: quota.error }, quota.status);
 
   const sql = getSQL(c.env);
   const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
@@ -545,7 +577,6 @@ pipeline.post('/decision-gate/review', async (c) => {
 
 pipeline.patch('/decision-gate/decide', async (c) => {
   const user = await requireAuth(c);
-  if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Only admins or partners can decide' }, 403);
   await ensureSchema(c.env);
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
@@ -562,6 +593,9 @@ pipeline.patch('/decision-gate/decide', async (c) => {
   //    a lost race moves nothing.
   const before: any = await c.env.DB.prepare(`SELECT id, deal_id, status FROM decision_gates WHERE id = ?`).bind(gateId).first();
   if (!before) return c.json({ error: 'Gate not found' }, 404);
+  // D4676: deciding is the spin-out capability on THIS gate's venture.
+  const allowed = await projectFor(c, user, Number(before.deal_id), 'spinout');
+  if (allowed instanceof Response) return allowed;
   const at = new Date().toISOString().replace('T', ' ').slice(0, 23);
   const dealId = before.deal_id;
   // Every statement below carries the same literal guard: the gate is decided,

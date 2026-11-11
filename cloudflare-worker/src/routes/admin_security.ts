@@ -63,7 +63,7 @@ import {
 } from '../auth';
 import {
   listActiveSessions, countActiveSessions, listLiveImpersonations, countSupportSessions, revokeUserSession, endImpersonation,
-  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT,
+  SESSION_TOKEN_HOURS, SESSION_BULK_LIMIT, SESSION_LIST_LIMIT,
 } from '../services/userSessions';
 import {
   SESSION_STATUS_DEFINITIONS, supportSessionStatus, supportSessionLimitMinutes, parseStoredTs,
@@ -74,28 +74,36 @@ import {
 } from '../services/securityIdentity';
 import { loadTokenAnomalies } from '../services/tokenAnomalies';
 import { logAdminAction } from '../services/adminAudit';
-import { loadGuardrailCounters } from '../services/aiRouter';
+import { loadGuardrailCounters, loadRecentGuardVerdicts } from '../services/aiRouter';
 import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
 import { screeningSummary } from '../services/sanctions';
-import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
+import { readBackupHeartbeat, readRestoreDrill, readRestoreDrillHistory } from '../services/backup';
 import { branchBindings } from '../services/branches';
-import { emergencyScope, deploymentOutcomes } from '../services/emergencyScope';
 import {
-  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, DSR_CLOCK_DAYS,
-  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE,
+  emergencyScope, deploymentOutcomes, signOutOnBranches, type BranchSignOutTarget,
+} from '../services/emergencyScope';
+import { EMERGENCY_REASON_MIN, EMERGENCY_OP_KEY_RE } from '../rpc/branchOps';
+import {
+  HQ_DSR_OUTCOMES, isHqDsrOutcome, loadDsrHistory, closeDsrRequest, dsrDaysLeft, dsrOverdue, DSR_CLOCK_RULE, DSR_CLOCK_LABEL,
+  dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
 import { ensureAdminAuditLogTable } from './admin';
+import { freshnessFor, type SecuritySource } from '../services/securitySourceFreshness';
 
 const r = new Hono<{ Bindings: Env }>();
 
 const IMPERSONATION_LIMIT = 25;
 const MIN_REASON = 8;
+/** D4800 — at most this many administrators are named in the MFA finding; the count is exact regardless. */
+const ADMIN_MFA_GAP_LIMIT = 50;
 
 
 type Absent = { available: false; reason: string };
 const absent = (reason: string): Absent => ({ available: false, reason });
+/** D5247 — a freshness row's fields beside a ledger source, whose own key stays `table`. */
+const withoutSource = ({ source: _s, ...rest }: { source: string } & Record<string, unknown>) => rest;
 
 /**
  * D152 — THE SENTENCE WAS WRONG ON TWO OF ITS THREE CLAUSES, AND IT IS
@@ -176,7 +184,12 @@ async function aiSafetyBlock(env: Env) {
   // D481 — the token anomalies carry their own availability, their own table
   // and their own window (24 hours against the seven days before), stated in
   // their own `how`; they answer whatever the rollup below does.
-  const always = { token_anomalies: await loadTokenAnomalies(env), not_counted: AI_SAFETY_NOT_COUNTED };
+  const always = {
+    token_anomalies: await loadTokenAnomalies(env),
+    // D4803 — SE08's "Recent guard verdicts", its own read with its own availability.
+    recent_verdicts: await loadRecentGuardVerdicts(env, AI_SAFETY_WINDOW_DAYS),
+    not_counted: AI_SAFETY_NOT_COUNTED,
+  };
   // D4691 — `available` is earned, not asserted: a rollup that threw is the
   // whole block unreadable, with its reason, never a block of zeros.
   let counters: Awaited<ReturnType<typeof loadGuardrailCounters>>;
@@ -365,7 +378,23 @@ r.get('/overview', async (c) => {
          FROM users WHERE LOWER(role) = 'admin' AND is_active = 1`,
     ).first<{ total: number; with_mfa: number }>();
     if (!row) throw new Error('no row');
-    return { admins_total: Number(row.total) || 0, admins_with_mfa: Number(row.with_mfa) || 0 };
+    // D4800 — which administrators the gap is, so the finding can name them
+    // (open question A's recommended A2). Same predicate as the count, read in
+    // the same part: if the names cannot be read, the whole part is unreadable
+    // rather than a count beside an empty list.
+    const gap = await env.DB.prepare(
+      `SELECT id, name, email
+         FROM users
+        WHERE LOWER(role) = 'admin' AND is_active = 1
+          AND NOT (tfa_methods IS NOT NULL AND tfa_methods <> '[]')
+        ORDER BY id
+        LIMIT ?`,
+    ).bind(ADMIN_MFA_GAP_LIMIT).all<{ id: number; name: string | null; email: string | null }>();
+    return {
+      admins_total: Number(row.total) || 0,
+      admins_with_mfa: Number(row.with_mfa) || 0,
+      admins_without_mfa: (gap.results || []).map((a) => ({ id: Number(a.id), name: a.name ?? null, email: a.email ?? null })),
+    };
   });
 
   // D4691 — `kyc` keeps its shape (status → count) when read; an unreadable
@@ -424,9 +453,12 @@ r.get('/overview', async (c) => {
       // clock at zero. The arithmetic lives in the service so it can fail a
       // test — it had never had one.
       days_left: dsrDaysLeft(requestedMs, now),
-      // D4675 — the instant the clock runs out, in UTC, so the rule is stated
-      // rather than inferred from a day count.
+      // D4675 — the instant the clock runs out (the end of the due day, UTC),
+      // so the rule is stated rather than inferred from a day count.
       deadline_at: dsrDeadlineIso(requestedMs),
+      // D4675 part 2 (Q2 = B): overdue from that instant. The same fact as
+      // `days_left < 0`, said once so no reader has to derive it.
+      overdue: dsrOverdue(requestedMs, now),
       // null rather than 0 whenever the ledger could not be read — see above.
       prior_requests: ledgerAvailable ? (seen?.prior ?? 0) : null,
       last_outcome: ledgerAvailable ? (seen?.outcome ?? null) : null,
@@ -434,7 +466,7 @@ r.get('/overview', async (c) => {
     };
   });
 
-  return c.json({
+  const body = {
     audit,
     impersonations,
     sessions,
@@ -452,7 +484,9 @@ r.get('/overview', async (c) => {
       ...(dsrRows === null
         ? { reason: 'The open erasure requests could not be read on this database. This is not a claim that none are open.' }
         : {}),
-      clock_days: DSR_CLOCK_DAYS,
+      // D4675 part 2 (Q1 = B): the rule, named. It replaced `clock_days: 30`;
+      // a calendar month has no fixed day count, so none is sent.
+      clock: { rule: DSR_CLOCK_RULE, label: DSR_CLOCK_LABEL },
       kinds: DSR_KINDS,
       rows: dsr,
       // D200 — H23 draws the DSR clocks "by territory · runs against the
@@ -464,6 +498,9 @@ r.get('/overview', async (c) => {
       branches: { bound: boundBranchCount(env), reason: DSR_BRANCH_REASON },
       ledger_available: ledgerAvailable,
       ...(ledgerReason ? { ledger_reason: ledgerReason } : {}),
+      // D4803 (SE06) — the requests closed in the last 90 days, with who closed
+      // them; its own read and its own unreadable state.
+      recent: await loadRecentDsrClosures(env),
     },
     // D200 — the ledger H23 draws: rows today and refused sign-ins in 24h,
     // with the retention, the kinds, and what it deliberately does not count.
@@ -483,10 +520,33 @@ r.get('/overview', async (c) => {
     // its own key; never one green light inferred from the other.
     backup_dr: {
       backup: await readBackupHeartbeat(env, 'd1'),
+      // D4803 — SE09's KV snapshots card: the worker cron's own heartbeat,
+      // read with the same validation. KV has no restore drill.
+      kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
+      drill_history: await readRestoreDrillHistory(env, now),
       not_recorded: DR_NOT_RECORDED,
     },
-  });
+  };
+
+  // D5247 — per store this read touched: whether it answered, the last good read, the store's own age and
+  // whether it is past it. The ledger's own stores carry the same fields on /governance's `sources[]`. A
+  // heartbeat or marker answered when R2 answered (one never written, or invalid, is a read that found no
+  // evidence); its evidence time is the recovery point or the marker's stamp.
+  const r2Answered = (state: string) => state !== 'unreadable';
+  const { backup: hbD1, kv: hbKv } = body.backup_dr;
+  const marker = body.backup_dr.drill;
+  const sources = await freshnessFor(env, [
+    { source: 'admin_audit_log', answered: body.audit.available },
+    { source: 'impersonation_sessions', answered: body.impersonations.available },
+    { source: 'security_events', answered: body.security_events.available },
+    { source: 'sanctions_screenings', answered: body.sanctions.available },
+    { source: 'backup_d1', answered: r2Answered(hbD1.state), evidence_at: hbD1.available ? hbD1.recovery_point : null },
+    { source: 'backup_kv', answered: r2Answered(hbKv.state), evidence_at: hbKv.available ? hbKv.recovery_point : null },
+    { source: 'restore_drill', answered: r2Answered(marker.state), evidence_at: 'at' in marker ? marker.at : null },
+  ], now);
+
+  return c.json({ ...body, sources });
 });
 
 // ── Canvas H7 · the privileged-action feed ────────────────────────────────
@@ -1199,7 +1259,9 @@ r.get('/governance', async (c) => {
   rows.sort((a, b) => {
     const av = Number.isNaN(a.ts) ? -Infinity : a.ts;
     const bv = Number.isNaN(b.ts) ? -Infinity : b.ts;
-    return bv - av;
+    // D4699 — rows at the same instant (several stores, or one store in one second) fall back to
+    // their key, so the same rows come back in the same order on every read and every page.
+    return bv - av || (a.key < b.key ? 1 : a.key > b.key ? -1 : 0);
   });
   // More is held when any store filled its own page, OR when the stores
   // together returned more than one page (two stores of forty each): the rows
@@ -1298,6 +1360,11 @@ r.get('/governance', async (c) => {
     accessExports = absent('The export records could not be read.');
   }
 
+  // D5247 — each store this read touched gains its last good read and its own age, so the Overview can mark it
+  // Stale; a store this filter did not read is not in `sources` and is not recorded.
+  const fresh = await freshnessFor(env, sources.map((s) => ({ source: s.table as SecuritySource, answered: s.available })));
+  const withFreshness = sources.map((s, i) => ({ ...s, ...withoutSource(fresh[i]) }));
+
   return c.json({
     filter,
     filters: FEED_FILTERS,
@@ -1312,7 +1379,7 @@ r.get('/governance', async (c) => {
     page_split_second: split,
     outcomes: FEED_OUTCOMES,
     stores: FEED_SOURCES,
-    sources,
+    sources: withFreshness,
     // What no store can say, said once rather than once per row.
     tenant_available: false,
     tenant_reason:
@@ -1405,9 +1472,19 @@ r.get('/sessions', async (c) => {
 
   // UNREADABLE IS A 503, NOT AN EMPTY LIST. "Nobody is signed in" is the one
   // answer a security desk must never give by accident.
+  // D4699 — `before_id` continues the list strictly below that session id (the last row's). Out of
+  // shape is refused with its field, never read as the first page.
+  const rawBefore = c.req.query('before_id');
+  let beforeId: number | null = null;
+  if (rawBefore !== undefined && rawBefore !== '') {
+    if (!/^[1-9][0-9]{0,15}$/.test(rawBefore)) {
+      return c.json({ error: 'The cursor is not a session id.', code: 'invalid_filter', field: 'before_id' }, 400);
+    }
+    beforeId = Number(rawBefore);
+  }
   let list: Awaited<ReturnType<typeof listActiveSessions>>;
   try {
-    list = await listActiveSessions(c.env, currentJti);
+    list = await listActiveSessions(c.env, currentJti, SESSION_LIST_LIMIT, beforeId);
   } catch {
     return c.json({
       error: 'Unreadable — the user_sessions table could not be read on this database. This is not a claim '
@@ -1441,6 +1518,8 @@ r.get('/sessions', async (c) => {
     token_hours: SESSION_TOKEN_HOURS,
     total: list.total,
     rows: list.rows,
+    // D4699 — Load more: the next page is `?before_id=<cursor.before_id>`; null when this is the last.
+    cursor: list.next_before_id ? { before_id: list.next_before_id } : null,
     impersonations,
     expiry_minutes: IMPERSONATION_EXPIRY_MINUTES,
     // D4669 — every act on this list reaches this deployment only.
@@ -1614,6 +1693,133 @@ r.post('/impersonations/:id/end', async (c) => {
     // message no longer has to explain a token outliving its session.
     message: 'The support session is ended. Its token is refused from its next request, and it can no longer '
       + 'be extended. The account holder\'s own sessions are untouched.',
+    scope: emergencyScope(c.env),
+  });
+});
+
+/**
+ * POST /api/admin/security/branch-sign-out
+ *
+ * D4669 part 2 (#4669) — the owner's option B: HQ's emergency sign-out may
+ * reach branch deployments, ON REQUEST, and each branch reports its own
+ * outcome. The ordinary acts above are unchanged and still write this
+ * deployment only; this is the separate act an operator chooses when an
+ * incident spans branches.
+ *
+ * Body: `{ branches: 'all' | string[], target, reason, op_key }`, where
+ * `target` is `{ kind: 'all' }` (every account on each branch named),
+ * `{ kind: 'account', email }` (the person's account on each branch named, by
+ * email, because HQ's ids mean nothing in another database) or
+ * `{ kind: 'account', user_id }` (one account HQ found on ONE branch).
+ *
+ * THE SAME BAR AS SIGNING EVERYONE OUT HERE (TOTP, a recent step-up, the
+ * elevation), checked before any binding is touched. The branch checks the
+ * caller is HQ, the reason, the operator's name and the key itself.
+ *
+ * EACH BRANCH IS ITS OWN ROW, and only an answer counts:
+ *   done         the branch said it acted (with how many accounts, and
+ *                `replayed` when this act was already on its record);
+ *   failed       the branch refused before writing: nothing changed there;
+ *   unreachable  not bound, or no answer in time: whether it acted is not
+ *                known, and it NEVER counts as done.
+ * The act is `done` only when every branch named said done, `failed` when none
+ * did, and `partial` otherwise — said as partial, never rounded either way.
+ *
+ * ONE KEY PER OPERATOR REQUEST. The page makes it when the dialog opens and
+ * resends it on Try again, and each branch answers a key it already holds
+ * with that record. So retrying a branch that timed out cannot sign anyone
+ * out twice or write a second audit row there.
+ *
+ * GATES THAT STAY: `HQ_RPC_SECRET` must be set (409 otherwise, as for every
+ * secret-carrying branch call), and a branch without a binding is reported,
+ * not skipped.
+ */
+r.post('/branch-sign-out', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const { reason, body } = await reasonOf(c);
+  if (reason.length < EMERGENCY_REASON_MIN) {
+    return c.json({
+      error: `A reason of at least ${EMERGENCY_REASON_MIN} characters is required. It is stored here and on every branch reached.`,
+      code: 'reason_required',
+    }, 400);
+  }
+  const opKey = String(body?.op_key ?? '');
+  if (!EMERGENCY_OP_KEY_RE.test(opKey)) {
+    return c.json({ error: 'The request carries no operation key, so a retry could not be recognised. Reopen the dialog.', code: 'op_key_required' }, 400);
+  }
+
+  const t = (body?.target ?? {}) as Record<string, unknown>;
+  let target: BranchSignOutTarget;
+  if (t.kind === 'all') {
+    target = { kind: 'all' };
+  } else if (t.kind === 'account' && typeof t.email === 'string' && t.email.includes('@')) {
+    target = { kind: 'account', email: t.email.trim().toLowerCase().slice(0, 320) };
+  } else if (t.kind === 'account' && Number.isInteger(Number(t.user_id)) && Number(t.user_id) > 0) {
+    target = { kind: 'account', user_id: Number(t.user_id) };
+  } else {
+    return c.json({ error: 'Name the target: every account, or one account by email (or by its id on one branch).', code: 'invalid_target' }, 400);
+  }
+
+  const bound = (() => { try { return branchBindings(c.env).map((b) => b.code); } catch { return null; } })();
+  if (bound === null) {
+    return c.json({ error: 'Which branches are bound could not be read, so no branch was asked. Nothing changed.', code: 'branches_unreadable' }, 503);
+  }
+  let codes: string[];
+  if (body?.branches === 'all') {
+    codes = bound;
+  } else if (Array.isArray(body?.branches)) {
+    codes = [...new Set((body.branches as unknown[]).map((x) => String(x ?? '').trim().toLowerCase()).filter(Boolean))];
+  } else {
+    return c.json({ error: 'Name the branches: every bound branch, or a list of branch codes.', code: 'invalid_branches' }, 400);
+  }
+  if (codes.length === 0) {
+    return c.json({ error: 'No branch is bound here, so there is no branch to reach. Nothing changed.', code: 'no_branch' }, 409);
+  }
+  if ('user_id' in target && codes.length !== 1) {
+    return c.json({ error: 'An account id belongs to one branch. Name that one branch, or name the person by email.', code: 'invalid_target' }, 400);
+  }
+  if (!c.env.HQ_RPC_SECRET) {
+    return c.json({
+      error: 'HQ_RPC_SECRET is not set on this Worker, so a branch cannot tell this call from any other Worker in the account. '
+        + 'Set it, then try again. No branch was asked.',
+      code: 'hq_rpc_secret_unset',
+    }, 409);
+  }
+
+  const result = await signOutOnBranches(c.env, codes, {
+    secret: c.env.HQ_RPC_SECRET,
+    hq_actor_name: String((actor as { name?: string }).name || actor.email || 'Axal VC HQ').slice(0, 200),
+    reason,
+    op_key: opKey,
+    target,
+  });
+
+  // HQ's record of the act, after the outcome is known and whatever it is: an
+  // operator's request to sign people out of other deployments is recorded
+  // even when no branch answered. `logAdminAction` never throws, so its
+  // failure never turns a reported outcome into an error.
+  await logAdminAction(c.env, actor.id, actor.email, 'security_branch_sign_out', {
+    reason,
+    op_key: opKey,
+    target_kind: target.kind,
+    ...('email' in target ? { target_email: target.email } : {}),
+    ...('user_id' in target ? { branch_user_id: target.user_id } : {}),
+    outcome: result.outcome,
+    branches: result.outcomes.map((o) => ({ code: o.deployment, outcome: o.outcome, affected: o.affected ?? null })),
+  });
+
+  const done = result.outcomes.filter((o) => o.outcome === 'done').length;
+  const message = result.outcome === 'done'
+    ? `Every branch asked (${done}) answered that it signed the ${target.kind === 'all' ? 'accounts' : 'account'} out.`
+    : result.outcome === 'partial'
+      ? `${done} of ${result.outcomes.length} branches answered that they acted. The others are listed with what is known; a branch that did not answer is not counted as done.`
+      : 'No branch answered that it acted. Each is listed with what is known.';
+  return c.json({
+    ok: result.outcome === 'done',
+    outcome: result.outcome,
+    op_key: opKey,
+    message,
+    outcomes: result.outcomes,
     scope: emergencyScope(c.env),
   });
 });

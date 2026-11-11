@@ -30,7 +30,13 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
-import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON } from '../services/templateSafety';
+import { logAdminAction } from '../services/adminAudit';
+import { checksOf, recordOf, sendRefusal } from '../services/crossBorder';
+import { signedCopyOf, sniffDocument } from '../services/governance';
+import { confirmationFor } from '../services/governanceHighRisk';
+import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
+import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
+import { contractAttention, isAttentionFilter, matchesAttention } from '../services/contractAttention';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -98,11 +104,19 @@ function publicationRefusal(c: AppContext, e: unknown) {
 
 adminContracts.post('/published-templates/:slug/publish', async (c) => {
   const admin = await requireHqAuthoring(c);
-  let input: { version?: unknown };
+  let input: { version?: unknown; reason?: unknown; confirm?: unknown };
   try { input = await c.req.json(); } catch { input = {}; }
   if (!input || !Number.isSafeInteger(input.version)) return c.json({ error: 'Send the version to publish.', code: 'version_required' }, 400);
+  // D4811 part 13 (CT-16 "Activate template"): publishing makes a version approved for use, so it is a
+  // high-risk action: a reason, the typed word PUBLISH, then a recent step-up (after the form checks,
+  // so a mistyped word never asks for a code). The reason is kept in the publication's audit row.
+  // D4811 part 15 (CT-16, owner's answer 2026-11-09): Activate is the Super Admin's alone.
+  if (!isSuperAdmin(admin as any)) return refuse(c, 403, { code: 'super_admin_only', message: 'Only the Super Admin publishes a template. Nothing was published.' });
+  const confirmed = confirmationFor('PUBLISH', input);
+  if (!confirmed.ok) return refuse(c, confirmed.refusal.status, { code: confirmed.refusal.code, message: confirmed.refusal.message.replace('saved', 'published') });
+  await requireStepUp(c);
   try {
-    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email));
+    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email), confirmed.reason);
     if (!published) return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
     const { body_md: _body, ...publication } = published;
     return c.json({ ok: true, publication });
@@ -593,9 +607,18 @@ async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<U
     }
   }
 
+  // D4811 part 18: an externally signed copy attached to a legacy agreement is its execution evidence.
+  const evidence = new Map<string, { r2_key: string; file_sha256: string }>();
+  try {
+    const ev: any[] = await sql.unsafe('SELECT agreement_uid, r2_key, file_sha256 FROM agreement_evidence', []);
+    for (const r of ev) evidence.set(String(r.agreement_uid), { r2_key: r.r2_key, file_sha256: r.file_sha256 });
+  } catch { /* the table is not migrated here yet: no evidence attached */ }
+
   return docs.map(d => {
     const p = d.project_id ? projectMap.get(d.project_id) : null;
-    return decorateDocType(enrichDocRow(d, p?.name || null, p?.founder_email || null));
+    const ev = evidence.get(String(d.uid));
+    const row = ev ? { ...d, file_key: ev.r2_key, file_sha256: ev.file_sha256 } : d;
+    return decorateDocType(enrichDocRow(row, p?.name || null, p?.founder_email || null));
   });
 }
 
@@ -898,6 +921,9 @@ adminContracts.get('/', async (c) => {
   if (provider && !['native', 'docusign'].includes(provider)) return c.json({ error: 'Unknown provider' }, 400);
   if (partyRole && !['founder', 'investor', 'advisor', 'partner', 'axal'].includes(partyRole)) return c.json({ error: 'Unknown party role' }, 400);
   if (projectId && (!/^\d+$/.test(projectId) || !Number.isSafeInteger(Number(projectId)) || Number(projectId) < 1)) return c.json({ error: 'Invalid project id' }, 400);
+  // D4811 part 3 — a metric strip cell's records (`services/contractAttention.ts`).
+  const attention = c.req.query('attention') || '';
+  if (attention && !isAttentionFilter(attention)) return c.json({ error: 'invalid_contract_query', message: 'Choose a valid attention filter.', field: 'attention' }, 400);
   const template = c.req.query('template') || '';
   const signedRecent = c.req.query('signed_recent');
   if (signedRecent && signedRecent !== 'true') return c.json({ error: 'signed_recent must be true' }, 400);
@@ -909,6 +935,9 @@ adminContracts.get('/', async (c) => {
   try {
     let rows = await loadAllContracts(sql, true);
     if (c.req.query('recorded') === 'true') rows = await recordedSigningDates(c, rows);
+    // A stalled send is known only from a recorded send date, so that filter always reads the recorded rows.
+    if (attention === 'stalled' && c.req.query('recorded') !== 'true') rows = await recordedSigningDates(c, rows);
+    if (attention) { const now = Date.now(); rows = rows.filter(r => matchesAttention(r as any, attention as any, now)); }
 
     if (status && status !== 'all') rows = rows.filter(r => status === 'awaiting_signature'
       ? ['sent', 'generated'].includes(r.status) : r.status === status);
@@ -1043,6 +1072,38 @@ adminContracts.get('/templates/store/:slug/fields', async (c) => {
   }
 });
 
+/**
+ * D4811 part 3 — the strip's two library cells. Legal review required: the
+ * templates counsel has not reviewed (restricted, D803) and the governance
+ * records in review; Restricted: those templates and the confidential
+ * governance records. Counts only. Governance is HQ's (D4563): a branch
+ * Worker reads it as not recorded, and a failed read is unreadable, never 0.
+ */
+async function reviewAttention(c: AppContext) {
+  let templates: number | null = null;
+  try {
+    const rows = (await c.env.DB.prepare('SELECT slug FROM legal_templates WHERE is_active = 1').all<{ slug: string }>()).results || [];
+    templates = rows.filter(r => isRestrictedSlug(r.slug)).length;
+  } catch { templates = null; }
+  let review: number | null = null, confidential: number | null = null;
+  let governance: 'hq' | 'branch' | 'unreadable' = 'hq';
+  if (c.env.BRANCH_CODE) governance = 'branch';
+  else {
+    try {
+      const g = await c.env.DB.prepare(
+        `SELECT SUM(CASE WHEN status = 'review' THEN 1 ELSE 0 END) AS review,
+                SUM(CASE WHEN confidential = 1 AND status <> 'archived' THEN 1 ELSE 0 END) AS confidential
+           FROM governance_documents`,
+      ).first<{ review: number | null; confidential: number | null }>();
+      review = Number(g?.review ?? 0); confidential = Number(g?.confidential ?? 0);
+    } catch { governance = 'unreadable'; }
+  }
+  return {
+    legal_review: { templates, governance: review, governance_scope: governance },
+    restricted: { templates, governance: confidential, governance_scope: governance },
+  };
+}
+
 // GET /api/admin/contracts/stats — aggregate counters across the union.
 adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
@@ -1082,6 +1143,11 @@ adminContracts.get('/stats', async (c) => {
         : null,
       signed_last_30d: signedRecent,
       pending_signature: byStatus.sent + byStatus.generated,
+      // D4811 part 3 — the metric strip (board CT-01), over the rows the page lists.
+      attention: {
+        ...contractAttention((recorded ? rows : await recordedSigningDates(c, loaded)) as any[], Date.now()),
+        ...(await reviewAttention(c)),
+      },
     });
   } catch {
     return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
@@ -1305,6 +1371,52 @@ adminContracts.get('/partner-deals', async (c) => {
 });
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
+/**
+ * D4811 part 4 — GET /api/admin/contracts/search?q=&historical=true
+ * (`services/contractSearch.ts`, board CT-13). One ranked list across
+ * templates, agreements and governance records, current versions first and
+ * earlier versions only on request. A store that cannot be read is named in
+ * `unreadable`, never reported as no match. Governance is HQ's; a
+ * confidential record is the Super Admin's alone, and is not even counted
+ * for anyone else.
+ */
+adminContracts.get('/search', async (c) => {
+  const admin = await requireAdmin(c);
+  const q = searchQuery(c.req.query('q'));
+  if (!q) return c.json({ error: 'invalid_search', message: 'Type at least 2 characters (at most 200) to search.', field: 'q' }, 400);
+  const historical = c.req.query('historical') === 'true';
+  const superAdmin = isSuperAdmin(admin as any);
+  const unreadable: string[] = [];
+  const results: SearchResult[] = [];
+  let hidden = 0;
+  try {
+    const t = await searchTemplates(c.env, q);
+    results.push(...t.current.filter(r => r.score > 0));
+    const h = t.historical.filter(r => r.score > 0);
+    if (historical) results.push(...h); else hidden += h.length;
+  } catch { unreadable.push('template'); }
+  const governanceScope = c.env.BRANCH_CODE ? 'branch' : 'hq';
+  if (governanceScope === 'hq') {
+    try {
+      const g = await searchGovernance(c.env, q, superAdmin);
+      results.push(...g.current.filter(r => r.score > 0));
+      const h = g.historical.filter(r => r.score > 0);
+      if (historical) results.push(...h); else hidden += h.length;
+    } catch { unreadable.push('governance'); }
+  }
+  const sql = getSQL(c.env);
+  try { results.push(...searchAgreements(await loadAllContracts(sql, true), q)); }
+  catch { unreadable.push('agreement'); }
+  finally { await sql.end(); }
+  const ranked = rank(results);
+  const counts = { template: 0, agreement: 0, governance: 0 };
+  for (const r of ranked) counts[r.type] += 1;
+  return c.json({
+    q, historical, total: ranked.length, items: ranked.slice(0, SEARCH_LIMIT).map(({ score, ...r }) => r),
+    counts, hidden_historical: historical ? 0 : hidden, unreadable, governance_scope: governanceScope, limit: SEARCH_LIMIT,
+  });
+});
+
 adminContracts.get('/:uid/history', async (c) => {
   const admin = await requireAdmin(c);
   const sql = getSQL(c.env);
@@ -1532,6 +1644,10 @@ adminContracts.post('/:uid/resend', async (c) => {
     // single recipient or signing token, so resend is not meaningful.
     // Return a deterministic 400 (action_not_supported) so the UI can
     // surface a clear toast instead of a 500.
+    // D4811 part 17 (CT-15): an agreement with open cross-border checks is not sent for signature.
+    const crossBorder = sendRefusal(await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>() ?? null);
+    if (crossBorder) return refuse(c, 409, { code: crossBorder.code, message: crossBorder.message, extra: { open: crossBorder.open } });
+
     if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
       return c.json(
         { error: 'Resend is not supported for this contract source', source: ref.source },
@@ -1595,10 +1711,135 @@ adminContracts.post('/:uid/resend', async (c) => {
   }
 });
 
+// D4811 (#4811) part 18 — attach execution evidence to a legacy agreement
+// marked signed with none (CT-02 "Attach execution evidence", CT-12 B): the
+// externally signed copy (PDF, at most 25 MB), the date it was signed, the
+// signatory and the uploader's attestation. Written once; a store whose row
+// carries its own evidence (an envelope) is refused, as is an agreement that
+// is not marked signed or already has evidence.
+adminContracts.get('/:uid/evidence', async (c) => {
+  await requireAdmin(c);
+  const row = await c.env.DB.prepare('SELECT agreement_uid, file_sha256, file_bytes, signed_on, signatory, attested_by, attached_at FROM agreement_evidence WHERE agreement_uid = ?')
+    .bind(c.req.param('uid')).first<any>().catch(() => null);
+  return c.json({ evidence: row ?? null });
+});
+
+adminContracts.post('/:uid/evidence', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref: ContractRowRef = null;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was attached.' });
+  if (ref.source !== 'documents') return refuse(c, 409, { code: 'evidence_not_supported', message: 'This agreement carries its own signing record; there is no copy to attach here. Nothing was attached.' });
+  if (String(ref.row.status).toLowerCase() !== 'signed') return refuse(c, 409, { code: 'not_marked_signed', message: 'Only an agreement marked signed takes execution evidence. Nothing was attached.' });
+  const prior = await c.env.DB.prepare('SELECT 1 AS ok FROM agreement_evidence WHERE agreement_uid = ?').bind(uid).first();
+  if (prior) return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. It is written once. Nothing was attached.' });
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'File storage is not available here. Nothing was attached.' });
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get('file');
+  if (!file || typeof file === 'string') return refuse(c, 422, { code: 'file_required', message: 'Choose the signed PDF. Nothing was attached.' });
+  const bytes = new Uint8Array(await (file as File).arrayBuffer());
+  if (!bytes.length || bytes.length > 25 * 1024 * 1024) return refuse(c, 413, { code: 'file_size', message: 'The signed copy must be a PDF of at most 25 MB. Nothing was attached.' });
+  if (sniffDocument(bytes) !== 'application/pdf') return refuse(c, 415, { code: 'pdf_required', message: 'Upload the signed copy as a PDF. Nothing was attached.' });
+  const copy = signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, new Date().toISOString().slice(0, 10));
+  if (!copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message.replace('uploaded', 'attached') });
+  const sha = await sha256HexBytes(bytes);
+  const key = `contracts/evidence/${uid}.pdf`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { agreement_uid: uid } });
+  try {
+    await c.env.DB.prepare('INSERT INTO agreement_evidence (agreement_uid, r2_key, file_sha256, file_bytes, signed_on, signatory, attested_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(uid, key, sha, bytes.length, copy.signed_on, copy.signatory, Number(admin.id)).run();
+  } catch {
+    return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. Nothing was attached.' });
+  }
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_evidence_attached', { uid, sha256: sha, bytes: bytes.length, signed_on: copy.signed_on });
+  return c.json({ evidence: { agreement_uid: uid, file_sha256: sha, file_bytes: bytes.length, signed_on: copy.signed_on, signatory: copy.signatory, attested_by: Number(admin.id) } }, 201);
+});
+
+// D4811 (#4811) part 17 — the cross-border record (board CT-15): seven checks
+// on an agreement with a foreign counterparty. Governing law is what was
+// entered, never defaulted. While a check is open, resend refuses (below).
+adminContracts.get('/:uid/cross-border', async (c) => {
+  await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row ?? null);
+  return c.json({ uid, record: row ?? null, checks: checksOf(row ?? null), open: blocked?.open ?? [] });
+});
+
+adminContracts.put('/:uid/cross-border', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref: ContractRowRef = null;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was saved.' });
+  const parsed = recordOf(await c.req.json().catch(() => ({})));
+  if (!parsed.ok) return refuse(c, parsed.refusal.status, { code: parsed.refusal.code, message: parsed.refusal.message });
+  const v = parsed.value;
+  await c.env.DB.prepare(`INSERT INTO agreement_cross_border (agreement_uid, counterparty_jurisdiction, governing_law, performance_countries,
+      tax_status, tax_note, data_transfer_status, data_transfer_note, local_counsel_status, local_counsel_note, sanctions_status, sanctions_note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(agreement_uid) DO UPDATE SET counterparty_jurisdiction = excluded.counterparty_jurisdiction, governing_law = excluded.governing_law,
+      performance_countries = excluded.performance_countries, tax_status = excluded.tax_status, tax_note = excluded.tax_note,
+      data_transfer_status = excluded.data_transfer_status, data_transfer_note = excluded.data_transfer_note,
+      local_counsel_status = excluded.local_counsel_status, local_counsel_note = excluded.local_counsel_note,
+      sanctions_status = excluded.sanctions_status, sanctions_note = excluded.sanctions_note, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+    .bind(uid, v.counterparty_jurisdiction, v.governing_law, v.performance_countries, v.tax_status, v.tax_note, v.data_transfer_status, v.data_transfer_note,
+      v.local_counsel_status, v.local_counsel_note, v.sanctions_status, v.sanctions_note, Number(admin.id), new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')).run();
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row);
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_cross_border_saved', { uid, source: ref.source, open: blocked?.open.length ?? 0 });
+  return c.json({ uid, record: row, checks: checksOf(row), open: blocked?.open ?? [] });
+});
+
 // POST /api/admin/contracts/:uid/void — UNION dispatch.
 // Task #5 (Z): now requires a free-text `reason` (>=5 chars) and mirrors
 // the void into `dd_audit_log` when the envelope is referenced by any
 // open dd_findings row (so the diligence audit trail captures it).
+// D4811 (#4811) part 11 — the "Link recipient" repair (boards CT-01, CT-02): an
+// agreement whose recipient has no company is linked to a deal, and through it
+// to the company. Only the stores that carry a company link can be repaired:
+// a legacy `documents` row takes the deal's company, an envelope takes the deal.
+// A row that is already linked is never relinked here, and nothing else on it
+// changes. Pairwise NDAs and partner deals have no company link to make.
+adminContracts.post('/:uid/link', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  const dealId = Number(body?.deal_id);
+  if (!Number.isInteger(dealId) || dealId <= 0) {
+    return refuse(c, 422, { code: 'deal_required', message: 'Choose the deal this agreement belongs to. Nothing was linked.' });
+  }
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available.' });
+    if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
+      return refuse(c, 409, { code: 'link_not_supported', message: 'This agreement is kept between its parties and has no company link to make. Nothing was linked.' });
+    }
+    const deals: any[] = await sql`SELECT d.id, d.uid, d.project_id, p.name AS project_name FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ${dealId} LIMIT 1`;
+    if (!deals.length) return refuse(c, 404, { code: 'deal_not_found', message: 'That deal is not available. Nothing was linked.' });
+    const deal = deals[0];
+    const already = ref.source === 'documents' ? ref.row.project_id != null : ref.row.deal_id != null;
+    if (already) {
+      return refuse(c, 409, { code: 'already_linked', message: 'This agreement is already linked. It is not relinked from here. Nothing was changed.' });
+    }
+    if (ref.source === 'documents') {
+      await sql`UPDATE documents SET project_id = ${deal.project_id}, updated_at = CURRENT_TIMESTAMP WHERE uid = ${ref.row.uid} AND project_id IS NULL`;
+    } else {
+      await sql`UPDATE esign_envelopes SET deal_id = ${deal.id} WHERE id = ${ref.row.id} AND deal_id IS NULL`;
+    }
+    await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_linked', {
+      uid, source: ref.source, deal_id: Number(deal.id), project_id: Number(deal.project_id),
+    });
+    return c.json({ ok: true, uid, source: ref.source, deal_id: Number(deal.id), project_name: deal.project_name });
+  } finally {
+    await sql.end();
+  }
+});
+
 adminContracts.post('/:uid/void', async (c) => {
   // Task #6 — voiding a contract is irreversible from the recipient's POV
   // (their magic link stops working). Gate on TOTP step-up.

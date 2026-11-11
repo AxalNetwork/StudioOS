@@ -12,9 +12,13 @@ import { teamAgentsApi } from '../../../lib/api/teamAgents';
 import { adminAiAgentsApi } from '../../../lib/api/adminAiAgents';
 import { AgentRadar } from '../../team/SkillParts';
 import { radarVector } from '../../team/skillsModel';
+import { DefinitionEditor } from './DefinitionEditor.jsx';
+import { ReleaseEvidence } from './ReleaseEvidence.jsx';
+import { definitionEditable } from './definitionModel';
 import {
   COMPANY_COLUMNS, FROM_AXAL_VC, NOT_RECORDED, REASON_MIN,
   ROSTER_COLUMNS, SUBTITLE, areaTiles, skillRow, viewFor,
+  AREAS, EVAL_STATE, SKILL_FILTERS, SOURCE, STATUS, filterSkills, roleOptions, sourceOnlyRows,
   PERSONA_STATUS, VALUE_KEYS, actionWord, defaultsArmed, filterRoster, fitLabel, historyLine, identityChanges, retireLines,
   rosterCounts, rosterRefusal, rosterRow, saveArmed, statusArmed, teamLine, usd, valueLabel,
 } from './aiAgentsModel';
@@ -384,11 +388,37 @@ function Unreadable({ onRetry, what }) {
   );
 }
 
-function FromAxal({ skills, onRetry }) {
-  const [q, setQ] = useState('');
+const SELECT = 'h-9 rounded-lg border border-axal-hairline bg-white px-2 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+
+/** D4537: the source library files, read on their own; an unreadable library never hides the stored skills. */
+function useLibraryFiles(attempt) {
+  const [library, setLibrary] = useState({ status: 'loading', skills: null });
+  useEffect(() => {
+    const controller = new AbortController();
+    setLibrary({ status: 'loading', skills: null });
+    adminHqSkillsApi.library({ signal: controller.signal })
+      .then((r) => {
+        if (!Array.isArray(r?.skills)) throw new Error('unreadable');
+        if (!controller.signal.aborted) setLibrary({ status: 'ready', skills: r.skills });
+      })
+      .catch(() => { if (!controller.signal.aborted) setLibrary({ status: 'unreadable', skills: null }); });
+    return () => controller.abort();
+  }, [attempt]);
+  return library;
+}
+
+export function FromAxal({ skills, onRetry }) {
+  const [filters, setFilters] = useState(SKILL_FILTERS);
+  const [libraryAttempt, setLibraryAttempt] = useState(0);
+  const library = useLibraryFiles(libraryAttempt);
   const [selected, setSelected] = useState(() => new Set());
-  const all = useMemo(() => (skills.hq ?? []).map(skillRow), [skills.hq]);
-  const rows = useMemo(() => all.filter((r) => !q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q.toLowerCase())), [all, q]);
+  const librarySlugs = useMemo(() => (library.status === 'ready' ? new Set(library.skills.map((x) => x.slug)) : null), [library]);
+  const all = useMemo(() => (skills.hq ?? []).map((card) => skillRow(card, librarySlugs)), [skills.hq, librarySlugs]);
+  const rows = useMemo(() => filterSkills(all, filters), [all, filters]);
+  const roles = useMemo(() => roleOptions(all), [all]);
+  const sourceOnly = useMemo(() => (library.status === 'ready' ? sourceOnlyRows(library.skills) : []), [library]);
+  const filtered = Object.values(filters).some(Boolean);
+  const set = (key) => (e) => setFilters((f) => ({ ...f, [key]: e.target.value }));
   const toggle = (uid) => setSelected((s) => { const n = new Set(s); if (n.has(uid)) n.delete(uid); else n.add(uid); return n; });
   if (skills.status === 'loading') return <p role="status" className={MUTED}>Reading the library…</p>;
   if (skills.status === 'unreadable') return <Unreadable onRetry={onRetry} what={`The ${FROM_AXAL_VC} skills`} />;
@@ -401,26 +431,50 @@ function FromAxal({ skills, onRetry }) {
         ))}
       </div>
       <Card className="space-y-2 px-4 py-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search skills" aria-label="Search skills"
+        <div className="flex flex-wrap items-center gap-2" data-testid="ai-agents-skill-filters">
+          <input type="search" value={filters.q} onChange={set('q')} placeholder="Search skills" aria-label="Search skills" data-testid="skill-filter-q"
             className="h-9 min-w-[220px] flex-1 rounded-lg border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+          <select value={filters.status} onChange={set('status')} aria-label="Status" className={SELECT} data-testid="skill-filter-status">
+            <option value="">Any status</option>
+            {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={filters.area} onChange={set('area')} aria-label="Area" className={SELECT} data-testid="skill-filter-area">
+            <option value="">Any area</option>
+            {AREAS.map((a) => <option key={a.slug} value={a.slug}>{a.label}</option>)}
+          </select>
+          <select value={filters.role} onChange={set('role')} aria-label="Role" className={SELECT} data-testid="skill-filter-role">
+            <option value="">Any role</option>
+            {roles.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+          </select>
+          <select value={filters.evals} onChange={set('evals')} aria-label="Evaluation" className={SELECT} data-testid="skill-filter-evals">
+            <option value="">Any evaluation</option>
+            {Object.entries(EVAL_STATE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={filters.source} onChange={set('source')} aria-label="Source" className={SELECT} disabled={!librarySlugs} data-testid="skill-filter-source">
+            <option value="">Any source</option>
+            {Object.entries(SOURCE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          {filtered ? <button type="button" onClick={() => setFilters(SKILL_FILTERS)} className="text-[12.5px] font-semibold underline" data-testid="skill-filter-clear">Clear filters</button> : null}
         </div>
+        <p className={MUTED} role="status" data-testid="skill-filter-count">{filtered ? `${rows.length} of ${all.length} skills` : `${all.length} skill${all.length === 1 ? '' : 's'}`}</p>
         <BulkBar rows={all} selected={selected} onDone={() => { setSelected(new Set()); onRetry(); }} />
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-[12.5px]" data-testid="ai-agents-skill-table">
-            <thead className={EYEBROW}><tr className="text-left"><th className="py-1.5 pr-2"><span className="sr-only">Select</span></th>{['Skill', 'Area · level', 'Version · status', 'Agents', 'Tools', 'Golden cases', 'Last eval'].map((h) => <th key={h} className="py-1.5 pr-3">{h}</th>)}</tr></thead>
+          <table className="w-full min-w-[860px] text-[12.5px]" data-testid="ai-agents-skill-table">
+            <caption className="sr-only">{`${FROM_AXAL_VC} skills in the store`}</caption>
+            <thead className={EYEBROW}><tr className="text-left"><th scope="col" className="py-1.5 pr-2"><span className="sr-only">Select</span></th>{['Skill', 'Source', 'Area · level', 'Version · status', 'Agents', 'Tools', 'Golden cases', 'Last eval'].map((h) => <th key={h} scope="col" className="py-1.5 pr-3">{h}</th>)}</tr></thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8} className="py-6 text-center text-axal-muted dark:text-gray-400">{q ? 'No skill matches.' : `No ${FROM_AXAL_VC} skills yet.`}</td></tr>
+                <tr><td colSpan={9} className="py-6 text-center text-axal-muted dark:text-gray-400" data-testid="ai-agents-skill-empty">{filtered ? 'No skill matches these filters.' : `No ${FROM_AXAL_VC} skills yet.`}</td></tr>
               ) : rows.map((r) => (
                 <tr key={r.uid} className="border-t border-axal-hairline/60 align-top dark:border-gray-800" data-testid="ai-agents-skill-row">
                   <td className="py-2 pr-2"><input type="checkbox" checked={selected.has(r.uid)} onChange={() => toggle(r.uid)} aria-label={`Select ${r.name}`} className="h-4 w-4" data-testid="ai-agents-skill-select" /></td>
-                  <td className="py-2 pr-3"><Link to={`/hq/ai-agents/skills/${encodeURIComponent(r.uid)}/edit`} className="font-semibold text-axal-ink hover:underline dark:text-gray-100">{r.name}</Link>{r.slug ? <div className="font-mono text-[11px] text-axal-muted dark:text-gray-500">{r.slug}</div> : null}</td>
+                  <td className="py-2 pr-3"><Link to={`/hq/ai-agents/skills/${encodeURIComponent(r.uid)}/edit`} className="font-semibold text-axal-ink hover:underline dark:text-gray-100">{r.name}</Link>{r.slug ? <div className="font-mono text-[11px] text-axal-muted dark:text-gray-500">{r.slug}</div> : null}{r.roles.length ? <div className="text-[11px] text-axal-muted dark:text-gray-500">{r.roles.map((x) => x.label).join(' · ')}</div> : null}</td>
+                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400" data-testid="ai-agents-skill-source">{r.source ? SOURCE[r.source] : NOT_RECORDED}</td>
                   <td className="py-2 pr-3 text-axal-ink dark:text-gray-200">{r.area} · {r.level}</td>
                   <td className="py-2 pr-3"><span className="mr-1.5 font-mono">{r.version}</span><Chip tone={r.status.tone}>{r.status.label}</Chip></td>
                   <td className="py-2 pr-3 font-mono tabular-nums">{r.agents}</td>
-                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.tools.length ? r.tools.join(' · ') : 'Not recorded'}</td>
-                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.golden}</td>
+                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.tools.length ? r.tools.join(' · ') : NOT_RECORDED}</td>
+                  <td className="py-2 pr-3 text-axal-muted dark:text-gray-400"><div>{r.golden}</div>{r.evals ? <Chip tone={EVAL_STATE[r.evals].tone}>{EVAL_STATE[r.evals].label}</Chip> : null}</td>
                   <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">{r.lastEval}</td>
                 </tr>
               ))}
@@ -428,7 +482,40 @@ function FromAxal({ skills, onRetry }) {
           </table>
         </div>
       </Card>
+      <SourceOnly library={library} rows={sourceOnly} onRetry={() => setLibraryAttempt((n) => n + 1)} />
     </div>
+  );
+}
+
+/** D4537: library files not yet in the store: a definition, its check and its seed state. Never a skill row. */
+function SourceOnly({ library, rows, onRetry }) {
+  if (library.status === 'loading') return <p role="status" className={MUTED}>Reading the source library…</p>;
+  if (library.status === 'unreadable') return <Unreadable onRetry={onRetry} what="The source library" />;
+  if (!rows.length) return <p className={MUTED} data-testid="ai-agents-source-only-none">Every source library file is in the store.</p>;
+  return (
+    <Card className="space-y-2 px-4 py-4" data-testid="ai-agents-source-only">
+      <div>
+        <p className="text-[13px] font-bold text-axal-ink dark:text-gray-100">In the source library, not in the store</p>
+        <p className={MUTED}>These are definition files. They have no status, version or agents until they are seeded as drafts.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-[12.5px]">
+          <caption className="sr-only">Source library files not yet seeded</caption>
+          <thead className={EYEBROW}><tr className="text-left">{['File', 'Area · level', 'Golden cases', 'Check', 'Seed'].map((h) => <th key={h} scope="col" className="py-1.5 pr-3">{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.slug} className="border-t border-axal-hairline/60 align-top dark:border-gray-800" data-testid="ai-agents-source-only-row">
+                <td className="py-2 pr-3"><span className="font-semibold text-axal-ink dark:text-gray-100">{r.name}</span><div className="font-mono text-[11px] text-axal-muted dark:text-gray-500">{r.slug}</div></td>
+                <td className="py-2 pr-3 text-axal-ink dark:text-gray-200">{r.area} · {r.level}</td>
+                <td className="py-2 pr-3 font-mono tabular-nums">{r.cases == null ? NOT_RECORDED : r.cases}</td>
+                <td className="py-2 pr-3">{r.check.ok ? <Chip tone="published">Valid</Chip> : <span className="text-red-700 dark:text-red-300"><Chip tone="draft">Not valid</Chip> {r.check.code ? <code className="font-mono text-[11px]">{r.check.code}</code> : null} {r.check.line}</span>}</td>
+                <td className="py-2 pr-3 text-axal-muted dark:text-gray-400">Not seeded</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
@@ -473,10 +560,13 @@ export function Editor({ view, viewerUid }) {
         <h3 className={H2}>Allowed tools</h3><p className={MUTED}>{data.skill.tools == null ? 'Not recorded' : data.skill.tools.join(' · ') || 'No tools'}</p>
         <h3 className={H2}>Output kind</h3><p className={MUTED}>{show(data.skill.output_kind)}</p>
       </Card>
-      {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ['Published versions', data.versions], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
+      {definitionEditable(data.skill.status) ? <DefinitionEditor skill={data.skill} onSaved={() => setAttempt(n => n + 1)} /> : null}
+      {[['Golden cases', data.cases], ['Evaluation results', data.evals], ['Review', data.review], ...(data.retired ? [['Retirement', data.retired]] : [])].map(([title, value]) => <Card key={title} className="space-y-2 px-4 py-4">
         <h3 className={H2}>{title}</h3>
         <div className={MUTED}><SkillRecord value={value} /></div>
       </Card>)}
+      {/* D4537: the release decision and each version's manifest, in words (replaces the raw versions record). */}
+      <ReleaseEvidence freshness={data.freshness} versions={data.versions} />
       <SkillLifecycle data={data} viewerUid={viewerUid ?? user?.uid} reload={() => setAttempt(n => n + 1)} />
     </>}
   </div>;

@@ -33,13 +33,17 @@ router.get('/', async (c) => {
     const from = calendarDay(c.req.query('from')); const to = calendarDay(c.req.query('to'));
     if (!from || !to || from > to) throw new Refused(400, 'A valid inclusive from and to date range is required');
     const channel = c.req.query('channel') || null; const campaign = c.req.query('campaign') || null;
-    const rows = await c.env.DB.prepare(`SELECT i.*, g.uid AS channel_uid, g.name AS channel_name, g.kind AS channel_kind
+    const rows = await c.env.DB.prepare(`SELECT i.*, g.uid AS channel_uid, g.name AS channel_name, g.kind AS channel_kind,
+      (SELECT json_extract(d.body_json, '$.text') FROM publish_drafts d
+        WHERE d.calendar_item_id = i.id AND d.project_id = i.project_id AND d.author_user_id = ?
+        AND d.module = 'distribution' AND d.status = 'draft' AND d.origin = 'eadwyn' AND d.team_only_included = 0
+        ORDER BY d.id DESC LIMIT 1) AS draft_copy
       FROM content_calendar_items i LEFT JOIN growth_channels g ON g.id = i.channel_id AND g.project_id = i.project_id
       WHERE i.project_id = ? AND i.planned_on >= ? AND i.planned_on <= ?
       AND (? IS NULL OR g.uid = ?)
       AND (? IS NULL OR EXISTS (SELECT 1 FROM grow_campaign_items l JOIN grow_campaigns c ON c.id = l.campaign_id
         WHERE l.kind = 'content_item' AND l.ref_id = i.id AND c.project_id = i.project_id AND c.uid = ?))
-      ORDER BY i.planned_on, i.planned_at_time, i.uid`).bind(id, from, to, channel, channel, campaign, campaign).all<Record<string, unknown>>();
+      ORDER BY i.planned_on, i.planned_at_time, i.uid`).bind(user.id, id, from, to, channel, channel, campaign, campaign).all<Record<string, unknown>>();
     const links = await c.env.DB.prepare(`SELECT l.ref_id, c.uid, c.name, c.utm_campaign FROM grow_campaign_items l
       JOIN grow_campaigns c ON c.id = l.campaign_id WHERE c.project_id = ? AND l.kind = 'content_item' ORDER BY c.name, c.uid`).bind(id).all<{ ref_id: number; uid: string; name: string; utm_campaign: string | null }>();
     return c.json({ can_edit: await canAccessProject(c.env, user, project, { write: true }), pieces: (rows.results || []).map((i) => ({ ...i, status: i.source === 'notion' ? 'planned' : i.status,

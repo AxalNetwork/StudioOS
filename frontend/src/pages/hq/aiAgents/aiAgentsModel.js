@@ -136,21 +136,88 @@ export const statusOf = (s) => STATUS[s] ?? { label: s ? String(s) : NOT_RECORDE
  * One SA3 row from a library card (`GET /api/admin/ai-agents/skills`). A skill
  * with no golden cases or no eval run reads "Not recorded", never a pass count.
  */
-export function skillRow(card) {
+export function skillRow(card, librarySlugs = null) {
   const area = areaOf(card);
   return {
     uid: card.uid,
+    areaSlug: area ?? null,
+    roles: (card.roles ?? []).map((r) => (typeof r === 'string' ? { key: r, label: r } : r)).filter((r) => r?.key),
+    evals: evalState(card.golden),
+    source: sourceOf(card.slug, librarySlugs),
     name: card.name || card.slug || 'Untitled skill',
     slug: card.slug ?? null,
     area: area ? AREA_LABEL[area] : NOT_RECORDED,
     level: levelOf(card) ?? NOT_RECORDED,
     version: card.version ? `v${card.version}` : 'Not published',
     status: statusOf(card.status),
+    statusKey: card.status ?? null,
     agents: shown(card.agents ?? card.used_by),
     tools: (card.tools ?? []).map((t) => (typeof t === 'string' ? t : t.label ?? t.key)).filter(Boolean),
     golden: card.golden ? `${card.golden.pass} / ${card.golden.total}` : NOT_RECORDED,
     lastEval: card.last_eval ?? NOT_RECORDED,
   };
+}
+
+/**
+ * D4537: a stored skill's evaluation state, from the list's `golden` (live cases × required models under the current
+ * evidence). A missing result is never a pass: `partial` and `not_evaluated` are not `below_bar`, and `no_cases` is
+ * not `meets_bar`.
+ */
+export const EVAL_STATE = {
+  no_cases: { label: 'No golden cases', tone: 'muted' },
+  not_evaluated: { label: 'Not evaluated', tone: 'muted' },
+  partial: { label: 'Partly evaluated', tone: 'review' },
+  below_bar: { label: 'Below the bar', tone: 'draft' },
+  meets_bar: { label: 'Meets the bar', tone: 'published' },
+};
+export function evalState(golden) {
+  if (!golden || !Number.isFinite(golden.total)) return null;
+  if (golden.total === 0) return 'no_cases';
+  const missing = Number.isFinite(golden.not_evaluated) ? golden.not_evaluated : null;
+  if (missing == null) return null;
+  if (missing >= golden.total) return 'not_evaluated';
+  if (missing > 0) return 'partial';
+  return golden.meets_bar ? 'meets_bar' : 'below_bar';
+}
+
+/**
+ * D4537: where a stored skill's definition came from. `library` is a source-library file that was seeded into the
+ * store; `authored` was written in the store. Unknown until `GET /library` answers (null).
+ */
+export const SOURCE = { library: 'From a library file', authored: 'Authored in HQ' };
+export function sourceOf(slug, librarySlugs) {
+  if (!librarySlugs || !slug) return null;
+  return librarySlugs.has(slug) ? 'library' : 'authored';
+}
+
+/** D4537: the library files not in the store yet. They are definitions, never skills: no status, version or agents. */
+export function sourceOnlyRows(library = []) {
+  return library.filter((x) => x && !x.in_store).map((x) => ({
+    slug: x.slug,
+    name: x.name || x.slug,
+    area: AREA_LABEL[x.area] ?? NOT_RECORDED,
+    level: levelWord(x.level) ?? NOT_RECORDED,
+    cases: Number.isFinite(x.cases) ? x.cases : null,
+    check: x.check?.ok ? { ok: true, line: 'Valid' } : { ok: false, code: x.check?.code ?? null, line: x.check?.message || 'Not valid' },
+  }));
+}
+
+export const SKILL_FILTERS = { q: '', status: '', area: '', role: '', evals: '', source: '' };
+/** D4537: the From Axal list's filters. Each is exact; an empty one keeps every row. */
+export function filterSkills(rows, f = SKILL_FILTERS) {
+  const q = String(f.q ?? '').trim().toLowerCase();
+  return rows.filter((r) => (!q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q))
+    && (!f.status || r.statusKey === f.status)
+    && (!f.area || r.areaSlug === f.area)
+    && (!f.role || r.roles.some((x) => x.key === f.role))
+    && (!f.evals || r.evals === f.evals)
+    && (!f.source || r.source === f.source));
+}
+/** The roles the stored skills list, for the role filter, in first-seen order. */
+export function roleOptions(rows) {
+  const seen = new Map();
+  for (const r of rows) for (const x of r.roles) if (!seen.has(x.key)) seen.set(x.key, x.label);
+  return [...seen].map(([key, label]) => ({ key, label }));
 }
 
 /** SA3's area tiles: per area, its skills and how many are a draft or in review. */

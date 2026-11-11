@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { ADD_TOKENS_EVENT, ADD_TOKENS_PATH, addTokensHref, isAddTokensHref, packOfHref } from '../../lib/aiTokens';
-import PackSheet from './PackSheet';
+import { lazySheet } from './lazySheet';
+
+// #4574 (H4): loaded when Add tokens is first asked for, not in every member's first download.
+const PackSheet = lazySheet(() => import('./PackSheet'), 'Add tokens');
 
 /**
  * D1288 (#3371, CRP9) — the one Add tokens. Mounted once beside the checkout

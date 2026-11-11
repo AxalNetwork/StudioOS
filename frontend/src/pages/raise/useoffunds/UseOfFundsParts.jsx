@@ -6,6 +6,7 @@ import {
   NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
@@ -216,7 +217,7 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => (e?.message ? `${e.message}` : 'It was not saved. Read the plan again before retrying.');
+const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
 /** D5069: the plan changed after the dialog opened. Nothing was written. */
 export const isStale = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open');
 /** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
@@ -332,6 +333,47 @@ export function AddMilestoneDialog({ projectId, revision, onClose, onSaved, api 
           <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="Leave empty to keep it Not costed" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-milestone-cost" />
           <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not costed, never 0.</span></label>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-milestone-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
+ * D5375: edit or remove one planned hire. The hire's own `revision` goes with the save and the removal, so a
+ * hire changed in another tab is refused (409, the dialog stays open, Review latest) instead of replaced.
+ * The cost a year and its currency are not edited here, so nothing is converted through a fixed factor.
+ */
+export function EditHireDialog({ projectId, hire, onClose, onSaved, api = useOfFundsApi }) {
+  const [role, setRole] = useState(hire?.role ?? '');
+  const [section, setSection] = useState(hire?.category_key ?? 'product');
+  const [from, setFrom] = useState(hire?.start_month ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
+  const fromOk = from === '' || /^\d{4}-(0[1-9]|1[0-2])$/.test(from);
+  const run = async (work, done) => {
+    setBusy(true); setError('');
+    try { await work(); onSaved(done); } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
+    setBusy(false);
+  };
+  const save = () => run(() => api.updateHire(projectId, hire.id, { role: role.trim(), category_key: section, start_month: from || null, expected_revision: hire.revision }), 'The hire is saved.');
+  const remove = () => run(() => api.deleteHire(projectId, hire.id, hire.revision), 'The hire is removed.');
+  return (
+    <Lightbox label="Edit hire" title="Edit hire" sub="A planned hire, by the section it is paid from." onClose={onClose} width={520} phone="sheet" testId="uof-edit-hire"
+      footer={<div className="flex justify-between gap-2 max-md:flex-col">
+        <button type="button" className={BTN_GHOST} onClick={remove} disabled={busy} data-testid="uof-hire-remove">Remove hire</button>
+        <DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Save hire" disabled={!role.trim() || !fromOk} testId="uof-hire-save" />
+      </div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Role</span><input className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} data-testid="uof-hire-role" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-hire-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>From</span><input className={`${FIELD} ${MONO}`} placeholder="2027-03" value={from} onChange={(e) => setFrom(e.target.value)} data-testid="uof-hire-from" />
+          {!fromOk ? <span className="text-[12px] text-red-700 dark:text-red-300">A month is written like 2027-03.</span> : null}</label>
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-hire-error">{error}</p> : null}
         {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Lightbox>

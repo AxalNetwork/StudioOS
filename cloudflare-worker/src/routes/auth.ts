@@ -165,6 +165,7 @@ import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 // (routes/admin_exploring.ts) shows a suggestion immediately, before the
 // onboarding chatbot even runs.
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
+import { claimLpRowsAtSignIn } from '../services/lpClaim';
 import { withDeadline } from '../util/deadline';
 
 /**
@@ -664,6 +665,7 @@ auth.post('/confirm-verify-email', safe('confirm-verify-email', 'Could not confi
   await sql.end();
 
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
 
@@ -874,6 +876,7 @@ auth.post('/login', safe('login', 'Login failed. Please try again in a moment, o
   // browser user) from being replayed from outside the browser even after
   // the SPA's identity-change purge wipes localStorage.
   await revokeStaleCrossIdentitySession(c, user.id);
+  await claimLpRowsAtSignIn(c.env, user); // D5318 H8
 
   const csrfToken = generateCsrfToken();
   setAuthCookies(c, jwtToken, csrfToken);
@@ -1314,7 +1317,12 @@ auth.post('/magic/start', safe('magic-start', 'Could not send your sign-in link.
   // token row existed, the screen said "Sign-in link sent", and no mail left.
   // Resend ran the same handler on a warm isolate, the errand survived, and
   // that second press was the first time a message was actually queued.
-  const queued = await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
+  // #4578 (D4578): /register asks for `purpose: 'signup'` right after it created the account, and gets the same link
+  // worded as "finish creating your account". The answer below is identical either way, so nothing is enumerated.
+  const signup = parsed.body?.purpose === 'signup';
+  const queued = signup
+    ? await sendEmail(c.env, 'auth_signup_link', email, { name, magic_url: magicUrl })
+    : await sendEmail(c.env, 'auth_magic_link', email, { name, magic_url: magicUrl });
   if (!queued.ok) {
     console.error('[AUTH:magic-start] email enqueue failed', queued.reason || 'unknown');
     return c.json({ error: 'Could not send your sign-in link. Please try again in a moment.' }, 502);
@@ -1421,6 +1429,7 @@ auth.get('/magic/verify', safe('magic-verify', 'Could not complete your sign-in 
     }
 
     await revokeStaleCrossIdentitySession(c, user.id);
+    await claimLpRowsAtSignIn(c.env, user); // D5318 H8
     const csrf = generateCsrfToken();
     setAuthCookies(c, jwtToken, csrf);
     const landing = newSignup ? '/onboarding/chat' : '/dashboard';

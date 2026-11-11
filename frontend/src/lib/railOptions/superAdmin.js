@@ -86,6 +86,27 @@ export function boardPage(board) {
   return [SUPER_ADMIN_PROFILE, board.section, board.module].filter(Boolean).join(' · ');
 }
 
+/**
+ * D5084 (#5084) — Revenue's contextual Eadwyn tasks, as Ask chips ("Suggested
+ * for this page"). Each puts its question in the Ask composer; none runs a page
+ * control, so none is a rail option above, and none lists a model to pick
+ * (`noModel`), which keeps model choice and pricing off Revenue's working rail
+ * (#5130 owns where they move). The section board carries all six; the
+ * Disputes and Statements anchors carry the one that is theirs.
+ */
+export const SUPER_ADMIN_ASK_CHIPS = Object.freeze([
+  ...[
+    ['summarise:period', 'Summarise the selected period'],
+    ['explain:incomplete-sources', 'Explain incomplete sources'],
+    ['show:overdue-receivables', 'Show overdue receivables'],
+    ['review:open-disputes', 'Review open disputes'],
+    ['compare:subsidiary-reporting', 'Compare subsidiary reporting'],
+    ['explain:ai-margin', 'Explain the AI margin'],
+  ].map(([key, label]) => ({ page: 'Super Admin · Revenue', route: '/admin/revenue', key, label, kind: 'numbers', handler: 'none', noModel: true })),
+  { page: 'Super Admin · Revenue · Disputes', route: '/admin/revenue#disputes', key: 'review:open-disputes', label: 'Review open disputes', kind: 'numbers', handler: 'none', noModel: true },
+  { page: 'Super Admin · Revenue · Statements', route: '/admin/revenue#statements', key: 'show:overdue-receivables', label: 'Show overdue receivables', kind: 'numbers', handler: 'none', noModel: true },
+]);
+
 export const SUPER_ADMIN_RAIL_OPTIONS = Object.freeze([
   { page: 'Super Admin · Content · Publications', key: 'draft:publication-summary', label: 'Draft with AI', kind: 'write', handler: 'draft',
     source: { file: 'pages/admin/PublicationNew.jsx', match: 'publications.draft(' } },

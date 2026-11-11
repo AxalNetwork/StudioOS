@@ -324,7 +324,7 @@ test('AdvisorStudioHome builds Today from all three reads, keeps the calendar an
   const home = src('../src/pages/advisor/AdvisorStudioHome.jsx');
   assert.match(home, /advisorToday\(\{ bookings, calendar, slots \}\)/);
   assert.match(home, /todayState\(today\)/);
-  assert.match(home, /read\('calendar', setCalendar, \(\) => api\.listCalendarEvents\(\), \(r\) => r\)/);
+  assert.match(home, /read\('calendar', setCalendar, \(\) => api\.listCalendarEvents\(\{ kinds: ADVISOR_AGENDA_KINDS\.join\(','\) \}\), \(r\) => r\)/);
   for (const name of ['bookings', 'calendar', 'slots']) assert.match(home, new RegExp(`today\\.failed\\.includes\\('${name}'\\)`));
   assert.doesNotMatch(home, /isBookableSlot/, 'a second private copy of the slot filter');
 });

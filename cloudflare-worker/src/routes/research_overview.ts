@@ -93,6 +93,107 @@ const COMPANY_SOURCE = 'Wikidata (CC0), research_company_directory';
 const MARKET_SOURCE = 'Axal market directory, research_market_directory';
 const FUND_SOURCE = 'Public fund lists (spreadsheets), research_fund_directory';
 
+/**
+ * D5318 H7 (#5318): each directory is read ONCE per request, and the totals
+ * and the section that draw on it share that read. Before, the fund directory
+ * was read seven times (two totals, five money aggregates), each repeating
+ * `SERVED_FUNDS`' `NOT EXISTS` over `research_fund_sources`; the company
+ * directory four times. Now one statement each: the fund one dedupes once,
+ * into a materialised CTE, and every aggregate reads that. Rows are tagged by
+ * `k` and ranked by `rk`, so the order is the SQL's, not a re-sort here. A
+ * failed read fails each line that draws on it, as before: never a zero.
+ */
+export interface DirRow { k: string; rk: number | null; v: string | number | null; n: number; as_of: string | null }
+
+export interface CompanyAggregates {
+  total: number; as_of: string | null;
+  /** Distinct raw `country` (the totals line); `countries` is distinct TRIM(country) (competition). */
+  countries_raw: number; countries: number; labels: number; labelled: number; located: number;
+  by_sector: Array<{ label: string; companies: number }>;
+  by_country: Array<{ country: string; companies: number }>;
+}
+
+/** The company directory's totals and its top `top` sector labels and countries, in one statement. */
+export async function readCompanyAggregates(env: Env, top: number): Promise<CompanyAggregates> {
+  const rows = (await env.DB.prepare(
+    `SELECT k, rk, v, n, as_of, countries_raw, labels, labelled, located, countries FROM (
+       SELECT 'all' AS k, 0 AS rk, NULL AS v, COUNT(*) AS n, MAX(as_of) AS as_of,
+              COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN country END) AS countries_raw,
+              COUNT(DISTINCT CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN LOWER(TRIM(sector)) END) AS labels,
+              SUM(CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN 1 ELSE 0 END) AS labelled,
+              SUM(CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN 1 ELSE 0 END) AS located,
+              COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN TRIM(country) END) AS countries
+         FROM research_company_directory
+       UNION ALL
+       SELECT 'sector', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, TRIM(sector) COLLATE NOCASE), TRIM(sector), COUNT(*),
+              NULL, NULL, NULL, NULL, NULL, NULL
+         FROM research_company_directory WHERE TRIM(COALESCE(sector, '')) <> '' GROUP BY LOWER(TRIM(sector))
+       UNION ALL
+       SELECT 'country', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, TRIM(country) COLLATE NOCASE), TRIM(country), COUNT(*),
+              NULL, NULL, NULL, NULL, NULL, NULL
+         FROM research_company_directory WHERE TRIM(COALESCE(country, '')) <> '' GROUP BY TRIM(country)
+     ) WHERE rk <= ? ORDER BY k, rk`
+  ).bind(top).all<DirRow & { countries_raw: number | null; labels: number | null; labelled: number | null; located: number | null; countries: number | null }>()).results || [];
+  const all = rows.find((r) => r.k === 'all');
+  return {
+    total: Number(all?.n ?? 0), as_of: all?.as_of ?? null,
+    countries_raw: Number(all?.countries_raw ?? 0), countries: Number(all?.countries ?? 0),
+    labels: Number(all?.labels ?? 0), labelled: Number(all?.labelled ?? 0), located: Number(all?.located ?? 0),
+    by_sector: rows.filter((r) => r.k === 'sector').map((r) => ({ label: String(r.v), companies: Number(r.n) })),
+    by_country: rows.filter((r) => r.k === 'country').map((r) => ({ country: String(r.v), companies: Number(r.n) })),
+  };
+}
+
+export interface FundAggregates {
+  total: number; as_of: string | null;
+  lists: Array<{ name: string; funds: number; as_of: string | null }>;
+  hq: RawCount[]; focus: RawCount[];
+  vintages: Array<{ year: number; funds: number }>;
+  /** Funds per SIZE_BANDS index, euro list only; a band with no fund is absent. */
+  bands: Map<number, number>;
+}
+
+/**
+ * Every fund aggregate the overview shows, in one statement over the served
+ * funds, deduped once. The euro filter (`EUR_SOURCE`, bound) is applied once,
+ * as `eur_cents`. The funds missing an HQ, a focus, a size or a vintage are
+ * what the grouped rows leave out: those rows count non-blank values only.
+ */
+export async function readFundAggregates(env: Env): Promise<FundAggregates> {
+  // The band edges are constants of this file, never request values.
+  const bandSql = `CASE ${SIZE_BANDS.map((b, i) => (b.max != null ? `WHEN eur_cents < ${b.max} THEN ${i}` : `ELSE ${i}`)).join(' ')} END`;
+  const rows = (await env.DB.prepare(
+    `WITH sf AS MATERIALIZED (
+       SELECT source_name, hq, sector_focus, fund_year, as_of,
+              CASE WHEN source_name = ? AND fund_size_cents > 0 THEN fund_size_cents END AS eur_cents
+         FROM ${SERVED_FUNDS} AS f)
+     SELECT k, rk, v, n, as_of FROM (
+       SELECT 'all' AS k, 0 AS rk, NULL AS v, COUNT(*) AS n, MAX(as_of) AS as_of FROM sf
+       UNION ALL
+       SELECT 'list', ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC, source_name), source_name, COUNT(*), MAX(as_of)
+         FROM sf GROUP BY source_name
+       UNION ALL
+       SELECT 'hq', 0, hq, COUNT(*), NULL FROM sf WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq
+       UNION ALL
+       SELECT 'focus', 0, sector_focus, COUNT(*), NULL FROM sf WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus
+       UNION ALL
+       SELECT 'vintage', fund_year, fund_year, COUNT(*), NULL FROM sf WHERE fund_year IS NOT NULL GROUP BY fund_year
+       UNION ALL
+       SELECT 'band', b, b, COUNT(*), NULL FROM (SELECT ${bandSql} AS b FROM sf WHERE eur_cents IS NOT NULL) GROUP BY b
+     ) ORDER BY k, rk`
+  ).bind(EUR_SOURCE).all<DirRow>()).results || [];
+  const of = (k: string) => rows.filter((r) => r.k === k);
+  const all = of('all')[0];
+  return {
+    total: Number(all?.n ?? 0), as_of: all?.as_of ?? null,
+    lists: of('list').map((r) => ({ name: String(r.v), funds: Number(r.n), as_of: r.as_of ?? null })),
+    hq: of('hq').map((r) => ({ v: String(r.v), n: Number(r.n) })),
+    focus: of('focus').map((r) => ({ v: String(r.v), n: Number(r.n) })),
+    vintages: of('vintage').map((r) => ({ year: Number(r.v), funds: Number(r.n) })),
+    bands: new Map(of('band').map((r) => [Number(r.v), Number(r.n)] as const)),
+  };
+}
+
 /** One total's read; a failure is "Unreadable" on its own line, never a zero. */
 async function readTotal<R>(read: () => Promise<R | null>): Promise<R | 'unreadable'> {
   try {
@@ -142,27 +243,20 @@ async function readSectorsTracked(env: Env) {
   return { value: SECTORS.length, as_of: dates.length ? dates[dates.length - 1] : null, source: SECTORS_SOURCE, sectors };
 }
 
-async function readTotals(env: Env) {
+async function readTotals(env: Env, companiesRead: Promise<CompanyAggregates>, fundsRead: Promise<FundAggregates>) {
   return section(async () => {
-    const [c, m, f, lists, pub, tracked] = await Promise.all([
-      readTotal(() => env.DB.prepare(
-        `SELECT COUNT(*) AS n, MAX(as_of) AS as_of,
-                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN country END) AS countries,
-                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN LOWER(TRIM(sector)) END) AS sectors
-           FROM research_company_directory`
-      ).first<{ n: number; as_of: string | null; countries: number; sectors: number }>()),
+    const [co, m, fu, pub, tracked] = await Promise.all([
+      readTotal(() => companiesRead),
       readTotal(() => env.DB.prepare(
         `SELECT COUNT(*) AS n, MAX(as_of) AS as_of, SUM(company_count) AS supplied FROM research_market_directory`
       ).first<{ n: number; as_of: string | null; supplied: number | null }>()),
-      readTotal(() => env.DB.prepare(`SELECT COUNT(*) AS n, MAX(as_of) AS as_of FROM ${SERVED_FUNDS} AS f`)
-        .first<{ n: number; as_of: string | null }>()),
-      readTotal(async () => (await env.DB.prepare(
-        `SELECT source_name AS name, COUNT(*) AS funds, MAX(as_of) AS as_of FROM ${SERVED_FUNDS} AS f
-          GROUP BY source_name ORDER BY funds DESC, source_name`
-      ).all<{ name: string; funds: number; as_of: string | null }>()).results || []),
+      readTotal(() => fundsRead),
       readTotal(() => readListedTotals(env)),
       readSectorsTracked(env),
     ]);
+    const c = co === 'unreadable' ? co : { n: co.total, as_of: co.as_of, countries: co.countries_raw, sectors: co.labels };
+    const f = fu === 'unreadable' ? fu : { n: fu.total, as_of: fu.as_of };
+    const lists = fu === 'unreadable' ? fu : fu.lists;
     const countriesSource = `${COMPANY_SOURCE}: distinct countries`;
     const sectorsSource = `${COMPANY_SOURCE}: distinct raw sector labels`;
     const suppliedSource = `${MARKET_SOURCE}: SUM(company_count), supplied by Axal and not verified`;
@@ -317,36 +411,17 @@ async function readDemandVsSupply(env: Env, indexes: Promise<LiveIndexes>) {
   });
 }
 
-async function readCompetition(env: Env, top: number) {
+async function readCompetition(companiesRead: Promise<CompanyAggregates>) {
   return section(async () => {
-    const [bySector, byCountry, stats] = await Promise.all([
-      env.DB.prepare(
-        `SELECT TRIM(sector) AS label, COUNT(*) AS companies FROM research_company_directory
-          WHERE TRIM(COALESCE(sector, '')) <> '' GROUP BY LOWER(TRIM(sector))
-          ORDER BY companies DESC, label COLLATE NOCASE LIMIT ?`
-      ).bind(top).all<{ label: string; companies: number }>(),
-      env.DB.prepare(
-        `SELECT TRIM(country) AS country, COUNT(*) AS companies FROM research_company_directory
-          WHERE TRIM(COALESCE(country, '')) <> '' GROUP BY TRIM(country)
-          ORDER BY companies DESC, country COLLATE NOCASE LIMIT ?`
-      ).bind(top).all<{ country: string; companies: number }>(),
-      env.DB.prepare(
-        `SELECT COUNT(*) AS total, MAX(as_of) AS as_of,
-                SUM(CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN 1 ELSE 0 END) AS labelled,
-                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(sector, '')) <> '' THEN LOWER(TRIM(sector)) END) AS labels,
-                SUM(CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN 1 ELSE 0 END) AS located,
-                COUNT(DISTINCT CASE WHEN TRIM(COALESCE(country, '')) <> '' THEN TRIM(country) END) AS countries
-           FROM research_company_directory`
-      ).first<{ total: number; as_of: string | null; labelled: number | null; labels: number; located: number | null; countries: number }>(),
-    ]);
-    const sectors = bySector.results || [];
-    const countries = byCountry.results || [];
+    const stats = await companiesRead;
+    const sectors = stats.by_sector;
+    const countries = stats.by_country;
     if (sectors.length === 0 && countries.length === 0) {
       return { status: 'not_recorded' as const, reason: 'No company in the directory records a sector or a country' };
     }
-    const all = Number(stats?.total ?? 0);
-    const labelled = Number(stats?.labelled ?? 0);
-    const located = Number(stats?.located ?? 0);
+    const all = stats.total;
+    const labelled = stats.labelled;
+    const located = stats.located;
     const sum = (rows: Array<{ companies: number }>) => rows.reduce((n, r) => n + Number(r.companies), 0);
     return {
       status: 'ok' as const, source: COMPANY_SOURCE, as_of: stats?.as_of ?? null,
@@ -402,55 +477,31 @@ export function crosswalkCounts(rows: RawCount[], map: (raw: string) => Mapping,
   };
 }
 
-async function readMoney(env: Env, top: number) {
+async function readMoney(env: Env, top: number, fundsRead: Promise<FundAggregates>) {
   return section(async () => {
-    const bandSql = SIZE_BANDS.map((b, i) =>
-      `SUM(CASE WHEN fund_size_cents >= ${b.min}${b.max != null ? ` AND fund_size_cents < ${b.max}` : ''} THEN 1 ELSE 0 END) AS b${i}`,
-    ).join(', ');
     const thisYear = new Date().getUTCFullYear();
-    const [hqRows, focusRows, overrides, countries, markets, bands, vintages, stats] = await Promise.all([
-      env.DB.prepare(
-        `SELECT hq AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f
-          WHERE TRIM(COALESCE(hq, '')) <> '' GROUP BY hq`
-      ).all<RawCount>(),
-      env.DB.prepare(
-        `SELECT sector_focus AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f
-          WHERE TRIM(COALESCE(sector_focus, '')) <> '' GROUP BY sector_focus`
-      ).all<RawCount>(),
+    const [funds, overrides, countries, markets] = await Promise.all([
+      fundsRead,
       loadOverrides(env),
       listCountries(env),
       env.DB.prepare(`SELECT slug, name FROM research_market_directory`).all<{ slug: string; name: string }>(),
-      // The band edges are constants of this file, never request values. Only
-      // sizes whose currency is known are banded: the euro list (EUR_SOURCE).
-      env.DB.prepare(`SELECT ${bandSql} FROM ${SERVED_FUNDS} AS f WHERE source_name = ? AND fund_size_cents > 0`)
-        .bind(EUR_SOURCE).first<Record<string, number | null>>(),
-      env.DB.prepare(
-        `SELECT fund_year AS year, COUNT(*) AS funds FROM ${SERVED_FUNDS} AS f
-          WHERE fund_year IS NOT NULL GROUP BY fund_year ORDER BY fund_year`
-      ).all<{ year: number; funds: number }>(),
-      env.DB.prepare(
-        `SELECT COUNT(*) AS total, MAX(as_of) AS as_of,
-                SUM(CASE WHEN TRIM(COALESCE(hq, '')) = '' THEN 1 ELSE 0 END) AS no_hq,
-                SUM(CASE WHEN TRIM(COALESCE(sector_focus, '')) = '' THEN 1 ELSE 0 END) AS no_focus,
-                SUM(CASE WHEN source_name = ? AND fund_size_cents > 0 THEN 1 ELSE 0 END) AS sized,
-                SUM(CASE WHEN fund_year IS NULL THEN 1 ELSE 0 END) AS no_vintage
-           FROM ${SERVED_FUNDS} AS f`
-      ).bind(EUR_SOURCE).first<{ total: number; as_of: string | null; no_hq: number | null; no_focus: number | null; sized: number | null; no_vintage: number | null }>(),
     ]);
-    const all = Number(stats?.total ?? 0);
+    const all = funds.total;
     if (all === 0) return { status: 'not_recorded' as const, reason: 'The fund directory holds no fund yet' };
     const countryName = new Map(countries.map((c) => [c.code, c.name] as const));
     const marketName = new Map((markets.results || []).map((m) => [m.slug, m.name] as const));
-    const hq = crosswalkCounts(hqRows.results || [], (v) => mapFundHq(v, overrides), top);
-    const focus = crosswalkCounts(focusRows.results || [], (v) => mapFundFocus(v, overrides), top);
+    const hq = crosswalkCounts(funds.hq, (v) => mapFundHq(v, overrides), top);
+    const focus = crosswalkCounts(funds.focus, (v) => mapFundFocus(v, overrides), top);
+    // Only sizes whose currency is known are banded: the euro list (EUR_SOURCE).
     const sizeBands = SIZE_BANDS
-      .map((b, i) => ({ band: b.band, funds: Number(bands?.[`b${i}`] ?? 0) }))
+      .map((b, i) => ({ band: b.band, funds: funds.bands.get(i) ?? 0 }))
       .filter((b) => b.funds > 0);
-    const years = (vintages.results || []).map((v) => ({ year: Number(v.year), funds: Number(v.funds) }));
+    const years = funds.vintages;
     const recent = years.filter((v) => v.year >= thisYear - 4 && v.year <= thisYear).reverse();
-    const sized = Number(stats?.sized ?? 0);
+    const counted = (rows: Array<{ n: number }>) => rows.reduce((s, r) => s + r.n, 0);
+    const sized = [...funds.bands.values()].reduce((s, n) => s + n, 0);
     return {
-      status: 'ok' as const, source: FUND_SOURCE, as_of: stats?.as_of ?? null,
+      status: 'ok' as const, source: FUND_SOURCE, as_of: funds.as_of,
       total_funds: all,
       hq_basis: 'HQ text matched to countries through the Research crosswalk (D533); a fund whose HQ names two countries counts in each',
       by_hq: hq.ranked.map((x) => ({ hq: countryName.get(x.key) ?? x.key, code: x.key, funds: x.funds })),
@@ -468,10 +519,11 @@ async function readMoney(env: Env, top: number) {
       recent_vintages: recent,
       ...(recent.length === 0 ? { recent_vintages_reason: `No fund records a vintage from ${thisYear - 4} to ${thisYear}` } : {}),
       missing: {
-        hq: Number(stats?.no_hq ?? 0),
-        focus: Number(stats?.no_focus ?? 0),
+        // The grouped rows count non-blank values only, so the rest is missing.
+        hq: all - counted(funds.hq),
+        focus: all - counted(funds.focus),
         size: all - sized,
-        vintage: Number(stats?.no_vintage ?? 0),
+        vintage: all - years.reduce((s, v) => s + v.funds, 0),
       },
     };
   });
@@ -498,13 +550,13 @@ interface SignalRow {
 async function readSignals(env: Env, top: number) {
   return section(async () => {
     // advisor_note is deliberately never selected (voice rule).
-    const [list, count] = await Promise.all([
-      env.DB.prepare(
-        `SELECT id, type, title, sector, country, region, why_now, build_opportunity, confidence_score, updated_at
-           FROM signals WHERE status = 'active' ORDER BY updated_at DESC, id LIMIT ?`
-      ).bind(top).all<SignalRow>(),
-      env.DB.prepare(`SELECT COUNT(*) AS n FROM signals WHERE status = 'active'`).first<{ n: number }>(),
-    ]);
+    // D5318 H7: the active count is a window over every active row, taken
+    // before LIMIT, so the page length never stands in for it.
+    const list = await env.DB.prepare(
+      `SELECT id, type, title, sector, country, region, why_now, build_opportunity, confidence_score, updated_at,
+              COUNT(*) OVER () AS active_count
+         FROM signals WHERE status = 'active' ORDER BY updated_at DESC, id LIMIT ?`
+    ).bind(top).all<SignalRow & { active_count: number }>();
     const rows = list.results || [];
     if (rows.length === 0) return { status: 'not_recorded' as const, reason: 'No active signal yet' };
     const items = rows.map((r) => {
@@ -527,7 +579,7 @@ async function readSignals(env: Env, top: number) {
     });
     return {
       status: 'ok' as const, source: 'Axal research team: hand-written theses (services/signals)',
-      active_count: Number(count?.n ?? rows.length), items,
+      active_count: Number(rows[0].active_count), items,
     };
   });
 }
@@ -540,12 +592,17 @@ researchOverview.get('/', async (c) => {
   // One read of the live indexes feeds both the heat grid and demand against supply.
   const indexes = readLiveIndexes(env);
   indexes.catch(() => {});
+  // D5318 H7: one read of each directory feeds its totals and its section.
+  const companies = readCompanyAggregates(env, top);
+  companies.catch(() => {});
+  const funds = readFundAggregates(env);
+  funds.catch(() => {});
   const [totals, heat, demandVsSupply, competition, money, signals] = await Promise.all([
-    readTotals(env),
+    readTotals(env, companies, funds),
     readHeat(env, indexes),
     readDemandVsSupply(env, indexes),
-    readCompetition(env, top),
-    readMoney(env, top),
+    readCompetition(companies),
+    readMoney(env, top, funds),
     readSignals(env, top),
   ]);
   return c.json({

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
@@ -46,7 +46,7 @@ const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hair
  * `fund` is { loading, error, status, data }; `list` is the founder's own
  * shortlist read, { loading, error, existing }.
  */
-export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, notice = null, onRetry = () => {} }) {
+export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {} }) {
   // The directory is the Funds page's second tab (D593); `/research/funds`
   // alone opens My funds.
   const back = (
@@ -112,10 +112,10 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
           )}
           {!list.loading && !list.error && (list.existing
             ? <Link to={`/research/funds/${encodeURIComponent(list.existing.uid)}`} className="rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white dark:bg-violet-600">Open your dossier →</Link>
-            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd} className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600"><Plus size={14} /> Add to my funds</button>)}
+            : <button type="button" onClick={onAdd || undefined} disabled={!onAdd || adding} aria-busy={adding || undefined} data-testid="fund-catalog-add" className="inline-flex items-center gap-1 rounded-lg bg-violet-700 px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-50 dark:bg-violet-600"><Plus size={14} aria-hidden="true" /> {adding ? 'Adding…' : 'Add to my funds'}</button>)}
         </div>
       </div>
-      {notice && <p className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{notice.text}</p>}
+      {notice && <p role={notice.ok ? 'status' : 'alert'} data-testid="fund-catalog-notice" className={`text-[12px] font-semibold ${notice.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{notice.text}</p>}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card padding="lg"><FundDetails item={item} reports={reports} reportsState={reportsState} /></Card>
         <div className="space-y-4">
@@ -159,15 +159,27 @@ export default function FundCatalogProfile({ role = 'founder' }) {
     return () => { alive = false; };
   }, [name]);
 
+  // D4613: one add in flight at a time. A ref, not state: two clicks in the
+  // same frame both read the state before React re-renders, so a state flag
+  // alone lets the second request through. The Worker also answers a repeat
+  // of the same catalogue add with the row the first one wrote.
+  const inFlight = useRef(false);
+  const [adding, setAdding] = useState(false);
   const add = async () => {
     const item = fund.data?.item;
-    if (!item || list.existing || list.error) return;
+    if (!item || list.existing || list.error || inFlight.current) return;
+    inFlight.current = true;
+    setAdding(true);
+    setNotice(null);
     try {
-      const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null });
+      const row = await api.research.fundCreate({ name: item.name, source_url: item.website || null, catalogue_uid: item.uid || id });
       setList({ loading: false, error: null, existing: row });
-      setNotice({ ok: true, text: 'Added to My funds.' });
+      setNotice({ ok: true, text: row?.existing ? 'Already on My funds.' : 'Added to My funds.' });
     } catch (e) {
       setNotice({ ok: false, text: e?.message || 'That fund did not save.' });
+    } finally {
+      inFlight.current = false;
+      setAdding(false);
     }
   };
 
@@ -177,7 +189,7 @@ export default function FundCatalogProfile({ role = 'founder' }) {
       title={name || 'Fund profile'}
       activeSlug="funds"
     >
-      <FundCatalogView fund={fund} list={list} onAdd={add} notice={notice} onRetry={load} />
+      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} />
     </WorkspaceShell>
   );
 }

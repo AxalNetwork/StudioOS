@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { adminGovernanceApi } from '../../../lib/api/adminGovernance';
 import { reportError } from '../../../lib/log';
 import PdfPages from './PdfPages';
 import { useRead, ReadState, Missing, SidePanel, button, card, input, date } from './parts';
 import {
   ACCEPT, byCategory, dayLabel, draftRow, executedHint, fileProblem, moveLabel,
-  ownershipPayload, recordedPercent, statusLabel, versionLine,
+  ownershipPayload, recordedPercent, statusLabel, versionLine, isDrill, recordState, signedCopyLine, signedCopyProblem, approvedChoices,
 } from './governanceModel';
 import { governanceLifecycle } from '../../../lib/contractLifecycle';
 import { LifecycleBadge } from './LifecycleBadge';
+import { DrillList, EntitiesTable, EntityAttention, GroupHeader } from './GovernanceAttention';
+import GovernanceWorkspace from './GovernanceWorkspace';
+import HighRiskMove, { MOVE_WORD } from './HighRiskMove';
+
+const isHighRisk = (to) => Object.prototype.hasOwnProperty.call(MOVE_WORD, to);
 
 /**
  * D4563 (#4563) — HQ Contracts › Corporate Governance, at its own address
@@ -20,26 +26,43 @@ import { LifecycleBadge } from './LifecycleBadge';
  * the Super Admin's alone: another admin sees only how many are withheld. The
  * ownership metadata is the Super Admin's alone too.
  */
-export default function GovernanceTab() {
+export default function GovernanceTab({ workspaceLink = null }) {
   const [revision, setRevision] = useState(0);
-  const [panel, setPanel] = useState(null); // { kind: 'new', entity } | { kind: 'doc', uid } | { kind: 'ownership' }
+  const [panel, setPanel] = useState(null); // { kind: 'new', entity, category? } | { kind: 'doc', uid } | { kind: 'ownership' }
   const read = useRead(() => adminGovernanceApi.list(), [revision]);
+  const [params] = useSearchParams();
+  // D4811 part 5: `/admin/contracts/governance/doc/:uid` is one record's workspace.
+  const { uid: workspaceUid } = useParams();
   const changed = () => setRevision((n) => n + 1);
   const data = read.data;
+  // D4811 part 2: `?entity=<key>` is one entity's page, `?records=<state>` a summary count's records.
+  const focus = data?.entities.find((e) => e.key === params.get('entity')) || null;
+  const drill = isDrill(params.get('records')) ? params.get('records') : null;
+  const open = (uid) => setPanel({ kind: 'doc', uid });
+  const add = (entity, category) => setPanel({ kind: 'new', entity, category });
   return <section aria-label="Corporate Governance" data-testid="governance-tab" className="space-y-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="text-lg font-bold">Corporate Governance</h2>
         <p className="text-[12.5px] text-axal-muted">Operating agreements, formation certificates, member registers, resolutions and signing authority records of the three Axal entities. A file is never replaced: a corrected one is a new version.</p></div>
-      {data?.super_admin && <button type="button" className={button} onClick={() => setPanel({ kind: 'ownership' })}>Ownership (Super Admin)</button>}
     </div>
     <ReadState read={read} what="Governance documents">
-      {data && <div className="grid gap-4 xl:grid-cols-3">{data.entities.map((entity) => <EntityCard key={entity.key} entity={entity} categories={data.categories}
-        onNew={() => setPanel({ kind: 'new', entity })} onOpen={(uid) => setPanel({ kind: 'doc', uid })} />)}</div>}
+      {data && (workspaceUid ? <GovernanceWorkspace key={`${workspaceUid}:${revision}`} uid={workspaceUid} categories={data.categories} entities={data.entities}
+        onEdit={() => open(workspaceUid)} />
+      : focus ? <>
+        <EntityAttention entity={focus} onAdd={(category) => add(focus, category)} onOpen={open} />
+        <EntityCard entity={focus} categories={data.categories} onNew={() => add(focus)} onOpen={open} />
+      </> : drill ? <DrillList entities={data.entities} state={drill} onAdd={add} onOpen={open} /> : <>
+        <GroupHeader data={data} onOwnership={() => setPanel({ kind: 'ownership' })} />
+        <EntitiesTable entities={data.entities} />
+        <h3 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">All documents</h3>
+        <div className="grid gap-4 xl:grid-cols-3">{data.entities.map((entity) => <EntityCard key={entity.key} entity={entity} categories={data.categories}
+          onNew={() => add(entity)} onOpen={open} />)}</div>
+      </>)}
     </ReadState>
-    {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} categories={data.categories} superAdmin={data.super_admin}
+    {panel?.kind === 'new' && data && <NewDocument entity={panel.entity} category={panel.category} categories={data.categories} superAdmin={data.super_admin}
       onClose={() => setPanel(null)} onCreated={(uid) => { changed(); setPanel({ kind: 'doc', uid }); }} />}
-    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} />}
-    {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => setPanel(null)} />}
+    {panel?.kind === 'doc' && data && <DocumentPanel uid={panel.uid} categories={data.categories} superAdmin={data.super_admin} onClose={() => setPanel(null)} onChanged={changed} workspaceLink={workspaceLink} />}
+    {panel?.kind === 'ownership' && <OwnershipPanel onClose={() => { setPanel(null); changed(); }} />}
   </section>;
 }
 
@@ -49,6 +72,15 @@ function StatusPill({ status }) {
   return badge ? <LifecycleBadge badge={badge} /> : <span className="text-[11px] text-axal-muted">{statusLabel(status)}</span>;
 }
 
+// D4811 part 2: an empty category says what the system knows of it, not a passive "None recorded".
+function emptyLine(entity, category) {
+  const record = entity.attention?.records?.find((r) => r.category === category);
+  if (!record) return 'None recorded.';
+  if (record.state === 'restricted') return `${recordState('restricted').label}: only the Super Admin can open it.`;
+  if (record.state === 'missing' || record.state === 'not_recorded') return `${recordState(record.state).label}.`;
+  return 'None recorded.';
+}
+
 function EntityCard({ entity, categories, onNew, onOpen }) {
   const groups = byCategory(entity.documents, categories);
   return <article className={`${card} min-w-0 p-4 space-y-3`} data-testid={`governance-entity-${entity.key}`}>
@@ -56,7 +88,7 @@ function EntityCard({ entity, categories, onNew, onOpen }) {
       <p className="text-[11px] text-axal-muted">{entity.documents.length} {entity.documents.length === 1 ? 'document' : 'documents'}{entity.withheld > 0 && <> · <span data-testid={`governance-withheld-${entity.key}`}>{entity.withheld} confidential (Super Admin only)</span></>}</p></div>
       <button type="button" className={`${button} shrink-0`} aria-label={`New document for ${entity.name}`} onClick={onNew}>New document</button></header>
     {groups.map((g) => <div key={g.key}><h4 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">{g.label}</h4>
-      {g.documents.length === 0 ? <p className="py-1 text-[12px] text-axal-muted">None recorded.</p>
+      {g.documents.length === 0 ? <p className="py-1 text-[12px] text-axal-muted">{emptyLine(entity, g.key)}</p>
         : <ul className="divide-y divide-axal-hairline">{g.documents.map((d) => <li key={d.uid}>
           <button type="button" className="flex w-full flex-wrap items-center justify-between gap-2 py-2 text-left" onClick={() => onOpen(d.uid)}>
             <span className="min-w-0"><span className="block truncate text-[13px] font-semibold">{d.title}</span>
@@ -70,8 +102,8 @@ function Field({ label, children }) {
 }
 function Problem({ text }) { return text ? <p role="alert" className="text-xs text-red-700 dark:text-red-300">{text}</p> : null; }
 
-function NewDocument({ entity, categories, superAdmin, onClose, onCreated }) {
-  const [form, setForm] = useState({ category: categories[0]?.key || '', title: '', effective_date: '', confidential: superAdmin });
+function NewDocument({ entity, category, categories, superAdmin, onClose, onCreated }) {
+  const [form, setForm] = useState({ category: categories.some((c) => c.key === category) ? category : categories[0]?.key || '', title: '', effective_date: '', confidential: superAdmin });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -102,13 +134,15 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged }) {
+function DocumentPanel({ uid, categories, superAdmin, onClose, onChanged, workspaceLink }) {
   const [revision, setRevision] = useState(0);
   const read = useRead(() => adminGovernanceApi.read(uid), [uid, revision]);
   const refresh = () => { setRevision((n) => n + 1); onChanged(); };
   const d = read.data?.document;
   return <SidePanel title={d ? d.title : 'Governance document'} onClose={onClose} testId="governance-document-panel">
     <ReadState read={read} what="This document">{d && <>
+      {/* D4811 part 5: the desk draws the door (its doors are the Contracts page's); the panel only places it. */}
+      {workspaceLink?.(d.uid)}
       <div className="flex flex-wrap items-center gap-2 text-xs"><StatusPill status={d.status} /><span className="text-axal-muted">{categories.find((c) => c.key === d.category)?.label}</span>{d.confidential && <span className="rounded-full border border-axal-hairline px-2 py-0.5 text-[11px]">Confidential</span>}</div>
       <StatusMoves document={d} versions={read.data.versions} onDone={refresh} />
       <Details document={d} superAdmin={superAdmin} onDone={refresh} />
@@ -134,7 +168,9 @@ function StatusMoves({ document: d, versions, onDone }) {
     {d.executed_version != null && <p className="text-xs">Executed from the signed copy, v{d.executed_version}.</p>}
     {d.status === 'executed' && d.executed_version == null && d.envelope_id != null && <p className="text-xs">Executed from completed envelope #{d.envelope_id}.</p>}
     <div className="flex flex-wrap gap-2">{d.next_statuses.map((to) => <button key={to} type="button" className={button} disabled={busy} onClick={() => { setAsking(to); setError(''); }}>{moveLabel(d.status, to)}</button>)}</div>
-    {asking && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
+    {/* D4811 part 6: executing and archiving are high-risk: Scope → Review → Result, with the reason, the word and the evidence. */}
+    {asking && isHighRisk(asking) && <HighRiskMove to={asking} document={d} versions={versions} onClose={() => setAsking(null)} onDone={onDone} />}
+    {asking && !isHighRisk(asking) && <div role="dialog" aria-label={moveLabel(d.status, asking)} className="rounded-lg border border-axal-hairline p-3 space-y-2 text-xs">
       <p>Move “{d.title}” from {statusLabel(d.status)} to {statusLabel(asking)}?</p>
       {asking === 'executed' && hint && <p className="text-amber-700 dark:text-amber-300">{hint}</p>}
       <div className="flex gap-2"><button type="button" className={button} onClick={() => setAsking(null)}>Cancel</button>
@@ -212,7 +248,7 @@ function Versions({ document: d, versions, onDone }) {
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null); // { version, blob } | { version, loading } | { version, error }
   async function send() {
-    const problem = fileProblem(upload?.file);
+    const problem = fileProblem(upload?.file) || signedCopyProblem(upload);
     if (problem) { setError(problem); return; }
     setBusy(true); setError('');
     try { await adminGovernanceApi.uploadVersion(d.uid, upload); setUpload(null); onDone(); }
@@ -232,17 +268,31 @@ function Versions({ document: d, versions, onDone }) {
     <h4 className="text-[10px] font-bold uppercase tracking-widest text-axal-faint">Versions</h4>
     {versions.length === 0 ? <p className="text-axal-muted">No file uploaded yet.</p>
       : <ul className="divide-y divide-axal-hairline">{versions.map((v) => <li key={v.version} className="flex flex-wrap items-center justify-between gap-2 py-2">
-        <span className="min-w-0"><span className="block font-semibold">{versionLine(v)}</span><span className="block text-axal-muted">{date(v.created_at) || 'Upload date not recorded'}{v.note ? ` · ${v.note}` : ''}</span></span>
+        <span className="min-w-0"><span className="block font-semibold">{versionLine(v)}</span><span className="block text-axal-muted">{date(v.created_at) || 'Upload date not recorded'}{v.note ? ` · ${v.note}` : ''}</span>
+          {signedCopyLine(v) && <span className="block text-axal-muted" data-testid={`signed-copy-${v.version}`}>{signedCopyLine(v)}</span>}</span>
         <span className="flex gap-2">{v.content_type === 'application/pdf' && <button type="button" className={button} aria-label={`Preview v${v.version}`} onClick={() => open(v)}>Preview</button>}
           <button type="button" className={button} aria-label={`Download v${v.version}`} onClick={() => download(v)}>Download</button></span></li>)}</ul>}
     {preview && <div className="rounded-lg border border-axal-hairline p-2" data-testid="governance-preview">
       <div className="mb-2 flex items-center justify-between"><b>v{preview.version}</b><button type="button" className={button} onClick={() => setPreview(null)}>Close preview</button></div>
       {preview.loading ? <p role="status">Loading the file…</p> : preview.error ? <p role="alert">{preview.error}</p> : <PdfPages blob={preview.blob} title={`${d.title} v${preview.version}`} />}</div>}
     {closed ? <p className="text-axal-muted">{d.status === 'executed' ? 'An executed document takes no new version. Archive it and restore it as a draft to revise it.' : 'An archived document takes no new version. Restore it as a draft first.'}</p>
-      : !upload ? <button type="button" className={button} onClick={() => { setUpload({ file: null, signed: false, note: '' }); setError(''); }}>Upload a version</button>
+      : !upload ? <button type="button" className={button} onClick={() => { setUpload({ file: null, signed: false, note: '', signed_on: '', signatory: '', attest: false, copy_of: approvedChoices(versions)[0]?.version ?? '' }); setError(''); }}>Upload a version</button>
         : <div role="dialog" aria-label="Upload a version" className="space-y-2 rounded-lg border border-axal-hairline p-3">
           <Field label="File (PDF or Word .docx, at most 25 MB)"><input type="file" accept={ACCEPT} className={input} onChange={(e) => setUpload({ ...upload, file: e.target.files?.[0] || null })} /></Field>
           <label className="flex items-center gap-2"><input type="checkbox" checked={upload.signed} onChange={(e) => setUpload({ ...upload, signed: e.target.checked })} /> This is the signed copy</label>
+          {/* D4811 part 12 (CT-12 B): a signed copy says when, by whom, and is attested. */}
+          {upload.signed && <fieldset className="space-y-2 rounded-lg border border-axal-hairline p-2" data-testid="governance-signed-copy">
+            <legend className="px-1 font-semibold">Execution evidence</legend>
+            {/* D4811 part 20: only a counsel-approved version can be the one signed; a draft is never offered. */}
+            {approvedChoices(versions).length
+              ? <Field label="Signed copy of"><select className={input} value={String(upload.copy_of)} onChange={(e) => setUpload({ ...upload, copy_of: e.target.value })}>
+                {approvedChoices(versions).map((v) => <option key={v.version} value={String(v.version)}>v{v.version} · counsel approved</option>)}
+                <option value="">No approved version named</option></select></Field>
+              : <p className="text-axal-muted" data-testid="governance-no-approved">No version of this record is approved by counsel, so this copy names none. Request a legal review on the record's Legal Review tab to bind a copy to an approved version.</p>}
+            <Field label="Signed on"><input type="date" className={input} max={new Date().toISOString().slice(0, 10)} value={upload.signed_on} onChange={(e) => setUpload({ ...upload, signed_on: e.target.value })} /></Field>
+            <Field label="Signatory (name, capacity)"><input className={input} maxLength={200} value={upload.signatory} placeholder="S. Example, Manager" onChange={(e) => setUpload({ ...upload, signatory: e.target.value })} /></Field>
+            <label className="flex min-h-[44px] items-start gap-2"><input type="checkbox" checked={upload.attest} onChange={(e) => setUpload({ ...upload, attest: e.target.checked })} /> I confirm this is the complete, fully signed copy.</label>
+          </fieldset>}
           <Field label="Note"><input className={input} maxLength={500} value={upload.note} onChange={(e) => setUpload({ ...upload, note: e.target.value })} /></Field>
           <Problem text={error} />
           <div className="flex gap-2"><button type="button" className={button} onClick={() => setUpload(null)}>Cancel</button><button type="button" className={`${button} bg-violet-600 text-white`} disabled={busy} onClick={send}>{busy ? 'Uploading…' : `Upload as v${versions.length + 1}`}</button></div>

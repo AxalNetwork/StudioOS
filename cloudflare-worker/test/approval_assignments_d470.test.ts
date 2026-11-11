@@ -84,8 +84,9 @@ async function token(userId: number) {
     .sign(new TextEncoder().encode(JWT_SECRET));
 }
 
-function client(db: InstanceType<typeof DatabaseSync>) {
+function client(db: InstanceType<typeof DatabaseSync>, configure?: (env: any) => void) {
   const env = { DB: d1Over(db), BRANCH_CODE: 'fr', JWT_SECRET };
+  configure?.(env);
   const app = new Hono<any>();
   app.route('/api/branch', branchApprovalRoutes);
   app.route('/api/branch', branchApprovalAssignmentRoutes);
@@ -237,4 +238,22 @@ test('assignment names an active admin, records one event, and refuses everyone 
   assert.equal(whileSuspended.status, 200);
   assert.equal(whileSuspended.body.available, true);
   assert.equal(whileSuspended.body.items.length, 2);
+});
+
+test('a failure anywhere in the assignment batch rolls back every assignment and event', async () => {
+  const db = freshDb(true);
+  const call = client(db, (env) => {
+    const batch = env.DB.batch.bind(env.DB);
+    env.DB.batch = (statements: any[]) => batch([
+      ...statements,
+      env.DB.prepare('INSERT INTO synthetic_missing_assignment_table (id) VALUES (1)'),
+    ]);
+  });
+  const result = await postAssign(call, {
+    assignee_user_id: 2,
+    items: [{ lane: 'jobs', item_id: 10 }],
+  });
+  assert.equal(result.status, 503);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM approval_assignments').get().n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM approval_events').get().n, 0);
 });

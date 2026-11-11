@@ -29,10 +29,12 @@ import { addColumnsFrom, stripForeignKeys, tableFromBaseline } from './_baseline
 import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { __resetForTest } from '../src/services/aiRouter.ts';
-import { agentRun } from '../src/services/agents/agentRun.ts';
-import { skillPrompt } from '../src/services/agents/skillEval.ts';
+import { agentQuote, agentRun } from '../src/services/agents/agentRun.ts';
+import { NO_INVENTED_FIGURE_RULE, skillForRun, skillPrompt } from '../src/services/agents/skillEval.ts';
+import { contextTokensOf, pinTokens } from '../src/services/agents/runCost.ts';
+import { estTokens } from '../src/services/ai/shapes.ts';
 import { CLOUDFLARE_SKILLS_SDK, SDK_PINNED_VERSION } from '../src/services/agents/skillsSdk.ts';
-import { SKILL_RUNTIME_SDK_VALUE, SKILL_RUNTIME_VAR, skillEngineOf } from '../src/services/agents/skillRuntime.ts';
+import { SKILL_RUNTIME_SDK_VALUE, SKILL_RUNTIME_VAR, sdkEstimateText, skillEngineOf, skillTextForRun } from '../src/services/agents/skillRuntime.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const BASELINE = sql('schema_baseline.sql');
@@ -57,9 +59,11 @@ function world(vars: Record<string, string | undefined> = {}) {
   for (const m of ['712_team_agents.sql', '202611021724_team_agents_persona.sql', '202611041609_outside_assistant_bindings.sql']) db.exec(sql(`migrations/${m}`));
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   for (const m of ['759_agent_skills.sql', '202611022326_agent_skill_context_tokens.sql', '202611022055_agent_skill_moderation.sql', '202611022140_hq_skill_lifecycle.sql']) db.exec(sql(`migrations/${m}`));
+  db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   db.exec(AI_BUDGET_MIGRATION + sql('migrations/465_ai_rail_preferences.sql') + sql('migrations/510_member_ai_pauses.sql')
     + sql('migrations/525_ai_reservation_idempotency.sql') + sql('migrations/632_ai_hold_context.sql'));
   db.exec(sql('migrations/202611022313_agent_skill_runs.sql'));
+  db.exec(sql('migrations/202611090905_skill_version_eval_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Synthetic Super', 'admin', null, 'free');
   user.run(EDITOR, 'u-editor', 'editor@example.test', 'Synthetic Editor', 'founder', 100, 'growth');
@@ -293,4 +297,100 @@ test('rollback: switch off is today\'s text byte for byte with no manifest read;
   // Every run, on, off and fallen back, went through the router once and left skill data as it was.
   assert.equal(modelCalls(w), w.systems.length);
   assert.deepEqual(snap(w), before);
+});
+
+// ── #5340: the two parity gaps the D4555 addendum left for review ─────────────
+
+/** The world with HQ's AI policy table (D4162), so a per-run ceiling can be set. */
+function policyWorld(vars: Record<string, string | undefined>) {
+  const w = world(vars);
+  w.db.exec(sql('migrations/202611022046_ai_admin_audit.sql') + sql('migrations/202611022114_ai_agent_policy.sql'));
+  return w;
+}
+const holdOf = (w: W) => (w.db.prepare('SELECT included_microusd + topup_microusd AS n FROM ai_budget_reservations ORDER BY rowid DESC LIMIT 1').get() as any).n as number;
+const QUOTE = { module: STEP.module, option: STEP.option, record: STEP.record, prompt: STEP.prompt };
+const big = (n: number) => `File ${n} ${'x'.repeat(7000)}`;
+const FILES = {
+  none: (_s: any) => [],
+  // Three files of 7 KB against the 16 KB cap: two are taken, as the cap test above shows.
+  cap: (s: any) => (s.slug === 'synthetic-hq-brief' ? [1, 2, 3].map((n) => ({ path: `references/f${n}.md`, content: big(n) })) : []),
+};
+
+test('#5340 parity: the switched-on prompt closes with the same "Not recorded" rule as skillPrompt(), from one constant, as Axal\'s words', async () => {
+  const w = world(PREVIEW_ON);
+  const r: any = await agentRun(w.env, { agent: agent(w), ...STEP, skill: uid(HQ_BRIEF) });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(lastEvent(w).skill_runtime.runtime, 'cloudflare_sdk');
+  const sys = w.systems[0];
+  // Mutation checked: NO_INVENTED_FIGURE_RULE dropped from the SDK text's join → this fails.
+  assert.ok(sys.endsWith(`\n\n${NO_INVENTED_FIGURE_RULE}`), 'the SDK text ends with the rule');
+  // After every untrusted block, so it is Axal's own instruction and not skill data.
+  assert.ok(sys.lastIndexOf(NO_INVENTED_FIGURE_RULE) > sys.lastIndexOf('END_RECORD_TEXT_UNTRUSTED_'));
+  // The legacy loader ends with the very same constant.
+  assert.ok(skillPrompt(v1Of(w, HQ_BRIEF)).endsWith(`\n${NO_INVENTED_FIGURE_RULE}`));
+  assert.equal(NO_INVENTED_FIGURE_RULE, 'Never invent a figure: write "Not recorded" for anything the records do not hold.');
+});
+
+test('#5340 quote, switch on: agentQuote holds exactly what the run holds for the prompt it sends, with files at the cap and with none', async () => {
+  const quoted: Record<string, number> = {};
+  for (const [label, resources] of Object.entries(FILES)) {
+    const w = world(PREVIEW_ON);
+    const bare: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE });
+    const q: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE, skill: uid(HQ_BRIEF), skillDeps: { resources } });
+    assert.equal(q.ok && q.quote.available, true, JSON.stringify(q));
+    const r: any = await agentRun(w.env, { agent: agent(w), ...STEP, skill: uid(HQ_BRIEF), skillDeps: { resources } });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    // Mutation checked: agentQuote's switched-on skill branch removed → the quote is the bare quote and this fails.
+    assert.equal(q.quote.value_microusd, holdOf(w), `${label}: the quote is the run's own hold`);
+    assert.ok(q.quote.value_microusd > bare.quote.value_microusd, `${label}: the skill text is counted`);
+    quoted[label] = q.quote.value_microusd;
+  }
+  assert.ok(quoted.cap > quoted.none, 'the files the run takes are counted');
+});
+
+test('#5340 ceiling, switch on: a run whose SDK text takes it over the per-run ceiling is refused before any hold or model call', async () => {
+  const w = policyWorld(PREVIEW_ON);
+  const bare: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE });
+  const full: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE, skill: uid(HQ_BRIEF), skillDeps: { resources: FILES.cap } });
+  const ceiling = Math.floor((bare.quote.value_microusd + full.quote.value_microusd) / 2);
+  assert.ok(bare.quote.value_microusd < ceiling && ceiling < full.quote.value_microusd, 'a ceiling between the two quotes');
+  w.db.prepare('UPDATE ai_agent_policy SET per_run_ceiling_microusd = ? WHERE id = 1').run(ceiling);
+  // Mutation checked: the ceiling re-check after the SDK text removed → the run takes a hold, calls the model and this fails.
+  const r: any = await agentRun(w.env, { agent: agent(w), ...STEP, skill: uid(HQ_BRIEF), skillDeps: { resources: FILES.cap } });
+  assert.deepEqual([r.ok, r.status, r.code], [false, 402, 'run_ceiling']);
+  assert.equal(modelCalls(w), 0);
+  assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get() as any).n, 0, 'no hold');
+  // With no files the same run fits under it.
+  const ok: any = await agentRun(w.env, { agent: agent(w), ...STEP, skill: uid(HQ_BRIEF), skillDeps: { resources: FILES.none } });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+});
+
+test('#5340 switch off: the quote reads no skill and is unchanged; the D4121 estimate is the legacy figure; switched on it counts the SDK text', async () => {
+  const w = world({ ENVIRONMENT: 'preview' });
+  const bare: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE });
+  const from = w.statements.length;
+  const q: any = await agentQuote(w.env, { agent: agent(w), ...QUOTE, skill: uid(HQ_BRIEF) });
+  // Mutation checked: the skillEngineOf test in agentQuote dropped → the skill is read and loaded, and both of these fail.
+  assert.deepEqual(q, bare);
+  assert.deepEqual(w.statements.slice(from).filter((s) => /agent_skill/.test(s)), []);
+  // The D4121 estimate, switch off: today's figure, skillPrompt() of the pinned version.
+  const pins = [{ skill_id: HQ_BRIEF, version: 1 }, { skill_id: CO_DIGEST, version: 1 }];
+  const v1 = v1Of(w, HQ_BRIEF);
+  const off = await pinTokens(w.env, pins);
+  assert.deepEqual(off, [contextTokensOf(v1), contextTokensOf(v1Of(w, CO_DIGEST))]);
+  // Switch on: the SDK text, which is longer (frames, catalogue, the SKILL.md file, the rule).
+  Object.assign(w.env, { [SKILL_RUNTIME_VAR]: SKILL_RUNTIME_SDK_VALUE });
+  // Mutation checked: pinTokens' switched-on branch removed → on equals off and this fails.
+  const on = await pinTokens(w.env, pins);
+  assert.ok(on && on[0] > off![0] && on[1] > off![1], JSON.stringify({ on, off }));
+  // It covers what a run with this skill actually sends.
+  const skill: any = await skillForRun(w.env, agent(w), uid(HQ_BRIEF), [], null);
+  const sent: any = await skillTextForRun(w.env, 1, skill, 'cloudflare_sdk');
+  assert.equal(sent.runtime, 'cloudflare_sdk');
+  assert.ok(on![0] >= estTokens(`\n\n${sent.text}`), `estimate ${on![0]} covers the sent ${estTokens(`\n\n${sent.text}`)}`);
+  // An unusable SDK: a run would send today's text, so the estimate counts that.
+  const s = w.db.prepare('SELECT id, uid, scope, company_id, slug FROM agent_skills WHERE id = ?').get(HQ_BRIEF) as any;
+  assert.equal(await sdkEstimateText([{ skill: s, version: v1 }], 0, { ...CLOUDFLARE_SKILLS_SDK, version: '0.33.0' }), null);
+  const est = await sdkEstimateText([{ skill: s, version: v1 }], 0);
+  assert.ok(est!.endsWith(NO_INVENTED_FIGURE_RULE) && est!.includes('Synthetic SKILL.md of synthetic-hq-brief v1'));
 });

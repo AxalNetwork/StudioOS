@@ -10,6 +10,7 @@ import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
 import { logAdminAction } from '../services/adminAudit';
+import { logActorAct } from '../services/actorLog';
 import { ensureTier } from '../middleware/requireTier';
 import { isAdmin, isFounder, mapError, nowIso, newUid, jload, trimOrNull } from './_t13t14t15_helpers';
 import { loadUserVectors, confidenceAdjustedAlignment, skillComplementarity, computeWatchOuts } from '../services/matchingVectors';
@@ -1269,6 +1270,40 @@ async function transition(c: Context<{ Bindings: Env }>, id: number, opts: {
   if (Number((wrote as any)?.meta?.changes ?? 0) === 0) {
     return c.json({ detail: 'This booking changed while you were looking at it. Reload it and try again.' }, 409);
   }
+  // #4692: WHO closed the session, and when.
+  //
+  // The row carried the OUTCOME and not the hand: `status` says what happened,
+  // `cancelled_by` says which side cancelled and `advisor_decision` holds the
+  // answer, but none of them names the account that pressed the button, and
+  // `updated_at` is the row's clock rather than an act. So a completed session
+  // (which is what the advisor is paid on) and a cancel could not be traced to
+  // a person at all — including a cancel an admin made on someone else's
+  // booking, which reached no audit store.
+  //
+  // Recorded AFTER the conditional UPDATE changed a row, so the refused press
+  // on a stale status above leaves no record of an act that did not happen.
+  // Both writers are best effort by their own contract: the session has
+  // already changed, and a lost line is better than an act undone by its own
+  // record.
+  //
+  // An admin's press is the privileged one and goes to `logAdminAction`, which
+  // reaches HQ's governance feed (D159); the advisor's and the client's own go
+  // to `activity_logs` through `logActorAct` (D637). `adm` decides, exactly as
+  // it decides `cancelled_by` above, so one press cannot be an admin to one
+  // store and the advisor to the other. Ids and states only: `opts.reason` is
+  // free text the person typed and stays out of both.
+  const actorRole = adm ? 'admin' : isAdvisor ? 'advisor' : 'client';
+  const act = {
+    booking_id: id, advisor_id: b.advisor_id, slot_id: b.slot_id,
+    from_status: b.status, to_status: opts.nextStatus,
+    actor_role: actorRole, cancelled_by: cancelledBy, decision, at,
+  };
+  if (actorRole === 'admin') {
+    await logAdminAction(c.env, user.id, String(user.email || ''),
+      `advisor_booking_${opts.nextStatus}`, { ...act, target_user_id: b.founder_user_id });
+  } else {
+    await logActorAct(c.env, user, `advisor_booking_${opts.nextStatus}`, act);
+  }
   // Task #52 — remove from external calendars on cancel/no-show.
   // Defer the dynamic import + provider DELETE work via waitUntil so
   // the cancel response returns immediately.
@@ -1425,7 +1460,7 @@ advisors.post('/:uid/book', async (c) => {
 // to the shared booking DTO or the founder's client brief.
 async function requireRosterClient(c: Context<{ Bindings: Env }>) {
   const user = await requireAuth(c);
-  if (!holdsLicence(user, 'advisor')) throw c.json({ detail: 'Advisor required' }, 403);
+  if (!holdsLicence(user, 'advisor')) throw refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
   const advisor = await requireMyAdvisor(c, user);
   if (advisor.user_id !== user.id) throw c.json({ detail: 'Your advisor profile is not attached to this account' }, 403);
   const clientId = Number(c.req.param('clientId'));
@@ -1861,7 +1896,7 @@ advisors.get('/me/booking-links', async (c) => {
 advisors.get('/me/visibility', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     const m = await requireMyAdvisor(c, user);
     return c.json(await advisorVisibility(c.env, { advisorId: m.id, userId: user.id }, c.req.query('days'), Date.now(), { limit: c.req.query('limit'), offset: c.req.query('offset') }));
   } catch (e) { return mapError(c, e); }
@@ -1870,7 +1905,7 @@ advisors.get('/me/visibility', async (c) => {
 advisors.get('/me/access-log', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     await requireMyAdvisor(c, user);
     const rows = await c.env.DB.prepare(
       `SELECT l.action, l.created_at, p.uid AS project_uid, p.name AS client,
@@ -1888,7 +1923,7 @@ advisors.get('/me/access-log', async (c) => {
 advisors.patch('/me/booking-links/:id', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (!holdsLicence(user, 'advisor')) return c.json({ detail: 'Advisor required' }, 403);
+    if (!holdsLicence(user, 'advisor')) return refuse(c, 403, ADVISOR_LICENCE_REQUIRED);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
     if (typeof body.is_active !== 'boolean') return c.json({ detail: 'is_active must be a boolean' }, 400);

@@ -14,7 +14,7 @@
  *   4. applies the cohort calendar gate, read through the enrollment;
  *   5. checks the saved work (`labEvidence.ts`);
  *   6. inserts the milestone with that evidence, once (UNIQUE user, key);
- *   7. advances the week through the existing pure `recordMilestone`;
+ *   7. advances the week through `recordMilestone` (`labLifecycle.ts`);
  *   8. pays the credit when, and only when, step 6 inserted the row.
  * A read in steps 2, 4 or 5 that fails answers 503 and records nothing.
  *
@@ -28,12 +28,19 @@
  *
  * Rows from before migration 202611071700 are `evidence_kind = 'legacy'`: the
  * reconciler neither re-checks nor pays them; D541's backfill still governs.
+ *
+ * THE MEMBER'S REQUEST (D4663). `completeLabMilestone` is `POST /milestone`
+ * whole: `incorporation_completed` goes to the paid-order sync (D585), every
+ * other key to `recordLabMilestone`, and the outcome is the status and body
+ * the route returns.
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { VALID_MILESTONE_KEYS, weekForKey } from './spinoutLabCatalog';
 import { mayParticipate, refusal, resolveLabEligibility, type LabEnrollment } from './labEnrollment';
 import { evidenceFor, MILESTONE_EVIDENCE, type Evidence } from './labEvidence';
+import { getLabState, recordMilestone, type LabOutcome } from './labLifecycle';
+import { graduationOf } from './labGraduation';
 
 export type RecordedBy = 'member' | 'advisor' | 'order' | 'ein' | 'reconcile';
 
@@ -112,9 +119,8 @@ export async function recordLabMilestone(env: Env, userId: number, rawKey: strin
   ).bind(userId, week, key, evidence.kind, evidence.ref, evidence.project_id, enrollment.id, by).run();
   const inserted = Number(ins.meta?.changes ?? 0) === 1;
 
-  // The week advance (and week 4's close) stays in the route's pure function,
-  // which the exact-statement harness pins. Its own INSERT OR IGNORE is a no-op.
-  const { recordMilestone } = await import('../routes/spinout_lab');
+  // The week advance (and week 4's close) is the lifecycle's. Its own INSERT
+  // OR IGNORE is a no-op after the insert above.
   const sql = getSQL(env);
   let state: unknown;
   try {
@@ -135,18 +141,58 @@ export async function recordLabMilestone(env: Env, userId: number, rawKey: strin
   return { ok: true, inserted, evidence, state, milestone_credit: milestoneCredit, graduation_credit: graduationCredit };
 }
 
+/** `POST /milestone`: what the member asked to record, answered as the route's status and body. */
+export async function completeLabMilestone(env: Env, userId: number, rawKey: unknown): Promise<LabOutcome> {
+  const key = typeof rawKey === 'string' ? rawKey.trim() : '';
+  // D585 (#1212): graduation's formation milestone comes only from the
+  // server's order status, at payment. A client call asks the server to sync,
+  // which records it only behind a paid order.
+  if (key === 'incorporation_completed') {
+    const { syncIncorporationMilestone } = await import('./labIncorporationMilestone');
+    const out = await syncIncorporationMilestone(env, userId);
+    if (!out.recorded && out.reason === 'not_paid') {
+      return { status: 409, body: { error: 'incorporation_not_paid', message: 'This milestone is recorded when your incorporation order is paid.' } };
+    }
+    if (!out.recorded && out.reason === 'unavailable') {
+      return { status: 503, body: { error: 'This step could not be checked just now. Try again in a moment.', code: 'lab_evidence_unavailable', retryable: true } };
+    }
+    const sql = getSQL(env);
+    let state: Record<string, unknown>;
+    try { state = await getLabState(sql, userId); } finally { await sql.end(); }
+    return {
+      status: 200,
+      body: {
+        ...state,
+        milestone_credit: out.recorded ? out.milestone_credit : null,
+        graduation_credit: out.recorded ? out.graduation_credit : null,
+      },
+    };
+  }
+  // D4657: the browser asks; the server records only what the policy, the
+  // cohort calendar and the saved work allow. A milestone pays only from the
+  // request whose insert recorded it.
+  const r = await recordLabMilestone(env, userId, key, 'member');
+  if (!r.ok) return { status: r.status, body: r.body };
+  return { status: 200, body: { ...(r.state as Record<string, unknown>), milestone_credit: r.milestone_credit, graduation_credit: r.graduation_credit } };
+}
+
 /**
  * Issue the credential, and pay its bonus, when the founder meets the
  * graduation rule (view spinout_lab_graduates, by_rule) and holds none yet.
  * Idempotent and best-effort: the certificate backfill and the reconciler
  * catch up anything missed. Returns the bonus outcome, or null.
+ *
+ * D5360: a suspended branch, or one whose licence does not hold the Spin-Out
+ * Lab (or whose grants cannot be read), issues neither. The milestone that
+ * completed graduation is already recorded; the scheduled backfill issues the
+ * credential and its bonus on the first tick after the hold lifts. The same
+ * `labIssuanceHold` the admin routes and the backfill ask.
  */
 export async function issueIfGraduated(env: Env, userId: number): Promise<unknown> {
   try {
-    const g = await env.DB.prepare('SELECT 1 AS x FROM spinout_lab_graduates WHERE user_id = ? AND by_rule = 1')
-      .bind(userId).first();
-    if (!g) return null;
-    const { issueOnGraduation } = await import('./certificateIssuance');
+    if (!(await graduationOf(env, userId)).by_rule) return null;
+    const { issueOnGraduation, labIssuanceHold } = await import('./certificateIssuance');
+    if (await labIssuanceHold(env)) return null;
     if ((await issueOnGraduation(env, userId)) !== 'issued') return null;
     const { creditLabGraduation } = await import('./labMilestoneCredits');
     return await creditLabGraduation(env, userId);

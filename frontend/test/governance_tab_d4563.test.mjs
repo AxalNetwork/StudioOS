@@ -96,10 +96,11 @@ test('a failed read says so and retries, never an empty collection', async () =>
 });
 
 test('a status move asks first in the panel, then sends; the Worker\'s refusal is printed as it comes', async () => {
+  // D4811 part 6: Mark executed is a high-risk move: Scope (evidence, reason) → Review (the typed word) → Result.
   const calls = stub({
     list: async () => listing(),
-    read: async () => ({ document: doc(), versions: [doc().latest] }),
-    update: () => Promise.reject(Object.assign(new Error('Upload the signed copy, or link the signed envelope, before marking this document executed. Nothing was saved.'), { status: 409 })),
+    read: async () => ({ document: doc(), versions: [{ ...doc().latest, signed: true }] }),
+    update: () => Promise.reject(Object.assign(new Error('Envelope #4 has not completed, so it cannot show this record was executed. Nothing was saved.'), { status: 409 })),
   });
   const view = await mountContracts(React.createElement(GovernanceTab), '/admin/contracts/governance', admin);
   try {
@@ -113,13 +114,19 @@ test('a status move asks first in the panel, then sends; the Worker\'s refusal i
     assert.match(view.text(), /Send to review|Return to review/);
     await view.click('Mark executed');
     assert.equal(calls.filter(([k]) => k === 'update').length, 0, 'the first press only asks');
-    assert.match(view.text(), /Move “Holdings OA” from Approved to Executed\?/);
-    assert.match(view.text(), /Upload the signed copy, or link the completed envelope/);
-    const confirms = view.nodes().filter((n) => n.tagName === 'BUTTON' && view.props(n)?.children === 'Mark executed');
+    assert.match(view.text(), /Mark as executed\?/);
+    assert.match(view.text(), /Signed copy uploaded to this record/);
+    const reason = view.nodes().find((n) => n.tagName === 'TEXTAREA');
+    await act(async () => { view.props(reason).onChange({ target: { value: 'Signed at the board meeting.' } }); });
+    await view.click('Continue');
+    assert.match(view.text(), /What changes.*Who is told.*What is recorded/);
+    const word = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.autoComplete === 'off');
+    await act(async () => { view.props(word).onChange({ target: { value: 'EXECUTED' } }); });
+    const confirms = view.nodes().filter((n) => n.tagName === 'BUTTON' && walk(n) === 'Mark executed');
     await act(async () => { view.props(confirms.at(-1)).onClick({}); });
     await view.flush();
-    assert.deepEqual(calls.filter(([k]) => k === 'update').at(-1)[1], ['d1', { status: 'executed' }]);
-    assert.match(view.text(), /before marking this document executed\. Nothing was saved\./);
+    assert.deepEqual(calls.filter(([k]) => k === 'update').at(-1)[1], ['d1', { status: 'executed', reason: 'Signed at the board meeting.', confirm: 'EXECUTED', evidence: { kind: 'version', version: 1 } }]);
+    assert.match(view.text(), /cannot show this record was executed\. Nothing was saved\./);
   } finally { await view.unmount(); restore(); }
 });
 
@@ -136,7 +143,7 @@ test('the Super Admin is offered the ownership, and an unrecorded entity reads N
   const view = await mountContracts(React.createElement(GovernanceTab), '/admin/contracts/governance', superAdmin);
   try {
     await view.flush();
-    await view.click('Ownership (Super Admin)'); await view.flush();
+    await view.click('🔒 View restricted ownership details'); await view.flush();
     assert.equal(calls.filter(([k]) => k === 'ownership').length, 1, 'read only once it opens');
     const text = view.text();
     assert.match(text, /Member A · Class A units · percent not recorded/);
@@ -155,7 +162,8 @@ test('the desk: Corporate Governance sits after Templates at its own path, HQ on
     const link = view.nodes().find((n) => view.props(n)?.['data-testid'] === 'contracts-tab-governance');
     assert.ok(link, 'the tab is drawn');
     assert.equal(view.props(link)['aria-current'], 'page');
-    assert.match(view.text(), /Templates.*Corporate Governance.*Forms/s, 'beside the template library');
+    // D4811 part 7: the four workflow tabs, then the Library menu (Forms, Document types).
+    assert.match(view.text(), /Agreements.*Templates.*Corporate Governance.*Closings.*Library/s, 'after Templates, among the four workflow tabs');
     assert.match(view.text(), /Holdings OA/);
   } finally { await view.unmount(); restore(); }
   stub({ list: async () => listing() });

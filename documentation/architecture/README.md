@@ -13,6 +13,7 @@ disagrees with the code, the document is the thing to fix.
 | `AI_MODEL_COVERAGE.md` | **Generated** (D1478). Every Workers AI catalogue model against the 14 platform modules: wired, offered, gap or n/a, with the file and line or page that does it, the picks the run never reads, and Pitch deck v2's models priced per run. `cloudflare-worker/test/ai_model_coverage_d1478.test.ts` fails when it differs from `renderCoverage()`. |
 | `SKILL_LIBRARY_CONTRACT.md` | Versioned, importer-compatible source definition and golden-case contract: current enforcement, compatibility aliases, evaluation limits, and the staged v2 path. |
 | `SKILL_LIBRARY_AUDIT.md` | Read-only audit of the skill library (#4529): sources of truth, field survival, validators, evaluation paths and findings, routes, the source catalogue reconciliation and the reconciliation contract for CI. |
+| `SKILL_ANALYTICS_METRICS.md` | The skill analytics metric dictionary (D4536): each metric's source, grouping, window, denominator, availability and scope; the catalogue coverage served on the HQ library read, and what each deferred usage metric waits on. |
 | `MODEL_TERMS.md` | D1504. Every model a run can reach: grandfathered or not, where it is routed from, and what its provider's terms allow (licence, commercial output, attribution, flow-down), "Not recorded" until reviewed. `cloudflare-worker/test/ai_model_terms_d1504.test.ts` holds it equal to `cloudflare-worker/src/services/ai/modelTerms.ts`. |
 | Page inventory | **Generated, not committed** (D4103). The same projection from the nav side: every destination each role sidebar can reach, and which canvas is behind it. Written beside the routing map by the same command. |
 | `UNRESOLVED_ITEMS.md` | The routing decisions that cannot be made from the code, what each blocks, and what a wrong guess would cost. |
@@ -31,6 +32,8 @@ disagrees with the code, the document is the thing to fix.
 | `SOCIAL_PREVIEWS.md` | OG images and how they are generated. |
 | `SOCIAL_CARDS_MAP.md` | D1440: which card each route group shares as, who can open it, whether it is meant to be shared, where its title and image come from, and the retirement calls. |
 | `ANALYTICS_FUNNEL.md` | The funnel events and what they mean. |
+| `SKILL_DISCOVERY_CONTRACT.md` | D4538: the task-to-skill recommendation request and response: the hard eligibility gate (`attachCheck`'s codes plus `output_mismatch`, `input_unavailable`, `not_runnable`), the ranking stages, abstention, and how a ranker is measured. Not a built route yet. |
+| `skill-discovery/` | D4538: the labelled discovery query set (`queries.v1.json`) a recommender is measured against; its README has the rule for adding a scenario. |
 
 **`CLAUDE.md` at the repo root outranks everything here.** Where this folder
 disagrees with it, that file wins.

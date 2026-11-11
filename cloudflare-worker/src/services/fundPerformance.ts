@@ -1,5 +1,6 @@
 /** D627: investments-only marks and called-capital performance. No cost-as-value fallback. */
 import type { Env } from '../types';
+import { positionMarkIdSql } from './portfolioValuation';
 export type Flow = { amount_cents: number; date: string | null };
 export type Mark = { id: number; value_cents: number | null; valuation_date: string | null };
 export function validDate(value: unknown): value is string {
@@ -79,9 +80,7 @@ export async function readFundPerformance(env: Env, fund: any, asOf: string, opt
   const pit = opts.pointInTime ? 1 : 0;
   const positions = await rows<Mark>(env.DB.prepare(
     `SELECT p.id, v.value_cents, v.valuation_date FROM portfolio_positions p
-     LEFT JOIN fund_position_valuations v ON v.id = (
-       SELECT m.id FROM fund_position_valuations m WHERE m.position_id = p.id AND m.valuation_date <= ?
-       ORDER BY m.valuation_date DESC, m.id DESC LIMIT 1)
+     LEFT JOIN fund_position_valuations v ON v.id = ${positionMarkIdSql('p.id')}
      WHERE p.fund_id = ? AND (? = 0 OR COALESCE(substr(p.position_date, 1, 10), substr(p.created_at, 1, 10)) <= ?)`)
     .bind(asOf, fund.id, pit, asOf));
   // Headers are authoritative. Legacy unnumbered LP lines are included once;

@@ -116,3 +116,113 @@ export function askStateOf(t, { libraryUids = null } = {}) {
   if (reason === 'retrieval_unavailable' || reason === 'model_unavailable') return reason;
   return null;
 }
+
+/**
+ * D3701 part 3 (RS-07) — one citation's availability. `available` while the
+ * library read lists its document, `gone` when it does not, and null when the
+ * library was not read or the citation names no document: unknown is not gone.
+ */
+export function citationAvailability(ct, libraryUids, revisions = null) {
+  if (!libraryUids || !ct?.document_uid) return null;
+  if (!libraryUids.has(ct.document_uid)) return 'gone';
+  // D4613: the document is still here but was indexed again after this
+  // answer, so the passage shown is the version the answer read, not
+  // necessarily what the document says now. Unknown on either side is not
+  // "changed".
+  const now = revisions?.get?.(ct.document_uid);
+  if (ct.revision && now && now !== ct.revision) return 'changed';
+  return 'available';
+}
+
+export const CITATION_AVAILABILITY = {
+  available: { label: 'Available', tone: 'ok', glyph: '✓' },
+  changed: { label: 'Re-indexed since this answer', tone: 'warn', glyph: '↻' },
+  gone: { label: 'No longer available', tone: 'neutral', glyph: '⊠' },
+};
+
+/**
+ * D4613 — an answer's citations split into the sources it cites and the
+ * passages it was given and never cites. Each keeps its index in the stored
+ * list, which is what the source sheet opens by. A citation stored without a
+ * `cited` mark (a payload from before D4613) counts as retrieved, never as
+ * cited: unknown is not support.
+ */
+export function splitCitations(t) {
+  const all = (Array.isArray(t?.citations) ? t.citations : []).map((ct, i) => ({ ct, i }));
+  return {
+    cited: all.filter(({ ct }) => ct?.cited === true),
+    retrieved: all.filter(({ ct }) => ct?.cited !== true),
+  };
+}
+
+/**
+ * D4613 — what the page says about an answer's bracketed references, from the
+ * Worker's `reference_check`. Null when there is nothing to say. A reference
+ * that resolves is never called verified: it names a source the answer was
+ * given, which is not proof that source supports the sentence.
+ */
+export function referenceNote(t) {
+  const check = t?.reference_check;
+  if (!check || t?.reason !== 'answered') return null;
+  if (check.status === 'invalid_refs') {
+    const refs = (check.invalid || []).map((n) => `[${n}]`).join(', ');
+    return {
+      tone: 'warn',
+      text: `This answer cites ${refs}, which ${check.invalid.length === 1 ? 'is' : 'are'} not among the sources it was given. ${check.invalid.length === 1 ? 'That reference is' : 'Those references are'} unverified.`,
+    };
+  }
+  if (check.status === 'none_cited') {
+    return { tone: 'warn', text: 'This answer cites none of its sources by number, so no sentence in it is tied to a passage.' };
+  }
+  return null;
+}
+
+/** D4613: the sentence that keeps a resolved reference from reading as proof. */
+export const REFERENCE_LIMIT = 'A numbered reference names the passage the answer drew on. It is not a check that the passage supports the sentence.';
+
+/**
+ * What "Copy with citations" puts on the clipboard: the answer, then each
+ * numbered source with its page and passage as recorded. A citation stored
+ * before passages were kept says so rather than copying nothing.
+ */
+export function answerWithCitations(t) {
+  const lines = [String(t?.answer || '').trim()];
+  const cites = Array.isArray(t?.citations) ? t.citations : [];
+  if (cites.length) {
+    lines.push('', 'Sources');
+    cites.forEach((ct, i) => {
+      const where = [ct.page != null ? `page ${ct.page}` : null, ct.chunk != null ? `passage ${ct.chunk + 1}` : null].filter(Boolean).join(', ');
+      lines.push(`[${ct.n || i + 1}] ${ct.title || 'Untitled document'}${where ? ` (${where})` : ''}`);
+      lines.push(ct.passage ? `    “${ct.passage}${ct.passage_truncated ? '…' : ''}”` : '    Passage not recorded for this answer.');
+    });
+  }
+  return lines.join('\n');
+}
+
+/**
+ * RS-07's history tabs. `session` is kept first: asking appends to the
+ * current session, and leaving the reader on All after a question would make
+ * the answer look lost (the reason `ask` resets the view). Archived is the
+ * discarded disposition (D549).
+ */
+export const HISTORY_TABS = [
+  { view: 'session', label: 'This session' },
+  { view: 'all', label: 'All' },
+  { view: 'saved', label: 'Saved answers' },
+  { view: 'discarded', label: 'Archived' },
+];
+
+/**
+ * D3701 part 4 (RS-11) — a press the router refused before it ran. The
+ * Worker answers a budget stop with 402 in the budget's own words (D766,
+ * `refuseRun`), and nothing is stored: the history stays as it was. Null for
+ * any other failure, which keeps its own message.
+ */
+export function tokensRefusal(err) {
+  if (!err || err.status !== 402) return null;
+  return {
+    title: 'You’re out of AI tokens',
+    body: err.message || 'The included AI allowance and top-up balance cannot cover this run.',
+    note: 'Add tokens to ask. Your history stays readable, and nothing was charged.',
+  };
+}

@@ -111,7 +111,8 @@ test('Median read time is absent, and for a harder reason than the artboard’s'
   const tile = strip.slice(strip.indexOf('label="Median read time"'));
   assert.match(tile, /label="Median read time"\s*\n\s*nr\b/,
     'the read-time tile now shows a number');
-  assert.ok(flat(tile).includes('nothing records that a client read one'),
+  // D4822: the canvas's words for the same absence.
+  assert.ok(flat(tile).includes('Read time unavailable · client reads are not currently tracked'),
     'the tile stopped saying why it is absent');
 
   // AND THE WORKER REFUSES IT AT SOURCE rather than the page hiding a figure.

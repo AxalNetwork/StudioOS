@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { safeReadJSON } from '../lib/storage';
-import { clearPendingPricingNext, storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
+import { clearPendingPricingNext, destinationArea, storePendingNext, sanitizeNextPath } from '../lib/pendingNext';
 import { Link } from 'react-router-dom';
 import { Copy, Check, Mail, RefreshCw } from 'lucide-react';
 import { api } from '../lib/api';
@@ -11,7 +11,7 @@ import AxalLogo from '../components/AxalLogo';
 import AuthShell, { AuthCard } from '../components/auth/AuthShell';
 import { normaliseRef, readRefCookie } from '../lib/referralRef';
 import { planIntentFrom } from '../lib/planIntent';
-import { LANES, LANE_ROLE, registerHeading } from '../lib/registerCopy';
+import { LANES, LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, registerHeading } from '../lib/registerCopy';
 import { RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
@@ -19,6 +19,7 @@ const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 export default function RegisterPage() {
   useForcedLightTheme();
   const [step, setStep] = useState(1);
+  const [linkPurpose, setLinkPurpose] = useState('signup');
   const [form, setForm] = useState({ email: '', name: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -131,6 +132,8 @@ export default function RegisterPage() {
   };
 
   const heading = registerHeading(lane, planIntent ? selection : null);
+  // #4579 (D4579): a kept destination in a named area (Grow) is said out loud, with the account it needs.
+  const destination = destinationArea(nextPath);
 
   // Task #1 — lane → account role. The marketing site's audience lanes map
   // onto the worker's CHECK-constrained roles (`lp` folds into investor, so
@@ -235,6 +238,9 @@ export default function RegisterPage() {
       // bare magic link, which find-or-creates the account on verify and has
       // its own per-IP/per-email rate limits. Referral attribution is lost in
       // that edge case, but the user isn't.
+      // #4578: a new account's link says "finish creating your account"; an address that already has an
+      // account (409) gets the ordinary sign-in link and the page says so.
+      let purpose = 'signup';
       if (!(TURNSTILE_SITE_KEY && turnstileFailed)) {
         try {
           await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole, product: productIntent || undefined });
@@ -243,9 +249,11 @@ export default function RegisterPage() {
           // Worker's wording must not turn every returning member's sign-in
           // link into an error.
           if (e?.code !== 'email_already_registered') throw e;
+          purpose = 'signin';
         }
       }
-      await api.magicStart(form.email.trim());
+      await api.magicStart(form.email.trim(), { purpose });
+      setLinkPurpose(purpose);
       track('register_success', { mode: 'magic' });
       setEmailMode('magic');
       setResendCooldown(60);
@@ -297,7 +305,7 @@ export default function RegisterPage() {
       if (emailMode === 'magic') {
         // Task #10 — resend the magic sign-in link (server rate-limits
         // 3/15min per email; surface its error message if we hit the cap).
-        await api.magicStart(form.email.trim());
+        await api.magicStart(form.email.trim(), { purpose: linkPurpose });
       } else {
         const res = await api.resendVerification({ email: form.email });
         if (res?.verification_url) {
@@ -331,7 +339,14 @@ export default function RegisterPage() {
             <>
               <h2 className="text-xl font-bold text-gray-900 mb-1">{heading.title}</h2>
               {/* Task #10 — audit's exact subhead copy (fix 10). */}
-              <p className="text-sm text-gray-600 mb-4">{heading.desc}</p>
+              <p className="text-sm text-gray-600 mb-2">{heading.desc}</p>
+              {/* #4578: the steps after this page, so "create an account" is not read as membership. */}
+              <p className="text-xs text-gray-500 mb-4" data-testid="register-membership-steps">{MEMBERSHIP_STEPS}</p>
+              {destination && (
+                <p className="text-sm text-gray-700 mb-4" data-testid="register-destination">
+                  {`Create an account to continue to ${destination.name}. ${destination.what} ${destination.who} Once your account is set up, you return there.`}
+                </p>
+              )}
 
               <RegistrationPlanBlock intent={planIntent} lane={lane} onSelection={setSelection} />
 
@@ -374,12 +389,12 @@ export default function RegisterPage() {
                 {TURNSTILE_SITE_KEY && turnstileFailed && (
                   <div className="text-xs text-amber-800 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
                     Human verification couldn't load — usually an ad blocker or strict network.
-                    You can still continue with an emailed sign-in link below.
+                    You can still continue with the emailed link below.
                   </div>
                 )}
                 <button type="submit" disabled={loading || (TURNSTILE_SITE_KEY && !turnstileToken && !turnstileFailed)}
                   className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-white transition-colors flex items-center justify-center gap-2">
-                  <Mail size={14} /> {loading ? 'Sending link…' : 'Email me a sign-in link'}
+                  <Mail size={14} /> {loading ? REGISTER_ACTIONS.sending : REGISTER_ACTIONS.submit}
                 </button>
                 {/* Task #10 — audit's exact trust line (fix 15). */}
                 <p className="text-[10px] text-gray-500 text-center leading-relaxed">
@@ -427,7 +442,7 @@ export default function RegisterPage() {
               </form>
 
               <p className="text-xs text-gray-600 text-center mt-4">
-                Already have an account? <Link to="/login" className="text-violet-600 hover:underline font-medium">Sign in</Link>
+                Already have an account? <Link to={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : '/login'} className="text-violet-600 hover:underline font-medium">Sign in</Link>
               </p>
             </>
           )}
@@ -444,7 +459,7 @@ export default function RegisterPage() {
                 {emailWarning
                   ? 'Email delivery is not configured. Use the link below to verify:'
                   : emailMode === 'magic'
-                    ? `We've sent a sign-in link to`
+                    ? (linkPurpose === 'signin' ? REGISTER_ACTIONS.sentSignin : REGISTER_ACTIONS.sentSignup)
                     : `We've sent a verification link to`}
               </p>
               {!emailWarning && (
@@ -511,7 +526,7 @@ export default function RegisterPage() {
                 <button onClick={resendEmail} disabled={loading || resendCooldown > 0}
                   className="w-full bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 rounded-lg py-2.5 text-sm font-medium text-gray-700 flex items-center justify-center gap-2 transition-colors">
                   <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                  {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : emailMode === 'magic' ? 'Resend sign-in link' : 'Resend Verification Email'}
+                  {resendCooldown > 0 ? `Resend available in ${resendCooldown}s` : loading ? 'Sending...' : emailMode === 'magic' ? (linkPurpose === 'signin' ? REGISTER_ACTIONS.resendSignin : REGISTER_ACTIONS.resendSignup) : 'Resend Verification Email'}
                 </button>
                 <button onClick={() => { setStep(1); setError(''); setVerificationUrl(''); setEmailWarning(false); }}
                   className="w-full text-sm text-gray-500 hover:text-gray-700 py-1 transition-colors">

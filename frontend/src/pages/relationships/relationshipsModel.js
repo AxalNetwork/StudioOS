@@ -145,6 +145,22 @@ export function draftEstimateLine(estimate) {
   return `Holds up to $${usd.toFixed(usd < 1 ? 4 : 2)} in AI tokens. Nothing is charged until you confirm.`;
 }
 
+// D4604: an accepted intro's delivery attempt, as the Worker records it (`delivery`, the teammate's own only).
+// Delivered and recorded are two facts: a send the mail server took can still be waiting for its record.
+export const DELIVERY_LINE = Object.freeze({
+  sending: 'This intro is being sent. Reload in a moment to see whether it went.',
+  unconfirmed: 'Your mail server may or may not have taken this intro. Look in your Sent folder, then say which. Sending it again before you know could deliver it twice.',
+  record_pending: 'Sent: your mail server took this intro. Its record here is not updated yet. Updating it sends nothing.',
+  not_sent: 'The last send of this intro did not go out. You can write it again.',
+});
+export const UPDATE_RECORD = 'Update the record';
+/** The delivery state of a request, or null. `canWrite` is false while a send is in flight, unconfirmed or delivered. */
+export function deliveryOf(r) {
+  const state = r?.status === 'accepted' ? r?.delivery?.state ?? null : null;
+  if (!state || !DELIVERY_LINE[state]) return { state: null, line: null, operationUid: null, canWrite: true };
+  return { state, line: DELIVERY_LINE[state], operationUid: r.delivery.operation_uid ?? null, canWrite: state === 'not_sent' };
+}
+
 /** "Omar Reyes → Lena Hart": who asked, and who was asked. */
 export const whoLine = (r) => `${r?.requester?.name || 'A teammate'} → ${r?.teammate?.name || 'A teammate'}`;
 /** "Alex Example · Bluefern Capital". */
@@ -164,6 +180,40 @@ export function introSubject(r, askerCompany = null) {
 export const teamLabelOf = (r, teams = []) => (teams.find((t) => t.key === r?.team_key)?.label) || 'Your team';
 
 /**
+ * #4611 finding 11 — THE NOTE THE DECLINE FORM PROMISES, AND WHO MAY READ IT.
+ *
+ * The decline form's own label is "A note they will read (optional)". The note
+ * is stored on `relationship_interactions.decision_note`, and
+ * `interactionView` has always returned it to BOTH people on the request — and
+ * nothing in `frontend/src/` referenced the field. `grep decision_note` over
+ * the whole frontend returned nothing. So the teammate typed an explanation,
+ * the product told them the asker would read it, the Worker served it, and the
+ * asker's log had no column and no cell for it. The notification only said
+ * "There is a note for you", pointing at a page that would not show it.
+ *
+ * WHAT THE DECISION CONTEXT IS. A bare note is not an explanation; it is a
+ * sentence with no subject. The line pairs the note with the verdict and its
+ * date — "Declined on 2026-11-04" — so the asker reads WHY beside WHAT, which
+ * is the finding's "with the relevant decision context".
+ *
+ * WHO. Only the two people on a request can read it, which is already true at
+ * the API: every read names the caller in its WHERE clause, so a third party's
+ * request is 404 and is in no response this function ever sees. Nothing is
+ * widened here; the field that was already being served is finally drawn.
+ *
+ * A NOTE ON AN ACCEPTANCE IS SHOWN TOO. The same column holds it, the same
+ * person wrote it for the same reader, and suppressing it would be a second
+ * version of this bug.
+ */
+export function decisionLine(r) {
+  const note = String(r?.decision_note || '').trim();
+  if (!note) return null;
+  const verdict = STATUS_LABEL[r?.status] || r?.status || 'Answered';
+  const on = String(r?.decided_at || '').slice(0, 10);
+  return { note, context: on ? `${verdict} on ${on}` : verdict };
+}
+
+/**
  * The log's rows, newest first: sent and received together, each with who for,
  * the team, the status, the outcome and the caller's own follow-up.
  */
@@ -173,7 +223,7 @@ export function logRows(read, teams = []) {
     uid: r.uid, side: r.side, when: String(r.created_at || '').slice(0, 10) || NOT_RECORDED,
     who: whoLine(r), person: personOf(r), team: teamLabelOf(r, teams),
     status: STATUS_LABEL[r.status] || r.status, statusKey: r.status, outcome: outcomeOf(r),
-    followUp: followUpLine(r.follow_up), row: r,
+    followUp: followUpLine(r.follow_up), decision: decisionLine(r), row: r,
   }));
 }
 

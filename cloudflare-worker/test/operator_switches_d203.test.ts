@@ -425,12 +425,12 @@ test('two databases in one isolate keep separate readings', async () => {
 test('the conditional write reports whether anything changed, and records who and why', async () => {
   const db = freshDb();
   const env = envFor(db);
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Nothing to release.', HOLDER, { revision: 0 }), { changed: false },
+  assert.equal((await setOperatorSwitch(env, 'eadwyn_off', false, 'Nothing to release.', HOLDER, { revision: 0 })).changed, false,
     'a release of a switch nobody threw reported a change');
   assert.equal(storeRows(db).length, 0, 'a release of nothing wrote a row');
 
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', true, REASON, HOLDER), { changed: true });
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', true, 'A second throw.', PLAIN_ADMIN), { changed: false },
+  assert.equal((await setOperatorSwitch(env, 'eadwyn_off', true, REASON, HOLDER)).changed, true);
+  assert.equal((await setOperatorSwitch(env, 'eadwyn_off', true, 'A second throw.', PLAIN_ADMIN)).changed, false,
     'throwing a thrown switch reported a change');
   let [row] = storeRows(db);
   assert.equal(row.thrown, 1);
@@ -439,7 +439,7 @@ test('the conditional write reports whether anything changed, and records who an
   assert.match(String(row.set_at), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/, "set_at is not SQLite's clock");
 
   assert.equal(row.revision, 1, 'the first throw is revision 1');
-  assert.deepEqual(await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt.', PLAIN_ADMIN, { revision: 1 }), { changed: true });
+  assert.equal((await setOperatorSwitch(env, 'eadwyn_off', false, 'Index rebuilt.', PLAIN_ADMIN, { revision: 1 })).changed, true);
   [row] = storeRows(db);
   assert.equal(row.thrown, 0);
   assert.equal(row.reason, 'Index rebuilt.');
@@ -679,6 +679,7 @@ test('D4703: the take rate needs the write bar, and is saved with its audit row'
 test('D4703: HQ reads the advisory charges owed back, open first; a plain admin cannot', async () => {
   const db = freshDb();
   db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611070915_advisory_refunds_due.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100930_advisory_refunds_due_resolution_reason.sql'), 'utf8'));
   db.exec(`INSERT INTO advisory_refunds_due (booking_id, booking_uid, booking_status, payment_intent_id, amount_cents, currency, created_at, resolved_at)
     VALUES (1, 'bk-old', 'cancelled', 'pi_1', 30000, 'usd', '2026-11-01 00:00:00', '2026-11-02 00:00:00'),
            (2, 'bk-new', 'no_show', 'pi_2', 12000, 'usd', '2026-11-05 00:00:00', NULL)`);
@@ -693,4 +694,164 @@ test('D4703: HQ reads the advisory charges owed back, open first; a plain admin 
   assert.deepEqual(ok.body.items.map((r: any) => r.booking_uid), ['bk-new', 'bk-old'], 'open first');
   assert.ok(!JSON.stringify(ok.body).includes('@'), 'no person is named');
   assert.equal((await get(PLAIN_ADMIN)).status, 403);
+});
+
+/* ── D4860 part 3 (#4860, owner answer A = B): the KV mirror ─────────── */
+
+import { emergencyKey, parseEmergency } from '../src/services/emergencySwitches.ts';
+import { MIRROR_ONLY_REASON } from '../src/services/platformSwitches.ts';
+
+/** A KV namespace in memory, whose reads or writes can be made to fail. */
+function fakeKv() {
+  const data = new Map<string, string>();
+  const kv = {
+    data, failGet: false, failPut: false, gets: 0,
+    async get(k: string) { kv.gets += 1; if (kv.failGet) throw new Error('kv down'); return data.has(k) ? data.get(k)! : null; },
+    async put(k: string, v: string) { if (kv.failPut) throw new Error('kv down'); data.set(k, v); },
+  };
+  return kv;
+}
+const mirrorOf = (kv: ReturnType<typeof fakeKv>) => parseEmergency(kv.data.get(emergencyKey('eadwyn_off')) ?? null);
+
+test('D4860: a throw is mirrored to KV with D1\'s revision and nothing else; a release clears it', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  const t = await post(env, 'eadwyn_off', { action: 'throw', reason: REASON });
+  assert.equal(t.status, 200, JSON.stringify(t.body));
+  assert.deepEqual({ thrown: mirrorOf(kv)?.thrown, revision: mirrorOf(kv)?.revision }, { thrown: true, revision: 1 });
+  const raw = kv.data.get(emergencyKey('eadwyn_off'))!;
+  assert.deepEqual(Object.keys(JSON.parse(raw)).sort(), ['revision', 'set_at', 'thrown'], 'the mirror carries no reason and no actor');
+  assert.equal(t.body.switch.emergency.thrown, true);
+  assert.equal((await askEadwyn(env)).status, 503);
+
+  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Index rebuilt and checked.', revision: 1 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(mirrorOf(kv)?.thrown, false, 'the release cleared the mirror');
+  assert.equal((await askEadwyn(env)).status, 200);
+  assert.deepEqual(auditRows(db).map((a) => a.action), ['platform_switch_thrown', 'platform_switch_released']);
+});
+
+test('D4860: a thrown mirror holds the kill at a new isolate whose D1 read fails, and is read before D1', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  assert.equal((await post(envFor(db, { TOKENS: kv }), 'eadwyn_off', { action: 'throw', reason: REASON })).status, 200);
+  // A new database binding is a new isolate's reading; this one has no switch table at all.
+  const broken = freshDb({ withStore: false });
+  assert.equal((await askEadwyn(envFor(broken, { TOKENS: kv }))).status, 503, 'the mirror holds the kill without D1');
+  assert.equal((await askEadwyn(envFor(broken))).status, 200, 'without the mirror the gate fails open, as before');
+  // Read before D1: a thrown mirror decides without asking the store.
+  const { advisorKillState } = await import('../src/services/advisor/rollout.ts');
+  const kill = await advisorKillState(envFor(broken, { TOKENS: kv }));
+  assert.deepEqual([kill.off, kill.by, kill.operator], [true, 'operator', null]);
+});
+
+test('D4860: with D1 unwritable a throw still holds through the mirror, answered 202 and unrecorded; throwing again records it', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  db.exec('ALTER TABLE platform_switches RENAME TO platform_switches_away');
+  const t = await post(env, 'eadwyn_off', { action: 'throw', reason: REASON });
+  assert.equal(t.status, 202, JSON.stringify(t.body));
+  assert.deepEqual([t.body.code, t.body.recorded], ['thrown_unrecorded', false]);
+  assert.deepEqual({ thrown: mirrorOf(kv)?.thrown, revision: mirrorOf(kv)?.revision }, { thrown: true, revision: null });
+  assert.equal(auditRows(db).length, 0, 'no audit row claims a write D1 did not take');
+  assert.equal((await askEadwyn(env)).status, 503, 'the kill holds');
+
+  db.exec('ALTER TABLE platform_switches_away RENAME TO platform_switches');
+  const listed = await getSwitches(env);
+  const entry = listed.body.items.find((s: any) => s.key === 'eadwyn_off');
+  assert.equal(entry.state, 'on');
+  assert.equal(entry.reason, MIRROR_ONLY_REASON, 'the console says the mirror holds an unrecorded throw');
+  assert.deepEqual([entry.emergency.thrown, entry.emergency.recorded], [true, false]);
+  const again = await post(env, 'eadwyn_off', { action: 'throw', reason: REASON });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.deepEqual({ thrown: mirrorOf(kv)?.thrown, revision: mirrorOf(kv)?.revision }, { thrown: true, revision: 1 }, 'recorded and realigned');
+  assert.deepEqual(auditRows(db).map((a) => a.action), ['platform_switch_thrown']);
+});
+
+test('D4860: an unrecorded throw is released by the revision the page read, with its own audit row', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  db.exec('ALTER TABLE platform_switches RENAME TO platform_switches_away');
+  assert.equal((await post(env, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 202);
+  db.exec('ALTER TABLE platform_switches_away RENAME TO platform_switches');
+  // A stale page cannot end it.
+  const stale = await post(env, 'eadwyn_off', { action: 'release', reason: 'Old tab release.', revision: 5 });
+  assert.equal(stale.status, 409, JSON.stringify(stale.body));
+  assert.equal(mirrorOf(kv)?.thrown, true);
+  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Index rebuilt and checked.', revision: 0 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(mirrorOf(kv)?.thrown, false);
+  assert.equal((await askEadwyn(env)).status, 200);
+  const audit = auditRows(db);
+  assert.deepEqual(audit.map((a) => a.action), ['platform_switch_released']);
+  assert.equal(JSON.parse(audit[0].filters_json).store, 'emergency');
+});
+
+test('D4860: a release that cannot clear the mirror keeps Eadwyn off and says so; releasing again clears it', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  assert.equal((await post(env, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 200);
+  kv.failPut = true;
+  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Index rebuilt and checked.', revision: 1 });
+  assert.equal(r.status, 202, JSON.stringify(r.body));
+  assert.equal(r.body.code, 'release_incomplete');
+  assert.equal((await askEadwyn(env)).status, 503, 'the mirror still holds the kill: a release fails safe');
+  kv.failPut = false;
+  const again = await post(env, 'eadwyn_off', { action: 'release', reason: 'Clearing the emergency store.', revision: 1 });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+  assert.equal(mirrorOf(kv)?.thrown, false);
+  assert.equal((await askEadwyn(env)).status, 200);
+});
+
+test('D4860: a release never clears the mirror while D1 still holds the throw, nor with D1 down', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  assert.equal((await post(env, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 200);
+  const wrong = await post(env, 'eadwyn_off', { action: 'release', reason: 'Wrong revision release.', revision: 7 });
+  assert.equal(wrong.status, 409);
+  assert.equal(mirrorOf(kv)?.thrown, true);
+  db.exec('ALTER TABLE platform_switches RENAME TO platform_switches_away');
+  const down = await post(env, 'eadwyn_off', { action: 'release', reason: 'Release with D1 down.', revision: 1 });
+  assert.equal(down.status, 503, JSON.stringify(down.body));
+  assert.equal(mirrorOf(kv)?.thrown, true, 'nothing is released while D1 cannot record it');
+});
+
+test('D4860: an unreadable mirror falls back to D1, and an unbound one changes nothing', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const env = envFor(db, { TOKENS: kv });
+  assert.equal((await post(env, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 200);
+  // A mirror that holds a throw but cannot be read (a fresh isolate, no last good reading) is not a throw.
+  const unreadable = fakeKv();
+  unreadable.data.set(emergencyKey('eadwyn_off'), JSON.stringify({ thrown: true, revision: 1, set_at: '' }));
+  unreadable.failGet = true;
+  assert.equal((await askEadwyn(envFor(freshDb(), { TOKENS: unreadable }))).status, 200, 'an unreadable mirror is not a throw; that D1 holds none');
+  assert.equal((await askEadwyn(envFor(db, { TOKENS: fakeKv() }))).status, 503, 'D1 still decides when the mirror does not hold it');
+});
+
+test('D4860: with D1 answering reads but refusing every write, a throw still stops Eadwyn through the mirror', async () => {
+  const db = freshDb();
+  const kv = fakeKv();
+  const real = makeD1(db);
+  // Reads (auth, the gate) still answer; every batch fails, as a write-refusing D1 does.
+  const readOnly = { ...real, prepare: real.prepare.bind(real), exec: real.exec?.bind(real), batch: async () => { throw new Error('D1_ERROR: database is read-only'); } };
+  const env = { ...envFor(db, { TOKENS: kv }), DB: readOnly };
+  const t = await post(env, 'eadwyn_off', { action: 'throw', reason: REASON });
+  assert.equal(t.status, 202, JSON.stringify(t.body));
+  assert.equal(t.body.code, 'thrown_unrecorded');
+  assert.equal(storeRows(db).length, 0);
+  assert.equal(auditRows(db).length, 0);
+  assert.equal((await askEadwyn(env)).status, 503);
+  // A release cannot be recorded, so nothing is released.
+  const r = await post(env, 'eadwyn_off', { action: 'release', reason: 'Release while D1 refuses writes.', revision: 0 });
+  assert.equal(r.status, 503, JSON.stringify(r.body));
+  assert.equal(mirrorOf(kv)?.thrown, true);
+  // Without a mirror, the same throw changes nothing and says so (D203's 503).
+  const bare = { ...envFor(freshDb()), DB: readOnly };
+  assert.equal((await post(bare, 'eadwyn_off', { action: 'throw', reason: REASON })).status, 503);
 });

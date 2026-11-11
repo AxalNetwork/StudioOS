@@ -12,6 +12,9 @@ import { requireAuth } from '../auth';
 import { type TierUser } from '../middleware/requireTier';
 import { mapError, nowIso, newUid, jload, trimOrNull } from './_t13t14t15_helpers';
 import { PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate } from '../services/advisorMoney';
+import { earningsOf, ledgerAggregate, type LedgerLine } from '../services/practiceReporting';
+// D4704: the aggregate moved to services/practiceReporting.ts; re-exported for its importers.
+export { ledgerAggregate, type LedgerLine };
 import { PayoutAccountNotReady, SettlementDisabled, chargeSession, FeeSnapshotMissing, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount } from '../services/advisorConnect';
 import { ensurePaymentsCustomer } from './payments';
 import {
@@ -378,41 +381,27 @@ advisors.post('/bookings/:id/pay', async (c) => {
  * Every figure here is a SUM over rows an advisor entered, in cents, with no
  * estimate anywhere. `unpriced_count` is reported rather than hidden: an
  * earnings total that quietly ignored the sessions nobody has priced would be
- * a smaller number presented as a complete one.
+ * a smaller number presented as a complete one. D4704: the figures are
+ * `earningsOf(ledgerAggregate(...))`, the ledger's own definition.
  */
 advisors.get('/me/earnings', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
-    const rows = await c.env.DB.prepare(
-      `SELECT billing_state AS billing_state,
-              COUNT(*) AS bookings,
-              SUM(COALESCE(amount_cents, 0)) AS total_cents
-         FROM advisor_bookings
-        WHERE advisor_id = ?
-          AND NOT (status IN ('cancelled', 'no_show') AND billing_state != 'collected')
-        GROUP BY billing_state`
-    ).bind(m.id).all<{ billing_state: string; bookings: number; total_cents: number }>();
-    const by = new Map((rows.results || []).map((r) => [r.billing_state, r]));
-    const cents = (k: string) => Number(by.get(k)?.total_cents || 0);
-    const count = (k: string) => Number(by.get(k)?.bookings || 0);
     // 241 — CARRIED HERE TOO, not only on the ledger, because this is the
     // payload the shipped Earnings page reads and that page said in so many
     // words that Axal "does not take a cut". A rate now exists; the page has
     // to be able to state it rather than deny it, and it needs the number and
     // the settlement mode in the same response to say both halves at once.
     const rate = await takeRate(c.env);
+    // D4704: the same aggregate as the ledger and the annual summary, over all
+    // time, so this overview and the ledger beside it cannot classify one
+    // booking two ways (services/practiceReporting.ts).
+    const agg = await ledgerAggregate(c.env, m.id, null, null, rate.bps);
     return c.json({
       currency: 'USD',
       take_rate: { bps: rate.bps, source: rate.source, updated_at: rate.updated_at },
-      billed_cents: cents('billed'),
-      collected_cents: cents('collected'),
-      written_off_cents: cents('written_off'),
-      outstanding_cents: cents('billed'),
-      unpriced_count: count('unpriced'),
-      by_state: BILLING_STATES.map((state) => ({
-        state, bookings: count(state), total_cents: cents(state),
-      })),
+      ...earningsOf(agg),
       // 241 — COMPUTED, NOT WRITTEN AS A LITERAL. This answered a hard-coded
       // 'none' before there was a take rate to be wrong about. It still
       // answers 'none' today, and it will keep answering it until PR5b's flag
@@ -433,133 +422,6 @@ advisors.get('/me/earnings', async (c) => {
 // recorded. `settlement` says which of the three modes is live, and while it
 // says 'none' no surface may render any of this as a receipt. D75.
 // ---------------------------------------------------------------------------
-
-/** The client rows a ledger lists one by one; the rest are summed into `clients_other`. */
-const LEDGER_CLIENT_CAP = 500;
-
-/**
- * #4702 (D4702): the one definition of an advisor's money over a window, shared
- * by `GET /me/ledger` and `GET /me/tax-summary` so the table, the export and the
- * annual summary cannot disagree.
- *
- *   · the population is every booking created in the half-open window
- *     `[from, until)` (absent bounds = unbounded), counted in the database; there
- *     is no row cap on the totals;
- *   · a line's cut is the cut it was STAMPED with when it was priced; only a line
- *     priced before 241 (no stored cut) is derived, at its stored rate or the
- *     fallback, rounded down, the same rule `cutCents` uses;
- *   · an unpriced booking has no gross and no cut and is counted apart.
- *
- * `clients` is the top `LEDGER_CLIENT_CAP` by gross; `other` sums everyone past
- * it, so the listed rows plus `other` always reconcile to the totals.
- */
-export type LedgerLine = { sessions: number; gross_cents: number; cut_cents: number; unpriced: number };
-export async function ledgerAggregate(env: Env, advisorId: number, from: string | null, until: string | null, fallbackBps: number) {
-  const t = await env.DB.prepare(
-    `SELECT COUNT(*) AS sessions,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
-            COALESCE(SUM(b.amount_cents), 0) AS gross,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
-                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
-                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut,
-            COUNT(DISTINCT b.founder_user_id) AS clients,
-            COUNT(DISTINCT CASE WHEN b.amount_cents IS NOT NULL THEN b.founder_user_id END)
-              + COALESCE(MAX(CASE WHEN b.amount_cents IS NOT NULL AND b.founder_user_id IS NULL THEN 1 ELSE 0 END), 0) AS priced_clients
-       FROM advisor_bookings b
-      WHERE b.advisor_id = ?
-        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')`
-  ).bind(fallbackBps, advisorId, from, from, until, until).first<{ sessions: number; unpriced: number; gross: number; cut: number; clients: number; priced_clients: number }>();
-  const rows = (await env.DB.prepare(
-    `SELECT b.founder_user_id AS client_user_id, MAX(u.name) AS client_name,
-            COUNT(*) AS sessions,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
-            COALESCE(SUM(b.amount_cents), 0) AS gross,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
-                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
-                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
-       FROM advisor_bookings b
-       LEFT JOIN users u ON u.id = b.founder_user_id
-      WHERE b.advisor_id = ?
-        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
-      GROUP BY b.founder_user_id
-      ORDER BY gross DESC, sessions DESC, b.founder_user_id
-      LIMIT ?`
-  ).bind(fallbackBps, advisorId, from, from, until, until, LEDGER_CLIENT_CAP + 1).all<any>()).results || [];
-  // #4679: what happened to the money, one database total per billing state over
-  // the same population as `t`, so the states add up to the totals.
-  const st = (await env.DB.prepare(
-    `SELECT CASE WHEN b.amount_cents IS NULL THEN 'unpriced'
-                 WHEN b.billing_state = 'collected' THEN 'collected'
-                 WHEN b.billing_state = 'written_off' THEN 'written_off'
-                 ELSE 'billed' END AS state,
-            COUNT(*) AS sessions,
-            COALESCE(SUM(b.amount_cents), 0) AS gross,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
-                              WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
-                              ELSE CAST((b.amount_cents * COALESCE(b.take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
-       FROM advisor_bookings b
-      WHERE b.advisor_id = ?
-        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
-      GROUP BY state`
-  ).bind(fallbackBps, advisorId, from, from, until, until).all<{ state: string; sessions: number; gross: number; cut: number }>()).results || [];
-  const stateOf = (k: string) => {
-    const r = st.find((x) => x.state === k);
-    const g = Number(r?.gross ?? 0); const cu = Number(r?.cut ?? 0);
-    return { sessions: Number(r?.sessions ?? 0), gross_cents: g, cut_cents: cu, net_cents: g - cu };
-  };
-  // A cancelled or missed session that was never collected owes nothing: it is
-  // in no total above and is counted here on its own.
-  const v = await env.DB.prepare(
-    `SELECT COUNT(*) AS n
-       FROM advisor_bookings b
-      WHERE b.advisor_id = ?
-        AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
-        AND (? IS NULL OR datetime(b.created_at) < datetime(?))
-        AND b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected'`
-  ).bind(advisorId, from, from, until, until).first<{ n: number }>();
-  const sessions = Number(t?.sessions ?? 0);
-  const gross = Number(t?.gross ?? 0);
-  const cut = Number(t?.cut ?? 0);
-  const unpriced = Number(t?.unpriced ?? 0);
-  // A "client" row counts the NULL-user group too, and `COUNT(DISTINCT)` does not
-  // count NULL, so the total is the larger of it and the rows actually returned.
-  const listedRows = rows.slice(0, LEDGER_CLIENT_CAP);
-  const clientsTotal = Math.max(Number(t?.clients ?? 0) + (rows.some((r: any) => r.client_user_id == null) ? 1 : 0), rows.length);
-  const clients = listedRows.map((r: any) => ({
-    client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
-    client_name: r.client_name ?? null,
-    sessions: Number(r.sessions), gross_cents: Number(r.gross), cut_cents: Number(r.cut), unpriced: Number(r.unpriced),
-  }));
-  const listed = clients.reduce((a, r) => ({
-    sessions: a.sessions + r.sessions, gross_cents: a.gross_cents + r.gross_cents,
-    cut_cents: a.cut_cents + r.cut_cents, unpriced: a.unpriced + r.unpriced,
-  }), { sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0 } as LedgerLine);
-  const overflow = rows.length > LEDGER_CLIENT_CAP;
-  return {
-    totals: { sessions, unpriced, priced: sessions - unpriced, gross_cents: gross, cut_cents: cut, net_cents: gross - cut },
-    pricedClients: Number(t?.priced_clients ?? 0),
-    states: {
-      billed: stateOf('billed'), collected: stateOf('collected'), written_off: stateOf('written_off'),
-      unpriced: Number(st.find((x) => x.state === 'unpriced')?.sessions ?? 0),
-    },
-    voidSessions: Number(v?.n ?? 0),
-    clients,
-    clientsTotal,
-    // Everyone past the cap, as one line; null when every client is listed.
-    other: overflow ? {
-      clients: Math.max(0, clientsTotal - clients.length),
-      sessions: sessions - listed.sessions, gross_cents: gross - listed.gross_cents,
-      cut_cents: cut - listed.cut_cents, net_cents: (gross - listed.gross_cents) - (cut - listed.cut_cents),
-      unpriced_sessions: unpriced - listed.unpriced,
-    } : null,
-  };
-}
 
 /** One row of D4's "By client · Q3" table, reconciling by construction. */
 function clientLineDto(r: {
@@ -711,6 +573,8 @@ advisors.get('/me/ledger', async (c) => {
     // by an operator). Nothing here moves money. One refund row per booking, as
     // before; the window is the booking's, as for every other figure here.
     const refundByBooking = new Map<number, { cents: number; resolved: boolean }>();
+    // #5305: an unreadable refund store is null below, never "0 owed".
+    let refundsRead = false;
     try {
       const rr = await c.env.DB.prepare(
         `SELECT r.booking_id AS booking_id, r.amount_cents AS amount_cents, r.resolved_at AS resolved_at
@@ -727,36 +591,143 @@ advisors.get('/me/ledger', async (c) => {
           });
         }
       }
+      refundsRead = true;
     } catch { /* table absent or unreadable: no refund figure, never a guess */ }
     const refundsFor = (resolved: boolean) => [...refundByBooking.values()].filter((r) => r.resolved === resolved);
     // PAID OUT is the provider paying the advisor, which is a separate event
     // from collecting. Read from the payout ledger in the same window; null
     // (never 0) when it could not be read.
     let paidOutCents: number | null = null;
+    // #4834 (D4834): how many paid rows the sum covers, so the page draws a
+    // "Paid out" figure only over payouts that were actually recorded, and
+    // never a $0 card over an empty payout table. Null with the sum when unread.
+    let paidOutCount: number | null = null;
     try {
       const po = await c.env.DB.prepare(
-        `SELECT COALESCE(SUM(amount_cents), 0) AS cents
+        `SELECT COALESCE(SUM(amount_cents), 0) AS cents, COUNT(*) AS n
            FROM advisor_payouts
           WHERE advisor_id = ? AND state = 'paid'
             AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) >= datetime(?))
             AND (? IS NULL OR datetime(COALESCE(paid_at, scheduled_for, created_at)) < datetime(?))`
-      ).bind(m.id, from, from, until, until).first<{ cents: number }>();
+      ).bind(m.id, from, from, until, until).first<{ cents: number; n: number }>();
       paidOutCents = Number(po?.cents ?? 0);
-    } catch { paidOutCents = null; }
+      paidOutCount = Number(po?.n ?? 0);
+    } catch { paidOutCents = null; paidOutCount = null; }
+
+    // #4834 (D4834): THE RECORDS BEHIND THE TOTALS, one per booking, so the
+    // Practice v2 ledger (PX-07) can show each line's own price, billing state,
+    // rate and fee. Same population as `ledgerAggregate` (a cancelled or missed
+    // session counts only if collected), newest first, capped and saying so.
+    //
+    // THE RATE AND THE FEE ARE THE LINE'S OWN, AS STORED. A line priced before
+    // migration 241 stamped them carries NULL, and it is sent as NULL: the
+    // aggregate fills that gap with today's rate for its totals, which is a
+    // different fact from a rate fixed when the line was priced, so `unfrozen`
+    // counts those lines and the page says so. Tolerated: an unread list leaves
+    // the totals standing (`lines.read: false`).
+    const LINES_CAP = 200;
+    let lines: {
+      read: boolean; listed: number; total: number | null; complete: boolean | null;
+      unfrozen: number | null; items: any[];
+      other: { records: number; gross_cents: number; fee_cents: number; net_cents: number } | null;
+    } = { read: false, listed: 0, total: null, complete: null, unfrozen: null, items: [], other: null };
+    try {
+      const lr = await c.env.DB.prepare(
+        `SELECT b.id AS id, b.founder_user_id AS client_user_id, u.name AS client_name,
+                b.topic AS topic, b.status AS status, b.created_at AS created_at,
+                s.starts_at AS session_at,
+                b.amount_cents AS amount_cents, b.billing_state AS billing_state,
+                b.take_rate_bps AS take_rate_bps, b.platform_cut_cents AS platform_cut_cents
+           FROM advisor_bookings b
+           LEFT JOIN users u ON u.id = b.founder_user_id
+           LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
+          WHERE b.advisor_id = ?
+            AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+            AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+            AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+          ORDER BY b.created_at DESC, b.id DESC
+          LIMIT ?`
+      ).bind(m.id, from, from, until, until, LINES_CAP + 1).all<any>();
+      const un = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n
+           FROM advisor_bookings b
+          WHERE b.advisor_id = ?
+            AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+            AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+            AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+            AND b.amount_cents IS NOT NULL AND b.platform_cut_cents IS NULL`
+      ).bind(m.id, from, from, until, until).first<{ n: number }>();
+      const rows = lr.results || [];
+      // #4702's rule for a capped list: the records past the cap are not lost,
+      // they are one summed row, with the aggregate's own fee expression, so
+      // the listed records plus this row add to the totals.
+      let other: { records: number; gross_cents: number; fee_cents: number; net_cents: number } | null = null;
+      if (rows.length > LINES_CAP) {
+        const o = await c.env.DB.prepare(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS gross,
+                  COALESCE(SUM(CASE WHEN amount_cents IS NULL THEN 0
+                                    WHEN platform_cut_cents IS NOT NULL THEN platform_cut_cents
+                                    ELSE CAST((amount_cents * COALESCE(take_rate_bps, ?)) / 10000 AS INTEGER) END), 0) AS cut
+             FROM (SELECT b.amount_cents AS amount_cents, b.platform_cut_cents AS platform_cut_cents,
+                          b.take_rate_bps AS take_rate_bps
+                     FROM advisor_bookings b
+                    WHERE b.advisor_id = ?
+                      AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
+                      AND (? IS NULL OR datetime(b.created_at) < datetime(?))
+                      AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')
+                    ORDER BY b.created_at DESC, b.id DESC
+                    LIMIT -1 OFFSET ?)`
+        ).bind(rate.bps, m.id, from, from, until, until, LINES_CAP).first<{ n: number; gross: number; cut: number }>();
+        const g = Number(o?.gross ?? 0); const cu = Number(o?.cut ?? 0);
+        other = { records: Number(o?.n ?? 0), gross_cents: g, fee_cents: cu, net_cents: g - cu };
+      }
+      const items = rows.slice(0, LINES_CAP).map((r: any) => {
+        const amount = r.amount_cents == null ? null : Number(r.amount_cents);
+        const fee = r.platform_cut_cents == null ? null : Number(r.platform_cut_cents);
+        const state = amount == null ? 'unpriced' : String(r.billing_state || 'billed');
+        return {
+          id: Number(r.id),
+          client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
+          client_name: r.client_name ?? null,
+          topic: r.topic ?? null,
+          status: r.status ?? null,
+          session_at: r.session_at ?? null,
+          created_at: r.created_at ?? null,
+          amount_cents: amount,
+          billing_state: state,
+          // Collected is recorded as the line's whole price: there is no
+          // separate collected amount in the store. Null when not collected.
+          collected_cents: state === 'collected' ? amount : null,
+          take_rate_bps: r.take_rate_bps == null ? null : Number(r.take_rate_bps),
+          platform_fee_cents: fee,
+          net_cents: amount != null && fee != null ? amount - fee : null,
+        };
+      });
+      lines = {
+        read: true,
+        listed: items.length,
+        total: agg.totals.sessions,
+        complete: rows.length <= LINES_CAP,
+        unfrozen: Number(un?.n ?? 0),
+        items,
+        other,
+      };
+    } catch { /* tolerated: `lines.read` stays false and the totals stand */ }
     const states = {
       billed: agg.states.billed,
       collected: agg.states.collected,
       written_off: agg.states.written_off,
       unpriced: { sessions: agg.states.unpriced },
-      refunds_owed: {
+      refunds_owed: refundsRead ? {
         sessions: refundsFor(false).length,
         amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
-      },
-      refunded: {
+      } : null,
+      refunded: refundsRead ? {
         sessions: refundsFor(true).length,
         amount_cents: refundsFor(true).reduce((n, r) => n + r.cents, 0),
-      },
+      } : null,
       paid_out_cents: paidOutCents,
+      paid_out_count: paidOutCount,
       void_sessions: agg.voidSessions,
     };
     const clients = [...byClient.values()]
@@ -796,6 +767,7 @@ advisors.get('/me/ledger', async (c) => {
         engagements: { read: engagementsRead, complete: engagementsComplete },
       },
       states,
+      lines,
       // NULL WHEN THERE IS NOTHING TO CONCENTRATE. A share of zero gross is
       // not 0% — it is a question with no answer, and 0% reads as "well
       // spread", which is the opposite of what an empty quarter means.
@@ -825,14 +797,17 @@ advisors.get('/me/ledger', async (c) => {
  * the chip row offers "Year to date" and "All time", and a note written under
  * one of those is as real as one written under a quarter.
  */
-const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}|all)$/;
+// #4834 (D4834): the Practice v2 period selector (PX-07) adds a calendar
+// MONTH, `2026-11`, beside the quarter and the year. A custom range has no key
+// and therefore no note: a note is the advisor's word on a named period.
+const PERIOD_KEY = /^(\d{4}-Q[1-4]|\d{4}-(0[1-9]|1[0-2])|\d{4}|all)$/;
 
 advisors.get('/me/period-notes/:key', async (c) => {
   try {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     const row = await c.env.DB.prepare(
       'SELECT * FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
     ).bind(m.id, key).first<any>();
@@ -855,7 +830,7 @@ advisors.put('/me/period-notes/:key', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     const body = await c.req.json().catch(() => ({} as any));
     // #4679 — A NOTE IS FILED AGAINST THE PERIOD IT WAS WRITTEN FOR. The page
     // names that period in the body; if it is not the period in the URL (a
@@ -903,7 +878,7 @@ advisors.delete('/me/period-notes/:key', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const key = String(c.req.param('key') || '');
-    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-Qn, YYYY or all' }, 400);
+    if (!PERIOD_KEY.test(key)) return c.json({ detail: 'period must be YYYY-MM, YYYY-Qn, YYYY or all' }, 400);
     await c.env.DB.prepare(
       'DELETE FROM advisor_period_notes WHERE advisor_id = ? AND period_key = ?'
     ).bind(m.id, key).run();

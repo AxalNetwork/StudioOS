@@ -16,6 +16,7 @@
  * cents with the closing's currency. Eadwyn never fills money.
  */
 import { DESK_PATH, STEPS, daysLeft, SOON_DAYS } from './closingModel.js';
+import { formatMinorOrCount } from '../../lib/money.js';
 
 export { DESK_PATH, STEPS, SOON_DAYS };
 
@@ -25,12 +26,8 @@ const cents = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? nul
 export function moneyCents(value, currency = 'USD') {
   const c = cents(value);
   if (c == null) return null;
-  const code = /^[A-Z]{3}$/.test(String(currency || '')) ? currency : 'USD';
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, minimumFractionDigits: 2 }).format(c / 100);
-  } catch {
-    return `${(c / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a closing's currency defaults to USD, an unlisted code names the count.
+  return formatMinorOrCount(c, String(currency || 'USD'), { locale: 'en-US' });
 }
 
 // ───────────────────────────────────────────────────────────── CP13, CP21: the desk

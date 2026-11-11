@@ -158,6 +158,15 @@ export function hasExecutionEvidence(row) {
   return row.source === 'esign' && row.raw_status === 'completed';
 }
 
+/**
+ * D4811 part 11: the stores whose agreement can be linked to a company (the
+ * Worker's `LINKABLE_SOURCES`, `services/contractAttention.ts`). Only these
+ * read "Unlinked recipient" and offer the Link repair; a pairwise NDA, a
+ * partner deal or a licence agreement has no company link to make.
+ */
+export const LINKABLE_SOURCES = Object.freeze(['documents', 'esign']);
+export const canLinkCompany = (row) => LINKABLE_SOURCES.includes(String(row?.source ?? ''));
+
 /** A date as the agreements table writes it ("12 May 2026"), or null. */
 export function dayOf(value) {
   if (!value) return null;
@@ -176,7 +185,8 @@ export function dayOf(value) {
  * Returns `{ badge, line, sentMissing, company, warning }`:
  * - `line`: "Sent 12 May 2026 · Awaiting signature", "Executed 3 Jun 2026", …
  * - `sentMissing`: an awaiting row whose send was never recorded (a neutral note);
- * - `company`: `{ name }` or `{ unlinked: true, label: 'Unlinked recipient' }`;
+ * - `company`: `{ name }`, `{ unlinked: true, label: 'Unlinked recipient' }` in a store
+ *   that can be linked (part 11), or `{ none: true, label }` in one that cannot;
  * - `warning`: null, or the contradiction's words.
  */
 export function agreementRowSemantics(row) {
@@ -196,7 +206,9 @@ export function agreementRowSemantics(row) {
     const voided = dayOf(row?.voided_at);
     line = voided ? `Voided ${voided}` : 'Voided';
   }
-  const company = row?.project_name ? { name: row.project_name } : { unlinked: true, label: 'Unlinked recipient' };
+  const company = row?.project_name ? { name: row.project_name }
+    : canLinkCompany(row) ? { unlinked: true, label: 'Unlinked recipient' }
+      : { none: true, label: 'No company link in this store' };
   const days = row?.status === 'signed' && Number.isFinite(row?.days_to_sign) ? row.days_to_sign : null;
   return { badge: warning ? null : badge, line, sentMissing, company, warning, days };
 }

@@ -838,6 +838,10 @@ const COOL_OFF_PREFIXES = [
   '/api/admin/licences',
   // D5014 (#5014) — the pricing models and market data behind recommended licence fees. Same class.
   '/api/admin/licence-pricing',
+  // D5018 (#5018) — the reference prices behind every program's recommended fee. Same class.
+  '/api/admin/program-pricing',
+  // D5019 (#5019) — named sub-territories that exclusivity scopes are drawn on. Same class.
+  '/api/admin/territory-regions',
   // D5048 (#5048) — a licence's package and program agreements. Same class.
   '/api/admin/licence-agreements',
   // D708 — each Axal entity's bank accounts: the payment instructions every
@@ -911,6 +915,8 @@ const COOL_OFF_ROUTES = [
   '/api/admin/branches/:code/support-session',
   '/api/admin/branches/:code/accounts/:userId/move',
   '/api/admin/branches/:code/admins/:userId/unbind',
+  // D5043 — finishing a move is the move's second leg, paused as the move is.
+  '/api/admin/account-moves/:uid/retry-invitation',
   '/api/admin/users/:userId/demote-admin',
   // D714 — the three fund routes that are wholly Super Admin acts: issuing a
   // capital call, executing a distribution, and assigning a fund's ledger
@@ -932,6 +938,11 @@ const COOL_OFF_ROUTES = [
   // class D892's reconciliation is paused under (`/api/admin/billing`). The exact
   // route, so D710's entity reads under `/api/admin/mercury` stay open.
   '/api/admin/mercury/safe-basis-repair',
+  // D5039 — recording a payment against a subsidiary statement and voiding one
+  // change what HQ is owed: the money class, behind the step-up. The exact
+  // routes, so the statement ledger and the dispute entry stay open.
+  '/api/admin/statements/:uid/payments',
+  '/api/admin/statements/:uid/void',
 ];
 for (const p of COOL_OFF_ROUTES) app.use(p, recoveryCoolOff);
 // Task #6 — Stripe billing surface (tier checkout/portal/webhook + MI Pro).
@@ -2594,6 +2605,22 @@ export default {
         } catch (e) {
           taskFailed('lab reconcile tick', e);
         }
+        // D4663 (#4663, owner decision A): graduation closes the Lab, so the
+        // reconciler above never sees a graduate whose final request died
+        // before the credential was issued. A few such graduates per tick get
+        // the credential and its bonus here. Idempotent; bounded by
+        // CERT_BACKFILL_TICK_LIMIT; recorded in spinout_certificate_backfill_*.
+        try {
+          const { runCertificateBackfillTick } = await import('./services/certificateIssuance');
+          const b = await runCertificateBackfillTick(env, { nowMs: now.getTime() });
+          // D5360: the same tick pays lost graduation bonuses; a tick that only paid bonuses is logged too.
+          if (b.scanned || b.bonus.scanned) {
+            console.info(`[cron] certificate backfill scanned=${b.scanned} issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid} bonus_skipped=${b.bonus.skipped}`);
+            cronSummary.push(`certificate backfill issued=${b.issued} skipped=${b.skipped} bonus_paid=${b.bonus.paid}`);
+          }
+        } catch (e) {
+          taskFailed('certificate backfill tick', e);
+        }
         // Epic 5: nightly score-integrity audit at 03:30 UTC. Re-verifies the
         // HMAC on every approved official snapshot; mismatches get flagged
         // for admin review and disappear from LP/partner views immediately.
@@ -2835,6 +2862,15 @@ export default {
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
           } catch (e) { taskFailed('licence push retry', e); }
+          // D5361 — incomplete termination consequences use the same five-minute
+          // lease as a manual resume, so a crashed request no longer waits for
+          // an operator and a racing clock cannot repeat an event or notice.
+          try {
+            const { resumeIncompleteLicenceTerminations } = await import('./routes/admin_licences_lifecycle');
+            const r = await resumeIncompleteLicenceTerminations(env, now);
+            if (!r.available) console.warn('[cron] licence termination resume', r.reason);
+            else if (r.tried || r.skipped) console.info(`[cron] licence termination resume tried=${r.tried} complete=${r.complete} incomplete=${r.incomplete} skipped=${r.skipped}`);
+          } catch (e) { taskFailed('licence termination resume', e); }
           // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
           try {
             const { retryOutbox } = await import('./services/programOutbox');
@@ -3219,6 +3255,15 @@ export default {
               } catch (e) {
                 taskFailed('axal-search re-embed', type, e);
               }
+            }
+            try {
+              const { sweepResearchIndex } = await import('./services/researchIndexSweep');
+              const r = await sweepResearchIndex(env, now);
+              if (r.pending_scanned || r.legacy_scanned || r.pending_failed) {
+                console.info(`[cron] research index recovery pending=${r.pending_scanned} enqueued=${r.pending_enqueued} requeued=${r.pending_requeued} failed=${r.pending_failed} legacy=${r.legacy_scanned}/${r.legacy_enqueued}`);
+              }
+            } catch (e) {
+              taskFailed('research index recovery', e);
             }
           } catch (e) {
             taskFailed('axal-search re-embed', e);

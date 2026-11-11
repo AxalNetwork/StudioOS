@@ -116,7 +116,11 @@ export async function listActiveSessions(
   env: Env,
   currentJti: string | null,
   limit: number = SESSION_LIST_LIMIT,
-): Promise<{ rows: SessionListRow[]; total: number }> {
+  beforeId: number | null = null,
+): Promise<{ rows: SessionListRow[]; total: number; next_before_id: number | null }> {
+  // D4699 — a stable order and a cursor. Newest sign-in first, by `id`, which never changes:
+  // `last_seen_at` moves on every request, so ordering by it moved rows between pages and reads.
+  // One row past the page says whether there is more; `next_before_id` continues strictly below.
   const res = await env.DB.prepare(
     `SELECT s.id, s.user_id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at, s.revoked_at,
             u.email, u.name, u.role, u.jwt_min_iat
@@ -125,12 +129,15 @@ export async function listActiveSessions(
       WHERE s.revoked_at IS NULL
         AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
         AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)
-      ORDER BY s.last_seen_at DESC, s.id DESC
+        AND (? IS NULL OR s.id < ?)
+      ORDER BY s.id DESC
       LIMIT ?`,
-  ).bind(...USER_SESSION_LIFETIME_BINDS, limit).all<Record<string, unknown>>();
+  ).bind(...USER_SESSION_LIFETIME_BINDS, beforeId, beforeId, limit + 1).all<Record<string, unknown>>();
+  const got = res.results || [];
+  const more = got.length > limit;
   const total = await countActiveSessions(env);
   const now = Date.now();
-  const rows = (res.results || []).map((r) => {
+  const rows = got.slice(0, limit).map((r) => {
     const factor = (r.factor as string) ?? null;
     const holder = factor === BRANCH_SUPPORT_FACTOR
       ? supportIdentity({ id: 0 }, { id: r.user_id, name: r.name, email: r.email })
@@ -151,7 +158,7 @@ export async function listActiveSessions(
       status: userSessionStatus(r, now),
     };
   });
-  return { rows, total };
+  return { rows, total, next_before_id: more && rows.length ? rows[rows.length - 1].id : null };
 }
 
 /**
@@ -169,6 +176,76 @@ export async function countActiveSessions(env: Env): Promise<number> {
         AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
         AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)`,
   ).bind(...USER_SESSION_LIFETIME_BINDS).first<{ n: number }>();
+  if (!row) throw new Error('user_sessions count returned no row');
+  return Number(row.n);
+}
+
+/**
+ * D4616 (#4616) — the account holder's own devices, by the same definition as
+ * HQ's list and count above, and never anybody else's.
+ *
+ * OWNER-SCOPED, ALWAYS. Both statements carry `s.user_id = ?` bound to the
+ * caller; there is no unscoped variant here, so reusing the shared rule cannot
+ * hand a member HQ's global list.
+ *
+ * HISTORY IS KEPT AND LABELLED. Unlike HQ's list, a member's list keeps the
+ * rows that no longer open a door (revoked, expired, signed out everywhere),
+ * newest first, each with the `status` `userSessionStatus` gives it, so the
+ * page can say "Expired" or "Signed out" instead of drawing it as a device in
+ * use. Only `active` rows are counted. The `jti` is read to mark the caller's
+ * own row and is not returned.
+ */
+export type OwnSessionRow = {
+  id: number;
+  user_agent: string | null;
+  ip: string | null;
+  created_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+  status: UserSessionStatus;
+  is_current: boolean;
+};
+
+export const OWN_SESSION_LIST_LIMIT = 100;
+
+export async function listOwnSessions(env: Env, userId: number, currentJti: string | null): Promise<OwnSessionRow[]> {
+  const res = await env.DB.prepare(
+    `SELECT s.id, s.jti, s.user_agent, s.ip, s.factor, s.created_at, s.last_seen_at, s.revoked_at, u.jwt_min_iat
+       FROM user_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+      WHERE s.user_id = ?
+      ORDER BY s.last_seen_at DESC, s.id DESC
+      LIMIT ?`,
+  ).bind(userId, OWN_SESSION_LIST_LIMIT).all<Record<string, unknown>>();
+  const now = Date.now();
+  return (res.results || []).map((r) => {
+    const status = userSessionStatus(r, now);
+    return {
+      id: Number(r.id),
+      user_agent: (r.user_agent as string) ?? null,
+      ip: (r.ip as string) ?? null,
+      created_at: (r.created_at as string) ?? null,
+      last_seen_at: (r.last_seen_at as string) ?? null,
+      revoked_at: (r.revoked_at as string) ?? null,
+      status,
+      // A token that authenticated this request is active by definition; a row
+      // that is not cannot be "this device", whatever its jti.
+      is_current: status === 'active' && !!currentJti && r.jti === currentJti,
+    };
+  });
+}
+
+/** The account holder's active sessions: `countActiveSessions`' predicate, plus the owner. */
+export async function countOwnActiveSessions(env: Env, userId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT COUNT(*) AS n
+       FROM user_sessions s
+       LEFT JOIN users u ON u.id = s.user_id
+      WHERE s.user_id = ?
+        AND s.revoked_at IS NULL
+        AND datetime(s.created_at) >= datetime('now', CASE WHEN s.factor = 'hq_support' THEN ? ELSE ? END)
+        AND CAST(strftime('%s', s.created_at) AS INTEGER) >= COALESCE(u.jwt_min_iat, 0)`,
+  ).bind(userId, ...USER_SESSION_LIFETIME_BINDS).first<{ n: number }>();
   if (!row) throw new Error('user_sessions count returned no row');
   return Number(row.n);
 }

@@ -40,7 +40,7 @@ const OVERVIEW = () => ({
   kyc: { pending: 1, approved: 3, rejected: 0 },
   kyc_not_recorded: [],
   dsr: {
-    clock_days: 30,
+    clock: { rule: 'calendar_month', label: 'One calendar month from receipt, to the end of that UTC day' },
     kinds: [{ kind: 'erasure', recorded: true }, { kind: 'access', recorded: false, reason: 'Only deletion requests are recorded.' }],
     rows: [{ id: 31, email: 'lumen@example.com', name: 'Lumen Founder', role: 'founder', kind: 'erasure', requested_at: '2026-10-20 09:00:00', days_left: 22, prior_requests: 0, last_outcome: null, last_outcome_at: null }],
     by_branch: [{ branch: 'HQ-held', open: 1 }],
@@ -168,7 +168,8 @@ test('every zone the page drew before is still drawn, under its workspace', () =
     // D4803 — retention and the branch-view note moved behind "How this is measured" (SE03's explanation layer).
     events: ['data-testid="hq-gov-filters"', 'data-testid="hq-gov-feed"', 'data-testid="hq-gov-sources"', 'data-testid="events-how-toggle"', 'data-testid="events-older"'],
     access: ['data-testid="hq-sessions"', 'data-testid="hq-sessions-revoke-selected"', 'data-testid="hq-force-reauth"', 'data-testid="hq-data-access"', '>Admins with MFA<', '>Failed sign-ins<'],
-    privacy: ['data-testid="hq-dsr"', 'data-testid="hq-dsr-actions"', 'data-testid="hq-dsr-groups"', 'data-testid="hq-dsr-branches"', 'data-testid="hq-dsr-kinds-not-recorded"'],
+    // D4803 slice 3 — the close moved from the zone's inline buttons into SE06's Record outcome dialog.
+    privacy: ['data-testid="hq-dsr"', 'data-testid="dsr-table"', 'data-testid="hq-dsr-groups"', 'data-testid="hq-dsr-branches"', 'data-testid="hq-dsr-kinds-not-recorded"'],
     trust: ['data-testid="hq-sanctions"', '>KYC pending<', '>KYC rejected<'],
     'ai-safety': ['data-testid="hq-ai-safety"', 'data-testid="hq-verdict-breakdown"', 'data-testid="hq-token-anomalies"'],
     resilience: ['data-testid="hq-backup-dr"', 'data-testid="hq-backup-heartbeat"', 'data-testid="hq-restore-drill"'],

@@ -1,7 +1,13 @@
 /**
  * D393 — Cohorts alignment: the five archetypes are the canvas's own, Founders
- * draws the week lanes from the Lab's week record, and Calendar gets the
- * canvas's four chips and a client-side .ics export.
+ * reads the Lab's week record, and Calendar gets the canvas's four chips and a
+ * client-side .ics export.
+ *
+ * RE-AIMED IN D4813 (#4813). D393's founder week lanes are gone: Cohorts v2's
+ * board C2 groups founders by state, and the four-week view is the Overview's
+ * progress grid. The invariants the lane tests pinned are kept against the new
+ * model — the batch's CURRENT week is read, nothing required is not 0%, a
+ * founder with no row has no progress, and no windows is never "Week 1".
  *
  * The archetypes are read out of the canvas here, so the guard cannot pass on
  * a shell that agrees with a typo. Everything else drives the real helpers
@@ -13,10 +19,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { bucketsFor } from '../src/workspaces/shellConfig.js';
-import { lanesFrom, FOUNDER_VIEWS, FounderCard } from '../src/pages/advisor/cohorts/FoundersZone.jsx';
+import { FounderCard } from '../src/pages/advisor/cohorts/FoundersZone.jsx';
+import { founderRows, filterFounders } from '../src/pages/advisor/cohorts/cohortModel.js';
 import { CAL_VIEWS, calendarIcs } from '../src/pages/advisor/cohorts/CalendarZone.jsx';
 import { buildIcs } from '../src/lib/ics.js';
 
@@ -56,52 +64,56 @@ const WEEKS = {
   ],
 };
 
-test('D393: every founder sits in the lane of the batch\'s week, with that week\'s deliverables', () => {
-  const m = lanesFrom(WEEKS, ROSTER);
-  assert.deepEqual(m.lanes.map((l) => [l.week, l.cards.length]), [[1, 0], [2, 4], [3, 0], [4, 0]]);
-  const by = Object.fromEntries(m.cards.map((c) => [c.user_id, c]));
-  assert.deepEqual([by[1].done, by[1].required, by[1].pct, by[1].behind], [1, 4, 25, true],
+test('D393/D4813: every founder is read at the batch\'s current week, with that week\'s deliverables', () => {
+  const rows = founderRows(ROSTER, WEEKS);
+  const by = Object.fromEntries(rows.map((c) => [c.user_id, c]));
+  assert.deepEqual([by[1].week, by[1].done, by[1].required, by[1].pct, by[1].state], [2, 1, 4, 25, 'at_risk'],
     'week 2 is read, not week 1');
-  assert.equal(by[2].complete, true);
+  assert.equal(by[2].state, 'on_track');
+  assert.equal(by[2].pct, 100);
   assert.equal(by[3].pct, null, 'nothing required is not 0%');
-  assert.equal(by[3].behind, false);
+  assert.equal(by[3].state, 'not_assessed');
   assert.equal(by[4].pct, null, 'a founder with no status row has no progress, not 0%');
   assert.equal(by[4].done, null);
-  assert.deepEqual(m.cards.filter(FOUNDER_VIEWS.behind).map((c) => c.user_id), [1]);
+  assert.equal(by[4].state, 'not_assessed');
+  assert.deepEqual(filterFounders(rows, { state: 'attention' }).map((c) => c.user_id), [1]);
 });
 
-test('D393: no windows, or no week open yet, means no lanes — never "Week 1" by default', () => {
-  const none = lanesFrom({ ...WEEKS, windows_recorded: false, weeks: [] }, ROSTER);
-  assert.equal(none.lanes, null);
-  assert.match(none.reason, /no week windows recorded/);
-  const early = lanesFrom({ ...WEEKS, current_week: null }, ROSTER);
-  assert.equal(early.lanes, null);
-  assert.match(early.reason, /No week of this cycle has opened yet/);
-  assert.equal(early.cards.length, 4, 'the roster still reads');
+test('D393/D4813: no windows, or no week open yet, means no week — never "Week 1" by default', () => {
+  const none = founderRows(ROSTER, { ...WEEKS, windows_recorded: false, weeks: [] });
+  assert.ok(none.every((r) => r.week == null && r.state === 'not_assessed'));
+  assert.match(none[0].reason, /No week windows are recorded/);
+  const early = founderRows(ROSTER, { ...WEEKS, current_week: null });
+  assert.ok(early.every((r) => r.week == null));
+  assert.match(early[0].reason, /No week of this cohort has opened yet/);
+  assert.equal(early.length, 4, 'the roster still reads');
 });
 
-test('D393: a card shows name and deliverables, the behind flag, and no company', () => {
-  const [amara, , nadia, noRow] = lanesFrom(WEEKS, ROSTER).cards;
-  const a = renderedText(renderToStaticMarkup(React.createElement(FounderCard, { card: amara })));
+test('D393/D4813: a card shows name, state and progress, and no company', () => {
+  const [amara, , nadia, noRow] = founderRows(ROSTER, WEEKS);
+  const card = (row) => renderedText(renderToStaticMarkup(React.createElement(MemoryRouter, null,
+    React.createElement(FounderCard, { row, guidanceHref: '/cohorts/guidance?cohort=1' }))));
+  const a = card(amara);
   assert.match(a, /Amara Osei/);
-  assert.match(a, /1 of 4 deliverables · 25%/);
-  assert.match(a, /Behind plan/);
+  assert.match(a, /25%/);
+  assert.match(a, /At risk/);
+  assert.match(a, /1 of 4 week-2 deliverables/);
   assert.doesNotMatch(a, /Company/i);
-  const n = renderedText(renderToStaticMarkup(React.createElement(FounderCard, { card: nadia })));
-  assert.match(n, /No deliverable is required this week/);
+  const n = card(nadia);
+  assert.match(n, /No deliverable is required in week 2/);
+  assert.match(n, /Not assessed/);
   assert.doesNotMatch(n, /0%/);
-  const r = renderedText(renderToStaticMarkup(React.createElement(FounderCard, { card: noRow })));
-  assert.match(r, /Progress not recorded/);
+  const r = card(noRow);
+  assert.match(r, /Not assessed/);
+  assert.doesNotMatch(r, /\b0%/);
 });
 
-test('D393: the page reads the week record, and draws what it cannot count as absent', () => {
+test('D393/D4813: the page reads the shared week record and narrows by state', () => {
   const src = read('frontend/src/pages/advisor/cohorts/FoundersZone.jsx');
-  assert.match(src, /api\.listMyAdvisorCohortWeeks\(cycleId\)/);
-  assert.match(src, /label: 'Flagged', value: null/, 'Flagged has no store and must read absent');
-  assert.match(src, /Bulk: nudge behind-plan · not built/);
-  assert.match(src, /<button type="button" disabled title="Nothing sends a founder a nudge/,
-    'the bulk nudge is drawn as a stated gap, not as a live control');
-  assert.match(src, /lane\.cards\.filter\(shown\)/, 'the chips narrow the lanes');
+  assert.match(src, /const weeks = ws\.weeks;/, 'Founders reads the workspace’s one week record');
+  assert.match(read('frontend/src/pages/advisor/cohorts/CohortWorkspace.jsx'), /api\.listMyAdvisorCohortWeeks\(cycleId\)/);
+  assert.match(src, /filterFounders\(rows, \{ q, state, sort, founder: only \}\)/, 'search, status and sort narrow the rows');
+  assert.match(src, /BOARD_COLUMNS\.map/, 'the board is the state columns');
 });
 
 // ── Calendar ───────────────────────────────────────────────────────────────
@@ -119,15 +131,16 @@ test('D393: the four calendar chips narrow the stream by kind', () => {
   assert.deepEqual(ids('client'), ['slot:7']);
   assert.deepEqual(ids('demo_day'), ['demo']);
   const src = read('frontend/src/pages/advisor/cohorts/CalendarZone.jsx');
-  assert.match(src, /downloadIcs\(calendarIcs\(shown\)/, 'the export takes the narrowed rows');
-  assert.match(src, /\{shown\.map\(\(it\) =>/, 'the list draws the narrowed rows');
+  // D4813 p3: the export takes the rows of the view on screen, with the cohort so each UID is scoped to it.
+  assert.match(src, /downloadIcs\(calendarIcs\(shown, ws\.cycleId\)/, 'the export takes the narrowed rows');
+  assert.match(src, /const visible = filterByTypes\(all, types\)/, 'the views draw the narrowed rows');
 });
 
 test('D393: the export is a real calendar, and a Lab date is a point in time, not a meeting', () => {
-  const ics = calendarIcs(ITEMS);
+  const ics = calendarIcs(ITEMS, 12);
   assert.match(ics, /^BEGIN:VCALENDAR\r\nVERSION:2\.0\r\nPRODID:-\/\/Axal\/\/Cohort Calendar\/\/EN/);
   assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 3);
-  const opens = ics.slice(ics.indexOf('UID:week:2:unlock'), ics.indexOf('END:VEVENT'));
+  const opens = ics.slice(ics.indexOf('UID:cohort-12-week-2-unlock'), ics.indexOf('END:VEVENT'));
   assert.match(opens, /DTSTART:20260928T090000Z/);
   assert.doesNotMatch(opens, /DTEND/, 'no end is invented for a week opening');
   assert.match(ics, /DTEND:20260929T150000Z/, 'a session keeps its real end');

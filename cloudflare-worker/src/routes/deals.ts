@@ -1,5 +1,5 @@
 import { holdsLicence, heldLicences } from '../services/accountLicences';
-import { dealAudience, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
+import { dealAudience, dealAudiences, hasActiveDealNda, investorHasDealRelationship, isDealStaff, namesInvestors, ndaExempt, type DealAudience } from '../services/dealAccess';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -77,7 +77,14 @@ deals.get('/', async (c) => {
   // a working, authorized deal-room destination.
   const scope = c.req.query('scope');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  // D4631 part 2: which list the caller reads follows the deal audience policy (services/dealAccess.ts) by the
+  // licences they hold, never the primary role alone. Deal staff (the admin, or the partner licence) read the
+  // studio's whole list; a holder of the investor licence reads the marketplace, each row marked by their own
+  // relationship to that deal (`dealAudiences`); anyone else reads only their own venture's deals (the `owner`
+  // relationship). Whatever the list, each row leaves through `serializeDeal` by the staff licence.
+  const staff = isDealStaff(user);
+  const investorReader = !staff && holdsLicence(user, 'investor');
+  const isPrivileged = staff || investorReader;
   // IDOR guard: founders can only list deals on their own projects.
   let rows: any;
   // Task #16 — surface founder_user_id on the listing so investors/admins can
@@ -85,12 +92,12 @@ deals.get('/', async (c) => {
   // without an extra round-trip per row.
   if (isPrivileged) {
     rows = status
-      ? await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
-      : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
+      ? await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id, p.founder_id AS row_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE d.status = ${status} AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`
+      : await sql`SELECT d.*, (SELECT COALESCE(SUM(cm.amount), 0) FROM commitments cm WHERE cm.deal_id = d.id AND cm.status = 'confirmed') AS capital_committed, p.name as project_name, p.sector as project_sector, pr.name as partner_name, lp.name as lead_partner_name, f.id as founder_user_id, p.founder_id AS row_founder_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users lp ON lp.id = d.lead_partner_id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY d.created_at DESC`;
     // Task #82 — annotate each deal with is_member (is this investor in the
     // dealroom?) so the SPA can render "View room" vs "Join room", and apply
     // the optional scope=mine relationship filter.
-    if (user.role === 'investor') {
+    if (investorReader) {
       await ensureInvestorPaywallSchema(c.env);
       // Company scoping, stage 6. The deal LIST above is deliberately NOT
       // narrowed — browsing open deals is a marketplace, and an investor is
@@ -108,10 +115,10 @@ deals.get('/', async (c) => {
         ? await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id}`
         : await sql`SELECT deal_id FROM investor_dealroom_members WHERE investor_user_id = ${user.id} AND (company_id = ${companyId} OR company_id IS NULL)`;
       const memberSet = new Set<number>((memberRows as any[]).map((r) => Number(r.deal_id)));
-      // D1237: a room request is not deal access. Reuse the deal reader's
-      // invited-or-committed predicate in one batch; never infer it from membership.
-      const readableIds = await userReadableDealIds(c.env, user, (rows as any[]).map((d) => Number(d.id)));
-      rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0, can_read: readableIds.has(Number(d.id)) }));
+      // D1237: a room request is not deal access. D4631 part 2: `can_read` is the caller's deal audience for that
+      // row (their own venture, or an invitation or commitment), in one batch; never inferred from membership.
+      const audiences = await dealAudiences(c.env, user, (rows as any[]).map((d) => ({ id: Number(d.id), founder_id: d.row_founder_id ?? null })));
+      rows = (rows as any[]).map((d) => ({ ...d, is_member: memberSet.has(Number(d.id)) ? 1 : 0, can_read: (audiences.get(Number(d.id)) ?? 'none') !== 'none' }));
       if (scope === 'mine') {
         const invitedRows = companyId === null
           ? await sql`SELECT deal_id FROM deal_invitations WHERE investor_user_id = ${user.id}`
@@ -127,7 +134,8 @@ deals.get('/', async (c) => {
       }
     }
   } else {
-    if (!user.founder_id) { await sql.end(); return c.json([]); }
+    // The `owner` relationship needs the founder licence as well as a founder id (canAccessFounderResource).
+    if (!user.founder_id || !holdsLicence(user, 'founder')) { await sql.end(); return c.json([]); }
     // The founder branch is an inlined ownership query, so it carries the
     // company clause directly — the same `(p.company_id = ? OR p.company_id IS
     // NULL)` the five loaders and the project picker use. Without it a founder
@@ -143,7 +151,8 @@ deals.get('/', async (c) => {
   }
   await sql.end();
   // D4631: the studio's internal fields leave to staff by licence, not by primary role.
-  return c.json((rows as any[]).map(row => serializeDeal(row, isDealStaff(user) ? 'admin' : 'member')));
+  // `row_founder_id` decided the row's audience; it is an internal key and never leaves.
+  return c.json((rows as any[]).map(({ row_founder_id: _founder, ...row }) => serializeDeal(row, isDealStaff(user) ? 'admin' : 'member')));
 });
 
 // ---------------------------------------------------------------------------
@@ -481,14 +490,27 @@ deals.get('/investors', async (c) => {
 deals.get('/invitations/mine', async (c) => {
   await requireRole(c, 'investor');
   const user = await requireAuth(c);
+  // D4631 part 2: the inbox is the firm the caller acts for, as the list's `scope=mine` and the deal page read it:
+  // the verified active company's invitations and those that name no firm. No company selected (or one the caller
+  // does not hold) reads every invitation of their own, as before.
+  const companyId = await investorActiveCompany(c, user);
   const sql = getSQL(c.env);
-  const rows = await sql`
-    SELECT di.id, di.uid, di.deal_id, di.status, di.message, di.created_at, di.responded_at,
+  const rows = companyId === null
+    ? await sql`
+    SELECT di.id, di.uid, di.deal_id, di.company_id, di.status, di.message, di.created_at, di.responded_at,
            p.name AS project_name, d.status AS deal_status
     FROM deal_invitations di
     LEFT JOIN deals d ON d.id = di.deal_id
     LEFT JOIN projects p ON p.id = d.project_id
     WHERE di.investor_user_id = ${user.id}
+    ORDER BY di.created_at DESC`
+    : await sql`
+    SELECT di.id, di.uid, di.deal_id, di.company_id, di.status, di.message, di.created_at, di.responded_at,
+           p.name AS project_name, d.status AS deal_status
+    FROM deal_invitations di
+    LEFT JOIN deals d ON d.id = di.deal_id
+    LEFT JOIN projects p ON p.id = d.project_id
+    WHERE di.investor_user_id = ${user.id} AND (di.company_id = ${companyId} OR di.company_id IS NULL)
     ORDER BY di.created_at DESC`;
   await sql.end();
   return c.json(rows);
@@ -1004,11 +1026,11 @@ deals.get('/:id/documents', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user, audience } = ctx;
+  const { sql, deal, user } = ctx;
   if (!deal.project_id) { await sql.end(); return c.json([]); }
   // D4631: the venture's document list is behind the venture's NDA, as its team, market and traction sections are.
   // The platform admin and the venture's own founder are exempt; an investor without an active NDA is told why, not given [].
-  if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
+  if (!ndaExempt(user, deal.project_founder_id) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
     await sql.end();
     return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
   }
@@ -1060,20 +1082,19 @@ deals.get('/:id/commitments', async (c) => {
   // D4631: who is named follows the caller's relationship to THIS deal, not their primary role.
   // D4633: an investor's own commitments under ONE firm, the one the commit
   // and withdrawal routes act under (the active firm, else the only one).
-  // Each row names its firm and whether it belongs to that context. A row
-  // recorded before commitments named a firm (company_id NULL) is listed
-  // too, marked `legacy` when a firm is selected: it is the investor's, but
-  // no firm's, so the page shows it and offers no action on it.
+  // Each row names its firm and whether it belongs to that context. D5355:
+  // production held no pre-firm rows, so a NULL row is not carried into a
+  // later selected firm's context. It remains readable only while the
+  // resolved context is the investor's own name (companyId is NULL).
   if (audience === 'investor') {
     const firm = await transferFirm(c, user, COMMITMENT_FIRM_REQUIRED);
     if ('refuse' in firm) { await sql.end(); return firm.refuse; }
     const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name
       FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id
-      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND (c.company_id IS ${firm.companyId} OR c.company_id IS NULL) ORDER BY c.created_at DESC`;
+      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND c.company_id IS ${firm.companyId} ORDER BY c.created_at DESC`;
     await sql.end();
     return c.json((rows as any[]).map((r) => {
-      const legacy = r.company_id == null && firm.companyId != null;
-      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: !legacy, legacy };
+      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: true, legacy: false };
     }));
   }
   if (namesInvestors(audience)) {

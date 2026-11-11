@@ -11,6 +11,7 @@ import { AWAITING_DECISION, slotMinutes, slotView } from './advisory/kit';
 import { advisorToday, listNames, todayState } from './advisorToday';
 import './advisorStudioHome.css';
 import { earningsFigures } from './advisorEarnings';
+import { ADVISOR_AGENDA_KINDS } from '../studio/studioAgenda';
 
 /**
  * " · 45 min", or nothing at all.
@@ -102,6 +103,8 @@ export default function AdvisorStudioHome({
   previewing = false,
   dashboardUnavailable = '',
   onRetryDashboard,
+  // D4474 (#4474): a block on a multi-licence Studio. The page owns the "Studio" h1, so the home leaves out its own.
+  embedded = false,
 }) {
   const [advisor, setAdvisor] = useState(loading);
   const [slots, setSlots] = useState(loading);
@@ -124,7 +127,8 @@ export default function AdvisorStudioHome({
   }, []);
   const loadBookings = useCallback(() => read('bookings', setBookings, () => api.listMyAdvisorBookings(), asItems), [read]);
   // The calendar answer is kept whole: its `sources` say whether the advisor-booking source was actually read.
-  const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents(), (r) => r), [read]);
+  // D5203 (#5203): Today reads only the kinds it draws, never all of the calendar's sources.
+  const loadCalendar = useCallback(() => read('calendar', setCalendar, () => api.listCalendarEvents({ kinds: ADVISOR_AGENDA_KINDS.join(',') }), (r) => r), [read]);
   const loadSlots = useCallback((uid) => read('slots', setSlots, () => api.listAdvisorSlots(uid, true), asItems), [read]);
 
   const load = useCallback(() => {
@@ -232,7 +236,7 @@ export default function AdvisorStudioHome({
 
       <header className="advisor-studio__masthead">
         <div>
-          <div className="advisor-studio__title"><h1>Studio</h1><Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
+          <div className="advisor-studio__title">{!embedded && <h1>Studio</h1>}<Status tone="violet">Advisor</Status><span>Good to see you, {firstName(profile?.name || user?.name)}.</span></div>
           <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{PURPOSE.advisor}</p>
         </div>
         <div className="flex items-center gap-3">

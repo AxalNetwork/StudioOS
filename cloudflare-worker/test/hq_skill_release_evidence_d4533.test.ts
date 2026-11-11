@@ -27,7 +27,7 @@ import { agentModels } from '../src/routes/team_agents.ts';
 import { mount } from '../src/routes/admin_hq_skills.ts';
 import { EVALUATOR, EVAL_DEPS, releaseDecision } from '../src/services/agents/skillLifecycle.ts';
 import { JUDGE_VERSION } from '../src/services/agents/skillAssertions.ts';
-import { draftPartsOf } from '../src/services/agents/skillPublish.ts';
+import { draftPartsOf, publishDraft } from '../src/services/agents/skillPublish.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const BASELINE = sql('schema_baseline.sql');
@@ -42,7 +42,8 @@ function world() {
   );
   addColumnsFrom(db, sql('migrations/597_company_archive_and_events.sql'), 'company_profiles');
   for (const m of ['199_super_admin', '089_skills_values_taxonomy', '712_team_agents', '759_agent_skills', '202611022326_agent_skill_context_tokens',
-    '202611022055_agent_skill_moderation', '202611022140_hq_skill_lifecycle', '202611081919_skill_release_evidence']) db.exec(sql(`migrations/${m}.sql`));
+    '202611022055_agent_skill_moderation', '202611022140_hq_skill_lifecycle', '202611081919_skill_release_evidence', '202611092030_skill_version_release_note']) db.exec(sql(`migrations/${m}.sql`));
+    db.exec(sql('migrations/202611090904_skill_eval_result_identity.sql')); // D4531 slice 3: the evaluator (and case text) on each result row
   const user = db.prepare("INSERT INTO users (id, uid, email, name, role, founder_id, subscription_tier, subscription_status) VALUES (?, ?, ?, ?, ?, ?, 'growth', 'active')");
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super', 'admin', null);
   user.run(SUPER2, 'u-super2', 'super2@example.test', 'Rex Reviewer', 'admin', null);
@@ -378,8 +379,23 @@ test('D4533: a simultaneous publish, and no failed publish leaves a pointer with
   const uid = await ready(w, [m1]);
   const both = await Promise.all([publish(w, uid), publish(w, uid)]);
   assert.deepEqual(both.map((r) => r.status).sort(), [200, 409]);
-  assert.equal(both.find((r) => r.status === 409)!.body.error, 'publish_conflict');
+  // D4533 step 5: the loser is refused by the pointer guard, or by the gate once the winner spent the approval.
+  assert.ok(['publish_conflict', 'needs_approval'].includes(both.find((r) => r.status === 409)!.body.error));
   assert.equal(Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_versions').get() as any).n), 1);
+
+  // The pointer guard itself: a press that read the skill before another committed, and passes the gate on an
+  // approval of its own, is still refused, and writes nothing.
+  const raced = await ready(w, [m1]);
+  const stale = { ...(w.db.prepare('SELECT * FROM agent_skills WHERE uid = ?').get(raced) as any) };
+  assert.equal((await publish(w, raced)).status, 200);
+  w.db.exec(`INSERT INTO agent_skill_reviews (skill_id, draft_hash, requested_by, reviewer_id, status, decided_at, evidence_hash, evidence_json)
+    SELECT skill_id, draft_hash, requested_by, reviewer_id, 'approved', CURRENT_TIMESTAMP, evidence_hash, evidence_json FROM agent_skill_reviews
+    WHERE skill_id = ${stale.id} AND status = 'approved' ORDER BY id DESC LIMIT 1`);
+  // Mutation checked: the batch's `.catch(() => null)` dropped → the stale press throws instead of answering publish_conflict.
+  // (The `changes !== 1` check behind it is defence in depth: here the version row's UNIQUE refuses first.)
+  const late = await publishDraft(w.env, stale, { id: SUPER, email: 'super@example.test', role: 'admin' } as any);
+  assert.deepEqual([late.ok, (late as any).code], [false, 'publish_conflict']);
+  assert.equal(Number((w.db.prepare('SELECT COUNT(*) AS n FROM agent_skill_versions WHERE skill_id = ?').get(stale.id) as any).n), 1);
 
   // The version row cannot be written: the pointer stays where it was.
   const next = await ready(w, [m1], 1);

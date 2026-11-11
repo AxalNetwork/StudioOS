@@ -7,6 +7,8 @@ import { branchOf } from '../util/branch';
 // its own activity_logs, and HQ reads Analytics Engine through the same rule
 // written as a WHERE clause. The skip list moved there; it is not restated here.
 import { activityLogged } from '../services/activeAccounts';
+// D4672 — a credential carried in the path never reaches a telemetry store.
+import { redactPath } from '../util/pathRedaction';
 
 // Endpoints completely excluded from system_metrics — prevents the monitoring
 // dashboard's polling from inflating the very metrics it displays.
@@ -34,6 +36,12 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
     } finally {
       const latency = Date.now() - start;
       const status = errored ? 500 : c.res.status;
+      // D4672 — what every store below records: the path with each credential
+      // the route carries in it (a consent, share, signing or download link)
+      // replaced by its parameter name. `path` itself is kept for the
+      // decisions (metering, activity) that read prefixes.
+      let recorded = path;
+      try { recorded = redactPath(path, (c.req as any).routePath); } catch { recorded = redactPath(path); }
       const env = c.env;
       const ctx = c.executionCtx as any;
 
@@ -58,7 +66,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
             ).bind(
               'request',
               1,
-              JSON.stringify({ endpoint: path, method, status, latency_ms: latency, role }),
+              JSON.stringify({ endpoint: recorded, method, status, latency_ms: latency, role }),
             ).run();
           } catch (e) {
             console.error('system_metrics insert failed', e);
@@ -103,7 +111,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
                 // and this block swallows failures with a console.warn below.
                 // A silent runtime rejection is the one failure mode a metrics
                 // write must not have. Do not "tidy" the branch into here.
-                indexes: [path.slice(0, 96)],
+                indexes: [recorded.slice(0, 96)],
                 // Blobs (in slot order, must match SQL reads in
                 // analyticsReports.ts loadTechnicalFromAnalyticsEngine):
                 //   blob1 route, blob2 method, blob3 role, blob4 status,
@@ -116,7 +124,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
                 // correct, because such a deployment already fails loudly at
                 // boot (assertBranchAppUrl) and on every authed path. Reading
                 // the var raw would instead write a garbage dimension verbatim.
-                blobs: [path, method, role, String(status), tier, branchOf(env) || 'hq'],
+                blobs: [recorded, method, role, String(status), tier, branchOf(env) || 'hq'],
                 // Doubles: double1 latency_ms, double2 status, double3 user_id
                 doubles: [latency, status, userId ?? 0],
               });
@@ -135,10 +143,10 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
             ).bind(
               `http_${method.toLowerCase()}`,
-              `${method} ${path} → ${status} (${latency}ms)`,
+              `${method} ${recorded} → ${status} (${latency}ms)`,
               actor,
               userId,
-              path,
+              recorded,
               method,
               status,
               latency,
@@ -156,7 +164,7 @@ export const observabilityMiddleware = (): MiddlewareHandler<{ Bindings: Env }> 
             await env.DB.prepare(
               `INSERT INTO error_logs (user_id, endpoint, method, status_code, message, stack_snippet)
                VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(userId, path, method, status, msg, stack).run();
+            ).bind(userId, recorded, method, status, msg, stack).run();
           } catch (e) {
             console.error('error_logs insert failed', e);
           }

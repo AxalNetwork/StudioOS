@@ -63,20 +63,32 @@ const PILL_TONES = {
  * violet and carries aria-current="page" (NavLink sets it); `end` is on by
  * default, so a page's Overview is open only at its own address.
  */
-export function HeaderTab({ linkRef, to, end = true, count = null, children, 'data-testid': testId }) {
+export function HeaderTab({ linkRef, to, end = true, active, count = null, children, 'data-testid': testId }) {
+  // D4812: a tab that owns several addresses (Fund admin's Capital: calls and
+  // distributions) says itself whether it is open; it is still a literal link.
+  if (typeof active === 'boolean') {
+    return (
+      <Link ref={linkRef} to={to} aria-current={active ? 'page' : undefined} data-testid={testId} className={tabClass(active)}>
+        {children}
+        <TabCount count={count} />
+      </Link>
+    );
+  }
   return (
     <NavLink
       ref={linkRef}
       to={to}
       end={end}
       data-testid={testId}
-      className={({ isActive }) => `inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-[13px] sm:min-h-[40px] ${isActive ? 'border-axal-violet font-bold text-axal-ink dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
+      className={({ isActive }) => tabClass(isActive)}
     >
       {children}
       <TabCount count={count} />
     </NavLink>
   );
 }
+
+const tabClass = (on) => `inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-[13px] sm:min-h-[40px] ${on ? 'border-axal-violet font-bold text-axal-ink dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
 
 function TabCount({ count }) {
   if (!count) return null;
@@ -230,6 +242,8 @@ export default function AdminPageHeader({
         <>
           <nav aria-label="Breadcrumb" className="col-span-2 hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="admin-page-crumb">
             <Link to={crumb.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300">{crumb.label}</Link>
+            {/* D4814: an optional middle level, "Approvals › Lanes › Product testers". */}
+            {crumb.via ? <><span aria-hidden="true">›</span><Link to={crumb.via.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300" data-testid="admin-page-crumb-via">{crumb.via.label}</Link></> : null}
             {crumb.current ? <><span aria-hidden="true">›</span><span>{crumb.current}</span></> : null}
           </nav>
           <Link to={crumb.to} className="col-span-2 inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet sm:hidden" data-testid="admin-page-back">

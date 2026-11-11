@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { VENTURE_PARAM, ventureRef } from '../src/pages/cycles/ventureQuery.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -192,6 +193,9 @@ test('no founder landing offers its own startup picker', () => {
     assert.doesNotMatch(src, /projects\.map\(\(project\) => <option/,
       `${file} must not build a project option list`);
   }
-  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /searchParams\.get\('project_id'\)/,
+  // D5074 (#5074): CycleRoute reads the venture through the shared helper, which reads `?project_id=`.
+  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /ventureRef\(searchParams\)/,
     'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
+  assert.equal(VENTURE_PARAM, 'project_id');
+  assert.equal(ventureRef('?project_id=7')?.id, 7, 'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
 });

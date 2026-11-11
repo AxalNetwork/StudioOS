@@ -198,7 +198,7 @@ function harness({ phone = false } = {}) {
 function Root() {
   const l = useLocation();
   const { view, scope } = viewOf(l.search);
-  return h(React.Fragment, null, h(DealFlow, { view, scope, board: h('div', { 'data-testid': 'today-board' }) }), h('span', { 'data-testid': 'probe' }, `${l.pathname}${l.search}`));
+  return h(React.Fragment, null, h(DealFlow, { view, scope }), h('span', { 'data-testid': 'probe' }, `${l.pathname}${l.search}`));
 }
 const page = (url) => h(MemoryRouter, { key: url, initialEntries: [url] }, h(Routes, null, h(Route, { path: '*', element: h(Root) })));
 
@@ -213,13 +213,17 @@ function stubs(over = {}) {
     add: rec('add', (b) => entry({ deal_id: b.deal_id, venture: 'Orchid Analytics', stage: b.stage, entered_via: 'added', can_open: false })),
   });
   api.listDeals = rec('listDeals', DEALS());
+  // D4815: the "Other deal activity" line's two zone reads.
+  was.screening = api.dealScreening; was.commitRoom = api.icCommitRoom;
+  api.dealScreening = rec('screening', { desk: { available: true, rows: [{ deal_id: 1 }, { deal_id: 2 }] } });
+  api.icCommitRoom = rec('commitRoom', { decisions: { available: true, rows: [] } });
   Object.assign(ventureScoresApi, { batch: rec('batch', BATCH()), weights: rec('weights', { weights: null, equal: true }) });
   Object.assign(dealViewsApi, { fit: rec('fit', FIT()), list: rec('views', VIEWS()), create: rec('create', { uid: 'v9' }), update: rec('vupdate', { uid: 'v1' }), remove: rec('remove', { ok: true }) });
   for (const [k, v] of Object.entries(over)) {
     const [obj, name] = k.split('.');
     ({ dealFlowApi, api, ventureScoresApi, dealViewsApi })[obj][name] = v;
   }
-  return { calls, restore: () => { Object.assign(dealFlowApi, { flow: was.flow, update: was.update, add: was.add }); api.listDeals = was.listDeals; Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights }); Object.assign(dealViewsApi, { fit: was.fit, list: was.list, create: was.create, update: was.vupdate, remove: was.remove }); } };
+  return { calls, restore: () => { Object.assign(dealFlowApi, { flow: was.flow, update: was.update, add: was.add }); api.listDeals = was.listDeals; api.dealScreening = was.screening; api.icCommitRoom = was.commitRoom; Object.assign(ventureScoresApi, { batch: was.batch, weights: was.weights }); Object.assign(dealViewsApi, { fit: was.fit, list: was.list, create: was.create, update: was.vupdate, remove: was.remove }); } };
 }
 
 test('mounted board (DLS1): stages with counts and asks, cards with bands, fit and owner, Move to with Undo, drag, a refused move, compare', async () => {
@@ -270,7 +274,11 @@ test('mounted board (DLS1): stages with counts and asks, cards with bands, fit a
     await t.change('dealflow-tick-1', true, 'checked');
     await t.change('dealflow-tick-2', true, 'checked');
     assert.equal(t.props(t.byId('dealflow-compare')).href, '/deals/compare?ids=1,2');
-    assert.ok(t.byId('today-board'), 'today’s zone board is kept under the board');
+    // D4815 (DX1): the zones and the deal rooms are one line linking to their routes; nothing sits under it.
+    assert.equal(t.props(t.byId('other-activity-screening')).href, '/deals/screening');
+    assert.match(t.text(t.byId('other-activity-screening')), /Screening\s*2/);
+    assert.equal(t.props(t.byId('other-activity-rooms')).href, '/deals/rooms');
+    assert.equal(t.byId('dealflow-more'), undefined, 'the rooms and tasks are back under the line');
   } finally { s.restore(); await t.close(); }
 });
 
@@ -391,9 +399,12 @@ test('mounted states (DLS13–DLS16): loading, unreadable, empty with its doors,
     await act(async () => t.root.render(page('/deals?x=1')));
     await t.settle();
     assert.match(t.text(t.byId('dealflow-unreadable')), /Your deal flow could not be read\. That is not the same as having none\./);
+    // D4815 (DX13): what survives is said to be separate from the unread flow.
+    assert.equal(t.text(t.byId('other-activity-surviving')), 'Other deal information is still available');
     flow = async () => ({ items: [], by_stage: {} });
     await act(async () => t.root.render(page('/deals?x=2')));
     await t.settle();
+    assert.equal(t.byId('other-activity-surviving'), undefined, 'a readable flow, even an empty one, has no surviving heading');
     assert.match(t.text(t.byId('dealflow-empty')), /Nothing in your deal flow yet\./);
     assert.equal(t.props(t.byId('dealflow-empty-all')).href, '/deals?view=table&scope=all');
     assert.equal(t.props(t.byId('dealflow-empty-new')).href, '/deals?scope=new');
