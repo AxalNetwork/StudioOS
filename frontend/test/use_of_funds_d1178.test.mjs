@@ -204,6 +204,17 @@ test('a scenario card, Make this the base\'s warning, and an Edit body with no r
   assert.match(scenarioBody({ name: 'x', raise: '1', target: '0' }).error, /1 to 120/);
 });
 
+test('scenario amounts use the recorded currency exponent', () => {
+  const form = { name: 'Seed', target: '18' };
+  assert.equal(scenarioBody({ ...form, raise: '1,234' }, 'jpy').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.25' }, 'JPY').error);
+  assert.equal(scenarioBody({ ...form, raise: '1.234' }, 'kwd').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, 'USD').error);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, null).error);
+  assert.equal(scenarioCard({ ...BASE, currency: 'jpy', amount_to_raise_cents: 1234 }).raise, '¥1,234');
+  assert.match(scenarioCard({ ...BASE, currency: undefined }).raise, /minor units.*currency not recorded/);
+});
+
 test('compare: Today is the record, each scenario Modelled, and nothing unrecorded is a zero', () => {
   const t = compareTable({ today: TODAY, scenarios: [BASE, LEAN] });
   const row = (k) => t.rows.find((r) => r.key === k);

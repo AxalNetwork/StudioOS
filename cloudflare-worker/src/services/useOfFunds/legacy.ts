@@ -1,6 +1,7 @@
 /** D1175: a single atomic copy; callers must use an authenticated founder id. */
 import { SECTION_KEYS, type SectionKey } from './plan';
 import type { Env } from '../../types';
+import { majorToMinor, toMajorString } from '../../../../frontend/src/lib/money.js';
 
 export const SECTION_LABELS: Record<SectionKey, string> = {
   product: 'Product & engineering', 'go-to-market': 'GTM: sales and marketing',
@@ -22,7 +23,7 @@ function cents(raw: unknown): number | null {
   if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) return null;
   if (typeof raw !== 'number' && typeof raw !== 'string') throw new UofStoreError('unreadable');
   const dollars = Number(raw);
-  const value = Math.round(dollars * 100);
+  const value = majorToMinor(dollars, 'USD');
   if (!Number.isFinite(dollars) || dollars < 0 || !whole(value)) throw new UofStoreError('unreadable');
   return value;
 }
@@ -119,6 +120,6 @@ export async function saveBaseSplit(db: Env['DB'], a: {
       source_label = 'typed', prior_value = CAST(share_pct AS TEXT), undone_at = NULL, undone_by = NULL, updated_by = ?, updated_at = datetime('now')
       WHERE scenario_id = ? AND category_key = ?`).bind(line.sharePct, line.sublabel ?? null, a.founderUserId, scenarioId, line.key)),
     db.prepare(`UPDATE projects SET use_of_funds = ?, funding_needed = ?, use_of_funds_meta = ?, updated_at = datetime('now') WHERE id = ?`)
-      .bind(JSON.stringify(split), a.amountToRaiseCents === null ? null : a.amountToRaiseCents / 100, JSON.stringify(meta), a.projectId),
+      .bind(JSON.stringify(split), a.amountToRaiseCents === null ? null : Number(toMajorString(a.amountToRaiseCents, 'USD')), JSON.stringify(meta), a.projectId),
   ]);
 }
