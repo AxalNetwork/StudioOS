@@ -21,6 +21,14 @@
  * `skillCaseIdentity.ts` (`case_id` + `revision`, or `<slug>#<sha12>`), the
  * scenario rules are `skillScenarios.checkScenarioPacks`, and a skill whose
  * cases exceed `CASES_MAX`, or two of whose cases share an identity, fails.
+ *
+ * D5335 (#5335): `libraryManifest` is the source manifest the Worker can build
+ * without the files (from the generated module, through `checkLibrary`), and
+ * `reconcileReport` is what `GET /api/admin/ai-agents/skills/library/reconcile`
+ * answers: per slug its class, the two draft hashes and the published version,
+ * the totals per class, and the persisted manifest, which
+ * `scripts/check-skill-library.mjs --persisted` reads back. Hashes and
+ * identities only: no draft text, no case input, no user identifier.
  */
 import type { Env } from '../../types';
 import { READ_KEYS } from './catalogue';
@@ -239,6 +247,76 @@ export function reconcile(source: readonly ManifestEntry[], persisted: readonly 
     out.push({ slug, class: rows.length > 1 ? 'duplicate_identity' : 'persisted_only', disposition: rows.length > 1 ? 'fail' : 'report', source: null, persisted: per(rows[0]) });
   }
   return out.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+}
+
+/** Every class, in the order the report totals them. */
+export const RECONCILE_CLASSES: readonly ReconcileClass[] = ['exact', 'source_only', 'persisted_only', 'content_drift', 'case_drift', 'missing_case', 'duplicate_identity', 'invalid_reference'];
+export const RECONCILE_REPORT_VERSION = 1;
+
+/**
+ * D5335: the source manifest from the generated module (the Worker reads no
+ * file), on the runtime's own `checkLibrary`. On the committed library it
+ * equals `checkSourceCatalogue`'s manifest; an entry `checkLibrary` refuses has
+ * no hash, so `reconcile` calls it `invalid_reference`.
+ */
+export async function libraryManifest(taxonomy: ReadonlySet<string>, entries: readonly LibraryEntry[]): Promise<ManifestEntry[]> {
+  const out: ManifestEntry[] = [];
+  for (const c of checkLibrary(taxonomy, entries)) {
+    if (!c.ok) { out.push({ slug: c.entry.slug, draft_hash: null, cases: [] }); continue; }
+    const cases: CaseManifest[] = [];
+    for (const k of c.cases) cases.push(await caseIdentity(c.entry.slug, { case_id: k.case_id, revision: k.revision, input: k.input, expect: k.expect }));
+    out.push({ slug: c.entry.slug, draft_hash: await draftHash(c.draft), cases });
+  }
+  return out;
+}
+
+export type ReconcileReportLine = {
+  slug: string; class: ReconcileClass; disposition: ReconcileLine['disposition'];
+  source_hash: string | null; persisted_hash: string | null; published_version: number | null;
+};
+
+/**
+ * D5335: the route's answer. Per slug: the class, its disposition (D4532 §3),
+ * the source and persisted draft hashes, and the published version (null when
+ * never published). `totals` names every class, zeros included. `manifest` is
+ * the persisted side, hashes and identities only, in the form `--persisted`
+ * reads. Nothing here carries draft text, case input or a person.
+ */
+export function reconcileReport(lines: readonly ReconcileLine[], persisted: readonly PersistedEntry[]) {
+  const byUid = new Map(persisted.map((p) => [p.uid, p]));
+  const totals = Object.fromEntries(RECONCILE_CLASSES.map((k) => [k, 0])) as Record<ReconcileClass, number>;
+  const skills: ReconcileReportLine[] = lines.map((l) => {
+    totals[l.class] += 1;
+    const p = l.persisted ? byUid.get(l.persisted.uid) : undefined;
+    const v = p ? Number(p.current_version) : 0;
+    return { slug: l.slug, class: l.class, disposition: l.disposition, source_hash: l.source?.draft_hash ?? null, persisted_hash: l.persisted?.draft_hash ?? null, published_version: v > 0 ? v : null };
+  });
+  return {
+    report_version: RECONCILE_REPORT_VERSION,
+    scope: 'hq' as const,
+    totals,
+    skills,
+    manifest: persisted.map((p) => ({
+      slug: p.slug, uid: p.uid, status: p.status, current_version: Number(p.current_version), draft_hash: p.draft_hash,
+      cases: p.cases.map((c) => ({ case_id: c.case_id, revision: c.revision, key: c.key, sha256: c.sha256 })),
+    })),
+  };
+}
+
+/**
+ * D5335: a `--persisted` file is either the manifest array `persistedManifest()`
+ * returns, or the reconcile route's JSON, whose `manifest` is that array.
+ * Anything else is refused, never read as an empty store.
+ */
+export function persistedFromJson(raw: unknown): PersistedEntry[] {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' && Array.isArray((raw as any).manifest) ? (raw as any).manifest : null;
+  if (!list) throw new Error('The persisted manifest is neither an array nor the reconcile route\'s JSON (no "manifest" array).');
+  for (const e of list) {
+    if (!e || typeof e !== 'object' || typeof e.slug !== 'string' || typeof e.uid !== 'string' || !Array.isArray(e.cases)) {
+      throw new Error('A persisted manifest entry needs slug, uid and cases.');
+    }
+  }
+  return list as PersistedEntry[];
 }
 
 /** The machine-readable summary the command prints with `--json`. */
