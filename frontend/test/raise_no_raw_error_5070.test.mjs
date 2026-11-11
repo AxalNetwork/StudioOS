@@ -12,7 +12,11 @@ const DIRS = ['pages/raise/caprel', 'pages/raise/narrative', 'pages/raise/dataro
 const TOP = ['pages/raise/AdvisorGrantSection.jsx', 'pages/raise/RoundClosesPanel.jsx', 'pages/raise/SupportReadsCard.jsx'];
 const RAW = /\b(?:e|err|error)\??\.(?:message|detail)\b|\.data\??\.(?:message|detail)\b/;
 // A line may read a raw field only to test it with `isSentence` first (the Worker-refusal contract).
-const ALLOWED = new Map([['pages/raise/dataroom/accessModel.js', /isSentence|raw = String/]]);
+const ALLOWED = new Map([
+  ['pages/raise/dataroom/accessModel.js', /isSentence|raw = String/],
+  // #5376: a 503 `*_off` keeps the Worker's sentence only after isSentence passes it.
+  ['pages/raise/pitch/deckV2Adapter.js', /isSentence\(e\?\.message\)/],
+]);
 
 const walk = (d) => readdirSync(join('frontend/src', d)).flatMap((f) => {
   const rel = `${d}/${f}`;
