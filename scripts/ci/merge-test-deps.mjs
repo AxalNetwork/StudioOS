@@ -54,9 +54,17 @@ export function mergeTraces(records, expected, { sha, node }) {
 
 function valid(row) {
   return row && typeof row.test === 'string' && typeof row.isTest === 'boolean' &&
-    Number.isFinite(row.wallMs) && Number.isInteger(row.exitCode) &&
+    typeof row.opaque === 'boolean' && Number.isFinite(row.wallMs) && row.wallMs >= 0 && Number.isInteger(row.exitCode) &&
     [...LISTS.map((key) => row[key]), row.probes?.hits, row.probes?.misses]
       .every((list) => Array.isArray(list) && list.every((item) => typeof item === 'string'));
+}
+
+function* tracePaths(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) yield* tracePaths(path);
+    if (entry.isFile() && entry.name.endsWith('.trace.json')) yield path;
+  }
 }
 
 function main(args) {
@@ -67,10 +75,9 @@ function main(args) {
   const root = fileURLToPath(new URL('../..', import.meta.url));
   const records = [];
   let invalid = 0;
-  for (const entry of readdirSync(input, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.trace.json')) continue;
+  for (const path of tracePaths(input)) {
     try {
-      const row = JSON.parse(readFileSync(join(entry.parentPath, entry.name), 'utf8'));
+      const row = JSON.parse(readFileSync(path, 'utf8'));
       if (!valid(row)) throw new Error('Invalid trace.');
       records.push(row);
     } catch { invalid += 1; }

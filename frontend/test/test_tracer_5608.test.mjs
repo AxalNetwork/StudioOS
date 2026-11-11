@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { mergeTraces } from '../../scripts/ci/merge-test-deps.mjs';
 
@@ -99,4 +100,23 @@ test('merge is byte-stable and marks tests without a top-level trace as untraced
   assert.equal(merged.dependencies.tests['b.test.mjs'].opaque, true);
   assert.equal(merged.timings.tests['b.test.mjs'].wallMs, 12);
   assert.deepEqual(merged.timings.untraced, ['a.test.mjs']);
+});
+
+test('merge CLI reads process traces from separate shard artifact directories', (t) => {
+  const root = fixture(t);
+  for (const [shard, read, isTest] of [['first', 'a', true], ['second', 'b', false]]) {
+    const directory = join(root, 'shards', shard);
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'process.trace.json'), JSON.stringify({
+      test: 'fixture.test.mjs', isTest, wallMs: 12, exitCode: 0, opaque: false,
+      reads: [read], directories: [], modules: [], sqlite: [], children: [],
+      probes: { hits: [], misses: [] },
+    }));
+  }
+  const merger = fileURLToPath(new URL('../../scripts/ci/merge-test-deps.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [merger, 'shards', 'output', 'a'.repeat(40)], { cwd: root, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const report = JSON.parse(readFileSync(join(root, 'output', 'test-deps.json'), 'utf8'));
+  assert.deepEqual(report.tests['fixture.test.mjs'].reads, ['a', 'b']);
+  assert.equal(report.tests['fixture.test.mjs'].opaque, false);
 });
