@@ -119,6 +119,7 @@ function database() {
   u.run(INVESTOR, 'investor', 'Ira Vale', 'ira@example.test', 'uid-52', 'cus_general_52');
   u.run(PARTNER, 'partner', 'Pat Rowe', 'pat@example.test', 'uid-53', 'cus_partner');
   db.exec(read('cloudflare-worker/sql/migrations/691_stripe_mode_stamps.sql').split('CREATE TABLE IF NOT EXISTS stripe_webhook_events')[1].replace(/^/, 'CREATE TABLE IF NOT EXISTS stripe_webhook_events'));
+  db.exec(read('cloudflare-worker/sql/migrations/202611071527_promo_ceiling_reservations.sql'));
   return db;
 }
 const env = (db: DatabaseSync) => ({ JWT_SECRET, ENVIRONMENT: 'test', STRIPE_SECRET_KEY: KEY, DB: d1Over(db) } as any);
