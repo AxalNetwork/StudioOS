@@ -96,6 +96,7 @@ const DOCUMENTED = new Map([
   ['cloudflare-worker/sql/historical', 'retired schema scripts preserved for archaeology'],
   ['cloudflare-worker/test',          'what the worker guarantees'],
   ['scripts',                         'build, deploy and the CI guards'],
+  ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
