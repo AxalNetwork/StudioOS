@@ -212,6 +212,7 @@ registerAcceptor({
       const s = await writeDemandSignal(env, {
         projectId: ctx.projectId, userId: ctx.userId, kind, who: null, signal_date: day(p.at) ?? undefined,
         source_kind: 'posthog', status: 'to_confirm', note: typeof p.answer === 'string' ? p.answer : null,
+        sourceProposalId: row.id,
       });
       return { target_ref: `demand_signals:${s.id}` };
     } catch (e) { return refuse(e); }

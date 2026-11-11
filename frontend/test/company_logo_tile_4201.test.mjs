@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { LOGO_HINT, LOGO_MAX_BYTES, logoProblem, shownLogo, unsavedLine } from '../src/pages/account/companies/generalFormModel.js';
+import { FIELDS, LABELS, LOGO_HINT, LOGO_MAX_BYTES, logoProblem, shownLogo, unsavedLine } from '../src/pages/account/companies/generalFormModel.js';
 import { LogoTile } from '../src/pages/account/companies/CompanyGeneralForm.jsx';
 import { logoSrcOf } from '../src/pages/account/companies/portfolioUi.jsx';
 
@@ -78,8 +78,24 @@ test('the form saves the logo with its one Save, before the fields, and the prev
   assert.match(save, /expectedVersion: versionOf\(baseline\)/, 'the save names the version it loaded');
   assert.doesNotMatch(save, /logoApi\.upload|logoApi\.remove|api\.updateCompany/, 'no separate logo-then-fields writes');
   assert.match(src, /const why = logoProblem\(file\);\s*setLogoError\(why\);\s*if \(why\) return;/, 'a bad file is never held');
-  assert.match(src, /<CompanyMark name=\{name\} size=\{28\} logoUrl=\{shownLogo\(row, logo\)\} \/>/, 'the preview shows what will be saved');
+  // D4966 (#5312): the preview is built by `previewOf`, which takes the pending
+  // logo and answers `logo` through the same `shownLogo`, and `PublicPreview`
+  // draws it. So a picked or removed logo is still what the preview shows.
+  assert.match(src, /const preview = previewOf\(row, form, logo, patch\);/, 'the preview is built from the pending logo');
+  assert.match(src, /<PublicPreview preview=\{preview\} collapsible \/>/, 'and the preview card draws it');
+  const fields = read('pages/account/companies/CompanyGeneralFields.jsx');
+  assert.match(fields, /<CompanyMark name=\{preview\.name \|\| ''\} size=\{28\} logoUrl=\{preview\.logo\} \/>/, 'the preview shows what will be saved');
+  const model = read('pages/account/companies/generalFormModel.js');
+  assert.match(model, /logo: shownLogo\(row, logo\),/, 'and `previewOf` reads it through shownLogo, not a copy of the rule');
   assert.match(src, /holdLogo\(null\)/, 'Discard drops the held logo too');
-  assert.match(src, /unsavedLine\(patch, logo\)/);
-  assert.doesNotMatch(read('pages/account/companies/generalFormModel.js'), /'logo_url'/, 'still no logo URL field');
+  // D4966 (#5312): the save rail counts the changes, and a pending logo is still
+  // one of them — `railStatus` and `unsavedLine` both read the one `changeCount`.
+  assert.match(src, /railStatus\(\{ canEdit, archived, row, status: save\.status, message: save\.message, problems: showProblems \? problems : \[\], patch, logo \}\)/);
+  assert.match(read('pages/account/companies/generalFormModel.js'), /export const unsavedLine = \(patch, logo = null\) => \{\n  const n = changeCount\(patch, logo\);/);
+  // Still no "paste a logo URL" field: the tile is the only way in. D4966's
+  // `PREVIEW_PUBLIC` names `logo_url` as one of the Worker's public fields,
+  // which is a read, so the rule is checked where it lives — the form's own
+  // field list and its labels.
+  assert.equal(FIELDS.includes('logo_url'), false, 'still no logo URL field');
+  assert.equal('logo_url' in LABELS, false, 'and no label for one');
 });

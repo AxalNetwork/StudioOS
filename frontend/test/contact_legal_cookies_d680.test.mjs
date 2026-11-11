@@ -293,8 +293,7 @@ test('every cookie row is a category the code really gates, and every gate has a
     assert.ok(gated.get(r.key).includes(r.controls.module), `${r.controls.module} does not gate on ${r.key}`);
     for (const key of r.controls.storage) assert.ok(src.includes(`'${key}'`), `${r.controls.module} never writes ${key}`);
   }
-  // The canvas's Preferences and Marketing rows have nothing behind them.
-  assert.ok(!rows.some((r) => /^(Preferences|Marketing)$/.test(r.title)));
+  assert.ok(!rows.some((r) => r.title === 'Preferences'));
 });
 
 test('the dialog draws the canvas\'s pieces, Essential locked on and every optional row off by default', () => {
@@ -324,7 +323,7 @@ test('the dialog draws the canvas\'s pieces, Essential locked on and every optio
 test('the banner names only the optional purposes the site has, and the footer\'s link opens the dialog', () => {
   localStorage.clear();
   const html = render(React.createElement(CookieConsent));
-  assert.match(text(html), /for analytics purposes\./);
+  assert.match(text(html), /for analytics and marketing purposes\./);
   assert.doesNotMatch(html, /functional|advertising/i);
   const src = codeOnly(read('frontend/src/components/CookieConsent.jsx'));
   assert.match(src, /window\.addEventListener\(OPEN_PREFERENCES_EVENT, onOpen\)/);

@@ -127,13 +127,22 @@ async function roadmapItem(env: Env, pid: number, ref: unknown): Promise<{ ref: 
 
 const flag = (v: unknown) => (v === true || v === 1 || v === '1' ? 1 : 0);
 
-export async function addFeedback(env: Env, pid: number, user: User, b: Body): Promise<{ uid: string }> {
+export async function addFeedback(
+  env: Env, pid: number, user: User, b: Body, options: { sourceProposalId?: number | null } = {},
+): Promise<{ uid: string }> {
   const text = str(b.body, 4000);
   if (!text) throw new Refused(400, 'Feedback says something', 'body');
   const source = oneOf(b.source, FEEDBACK_SOURCES, 'source', true);
   const item = await roadmapItem(env, pid, b.roadmap_item_ref);
   const status = oneOf(b.status, FEEDBACK_STATUS, 'status') ?? 'open';
-  const id = newUid();
+  const sourceProposalId = Number.isSafeInteger(options.sourceProposalId) && Number(options.sourceProposalId) > 0
+    ? Number(options.sourceProposalId) : null;
+  const id = sourceProposalId == null ? newUid() : `posthog-proposal-${sourceProposalId}`;
+  if (sourceProposalId != null) {
+    const existing = await env.DB.prepare('SELECT uid FROM product_feedback WHERE uid = ? AND project_id = ?')
+      .bind(id, pid).first<{ uid: string }>();
+    if (existing) return { uid: String(existing.uid) };
+  }
   await env.DB.prepare(
     `INSERT INTO product_feedback (uid, project_id, body, source, from_name, from_email, from_company, theme, roadmap_item_ref, roadmap_item_label,
        notify_on_ship, status, shipped_on, created_by, updated_by)
@@ -172,10 +181,15 @@ export async function updateFeedback(env: Env, pid: number, user: User, uid: str
 }
 
 /** The writer #1698's feedback-theme fill applies through: an existing theme or a new one. */
-export async function setFeedbackTheme(env: Env, projectId: number, uid: string, theme: string | null, userId: number): Promise<{ uid: string; theme: string | null }> {
+export async function setFeedbackTheme(
+  env: Env, projectId: number, uid: string, theme: string | null, userId: number,
+  sourceProposalId: number | null = null,
+): Promise<{ uid: string; theme: string | null }> {
   const row = await owned<{ id: number }>(env, 'SELECT id FROM product_feedback WHERE uid = ? AND project_id = ?', uid, projectId);
   const t = str(theme, 80);
-  await env.DB.prepare('UPDATE product_feedback SET theme = ?, updated_by = ?, updated_at = ? WHERE id = ?').bind(t, userId, nowIso(), row.id).run();
+  await env.DB.prepare(
+    'UPDATE product_feedback SET theme = ?, theme_source_proposal_id = ?, updated_by = ?, updated_at = ? WHERE id = ?',
+  ).bind(t, sourceProposalId, userId, nowIso(), row.id).run();
   await logGrowWrite(env, projectId, userId, { module: 'product-improvement', entityId: uid, action: 'grow_feedback_theme_set', summary: t ? 'Theme set' : 'Theme cleared' });
   return { uid, theme: t };
 }

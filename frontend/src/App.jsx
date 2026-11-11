@@ -91,6 +91,7 @@ import { clearActiveProject } from './lib/activeProject.js';
 // returns, racing the flag and still bouncing logged-out visitors to /login.
 import NotFoundPage from './pages/NotFoundPage';
 import { keepFirstTouch } from './lib/referralRef';
+import { subscribe as subscribeConsent } from './lib/cookieConsent';
 import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -2425,19 +2426,17 @@ function AppInner() {
     window.location.replace('/login');
   }, [clearSession]);
 
-  // Task #8 — Universal referral attribution. Capture a `?ref=CODE` from ANY
-  // entry point (not just /register) into the `axal_ref` cookie so a later
-  // purchase of ANY SKU can pay the referrer a commission. First-touch wins:
-  // we never overwrite an existing cookie. 30-day window, SameSite=Lax so it
-  // survives the cross-domain marketing → app hop.
+  // D5509 — capture a referral on entry or when the visitor opts in on that page.
   useEffect(() => {
-    try {
-      const code = new URLSearchParams(window.location.search).get('ref');
-      if (!code) return;
-      // D4289 P2 (#4291): a handle reference stays a handle (h:jane, 90 days); a code is normalised as before (30 days).
-      keepFirstTouch(code); // first-touch wins: an existing cookie is never replaced
-    } catch { /* attribution must never break navigation */ }
-  }, []);
+    const capture = () => {
+      try {
+        const code = new URLSearchParams(window.location.search).get('ref');
+        if (code) keepFirstTouch(code);
+      } catch { /* attribution must never break navigation */ }
+    };
+    capture();
+    return subscribeConsent(capture);
+  }, [location.search]);
 
   // T20 — cross-tab `user` sync now lives inside AuthProvider; the
   // realUser mirror still lives here because it's only relevant to the

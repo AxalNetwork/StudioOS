@@ -63,6 +63,10 @@ export default function EventEditorPage() {
     title: '', type: 'meetup', summary: '', description: '',
     starts_at: '', ends_at: '', timezone: browserTz,
     location_kind: 'virtual', location_text: '', location_url: '', cover_url: '',
+    // #5309 (D5309, D3724 §gaps 8 and 11): the cover's alt text, where it came
+    // from, and how to frame it. `null` is "not recorded" and is what an event
+    // whose cover predates the migration keeps; it is never filled with a guess.
+    cover_alt: '', cover_source: null, cover_focal: null, cover_crops: null,
     capacity: '', waitlist_enabled: true, approval_required: false,
     visibility: 'private',
   });
@@ -88,7 +92,12 @@ export default function EventEditorPage() {
   });
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const onCoverDrawn = useCallback((url) => setForm((f) => ({ ...f, cover_url: url })), []);
+  // #5309: a drawn cover brings its own alt text (Eadwyn's own words, checked
+  // on the image); the step sets `cover_source`. An undescribed draw leaves the
+  // alt text as it was rather than clearing it.
+  const onCoverDrawn = useCallback((url, alt) => setForm((f) => ({
+    ...f, cover_url: url, ...(alt ? { cover_alt: alt } : {}), cover_source: 'generated',
+  })), []);
 
   useEffect(() => {
     if (!isEdit) return;
@@ -109,6 +118,10 @@ export default function EventEditorPage() {
           location_kind: ev.location_kind || 'virtual',
           location_text: ev.location_text || '', location_url: ev.location_url || '',
           cover_url: ev.cover_url || '',
+          cover_alt: ev.cover_alt || '',
+          cover_source: ev.cover_source ?? null,
+          cover_focal: ev.cover_focal ?? null,
+          cover_crops: ev.cover_crops ?? null,
           capacity: ev.capacity ?? '',
           waitlist_enabled: ev.waitlist_enabled !== 0 && ev.waitlist_enabled !== false,
           approval_required: ev.approval_required === 1 || ev.approval_required === true,
@@ -140,6 +153,10 @@ export default function EventEditorPage() {
     location_text: form.location_text.trim() || null,
     location_url: form.location_url.trim() || null,
     cover_url: form.cover_url.trim() || null,
+    cover_alt: form.cover_alt.trim() || null,
+    cover_source: form.cover_source || null,
+    cover_focal: form.cover_focal || null,
+    cover_crops: form.cover_crops || null,
     capacity: form.capacity === '' ? null : Number(form.capacity),
     waitlist_enabled: form.waitlist_enabled ? 1 : 0,
     approval_required: form.approval_required ? 1 : 0,

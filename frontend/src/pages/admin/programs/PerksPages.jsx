@@ -11,7 +11,8 @@ import {
 import { useRead } from './useProgramReads';
 import {
   ACTION_WORD, CREDITS_DONE, CREDITS_FOOT, CREDITS_HELD_WAITS, LISTING_DONE, LISTING_STATUSES, PAGE_SIZE, PERK_WEEKS_LINE,
-  countLine, isFeatureAction, listingActions, listingBody, listingDialog, listingWord, perkClaimsFrom, refusalSentence, shortDay, totalOf,
+  countLine, isFeatureAction, listingActions, listingBody, listingDialog, listingWord, perkClaimsFrom, perkParticipationTiles, refusalSentence,
+  shortDay, totalOf,
 } from './programPagesModel';
 import {
   HQ_READS_MONEY, NOTHING_WAITING, NOT_READ_YET, NOT_RECORDED, OVERDUE_HOURS, PERKS_EMPTY, ageText, hoursSince, isReady,
@@ -137,6 +138,20 @@ export function PerksOverview({ reads, superAdmin }) {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * D5313 (#5313): Participation, the generic shell's core section, on Perks' own claims read. Claims are recorded; the
+ * members behind them are not, so that tile reads "Not recorded" with its reason, never 0.
+ */
+export function PerksParticipation({ reads }) {
+  return (
+    <Card title="Participation" meta={PERK_WEEKS_LINE} testId="programs-perks-participation">
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        {perkParticipationTiles(reads.claims).map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
+      </div>
+    </Card>
   );
 }
 

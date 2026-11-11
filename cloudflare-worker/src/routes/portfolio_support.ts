@@ -150,7 +150,7 @@ r.get('/', async (c) => {
     if (empty) {
       return c.json({
         entries: [], companies: [], untouched: [],
-        page: { offset: 0, limit: SUPPORT_PAGE, total: 0, next_offset: null },
+        page: { offset: 0, limit: SUPPORT_PAGE, total: 0, matching_total: 0, next_offset: null },
         page_state: 'recorded', filter: { state: null },
         totals_basis: 'all_entries_in_scope',
         totals: {
@@ -282,12 +282,19 @@ r.get('/', async (c) => {
 
     // #4647: the figures are Unreadable, not zero, when their own read failed.
     const unreadable = aggRows == null;
+    const matchingEntries = stateFilter === 'delivered' ? counts.delivered
+      : stateFilter === 'promised' ? counts.promised
+        : stateFilter === 'withdrawn' ? counts.withdrawn : entriesTotal;
     return c.json({
       entries: rows,
       // The page the `entries` above are, and where the next one starts. The
       // ordering ends in `s.id`, which is unique, so a row cannot repeat or
       // fall between two pages as `created_at DESC` alone allowed.
-      page: pageFacts(win, unreadable ? win.offset + rows.length : entriesTotal, rows.length),
+      page: {
+        ...pageFacts(win, unreadable ? win.offset + rows.length : matchingEntries, rows.length),
+        total: unreadable ? win.offset + rows.length : entriesTotal,
+        matching_total: unreadable ? null : matchingEntries,
+      },
       page_state: unreadable ? 'unreadable' : 'recorded',
       filter: { state: stateFilter },
       companies,
