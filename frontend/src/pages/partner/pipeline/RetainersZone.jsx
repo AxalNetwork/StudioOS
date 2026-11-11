@@ -1,3 +1,4 @@
+import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -126,7 +127,7 @@ function RetainerForm({ row, onSave, onDelete, busy, note }) {
   const r = row.retainer;
   const [shape, setShape] = useState(r?.shape || 'retainer');
   const [cadence, setCadence] = useState(r?.cadence || 'monthly');
-  const [amount, setAmount] = useState(r?.amount_cents != null ? String(r.amount_cents / 100) : '');
+  const [amount, setAmount] = useState(centsToInput(r?.amount_cents));
   const [hours, setHours] = useState(r?.retained_hours != null ? String(r.retained_hours) : '');
   const [renews, setRenews] = useState(r?.renews_at || '');
   const [ended, setEnded] = useState(r?.ended_at || '');
@@ -135,7 +136,7 @@ function RetainerForm({ row, onSave, onDelete, busy, note }) {
   useEffect(() => {
     setShape(r?.shape || 'retainer');
     setCadence(r?.cadence || 'monthly');
-    setAmount(r?.amount_cents != null ? String(r.amount_cents / 100) : '');
+    setAmount(centsToInput(r?.amount_cents));
     setHours(r?.retained_hours != null ? String(r.retained_hours) : '');
     setRenews(r?.renews_at || '');
     setEnded(r?.ended_at || '');
