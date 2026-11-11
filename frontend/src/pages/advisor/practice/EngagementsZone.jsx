@@ -6,8 +6,8 @@ import {
   buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
-  BOARD_LANES, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
-  boardLaneOf, canDecideRenewal, clientNote, dueLine, laneMoves, shapeNote,
+  BOARD_LANES, END_REASON_LABEL, LANE_LABEL, OUTCOME_LABEL, OUTCOME_TONE, SHAPE_LABEL, SIGNED_LANES,
+  boardLaneOf, canDecideRenewal, clientNote, dueLine, endReasonLabel, laneMoves, shapeNote,
 } from './engagementBoard';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
@@ -68,7 +68,7 @@ export default function EngagementsZone() {
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState(null);
   const [deciding, setDeciding] = useState(null);
-  const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '' });
+  const [decision, setDecision] = useState({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
   const [adding, setAdding] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [partial, setPartial] = useState(null);
@@ -183,16 +183,25 @@ export default function EngagementsZone() {
     () => api.updateMyAdvisorEngagement(e.id, { founder_user_id: value === '' ? null : Number(value) }),
     'That client account could not be linked.');
 
-  const recordRenewal = (e) => act(e.id, async () => {
+  const recordRenewal = (e) => {
+    // #5316 (D5316): the Worker refuses an ending with no reason, so the form asks first.
+    if (decision.decision === 'ended' && !END_REASON_LABEL[decision.end_reason]) {
+      setNote({ ok: false, text: 'Say why it ended: it did not renew, or it ended for another reason.' });
+      return undefined;
+    }
+    return recordDecision(e);
+  };
+  const recordDecision = (e) => act(e.id, async () => {
     await api.recordMyAdvisorEngagementRenewal(e.id, {
       decision: decision.decision,
+      ...(decision.decision === 'ended' ? { end_reason: decision.end_reason } : {}),
       // The term being decided: the cycle count this row showed. A retry of the same press is one cycle.
       expected_cycles: Number(e.cycles || 0),
       note: decision.note.trim() || null,
       term_ends_at: decision.term_ends_at || null,
     });
     setDeciding(null);
-    setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
+    setDecision({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
   }, 'That renewal decision could not be recorded.');
 
   const showHistory = async (e) => {
@@ -405,7 +414,7 @@ export default function EngagementsZone() {
             </p>
             : <div className="overflow-x-auto"><table className="w-full min-w-[460px] text-[12px]">
               <thead><tr className="text-left text-[10px] font-extrabold uppercase tracking-[.07em] text-axal-faint">
-                <th className="pb-2">Client</th><th className="pb-2">Cycles</th><th className="pb-2">Outcome</th><th className="pb-2">Note</th>
+                <th className="pb-2">Client</th><th className="pb-2">Cycles</th><th className="pb-2">Outcome</th><th className="pb-2">Why it ended</th><th className="pb-2">Note</th>
               </tr></thead>
               <tbody>{renewals.map((e) => (
                 <tr key={e.id} data-testid={`row-pr2-renewal-${e.id}`} className="border-t border-axal-hairline dark:border-gray-700">
@@ -414,6 +423,9 @@ export default function EngagementsZone() {
                   <td className="py-2 pr-3">{e.outcome
                     ? <Pill tone={OUTCOME_TONE[e.outcome]}>{OUTCOME_LABEL[e.outcome]}</Pill>
                     : <Unrecorded>No decision</Unrecorded>}</td>
+                  <td className="py-2 pr-3" data-testid={`end-reason-${e.id}`}>{e.outcome !== 'ended'
+                    ? ''
+                    : END_REASON_LABEL[e.end_reason] || <Unrecorded>{endReasonLabel(e)}</Unrecorded>}</td>
                   <td className="py-2 text-axal-muted">{e.renewal_note || <Unrecorded>No note recorded</Unrecorded>}</td>
                 </tr>
               ))}</tbody>
@@ -545,7 +557,7 @@ export default function EngagementsZone() {
                 <button type="button" className={ghostButtonClass} disabled={busy === e.id}
                   onClick={() => {
                     setDeciding(deciding === e.id ? null : e.id);
-                    setDecision({ decision: 'renewed', note: '', term_ends_at: '' });
+                    setDecision({ decision: 'renewed', note: '', term_ends_at: '', end_reason: '' });
                   }}>
                   {deciding === e.id ? 'Cancel' : 'Decide'}
                 </button>
@@ -565,7 +577,17 @@ export default function EngagementsZone() {
                       disabled={decision.decision === 'ended'}
                       onChange={(ev) => setDecision({ ...decision, term_ends_at: ev.target.value })} />
                   </Field>
-                  <Field label="Note" hint="What the renewal history shows. Why it ended goes here too.">
+                  {decision.decision === 'ended' && (
+                    <Field label="Why it ended" hint="Required. Kept with the engagement.">
+                      <select className={inputClass} value={decision.end_reason} data-testid="end-reason-select"
+                        onChange={(ev) => setDecision({ ...decision, end_reason: ev.target.value })}>
+                        <option value="">Choose…</option>
+                        <option value="did_not_renew">{END_REASON_LABEL.did_not_renew}</option>
+                        <option value="other">{END_REASON_LABEL.other}</option>
+                      </select>
+                    </Field>
+                  )}
+                  <Field label="Note" hint="What the renewal history shows. Any detail on why it ended goes here.">
                     <input className={inputClass} value={decision.note}
                       placeholder="Two cycles, then they hired in-house."
                       onChange={(ev) => setDecision({ ...decision, note: ev.target.value })} />

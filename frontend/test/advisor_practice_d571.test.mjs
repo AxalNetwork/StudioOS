@@ -92,6 +92,8 @@ const deliverable = (over = {}) => ({
   // #4684: the latest sent version's recipient, which a nudge reaches; null until something is sent.
   recipient_email: null,
   state: 'not_started', due_date: null, manual_status: null, version_count: 1,
+  // #5316 (D5316): the unsent version marked ready to send, or null.
+  ready_version: null,
   latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });

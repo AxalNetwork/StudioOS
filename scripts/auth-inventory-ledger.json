@@ -2026,11 +2026,6 @@
       "kind": "unclassified",
       "state": "unreviewed"
     },
-    "POST /api/projects/:id/advance-week": {
-      "review": "record_without_ownership_check",
-      "kind": "unclassified",
-      "state": "unreviewed"
-    },
     "POST /api/public/analytics/pageview": {
       "review": "no_gate_found",
       "kind": "public_content",
