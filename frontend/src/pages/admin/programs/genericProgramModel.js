@@ -85,6 +85,17 @@ export function moduleRows(programKey, program) {
   };
 }
 
+/**
+ * D5313 (#5313): the modules from a page's own registry read (`useProgramDetail`'s `read`), for a built-in program in
+ * the shell. Its page draws while that read is out or after it failed, so a failed read is "Could not be read", never
+ * none, and one still out is loading.
+ */
+export function shellModules(programKey, read) {
+  if (!read || read.status === 'loading') return { state: 'loading', rows: [] };
+  if (read.status !== 'ready') return { state: 'unreadable', rows: [] };
+  return moduleRows(programKey, read.data?.program || {});
+}
+
 /** The member-access choices Settings offers: the registry's seven words, and Not recorded (null). */
 export const ACCESS_CHOICES = Object.freeze(['open', 'apply', 'request', 'invite', 'assigned', 'not_open', 'closed']);
 export const PARTICIPATION_UNRECORDED = 'No participation store exists for this program yet, so who has joined is not recorded. It is not the same as nobody.';

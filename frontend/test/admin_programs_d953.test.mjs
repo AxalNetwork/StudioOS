@@ -148,7 +148,8 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
     // D962 (#2795) adds Activity to these four; no page has a Terms tab.
     'mentor-cohorts': ['Overview', 'How it runs', 'People', 'Activity'],
     'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings', 'Activity'],
-    perks: ['Overview', 'How it runs', 'Queue', 'Activity'],
+    // D5313 (#5313): Perks runs in the generic shell (PG03a): its six core sections and the Perk queue module.
+    perks: ['Overview', 'Playbook', 'Availability & grants', 'Participation', 'Perk queue', 'History', 'Settings'],
     learning: ['Overview', 'How it runs', 'People', 'Activity'],
     // D963 (#2796): Referral partners' Queue and Activity, Investor cohort access's Overview and Activity.
     'referral-partners': ['Overview', 'How it runs', 'Queue', 'Activity'],

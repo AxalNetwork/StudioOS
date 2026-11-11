@@ -16,6 +16,7 @@
  * spec's own, because the local Worker has no Google or Outlook to fail. Nothing leaves 127.0.0.1.
  */
 import { test, expect } from '@playwright/test';
+import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
 const FROM_TITLE = 'Axal own session';
 const OUTLOOK_TITLE = 'Outlook own event';
@@ -40,13 +41,13 @@ const providerEvent = (kind, title) => ({
 
 /** The member's calendar, with Google's read failing until `state.googleOk` flips. */
 async function wire(page, manifest, state) {
-  await page.addInitScript(({ token, user }) => {
+  await page.addInitScript(({ token, user, consentVersion }) => {
     try {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
-      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: 1, decided: true, updatedAt: '2026-11-09T00:00:00Z', categories: { essential: true } }));
+      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-11-09T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the journey fails loudly on its first check */ }
-  }, { token: manifest.token, user: manifest.user });
+  }, { token: manifest.token, user: manifest.user, consentVersion: CONSENT_VERSION });
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
 
   await page.route('**/api/calendar/events*', async (route) => {

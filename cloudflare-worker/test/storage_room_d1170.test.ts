@@ -243,6 +243,9 @@ const SITES: Array<[string, string, string]> = [
   ['routes/deck_media.ts', "deckMedia.post('/:id{[0-9]+}/videos/upload'", 'await c.env.FILES.put(videoKey(uid), bytes'],
   ['routes/founder_validate_sessions.ts', 'async function openOn', 'const insert = env.DB.prepare('],
   ['services/interviewIntake.ts', 'export async function openSession', 'const [inserted] = await env.DB.batch(['],
+  // D5309 (#5309): an UPLOADED event cover is the member's own file, weighed before it lands. The drawn cover beside
+  // it (`services/coverDraws.ts`) is generated, and is named below rather than guarded.
+  ['services/eventCovers.ts', 'export async function storeCoverUpload', 'await env.FILES.put(`${prefix}${filename}`'],
 ];
 
 test('D1506: the deck image upload and import both land through landImage, the guarded writer', () => {
