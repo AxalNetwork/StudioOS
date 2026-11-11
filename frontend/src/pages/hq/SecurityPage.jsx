@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, adminMfaPolicyApi } from '../../lib/api';
+import { useAuth } from '../../hooks/useAuthSync';
+import { isSuperAdminUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
@@ -18,6 +20,7 @@ import PrivacyWorkspace from './security/PrivacyWorkspace.jsx';
 import TrustWorkspace from './security/TrustWorkspace.jsx';
 import StatusBadge from './security/StatusBadge.jsx';
 import { buildOverview, clockOf } from './security/overviewModel.js';
+import { changeMfaPolicy } from './security/mfaPolicyModel.js';
 import { tabFromSearch, tabOf } from './security/securityTabs.js';
 
 /**
@@ -646,7 +649,7 @@ export default function HqSecurityPage() {
 
   // D4699 — each read is numbered, and only the newest answer lands. A slow first read that answers
   // after a retry (or after a filter changed) is dropped instead of overwriting the newer one.
-  const seq = useRef({ overview: 0, sessions: 0, feed: 0 });
+  const seq = useRef({ overview: 0, sessions: 0, feed: 0, mfaPolicy: 0 });
   const latest = (k) => { const n = ++seq.current[k]; return () => n === seq.current[k]; };
 
   const [data, setData] = useState(null);
@@ -673,6 +676,26 @@ export default function HqSecurityPage() {
     );
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  // D5249 — "Require MFA for admins". The read is Super Admin only, so a plain
+  // admin never asks for it and sees no control. The state shown is the
+  // server's last answer: a change lands only from its reply, never optimistically.
+  const isSuper = isSuperAdminUser(useAuth()?.user);
+  const [mfaPolicy, setMfaPolicy] = useState(null);
+  const loadMfaPolicy = useCallback(() => {
+    if (!isSuper) return;
+    const current = latest('mfaPolicy');
+    setMfaPolicy(null);
+    adminMfaPolicyApi.get().then(
+      (r) => { if (current()) setMfaPolicy(r); },
+      (e) => { reportError('hq-mfa-policy', e); if (current()) setMfaPolicy(UNAVAILABLE); },
+    );
+  }, [isSuper]);
+  useEffect(() => { loadMfaPolicy(); }, [loadMfaPolicy]);
+  const onSetMfaPolicy = useCallback(
+    (enabled, reason) => changeMfaPolicy({ put: adminMfaPolicyApi.set, setPolicy: setMfaPolicy, reload: loadMfaPolicy }, enabled, reason),
+    [loadMfaPolicy],
+  );
   // D4699 — Load more: the next page below the last session id, appended once (a re-read or a new
   // first page in the meantime drops it). Resolves to the merged list, or throws for the caller's Retry.
   const loadMoreSessions = useCallback(async () => {
@@ -746,6 +769,8 @@ export default function HqSecurityPage() {
       loadMoreSessions={loadMoreSessions}
       onSessionAct={onSessionAct}
       readAt={readAt}
+      mfaPolicy={mfaPolicy}
+      mfaPolicyProps={{ isSuper, unavailable: UNAVAILABLE, onSet: onSetMfaPolicy, onRetry: loadMfaPolicy }}
     />
   );
 }
@@ -753,6 +778,7 @@ export default function HqSecurityPage() {
 export function SecurityConsole({
   tab = 'overview', onTab = () => {}, data, load, feed, filter, setFilter, loadFeed, sessionList, loadSessions, onSessionAct, readAt = {}, loadMoreSessions = null,
   controls = EMPTY_CONTROLS, setControls = () => {}, loadOlder = () => Promise.reject(new Error('no cursor reader')),
+  mfaPolicy = null, mfaPolicyProps = null,
 }) {
   const feedReady = feed && feed !== UNAVAILABLE;
   const access = feedReady ? feed.data_access : null;
@@ -903,6 +929,8 @@ export function SecurityConsole({
         onRetry={{ overview: load, feed: loadFeed }}
         filterLabel={filterLabel}
         sourceNotes={sourceNotes}
+        mfaPolicy={mfaPolicy}
+        mfaPolicyProps={mfaPolicyProps}
       />
     ),
     events: (
