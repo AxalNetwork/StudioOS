@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
 import { Pill, Sheet, Unrecorded } from '../../ui';
 import { AgentIdentity, PersonAvatar } from './AgentMark.jsx';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, MONO, MUTED } from './teamUi.jsx';
 import { agentName, budgetLine, refusalWords, agentLine } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM6c, TM6b) — who works on a module page, and "Assign this
- * task to…". Built, NOT MOUNTED: a module header's "Working here" button sits
- * beside Ask, which opens the Ask panel (#3706, #3740), and both reads it
- * needs are not on this base: the agents of a module (#3840's
- * `listAgents(…, { module })`) and what each person and agent is working on
- * (#3742 E1's tasks, #3845). The module headers mount this when those land.
+ * task to…". ModuleWorkingHere mounts the sheet beside Ask using the
+ * module-filtered agent and task reads (#3840, #3845).
  *
  * "Working on" is the assignment store's answer: `null` is its "nothing
  * assigned here"; a field it never sent is "Not recorded".
@@ -22,15 +19,15 @@ function WorkingOn({ value }) {
   return <span className="text-[13px] text-axal-ink dark:text-gray-200">{value.title}{value.due ? <span className={MONO}> · due {value.due}</span> : null}{value.waiting ? <span className={MUTED}> · {value.waiting}</span> : null}</span>;
 }
 
-export function WorkingHereSheet({ moduleLabel, people, agentsBlock, onClose, onOpenTeam, onAssign, onProfile }) {
+export function WorkingHereSheet({ moduleLabel, people, agentsBlock, onClose, onOpenTeam, onAssign, onProfile, extra }) {
   const list = agentsBlock?.available ? (agentsBlock.value?.agents || []) : null;
   const ppl = Array.isArray(people) ? people : [];
   return (
     <Sheet title="Working here" width={520} onClose={onClose} testId="working-here"
-      sub={`${moduleLabel} · ${ppl.length} ${ppl.length === 1 ? 'person' : 'people'}${list ? ` · ${list.length} AI agent${list.length === 1 ? '' : 's'}` : ''}`}
-      footer={<div className="flex justify-end gap-2"><button type="button" className={BTN_SECONDARY} onClick={onOpenTeam}>Open Team</button><button type="button" className={BTN_PRIMARY} onClick={onAssign} disabled={!onAssign}>Assign a task…</button></div>}>
+      sub={`${moduleLabel}${people ? ` · ${ppl.length} ${ppl.length === 1 ? 'person' : 'people'}` : ''}${list ? ` · ${list.length} AI agent${list.length === 1 ? '' : 's'}` : ''}`}
+      footer={<div className="flex justify-end gap-2"><button type="button" className={BTN_SECONDARY} onClick={onOpenTeam}>Open Team</button>{onAssign && <button type="button" className={BTN_PRIMARY} onClick={onAssign}>Assign a task…</button>}</div>}>
       <div className="flex flex-col gap-4 px-5 py-5">
-        <p className="m-0 font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">People · {ppl.length}</p>
+        <p className="m-0 font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">People · {people ? ppl.length : <Unrecorded />}</p>
         {ppl.map((p) => (
           <article key={p.key} className="flex flex-col gap-1.5 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
             <span className="flex items-center gap-2.5"><PersonAvatar initials={p.initials} size={34} /><b className="text-[13.5px] text-axal-ink dark:text-gray-100">{p.name}{p.you ? ' · you' : ''}</b></span>
@@ -38,14 +35,15 @@ export function WorkingHereSheet({ moduleLabel, people, agentsBlock, onClose, on
             <span className="rounded-md bg-axal-ground px-2 py-1.5 dark:bg-gray-900"><span className={`${MONO} mr-1`}>Working on</span><WorkingOn value={p.working_on} /></span>
           </article>
         ))}
-        <p className="m-0 font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">AI agents{list ? ` · ${list.length}` : ''}</p>
-        {list === null ? <HonestBlock>{agentsBlock?.reason || 'The agents could not be read.'} That is not the same as having none.</HonestBlock> : list.map((a) => (
+        {list && <p className="m-0 font-mono text-[11px] uppercase tracking-[.11em] text-axal-muted dark:text-gray-400">AI agents · {list.length}</p>}
+        {list?.map((a) => (
           <article key={a.uid} className="flex flex-col gap-1.5 rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700">
-            <span className="flex items-center justify-between gap-2"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={34} /><button type="button" className={BTN_TEXT} onClick={() => onProfile?.(a)}>Profile</button></span>
+            <span className="flex items-center justify-between gap-2"><AgentIdentity name={agentName(a)} role={agentLine(a)} size={34} />{onProfile && <button type="button" className={BTN_TEXT} onClick={() => onProfile(a)}>Profile</button>}</span>
             <span className={MUTED}>Platform model · {a.model_label || a.model_id || <Unrecorded />} · sponsored by {a.sponsor?.name || <Unrecorded />}{a.month_spend?.available && budgetLine(a.month_spend.value_microusd, a.monthly_cap_microusd) ? ` · ${budgetLine(a.month_spend.value_microusd, a.monthly_cap_microusd)}` : ''}</span>
             <span className="rounded-md bg-axal-ground px-2 py-1.5 dark:bg-gray-900"><span className={`${MONO} mr-1`}>Working on</span><WorkingOn value={a.working_on} /></span>
           </article>
         ))}
+        {extra}
         <p className={`m-0 ${MUTED}`}>Only people on the team, and agents whose rule book includes {moduleLabel}, appear here. Agents propose; people decide.</p>
       </div>
     </Sheet>
