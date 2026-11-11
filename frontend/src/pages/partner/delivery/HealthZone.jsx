@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutations, useZoneRead, signature } from './useZoneMutations';
 import { EngagementFocusBar, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
-import { api, partnerDeliveryReviewsApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { partnerDeliveryReviewsApi } from '../../../lib/api/partnerDeliveryReviews';
 import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, Unrecorded,
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
@@ -384,11 +385,11 @@ function BlockerEditor({ engagementId, pending, mutate }) {
  * before the history was kept says earlier reviews are Not recorded.
  */
 export function reviewHistoryView(read) {
-  if (!read) return { kind: 'loading' };
-  if (read.error || read.available === false) {
-    return { kind: 'unreadable', text: read.reason || 'Unreadable: the review history could not be read.' };
+  if (!read) return { kind: 'loading', items: [] };
+  if (read?.error || read?.available === false) {
+    return { kind: 'unreadable', items: [], text: read?.reason || 'Unreadable: the review history could not be read.' };
   }
-  const items = Array.isArray(read.items) ? read.items : [];
+  const items = Array.isArray(read?.items) ? read.items : [];
   return {
     kind: items.length ? 'list' : 'empty',
     items: items.map((r) => ({
@@ -399,21 +400,22 @@ export function reviewHistoryView(read) {
       recorded: r.recorded_at,
       by: r.recorded_by_name || null,
     })),
-    earlier: read.earlier_not_recorded ? (read.earlier_note || 'Not recorded: earlier reviews were not kept.') : null,
+    earlier: read?.earlier_not_recorded ? (read?.earlier_note || 'Not recorded: earlier reviews were not kept.') : null,
   };
 }
 
 function ReviewHistory({ engagementId, seed }) {
-  const [read, setRead] = useState(null);
+  // null while the read is out; reviewHistoryView draws that as loading.
+  const [reviews, setReviews] = useState(null);
   useEffect(() => {
     let live = true;
-    setRead(null);
+    setReviews(null);
     partnerDeliveryReviewsApi.partnerEngagementReviews(engagementId)
-      .then((r) => { if (live) setRead(r || { available: false }); })
-      .catch(() => { if (live) setRead({ error: true }); });
+      .then((r) => { if (live) setReviews(r || { available: false }); })
+      .catch(() => { if (live) setReviews({ error: true }); });
     return () => { live = false; };
   }, [engagementId, seed]);
-  const view = reviewHistoryView(read);
+  const view = reviewHistoryView(reviews);
   if (view.kind === 'loading') return <p className="text-[12px] text-axal-faint">Reading the history…</p>;
   if (view.kind === 'unreadable') return <p className="text-[12px] text-red-700 dark:text-red-300">{view.text}</p>;
   return (
@@ -423,7 +425,7 @@ function ReviewHistory({ engagementId, seed }) {
       )}
       {view.kind === 'list' && (
         <ul className="space-y-1 text-[12px] text-axal-muted">
-          {view.items.map((r) => (
+          {(Array.isArray(view?.items) ? view.items : []).map((r) => (
             <li key={r.key}>
               <span className="font-bold tabular-nums">{r.score}</span>
               {r.source && <> · {r.source}</>}
