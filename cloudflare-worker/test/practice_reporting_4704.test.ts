@@ -83,7 +83,7 @@ test('the overview and the ledger classify every booking the same way, the edge 
   assert.equal(byState.collected.bookings, l.body.states.collected.sessions);
   assert.equal(byState.unpriced.total_cents, 0, 'an unpriced line carries no cents');
   assert.equal(e.body.billed_cents + e.body.collected_cents + e.body.written_off_cents, l.body.totals.gross_cents, 'the states add up to the ledger total');
-  assert.deepEqual(e.body.population, { definition: 'practice_money_v1', period: { from: null, until: null }, sessions: 6, excluded_void_sessions: 1, complete: true });
+  assert.deepEqual(e.body.population, { definition: 'practice_money_v1', period: { from: null, until: null }, sessions: 6, included_sessions: 0, excluded_void_sessions: 1, complete: true });
   assert.equal(l.body.totals.sessions, e.body.population.sessions);
 });
 

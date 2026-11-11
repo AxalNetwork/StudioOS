@@ -115,6 +115,8 @@ test('the bootstrap produces the same schema the migrations do', async () => {
     migrated.exec(config.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}[\\s\\S]*?;`))![0]);
   }
   migrated.exec(migration('394_advisor_practice'));
+  // #5316 (D5316): a session recorded as included in an engagement.
+  migrated.exec(migration('202611110746_5316_advisor_booking_included'));
 
   const healed = fresh();
   await ensureAdvisorStoresSchema({ DB: makeD1(healed) } as any);
