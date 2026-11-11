@@ -63,6 +63,7 @@ with the ones ahead of it is taken out of the queue with the reason.
 | api ↔ worker drift | `ci.yml` | runs |
 | applied migrations unchanged | `migration-immutability.yml` | diffs against `merge_group.base_sha` |
 | scan | `gitleaks.yml` | scans `merge_group.base_sha..head_sha` |
+| `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes | hourly and manual | `contents: read`, `issues: write`, `pull-requests: write` |
 
 Only these three workflows listen for `merge_group`. Nothing else runs in the
 queue: no preview, no Claude review, no comment, and no deploy; the deploy

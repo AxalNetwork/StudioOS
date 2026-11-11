@@ -1,0 +1,32 @@
+name: Advisory PR overlap
+on:
+  schedule:
+    - cron: '31 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: pr-overlap
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          filter: blob:none
+          fetch-depth: 0
+          # Read-only credential permits fetching refs/pull/*/head; no PR code runs.
+          persist-credentials: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Report bounded overlaps and textual conflicts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/pr-overlap.mjs
