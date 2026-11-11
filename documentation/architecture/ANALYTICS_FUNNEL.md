@@ -55,7 +55,7 @@ The worker also lazily bootstraps the table via
 `services/funnelEventsSchema.ts` so `/api/track` self-heals on a DB the
 migration has not reached.
 
-## Event dictionary (21 events — keep the 3 lists in sync)
+## Event dictionary (23 events — keep the 3 lists in sync)
 
 The allowlist lives in **`cloudflare-worker/src/routes/track.ts`**
 (`FUNNEL_EVENT_ALLOWLIST`), **`frontend/src/lib/funnel.js`** (`EVENTS`) and
@@ -64,6 +64,8 @@ this table. A name missing from any of the three is silently dropped.
 | Event | Fired | Props |
 |---|---|---|
 | `landing_view` | `/` mount | — |
+| `pricing_view` | A pricing audience tab opens or its billing toggle changes | `audience`, `plan: null`, `interval: monthly\|yearly` |
+| `pricing_plan_selected` | A plan card opens checkout or starts registration | `audience`, stable `plan` key, `interval: monthly\|yearly\|null` (null for free plans) |
 | `register_view` | `/register` mount | — |
 | `register_form_start` | first keystroke in name/email (once per mount) | — |
 | `register_field_error` | client-side validation failure | `field`: name\|email |
@@ -86,6 +88,16 @@ this table. A name missing from any of the three is silently dropped.
 | `dashboard_first_view` | first dashboard render **ever per browser** (localStorage-deduped `trackOnce`) | — |
 
 ## Funnel edges
+
+Pricing events use the same analytics consent and anonymous browser ID as
+registration. Audience is the pricing tab (Founder, Investor, Advisor, or
+Operating Partner). The view records the toggle setting. A selection records
+the actual interval shown on the clicked card, including a monthly fallback
+when yearly billing is unavailable. Models, contact links, current-plan
+management, and automatic checkout reopening do not count as selections.
+The Worker stores only the three allowed pricing properties. A selection is
+an intent signal. Use the existing anonymous ID to measure subsequent browser
+events within a fixed window, and use billing records separately for payment.
 
 ```
 landing_view

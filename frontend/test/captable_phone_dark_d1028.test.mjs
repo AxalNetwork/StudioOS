@@ -3,6 +3,7 @@
 // (`matchMedia` matching PHONE_QUERY, below 1024px) and, where the layout
 // differs, at desktop width too. Fixtures follow the Worker's shapes
 // (services/capTableRecord.ts, routes/captable.ts) and are worked out by hand.
+import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -145,7 +146,7 @@ function handlerFor() {
     if (/\/captable\/simulate$/.test(url)) return response(MODEL_RESULT);
     const one = /\/captable\/scenarios\/([^/?]+)$/.exec(url);
     if (one && method === 'GET') return { 's-today': true, 's-model': true }[one[1]] ? response(one[1] === 's-today' ? S_TODAY : S_MODEL) : response({ detail: 'Scenario not found' }, 404);
-    if (url.includes('/captable/record/3')) return response(RECORD);
+    if (url.includes('/captable/record/3')) return response(withCapabilities(RECORD, OWNER, GRANTS));
     if (url.includes('/captable/access/3/grants')) return response(GRANTS);
     if (url.includes('/cycles/raise/modules/')) return response(MODULE);
     if (url.includes('/auth/me')) return response(OWNER);

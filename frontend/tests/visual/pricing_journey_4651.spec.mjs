@@ -15,6 +15,7 @@
  *   · a failed catalogue read on registration says so, and Try again reads it.
  */
 import { test, expect } from '@playwright/test';
+import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
 const PAID = {
   'founder:growth': { month: 5000, year: 48000 },
@@ -40,11 +41,11 @@ function priced(body) {
  * `state.signedIn` flips when the email link is confirmed or Google returns.
  */
 async function wire(page, manifest, state) {
-  await page.addInitScript(() => {
+  await page.addInitScript((consentVersion) => {
     try {
-      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: 1, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
+      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the journey fails loudly on its first check */ }
-  });
+  }, CONSENT_VERSION);
   await page.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort('blockedbyclient'));
   await page.route('**/api/public/plans-and-packs', async (route) => {
     if (state.catalogueDown > 0) { state.catalogueDown -= 1; return route.fulfill({ status: 503, contentType: 'application/json', body: '{"detail":"Unavailable"}' }); }

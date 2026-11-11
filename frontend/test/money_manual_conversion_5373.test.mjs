@@ -205,13 +205,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/subscriptionPlans.ts": 1,
     "cloudflare-worker/src/services/captable.ts": 1,
   } },
-  { kind: 'pending', reason: "Cap table instruments and the cap-table model: an instrument carries its own currency, but the saved model and the access record are in whole major units. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/raise/captable/instrumentsModel.js": 1,
-    "frontend/src/pages/raise/captable/overviewModel.js": 2,
-    "cloudflare-worker/src/services/capTableAccessRecord.ts": 2,
-    "cloudflare-worker/src/services/capTableToday.ts": 5,
-    "cloudflare-worker/src/services/capTableWrites.ts": 4,
-  } },
 ];
 
 const listed = new Map();
@@ -251,7 +244,10 @@ test('a fixed-currency entry names the currency in its file, and every entry say
       assert.match(text, NAMES[g.kind], `${file}: listed as ${g.kind.toUpperCase()} by contract but never names that currency`);
     }
   }
-  assert.deepEqual([...new Set(ALLOW.map((g) => g.kind))].sort(), ['eur', 'not-money', 'pending', 'usd']);
+  // The three pending groups are migrated: Use of Funds (D5496), the cap table (D5497) and the
+  // advisor ledger, partner forms, pitch sources and Stripe MRR import (D5498). The allow-list
+  // now holds only a fixed currency or a line that is not money.
+  assert.deepEqual([...new Set(ALLOW.map((g) => g.kind))].sort(), ['eur', 'not-money', 'usd']);
 });
 
 test('every pending file is named in the decision file, so the follow-up list is explicit', () => {
@@ -283,6 +279,11 @@ test('the surfaces D5373 migrated whole are off the allow-list and use the money
     'cloudflare-worker/src/services/licenceContract.ts:exponentOf',
     'cloudflare-worker/src/services/orders.ts:suffixAmount',
     'cloudflare-worker/src/services/influencer/payoutReadiness.ts:suffixAmount',
+    'frontend/src/pages/raise/captable/instrumentsModel.js:toMajorString',
+    'frontend/src/pages/raise/captable/overviewModel.js:majorToMinor',
+    'cloudflare-worker/src/services/capTableAccessRecord.ts:toMajorString',
+    'cloudflare-worker/src/services/capTableToday.ts:majorToMinor',
+    'cloudflare-worker/src/services/capTableWrites.ts:toMajorString',
   ];
   for (const entry of migrated) {
     const [file, fn] = entry.split(':');
