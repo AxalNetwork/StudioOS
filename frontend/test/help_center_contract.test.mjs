@@ -316,7 +316,7 @@ test('every guide has its own address, and the page reads it', () => {
   // one long scroll under the home, under a rail listing all of them.
   assert.match(
     APP_CODE,
-    /path="\/help\/:area\/:guide" element=\{guard\([^)]*<HelpCenterPage \/>\)\}/,
+    /path="\/help\/:area\/:guide" element=\{<HelpCenterPage \/>\}/,
     'a guide must have a route, and it must mount the Help Center',
   );
   assert.match(LAYOUT_CODE, /const route = parseGuidePath\(location\.pathname\)/);
