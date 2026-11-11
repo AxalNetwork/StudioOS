@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../../../lib/api';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { Lightbox } from '../../../ui';
 import { changedPill, compareCards, compareLine, restoreCardDialog, restoreDialog, vLabel } from './compareModel';
 import { dayLabel } from './pitchStudioModel';
@@ -86,7 +87,7 @@ export default function VersionCompare({ older, newer, versions, readOnly, onClo
       const r = dialog !== true ? await deckCoeditApi.restoreCard(older.id, dialog.uid) : await api.deckRestore(older.id);
       setDialog(false); onRestored?.(r?.deck || r);
     } catch (e) {
-      setRefusal(e?.message || (dialog !== true ? 'The card could not be restored. Nothing changed.' : 'The version could not be restored. Nothing changed.'));
+      setRefusal(userFacingRaiseError(e, { fallback: dialog !== true ? 'The card could not be restored. Nothing changed.' : 'The version could not be restored. Nothing changed.', scope: 'raise:pitch:version-restore' }));
     } finally { setBusy(false); }
   };
   return (

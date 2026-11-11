@@ -181,7 +181,8 @@ test('the plan gate links to the plans, never to a top-up; tokens link to the to
   const tokens = refusalOf({ status: 402, code: 'tokens', message: 'Synthetic: out of tokens.' });
   assert.deepEqual([tokens.link, tokens.topUp?.href], [null, ADD_TOKENS_PATH]);
   const line = renderToStaticMarkup(h(RefusalLine, { refusal: gate, testId: 'synthetic-refusal' }));
-  assert.match(line, /Synthetic: this needs a paid plan\./);
+  // D5070 (#5376): `tier_required` is a taxonomy code, so it reads in the taxonomy's words.
+  assert.match(line, /This needs a plan that includes it\./);
   assert.match(line, new RegExp(`href="${PLANS_PATH}"[^>]*>See plans ›<`), 'the card tools draw the plan link too');
   assert.doesNotMatch(line, /Add tokens/);
 });

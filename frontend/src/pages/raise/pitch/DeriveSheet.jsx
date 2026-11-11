@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { deckDeriveApi } from '../../../lib/api/deckDerive';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import Sheet from '../../../ui/Sheet.jsx';
 import { refusalOf } from './newDeckModel';
 import { BLIND_LABEL, BLIND_LINE, DERIVE_FORMATS, DERIVE_TITLE, PROPOSED_LINE, deriveHold } from './deriveModel';
@@ -47,7 +48,9 @@ export default function DeriveSheet({ deckId, version = null, dirty = false, rea
   }, [format, blind, deckId, memoOff, source]);
 
   const hold = format === 'memo' ? (quote.status === 'ok' ? deriveHold('memo', quote.data) : null) : deriveHold(format, null);
-  const refusedQuote = format === 'memo' && quote.status === 'ok' && quote.data?.ai === false ? (quote.data.message || 'The memo cannot run now.') : null;
+  const refusedQuote = format === 'memo' && quote.status === 'ok' && quote.data?.ai === false
+    ? userFacingRaiseError(quote.data, { fallback: 'The memo cannot run now.', scope: 'raise:pitch:derive-quote' })
+    : null;
   const canPropose = !readOnly && !busy && deckId != null && (format !== 'memo' || (!memoOff && hold != null));
 
   const propose = async () => {

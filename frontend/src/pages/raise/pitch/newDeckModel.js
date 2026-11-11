@@ -9,6 +9,7 @@
  */
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { NOT_ON_STUDIOOS } from './sourcesModel';
+import { newDeckFailure } from './pitchSafeErrors.js';
 
 export const NEW_PATH = '/raise/pitch/new';
 export const NO_ROUND = 'No active round yet.';
@@ -106,7 +107,7 @@ export function refusalOf(e) {
   if (!e) return null;
   const data = e.data && typeof e.data === 'object' ? e.data : {};
   const code = e.code || data.error || null;
-  const message = e.message || data.message || 'That did not work. Nothing was changed.';
+  const message = newDeckFailure(e);
   // D1604 (PD-9 plan gate): a press the plan does not include links to the plans, never to a top-up.
   const link = code === 'figure_in_prompt' && typeof data.href === 'string' && data.href.startsWith('/')
     ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }

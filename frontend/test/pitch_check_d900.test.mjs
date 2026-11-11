@@ -175,7 +175,8 @@ test('a refused swap says why in the Worker\'s words, and nothing opens', async 
   try {
     await v.click('pitch-check-use-c1');
     await v.click('pitch-check-use-confirm');
-    assert.equal(v.text('pitch-check-use-error'), 'The record’s figure changed since you opened this. Run the check again.');
+    // D5070 (#5376): an error with no Worker code is never shown raw; the approved sentence is.
+    assert.equal(v.text('pitch-check-use-error'), 'The figure could not be replaced.');
     assert.equal(opened, null);
   } finally { await v.close(); }
 });
@@ -205,7 +206,8 @@ test('a failed check says so with Try again, never an empty panel', async () => 
   stub({ run: async () => { throw new Error('This version’s slides could not be read, so nothing was checked. Its last check stands.'); } });
   const v = await mount({});
   try {
-    assert.match(v.text('pitch-check-error'), /slides could not be read/);
+    // D5070 (#5376): an error with no Worker code is never shown raw; the approved sentence is.
+    assert.match(v.text('pitch-check-error'), /The check could not be run\./);
     assert.ok(v.by('pitch-check-retry'), 'Try again');
     // #3657: the panel read the last check first, so it still stands under the error.
     assert.match(v.text('pitch-check-summary'), /4 figures/);
