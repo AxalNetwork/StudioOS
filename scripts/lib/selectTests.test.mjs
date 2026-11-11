@@ -67,3 +67,12 @@ test('missing or non-PR failure evidence is unscored, never zero misses', () => 
   const records = [{ mode: 'full', ...score({ files: [] }, null) }, { mode: 'selected', ...score({ files: [] }, { verdict: 'pr_failure', failures: [{ file: tests[0] }] }) }];
   assert.deepEqual(report(records), { runs: 2, failing: 1, unscored: 1, misses: 1, fallbackFraction: 0.5, gate: 'not-met' });
 });
+
+
+test('D5608 producer fields include reads, resolved modules, sqlite and both probe outcomes', () => {
+  const f = fixture();
+  f.deps.tests[tests[0]] = { reads: ['x.sql'], modules: ['module.ts'], sqlite: ['test.db'], probes: { hits: ['present.sql'], misses: ['missing.sql'] }, directories: [] };
+  for (const path of ['x.sql', 'module.ts', 'test.db', 'present.sql', 'missing.sql']) assert.deepEqual(select({ ...f, changed: [path] }).files, [tests[0]]);
+  f.deps.tests[tests[0]].probes.misses = null;
+  assert.equal(select(f).mode, 'full');
+});

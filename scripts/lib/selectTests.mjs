@@ -31,8 +31,11 @@ export function select({ changed, deps, tests, graph = {}, meta = {} }) {
   for (const t of all) {
     const trace = deps.tests[t];
     if (trace) {
-      if (!strings(trace.files) || !strings(trace.directories)) return full('missing-or-invalid-trace');
-      if (trace.opaque || trace.files.length > FAN_IN_MAX || trace.files.some((f) => changedPaths.has(f))) selected.add(t);
+      // #5608 records reads, imports, sqlite opens and hit/miss probes separately.
+      const lists = [trace.reads, trace.modules, trace.sqlite, trace.probes?.hits, trace.probes?.misses];
+      const files = trace.files ?? (lists.every(strings) ? [...new Set(lists.flat())] : null);
+      if (!strings(files) || !strings(trace.directories)) return full('missing-or-invalid-trace');
+      if (trace.opaque || files.length > FAN_IN_MAX || files.some((f) => changedPaths.has(f))) selected.add(t);
       // Only additions/deletions affect a directory listing; modifications affect file readers.
       if (changes.some((c) => /^[ADR]/.test(c.status) && trace.directories.some((d) => (d === '.' || d === '' || c.path.startsWith(`${d.replace(/\/$/, '')}/`))))) selected.add(t);
     } else {
