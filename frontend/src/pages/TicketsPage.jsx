@@ -561,7 +561,12 @@ function TicketForm({ isAdmin, role }) {
               placeholder="What happened, what you expected, and where in the product." className={`${INPUT} min-h-[96px] resize-y`} />
           </div>
 
-          {submitError && <StateNote tone="red" role="alert">{submitError}</StateNote>}
+          <div role="note" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-[12.5px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+            Ordinary tickets and replies may be mirrored to a public GitHub tracker and are visible to administrators. Do not include passwords, recovery codes, private company records or other confidential evidence. This form does not support file attachments.
+            For vulnerabilities, use the <Link to="/trust/disclosure" className="font-semibold underline">private disclosure guidance</Link> or a <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className="font-semibold underline">private security advisory</a> instead.
+          </div>
+
+          {submitError && <StateNote tone="red" role="alert">{submitError}</StateNote>
 
           <div className="flex justify-end gap-2">
             <Link to="/help/tickets" className={SECONDARY}>Cancel</Link>
