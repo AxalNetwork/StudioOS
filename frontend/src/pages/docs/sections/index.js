@@ -41,6 +41,7 @@ import portals from './portals';
 import integrations from './integrations';
 import account from './account';
 import troubleshooting from './troubleshooting';
+import workflows from './workflows';
 import changelog from './changelog';
 
 export const SECTIONS = [
@@ -56,6 +57,7 @@ export const SECTIONS = [
   integrations,
   account,
   troubleshooting,
+  workflows,
   changelog,
   // Last, so an admin's rail keeps the order every other viewer sees and the
   // operator content sits below the product content rather than above it.
