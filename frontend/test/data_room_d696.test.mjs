@@ -65,8 +65,14 @@ async function mounted(url, reads) {
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const by = (testid) => walk(container).filter((n) => props(n)['data-testid'] === testid);
   const links = (testid) => by(testid).map((n) => ({ href: props(n).href ?? props(n).to, text: text(n) }));
+  async function waitForAdd() {
+    const deadline = performance.now() + 5_000;
+    while (!links('records-add').length && performance.now() < deadline) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    }
+  }
   return {
-    requests, links, by, text, settle,
+    requests, links, by, text, settle, waitForAdd,
     go: (to) => act(async () => { out.navigate(to); }).then(settle),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
@@ -97,6 +103,7 @@ for (const [what, add] of [
     const view = await mounted('/raise/data-room?project_id=3', (u) => (u.includes('/auth/me') ? FOUNDER
       : u.includes('/cycles/raise/modules/data-room') ? moduleRead(add) : {}));
     try {
+      await view.waitForAdd();
       assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/data-room')), 'the module read is made');
       assert.deepEqual(view.by('cycle-module').length, 1);
       // #1657's Upload form is registered (D695), so the Add is the form's own address,
