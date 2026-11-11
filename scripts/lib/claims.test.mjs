@@ -71,5 +71,6 @@ test('403 requests explicit label fallback; other API errors propagate', async (
   const f = fake();
   const api = async (...args) => { if (args[0] === 'POST') throw Object.assign(new Error('no'), { status: 403 }); return f.api(...args); };
   assert.equal(await runClaim({ ...identity, api, command: 'claim' }), 4);
+  assert.equal(await runClaim({ ...identity, api: async () => { throw Object.assign(new Error('read forbidden'), { status: 403 }); }, command: 'claim' }), 4);
   await assert.rejects(runClaim({ ...identity, command: 'claim', api: async () => { throw new Error('offline'); } }), /offline/);
 });

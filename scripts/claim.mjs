@@ -24,7 +24,7 @@ async function pages(api, path) {
   }
   throw new Error('pagination cap reached');
 }
-export async function runClaim({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log }) {
+async function runClaimInternal({ command, issue, slot, agent, session, ttlHours = 24, now = new Date(), api, log = console.log }) {
   const read = async number => {
     try {
       const ref = await api('GET', `git/ref/heads/claim/${number}`);
@@ -72,6 +72,16 @@ export async function runClaim({ command, issue, slot, agent, session, ttlHours 
     if (e.status === 422) { log({ held: await read(issue) }); return 3; }
     if (e.status === 403) { log('Ref permission denied: use the label claim and explicitly record the 403 fallback in STATUS.'); return 4; }
     throw e;
+  }
+}
+export async function runClaim(options) {
+  try { return await runClaimInternal(options); }
+  catch (error) {
+    if (error.status === 403) {
+      (options.log ?? console.log)('Ref permission denied: use the label claim and explicitly record the 403 fallback in STATUS.');
+      return 4;
+    }
+    throw error;
   }
 }
 export async function main(argv = process.argv.slice(2)) {
