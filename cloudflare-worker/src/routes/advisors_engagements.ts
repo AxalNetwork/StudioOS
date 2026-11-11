@@ -40,6 +40,12 @@ const advisors = new Hono<{ Bindings: Env }>();
 // ---------------------------------------------------------------------------
 export const ENGAGEMENT_LANES = ['drafting', 'proposed', 'signed', 'renewal_due', 'ended'];
 export const ENGAGEMENT_SHAPES = ['retainer', 'sprint', 'equity', 'per_call'];
+/**
+ * #5316 (D5316): why a signed engagement ended. Required when one is ended
+ * through `/renewal`; NULL on an engagement that ended before it was recorded,
+ * which reads "Not recorded" and is never back-filled.
+ */
+export const ENGAGEMENT_END_REASONS = ['did_not_renew', 'other'] as const;
 /** The two lanes that mean "under contract" — what the Active tile counts. */
 const SIGNED_LANES = new Set(['signed', 'renewal_due']);
 
@@ -89,6 +95,10 @@ function engagementDto(r: EngagementRow): any {
     // NULL until the row is signed. The fixture's placeholder 'Active' on an
     // unsent draft is the thing this deliberately does not reproduce.
     outcome: r.outcome ?? null,
+    // #5316 (D5316): only an ENDED outcome has a reason. NULL there means it was
+    // never recorded (an engagement ended before the reason existed), which the
+    // page reads as "Not recorded" — never as either reason.
+    end_reason: r.outcome === 'ended' ? (r.end_reason ?? null) : null,
     renewal_note: r.renewal_note,
     created_at: r.created_at, updated_at: r.updated_at,
   };
@@ -179,6 +189,14 @@ advisors.get('/me/engagements', async (c) => {
         renewal_due: items.filter((e) => e.lane === 'renewal_due').length,
         ended_lane: items.filter((e) => e.lane === 'ended').length,
         renewed, ended, decided,
+        // #5316 (D5316): the endings by recorded reason. `not_recorded` is every
+        // ended outcome with no reason stored — the ones that ended before it
+        // was asked, kept apart rather than folded into either reason.
+        ended_by_reason: {
+          did_not_renew: items.filter((e) => e.outcome === 'ended' && e.end_reason === 'did_not_renew').length,
+          other: items.filter((e) => e.outcome === 'ended' && e.end_reason === 'other').length,
+          not_recorded: items.filter((e) => e.outcome === 'ended' && e.end_reason == null).length,
+        },
         // Null, never 0%. A practice that has not yet reached a renewal has
         // not failed to renew, and 0% would say it had.
         renewal_rate: decided > 0 ? Math.round((renewed / decided) * 100) : null,
@@ -441,6 +459,17 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
       return c.json({ detail: 'this engagement moved on since you opened it — reload it', code: 'cycles_changed', current_cycles: Number(row.cycles || 0) }, 409);
     }
 
+    // #5316 (D5316): ENDING A SIGNED ENGAGEMENT SAYS WHY. Asked here, after the replay, conflict, lane and term checks,
+    // so a retry of a recorded ending, a clash with a recorded renewal and an unsigned row answer exactly as before;
+    // only a write that would record an ending needs the reason. A renewal carries none.
+    const endReason = decision === 'ended' ? String(body.end_reason ?? '').trim() : null;
+    if (decision === 'ended' && !(ENGAGEMENT_END_REASONS as readonly string[]).includes(endReason!)) {
+      return c.json({
+        detail: 'Say why this engagement ended: end_reason "did_not_renew" or "other".',
+        code: 'end_reason_required', allowed: ENGAGEMENT_END_REASONS,
+      }, 400);
+    }
+
     const now = nowIso();
     const day = now.slice(0, 10);
     const renewed = decision === 'renewed';
@@ -452,18 +481,20 @@ advisors.post('/me/engagements/:id/renewal', async (c) => {
       c.env.DB.prepare(
         `UPDATE advisor_engagements
             SET lane = ?, cycles = ?, outcome = ?, renewal_note = ?,
-                term_ends_at = ?, ended_at = ?, updated_at = ?
+                term_ends_at = ?, ended_at = ?, end_reason = ?, updated_at = ?
           WHERE id = ? AND cycles = ? AND lane IN ('signed', 'renewal_due')`
       ).bind(
         renewed ? 'signed' : 'ended',
         // A renewal starts a term, so it adds one. Ending does not: the term that just ran was already counted.
         cyclesAfter,
         decision,
-        // One note column, because the artboard draws one — migration 238's header records why there is no separate
-        // end_reason beside it.
+        // One note column, because the artboard draws one. #5316 (D5316) adds `end_reason` beside it: the note is
+        // free text, the reason is one of two recorded answers the Practice v2 canvas draws.
         note,
         renewed ? engagementDate(body.term_ends_at) : row.term_ends_at,
         renewed ? row.ended_at : (row.ended_at || day),
+        // A renewal leaves the column as it was (NULL: a signed row has not ended).
+        renewed ? (row.end_reason ?? null) : endReason,
         now, row.id, expected,
       ),
       c.env.DB.prepare(
