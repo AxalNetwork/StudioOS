@@ -4385,6 +4385,8 @@ export const api = {
   // here rather than through `advance`, so the loss lands in the denominator.
   // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
   // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
+  // #5316 (D5316): ending needs `data.end_reason`, 'did_not_renew' or 'other' (400 `end_reason_required`
+  // otherwise); the engagement then reads it back as `end_reason`, null on one ended before it was asked.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 

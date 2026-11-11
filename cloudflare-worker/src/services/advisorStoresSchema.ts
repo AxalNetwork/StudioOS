@@ -395,6 +395,11 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisor_booking_links', [
       ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
     ]);
+    // #5316 / migration 202611110734: why a signed engagement ended (bare here;
+    // the CHECK is the migration's, the route validates every write).
+    await addMissingColumns(env, 'advisor_engagements', [
+      ['end_reason', 'ALTER TABLE advisor_engagements ADD COLUMN end_reason TEXT'],
+    ]);
     READY.set(key, true);
   } catch (e) {
     // Not fatal, and deliberately not swallowed silently: on a database that

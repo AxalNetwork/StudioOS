@@ -222,6 +222,8 @@ export type EngagementRow = {
   proposed_at: string | null; started_at: string | null;
   term_ends_at: string | null; ended_at: string | null;
   cycles: number; outcome: string | null; renewal_note: string | null;
+  // #5316 (D5316): why a signed engagement ended; NULL before it was recorded.
+  end_reason?: string | null;
   created_at: string; updated_at: string;
 };
 
