@@ -34,9 +34,10 @@ import partnerPipeline from '../src/routes/partner_pipeline.ts';
 import { quotesRouter } from '../src/routes/needs.ts';
 import pipeline from '../src/routes/pipeline.ts';
 import { analysePipeline } from '../src/services/bdAnalytics.ts';
+import { isRetainerActive, monthlyAmountCents, retainerProjection } from '../src/routes/_partner_workspace_helpers.ts';
 import { MATCH_DEPS } from '../src/services/ai/matchRows.ts';
 import {
-  companyBinds, isActiveRetainer, monthlyCents, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
+  companyBinds, negotiationIsOpen, negotiationLabel, quoteOutcome, winRate, winRateBasis,
 } from '../src/services/partnerPipelineRules.ts';
 import {
   COMPONENT_CAPS_V2, FORMULA_KEY, formulaVersionOf, scaleOf, scoreTraction, validateKeyMetrics,
@@ -269,6 +270,11 @@ test('lead ranking only hands eligible marketplace needs to the ranker', async (
   assert.equal(rerank.mock.callCount(), 1);
   assert.match(rerank.mock.calls[0].arguments[1].join('\n'), /^Eligible design\./);
   assert.equal(rerank.mock.calls[0].arguments[1].length, 1);
+  const leads = await get(env(db), '/api/partner/pipeline/leads', CO_A);
+  assert.equal(leads.status, 200, JSON.stringify(leads.body));
+  assert.equal(leads.body.open_count, 3);
+  assert.equal(leads.body.excluded_count, 2);
+  assert.match(leads.body.population_note, /including fit exclusions, except needs already bid on or passed/);
 });
 
 // 1 ───────────────────────────────────────────────────────────────────────────
@@ -356,13 +362,18 @@ test('the rules, as pure functions', () => {
   assert.match(winRateBasis(0, 0, 3, 1), /^No quotes decided yet/);
   assert.match(winRateBasis(4, 1, 2, 1), /^4 won of 5 decided\. 2 still open and 1 withdrawn are excluded/);
 
-  assert.equal(isActiveRetainer({ ended_at: null }, {}, '2026-11-07'), true);
-  assert.equal(isActiveRetainer({ ended_at: '2026-11-07' }, {}, '2026-11-07'), false, 'ending today is ended');
-  assert.equal(isActiveRetainer({ ended_at: '2026-12-31' }, {}, '2026-11-07'), true, 'a scheduled end is not an end yet');
-  assert.equal(isActiveRetainer({ ended_at: 'soon' }, {}, '2026-11-07'), false, 'an unreadable end date is not active');
-  assert.equal(isActiveRetainer({}, { status: 'cancelled' }), false);
-  assert.equal(isActiveRetainer({}, { cancelled_at: '2026-01-01' }), false);
-  assert.deepEqual([monthlyCents(100000, 'monthly'), monthlyCents(300000, 'quarterly'), monthlyCents(100000, 'annual'), monthlyCents(null, 'monthly')], [100000, 100000, null, null]);
+  const now = new Date('2026-11-07T12:00:00Z');
+  assert.equal(isRetainerActive({ ended_at: null }, now), true);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07' }, now), false);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07 13:00:00' }, now), true);
+  assert.equal(isRetainerActive({ ended_at: '2026-11-07 12:00:00' }, now), false);
+  assert.equal(isRetainerActive({ ended_at: 'soon' }, now), false);
+  assert.equal(isRetainerActive({ engagement_status: 'cancelled' }, now), false);
+  assert.equal(isRetainerActive({ cancelled_at: '2026-01-01' }, now), false);
+  assert.equal(monthlyAmountCents({ amount_cents: 1200000, cadence: 'annual' }), 100000);
+  assert.equal(monthlyAmountCents({ amount_cents: 100000, cadence: 'unknown' }), null);
+  const projected = retainerProjection({ retainer_id: 1, cadence: 'quarterly', amount_cents: 300000, engagement_status: 'cancelled' }, [], now);
+  assert.deepEqual([projected.retainer?.active, projected.retainer?.monthly_cents, projected.retainer?.current_monthly_cents], [false, 100000, null]);
 
   assert.equal(negotiationIsOpen('terms', 'submitted'), true);
   assert.equal(negotiationIsOpen('closed', 'submitted'), false);

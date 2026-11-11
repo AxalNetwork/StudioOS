@@ -321,6 +321,9 @@ export default function PartnerLeadsZone() {
             />
           </div>
 
+          {d?.population_note && (
+            <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.population_note}</p>
+          )}
           {d?.scoring === 'none' && (
             <p className="text-[12.5px] leading-relaxed text-axal-muted">{d.scoring_note}</p>
           )}
