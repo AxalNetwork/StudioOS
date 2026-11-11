@@ -425,6 +425,64 @@ test('the firm can read its link back, and the link alone answers nothing', asyn
   assert.equal((await call(e, 'GET', '/proof', ours)).body.items[0].is_published, false);
 });
 
+test('#4835: proof reads only page history and reports whole-firm publication counts', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const old = (await call(e, 'POST', '/proof', ours, { title: 'Old confirmed result' })).body;
+  const foreign = (await call(e, 'POST', '/proof', theirs, { title: 'Another firm' })).body;
+  for (const [owner, item, email] of [[ours, old, 'client@example.test'], [theirs, foreign, 'other@example.test']] as const) {
+    const ask = await call(e, 'POST', `/proof/${item.id}/consent-request`, owner, {
+      consenter_name: 'Client', consenter_email: email,
+    });
+    assert.equal(ask.status, 200);
+    assert.equal((await answer(e, ask.body.invite_token, { consent_text: 'Agreed' })).status, 200);
+  }
+  db.prepare("UPDATE partner_proof_items SET created_at = '2026-01-01' WHERE id = ?").run(old.id);
+  const insert = db.prepare(`INSERT INTO partner_proof_items (uid, partner_id, kind, title, created_at)
+    VALUES (?, 1, 'case_study', 'New result', '2026-02-01')`);
+  for (let i = 0; i < 200; i++) insert.run(`new-proof-${i}`);
+
+  const fetched: number[][] = [];
+  const prepare = e.DB.prepare.bind(e.DB);
+  e.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (/SELECT k\.\*/.test(sql)) {
+      const bind = statement.bind;
+      statement.bind = (partner: number, ids: string) => {
+        fetched.push(JSON.parse(ids));
+        return bind(partner, ids);
+      };
+    }
+    return statement;
+  };
+  const first = (await call(e, 'GET', '/proof', ours)).body;
+  assert.equal(first.total, 201);
+  assert.equal(first.published_count, 1);
+  assert.equal(first.self_stated_count, 200);
+  assert.equal(first.has_more, true);
+  assert.deepEqual(fetched[0], first.items.map((item: any) => item.id));
+  assert.equal(first.items.length, 200);
+  assert.ok(first.items.every((item: any, index: number) => index === 0 || first.items[index - 1].id > item.id));
+
+  const next = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.deepEqual(fetched[1], [old.id]);
+  assert.equal(next.has_more, false);
+  assert.equal(next.published_count, 1);
+  assert.deepEqual(next.items.map((item: any) => [item.id, item.consents[0].state]), [[old.id, 'confirmed']]);
+
+  const empty = (await call(e, 'GET', '/proof?page=3', ours)).body;
+  assert.deepEqual(empty.items, []);
+  assert.equal(empty.total, 201);
+  assert.equal(fetched.length, 2);
+
+  assert.equal((await call(e, 'GET', '/proof?page=0', ours)).status, 400);
+  assert.equal((await call(e, 'PATCH', `/proof/${old.id}`, ours, { title: 'Edited result' })).status, 200);
+  const changed = (await call(e, 'GET', '/proof?page=2', ours)).body;
+  assert.equal(changed.published_count, 0);
+  assert.equal(changed.self_stated_count, 201);
+  assert.equal(changed.items[0].consents[0].state, 'superseded');
+});
+
 test('the client answers unauthenticated, and that is what publishes it', async () => {
   const e = env(freshDb());
   const item = await call(e, 'POST', '/proof', ours, { title: 'A result' });
