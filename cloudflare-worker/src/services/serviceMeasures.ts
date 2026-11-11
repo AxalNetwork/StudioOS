@@ -7,13 +7,12 @@
  * TWO STORES, TWO SETS OF WORDS, AND THEY ARE NOT ADDED TOGETHER.
  *
  *   `service_engagements` is a REQUEST for a catalogue entry (migration 034).
- *   It has no price column, no link to an invoice, and the only status
+ *   It records the quoted price for new requests (#4680), has no link to an invoice, and the only status
  *   anything writes is `pending` (`POST /services/offerings/:id/engage`). So a
  *   count of its rows is a count of requests; multiplying one by the entry's
  *   CURRENT price states a sale that no one made, and states it again at a
  *   different figure after every reprice. The catalogue therefore serves
- *   COUNTS, with the status each count reads, and a historical monetary figure
- *   as `null` until a snapshotted amount exists on the request.
+ *   COUNTS, with the status each count reads, and a separate sum of known quotes.
  *
  *   `engagements` is accepted work (a quote the founder accepted). Its `price`
  *   was copied from the accepted quote and never follows the catalogue, so it
@@ -74,15 +73,24 @@ export const REQUEST_MEASURE_BASIS: Record<keyof RequestMeasures, string> = {
 };
 
 export const REQUEST_MEASURE_NOTE =
-  'These are counts of service requests by the status each row carries. A request stores no price and '
-  + 'no invoice, so no money is stated for them: a count multiplied by the entry’s current price would '
-  + 'be restated by every reprice and would count requests nobody accepted. No step in the product moves '
+  'These are counts of service requests by the status each row carries. Quoted amounts are reported separately. '
+  + 'No step in the product moves '
   + 'a request past pending yet, so booked, delivered, invoiced and paid read the rows that carry those '
   + 'statuses, which today is none.';
 
 export const REQUEST_VALUE_NOTE =
-  'Not recorded. A service request carries no amount, so no historical booked value can be stated; '
-  + 'it will be stated from a snapshotted amount once requests record one.';
+  'Total quoted USD value from recorded service requests. This does not measure accepted bookings or payments. '
+  + 'Requests without a recorded quote are counted separately.';
+
+export function sumQuotedValues(rows: { quoted_total?: number | null; unquoted?: number }[]) {
+  let total: number | null = null;
+  let missing = 0;
+  for (const row of rows) {
+    if (row.quoted_total != null) total = (total ?? 0) + row.quoted_total;
+    missing += row.unquoted ?? 0;
+  }
+  return { booked_value_cents: total, requests_without_recorded_amount: missing };
+}
 
 export const WON_MEASURE_BASIS = {
   engagement_count: 'Every engagement attributed to the surface, including cancelled ones.',

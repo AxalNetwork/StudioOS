@@ -76,7 +76,8 @@ function fixture() {
     ${migrationTable('034_unmounted_routes', 'service_engagements')}
   `);
   for (const m of ['188_engagement_invoices', '209_partner_offers_stores', '227_service_offering_model_and_cents',
-    '229_fit_rule_signal', '233_partner_lead_passes']) db.exec(migration(m));
+    '229_fit_rule_signal', '233_partner_lead_passes',
+    '202611101748_4680_service_request_history']) db.exec(migration(m));
   db.prepare('INSERT INTO partners (id, uid, name, email) VALUES (?,?,?,?)').run(OUR_PARTNER_ID, 'p-1', 'Acme Studio', 'u10@example.test');
   db.prepare('UPDATE users SET partner_id = ? WHERE id = ?').run(OUR_PARTNER_ID, PARTNER);
   db.prepare('INSERT INTO founders (id, name, email) VALUES (?,?,?)').run(FOUNDER_USER, 'Fran', 'f@example.test');
@@ -188,7 +189,8 @@ test('catalogue requests are counts by status; a pending request is not booked a
   assert.deepEqual(r.measures, r.items[0].requests, 'the total is not the sum of the rows');
   // No historical monetary measure: null, not zero and not requests x price.
   assert.equal(r.booked_value_cents, null);
-  assert.match(r.booked_value_note, /Not recorded/);
+  assert.equal(r.requests_without_recorded_amount, 7);
+  assert.match(r.booked_value_note, /quoted USD/);
   assert.ok(r.measures_basis.booked && r.measures_basis.paid, 'the basis of each measure is not served');
   // The shared frontend total is the worker's total.
   assert.deepEqual(requestTotals(r.items), r.measures);

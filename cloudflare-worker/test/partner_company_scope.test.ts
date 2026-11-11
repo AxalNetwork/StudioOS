@@ -69,7 +69,18 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
       return api;
     },
     async exec(sql: string) { db.exec(sql); return { count: 0, duration: 0 }; },
-    async batch(x: any[]) { return x; },
+    async batch(x: any[]) {
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const stmt of x) results.push(await stmt.run());
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
   };
 }
 
@@ -186,10 +197,13 @@ function freshDb() {
       requester_user_id INTEGER NOT NULL,
       owner_user_id INTEGER NOT NULL,
       note TEXT,
+      quoted_price_cents INTEGER,
+      quoted_currency TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE research_market_readings (offering_id INTEGER);
   `);
   const u = db.prepare('INSERT INTO users (id, role, founder_id, partner_id, email) VALUES (?,?,?,?,?)');
   u.run(PARTNER.user, 'partner', null, PARTNER.partner_id, 'p@example.com');
@@ -276,6 +290,58 @@ const founder = { user: FOUNDER.user, role: 'founder' };
 const admin = { user: ADMIN, role: 'admin' };
 
 // ---------- Offers: the catalog ----------
+
+test('a founder cannot publish and a private offering stays in its own catalogue', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const created = await call(services, '/offerings', founder, FOUNDER_CO, {
+    method: 'POST', body: JSON.stringify({ title: 'Forbidden' }),
+  }, e);
+  assert.equal(created.status, 403);
+  db.exec('UPDATE service_offerings SET is_active = 0 WHERE id = 71');
+  assert.equal((await call(services, '/offerings/71', founder, undefined, {}, e)).status, 404);
+  assert.equal((await call(services, '/offerings/71', partner, AGENCY_B, {}, e)).status, 404);
+  assert.equal((await call(services, '/offerings/71', partner, AGENCY_A, {}, e)).status, 200);
+});
+
+test('a request keeps its quoted price through repricing and removal', async () => {
+  const db = freshDb();
+  const e = env(db);
+  db.exec("UPDATE service_offerings SET price_cents = 5000 WHERE id = 71");
+  db.exec("INSERT INTO service_engagements (offering_id, requester_user_id, owner_user_id) SELECT id, 99, owner_user_id FROM service_offerings WHERE id = 71");
+  const request = await call(services, '/offerings/71/engage', founder, undefined, { method: 'POST' }, e);
+  assert.equal(request.status, 200);
+  db.exec('UPDATE service_offerings SET price_cents = 9000 WHERE id = 71');
+  const removed = await call(services, '/offerings/71', partner, AGENCY_A, { method: 'DELETE' }, e);
+  assert.equal(removed.body.archived, true);
+  const list = await call(services, '/offerings?mine=1', partner, AGENCY_A, {}, e);
+  assert.equal(list.body.booked_value_cents, 5000);
+  assert.equal(list.body.requests_without_recorded_amount, 1);
+  assert.equal(db.prepare('SELECT quoted_currency FROM service_engagements WHERE uid = ?').get(request.body.uid)?.quoted_currency, 'USD');
+  assert.equal((await call(services, '/offerings/71/engage', founder, undefined, { method: 'POST' }, e)).status, 404);
+});
+
+test('removal between the availability read and request write leaves no orphan request', async () => {
+  const db = freshDb();
+  const e = env(db);
+  const prepare = e.DB.prepare;
+  e.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.startsWith('INSERT INTO service_engagements')) {
+      const run = statement.run;
+      statement.run = async () => {
+        const removal = await call(services, '/offerings/71', partner, AGENCY_A, { method: 'DELETE' }, e);
+        assert.equal(removal.status, 200);
+        assert.equal(removal.body.archived, false);
+        return run();
+      };
+    }
+    return statement;
+  };
+  const request = await call(services, '/offerings/71/engage', founder, undefined, { method: 'POST' }, e);
+  assert.equal(request.status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM service_engagements WHERE offering_id = 71').get()?.n, 0);
+});
 
 test('?mine=1 shows only the active agency, plus rows with no agency', async () => {
   const a = await call(services, '/offerings?mine=1', partner, AGENCY_A);

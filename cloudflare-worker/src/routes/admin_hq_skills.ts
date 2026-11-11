@@ -94,7 +94,6 @@ const adminHqSkills = new Hono<{ Bindings: Env }>();
 export const REASON_MIN = 10;
 export const REASON_MAX = 500;
 const BULK_MAX = 50;
-const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
 const say = (c: C, status: number, code: string, message: string, extra?: Record<string, unknown>) => refuse(c, status, { code, message, extra });
@@ -123,10 +122,10 @@ async function audit(env: Env, admin: User, action: string, s: Pick<SkillRow, 'u
   await logAdminAction(env, admin.id, admin.email, action, { skill_uid: s.uid, skill_name: s.name, reason, before, after, ...extra });
 }
 
-function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
-  const axis = p.tags.map((t) => RADAR_AXES.find((a) => a.slug === category.get(t.slug))).find(Boolean);
-  const level = p.tags.reduce<string | null>((best, t) => (best == null || LEVELS.indexOf(t.level) > LEVELS.indexOf(best) ? t.level : best), null);
-  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level };
+export function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
+  const primary = areaOf(p.tags, (slug) => category.get(slug) ?? null);
+  const axis = RADAR_AXES.find((candidate) => candidate.slug === primary.area);
+  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level: primary.level };
 }
 
 // D4533: `current` is the whole evidence; `changes` says which part moved since (null: not recorded on a review from before D4533).

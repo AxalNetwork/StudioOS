@@ -143,7 +143,8 @@ export type AssignResult =
 
 const UPSERT =
   'INSERT INTO approval_assignments (lane, item_id, assignee_user_id, assigned_by_user_id) '
-  + 'VALUES (?, ?, ?, ?) '
+  + 'SELECT ?, ?, ?, ? WHERE NOT EXISTS ('
+  + 'SELECT 1 FROM approval_assignments WHERE lane = ? AND item_id = ? AND assignee_user_id = ?) '
   + 'ON CONFLICT(lane, item_id) DO UPDATE SET '
   + 'assignee_user_id = excluded.assignee_user_id, '
   + 'assigned_by_user_id = excluded.assigned_by_user_id, '
@@ -151,12 +152,12 @@ const UPSERT =
 
 const EVENT =
   "INSERT INTO approval_events (lane, item_id, kind, actor_user_id, assignee_user_id) "
-  + "VALUES (?, ?, 'assigned', ?, ?)";
+  + "SELECT ?, ?, 'assigned', ?, ? WHERE changes() > 0";
 
 /**
- * Assign every item, or none of the checks. A write that throws after an
- * earlier item in the same call has landed is reported as unreadable; the
- * caller does not hear a partial success.
+ * Assign every item and append its event in one D1 transaction, or write none
+ * of them. Each event immediately follows its conditional upsert and uses
+ * `changes()`, so assigning the same reviewer again stays idempotent.
  */
 export async function assignReviewers(
   env: Env,
@@ -223,24 +224,25 @@ export async function assignReviewers(
     }
   }
   const name = personLabel({ id: Number(reviewer.id), name: reviewer.name, email: reviewer.email });
-  const assigned: Array<{ lane: string; item_id: number; assignee_user_id: number; assignee_name: string }> = [];
+  const assigned = items.map((it) => ({
+    lane: it.lane,
+    item_id: it.item_id,
+    assignee_user_id: assigneeUserId,
+    assignee_name: name,
+  }));
   try {
+    const statements = [];
     for (const it of items) {
-      const current = await env.DB.prepare(
-        'SELECT assignee_user_id FROM approval_assignments WHERE lane = ? AND item_id = ?',
-      ).bind(it.lane, it.item_id).first<{ assignee_user_id: number }>();
-      const same = current && Number(current.assignee_user_id) === assigneeUserId;
-      if (!same) {
-        await env.DB.prepare(UPSERT).bind(it.lane, it.item_id, assigneeUserId, actorUserId).run();
-        await env.DB.prepare(EVENT).bind(it.lane, it.item_id, actorUserId, assigneeUserId).run();
-      }
-      assigned.push({
-        lane: it.lane,
-        item_id: it.item_id,
-        assignee_user_id: assigneeUserId,
-        assignee_name: name,
-      });
+      statements.push(
+        env.DB.prepare(UPSERT).bind(
+          it.lane, it.item_id, assigneeUserId, actorUserId,
+          it.lane, it.item_id, assigneeUserId,
+        ),
+        env.DB.prepare(EVENT).bind(it.lane, it.item_id, actorUserId, assigneeUserId),
+      );
     }
+    const results = await env.DB.batch(statements);
+    if (results.some((row) => 'success' in row && !row.success)) throw new Error('Assignment batch failed');
   } catch (e) {
     console.error('[approval-assignments] could not write', (e as Error).message);
     return { ok: false, status: 503, code: 'assignments_unreadable', message: ASSIGNMENTS_UNREADABLE };

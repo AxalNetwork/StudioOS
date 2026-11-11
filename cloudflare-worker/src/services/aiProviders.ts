@@ -246,7 +246,9 @@ export async function runProviderModel(env: Env, opts: ProviderRunOptions, deps:
  *      with one row naming what is missing (names only, never a value);
  *   6. the page's AI switch (`assistOff`), as `run()` checks it;
  *   7. the admission seam (`deps.admit`): shared upstream capacity, when the
- *      caller has one (#4594). A refusal or an unreadable check calls nothing;
+ *      caller has one (D5338's lease, `upstreamLease.ts`). A refusal or an
+ *      unreadable check calls nothing. Every retry asks the same lease
+ *      (`attempt`) before it runs, and the release says how the run ended;
  *   8. the hold, through ONE `meteredCall` keyed `exec:<executionId>:<component>`:
  *      the provider's quote plus the guard's share (D763);
  *   9. inside it: the input guard; the call, retried only on a rate limit or an
@@ -318,9 +320,20 @@ export function gatewayRetryDelayMs(attempt: number, retryAfterSec: number | nul
   return Math.ceil(base + Math.min(1, Math.max(0, random())) * GATEWAY_JITTER_MS);
 }
 
-/** Shared upstream capacity (#4594 owns the authority). Absent, no capacity check runs; it is never a substitute for the hold. */
-export type GatewayAdmission = (req: { userId: number; model: string; task: string; executionId: string }) =>
-  Promise<{ ok: true; release: () => void | Promise<void> } | { ok: false; retryAfterSec: number | null }>;
+/**
+ * Shared upstream capacity (D5338's lease, `upstreamLease.ts`). Absent, no
+ * capacity check runs; it is never a substitute for the hold. `attempt`, when
+ * the lease has one, is asked before every retry: a refusal ends the run with
+ * the failure it had. `release` is told the run's completion: `unknown` (the
+ * provider may still be working) keeps the slot until the lease expires.
+ */
+export type GatewayAdmitted = {
+  ok: true;
+  release: (end?: { completion: 'done' | 'none' | 'unknown' }) => void | Promise<void>;
+  attempt?: () => Promise<boolean>;
+};
+export type GatewayAdmission = (req: { gatewaySlug: string; userId: number; model: string; task: string; executionId: string }) =>
+  Promise<GatewayAdmitted | { ok: false; retryAfterSec: number | null; reason?: string }>;
 
 export interface GatewayDeps {
   attemptTimeoutMs?: number;
@@ -372,7 +385,10 @@ function thrownFailure(e: unknown): { error: ProviderErrorKind; completion: 'non
 const TIMED_OUT = Symbol('timed_out');
 
 /** One run's calls: bounded, retried only where the gateway said the provider did not run. */
-async function callGateway(ai: AiLike, m: GatewayTextModel, input: Record<string, unknown>, option: ProviderGatewayOption, deps: GatewayDeps): Promise<CallEnd> {
+async function callGateway(
+  ai: AiLike, m: GatewayTextModel, input: Record<string, unknown>, option: ProviderGatewayOption, deps: GatewayDeps,
+  attempt?: () => Promise<boolean>,
+): Promise<CallEnd> {
   const adapter = GATEWAY_ADAPTERS[m.format];
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const random = deps.random ?? Math.random;
@@ -413,6 +429,12 @@ async function callGateway(ai: AiLike, m: GatewayTextModel, input: Record<string
     if (!GATEWAY_RETRYABLE.has(out.error) || out.completion !== 'none' || n >= GATEWAY_MAX_ATTEMPTS) return fail;
     const wait = gatewayRetryDelayMs(n, out.retryAfterSec, random);
     if (waited + wait > GATEWAY_RETRY_BUDGET_MS) return fail;
+    // D5338: a retry is one more upstream request, counted against the run's own lease; refused or unreadable, no retry.
+    if (attempt) {
+      let more = false;
+      try { more = await attempt(); } catch { more = false; }
+      if (!more) return fail;
+    }
     await sleep(wait);
     waited += wait;
     attempts[attempts.length - 1].waited_ms = wait;
@@ -466,10 +488,12 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
     if (off) return { ok: false, refusal: 'assist_off' };
   }
 
-  let admitted: { release: () => void | Promise<void> } | null = null;
+  let admitted: GatewayAdmitted | null = null;
+  // How the run ended, for the lease: 'none' until the gateway is called, then 'unknown' until an answer says otherwise.
+  let completion: 'done' | 'none' | 'unknown' = 'none';
   if (deps.admit) {
     try {
-      const a = await deps.admit({ userId: opts.userId, model: m.id, task: opts.task, executionId: opts.executionId });
+      const a = await deps.admit({ gatewaySlug: cfg.slug, userId: opts.userId, model: m.id, task: opts.task, executionId: opts.executionId });
       if (!a.ok) return { ok: false, refusal: 'capacity_unavailable', retryAfterSec: a.retryAfterSec };
       admitted = a;
     } catch {
@@ -504,7 +528,8 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
           meter.reportCost(guardMicro());
           return { kind: 'guard', side: 'input', action: gIn.decision.action };
         }
-        const end = await callGateway(cfg.ai, m, GATEWAY_ADAPTERS[m.format].input(opts.request), option, deps);
+        completion = 'unknown';
+        const end = await callGateway(cfg.ai, m, GATEWAY_ADAPTERS[m.format].input(opts.request), option, deps, admitted?.attempt);
         if (!end.ok) { meter.reportCost(guardMicro()); return { kind: 'failed', end }; }
         const o = end.outcome;
         // Pinned: the row's own model, on Cloudflare's own credential (ZDR applies to Unified Billing only).
@@ -523,6 +548,7 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
       });
     } catch (e) {
       if (e instanceof MeteringRefused) {
+        completion = 'none';
         const refusal: ProviderRefusal = (METERING_REFUSALS as readonly string[]).includes(e.code) ? e.code as MeteringRefusal : 'insufficient_tokens';
         await row(usageOf(0, 0, 0, 0), refusal);
         return { ok: false, refusal };
@@ -538,6 +564,7 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
     }
 
     const v = done.value;
+    completion = v.kind === 'failed' ? v.end.completion : v.kind === 'guard' && v.side === 'input' ? 'none' : 'done';
     const latency = Date.now() - started;
     const charge = (units: Record<string, number | string | boolean | null | undefined>) => ({
       charged: done.usage.charged_microusd, reservationUid: done.usage.reservation_uid,
@@ -590,7 +617,7 @@ export async function runGatewayTextModel(env: Env, opts: GatewayRunOptions, dep
     };
   } finally {
     if (admitted) {
-      try { await admitted.release(); } catch { /* the admission seam's lease expires on its own */ }
+      try { await admitted.release({ completion }); } catch { /* the admission seam's lease expires on its own */ }
     }
   }
 }
