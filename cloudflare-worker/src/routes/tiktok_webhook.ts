@@ -33,12 +33,15 @@ router.post('/', async c => {
       typeof event.create_time !== 'number' || !Number.isSafeInteger(event.create_time)) {
     return c.json({ error: 'invalid_event' }, 400);
   }
-  const match = "provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?";
   const cutoff = event.create_time;
+  // The same three conditions in both statements, written out: no interpolation in the query text.
   await c.env.DB.batch([
-    c.env.DB.prepare(`DELETE FROM integration_companies WHERE integration_id IN (SELECT id FROM integrations WHERE ${match})`)
+    c.env.DB.prepare(`DELETE FROM integration_companies WHERE integration_id IN (SELECT id FROM integrations
+                       WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?)`)
       .bind(event.user_openid, cutoff),
-    c.env.DB.prepare(`DELETE FROM integrations WHERE ${match}`).bind(event.user_openid, cutoff),
+    c.env.DB.prepare(`DELETE FROM integrations
+                       WHERE provider_key = 'tiktok' AND external_account_id = ? AND unixepoch(updated_at) <= ?`)
+      .bind(event.user_openid, cutoff),
   ]);
   return c.json({ ok: true });
 });
