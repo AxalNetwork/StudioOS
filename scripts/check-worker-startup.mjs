@@ -75,7 +75,7 @@ const moduleTypes = {
   'application/wasm': 'CompiledWasm',
 };
 
-async function profileOnce(bundle, output) {
+async function profileOnce(bundle) {
   const { Miniflare, convertV4MiniflareOptions } = requireWorker('miniflare');
   const { form, metadata } = await parseBundle(readFileSync(bundle));
   const modules = [{ path: '__s32_probe.mjs', type: 'ESModule', contents: `export default {
@@ -131,9 +131,10 @@ async function profileOnce(bundle, output) {
     await inspect('Profiler.start');
     const coldMs = await health();
     const { profile } = await inspect('Profiler.stop');
-    writeFileSync(output, JSON.stringify(profile));
     const warmMs = await health();
-    writeFileSync(output + '.health.json', JSON.stringify({ coldMs, warmMs }));
+    // The child reads the loopback inspector. The parent validates its result
+    // and owns every diagnostics path.
+    console.log('STUDIOOS_STARTUP_PROFILE ' + JSON.stringify({ profile, coldMs, warmMs }));
   } finally {
     socket?.close();
     await worker.dispose();
@@ -158,15 +159,22 @@ async function main(candidate, bundle, output) {
     for (let i = 1; i <= runs; i += 1) {
       const file = `startup-${i}.cpuprofile`;
       const profilePath = join(dir, file);
-      const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--profile', artifact, profilePath],
-        { cwd: workerDir, env, encoding: 'utf8', timeout: 45_000 });
-      writeFileSync(join(dir, `startup-${i}.log`), (child.stdout ?? '') + (child.stderr ?? ''));
+      const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--profile', artifact],
+        { cwd: workerDir, env, encoding: 'utf8', timeout: 45_000, maxBuffer: 4 * 1024 * 1024 });
+      const prefix = 'STUDIOOS_STARTUP_PROFILE ';
+      const lines = (child.stdout ?? '').split('\n');
+      const records = lines.filter(line => line.startsWith(prefix));
+      writeFileSync(join(dir, `startup-${i}.log`), lines.filter(line => !line.startsWith(prefix)).join('\n') + (child.stderr ?? ''));
       if (child.error || child.status !== 0) {
         const reason = child.error?.code ?? child.signal ?? `exit ${child.status}`;
         throw new Error(`Local startup profile ${i} failed (${reason}). See startup-${i}.log.`);
       }
-      report.measurements.push({ file, ...measureProfile(JSON.parse(readFileSync(profilePath, 'utf8'))),
-        ...JSON.parse(readFileSync(profilePath + '.health.json', 'utf8')) });
+      if (records.length !== 1) throw new Error(`Local startup profile ${i} did not emit one result.`);
+      const { profile, coldMs, warmMs } = JSON.parse(records[0].slice(prefix.length));
+      if (![coldMs, warmMs].every(ms => Number.isFinite(ms) && ms > 0)) throw new Error('Invalid health timings.');
+      const measurements = measureProfile(profile);
+      writeFileSync(profilePath, JSON.stringify(profile));
+      report.measurements.push({ file, ...measurements, coldMs, warmMs });
     }
     const finalDigest = createHash('sha256').update(readFileSync(artifact)).digest('hex');
     if (finalDigest !== report.bundle.sha256) throw new Error('Bundle changed during startup profiling.');
