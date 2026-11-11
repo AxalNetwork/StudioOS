@@ -9,11 +9,11 @@ const LABELS = { post: 'Post', subject_line: 'Subject line', newsletter: 'Newsle
 const money = (n) => (n / 1e6).toFixed(6).replace(/0+$/, '').replace(/\.$/, '') || '0';
 export function holdLine(estimate) { return Number.isSafeInteger(estimate?.hold_microusd) && estimate.hold_microusd >= 0 ? `Holds up to $${money(estimate.hold_microusd)} · you pay what it uses` : 'Hold not recorded'; }
 export function receiptLine(receipt) { return Number.isSafeInteger(receipt?.charged_microusd) && Number.isSafeInteger(receipt?.held_microusd) ? `Charged $${money(receipt.charged_microusd)} of $${money(receipt.held_microusd)} held` : 'Charge not recorded'; }
-export function proposalLabel(p) { const v = p.decided_payload ?? p.payload ?? {}; return `${LABELS[v.kind] ?? 'Text proposal'}${v.placement ? ` · ${v.placement.replaceAll('_', ' ')}` : ''}${v.creative_field ? ` · ${v.creative_field}` : ''}`; }
+export function proposalLabel(p) { const v = p.decided_payload ?? p.payload ?? {}; return `${v.piece_uid ? 'Repurpose' : LABELS[v.kind] ?? 'Text proposal'}${v.placement ? ` · ${v.placement.replaceAll('_', ' ')}` : ''}${v.creative_field ? ` · ${v.creative_field}` : ''}`; }
 export function listedRows(rows) { return Array.isArray(rows) ? rows.filter(p => p?.status === 'proposed' && p.rail_option === DISTRIBUTION_OPTION) : []; }
 export function safeProposal(p) {
   const v = p?.payload;
-  return p?.status === 'proposed' && p.rail_option === DISTRIBUTION_OPTION && v?.version === 1 && SAFE_KINDS.includes(v.kind) && typeof v.text === 'string' && v.text.trim().length > 0 && [...v.text].length <= 2000 && Object.keys(v).every(k => ['version','project','campaign_uid','target','kind','channel_uid','text','sources'].includes(k));
+  return p?.status === 'proposed' && p.rail_option === DISTRIBUTION_OPTION && v?.version === 1 && SAFE_KINDS.includes(v.kind) && typeof v.text === 'string' && v.text.trim().length > 0 && [...v.text].length <= 2000 && Object.keys(v).every(k => ['version','project','campaign_uid','target','kind','channel_uid','text','sources','piece_uid'].includes(k));
 }
 export function waitingModel(rows) { const listed = listedRows(rows); return { rows: listed, count: listed.length, safe: listed.filter(safeProposal) }; }
 export function notifyDistribution(project) { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('distribution-proposals-changed', { detail: { project } })); }
