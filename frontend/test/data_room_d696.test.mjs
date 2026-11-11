@@ -53,21 +53,26 @@ async function mounted(url, reads) {
   const root = createRoot(container);
   const out = {};
   function Capture() { out.navigate = useNavigate(); return null; }
-  const settle = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(Capture), h(Routes, null,
     // The module arm of App's /raise/data-room, and the generic record route.
     h(Route, { path: '/raise/data-room', element: h(CycleRoute, { cycle: 'raise', slug: 'data-room' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   )))));
-  await settle();
   const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const by = (testid) => walk(container).filter((n) => props(n)['data-testid'] === testid);
   const links = (testid) => by(testid).map((n) => ({ href: props(n).href ?? props(n).to, text: text(n) }));
+  async function waitFor(ready, message) {
+    const deadline = performance.now() + 5_000;
+    while (!ready() && performance.now() < deadline) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    }
+    assert.ok(ready(), message);
+  }
   return {
-    requests, links, by, text, settle,
-    go: (to) => act(async () => { out.navigate(to); }).then(settle),
+    requests, links, by, text, waitFor,
+    go: (to) => act(async () => { out.navigate(to); }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -97,6 +102,7 @@ for (const [what, add] of [
     const view = await mounted('/raise/data-room?project_id=3', (u) => (u.includes('/auth/me') ? FOUNDER
       : u.includes('/cycles/raise/modules/data-room') ? moduleRead(add) : {}));
     try {
+      await view.waitFor(() => view.by('records-add').length > 0, 'the loaded Data room renders its Upload action');
       assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/data-room')), 'the module read is made');
       assert.deepEqual(view.by('cycle-module').length, 1);
       // #1657's Upload form is registered (D695), so the Add is the form's own address,
@@ -136,9 +142,10 @@ test('12. a record adds its title to the rail\'s crumbs, and leaving it drops th
   const crumbs = () => view.by('text-worker-rail-crumbs').map((n) => view.text(n)).join(' | ');
   try {
     // The rail draws its separators between the crumbs without spaces.
+    await view.waitFor(() => crumbs().includes('Example deck.pdf'), 'the record title reaches the rail');
     assert.equal(crumbs(), 'Raise›Data room›Example deck.pdf');
     await view.go('/raise/data-room?project_id=3');
-    assert.equal(crumbs(), 'Raise›Data room', 'the module page drops the record');
+    await view.waitFor(() => crumbs() === 'Raise›Data room', 'the module page drops the record');
   } finally { await view.close(); }
 });
 
