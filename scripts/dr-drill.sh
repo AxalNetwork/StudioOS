@@ -338,7 +338,7 @@ if ! SPLIT_SUMMARY=$(node "${REPO_ROOT}/scripts/dr-drill-split.mjs" "${TMP}/back
   exit 2
 fi
 log "split (chunk budget ${CHUNK_BYTES} bytes): ${SPLIT_SUMMARY}"
-CHUNK_TOTAL=$(wc -l < "${TMP}/chunks/manifest.tsv")
+CHUNK_TOTAL=$(awk 'END { print NR + 0 }' "${TMP}/chunks/manifest.tsv")
 CHUNK_N=0
 # The manifest is read on fd 3 so nothing wrangler reads from stdin eats it.
 while IFS=$'\t' read -r CHUNK_FILE CHUNK_PHASE CHUNK_STMTS CHUNK_SIZE CHUNK_OVER <&3; do
