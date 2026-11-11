@@ -740,6 +740,7 @@ function BillingEditor({ booking, onSaved, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
   const [pending, setPending] = useState(null);
+  const pendingAmount = pending?.amount_cents;
   const writing = useRef(false);
   const stored = booking.amount_cents == null ? null : Number(booking.amount_cents);
   const priceLocked = ['collected', 'written_off'].includes(booking.billing_state);
@@ -813,11 +814,11 @@ function BillingEditor({ booking, onSaved, onChanged }) {
       </div>
       {priceLocked && <p className="mt-2 text-sm">{BILLING_REFUSALS.get('settled_price')}</p>}
       {pending && <div className="mt-3 space-y-2" role="group" aria-label="Confirm price change">
-        <p>Stored price: {money(stored)}. {pending.amount_cents == null
+        <p>Stored price: {money(stored)}. {pendingAmount == null
           ? 'Clearing the price also clears the recorded fee rate and cut.'
-          : `Confirm ${money(pending.amount_cents)}. The fee rate and cut will be recorded at today’s rate.`}</p>
+          : `Confirm ${money(pendingAmount)}. The fee rate and cut will be recorded at today’s rate.`}</p>
         <button type="button" className={buttonClass} disabled={busy} onClick={() => record(pending)}>
-          {pending.amount_cents == null ? 'Confirm clear' : 'Confirm price'}
+          {pendingAmount == null ? 'Confirm clear' : 'Confirm price'}
         </button>
         <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => setPending(null)}>Cancel price change</button>
       </div>}
