@@ -120,7 +120,13 @@ test('the preview card marks unsaved changes, names the private fields it leaves
     assert.equal(collapsible.props(collapsible.by('company-general-preview-toggle')).children, 'Hide preview');
     await press(collapsible, 'company-general-preview-toggle');
     assert.equal(collapsible.props(collapsible.by('company-general-preview-toggle')).children, 'Show preview');
-    assert.equal(collapsible.by('company-general-preview-description'), undefined, 'collapsed, it draws nothing');
+    // Collapsed, the body is hidden from the page and from a screen reader
+    // (`display: none`), and comes back at `lg`, where the preview is the
+    // canvas's sticky rail and the toggle is not drawn at all.
+    const wrap = collapsible.by('company-general-preview-body');
+    assert.ok(wrap, 'the body is still addressable');
+    assert.equal(collapsible.props(wrap).className, 'hidden lg:block');
+    assert.equal(collapsible.props(collapsible.by('company-general-preview-toggle')).className.includes('lg:hidden'), true, 'and the toggle is a phone control');
   } finally { await collapsible.unmount(); }
 });
 

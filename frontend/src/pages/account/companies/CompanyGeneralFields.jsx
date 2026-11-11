@@ -30,7 +30,12 @@ import {
  */
 
 const INPUT = 'w-full rounded-md border border-axal-hairline bg-white px-2.5 py-1.5 text-[13.5px] text-axal-ink disabled:cursor-not-allowed disabled:bg-axal-ground dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:disabled:bg-gray-800';
-const DIRTY_EDGE = 'rounded-md ring-2 ring-axal-violet/60';
+/**
+ * CS-02's violet edge. It goes on the CONTROL, not on a wrapper: a wrapper that
+ * also holds the character count or the Open link draws its box around those
+ * too, which reads as a second field rather than a changed one.
+ */
+const DIRTY_EDGE = 'ring-2 ring-axal-violet/60';
 const ERROR_TEXT = 'text-[12px] text-red-700 dark:text-red-300';
 
 /** The label, hint, help and error around one control. `dirty` draws the canvas's violet edge. */
@@ -44,7 +49,7 @@ export function FieldFrame({ field, htmlFor, dirty, error, children, span }) {
           {LABELS[field]}{field === 'company_name' ? ' · required' : ''}
           {FIELD_HINT[field] ? <span className={`ml-1.5 font-normal ${MUTED}`}>{FIELD_HINT[field]}</span> : null}
         </span>
-        <span className={dirty ? DIRTY_EDGE : undefined}>{children({ helpId, errId })}</span>
+        <span className="block">{children({ helpId, errId, edge: dirty ? ` ${DIRTY_EDGE}` : '' })}</span>
       </label>
       {FIELD_HELP[field] ? <p className={`m-0 mt-1 ${MUTED}`} id={helpId}>{FIELD_HELP[field]}</p> : null}
       {error ? <p className={`m-0 mt-1 ${ERROR_TEXT}`} id={errId} role="alert" data-testid={`general-${field}-error`}>{error}</p> : null}
@@ -85,9 +90,9 @@ export function UrlField({ field, value, onChange, disabled, dirty, error }) {
   const hint = normalisedHint(field, value);
   return (
     <FieldFrame field={field} htmlFor={id} dirty={dirty} error={error}>
-      {({ helpId, errId }) => (
+      {({ helpId, errId, edge }) => (
         <>
-          <input id={id} type="url" inputMode="url" autoComplete="url" className={INPUT} value={value} disabled={disabled}
+          <input id={id} type="url" inputMode="url" autoComplete="url" className={INPUT + edge} value={value} disabled={disabled}
             aria-invalid={error ? 'true' : undefined}
             aria-describedby={[error ? errId : null, `${id}-tail`, FIELD_HELP[field] ? helpId : null].filter(Boolean).join(' ') || undefined}
             placeholder={field === 'website' ? 'https://example.com' : 'https://www.linkedin.com/company/…'}
@@ -111,14 +116,14 @@ export function DescriptionField({ value, onChange, disabled, dirty, error, max 
   const count = descriptionCount(value, max);
   return (
     <FieldFrame field="description" htmlFor={id} dirty={dirty} error={error} span>
-      {({ helpId, errId }) => (
+      {({ helpId, errId, edge }) => (
         <>
-          <textarea id={id} className={`${INPUT} resize-none`} rows={3} value={value} disabled={disabled}
+          <textarea id={id} className={`${INPUT} resize-none${edge}`} rows={3} value={value} disabled={disabled}
             aria-invalid={count.over || error ? 'true' : undefined}
             aria-describedby={[error ? errId : null, `${id}-count`, helpId].filter(Boolean).join(' ')}
             onChange={(e) => onChange(e.target.value)} />
           <span id={`${id}-count`} data-testid="general-description-count"
-            className={`${count.over ? ERROR_TEXT : MUTED} text-[11.5px] tabular-nums`}>{count.text}{count.over ? ' · over the limit' : count.near ? ' · near the limit' : ''}</span>
+            className={`mt-1 block ${count.over ? ERROR_TEXT : MUTED} text-[11.5px] tabular-nums`}>{count.text}{count.over ? ' · over the limit' : count.near ? ' · near the limit' : ''}</span>
         </>
       )}
     </FieldFrame>
@@ -152,10 +157,10 @@ export function CurrencyCombobox({ value, stored, onChange, disabled, dirty, err
   };
   return (
     <FieldFrame field="default_currency" htmlFor={id} dirty={dirty} error={error}>
-      {({ helpId, errId }) => (
+      {({ helpId, errId, edge }) => (
         <span className="relative block" ref={box}>
           <input
-            id={id} className={INPUT} disabled={disabled} role="combobox" autoComplete="off"
+            id={id} className={INPUT + edge} disabled={disabled} role="combobox" autoComplete="off"
             aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
             aria-activedescendant={open && options[at] !== undefined ? `${listId}-${options[at] || 'none'}` : undefined}
             aria-invalid={error ? 'true' : undefined}
@@ -217,12 +222,15 @@ export function PublicPreview({ preview, collapsible = false }) {
   );
   return (
     <PCard title={PREVIEW_TITLE} testId="company-general-preview">
+      {/* CS-13 A: the preview collapses on a phone. On a desktop it is the
+          canvas's sticky rail and is always open, so the toggle is not drawn
+          there and a closed preview re-opens at `lg`. */}
       {collapsible ? (
         <>
-          <button type="button" className={`mb-2 ${MUTED} underline`} aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="company-general-preview-toggle">
+          <button type="button" className={`mb-2 lg:hidden ${MUTED} underline`} aria-expanded={open} onClick={() => setOpen((v) => !v)} data-testid="company-general-preview-toggle">
             {open ? 'Hide preview' : 'Show preview'}
           </button>
-          {open ? body : null}
+          <div className={open ? '' : 'hidden lg:block'} data-testid="company-general-preview-body">{body}</div>
         </>
       ) : body}
       <p className={`m-0 mt-3 ${MUTED}`} data-testid="company-general-preview-scope">

@@ -7,7 +7,7 @@ import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext'
 import {
   DESCRIPTION_MAX, FIELD_HELP, LABELS, LEAVE_PROMPT, LOGO_HINT, PROSE_MAX, REGIONS, REVENUE_RANGES, SECTIONS, STAGES,
   VERSION_CONFLICT, archivedLine, canEditCompany, changes, conflictLine, failedBeforeWriting, fieldProblems, formOf, hasIntent,
-  logoProblem, previewOf, problemOf, railStatus, readOnlyReasonLine, rebaseOnConflict, reconcile, regionCodesIn, saveIntent,
+  logoProblem, previewOf, problemOf, railStatus, rebaseOnConflict, reconcile, regionCodesIn, saveIntent,
   saveLine, shownLogo, versionOf,
 } from './generalFormModel';
 import {
@@ -81,6 +81,8 @@ function Field({ f, form, set, disabled, row, dirty, error }) {
     'aria-describedby': [error ? `${id}-error` : null, FIELD_HELP[f] ? `${id}-help` : null].filter(Boolean).join(' ') || undefined,
   };
   let input;
+  // CS-02: a changed field carries the violet edge on its own control.
+  const edge = dirty ? ' ring-2 ring-axal-violet/60' : '';
   // D4966: the currency, the two links and the description are the v2 canvas's
   // own controls (`CompanyGeneralFields.jsx`), each with its label, hint, help,
   // error and the changed-field edge already wired.
@@ -95,7 +97,7 @@ function Field({ f, form, set, disabled, row, dirty, error }) {
   }
   if (f === 'stage') {
     input = (
-      <select id={id} className={INPUT} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)}>
+      <select id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)}>
         {STAGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
     );
@@ -105,23 +107,23 @@ function Field({ f, form, set, disabled, row, dirty, error }) {
     // A band from the list; a value stored before the list is still shown, as itself, until it is changed.
     const legacy = v && !REVENUE_RANGES.some(([k]) => k === v);
     input = (
-      <select id={id} className={INPUT} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} data-testid="general-revenue-range">
+      <select id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} data-testid="general-revenue-range">
         <option value="">Not recorded</option>
         {legacy ? <option value={v}>{v}</option> : null}
         {REVENUE_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
     );
   } else if (f === 'employee_count') {
-    input = <input id={id} type="number" min={0} step={1} inputMode="numeric" className={INPUT} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
+    input = <input id={id} type="number" min={0} step={1} inputMode="numeric" className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
   } else if (f === 'international_presence' || f === 'current_products' || f === 'expansion_goals') {
     input = (
       <>
-        <textarea id={id} className={`${INPUT} resize-y`} rows={2} maxLength={PROSE_MAX} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />
+        <textarea id={id} className={`${INPUT} resize-y${edge}`} rows={2} maxLength={PROSE_MAX} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />
         <span className={`${MUTED} text-[11.5px] tabular-nums`}>{v.length} / {PROSE_MAX}</span>
       </>
     );
   } else {
-    input = <input id={id} className={INPUT} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
+    input = <input id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
   }
   return (
     <FieldFrame field={f} htmlFor={id} dirty={dirty} error={error}>
@@ -348,9 +350,13 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
         setShowProblems(true);
         if (dirty && !problem && !busy) onSave({ checkFirst: ['error', 'partly', 'unknown'].includes(save.status) && save.check !== false });
       }}>
+        {/* D4966 (CS-05, CS-12): read-only and archived are two of the rail's twelve
+            states, and they are said here, where they always were. The save bar
+            below is the editor's; a company nobody may change shows no actions
+            (#4960's rule, which this keeps). */}
         {archived
-          ? <p className={`m-0 ${MUTED}`} data-testid="company-general-archived">{archivedLine(row.company_name)}</p>
-          : !canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyReasonLine(row)}</p>}
+          ? <p className={`m-0 ${MUTED}`} role="status" data-rail-state={rail.state} data-testid="company-general-archived">{`${rail.line} — ${archivedLine(row.company_name)}`}</p>
+          : !canEdit && <p className={`m-0 ${MUTED}`} role="status" data-rail-state={rail.state} data-testid="company-general-read-only">{rail.line}</p>}
         {/* CS-13 A: on a phone the four groups are a selector, so the form is not one long scroll. */}
         <div className="lg:hidden" data-testid="company-general-group-picker">
           <label htmlFor="company-general-group" className={`text-[12px] font-semibold ${INK}`}>Section</label>
@@ -374,17 +380,20 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
             </div>
           </PCard>
         ))}
-        {/* CS-12: the rail says one of twelve things, and a read-only or archived company says that instead. */}
-        {(canEdit || archived || !canEdit) && (dirty || save.status !== 'idle' || !canEdit || archived) && (
-          <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="company-general-savebar">
-            <span className={`mr-auto ${MUTED}`} role="status"
+        {/* CS-12: the rail says one of twelve things; the four above are the
+            editor's. CS-13 C: the bar is the house's own sticky footer
+            (`sticky bottom-0 z-10`, as the checkout and decision bars are),
+            with 44px targets and the status on its own line below 1024px. */}
+        {canEdit && (dirty || save.status !== 'idle') && (
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white/95 px-4 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-900/95" data-testid="company-general-savebar">
+            <span className={`w-full lg:w-auto lg:mr-auto ${MUTED}`} role="status"
               aria-live={rail.announce === 'none' ? 'off' : rail.announce === 'assertive' ? 'assertive' : 'polite'}
               data-rail-state={rail.state} data-testid="company-general-status">
               {save.status === 'conflict' ? <span data-testid="company-general-conflict">{rail.line}</span> : rail.line}
             </span>
-            {canEdit && dirty && <button type="button" className={GHOST} onClick={onDiscard} disabled={busy} data-testid="company-general-discard">Discard</button>}
-            {canEdit && dirty && (
-              <button type="submit" className={PRIMARY} disabled={busy} data-testid="company-general-save">
+            {dirty && <button type="button" className={`${GHOST} min-h-[44px]`} onClick={onDiscard} disabled={busy} data-testid="company-general-discard">Discard</button>}
+            {dirty && (
+              <button type="submit" className={`${PRIMARY} min-h-[44px]`} disabled={busy} data-testid="company-general-save">
                 {save.status === 'saving' ? 'Saving…' : save.status === 'reconciling' ? 'Checking…' : ['error', 'partly', 'unknown'].includes(save.status) ? 'Try again' : 'Save changes'}
               </button>
             )}

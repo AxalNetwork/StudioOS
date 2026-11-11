@@ -160,6 +160,8 @@ async function mount(role, { url = '/account/portfolio', handle = worker(), know
     path: () => props(byId('where'))?.['data-path'],
     submit: (id) => fire(id, 'onSubmit', { preventDefault() {} }),
     click: (id) => fire(id, 'onClick'), change: (id, v) => fire(id, 'onChange', { target: { value: v, checked: v } }),
+    focus: (id) => fire(id, 'onFocus', {}),
+    mouseDown: (id) => fire(id, 'onMouseDown', { preventDefault() {} }),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
   };
 }
@@ -622,18 +624,25 @@ test('#4736: General for a company the member cannot open is the refusal with Ba
 });
 
 test('#4736: General draws Default currency, Not recorded when the company has none, the stored code when it has one, and saves only a change', async () => {
+  // D4966 (#5312, CS-06): the control is a searchable combobox now, not a
+  // `<select>`. The rule is the same: an unrecorded currency reads "Not
+  // recorded", nothing is preselected, and only a change is sent.
   let v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }) });
   try {
-    assert.equal(v.prop('general-default-currency', 'value'), '');
-    assert.equal(v.prop('general-default-currency-none', 'value'), '', 'the empty choice is the unrecorded one, not a code');
+    assert.equal(v.prop('general-default-currency', 'value'), 'Not recorded');
+    assert.equal(v.prop('general-default-currency', 'role'), 'combobox');
+    await v.focus('general-default-currency');
+    assert.equal(v.prop('general-default-currency-none', 'aria-selected'), true, 'the empty choice is the unrecorded one, not a code');
     assert.match(v.of('general-section-identity'), /Default currency.*Not recorded/s);
     assert.equal(v.count('company-general-savebar'), 0);
   } finally { await v.close(); }
   v = await mount('founder', { element: h(CompanyGeneralForm, { uid: 'nl' }), handle: worker({ 'GET /api/company/nl': () => response({ ...COMPANY, default_currency: 'EUR' }) }) });
   try {
-    assert.equal(v.prop('general-default-currency', 'value'), 'EUR');
+    assert.equal(v.prop('general-default-currency', 'value'), 'EUR · Euro');
     assert.equal(v.count('company-general-savebar'), 0, 'an unchanged currency is not a change');
+    await v.focus('general-default-currency');
     await v.change('general-default-currency', 'GBP');
+    await v.mouseDown('general-default-currency-GBP');
     await v.submit('company-general-form');
     assert.deepEqual(v.writes().map((w) => [w.call, w.body]), [['POST /api/company/nl/settings', { default_currency: 'GBP' }]]);
   } finally { await v.close(); }
