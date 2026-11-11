@@ -39,6 +39,7 @@
  * providers' reconciles and not this one. Filed by D232, not changed there.
  */
 import type { Context } from 'hono';
+import { fromStripeUnits, toMajorString } from '../../../../frontend/src/lib/money.js';
 import { oauthCallbackUrl } from '../../util/url';
 import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import type { Env, User } from '../../types';
@@ -149,6 +150,7 @@ interface StripeSubscription {
   id: string;
   status: string;
   customer: string;
+  currency?: string;
   created: number;
   canceled_at: number | null;
   items: { data: StripeSubscriptionItem[] };
@@ -187,7 +189,11 @@ async function listAll<T>(token: string, basePath: string): Promise<T[]> {
 
 /** Normalize subscription item amount to monthly USD-cents. */
 function monthlyCents(item: StripeSubscriptionItem): number {
-  const amt = item.price?.unit_amount ?? 0;
+  const units = item.price?.unit_amount;
+  if (units == null || units === 0) return 0;
+  if (item.price.currency?.toUpperCase() !== 'USD') throw new Error('stripe_mrr_currency_unsupported');
+  const amt = fromStripeUnits(units, item.price.currency);
+  if (amt === null) throw new Error('stripe_mrr_amount_invalid');
   const qty = item.quantity || 1;
   const recur = item.price?.recurring;
   const interval = recur?.interval || 'month';
@@ -204,6 +210,7 @@ function monthlyCents(item: StripeSubscriptionItem): number {
 
 interface StripeMetrics {
   mrr: number;             // USD (not cents)
+  mrr_cents: number;
   arr: number;
   paying_customers: number;
   monthly_churn_pct: number; // 0..100
@@ -218,9 +225,18 @@ async function computeStripeMetrics(token: string): Promise<StripeMetrics> {
   const customers = new Set<string>();
   for (const sub of allActive) {
     customers.add(sub.customer);
-    for (const it of sub.items?.data || []) mrrCents += monthlyCents(it);
+    for (const item of sub.items?.data || []) {
+      const amount = monthlyCents(item);
+      if (amount !== 0 && sub.currency && sub.currency.toUpperCase() !== 'USD') {
+        throw new Error('stripe_mrr_currency_unsupported');
+      }
+      mrrCents += amount;
+    }
   }
-  const mrr = Math.round(mrrCents) / 100;
+  const mrrMinor = Math.round(mrrCents);
+  const mrrText = toMajorString(mrrMinor, 'USD');
+  if (mrrText === null) throw new Error('stripe_mrr_amount_invalid');
+  const mrr = Number(mrrText);
   const arr = mrr * 12;
 
   // Churn — count canceled subs in last 30d / (canceled + still-active 30d ago).
@@ -235,6 +251,7 @@ async function computeStripeMetrics(token: string): Promise<StripeMetrics> {
 
   return {
     mrr,
+    mrr_cents: mrrMinor,
     arr,
     paying_customers: customers.size,
     monthly_churn_pct: Math.round(monthly_churn_pct * 100) / 100,
@@ -503,7 +520,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
   return {
     summary: `mrr=$${metrics.mrr.toFixed(2)} customers=${metrics.paying_customers} churn=${metrics.monthly_churn_pct}% project=${projectId ?? 'unset'}`,
     counts: {
-      mrr_cents: Math.round(metrics.mrr * 100),
+      mrr_cents: metrics.mrr_cents,
       customers: metrics.paying_customers,
       active_subs: metrics.active_subs,
     },

@@ -70,6 +70,7 @@ and citations by number keep working.
 | `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
 | `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
+| `D5358.md` | Practice Sessions confirms price changes and clears, preserves status-only updates, and handles billing refusals. |
 | `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
 | `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |

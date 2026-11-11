@@ -19,10 +19,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { scanFile, scanTree } from './_moneyConversionScan.mjs';
 
 const root = new URL('../../', import.meta.url);
-const rootPath = root.pathname;
+const rootPath = fileURLToPath(root);
 
 /** [kind, reason, files] groups: file -> exact number of flagged lines. */
 const ALLOW = [
@@ -62,6 +63,7 @@ const ALLOW = [
     "cloudflare-worker/src/services/roundMath.ts": 1,
     "cloudflare-worker/src/services/secondaryProceeds.ts": 1,
     "cloudflare-worker/src/services/ventureScoring/collectors.ts": 2,
+    "cloudflare-worker/src/integrations/providers/stripe.ts": 1,
   } },
   { kind: 'eur', reason: "Research directory sizes are recorded in euros only (the EUR_SOURCE rule); the read refuses any other size currency.", files: {
     "frontend/src/pages/research/GeographyProfile.jsx": 1,
@@ -149,7 +151,6 @@ const ALLOW = [
     "frontend/src/components/spinout/SafeIssuancesCard.jsx": 1,
   } },
   { kind: 'usd', reason: "Admin, advisor-firm, partner, network and founder surfaces that name US dollars in the column or the copy (`price_usd`, `hourly_rate_usd`, \"in dollars\", `$` in the string).", files: {
-    "frontend/src/lib/moneyInput.js": 1,
     "frontend/src/lib/partnerSettlements.js": 1,
     "frontend/src/pages/ServiceCatalogPage.jsx": 2,
     "frontend/src/pages/admin/advisors/apOverviewModel.js": 1,
@@ -204,27 +205,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/subscriptionPlans.ts": 1,
     "cloudflare-worker/src/services/captable.ts": 1,
   } },
-  { kind: 'pending', reason: "Use of Funds money paths (scenario and hire amounts carry a currency column). Owned by #5375, which edits these files; migrating them here would collide. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/scenariosForecastModel.js": 5,
-    "frontend/src/pages/raise/useoffunds/useOfFundsModel.js": 3,
-    "cloudflare-worker/src/services/useOfFunds/legacy.ts": 2,
-    "cloudflare-worker/src/services/useOfFunds/read.ts": 1,
-    "cloudflare-worker/src/services/useOfFunds/store.ts": 4,
-  } },
-  { kind: 'pending', reason: "Advisor practice ledger, partner pipeline retainers and proposals, pitch chart sources and the Stripe MRR import hold amounts whose currency is a column of the row; the forms were not rebuilt here. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/advisor/practice/EarningsZone.jsx": 2,
-    "frontend/src/pages/advisor/practice/SessionsZone.jsx": 1,
-    "frontend/src/pages/advisor/practice/engagementCorrection.js": 1,
-    "frontend/src/pages/advisor/practice/practiceTools.js": 2,
-    "frontend/src/pages/partner/offers/AudienceFitZone.jsx": 1,
-    "frontend/src/pages/partner/pipeline/ProposalsZone.jsx": 2,
-    "frontend/src/pages/partner/pipeline/RetainersZone.jsx": 2,
-    "frontend/src/pages/raise/pitch/chartModel.js": 1,
-    "frontend/src/pages/raise/pitch/sourcesModel.js": 1,
-    "cloudflare-worker/src/integrations/providers/stripe.ts": 3,
-  } },
 ];
 
 const listed = new Map();
@@ -264,7 +244,10 @@ test('a fixed-currency entry names the currency in its file, and every entry say
       assert.match(text, NAMES[g.kind], `${file}: listed as ${g.kind.toUpperCase()} by contract but never names that currency`);
     }
   }
-  assert.deepEqual([...new Set(ALLOW.map((g) => g.kind))].sort(), ['eur', 'not-money', 'pending', 'usd']);
+  // The three pending groups are migrated: Use of Funds (D5496), the cap table (D5497) and the
+  // advisor ledger, partner forms, pitch sources and Stripe MRR import (D5498). The allow-list
+  // now holds only a fixed currency or a line that is not money.
+  assert.deepEqual([...new Set(ALLOW.map((g) => g.kind))].sort(), ['eur', 'not-money', 'usd']);
 });
 
 test('every pending file is named in the decision file, so the follow-up list is explicit', () => {
@@ -275,6 +258,13 @@ test('every pending file is named in the decision file, so the follow-up list is
 
 test('the surfaces D5373 migrated whole are off the allow-list and use the money layer (checkout, payModel and wellbeing keep USD-only lines, so they are listed and tested in money_surfaces_5373)', () => {
   const migrated = [
+    'frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/scenariosForecastModel.js:parseMinor',
+    'frontend/src/pages/raise/useoffunds/useOfFundsModel.js:formatMinorOrCount',
+    'cloudflare-worker/src/services/useOfFunds/legacy.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/read.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/store.ts:toMajorString',
     'frontend/src/lib/partnerEarnings.js:formatMinor',
     'frontend/src/pages/events/myEventsModel.js:formatMinorOrCount',
     'frontend/src/pages/events/eventDrawersModel.js:formatMinorOrCount',

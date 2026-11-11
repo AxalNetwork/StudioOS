@@ -1,3 +1,5 @@
+import { formatMinor } from '../../../lib/money.js';
+import { amountToCents } from '../../../lib/moneyInput.js';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
@@ -122,7 +124,8 @@ export default function PartnerProposalsZone() {
   })();
 
   const trail = historyId != null ? items.find((r) => r.quote_id === historyId) : null;
-  const priceBad = draft.price.trim() !== '' && !(Number.isFinite(Number(draft.price)) && Number(draft.price) >= 0);
+  const price = amountToCents(draft.price);
+  const priceBad = Boolean(price.error);
 
   const rowActions = partnerZoneActions('pipeline/proposals', { view: { header: ['Client', 'Shape', 'Value', 'Version', 'State', 'Loss reason', 'Days since sent'], rows: visible, cells: (r) => [r.client, r.shape, r.price_dollars, r.version, r.state, r.loss_reason, r.days_since_sent] } });
 
@@ -291,7 +294,7 @@ export default function PartnerProposalsZone() {
                   { text: `v${v.version}`, sub: formatDay(v.created_at) },
                   {
                     text: v.change_summary,
-                    sub: v.price_cents == null ? undefined : moneyDollars(Math.round(v.price_cents / 100)),
+                    sub: v.price_cents == null ? undefined : formatMinor(v.price_cents, 'USD', { trimWhole: true }),
                   },
                   v.note ? { text: v.note } : { nr: true },
                 ],
@@ -384,6 +387,7 @@ export default function PartnerProposalsZone() {
                 // this is in flight cannot retarget it or clear that one's draft.
                 const id = editId;
                 const sent = draft;
+                if (priceBad) return;
                 const saved = await run(
                   () => api.addPartnerProposalVersion(id, {
                     change_summary: sent.change_summary,
@@ -391,8 +395,7 @@ export default function PartnerProposalsZone() {
                     // DOLLARS IN THE BOX, CENTS ON THE WIRE. Every new money
                     // column in this bucket is integer cents; the field asks
                     // for the figure a person says out loud.
-                    price_cents: sent.price.trim() === ''
-                      ? null : Math.round(Number(sent.price) * 100),
+                    price_cents: price.cents,
                   }),
                   'Version recorded.', `version:${id}`,
                 );

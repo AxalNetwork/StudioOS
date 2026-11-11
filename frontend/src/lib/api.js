@@ -4569,7 +4569,7 @@ export const api = {
 
   // `is_published` on each item is DERIVED from its consent rows, never stored.
   // There is no method to set it, and that absence is the feature.
-  listPartnerProof: () => request('/partner/offers/proof'),
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
   createPartnerProof: (data) =>
     request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
   updatePartnerProof: (id, data) =>
