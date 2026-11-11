@@ -90,19 +90,21 @@ function legacyRepair(conflict=false) {
  * that read, then takes the next revision. Nothing else in the batch is written.
  */
 export const CHANGED_SINCE_OPEN='This scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.';
-export function expectedRevision(b:Record<string,unknown>|undefined,required=true):number|null {
+/** D5375: a planned hire carries its own revision; the sentence names the hire, not the scenario. */
+export const HIRE_CHANGED_SINCE_OPEN='This hire was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.';
+export function expectedRevision(b:Record<string,unknown>|undefined,required=true,what:'scenario'|'hire'='scenario'):number|null {
   const v=b?.expected_revision;
   if (v===undefined||v===null) {
-    if (required) throw new PlanError(400,'expected_revision_required','Say which revision you are editing (expected_revision), as read with the scenario. Nothing was saved.');
+    if (required) throw new PlanError(400,'expected_revision_required',`Say which revision you are editing (expected_revision), as read with the ${what}. Nothing was saved.`);
     return null;
   }
-  if (typeof v!=='number'||!Number.isSafeInteger(v)||v<0) throw new PlanError(400,'expected_revision_required','expected_revision is the whole-number revision the scenario was read at. Nothing was saved.');
+  if (typeof v!=='number'||!Number.isSafeInteger(v)||v<0) throw new PlanError(400,'expected_revision_required',`expected_revision is the whole-number revision the ${what} was read at. Nothing was saved.`);
   return v;
 }
-const staleError=(current:number)=>{ const e=new PlanError(409,'changed_since_open',CHANGED_SINCE_OPEN); e.currentRevision=current; return e; };
+const staleError=(current:number,what:'scenario'|'hire'='scenario')=>{ const e=new PlanError(409,'changed_since_open',what==='hire'?HIRE_CHANGED_SINCE_OPEN:CHANGED_SINCE_OPEN); e.currentRevision=current; return e; };
 /** Refuse a stale write before the batch; `null` expected means the caller sent none. */
-function checkRevision(row:any,expected:number|null) {
-  if (expected!==null&&Number(row.revision??0)!==expected) throw staleError(Number(row.revision??0));
+function checkRevision(row:any,expected:number|null,what:'scenario'|'hire'='scenario') {
+  if (expected!==null&&Number(row.revision??0)!==expected) throw staleError(Number(row.revision??0),what);
 }
 function claim(env:Env,s:Scope,scenarioId:number,expected:number|null):D1PreparedStatement[] {
   if (expected===null) return [env.DB.prepare('UPDATE uof_scenarios SET revision=revision+1 WHERE id=? AND project_id=?').bind(scenarioId,s.projectId)];
@@ -138,7 +140,7 @@ export async function scenarioParts(env: Env, id: number) {
   return { lines: lines.results ?? [], milestones: milestones.results ?? [] };
 }
 export async function hires(env: Env, s: Scope) {
-  return (await env.DB.prepare('SELECT id, category_key, role, start_month, annual_cents, currency, updated_at FROM use_of_funds_hires WHERE project_id = ? ORDER BY start_month, id').bind(s.projectId).all<any>()).results ?? [];
+  return (await env.DB.prepare('SELECT id, category_key, role, start_month, annual_cents, currency, updated_at, revision FROM use_of_funds_hires WHERE project_id = ? ORDER BY start_month, id').bind(s.projectId).all<any>()).results ?? [];
 }
 const sourceOf = (label: string | null): Source => ({ typed: 'Typed', connector: 'Connector', document: 'Document', signed: 'Signed' }[label ?? ''] as Source) ?? 'Recorded';
 export async function view(env: Env, s: Scope, r: any) {
@@ -362,23 +364,35 @@ export async function saveMilestone(env:Env,s:Scope,id:number|null,b:Record<stri
   return {...saved,source:'Typed',cost_state:saved.cost_cents===null?'not_costed':'recorded',scenario_revision:revision};
 }
 export async function saveHire(env:Env,s:Scope,id:number,b:Record<string,unknown>,remove=false) {
-  fields(b,['category_key','role','start_month','annual_cents','currency']);
+  fields(b,['category_key','role','start_month','annual_cents','currency','expected_revision']);
   const old=await env.DB.prepare('SELECT * FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId).first<any>();
-  if (!old) throw new PlanError(404,'not_found','Hire not found.'); const r={...old};
+  if (!old) throw new PlanError(404,'not_found','Hire not found.');
+  // D5375: an edit or a removal says which revision of the hire it read.
+  const expected=expectedRevision(b,true,'hire') as number;
+  checkRevision(old,expected,'hire');
+  const r={...old};
   if (has(b,'category_key')) { r.category_key=key(b.category_key); if (!r.category_key) throw bad(); }
   if (has(b,'role')) r.role=text(b.role);
   if (has(b,'start_month')) r.start_month=month(b.start_month);
   if (has(b,'annual_cents')) r.annual_cents=number(b.annual_cents);
   if (has(b,'currency')) r.currency=currency(b.currency);
+  // Both statements carry `revision=?`, so a hire that moved after the read above changes no row
+  // and leaves no audit row: the batch is one transaction and the audit row is selected from the
+  // very row the second statement then changes.
   const written=await env.DB.batch([
     env.DB.prepare(`INSERT INTO activity_logs(project_id,user_id,entity_type,entity_id,action,details,actor)
-      SELECT ?,?,'raise.use-of-funds',uid,?,?,? FROM use_of_funds_hires WHERE id=? AND project_id=?`)
-      .bind(s.projectId,s.user.id,remove?'uof_hire_deleted':'uof_hire_updated',`${s.user.role==='admin'?'Studio admin: ':''}${remove?'uof hire deleted.':'uof hire updated.'}`,`user:${s.user.id}`,id,s.projectId),
-    remove ? env.DB.prepare('DELETE FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId)
-      : env.DB.prepare("UPDATE use_of_funds_hires SET category_key=?,role=?,start_month=?,annual_cents=?,currency=?,updated_at=datetime('now') WHERE id=? AND project_id=?").bind(r.category_key,r.role,r.start_month,r.annual_cents,r.currency,id,s.projectId),
+      SELECT ?,?,'raise.use-of-funds',uid,?,?,? FROM use_of_funds_hires WHERE id=? AND project_id=? AND revision=?`)
+      .bind(s.projectId,s.user.id,remove?'uof_hire_deleted':'uof_hire_updated',`${s.user.role==='admin'?'Studio admin: ':''}${remove?'uof hire deleted.':'uof hire updated.'}`,`user:${s.user.id}`,id,s.projectId,expected),
+    remove ? env.DB.prepare('DELETE FROM use_of_funds_hires WHERE id=? AND project_id=? AND revision=?').bind(id,s.projectId,expected)
+      : env.DB.prepare("UPDATE use_of_funds_hires SET category_key=?,role=?,start_month=?,annual_cents=?,currency=?,revision=revision+1,updated_at=datetime('now') WHERE id=? AND project_id=? AND revision=?").bind(r.category_key,r.role,r.start_month,r.annual_cents,r.currency,id,s.projectId,expected),
   ]);
-  if (!written[1].meta.changes) throw new PlanError(409,'hire_changed','The hire changed. Read it again.');
-  return remove?{ok:true}:{...r,source:'Typed'};
+  if (!written[1].meta.changes) {
+    // Gone is a removal; still there is a newer revision.
+    const now=await env.DB.prepare('SELECT revision FROM use_of_funds_hires WHERE id=? AND project_id=?').bind(id,s.projectId).first<{revision:number|null}>();
+    if (!now) throw new PlanError(409,'hire_changed','The hire changed. Read it again.');
+    throw staleError(Number(now.revision??0),'hire');
+  }
+  return remove?{ok:true}:{...r,revision:expected+1,source:'Typed'};
 }
 
 /** Compatibility PUT: five shares, target and section milestones change together. */

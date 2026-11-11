@@ -17,7 +17,7 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const table of ['users', 'partners', 'projects', 'deals', 'commitments', 'deal_invitations', 'activity_logs', 'user_company_links', 'super_admins',
-    'cap_table_holders', 'cap_table_securities', 'project_members', 'legal_documents', 'esign_envelopes', 'esign_recipients', 'subsidiaries', 'capital_calls', 'syndicates', 'syndicate_members',
+    'cap_table_holders', 'cap_table_securities', 'cap_table_scenarios', 'project_members', 'legal_documents', 'esign_envelopes', 'esign_recipients', 'subsidiaries', 'capital_calls', 'syndicates', 'syndicate_members',
     'shared_services_log', 'mi_pro_subscriptions']) {
     db.exec(tableFromBaseline(baseline, table));
   }

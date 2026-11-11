@@ -32,10 +32,9 @@ const row = (uid, payload = AFTERNOON) => ({ uid, rail_option: BLOCK_OPTION, sta
 
 // ── The hand-over, pure ─────────────────────────────────────────────────────
 
-test('a card\'s instants become the Block form\'s whole UTC days: the first, and the day after the last', () => {
-  assert.deepEqual(blockDates(AFTERNOON), { from: '2026-11-10', until: '2026-11-11' }, 'an afternoon fills one day');
-  assert.deepEqual(blockDates({ from: '2026-11-10T00:00:00.000Z', until: '2026-11-12T00:00:00.000Z' }), { from: '2026-11-10', until: '2026-11-12' }, 'midnight to midnight is two days');
-  assert.deepEqual(blockDates({ from: '2026-11-10T23:30:00.000Z', until: '2026-11-11T01:00:00.000Z' }), { from: '2026-11-10', until: '2026-11-12' }, 'across midnight is two days');
+test('a card\'s exact instants survive the hand-over', () => {
+  assert.deepEqual(blockDates(AFTERNOON), { from: AFTERNOON.from, until: AFTERNOON.until }, 'an afternoon stays an afternoon');
+  assert.deepEqual(blockDates({ from: '2026-11-10T00:00:00Z', until: '2026-11-12T00:00:00Z' }), { from: '2026-11-10T00:00:00.000Z', until: '2026-11-12T00:00:00.000Z' });
   for (const bad of [null, {}, { from: 'x', until: 'y' }, { from: AFTERNOON.until, until: AFTERNOON.from }, { from: AFTERNOON.from, until: AFTERNOON.from }]) {
     assert.equal(blockDates(bad), null, JSON.stringify(bad));
   }
@@ -43,21 +42,22 @@ test('a card\'s instants become the Block form\'s whole UTC days: the first, and
 
 test('the address carries the card, and reads back only a valid hand-over', () => {
   const href = blockHref('p1', blockDates(AFTERNOON));
-  assert.equal(href, `${BLOCK_ROUTE}?block=p1&from=2026-11-10&until=2026-11-11`);
-  assert.deepEqual(parseBlockQuery(href.split('?')[1]), { uid: 'p1', from: '2026-11-10', until: '2026-11-11' });
+  assert.equal(href, `${BLOCK_ROUTE}?block=p1&from=2026-11-10T12%3A00%3A00.000Z&until=2026-11-10T18%3A00%3A00.000Z`);
+  assert.deepEqual(parseBlockQuery(href.split('?')[1]), { uid: 'p1', from: AFTERNOON.from, until: AFTERNOON.until, exact: true });
   assert.equal(blockHref('p1', null), `${BLOCK_ROUTE}?block=p1`, 'a card with no dates still carries its uid');
-  assert.deepEqual(parseBlockQuery('block=p1'), { uid: 'p1', from: '', until: '' }, 'no dates: the form opens empty for the card');
+  assert.deepEqual(parseBlockQuery('block=p1'), { uid: 'p1', from: '', until: '', exact: false }, 'no dates: the form opens empty for the card');
+  assert.deepEqual(parseBlockQuery('block=p1&from=2026-11-10&until=2026-11-11'), { uid: 'p1', from: '2026-11-10', until: '2026-11-11', exact: false }, 'an old open tab keeps its whole-day hand-over');
   assert.equal(parseBlockQuery(''), null, 'no card, no hand-over');
   assert.equal(parseBlockQuery('from=2026-11-10&until=2026-11-11'), null, 'dates without a card are not a hand-over');
   assert.equal(parseBlockQuery('block=a b'), null, 'a uid is a token');
   for (const q of ['from=2026-11-31&until=2026-12-02', 'from=2026-11-12&until=2026-11-10', 'from=2026-11-10&until=2026-11-10', 'from=2026-11-10', 'from=nope&until=nope']) {
-    assert.deepEqual(parseBlockQuery(`block=p1&${q}`), { uid: 'p1', from: '', until: '' }, `${q}: bad dates are dropped, not guessed`);
+    assert.deepEqual(parseBlockQuery(`block=p1&${q}`), { uid: 'p1', from: '', until: '', exact: false }, `${q}: bad dates are dropped, not guessed`);
   }
 });
 
 test('only a Block card carries dates, and "Accept all" never counts it', () => {
   const block = optionCard(row('p1'), BLOCK_OPTION);
-  assert.deepEqual(block.block, { from: '2026-11-10', until: '2026-11-11' });
+  assert.deepEqual(block.block, { from: AFTERNOON.from, until: AFTERNOON.until });
   assert.equal(needsBlockPage(block), true);
   const other = optionCard({ uid: 'f1', status: 'proposed', payload: { text: 'x', from: AFTERNOON.from, until: AFTERNOON.until } }, 'form:mvp_features');
   assert.equal('block' in other, false);
@@ -106,19 +106,21 @@ async function mount(el, answer, entries = ['/practice/sessions']) {
     calls, by, props, text, settle,
     button: (label, within = document.body) => walk(within).find((n) => n.tagName === 'BUTTON' && text(n).trim() === label),
     async press(node) { assert.ok(node, 'a control to press'); await act(async () => props(node).onClick({ preventDefault() {}, stopPropagation() {} })); await settle(); },
+    async change(id, value) { const node = by(id); assert.ok(node, id); await act(async () => props(node).onChange({ target: { value } })); await settle(); },
     async submit(id) { const f = by(id); assert.ok(f, id); await act(async () => props(f).onSubmit({ preventDefault() {} })); await settle(); },
     async close() { await act(async () => root.unmount()); globalThis.fetch = realFetch; restore(); },
   };
 }
 
 /** The Worker, as far as this page and panel reach it. */
-function worker({ cards = [row('p1')], block = () => json({ blocked: 3, skipped_booked: 0 }), decide = () => json({ proposal: { uid: 'p1', status: 'accepted' } }) } = {}) {
+function worker({ cards = [row('p1')], timezone = null, block = () => json({ blocked: 3, skipped_booked: 0 }), decide = () => json({ proposal: { uid: 'p1', status: 'accepted' } }) } = {}) {
   return (c) => {
     if (c.path === '/api/ai/rail/proposals' && c.method === 'GET') return json({ proposals: cards });
     if (/\/api\/ai\/rail\/proposals\/[^/]+\/decide$/.test(c.path)) return decide(c);
     if (c.path === '/api/advisors/me/slots/block') return block(c);
     if (c.path === '/api/advisors/me/slots') return json({ items: [] });
     if (c.path === '/api/advisors/me/bookings') return json({ items: [] });
+    if (c.path === '/api/advisors/me/availability') return json({ timezone });
     if (c.path === '/api/eadwyn/conversations') return json({ conversations: [] });
     return json({});
   };
@@ -142,17 +144,91 @@ test('Accept on a Block card decides nothing; Block writes, and only then the ca
     assert.deepEqual(blocks(m), [], 'and writes no block by itself');
     assert.ok(m.by('advisor-block-form'), 'the Block form is open');
     assert.equal(m.props(m.by('advisor-block-from')).value, '2026-11-10', 'filled with the card\'s first day');
-    assert.equal(m.props(m.by('advisor-block-until')).value, '2026-11-11', 'and the day after its last');
-    assert.match(m.text(m.by('advisor-block-from-ask')), /Block closes whole days/, 'the form says a block is wider than an afternoon');
+    assert.equal(m.props(m.by('advisor-block-start-time')).value, '12:00', 'filled with the card\'s exact start');
+    assert.equal(m.props(m.by('advisor-block-until')).value, '2026-11-10', 'filled with the card\'s ending day');
+    assert.equal(m.props(m.by('advisor-block-end-time')).value, '18:00', 'filled with the card\'s exact end');
+    assert.match(m.text(m.by('advisor-block-from-ask')), /exact time range/, 'the form names the exact scope');
     assert.equal(m.text(m.by('where')), '/practice/sessions', 'the hand-over is taken out of the address once read');
     assert.deepEqual(closed, ['route'], 'the panel closes as the advisor is sent to the form');
 
     await m.submit('advisor-block-form');
-    assert.deepEqual(blocks(m).map((c) => c.body), [{ from: '2026-11-10T00:00:00.000Z', until: '2026-11-11T00:00:00.000Z', reason: '' }]);
+    assert.deepEqual(blocks(m).map((c) => c.body), [{ from: AFTERNOON.from, until: AFTERNOON.until, reason: '' }]);
     assert.deepEqual(decides(m).map((c) => [c.path, c.body]), [['/api/ai/rail/proposals/p1/decide', { decision: 'accept' }]], 'decided after Block');
     assert.ok(m.calls.indexOf(blocks(m)[0]) < m.calls.indexOf(decides(m)[0]), 'Block came first');
     assert.match(m.text(), /Blocked 3 slots\./);
     assert.equal(m.by('advisor-block-form'), undefined, 'the form closes once it has written');
+  } finally { await m.close(); }
+});
+
+test('a hand-entered date-only range still blocks whole UTC days', async () => {
+  __resetEadwynPanelForTest();
+  const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker());
+  try {
+    await m.press(m.button('Block a date range'));
+    await m.change('advisor-block-from', '2026-11-12');
+    await m.change('advisor-block-until', '2026-11-14');
+    assert.equal(m.props(m.by('advisor-block-start-time')).value, '');
+    assert.equal(m.props(m.by('advisor-block-end-time')).value, '');
+    await m.submit('advisor-block-form');
+    assert.deepEqual(blocks(m).map((c) => c.body), [{
+      from: '2026-11-12T00:00:00.000Z', until: '2026-11-14T00:00:00.000Z', reason: '',
+    }]);
+    assert.deepEqual(decides(m), [], 'a hand-entered range has no proposal to decide');
+  } finally { await m.close(); }
+});
+
+test('a whole-day card remains its exact midnight-to-midnight range', async () => {
+  __resetEadwynPanelForTest();
+  const wholeDay = { ...AFTERNOON, from: '2026-11-12T00:00:00.000Z', until: '2026-11-13T00:00:00.000Z' };
+  const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker({ cards: [row('p1', wholeDay)] }));
+  try {
+    await m.press(m.button('Accept', m.by('ask-card-p1')));
+    assert.equal(m.props(m.by('advisor-block-from')).value, '2026-11-12');
+    assert.equal(m.props(m.by('advisor-block-start-time')).value, '00:00');
+    assert.equal(m.props(m.by('advisor-block-until')).value, '2026-11-13');
+    assert.equal(m.props(m.by('advisor-block-end-time')).value, '00:00');
+    await m.submit('advisor-block-form');
+    assert.deepEqual(blocks(m).map((c) => c.body), [{ from: wholeDay.from, until: wholeDay.until, reason: '' }]);
+  } finally { await m.close(); }
+});
+
+test('a card is shown in the advisor timezone without changing its submitted instants', async () => {
+  __resetEadwynPanelForTest();
+  const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker({ timezone: 'Europe/Istanbul' }));
+  try {
+    await m.press(m.button('Accept', m.by('ask-card-p1')));
+    assert.equal(m.props(m.by('advisor-block-start-time')).value, '15:00');
+    assert.equal(m.props(m.by('advisor-block-end-time')).value, '21:00');
+    assert.match(m.text(), /Optional · Europe\/Istanbul/);
+    await m.submit('advisor-block-form');
+    assert.deepEqual(blocks(m).map((c) => c.body), [{ from: AFTERNOON.from, until: AFTERNOON.until, reason: '' }]);
+  } finally { await m.close(); }
+});
+
+test('a partial time range is refused locally instead of being widened to whole days', async () => {
+  __resetEadwynPanelForTest();
+  const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker());
+  try {
+    await m.press(m.button('Block a date range'));
+    await m.change('advisor-block-from', '2026-11-12');
+    await m.change('advisor-block-until', '2026-11-12');
+    await m.change('advisor-block-start-time', '12:00');
+    await m.submit('advisor-block-form');
+    assert.deepEqual(blocks(m), []);
+    assert.match(m.text(), /Choose both a start time and an end time/);
+  } finally { await m.close(); }
+});
+
+test('booked slots remain skipped and their count is reported before the card is decided', async () => {
+  __resetEadwynPanelForTest();
+  const m = await mount(h(Both, { closed: [], options: OPTIONS }), worker({
+    block: () => json({ blocked: 2, skipped_booked: 1 }),
+  }));
+  try {
+    await m.press(m.button('Accept', m.by('ask-card-p1')));
+    await m.submit('advisor-block-form');
+    assert.match(m.text(), /Blocked 2 slots\. 1 already booked and left alone/);
+    assert.ok(m.calls.indexOf(blocks(m)[0]) < m.calls.indexOf(decides(m)[0]));
   } finally { await m.close(); }
 });
 
@@ -197,7 +273,7 @@ test('the card\'s Edit link carries the same hand-over as Accept', async () => {
     const card = m.by('ask-card-p1');
     const link = (function find(n) { return [n, ...(n.childNodes || []).flatMap(find)]; })(card).find((n) => n.tagName === 'A');
     assert.ok(link, 'Edit is a link');
-    assert.equal(m.props(link).href, '/practice/sessions?block=p1&from=2026-11-10&until=2026-11-11', 'not the bare page');
+    assert.equal(m.props(link).href, '/practice/sessions?block=p1&from=2026-11-10T12%3A00%3A00.000Z&until=2026-11-10T18%3A00%3A00.000Z', 'not the bare page');
   } finally { await m.close(); }
 });
 
@@ -211,6 +287,7 @@ test('"Accept all" is not offered for Block cards, and decides none of them', as
     // Taken one at a time, each through the form.
     await m.press(m.button('Accept', m.by('ask-card-p2')));
     assert.equal(m.props(m.by('advisor-block-from')).value, '2026-11-11', 'the second card fills its own dates');
+    assert.equal(m.props(m.by('advisor-block-start-time')).value, '12:00');
     assert.deepEqual(decides(m), []);
   } finally { await m.close(); }
 });

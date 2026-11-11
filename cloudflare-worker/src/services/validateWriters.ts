@@ -43,10 +43,13 @@ import { assertStorageRoom, noteStorageLanded, type StorageTicket } from './stor
 export class WriterError extends Error {
   status: number;
   sentence: string;
-  constructor(status: number, sentence: string) {
+  /** D5375: fields a caller may add to the refusal body, e.g. `code` and `current_revision` of a stale write. */
+  extra?: Record<string, unknown>;
+  constructor(status: number, sentence: string, extra?: Record<string, unknown>) {
     super(sentence);
     this.status = status;
     this.sentence = sentence;
+    this.extra = extra;
   }
 }
 

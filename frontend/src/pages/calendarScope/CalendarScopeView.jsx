@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
+import { useCalendarRead } from '../calendarReadController.js';
 import {
   AGENT_RUNS_LINE, NOT_RECORDED, SCOPES, TYPES, apiScope, byDay, coverageLine, dayCounts, emptyLine, filterRows, notYet, NO_PAGE, optionsOf, BUILD, scopedRow, viewingChip, withScope,
 } from './calendarScopeModel';
@@ -70,22 +71,17 @@ function ItemDetail({ row, onClose }) {
 
 /** CA2 / CA3 — the scoped read, its filters, the agenda or the month counts, and its states. */
 export default function CalendarScopeView({ scope, user, window: win, range, label, pathname, search, scopes, phone = false }) {
-  const [state, setState] = useState({ status: 'loading' });
   const [filters, setFilters] = useState({ type: '', project: '', person: '', company: '', studio: '' });
   const [openId, setOpenId] = useState(null);
-  const load = useCallback(async () => {
-    setState({ status: 'loading' });
-    try {
-      const r = await api.listCalendarEvents({ from: win.from.toISOString(), to: win.to.toISOString(), scope: apiScope(scope) });
-      setState({ status: 'ready', items: Array.isArray(r?.items) ? r.items : [], coverage: r?.coverage ?? null });
-    } catch (e) {
-      reportError('calendar-scope:read', e);
-      setState({ status: 'unreadable', message: e?.message || '' });
-    }
+  const request = useCallback(async () => {
+    try { return await api.listCalendarEvents({ from: win.from.toISOString(), to: win.to.toISOString(), scope: apiScope(scope) }); }
+    catch (error) { reportError('calendar-scope:read', error); throw error; }
   }, [scope, win.from, win.to]);
-  useEffect(() => { load(); }, [load]);
+  const key = `${apiScope(scope)}:${win.from.toISOString()}:${win.to.toISOString()}`;
+  const state = useCalendarRead({ key, window: win, request });
+  const load = state.refresh;
 
-  const rows = useMemo(() => (state.status === 'ready' ? state.items.map(scopedRow) : []), [state]);
+  const rows = useMemo(() => (['ready', 'partial'].includes(state.status) ? state.items.map(scopedRow) : []), [state]);
   const shown = filterRows(rows, filters);
   const projects = [...new Set(rows.map((r) => r.project).filter(Boolean))].sort();
   const companies = optionsOf(rows, 'company');
@@ -151,7 +147,7 @@ export default function CalendarScopeView({ scope, user, window: win, range, lab
       <div className="cal-controls">
         <div>
           <span className="cal-range cal-mono">{label}</span>
-          {state.status === 'ready' && <span className="cal-meta" data-testid="cal-scope-coverage">{coverageLine(state.coverage, scope, user)}</span>}
+          {['ready', 'partial'].includes(state.status) && <span className="cal-meta" data-testid="cal-scope-coverage">{state.refreshing ? 'Refreshing… · ' : ''}{coverageLine(state.coverage, scope, user)}</span>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {scope === 'platform' && (BUILD.C1.live
@@ -175,7 +171,10 @@ export default function CalendarScopeView({ scope, user, window: win, range, lab
         </div>
       </div>
       <div className={`grid gap-4 ${open ? 'xl:grid-cols-[minmax(0,1fr)_22rem]' : ''}`}>
-        <section className="min-w-0">{body}</section>
+        <section className="min-w-0">
+          {state.error && state.status !== 'unreadable' ? <div className="cal-alert mb-3" role="alert" data-testid="cal-scope-refresh-error">Refresh could not be read. The previous calendar remains shown. <button type="button" className="cal-btn cal-btn-o cal-btn-sm" onClick={load}>Try again</button></div> : null}
+          {body}
+        </section>
         {open ? <ItemDetail row={open} onClose={() => setOpenId(null)} /> : null}
       </div>
       <p className={`${MUTED} mt-3`}>{AGENT_RUNS_LINE}</p>

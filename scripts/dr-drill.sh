@@ -82,6 +82,38 @@ FAIL_REASON=
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() { echo "[dr-drill] $*"; }
+
+# D5317: independent objects preserve overlapping runs. Invert the epoch so
+# the bucket's ascending key order starts with the newest run.
+write_history() {
+  local marker="$1" prefix="drill-d1-history/" key listed expired
+  key=$(printf '%s%012d-%s-%s.json' "$prefix" "$((999999999999 - STARTED_EPOCH))" "$$" "$(basename "$marker")")
+  if ! wrangler r2 object put "${BUCKET}/${key}" --file "$marker" --content-type application/json --remote; then
+    log "WARN: could not record drill history"
+    return
+  fi
+  if [[ ! "${CLOUDFLARE_ACCOUNT_ID:-}" =~ ^[a-fA-F0-9]{32}$ || ! "$BUCKET" =~ ^[a-z0-9-]{3,64}$ || -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+    log "WARN: drill history retention could not be checked"
+    return
+  fi
+  if ! listed=$(printf 'Authorization: Bearer %s\n' "$CLOUDFLARE_API_TOKEN" |
+      curl --fail --silent --max-time 15 --header @- --get \
+        --data-urlencode "prefix=$prefix" --data-urlencode 'per_page=1000' \
+        "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${BUCKET}/objects") ||
+      ! expired=$(jq -er '
+        if .success == true and (.result | type) == "array"
+        then [.result[].key | strings | select(test("^drill-d1-history/[0-9]{12}-[0-9]+-drill-marker\\.[A-Za-z0-9]+\\.json$"))] | sort | .[12:] | join("\n")
+        else error("invalid R2 object list") end' <<< "$listed" 2>/dev/null); then
+    log "WARN: drill history retention could not be checked"
+    return
+  fi
+  while IFS= read -r key; do
+    [[ -n "$key" ]] || continue
+    wrangler r2 object delete "${BUCKET}/${key}" --remote ||
+      log "WARN: could not prune an older drill history record"
+  done <<< "$expired"
+}
+
 page() {
   local msg="$1"
   log "PAGE: $msg"
@@ -98,7 +130,7 @@ page() {
 write_marker() {
   local rc="$1" outcome="failed" marker
   [[ "$rc" -eq 0 ]] && outcome="passed"
-  marker="$(mktemp)"
+  marker="$(mktemp "${TMPDIR:-/tmp}/drill-marker.XXXXXXXX")" || return
   if jq -n \
       --arg at "${STARTED_AT}" \
       --arg outcome "${outcome}" \
@@ -132,6 +164,7 @@ write_marker() {
         rto_met: ($duration_s <= $rto_target_s)}' > "${marker}"; then
     wrangler r2 object put "${BUCKET}/drill-d1.json" --file "${marker}" --content-type application/json --remote \
       || log "WARN: could not write the drill marker (r2://${BUCKET}/drill-d1.json)"
+    write_history "$marker"
   else
     log "WARN: could not build the drill marker"
   fi
