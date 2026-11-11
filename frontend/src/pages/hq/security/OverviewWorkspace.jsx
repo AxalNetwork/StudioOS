@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import StatusBadge from './StatusBadge.jsx';
 import SourceAvailability from './SourceAvailability.jsx';
+import MfaPolicyControl from './MfaPolicyControl.jsx';
 import { tabHref } from './securityTabs.js';
 
 /**
@@ -33,7 +34,7 @@ function FindingAction({ finding, onRetry }) {
   return <Link to={tabHref(a.tab)} className={cls}>{a.label}</Link>;
 }
 
-export function ActionRequiredList({ model, onRetry }) {
+export function ActionRequiredList({ model, onRetry, mfaSlot = null }) {
   const { findings, loading, incomplete } = model;
   const open = findings.filter((f) => f.state !== 'unavailable').length;
   const sub = incomplete
@@ -61,6 +62,8 @@ export function ActionRequiredList({ model, onRetry }) {
               <div className="min-w-0 flex-1">
                 <div className="text-[13.5px] font-bold text-axal-ink dark:text-white">{f.title}</div>
                 <p className="mt-0.5 text-[12.5px] leading-relaxed text-axal-muted">{f.detail}</p>
+                {/* D5249 — the finding's secondary control: the policy's own state, from the server. */}
+                {f.id === 'mfa-gap' && mfaSlot}
               </div>
               <span className="shrink-0 font-mono text-[11px] text-axal-faint sm:w-40 sm:text-right">
                 {f.when}<br />{f.where}
@@ -184,11 +187,21 @@ export function RecentEvents({ recent, onRetry, filterLabel }) {
   );
 }
 
-export default function OverviewWorkspace({ model, onRetry, filterLabel, sourceNotes }) {
+export default function OverviewWorkspace({ model, onRetry, filterLabel, sourceNotes, mfaPolicy = null, mfaPolicyProps = null }) {
+  // D5249 — "Require MFA for admins" sits on the MFA finding when there is one;
+  // with no open gap it keeps its own small section, so the setting stays reachable.
+  const mfaSlot = mfaPolicyProps?.isSuper ? <MfaPolicyControl policy={mfaPolicy} {...mfaPolicyProps} /> : null;
+  const gapOpen = model.findings.some((f) => f.id === 'mfa-gap');
   return (
     <div className="space-y-5" data-testid="security-overview">
-      <ActionRequiredList model={model} onRetry={onRetry} />
+      <ActionRequiredList model={model} onRetry={onRetry} mfaSlot={mfaSlot} />
       <CheckedAndClear items={model.clear} />
+      {mfaSlot && !gapOpen && (
+        <section aria-labelledby="security-mfa-policy-h" className="rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid="security-mfa-policy-section">
+          <h2 id="security-mfa-policy-h" className="text-[14px] font-extrabold tracking-tight">Administrator MFA</h2>
+          {mfaSlot}
+        </section>
+      )}
       <StatusByArea areas={model.areas} />
       <RecentEvents recent={model.recent} onRetry={onRetry.feed} filterLabel={filterLabel} />
       <section aria-labelledby="security-sources-h" className="rounded-xl border border-axal-hairline bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
