@@ -24,6 +24,7 @@ import { BLOCK_KINDS, modelProblems, sanitizeBlocks, sanitizeModel } from '../sr
 import { EXPORT_GEOMETRY, TONE_COLOURS, atOf, decorPlan } from '../src/services/decks/arrange.ts';
 import { fitProblems } from '../src/services/decks/designSystem.ts';
 import { writeEditableDeck } from '../src/services/decks/pptxEditable.ts';
+import { iconGeometryFromDisk } from './_icon_geometry.ts';
 import * as front from '../../frontend/src/pages/raise/pitch/arrangeModel.js';
 
 const url = (u: string | null | undefined) => (typeof u === 'string' && u.startsWith('https://') ? u : null);
@@ -152,7 +153,8 @@ test('the PDF and the PowerPoint draw the same decor: the print page\'s plan is 
   const icon = { ...card, decor: [{ id: 'd7', kind: 'icon', ref: 'rocket' }] };
   assert.equal(decorPlan(icon)[0].geometry, null);
   assert.equal(front.decorPlan(icon)[0].geometry, null);
-  const iconXml = unzip((await writeEditableDeck({ slides: [icon], renderable: [{ title: 'x', fields: [] }], brand: BRAND, notes: false, images: new Map() })).bytes).get('ppt/slides/slide1.xml')!;
+  // D4574 H3 (#4574): the icon's nodes are a static asset now, so the writer is given them.
+  const iconXml = unzip((await writeEditableDeck({ slides: [icon], renderable: [{ title: 'x', fields: [] }], brand: BRAND, notes: false, images: new Map(), icons: iconGeometryFromDisk() })).bytes).get('ppt/slides/slide1.xml')!;
   assert.match(iconXml, /name="Decor d7"[\s\S]*asvg:svgBlip/);
   assert.doesNotMatch(iconXml, /<p:sp>\s*<p:nvSpPr><p:cNvPr id="\d+" name="Decor d7"/);
 });

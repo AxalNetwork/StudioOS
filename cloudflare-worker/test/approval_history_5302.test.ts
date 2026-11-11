@@ -116,7 +116,7 @@ test('a lane whose store keeps a decision column is recorded on Decided', () => 
   }
   assert.deepEqual(offenders, [], 'these lanes record decisions but Decided says they do not');
   // The three lanes that do not record keep no such column: the rule above is what keeps them honest.
-  assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key), ['jobs', 'best_fit', 'ai_runs']);
+  assert.deepEqual(DECISION_LANES.filter((l) => !l.recorded).map((l) => l.key), ['jobs', 'ai_runs']);
 });
 
 test('the inbox, the Lanes model and Decided name the same lanes and agree each is decidable', async () => {

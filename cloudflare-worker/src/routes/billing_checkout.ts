@@ -43,7 +43,7 @@ import { getCatalog } from '../services/catalog';
 import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
 import { isTokenPackPrice } from '../services/aiCredits';
 import { computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
-import { canRedeemPromo, commitPromoReservation, releasePromoReservation, reservePromo } from '../services/promoRedemption';
+import { canRedeemPromo, commitPromoReservation, livePromoReservationPromoId, releasePromoReservation, reservePromo } from '../services/promoRedemption';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice } from '../services/moneyRails';
@@ -134,6 +134,14 @@ async function influencerOfferFor(env: Env, userId: number, product: { id: strin
     return (await autoOffer(env, userId, { product, interval, unitAmount: unit, currency })).applied;
   } catch {
     console.warn('[checkout] influencer offer not read');
+    return null;
+  }
+}
+async function heldInfluencerOfferFor(env: Env, promoId: string, unit: number) {
+  try {
+    const { heldAutoOffer } = await import('../services/influencerOffers');
+    return await heldAutoOffer(env, promoId, unit);
+  } catch {
     return null;
   }
 }
@@ -365,6 +373,7 @@ checkout.post('/checkout/start', async (c) => {
   }
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
   const startKey = (promoFragment: string) => `checkout:${user.id}:${price.id}:${promoFragment}:${pm ? 'saved' : 'new'}:${nonce}`;
+  const autoKey = startKey('auto');
   let promo: PromoRow | undefined;
   if (promoCode) {
     // D4855: the member and interval the quote used, so the start decides what the quote showed.
@@ -373,7 +382,10 @@ checkout.post('/checkout/start', async (c) => {
     promo = v.promo;
   }
   // D4293: the same offer the quote showed, read again now (its budget may have moved).
-  const auto = promoCode ? null : await influencerOfferFor(c.env, user.id, product, interval, Number(price.unit_amount), price.currency);
+  const heldAutoPromo = promoCode ? null : await livePromoReservationPromoId(c.env, autoKey, user.id);
+  const auto = promoCode ? null : heldAutoPromo
+    ? await heldInfluencerOfferFor(c.env, heldAutoPromo, Number(price.unit_amount))
+    : await influencerOfferFor(c.env, user.id, product, interval, Number(price.unit_amount), price.currency);
   if (auto) promo = auto.promo;
   const params: Record<string, string> = {
     customer,
@@ -394,7 +406,7 @@ checkout.post('/checkout/start', async (c) => {
   if (pm) params.default_payment_method = pm;
   if (promo) { params['discounts[0][promotion_code]'] = promo.id; params['metadata[promo_code_id]'] = promo.id; }
   if (auto) params['metadata[influencer_offer_uid]'] = auto.offer.uid;
-  const idempotencyKey = startKey(promoPart(promoCode || (auto ? auto.promo.code : '')));
+  const idempotencyKey = promoCode ? startKey(promoPart(promoCode)) : autoKey;
   // D4855: the first invoice's discount leaves the licence's ceiling in one
   // conditional write, before Stripe is asked, and goes back if Stripe makes no
   // subscription. A typed code that no longer fits is refused; an automatic

@@ -480,22 +480,35 @@ networkfx.get('/effects', async (c) => {
   const user = await requireAuth(c);
   await ensureSchema(c.env);
   const sql = getSQL(c.env);
-  const compoundEarnings = await sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`;
-  const directEarnings = await sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type NOT LIKE '%_compound'`;
-  const chainCounts = await sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`;
-  const activeSyndicates = await sql`SELECT COUNT(*) as n FROM syndicates WHERE status = 'open'`;
-  const mySyndicates = await sql`SELECT COUNT(*) as n FROM syndicate_members WHERE user_id = ${user.id}`;
-  const marketplaceCount = await sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`;
+  const sourceStatus = new Map<string, 'ready' | 'unreadable'>();
+  const read = async <T,>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { const value = await fn(); sourceStatus.set(label, 'ready'); return value; }
+    catch (e: any) { console.error('[networkfx] effects', label, String(e?.message || e)); sourceStatus.set(label, 'unreadable'); return fallback; }
+  };
+  const [compoundEarnings, directEarnings, chainCounts, activeSyndicates, mySyndicates, marketplaceCount] = await Promise.all([
+    read('compoundEarnings', () => sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type LIKE '%_compound'`, [] as any[]),
+    read('directEarnings', () => sql`SELECT COALESCE(SUM(amount_cents), 0) as c FROM commissions WHERE user_id = ${user.id} AND source_type NOT LIKE '%_compound'`, [] as any[]),
+    read('chainCounts', () => sql`SELECT level, COUNT(*) as n FROM referral_chains WHERE root_referrer_id = ${user.id} GROUP BY level`, [] as any[]),
+    read('activeSyndicates', () => sql`SELECT COUNT(*) as n FROM syndicates WHERE status = 'open'`, [] as any[]),
+    read('mySyndicates', () => sql`SELECT COUNT(*) as n FROM syndicate_members WHERE user_id = ${user.id}`, [] as any[]),
+    read('marketplaceCount', () => sql`SELECT COUNT(*) as n FROM marketplace_profiles WHERE availability = 'available'`, [] as any[]),
+  ]);
   await sql.end();
   const chains: Record<string, number> = { L1: 0, L2: 0, L3: 0 };
   for (const r of chainCounts as any[]) { chains[`L${r.level}`] = r.n; }
+  const figure = (label: string, raw: unknown): number | null => {
+    if (sourceStatus.get(label) !== 'ready') return null;
+    const parsed = Number.parseInt(String(raw ?? 0), 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
   return c.json({
-    compound_earnings_cents: parseInt(compoundEarnings[0]?.c) || 0,
-    direct_earnings_cents: parseInt(directEarnings[0]?.c) || 0,
-    chain_counts: chains,
-    active_syndicates: parseInt(activeSyndicates[0]?.n) || 0,
-    my_syndicates: parseInt(mySyndicates[0]?.n) || 0,
-    marketplace_available: parseInt(marketplaceCount[0]?.n) || 0,
+    compound_earnings_cents: figure('compoundEarnings', compoundEarnings[0]?.c),
+    direct_earnings_cents: figure('directEarnings', directEarnings[0]?.c),
+    chain_counts: sourceStatus.get('chainCounts') === 'ready' ? chains : null,
+    active_syndicates: figure('activeSyndicates', activeSyndicates[0]?.n),
+    my_syndicates: figure('mySyndicates', mySyndicates[0]?.n),
+    marketplace_available: figure('marketplaceCount', marketplaceCount[0]?.n),
+    source_status: Object.fromEntries(sourceStatus),
   });
 });
 

@@ -95,13 +95,13 @@ const envFor = (db: DatabaseSync) => ({ DB: d1Over(db), JWT_SECRET, ENVIRONMENT:
 async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
   return callAs(db, FOUNDER, method, path, body);
 }
-async function callAs(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown, project = P) {
+async function callAs(db: DatabaseSync, userId: number, method: string, path: string, body?: unknown, project = P, headers: Record<string, string> = {}) {
   const token = await new SignJWT({ user_id: userId, role: 'founder' })
     .setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const multipart = body instanceof FormData;
   // A thrown Response is the response, as the Worker's entry point answers it (util/thrownResponse.ts).
   const r = await withThrownResponses(() => app.request(`/api/cycles/build${path}${path.includes('?') ? '&' : '?'}project=${project}`, {
-    method, headers: { Authorization: `Bearer ${token}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
+    method, headers: { Authorization: `Bearer ${token}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }), ...headers },
     ...(body === undefined ? {} : { body: multipart ? body : JSON.stringify(body) }),
   }, envFor(db)));
   return { status: r.status, body: await r.json().catch(() => null) as any };
@@ -755,6 +755,46 @@ test('test 9: Add filing stores kind, jurisdiction and founder; an 83(b) is titl
   assert.equal((await call(db, 'PATCH', '/formation-steps/9', { kind: 'franchise_tax', jurisdiction: 'DE' })).status, 200);
   assert.deepEqual({ ...db.prepare('SELECT title, kind, jurisdiction, state FROM formation_steps WHERE id = 9').get() },
     { title: '83(b) election · Ana Wren', kind: 'franchise_tax', jurisdiction: 'DE', state: 'doing' }, 'the Filing cell stays the stored title');
+  db.close();
+});
+
+test('D5306: a lost filing-create answer replays one filing and activity; the key is scoped to member and venture', async () => {
+  const db = seeded();
+  const key = 'filing-create-5306-a';
+  const headers = { 'Idempotency-Key': key };
+  const body = { kind: 'annual_report', jurisdiction: 'DE', due_date: '2027-03-01', state: 'upcoming' };
+
+  const first = await callAs(db, FOUNDER, 'POST', '/formation-steps', body, P, headers);
+  assert.equal(first.status, 201);
+  // The caller loses `first`; its retry carries the same open form's key.
+  const retry = await callAs(db, FOUNDER, 'POST', '/formation-steps', body, P, headers);
+  assert.equal(retry.status, 200);
+  assert.deepEqual(retry.body, { id: first.body.id, replayed: true });
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM formation_steps WHERE project_id = ${P} AND idempotency_key = '${key}'`), 1);
+  assert.equal(count(db, `SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'build_formation_step_created' AND entity_id = 'step-${first.body.id}'`), 1);
+
+  const different = await callAs(db, FOUNDER, 'POST', '/formation-steps', body, P, { 'Idempotency-Key': 'filing-create-5306-b' });
+  assert.equal(different.status, 201);
+  assert.notEqual(different.body.id, first.body.id, 'a different key creates a different filing');
+
+  db.exec(`UPDATE users SET founder_id = 1001 WHERE id = ${TEAMMATE}`);
+  const teammate = await callAs(db, TEAMMATE, 'POST', '/formation-steps', body, P, headers);
+  assert.equal(teammate.status, 201);
+  assert.notEqual(teammate.body.id, first.body.id, 'the same key from another member is not honoured');
+
+  const otherVenture = await callAs(db, OUTSIDER, 'POST', '/formation-steps', body, P_OTHER, headers);
+  assert.equal(otherVenture.status, 201);
+  assert.notEqual(otherVenture.body.id, first.body.id, 'the same key on another venture is not honoured');
+
+  const raced = seeded();
+  const pair = await Promise.all([
+    callAs(raced, FOUNDER, 'POST', '/formation-steps', body, P, { 'Idempotency-Key': 'filing-concurrent-5306' }),
+    callAs(raced, FOUNDER, 'POST', '/formation-steps', body, P, { 'Idempotency-Key': 'filing-concurrent-5306' }),
+  ]);
+  assert.equal(new Set(pair.map((r) => r.body.id)).size, 1, 'concurrent presses return the same filing');
+  assert.equal(count(raced, "SELECT COUNT(*) AS n FROM formation_steps WHERE idempotency_key = 'filing-concurrent-5306'"), 1);
+  assert.equal(count(raced, "SELECT COUNT(*) AS n FROM activity_logs WHERE action = 'build_formation_step_created'"), 1);
+  raced.close();
   db.close();
 });
 
