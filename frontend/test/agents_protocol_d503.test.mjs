@@ -10,7 +10,7 @@
  *     label it never names is one no agent knows to set, a STATUS field it
  *     drops is one Session 1 stops receiving, and its house rules are the
  *     only copy an agent that never loads CLAUDE.md will ever see.
- *   .github/pull_request_template.md — the eight sections every agent's PR
+ *   .github/pull_request_template.md — the required sections every agent's PR
  *     fills in.
  *   .github/workflows/labels-sync.yml — writes labels with the job's token. It
  *     needs `issues: write` to work at all, so it must run no third-party code
@@ -64,6 +64,7 @@ const PR_SECTIONS = [
   'Risks',
   'Dependencies',
   'Agent',
+  'Help impact',
   'Review requested',
 ];
 
@@ -287,7 +288,7 @@ test('CLAUDE.md sends every Claude session to AGENTS.md before it takes an issue
 
 // ---------- .github/pull_request_template.md ----------
 
-test('the PR template has the eight sections, in order', () => {
+test('the PR template has the required sections, in order', () => {
   const headings = at(PR_TEMPLATE).split('\n')
     .filter((l) => l.startsWith('## '))
     .map((l) => l.slice(3).trim());
