@@ -22,7 +22,9 @@ reply against its schema, not only that the route exists.
 | `deckGrid.schema.json` | `GET /api/decks/:id/grid` (D1499, #3749): the geometry, the 17 structures and each card's areas with their boxes. |
 | `deckImageTools.schema.json` | `GET /api/decks/images/tools` (D1534, #3778 phase 2): the AI image tools (background removal through AI Gateway, Upscale with no model), each with whether it can run, its model, its per-image price and why not. |
 | `deckImageVary.schema.json` | `POST /api/decks/images/:uid/edit/quote` (D1544, #3784): an image edit's model, its one hold for the edit and its checks, the references it sends, or why it cannot run. |
+| `deckInstruct.schema.json` | `POST /api/decks/:id/areas/instruct/quote` and `POST /api/decks/:id/areas/instruct` (D1521, #3773): an instruction on at most six areas of one card, quoted as #3764's areas quote, or its one run: the batch, replay, the selection, what was asked and one proposal per area. |
 | `deckInvestorLinks.schema.json` | `GET /api/decks/:id/investor-links` (D1565, #3812): the deck, its version and its per-investor links. |
+| `deckJudge.schema.json` | `POST /api/decks/areas/:uid/judge/quote` and `POST /api/decks/areas/:uid/judge` (D1525, #3783): the judge's input-only hold and family, or its blind ranking of an area's variants (rank, probability, "Ranked n of m"), the score AUTO-5 reads and the panel's agreement. |
 | `deckMarkSeen.schema.json` | `POST /api/decks/areas/batches/:uid/seen` (D1600, #3879): `{ ok: true }` when the return banner's Review is opened. |
 | `deckRehearsals.schema.json` | `GET /api/decks/:id/rehearsals` (D1580 F1, #3827): the founder's own rehearsals of the version, newest first, each a summary. |
 | `deckMyTemplates.schema.json` | `GET /api/decks/templates/mine` (D1535, #3782): the caller's own templates. |
@@ -33,11 +35,13 @@ reply against its schema, not only that the route exists.
 | `deckReplaceImages.schema.json` | `POST /api/decks/:id/images/replace-all/quote` (D1561, #3808): every image area priced as one quote, the hold with one redraw each, the areas left out and why, or why it cannot run. |
 | `deckSource.schema.json` | `PUT /api/data-room/:projectUid/files/:uid/deck-source` (#3881): the public opt-in and extraction state, without internal job or billing fields. |
 | `deckSaveCard.schema.json` | `PATCH /api/decks/:id/cards/:uid` (D1501, #3751): the card's working copy with its new revision. |
+| `deckSaveDoc.schema.json` | `PUT /api/decks/:id/draft-doc` (D4596, #4596): the working copy's deck-level state with its new revision. |
 | `deckSaveAsTemplate.schema.json` | `POST /api/decks/:id/save-as-template` (D1535, #3782): the template a deck was saved as. |
 | `deckSlideAnalytics.schema.json` | `GET /api/decks/:id/investor-links/:shareId/analytics` (D1573, #3820): one investor link's views, its Time per slide consent, seconds per card by uid, the most-read card and the visit timeline; missing is null, never 0. |
 | `deckStagePlan.schema.json` | `GET /api/decks/:id/stage-plan` (D1522, #3774): the keys the route adds to `stagePlan()`'s plan. |
 | `deckUnseenBatches.schema.json` | `GET /api/decks/:id/batches?state=done&unseen=1` (D1600, #3879): the finished runs nobody opened, newest first, at most five, each with its count of cards waiting. |
 | `deckUsage.schema.json` | `GET /api/decks/:id/usage` (D1524, #3776): the deck's estimate, its spend from the ledger and the per-run unit prices; unread is `{ available: false }`, never 0. |
+| `deckDocumentImport.schema.json` | `POST /api/decks/imports` (D1563, #3810): what Start from › Import a document made — an outline from a paste, DOCX or PDF, or a .pptx deck's cards — with the venture's proposal it stored and the import's counts. |
 | `deckTemplateImport.schema.json` | `POST /api/decks/templates/import` (D1572, #3819): pd30's mapping report for a .pptx template: colours, fonts with their OFL stand-in, each layout on whole cells or with its reason, and the counts. |
 | `deckTemplates.schema.json` | `GET /api/decks/templates` (D1535, #3782): HQ's Gallery templates, filtered, with New deck's seven audiences. |
 | `deckVentureElements.schema.json` | `GET /api/decks/:id/venture-elements` and `/venture-elements/:element` (D1543, #3781): every venture-record element placed or refused by its gate, or one placed element, with its blocks and bindings. |
@@ -46,7 +50,9 @@ reply against its schema, not only that the route exists.
 | `index.ts` | `CONTRACTS`: each adapter method with a route, its issue, its route and its schema file. The tests read the schemas; the Worker never loads one. |
 | `validate.ts` | `contractErrors`, the subset of JSON Schema the contracts use. A keyword it does not check is an error, never skipped. |
 | `deckModelPresets.schema.json` | `GET /api/decks/:id/model-presets` (D1549, #3796): the preset in force, the stored one, and per element group each preset's model, the resolved model and HQ's lock. |
+| `deckNarrativeOutline.schema.json` | `POST /api/decks/narrative/outline` and `POST /api/decks/narrative/build` (D1516, #3768): the outline from the narrative (its version, the stage's cards with their grid plan, the cards left out, the theme and template picked, the `deck_build` quote), or the build (the version, not current, bound to its narrative version; the one run, its hold and its proposals). |
 | `deckOrgLocks.schema.json` | The same reply's `locks` key (D1549; the adapter row is #3786's): each element group HQ locked, with "Set by Axal VC HQ". |
+| `deckDiagramCheck.schema.json` | `POST /api/decks/:id/diagrams/check` (D1542, #3780): an edited diagram as it would be saved, whether it fits its area, each fit problem, the numbers its labels name and the steps the area holds. |
 
 ## Rule for adding here
 

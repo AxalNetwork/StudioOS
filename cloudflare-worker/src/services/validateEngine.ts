@@ -163,6 +163,12 @@ export async function digestSession(env: Env, opts: {
     throw err;
   }
 
+  if (session.outputs != null && !force && opts.trigger !== 'manual') {
+    const { enqueueOutputs } = await import('./callOutputs');
+    await enqueueOutputs(env, session.id);
+    return { ok: true, status: 'unchanged' };
+  }
+
   const blocked = await sessionDigestConsentBlocks(env, session);
   if (blocked) {
     // A withdrawal's own sentence stays: it says more than the consent rule does.

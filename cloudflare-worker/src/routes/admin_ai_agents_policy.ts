@@ -18,7 +18,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import type { RouteMount } from '../util/routeRegistry';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { aiAdminAuditStatement } from '../services/agents/adminAudit';
 import {
@@ -55,7 +55,7 @@ r.get('/', async (c) => {
 });
 
 r.put('/models', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   const m = areaModelsOf(b.areas); if (!m.ok) return say(c, m.problem);
@@ -67,7 +67,7 @@ r.put('/models', async (c) => {
 });
 
 r.post('/locks', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   if (typeof b.model !== 'string' || !modelById(b.model)) return say(c, { code: 'unknown_model', message: 'Name a model from the catalogue.' });
@@ -80,7 +80,7 @@ r.post('/locks', async (c) => {
 });
 
 r.delete('/locks/:model', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const model = decodeURIComponent(c.req.param('model'));
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
@@ -94,7 +94,7 @@ r.delete('/locks/:model', async (c) => {
 });
 
 r.put('/caps', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   const p = await policyOr(c); if (p instanceof Response) return p;
@@ -110,7 +110,7 @@ r.put('/caps', async (c) => {
 });
 
 r.put('/tools', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   const t = readToolsOf(b.tools); if (!t.ok) return say(c, t.problem);
@@ -122,7 +122,7 @@ r.put('/tools', async (c) => {
 });
 
 r.post('/pause', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   if (b.confirm !== PAUSE_WORD) return say(c, { code: 'confirm_required', message: `Type ${PAUSE_WORD} to pause every AI agent on the platform.` });
@@ -136,14 +136,16 @@ r.post('/pause', async (c) => {
 });
 
 r.post('/resume', async (c) => {
-  const admin = await requireSuperAdmin(c);
+  const admin = await requireSuperAdminWriteBar(c);
   const b = await body(c);
   const why = reasonProblem(b.reason); if (why) return say(c, why);
   const p = await policyOr(c); if (p instanceof Response) return p;
   if (!p.paused.on) return say(c, { code: 'not_paused', message: 'AI agents are not paused.' }, 409);
   await write(c, Number(admin.id), 'policy.resume', 'platform', { paused: true, since: p.paused.since, reason: p.paused.reason }, { paused: false }, b.reason, [
-    c.env.DB.prepare(`UPDATE ai_agent_policy SET paused = 0, paused_at = NULL, paused_by = NULL, paused_reason = NULL, updated_by = ?, updated_at = datetime('now') WHERE id = 1`)
-      .bind(Number(admin.id)),
+    // D4703 (#4703): only the pause this page read. A resume from an older tab
+    // cannot clear a pause set after it (the switch release's rule, part 1).
+    c.env.DB.prepare(`UPDATE ai_agent_policy SET paused = 0, paused_at = NULL, paused_by = NULL, paused_reason = NULL, updated_by = ?, updated_at = datetime('now') WHERE id = 1 AND paused = 1 AND paused_at = ?`)
+      .bind(Number(admin.id), p.paused.since),
   ]);
   return c.json({ policy: await readPolicy(c.env) });
 });

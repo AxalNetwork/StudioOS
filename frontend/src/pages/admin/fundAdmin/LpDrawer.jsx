@@ -59,7 +59,7 @@ export function LpDrawer({ apis, access, lpId, onClose, onChanged }) {
               ))}
             </nav>
             <div role="tabpanel" data-testid={`lp-panel-${tab}`}>
-              {tab === 'summary' && <Summary lp={lp} />}
+              {tab === 'summary' && <Summary lp={lp} access={access} onReceipt={() => setTab('calls')} />}
               {tab === 'calls' && <Calls apis={apis} access={access} lp={lp} onChanged={reload} />}
               {tab === 'distributions' && <Distributions apis={apis} lp={lp} />}
               {tab === 'notices' && <Notices apis={apis} lp={lp} />}
@@ -88,8 +88,19 @@ function Money({ lp, k }) {
   return c.reason ? <Unrecorded reason={c.reason}>{`${c.text}: ${c.reason}`}</Unrecorded> : c.text;
 }
 
-function Summary({ lp }) {
+function Summary({ lp, access, onReceipt }) {
+  // D4812 part 7 (FA-09 B): the record says what is owed and leads to Record receipt; on a phone that is a 48px button.
+  const owed = Number.isSafeInteger(Number(lp.outstanding_cents)) && lp.outstanding_cents !== null ? Number(lp.outstanding_cents) : null;
   return (
+    <>
+    {owed != null && owed > 0 && (
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" data-testid="lp-summary-owed">
+        <Pill tone="warn">{`${money(owed)} outstanding`}</Pill>
+        <FundActControl access={access} act="capital_call.receipt" testId="lp-summary-receipt-refused" className="text-[12px] text-axal-muted dark:text-gray-400">
+          <button type="button" className={`${BTN.primary} max-sm:min-h-[48px] max-sm:w-full`} onClick={onReceipt} data-testid="lp-summary-receipt">Record receipt…</button>
+        </FundActControl>
+      </div>
+    )}
     <Panel label={`${lp.name || lp.email || `LP ${lp.limited_partner_id}`} · ${lp.fund_name || NOT_RECORDED}`} testId="lp-summary">
       <Fact k="Commitment" testId="lp-summary-commitment"><Money lp={lp} k="commitment_cents" /></Fact>
       <Fact k="Called" testId="lp-summary-called"><Money lp={lp} k="called_cents" /></Fact>
@@ -100,6 +111,7 @@ function Summary({ lp }) {
       <Fact k="Identity" testId="lp-summary-identity">{lp.kyc_status ? identityText(lp.kyc_status) : <Unrecorded reason={lp.unavailable?.kyc_status}>{`${NOT_RECORDED}: ${lp.unavailable?.kyc_status || ''}`}</Unrecorded>}</Fact>
       <Fact k="Booklet" testId="lp-summary-booklet">{lp.booklet ? bookletText(lp.booklet) : <Unrecorded reason={lp.unavailable?.booklet}>{NOT_RECORDED}</Unrecorded>}</Fact>
     </Panel>
+    </>
   );
 }
 

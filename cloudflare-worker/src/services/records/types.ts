@@ -71,7 +71,8 @@ export type RecordContent = {
   title: string;
   sub: string;
   pills: Array<string | { text: string; tone?: string }>;
-  facts: [RecordFact, RecordFact, RecordFact, RecordFact];
+  /** #4411: interviews add a fifth fact to distinguish recording from quote permission. */
+  facts: [RecordFact, RecordFact, RecordFact, RecordFact] | [RecordFact, RecordFact, RecordFact, RecordFact, RecordFact];
   /** A store's own uid beside the record id, where its other routes address it by uid (D691: a data-room file). */
   uid?: string;
   createdBy?: number | null;
@@ -101,6 +102,11 @@ export type RecordAction = {
   form?: RecordForm;
   confirm?: string | { title: string; body?: string; cta?: string };
   multipart?: boolean;
+  /**
+   * D5375: fields the client sends back with the form's values, as read with this record. Edit split
+   * puts the Base `expected_revision` here, so a save made from a drawer opened before another save is refused.
+   */
+  body?: Record<string, unknown>;
   /** Server-only callback. It is removed from the read response. */
   execute?: (ctx: RecordContext, id: string, body: Record<string, unknown> | FormData) => Promise<ActionResult>;
   /** Any id named in an action body must be checked in its own store. */

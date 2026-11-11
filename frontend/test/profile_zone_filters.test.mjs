@@ -261,7 +261,21 @@ const PROFILES = {
     canvas: /^(Pages · Advisor (Network|Research|Expertise)\.dc\.html$|Advisor Detail · Practice)/,
     // PR5 is a pointer to D4 in the backlog canvas — see `alsoZones` in
     // `canvasFilters` for why the file is read by route and not by directory.
-    alsoZones: [['practice/earnings', 'design/canvases/backlog/Detail Layer Canvas II.dc.html']],
+    // #4834 (D4834): Earnings left `alsoZones` when Practice v2 replaced D4;
+    // its row is read from the v2 canvas below. `alsoZones` stays for the
+    // pattern and reads nothing for this profile now.
+    alsoZones: [],
+    // #4833 (D4833): a zone the Practice v2 canvas has REPLACED, read from that
+    // canvas by its section builder (`const delivery = () => … chips([…])`).
+    // Its row overrides the PR3 artboard's. `omit` names a chip the canvas
+    // draws over no stored state, with the decision that says so: `Ready`
+    // (D4874, "isn't recorded today").
+    // #4834 (D4834): Earnings' row is the canvas's period selector, a
+    // `seg` radiogroup rather than `chips([…])`, so it is read by `row: 'seg'`.
+    v2Zones: [
+      ['practice/delivery', 'design/incoming/Practice v2 Page.dc.html', 'delivery', { omit: ['Ready'], why: 'D4874' }],
+      ['practice/earnings', 'design/incoming/Practice v2 Page.dc.html', 'earnings', { row: 'seg' }],
+    ],
     pages: ['frontend/src/pages/advisor', 'frontend/src/pages/research', 'frontend/src/workspaces'],
     actions: 'frontend/src/workspaces/advisorZoneActions.js',
     // 7 → 8 → 9 → 10 → 11: `practice/opportunities` brought the bucket's first
@@ -305,20 +319,14 @@ const PROFILES = {
       // of the product: PR5 is a pointer ("drawn in full as D4"), and D4 draws
       // four. `alsoZones` above reads that one artboard by route, so the zone
       // is now specified and covered rather than deferred by an absence in the
-      // wrong file.
+      // wrong file. Since #4834 (D4834) Practice v2 draws it, and `v2Zones`
+      // reads it from there.
     ],
-    // THE ADVISOR SET CARRIES SAMPLES NOW, AND ONLY IN ONE PLACE — which is
-    // exactly what the "prove the absence" branch below exists to catch, and
-    // it did the moment D4 came into scope, naming both labels.
-    //
-    // `Q3 2026` and `Q2 2026` are the quarter the artboard happened to be
-    // drawn in. A chip reading `Q3 2026` is wrong for every reader after it,
-    // so the two are a `dynamic` group instead: the page supplies today's two
-    // quarters and the label a reader sees is their own. Partner reached the
-    // same pattern from the same canvas problem and relabelled positionally
-    // ("This quarter"); this profile names the actual quarter, which is more
-    // useful and only possible because the label is computed.
-    samples: /\b(?:Q[1-4] )?20\d\d\b/,
+    // NO SAMPLES AGAIN (#4834, D4834). D4's `Q3 2026` and `Q2 2026` were the
+    // advisor set's only sampled labels, and Practice v2 replaced D4 with
+    // `This month · Last month · Quarter · Year · Custom`, which name a kind
+    // of period rather than one. So the profile declares no pattern and the
+    // "prove the absence" branch below checks no canvas label carries a digit.
     live: (route) => route.replace(/^\//, ''),
   },
 
@@ -485,7 +493,50 @@ function canvasFilters(profile) {
     assert.ok(chips.length, `${file} draws no view chips for ${zone}`);
     out[zone] = chips;
   }
+
+  // #4833 (D4833): A ZONE THE PRACTICE V2 CANVAS REPLACED. That canvas builds
+  // each section in a script (`const delivery = () => hdr(…) + chips([['Draft',
+  // 1], ['Ready'], …], 'All')`), so its row is read from the section's own
+  // builder, and it overrides the older artboard's row for the same route.
+  // A chip the canvas draws over nothing stored is dropped only by name, and
+  // only with the decision that says so; a name that is not on the canvas
+  // fails here rather than quietly dropping nothing.
+  for (const [zone, file, section, { omit = [], why, row } = {}] of profile.v2Zones || []) {
+    const chips = row === 'seg' ? v2SectionSeg(read(file), section) : v2SectionChips(read(file), section);
+    assert.ok(chips.length, `${file} draws no chips for its ${section} section`);
+    for (const name of omit) {
+      assert.ok(chips.includes(name), `${zone}: ${name} is omitted but the canvas does not draw it`);
+      assert.match(String(why || ''), /^D\d+$/, `${zone}: omitting ${name} must cite its decision`);
+    }
+    out[zone] = chips.filter((label) => !omit.includes(label));
+  }
   return out;
+}
+
+/**
+ * #4834 (D4834): the options of the `seg` radiogroup in one Practice v2
+ * section builder (`<div class="seg" role="radiogroup" …>' + J([…].map(…`),
+ * in canvas order. Earnings draws its period selector this way.
+ */
+function v2SectionSeg(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const seg = src.indexOf('role="radiogroup"', at);
+  const next = src.indexOf('const ', at + 10);
+  if (seg < 0 || (next >= 0 && seg > next)) return [];
+  const from = src.indexOf('J([', seg);
+  const end = src.indexOf(']', from);
+  return [...src.slice(from, end).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+}
+
+/** The chip names in one Practice v2 section builder, in canvas order. */
+function v2SectionChips(src, section) {
+  const at = src.indexOf(`const ${section} = () =>`);
+  if (at < 0) return [];
+  const from = src.indexOf('chips([', at);
+  if (from < 0) return [];
+  const end = src.indexOf(']],', from);
+  return [...src.slice(from, end + 2).matchAll(/\['([^']+)'/g)].map((m) => m[1]);
 }
 
 /**
@@ -680,6 +731,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasFilters(profile);
     // D549 explicitly excludes Cited in deck until its design/store exists.
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
+    // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
+    if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {
@@ -1200,7 +1253,11 @@ test('a zone whose row can narrow hands the export the narrowed rows', () => {
 
     // The identifier must be DERIVED from the loaded list, not be it. A
     // `const visible = items.filter(…)` passes; handing over `items` does not.
-    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(`);
+    // A row set taken from a shared view-model function (`const { exportRows }
+    // = fitView(items, view)`, #4696) is derived too: the function is the one
+    // definition the table, the list and the export all read, and
+    // offers_reconcile_4696 pins what it returns.
+    const derived = new RegExp(`const ${named[1]} = [^;]*\\.(filter|sort)\\(|const \\{[^}]*\\b${named[1]}\\b[^}]*\\} = \\w+View\\(`);
     assert.match(src, derived,
       `${one.file} exports "${named[1]}", which is not narrowed — the file would not match the chips on screen`);
 

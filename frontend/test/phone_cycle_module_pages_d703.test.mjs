@@ -264,7 +264,7 @@ test('15: PhoneBar\'s back.onClick is a button that calls it, never the no-histo
   const bar = tag(ssr(h(CycleBar, { back: { label: 'Validate', to: `/validate${Q}` }, title: 'Problem discovery' })), 'cycle-bar');
   for (const cls of ['sticky', 'top-0', '-mx-[22px]', '-mt-[14px]', 'mb-[14px]']) assert.ok(bar.includes(cls), cls);
   const body = read('frontend/src/pages/cycles/CycleRoute.jsx').split('\n').find((l) => l.includes('data-testid="cycle-route-body"'));
-  assert.match(body, /className=\{CYCLE_GUTTER\}/);
+  assert.match(body, /className=\{distribution \? 'min-w-0' : CYCLE_GUTTER\}/);
   for (const cls of PHONE_GUTTER.split(' ')) assert.ok(CYCLE_GUTTER.includes(cls), `PHONE_GUTTER's ${cls} is the body's below lg`);
 });
 

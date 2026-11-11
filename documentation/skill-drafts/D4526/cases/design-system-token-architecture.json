@@ -1,0 +1,42 @@
+{
+  "skill": "design-system-token-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "tokens": {
+          "color.brand": "#5522AA",
+          "button.primary": "color.brand"
+        },
+        "dark_overrides": {},
+        "contrast_measurements": null
+      },
+      "github.repos": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "button.primary",
+      "color.brand",
+      "dark"
+    ],
+    "must_say_not_recorded": [
+      "contrast measurements"
+    ],
+    "must_not_include": [
+      "contrast verified"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why contrast measurements is missing rather than inventing it.",
+    "Do not assert: contrast verified.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "button.primary; color.brand; dark. contrast measurements: Not recorded. Human review required."
+}

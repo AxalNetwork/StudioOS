@@ -27,6 +27,8 @@ import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
 import { EDITS, FORMS, editFor, formFor } from '../src/pages/cycles/forms.js';
 import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixtures.mjs';
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { ventureRef } from '../src/pages/cycles/ventureQuery.js';
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -173,16 +175,17 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   const mod = html(h(CycleModulePage, { cycle: 'validate', slug: slugOf(MODULES.validate[0]), cards: OVERVIEWS.validate.cards, data: { card: OVERVIEWS.validate.cards[0] }, search: '?project_id=7' }));
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /searchParams\.get\('project_id'\) \|\| searchParams\.get\('project'\)/, "the read's own `?project=` links pick the venture too");
-  // 4 → 5 (D906): the Investor narrative tool's tab bar on its module page keeps it too.
-  // 5 → 4 (2026-10-24, D906 review): that tab bar now takes `tabSearch(q, …)`, the venture and the version.
-  // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
-  // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
-  // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
-  // 8 → 9 (D1173, #2455): the Use of funds tool's tab bar on its module page keeps it too.
-  // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
-  // 10 → 11 (D1466, #3714): Raise's lead row (Next steps' links) keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 11, 'the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door, the readiness door and Raise\'s lead row keep the venture');
+  // D5074: the address is parsed by the shared helper, which reads `?project=` (and a UID) as well as `?project_id=`.
+  assert.match(route, /const ref = ventureRef\(searchParams\);/, "the read's own `?project=` links pick the venture too");
+  assert.equal(ventureRef('?project=7')?.id, 7, "the read's own `?project=` links pick the venture too");
+  assert.equal(ventureRef('?project_id=7')?.id, 7);
+  // Check each consumer rather than a total changed by every new component (D4485, D4487).
+  for (const component of ['CycleHeader', 'PhoneCycleRoot', 'CycleOverview', 'RaiseLead', 'PmfChip', 'BuildPlanDoor', 'ModulePage', 'CapTableHomeNav', 'DataRoomHomeNav', 'UseOfFundsHomeNav', 'CapRelHomeNav', 'OverviewTab', 'DistributionTabs', 'NewCampaignPage', 'CampaignsTab', 'InboxNeedsYou']) {
+    const start = route.search(new RegExp(`<${component}\\b`));
+    const end = route.indexOf('search={q}', start);
+    const attributes = route.slice(start, end);
+    assert.ok(start >= 0 && end > start && !attributes.includes('search={') && !attributes.includes('/>'), `${component} receives the venture query`);
+  }
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 
@@ -270,7 +273,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
   assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
-  assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(formWrites, projectId, values\)\}/);
+  assert.match(route, /onSubmit=\{\(values, memory\) => formOpen\.submit\(formWrites, projectId, values, memory\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   // D695 (#1656): the Add, an Edit from the row's values, and an Edit from its record (Validate's).
@@ -315,7 +318,8 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /rowAction=\{!narrativeAdmin && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
-  assert.match(route, /<FormLightbox key=\{`edit-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
+  // D4630: the key names the venture too, so a venture change remounts the form.
+  assert.match(route, /<FormLightbox key=\{`edit-\$\{projectId\}-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
   // D695: the open Add is the address's and the open Edit the history entry's, so neither follows the founder to another module.
   assert.match(route, /const formOpen = adding && forms\.length && !capTableAdding \? forms\.find\(\(f\) => f\.key === searchParams\.get\('form'\)\) \|\| forms\[0\] : null;/);
@@ -483,21 +487,22 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
   // Every Build page keeps its static route, and no module slug is one of them.
   const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
-  for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.ok(buildPages.includes(page), `/build/${page} lost its route`);
+  for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.equal(buildPages.includes(page), !isRetiredRedirect(`/build/${page}`), `/build/${page}`);
   for (const m of LIVE_MODULES.build) assert.ok(!buildPages.includes(m.slug), `${m.slug} would be shadowed by a Build page`);
-  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
+  // #4579: signed out, /grow goes through the guard itself, so sign-in keeps next=/grow.
+  assert.match(app, /<Route path="\/grow" element=\{founderGrowLanding \|\| !user\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)/, "a founder's /grow is the Grow overview");
   assert.match(app, /<Route path="\/grow\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="grow" \/>\)\} \/>/, 'Grow has its module pages');
   // The seven Grow pages keep their static routes, and no module slug is one of them.
   const growPages = ['focus', 'talent', 'customers', 'partnerships', 'capital-match', 'brand', 'launch'];
-  for (const page of growPages) assert.ok(app.includes(`<Route path="/grow/${page}"`), `/grow/${page} lost its route`);
+  for (const page of growPages) assert.equal(app.includes(`<Route path="/grow/${page}"`), !isRetiredRedirect(`/grow/${page}`), `/grow/${page} lost its route`);
   for (const m of LIVE_MODULES.grow) assert.ok(!growPages.includes(m.slug), `${m.slug} would be shadowed by a Grow page`);
   // Raise's tools keep their static routes, which win over /raise/:slug.
   for (const tool of ['/raise/pitch', '/raise/data-room', '/raise/capital/model', '/raise/capital/pipeline']) {
-    assert.ok(app.includes(`<Route path="${tool}"`), `${tool} lost its route`);
+    assert.equal(app.includes(`<Route path="${tool}"`), !isRetiredRedirect(`${tool}`), `${tool} lost its route`);
   }
   // D704 (#1666): the three old zone pages redirect to their modules.
   for (const zone of ['interviews', 'pain-map', 'hypotheses']) {
-    assert.ok(app.includes(`<Route path="/validate/${zone}" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)} />`), `/validate/${zone} redirects to its module`);
+    assert.equal(app.includes(`<Route path="/validate/${zone}" element={guard(labRoles(['admin', 'founder']), <ValidateZoneRedirect zone="${zone}" />)} />`), !isRetiredRedirect(`/validate/${zone}`), `/validate/${zone} redirects to its module`);
   }
   assert.doesNotMatch(app, /FounderValidateWorkspace/, 'the old workspace is gone');
   // D693 decision 12 (#1704): /validate/verdict stays a static line, with the

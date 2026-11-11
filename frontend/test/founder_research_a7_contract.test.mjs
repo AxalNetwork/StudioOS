@@ -15,7 +15,7 @@ test('A7 owns the founder Research landing, and /signals only redirects to it', 
   // `/research` with the query kept (`?mode=landing`, `?project_id=`), and the
   // desk is mounted at `/research` alone. D670 retired the Signals feed
   // itself, so the redirect now applies to everyone and nothing keeps the feed.
-  assert.match(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
   assert.match(app, /<Route path="\/research" element=\{founderResearchLanding\s*\? guard\([^)]*\), <FounderResearchDesk \/>\)/);
   assert.match(app, /researchMode.*workspace/);
   assert.match(app, /researchHasNonProjectQuery/);

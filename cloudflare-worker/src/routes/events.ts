@@ -41,6 +41,7 @@ import {
   parseAudienceRules,
   type AudienceRules,
 } from '../services/eventAudience';
+import { validEventTopics } from '../services/eventTopics';
 import { isEventType } from '../services/eventTypes';
 import { deliverEventInvite } from '../services/eventMessaging';
 import { createEventTicketPaymentIntent } from '../services/eventTickets';
@@ -388,6 +389,7 @@ events.post('/', async (c) => {
   try { Object.assign(body, eventTimeFields(body)); }
   catch (error) { if (error instanceof EventTimeError) return refuse(c, 400, { code: error.code, message: eventTimeMessage(error.code) }); throw error; }
 
+  if (body.topics !== undefined && !validEventTopics(body.topics)) return c.json({ error: 'bad_topic' }, 400);
   const type = isEventType(body.type) ? body.type : 'meetup';
   const visibility = EVENT_VISIBILITIES.includes(body.visibility) ? body.visibility : 'private';
   const locationKind = LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : 'virtual';
@@ -403,8 +405,8 @@ events.post('/', async (c) => {
        (slug, host_user_id, project_id, type, title, summary, description, cover_url,
         starts_at, ends_at, timezone, location_kind, location_text, location_url,
         capacity, waitlist_enabled, approval_required, visibility, status,
-        audience_rules_json, price_cents, currency)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?)`,
+        audience_rules_json, price_cents, currency, topics_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)`,
   ).bind(
     slug,
     u.id,
@@ -427,6 +429,7 @@ events.post('/', async (c) => {
     audienceRules,
     body.price_cents != null ? Number(body.price_cents) : 0,
     body.currency || 'usd',
+    JSON.stringify(body.topics ?? []),
   ).run();
 
   const created = await loadEvent(c.env, Number(ins?.meta?.last_row_id));
@@ -661,6 +664,10 @@ events.patch('/:id', async (c) => {
   const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); const value = body[k] != null ? Number(body[k]) : null; binds.push(value); reviewValues.set(k, value); } };
   const bool = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ? 1 : 0); } };
 
+  if ('topics' in body) {
+    if (!validEventTopics(body.topics)) return c.json({ error: 'bad_topic' }, 400);
+    sets.push('topics_json = ?'); binds.push(JSON.stringify(body.topics));
+  }
   str('title'); str('summary'); str('description'); str('cover_url');
   str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
   if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }

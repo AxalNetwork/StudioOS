@@ -73,6 +73,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   event_cover: 'Draw an event cover',
   course_cover: 'Draw a course cover',
   mail_draft: 'Draft an email',
+  distribution_draft: 'Draft Distribution text',
   // D1420 (#3864).
   studio_layout: 'Arrange your Studio',
   // D1583 (#3830).

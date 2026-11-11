@@ -12,6 +12,8 @@ import type { Browser, Page } from 'playwright';
 import type { MeetPage } from '../src/adapters/meet.ts';
 
 const FIXTURE = readFileSync(new URL('./fixtures/meet.html', import.meta.url), 'utf8');
+// D3678: Google's sign-in page, constructed (fixtures/google_signin.html).
+const SIGNIN = readFileSync(new URL('./fixtures/google_signin.html', import.meta.url), 'utf8');
 
 async function findChromium(): Promise<{ launch: () => Promise<Browser> } | string> {
   let pw: typeof import('playwright');
@@ -33,6 +35,28 @@ export async function withMeetPage<T>(fn: (page: MeetPage, raw: Page) => Promise
     const page = await browser.newPage();
     await page.route('**/*', async (route) => {
       if (route.request().url().startsWith('https://meet.google.com/')) await route.fulfill({ status: 200, contentType: 'text/html', body: FIXTURE });
+      else await route.abort();
+    });
+    return await fn(page as unknown as MeetPage, page);
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
+ * D3678: a fresh page where accounts.google.com answers with the constructed
+ * sign-in fixture in `scenario`, and meet.google.com with the Meet fixture.
+ * Every other request is aborted.
+ */
+export async function withSignInPages<T>(scenario: string, fn: (page: MeetPage, raw: Page) => Promise<T>): Promise<T> {
+  if (typeof found === 'string') throw new Error(found);
+  const browser = await found.launch();
+  try {
+    const page = await browser.newPage();
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.startsWith('https://accounts.google.com/')) await route.fulfill({ status: 200, contentType: 'text/html', body: SIGNIN.replaceAll('__SCENARIO__', scenario) });
+      else if (url.startsWith('https://meet.google.com/')) await route.fulfill({ status: 200, contentType: 'text/html', body: FIXTURE });
       else await route.abort();
     });
     return await fn(page as unknown as MeetPage, page);

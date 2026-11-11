@@ -42,7 +42,8 @@ import { paidInvestorTier } from '../services/investorTiers';
 import { getCatalog } from '../services/catalog';
 import { keyReadiness, planReadiness, CHECKOUT_NOT_READY_MESSAGE } from '../services/stripeReadiness';
 import { isTokenPackPrice } from '../services/aiCredits';
-import { validatePromoForProduct, computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
+import { computeDiscount, normalizeCode, type PromoRow } from '../services/promos';
+import { canRedeemPromo, commitPromoReservation, livePromoReservationPromoId, releasePromoReservation, reservePromo } from '../services/promoRedemption';
 import { automaticTaxParams, stripeTaxEnabled } from '../util/stripeTax';
 import { refuse } from '../util/refusal';
 import { moneyKindForCatalogPrice } from '../services/moneyRails';
@@ -122,6 +123,27 @@ async function heldOnlyInStripe(env: Env, user: CheckoutUser, meta: PlanMeta) {
   const investor = meta.kind === 'investor' ? await storedInvestorCustomer(env, user.id) : null;
   const found = await heldPlanInStripe(env, { general: user.stripe_customer_id, investor }, meta);
   return found ? { ...found, adopt: meta.kind === 'investor' && !investor && found.customer === user.stripe_customer_id } : null;
+}
+/**
+ * D4293: the influencer offer checkout applies when the member typed no code,
+ * or null. An unreadable offer store applies none: an offer never blocks a sale.
+ */
+async function influencerOfferFor(env: Env, userId: number, product: { id: string; metadata?: Record<string, string> | null }, interval: string, unit: number, currency: string) {
+  try {
+    const { autoOffer } = await import('../services/influencerOffers');
+    return (await autoOffer(env, userId, { product, interval, unitAmount: unit, currency })).applied;
+  } catch {
+    console.warn('[checkout] influencer offer not read');
+    return null;
+  }
+}
+async function heldInfluencerOfferFor(env: Env, promoId: string, unit: number) {
+  try {
+    const { heldAutoOffer } = await import('../services/influencerOffers');
+    return await heldAutoOffer(env, promoId, unit);
+  } catch {
+    return null;
+  }
 }
 const PLAN_CHECK_UNAVAILABLE = { status: 503, code: 'plan_check_unavailable', message: 'Your current plan could not be checked, so nothing was charged. Try again in a moment.' } as CheckoutRefusal;
 const SUBSCRIPTION_EXISTS = { status: 409, code: 'subscription_exists', message: 'You already pay for a plan of this kind. Change it from Billing.' } as CheckoutRefusal;
@@ -243,9 +265,21 @@ checkout.post('/checkout/quote', async (c) => {
   let discount: { amount: number; code: string } | null = null;
   let discountReason: string | null = null;
   if (promoCode) {
-    const v = await validatePromoForProduct(c.env, promoCode, product.id, unit, price.currency);
-    if (v.ok && v.promo) { promo = v.promo; discount = { amount: computeDiscount(v.promo, unit).discountCents, code: v.promo.code }; }
+    // D4855: the quote asks the rule checkout asks, for this member and interval, ceiling included.
+    const v = await canRedeemPromo(c.env, { code: promoCode, productId: product.id, amountCents: unit, currency: price.currency, buyer: { userId: user.id, interval } });
+    if (v.ok) { promo = v.promo; discount = { amount: computeDiscount(v.promo, unit).discountCents, code: v.promo.code }; }
     else discountReason = String(v.reason || 'not_found');
+  }
+  // D4293: no code typed, and the member came through an influencer with an
+  // active offer the code's own rules accept: that offer's code is applied.
+  // Never two codes.
+  let offer: { uid: string } | null = null;
+  if (!promoCode) {
+    const auto = await influencerOfferFor(c.env, user.id, product, interval, unit, price.currency);
+    if (auto) {
+      promo = auto.promo; offer = { uid: auto.offer.uid };
+      discount = { amount: auto.discountCents, code: auto.promo.code };
+    }
   }
   let vat: { amount: number | null; reason: string | null } = { amount: null, reason: 'Tax is not charged on plans here.' };
   let total: number | null = unit - (discount?.amount ?? 0);
@@ -273,7 +307,7 @@ checkout.post('/checkout/quote', async (c) => {
   return c.json({
     ...base,
     mode: 'new', direction: null, proration_amount: null, change_at: 'now',
-    discount, discount_reason: discountReason,
+    discount, discount_reason: discountReason, influencer_offer: offer,
     vat, total_due_today: total, total_reason: totalReason,
     step_up_required: false,
   });
@@ -323,17 +357,36 @@ checkout.post('/checkout/start', async (c) => {
   if (pm && !PM_RE.test(pm)) return refuse(c, 400, { code: 'invalid_payment_method', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
   if (pm) { await requireFactor(c, 'totp'); await requireStepUp(c); }
   const customer = (await familyCustomer(c.env, user, meta, 'create'))!;
+  let cardFingerprint: string | null = null;
   if (pm) {
-    const card = await stripeCall<{ id: string; customer?: string | null }>(c.env, `/payment_methods/${pm}`, {}, { method: 'GET' }).catch(() => null);
+    const card = await stripeCall<{ id: string; customer?: string | null; card?: { fingerprint?: string | null } | null }>(c.env, `/payment_methods/${pm}`, {}, { method: 'GET' }).catch(() => null);
     if (!card || card.customer !== customer) return refuse(c, 404, { code: 'payment_method_not_found', message: 'That card could not be used. Choose another or add a new one.', audience: 'member' });
+    cardFingerprint = card.card?.fingerprint ?? null;
+  }
+  // D4289 P2 (#4291): the member's locked referral rides on the subscription (P3 reads these keys). A saved card
+  // that is one of the referrer's own refuses it (self_card); a new card is checked by P3 on the paid invoice.
+  const { activeAttribution, referralMetadata, selfCardRefusal } = await import('../services/referrals/handleAttribution');
+  let attribution = await activeAttribution(c.env, user.id);
+  if (attribution && cardFingerprint
+    && await selfCardRefusal(c.env, user.id, attribution, cardFingerprint, (path) => stripeCall<any>(c.env, path, {}, { method: 'GET' }))) {
+    attribution = null;
   }
   const promoCode = typeof body.promo_code === 'string' ? body.promo_code.trim() : '';
+  const startKey = (promoFragment: string) => `checkout:${user.id}:${price.id}:${promoFragment}:${pm ? 'saved' : 'new'}:${nonce}`;
+  const autoKey = startKey('auto');
   let promo: PromoRow | undefined;
   if (promoCode) {
-    const v = await validatePromoForProduct(c.env, promoCode, product.id, Number(price.unit_amount), price.currency);
-    if (!v.ok || !v.promo) return refuse(c, 400, { code: 'promo_invalid', message: 'That code does not apply to this plan.', audience: 'member', extra: { reason: v.reason ?? 'not_found' } });
+    // D4855: the member and interval the quote used, so the start decides what the quote showed.
+    const v = await canRedeemPromo(c.env, { code: promoCode, productId: product.id, amountCents: Number(price.unit_amount), currency: price.currency, buyer: { userId: user.id, interval }, reference: startKey(promoPart(promoCode)) });
+    if (!v.ok) return refuse(c, 400, { code: 'promo_invalid', message: v.message, audience: 'member', extra: { reason: v.reason, ...(v.remaining_cents !== undefined ? { remaining_cents: v.remaining_cents, currency: v.currency } : {}) } });
     promo = v.promo;
   }
+  // D4293: the same offer the quote showed, read again now (its budget may have moved).
+  const heldAutoPromo = promoCode ? null : await livePromoReservationPromoId(c.env, autoKey, user.id);
+  const auto = promoCode ? null : heldAutoPromo
+    ? await heldInfluencerOfferFor(c.env, heldAutoPromo, Number(price.unit_amount))
+    : await influencerOfferFor(c.env, user.id, product, interval, Number(price.unit_amount), price.currency);
+  if (auto) promo = auto.promo;
   const params: Record<string, string> = {
     customer,
     'items[0][price]': price.id,
@@ -347,23 +400,46 @@ checkout.post('/checkout/start', async (c) => {
     'metadata[plan_key]': entry.key,
     ...planMetaParams(meta),
     ...automaticTaxParams(stripeTaxEnabled(c.env)),
+    ...referralMetadata(attribution),
+    ...(attribution && !cardFingerprint ? { 'metadata[referral_card_check]': 'on_payment' } : {}),
   };
   if (pm) params.default_payment_method = pm;
   if (promo) { params['discounts[0][promotion_code]'] = promo.id; params['metadata[promo_code_id]'] = promo.id; }
+  if (auto) params['metadata[influencer_offer_uid]'] = auto.offer.uid;
+  const idempotencyKey = promoCode ? startKey(promoPart(promoCode)) : autoKey;
+  // D4855: the first invoice's discount leaves the licence's ceiling in one
+  // conditional write, before Stripe is asked, and goes back if Stripe makes no
+  // subscription. A typed code that no longer fits is refused; an automatic
+  // offer that no longer fits is simply not applied (an offer never blocks a sale).
+  let reservationRef: string | null = null;
+  if (promo) {
+    const taken = await reservePromo(c.env, { code: promo.code, productId: product.id, amountCents: Number(price.unit_amount), currency: price.currency, buyer: { userId: user.id, interval }, reference: idempotencyKey });
+    if (taken.ok) {
+      reservationRef = taken.reservation?.ref ?? null;
+      if (reservationRef) params['metadata[promo_reservation_ref]'] = reservationRef;
+    } else if (promoCode) {
+      return refuse(c, 400, { code: 'promo_invalid', message: taken.message, audience: 'member', extra: { reason: taken.reason, ...(taken.remaining_cents !== undefined ? { remaining_cents: taken.remaining_cents, currency: taken.currency } : {}) } });
+    } else {
+      for (const k of ['discounts[0][promotion_code]', 'metadata[promo_code_id]', 'metadata[influencer_offer_uid]']) delete params[k];
+      promo = undefined;
+    }
+  }
   let sub: StripeSubLite;
   try {
-    sub = await stripeCall<StripeSubLite>(c.env, '/subscriptions', params, {
-      idempotencyKey: `checkout:${user.id}:${price.id}:${promoPart(promoCode)}:${pm ? 'saved' : 'new'}:${nonce}`, moneyKind,
-    });
+    sub = await stripeCall<StripeSubLite>(c.env, '/subscriptions', params, { idempotencyKey, moneyKind });
   } catch (e) {
+    await releasePromoReservation(c.env, reservationRef);
     return refuse(c, 502, { code: 'start_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', raw: e, audience: 'member' });
   }
   await logCheckout(c.env, user.id, 'checkout_started', sub.id, { plan_key: entry.key, interval, price_id: price.id, mode: 'new', before_plan_key: before, saved_card: !!pm });
-  if (promo) await logCheckout(c.env, user.id, 'promo_applied', sub.id, { plan_key: entry.key, promo_code_id: promo.id });
+  if (promo) await logCheckout(c.env, user.id, 'promo_applied', sub.id, { plan_key: entry.key, promo_code_id: promo.id, ...(auto ? { influencer_offer_uid: auto.offer.uid } : {}) });
   const secret = sub.latest_invoice?.payment_intent?.client_secret;
   if (!secret) {
     // A zero-due first invoice (a 100% code) has no payment to confirm: the plan is on.
-    if (ON_STATUSES.has(sub.status)) return c.json({ mode: 'new', free: true, ref: sub.id, status: sub.status });
+    if (ON_STATUSES.has(sub.status)) {
+      await commitPromoReservation(c.env, reservationRef);
+      return c.json({ mode: 'new', free: true, ref: sub.id, status: sub.status });
+    }
     return refuse(c, 502, { code: 'start_failed', message: 'The payment could not be started. Nothing was charged; try again in a moment.', audience: 'member' });
   }
   return c.json({ mode: 'new', client_secret: secret, ref: sub.id, status: sub.status, saved_card: !!pm });

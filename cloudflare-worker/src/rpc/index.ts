@@ -23,6 +23,7 @@
  * against `licence_deployments`. See the header of `hqOps.ts` for what that
  * does and does not establish.
  */
+import { branchSegmentOverview } from '../services/personaSegmentScopes';
 import { recordProgramUsage, type ProgramFigure } from '../services/programUsage';
 import { WorkerEntrypoint } from 'cloudflare:workers';
 import type { Env } from '../types';
@@ -31,9 +32,10 @@ import {
   branchHealth, branchOverview, branchSearchAccounts, applyLicenceCopy,
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
-  moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
+  moveAccountOut, inviteAccount, unbindAdmin, emergencySignOut, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
   applyGames, branchGameHoldings, branchInsights, branchPrograms,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
+  type EmergencySignOutRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage,
@@ -71,6 +73,9 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // Super Admin scope: #2660's read over this branch's database. Counts
   // only, so no secret, on the rule above.
   insights(params?: Record<string, string>) { return branchInsights(this.env, params, loadInsightsForBranch); }
+  // D4438 — same local segment queries, aggregate-only HQ scope read.
+  personaSegmentOverview(now?: number) { return branchSegmentOverview(this.env, now); }
+
 
   // D954 — Admin › Programs' catalogue over this branch's own database, for
   // HQ's Super Admin scope. Counts only, so no secret, on the rule above.
@@ -153,6 +158,13 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // demotes and deactivates accounts, so it authenticates its caller.
   unbindAdmin(secret: string, req: UnbindRequest) {
     return unbindAdmin(this.env, secret, req);
+  }
+
+  // D4669 part 2 — HQ signs accounts out on THIS branch, on request (the
+  // owner's option B). Secret first, for the reason above: it ends sessions,
+  // so it authenticates its caller rather than assuming it.
+  emergencySignOut(secret: string, req: EmergencySignOutRequest) {
+    return emergencySignOut(this.env, secret, req);
   }
 }
 

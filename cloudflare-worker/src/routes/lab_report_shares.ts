@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D588 (#1215) — share a Spin-Out Lab scoring report with one named account.
  *
@@ -59,12 +60,12 @@ async function projectOwner(env: Env, projectId: number): Promise<{ id: number; 
 }
 
 async function hiddenByCompany(c: Parameters<typeof activeCompanyFor>[0], user: User, project: { founder_id: number | null; company_id?: number | null }): Promise<boolean> {
-  if (user.role !== 'founder' || user.founder_id !== project.founder_id) return false;
+  if (!holdsLicence(user, 'founder') || user.founder_id !== project.founder_id) return false;
   return !projectInActiveCompany(await activeCompanyFor(c, user), project);
 }
 
 function ownsProject(user: User, project: { founder_id: number | null }): boolean {
-  return (user.role === 'founder' || user.role === 'exploring')
+  return (holdsLicence(user, 'founder') || user.role === 'exploring')
     && user.founder_id != null
     && user.founder_id === project.founder_id;
 }

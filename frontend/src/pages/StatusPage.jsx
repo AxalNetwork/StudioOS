@@ -12,7 +12,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, AlertTriangle, XCircle, Clock, Info, Loader2 } from 'lucide-react';
 import { request } from '../lib/api';
 import { overallStatus } from '../lib/statusOverall';
 import { DAY_WORDS, recordLine } from '../lib/statusHistory';
@@ -120,14 +120,14 @@ export default function StatusPage() {
               <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 dark:border-gray-800 dark:bg-gray-900" data-card>
                 {services.map((s) => {
                   const pill = s.monitoring === 'not_monitored' && s.status === 'unknown'
-                    ? { ...STATUS_PILL.unknown, label: 'Not monitored' }
+                    ? { ...STATUS_PILL.unknown, icon: Info, label: s.availability || 'Not monitored' }
                     : STATUS_PILL[s.status] || STATUS_PILL.unknown;
                   const Icon = pill.icon;
                   return (
                     <div key={s.name} className="p-4 flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-[180px]">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
-                        {s.availability && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{s.availability}</div>}
+                        {s.availability && s.monitoring !== 'not_monitored' && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{s.availability}</div>}
                         {s.note && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{s.note}</p>}
                         {recordLine(s) && <div data-testid="status-record-line" className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{recordLine(s)}</div>}
                       </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { RailFrame, WorkerRail } from '../../ui';
+import { RailFrame } from '../../ui';
 import ProgramsTable from './ProgramsTable';
 import ProgramDetail, { ProgramFields } from './ProgramDetail';
 import { LearningHeader, SectionCard } from './LearningStates';
@@ -31,18 +31,6 @@ import useLearningRead from './useLearningRead';
 const STUDIO = { to: '/learning/studio', label: 'Learning studio' };
 const PROGRAMS = { to: '/learning/studio/programs', label: 'Regional programs' };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-function StudioRail({ coverage }) {
-  return (
-    <WorkerRail
-      workspace="Learning studio"
-      role="super_admin"
-      stance="Authoring view"
-      note="Eadwyn reads back what this page has loaded. It does not publish, assign, enrol or edit anything: every write here is the Super Admin’s own."
-      coverage={coverage}
-    />
-  );
-}
 
 // ── /learning/studio/programs ─────────────────────────────────────────────
 
@@ -92,9 +80,8 @@ export function StudioProgramsPage({ sub }) {
       setBusy(false);
     }
   };
-  const coverage = state.status === 'ready' && !state.refused ? [`${plural(state.programs.length, 'program')}, drafts and archived included`] : [];
   return (
-    <RailFrame rail={<StudioRail coverage={coverage} />} data-testid="learning-studio-programs">
+    <RailFrame data-testid="learning-studio-programs">
       <div className="space-y-4">
         <LearningHeader
           title="Regional programs"
@@ -191,7 +178,7 @@ export function StudioProgramPage({ uid, sub }) {
   const current = state.status === 'ready' && !state.refused ? state : null;
   const handlers = programHandlers({ uid, current, run, setWantChoices });
   return (
-    <RailFrame rail={<StudioRail coverage={programCoverage(state)} />} data-testid="learning-studio-program">
+    <RailFrame data-testid="learning-studio-program">
       <div className="space-y-4">
         <LearningHeader
           title={current?.program.name || 'Program'}

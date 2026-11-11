@@ -600,9 +600,9 @@ test('the routes: each address under today\'s guard at App.jsx\'s six-space inde
   for (const l of lines) assert.ok(app.includes(l), l.trim());
   assert.equal((app.match(/<AdminPartnerInvitations \/>/g) || []).length, 6);
   // D952: the old Firm links address forwards to Advisors & Partners › Firms, unguarded like every redirect.
-  assert.ok(app.includes('\n      <Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'));
+  assert.equal(app.includes('\n      <Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'), false);
   assert.ok(app.indexOf(lines[1]) < app.indexOf(lines[2]) && app.indexOf(lines[3]) < app.indexOf(lines[4]), 'static paths before :id');
-  assert.ok(app.includes('\n      <Route path="/admin/partners" element={<Navigate to="/admin/partner-invitations?moved=partners" replace />} />'));
+  assert.equal(app.includes('\n      <Route path="/admin/partners" element={<Navigate to="/admin/partner-invitations?moved=partners" replace />} />'), false);
   assert.doesNotMatch(codeOnly(app).split('\n').filter((l) => l.includes('partner-invitations')).join('\n'), /hqOnly\(/, 'no hqOnly');
 });
 
@@ -635,10 +635,11 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
   assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
-  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Open partner invitations<\/Link>/);
+  // D4820: Community's door is a Manage Community row, "Open →" named "Open Partner invitations".
+  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\} aria-label=\{openLabel\('Partner invitations'\)\}>Open →<\/Link>/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/partner-invitations', key\(AD, 'Community', 'Partner invitations'\)\)/);
   assert.match(read('frontend/src/lib/railOptions/admin.js'), /id: 'S31', section: 'Community', module: 'Partner invitations', route: '\/admin\/partner-invitations', files: \['pages\/admin\/PartnerInvitations\.jsx'\], rail: FRAME/);
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partners' \}, \/\/ D923/);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partners' \}, \/\/ D923/);
   assert.match(read('cloudflare-worker/src/services/partnerDeals.ts'), /Admin panel: \/admin\/partner-invitations\/referrals`/);
   assert.match(read('frontend/src/App.jsx'), /Getting a partner INTO the system is\s+\/admin\/partner-invitations, the invitation flow/);
 });

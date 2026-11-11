@@ -82,8 +82,8 @@ function records(f: F) {
   f.seed('product_feedback', { uid: 'fb-2', project_id: P, body: 'PRIVATE', source: 'customer', theme: 'Bulk CSV import', roadmap_item_label: 'Bulk CSV import', status: 'shipped', shipped_on: daysAgo(12) });
   f.seed('product_feedback', { uid: 'fb-3', project_id: P, body: 'PRIVATE', source: 'customer', theme: 'Faster search', status: 'shipped', shipped_on: daysAgo(200) });
   f.seed('product_feedback', { uid: 'fb-4', project_id: P, body: 'PRIVATE', source: 'customer', theme: 'SSO', status: 'planned', shipped_on: daysAgo(1) });
-  f.seed('growth_channels', { id: 1, uid: 'ch-1', project_id: P, name: 'LinkedIn', utm_source: 'private-utm', state: 'active', kind: 'content', cac_bar_cents: 987654 });
-  f.seed('growth_channels', { id: 2, uid: 'ch-2', project_id: P, name: 'Paused channel', utm_source: 'x', state: 'paused', kind: 'content' });
+  f.seed('growth_channels', { id: 1, uid: 'ch-1', project_id: P, name: 'LinkedIn', utm_source: 'private-utm', state: 'active', kind: 'organic', cac_bar_cents: 987654 });
+  f.seed('growth_channels', { id: 2, uid: 'ch-2', project_id: P, name: 'Paused channel', utm_source: 'x', state: 'paused', kind: 'organic' });
   f.seed('channel_experiments', { uid: 'ex-1', channel_id: 1, title: 'Founder video series', run_on: daysAgo(5), cac_cents: 987654 });
   f.seed('project_metrics', { project_id: P, snapshot_date: daysAgo(2), source: 'stripe', mrr: 18400, paying_accounts: 42, new_users: 0 });
   f.seed('project_metrics', { project_id: P, snapshot_date: daysAgo(1), source: 'mercury', net_burn: 48000, cash_balance: 987654, notes: 'PRIVATE note' });

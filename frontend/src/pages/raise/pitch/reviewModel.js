@@ -28,6 +28,17 @@ export const mayRunReview = (history, readOnly) => !readOnly && history?.status 
 export const isReviewReadOnly = (e) => e?.code === 'read_only' || e?.data?.error === 'read_only';
 
 export const NO_REVIEW_YET = 'This version has not been reviewed yet.';
+/** D4271 (ps6b): "v7 has not been reviewed yet", naming the version; the generic line when the label is unknown. */
+export const notReviewedLine = (label) => (label ? `${label} has not been reviewed yet.` : NO_REVIEW_YET);
+/**
+ * D4271 (ps6b): "Last run on v6 · 72 / 100": the newest review of any version
+ * that returned a score, or null when none did. Never a score the review did
+ * not return.
+ */
+export function lastRunLine(reviews) {
+  const r = (Array.isArray(reviews) ? reviews : []).find((x) => typeof x?.overall_score === 'number' && Number.isFinite(x.overall_score));
+  return r ? `Last run on v${r.deck_version} · ${Math.round(r.overall_score)} / 100` : null;
+}
 export const NO_REVIEWS = 'No version of this deck has been reviewed yet.';
 export const UPLOAD_LINE = 'Reviewing a file or text from outside the studio? Upload it or paste it here. Those reviews stay yours and are not part of the deck\'s history.';
 

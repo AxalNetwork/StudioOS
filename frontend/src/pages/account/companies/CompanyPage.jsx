@@ -5,10 +5,13 @@ import { teamsApi } from '../../../lib/api/teams';
 import { reportError } from '../../../lib/log';
 import { companyTeamPath } from '../../../lib/settingsScope.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import ComplianceCard from '../../work/ComplianceCard.jsx';
+import SkillsLink from '../../team/SkillsLink.jsx';
+import { AccessPill } from '../../../ui/ReasonGate';
 import * as portfolio from './portfolioAdapter.js';
 import {
-  ACTIVE_HERE, BASE_PATH, companyLegalPath, companyPowers, companySettingsPathFor, documentRows, legalFacts, locationRows,
-  portfolioProject, projectPagePath, roleWord,
+  ACTIVE_HERE, ADMIN_LINE, BASE_PATH, READ_ONLY_LINE, accessViewer, companyLegalPath, companyPowers, companySettingsPathFor, documentRows, hqReadOnly,
+  legalFacts, locationRows, portfolioProject, projectPagePath, roleWord,
 } from './companiesModel';
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { CompanyMark, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading, SlugChip, TypeBadge } from './portfolioUi.jsx';
@@ -58,7 +61,7 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function DocumentsCard({ uid, read, onRetry, onChanged }) {
+function DocumentsCard({ uid, read, onRetry, onChanged, readOnly = false }) {
   const [busy, setBusy] = useState(null);
   const [said, setSaid] = useState('');
   const picker = useRef(null);
@@ -66,7 +69,7 @@ function DocumentsCard({ uid, read, onRetry, onChanged }) {
   if (read.status === 'loading' && !read.value) return <PCard title="Documents" testId="company-documents"><Reading lines={2} /></PCard>;
   if (read.status !== 'ready') return <PCard title="Documents" testId="company-documents"><Failed what="Documents" onRetry={onRetry} testId="company-documents-unread" /></PCard>;
   const rows = documentRows(read.value);
-  const canUpload = !!read.value?.can_upload;
+  const canUpload = !readOnly && !!read.value?.can_upload;
   const open = async (doc) => {
     setBusy(doc.uid); setSaid('');
     const out = await portfolio.downloadDocument(uid, doc.uid);
@@ -128,6 +131,8 @@ export default function CompanyPage({
   }
 
   const powers = companyPowers(detail.value, meId);
+  // D4360: an admin or HQ with no seat here reads it read only (until the members read says otherwise, nothing is writable).
+  const locked = hqReadOnly(profile, powers.member);
   const name = String(detail.value?.company_name || card?.name || '').trim() || NOT_RECORDED;
   const company = { uid, name };
   // The pane says what changed (`companies-done`); leaving the company returns to Portfolio.
@@ -155,14 +160,16 @@ export default function CompanyPage({
             <SlugChip path={path} />
             {active ? <Pill tone="info">{ACTIVE_HERE}</Pill> : null}
             {powers.primary ? <Pill tone="neutral">Primary admin</Pill> : null}
+            {locked && detail.status === 'ready' ? <AccessPill viewer={accessViewer(profile)} testId="company-access-pill" /> : null}
           </span>
         </div>
         <span className="flex flex-wrap items-center gap-2">
-          <Link to={companySettingsPathFor(uid)} className={BTN_SECONDARY} data-testid="company-page-settings">Company settings</Link>
-          {!powers.archived && profile !== 'explorer' ? <button type="button" className={BTN_PRIMARY} onClick={() => onNew('project', { uid, name })} data-testid="company-page-new-project">New project</button> : null}
+          {!locked ? <Link to={companySettingsPathFor(uid)} className={BTN_SECONDARY} data-testid="company-page-settings">Company settings</Link> : null}
+          {!locked && !powers.archived && profile !== 'explorer' ? <button type="button" className={BTN_PRIMARY} onClick={() => onNew('project', { uid, name })} data-testid="company-page-new-project">New project</button> : null}
         </span>
       </header>
 
+      {locked && detail.status === 'ready' ? <p className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 ${MUTED} dark:bg-gray-800`} data-testid="company-read-only">{`${READ_ONLY_LINE} ${ADMIN_LINE}`}</p> : null}
       {powers.archived ? <p className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 ${MUTED} dark:bg-gray-800`} data-testid="company-archived">This company is archived. The primary admin can restore it.</p> : null}
 
       {detail.status === 'ready' && powers.member ? (
@@ -181,7 +188,7 @@ export default function CompanyPage({
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <div className="flex min-w-0 flex-col gap-4">
           <PCard title="Legal information" testId="company-legal"
-            aside={legal.status === 'ready' ? <Link to={companyLegalPath(uid)} className={LINK} data-testid="company-legal-edit">Edit in Legal</Link> : null}>
+            aside={legal.status === 'ready' && !locked ? <Link to={companyLegalPath(uid)} className={LINK} data-testid="company-legal-edit">Edit in Legal</Link> : null}>
             {legal.status === 'loading' && !legal.value ? <Reading />
               : !facts ? <Failed what="Legal information" onRetry={reread} testId="company-legal-unread" />
                 : (
@@ -206,11 +213,18 @@ export default function CompanyPage({
                   </ul>
                 ) : <p className={`m-0 ${MUTED}`} data-testid="company-locations-none">No location recorded.</p>}
           </PCard>
-          <DocumentsCard uid={uid} read={docs} onRetry={reread} onChanged={reread} />
+          {detail.status === 'ready' ? <ComplianceCard key={uid} uid={uid} /> : null}
+          <DocumentsCard uid={uid} read={docs} onRetry={reread} onChanged={reread} readOnly={locked} />
         </div>
         <div className="flex min-w-0 flex-col gap-4">
           <PCard title="Team" count={detail.status === 'ready' ? members.length : null} testId="company-team"
-            aside={<Link to={companyTeamPath(uid)} className={LINK} data-testid="company-team-link">Team</Link>}>
+            aside={(
+              <>
+                <Link to={companyTeamPath(uid)} className={LINK} data-testid="company-team-link">Team</Link>
+                {/* #4363: the company's Skills tab, one click from its team. */}
+                <SkillsLink scope={{ kind: 'company', company: { uid } }} className={LINK} testId="company-skills-link" />
+              </>
+            )}>
             {detail.status === 'loading' && !detail.value ? <Reading lines={2} />
               : detail.status !== 'ready' ? <Failed what="The team" onRetry={reread} testId="company-team-unread" />
                 : (
@@ -228,7 +242,7 @@ export default function CompanyPage({
                 )}
           </PCard>
           <PCard title="Projects in this company" testId="company-page-projects"
-            aside={!powers.archived && profile !== 'explorer' ? <button type="button" className={BTN_TEXT} onClick={() => onNew('project', { uid, name })}>+ Add project</button> : null}>
+            aside={!locked && !powers.archived && profile !== 'explorer' ? <button type="button" className={BTN_TEXT} onClick={() => onNew('project', { uid, name })} data-testid="company-add-project">+ Add project</button> : null}>
             {inside == null && projectsLoading ? <Reading lines={2} />
               : inside == null ? <Failed what="Its projects" onRetry={() => onChanged('', {})} testId="company-page-projects-unread" />
               : inside.length ? (

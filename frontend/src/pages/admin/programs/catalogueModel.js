@@ -14,7 +14,7 @@
  * A read that did not answer at all is loading or unreadable for every block it feeds.
  */
 import {
-  COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, ageText, isFailed, isLoading,
+  COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, READING, ageText, isFailed, isLoading,
   grantBadgeOf, plural, programByKey,
 } from './programsModel';
 
@@ -84,8 +84,8 @@ export function deltaText(now, before) {
 /**
  * The four tiles (`dc:333`). Programs running counts the registry's `live`
  * rows; People taking part names what it covers and that the Lab is left
- * out; Waiting for you sums the queues part 1 reads and names the one it
- * leaves out; Credits paid out is HQ's.
+ * out; Waiting for you sums every queue an admin can act on, so it reconciles
+ * with the queues beside it; Credits paid out is HQ's.
  */
 export function catalogueTiles(read) {
   const running = pick(read, ['tiles', 'running']);
@@ -105,10 +105,13 @@ export function catalogueTiles(read) {
   if (people.state === 'ready') {
     const d = people.data;
     const covers = Array.isArray(d.covers) ? d.covers.map(nameOf) : [];
-    const leftOut = (Array.isArray(d.left_out) ? d.left_out : []).map((x) => `${nameOf(x.program)} is left out: ${x.reason}`);
+    const missing = Array.isArray(d.left_out) ? d.left_out : [];
+    const leftOut = missing.map((x) => `${nameOf(x.program)} is left out: ${x.reason}`);
     tiles.push({
       key: 'people', label: 'People taking part', state: 'ready', value: nf(d.count), delta: deltaText(d.count, d.previous),
       sub: 'active in the period, across programs',
+      // D4807: a figure that leaves a program out says so beside the number, so it never looks complete.
+      partial: missing.length ? `Partial · excludes ${list(missing.map((x) => nameOf(x.program)))}` : null,
       extra: [covers.length ? `Counts ${list(covers)}.` : null, ...leftOut].filter(Boolean),
     });
   } else tiles.push(waitingState('people', 'People taking part', people));
@@ -124,7 +127,7 @@ export function catalogueTiles(read) {
       key: 'waiting', label: 'Waiting for you', state: 'ready', value: nf(count),
       sub: count === 0 ? 'Nothing is waiting.' : oldest !== null ? `oldest ${ageText(oldest)}` : null,
       overdue: count > 0 && oldest !== null && oldest >= OVERDUE_HOURS,
-      cover: 'cohort applications, Refer & Earn reviews, perk listings and office-hours hosts',
+      cover: 'cohort applications, Refer & Earn reviews, strategic referral access, perk listings and office-hours hosts',
       extra: leftOutWaiting(waiting),
     });
   } else {
@@ -245,22 +248,28 @@ export function waitingChart(read) {
       return { ...def, state: s.state, word: s.state === 'pending' ? NOT_READ_YET : s.state === 'unrecorded' ? NOT_RECORDED : COULD_NOT_READ, reason: s.reason };
     }
     const d = s.data;
+    // D4807: a queue that records no ages (strategic requests) has a count and no bands: a row in words, never an empty bar.
+    const aged = Boolean(d.bands && typeof d.bands === 'object');
     const bands = d.bands || {};
-    const parts = WAIT_BANDS.map((b) => ({ key: b.key, label: b.label, tone: b.tone, value: Number(bands[b.key]) || 0 }));
+    const parts = aged ? WAIT_BANDS.map((b) => ({ key: b.key, label: b.label, tone: b.tone, value: Number(bands[b.key]) || 0 })) : [];
     const memberLine = def.key === 'referrals' && Number(d.waiting_on_member) > 0 ? `${nf(d.waiting_on_member)} waiting on the member` : null;
     return {
       ...def, state: 'ready', count: Number(d.count) || 0, parts,
+      // D4873: the oldest item's age, for Needs attention's Overdue and Eadwyn's "review the oldest first".
+      oldestHours: d.oldest_hours === null || d.oldest_hours === undefined || !(Number(d.count) > 0) ? null : Number(d.oldest_hours),
       text: `${nf(Number(d.count) || 0)} waiting`,
       sub: [d.aged, d.oldest_hours !== null && d.oldest_hours !== undefined && Number(d.count) > 0 ? `oldest ${ageText(d.oldest_hours)}` : null, memberLine,
+        !aged && Number(d.count) > 0 ? 'no recorded age' : null,
         Number(d.age_not_recorded) > 0 ? `${nf(d.age_not_recorded)} with no recorded age` : null].filter(Boolean).join(' · '),
     };
   });
   const ready = rows.filter((r) => r.state === 'ready');
   if (!ready.length) return { key: 'waiting', title: 'Waiting by program', state: 'unreadable', reason: 'No queue could be read. That is not the same as none.', rows };
-  const over = ready.some((r) => r.parts.find((p) => p.key === 'over_72').value > 0);
+  const bars = ready.filter((r) => r.parts.length > 0);
+  const over = bars.some((r) => r.parts.find((p) => p.key === 'over_72').value > 0);
   return {
     key: 'waiting', title: 'Waiting by program', state: 'ready', rows,
-    chart: { type: 'stackbars', head: 'Queue', parts: WAIT_BANDS, rows: ready.map((r) => ({ key: r.key, label: r.label, total: r.text, parts: r.parts })) },
+    chart: { type: 'stackbars', head: 'Queue', parts: WAIT_BANDS, rows: bars.map((r) => ({ key: r.key, label: r.label, total: r.text, parts: r.parts })) },
     alt: `Items waiting by queue: ${ready.map((r) => `${r.label} ${nf(r.count)}`).join(', ')}.`,
     legend: WAIT_BANDS.map((b) => ({ label: b.label, tone: b.tone })),
     foot: over ? null : NOTHING_OVER_72,
@@ -339,7 +348,12 @@ export const STATUS_WORD = Object.freeze({
  */
 export function catalogueCards(read) {
   const reg = pick(read, ['programs']);
-  if (reg.state !== 'ready') return { state: reg.state, reason: reg.reason, cards: PROGRAMS.map((p) => ({ ...p, row: null })) };
+  // D4807: while the registry has not answered, the card keeps its door and its name, but its status and grant are
+  // words about the read (Reading…, Could not be read), never the constant's "Live" or "HQ-held" standing in for a fact.
+  if (reg.state !== 'ready') {
+    const word = reg.state === 'loading' ? READING : reg.state === 'pending' ? NOT_READ_YET : reg.state === 'unrecorded' ? NOT_RECORDED : COULD_NOT_READ;
+    return { state: reg.state, reason: reg.reason, cards: PROGRAMS.map((p) => ({ ...p, status: word, grant: word, hqGrant: word, row: null, fallback: reg.state })) };
+  }
   const rows = Array.isArray(reg.data.rows) ? reg.data.rows : [];
   const cards = rows.map((r) => {
     const base = programByKey(r.key) || { key: r.key, grant: 'Not offered yet', hqGrant: 'HQ only' };
@@ -382,6 +396,8 @@ export const learningJoinOf = (d) => {
   const words = (Array.isArray(d.join_methods) ? d.join_methods : []).map((m) => JOIN_WORD[m]).filter(Boolean);
   return words.length === 2 ? 'Open or by invitation' : words[0] || NOT_RECORDED;
 };
+/** D4298 (#4298): the Influencers card's figure, P1's active members. */
+export const influencerLine = (d) => `${plural(Number(d.count) || 0, 'active influencer', 'active influencers')}`;
 export const testingLine = (d) => `${nf(d.open)} open · ${nf(d.applications)} applied, not withdrawn`;
 
 /**

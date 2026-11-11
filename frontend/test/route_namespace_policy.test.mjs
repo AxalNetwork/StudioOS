@@ -57,12 +57,11 @@ test('the prohibition is recorded as resolved, not merely observed', () => {
   assert.match(decisions, /\*\*RESOLVED — keep the prohibition\.\*\*/);
 });
 
-test('D4 does not claim /founder is unclaimed — the namespace is still in use', () => {
+test('D2319 retires the last /founder alias without changing D4’s root prohibition', () => {
   // The bare root is free; the namespace is not. Recording it the other way
   // is what made the decision look cheaper than it is.
   const under = ROUTES.filter((p) => p.startsWith('/founder/'));
-  assert.ok(under.length > 0,
-    'if /founder/* ever empties, D4 needs re-reading — not silently re-deciding');
+  assert.deepEqual(under, [], 'D2319 retires the last zero-use /founder alias');
   const decisions = readFileSync(resolve(process.cwd(), 'documentation/architecture/DECISIONS.md'), 'utf8');
   assert.match(decisions, /`\/founder` is not unclaimed/);
 });

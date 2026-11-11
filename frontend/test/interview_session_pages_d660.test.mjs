@@ -40,7 +40,7 @@ test('Start is disabled on an audio channel until consent is recorded, and the n
   assert.match(startButton(none), /aria-disabled="true"/);
   assert.match(renderedText(none), /Audio starts only once consent is recorded\./);
 
-  const given = lightbox({ initialConsent: 'verbal' });
+  const given = lightbox({ initialConsent: 'verbal', sessions: {} }); // Isolate consent; D4412 separately gates on the extraction quote.
   assert.doesNotMatch(startButton(given), /aria-disabled/);
   assert.match(renderedText(given), /Consent recorded\. Audio starts when you press Start\./);
   assert.doesNotMatch(renderedText(given), /Audio starts only once/);

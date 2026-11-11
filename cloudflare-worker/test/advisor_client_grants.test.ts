@@ -35,12 +35,12 @@ test('the route is mounted exactly once', () => {
   assert.equal(mounts.length, 1);
 });
 
-test('every read re-checks the advisor role, not just the grant', () => {
+test('every read re-checks the held Advisor licence, not just the client grant', () => {
   // `advisors.ts:1410` makes this argument for cohort assignments and it holds
   // identically: the grant is the founder's decision, the role is the
   // eligibility that decision presumes. Without the second check, an advisor
   // who is later demoted keeps an active row and keeps reading indefinitely.
-  assert.match(routes, /const isAdvisorNow = \(u: any\) => u\?\.role === 'advisor'/);
+  assert.match(routes, /const isAdvisorNow = \(u: any\) => \(u && holdsLicence\(u, 'advisor'\)\)/);
   for (const handler of ['/shared/list', "'/shared/:projectUid/brief'"]) {
     const at = routes.indexOf(handler);
     assert.ok(at > -1, `${handler} is gone`);

@@ -17,6 +17,7 @@ import { aiBudgetApi } from '../../../lib/api/aiBudget.js';
 import { assistantsApi } from '../../../lib/api/assistants.js';
 import { accountCompaniesApi } from '../../../lib/api/accountCompanies.js';
 import { downloadCsv } from '../../../lib/csvExport.js';
+import { openAddTokens } from '../../../lib/aiTokens.js';
 import {
   BREAKDOWNS, KEY_ALERTS, MAX_DAYS, WORDS, accountAlerts, accountMeter, breakdownRows, breakdownSummary, count, daySeries, daySummary,
   daysCsv, keyAlertLine, keyMeter, keyPreview, previousRange, rangeFor, reportParams, resetsOn, shortDay, tiles,
@@ -143,7 +144,11 @@ function LimitsAndAlerts({ callers, keysApi, budgetApi, totals }) {
         {account.status === 'loading' ? <p className={`m-0 ${MUTED}`}>Reading…</p> : null}
         {account.status === 'error' ? <Unreadable what="Your account’s monthly limit" claim="That is not the same as having no limit." onRetry={account.retry} /> : null}
         {meter ? <Meter label="Monthly limit, from Usage › Limits" value={meter.value} percent={meter.percent} testId="usage-limit-account" link={<Link to="/account/usage/limits" className={`text-[12px] ${LINK}`}>Change in Limits ›</Link>} /> : null}
-        <Link to="/account/usage/ai-tokens" className={`w-fit text-[12px] ${LINK}`}>See AI tokens ›</Link>
+        {/* D1434: API calls draw on the same AI tokens, so the top-up is offered here too (the Add tokens sheet, in place). */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className={BTN} onClick={() => openAddTokens({ from: 'API usage' })} data-testid="usage-add-tokens">Add tokens</button>
+          <Link to="/account/usage/ai-tokens" className={`w-fit text-[12px] ${LINK}`}>See AI tokens ›</Link>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1" data-testid="usage-limits-rate">

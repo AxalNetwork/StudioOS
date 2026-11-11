@@ -36,8 +36,8 @@ function sourceFiles(dir) {
 }
 
 test('both URLs redirect to /research, and no page links them', () => {
-  assert.match(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
-  assert.match(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/market-intel" element=\{<Navigate to="\/research" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
   const linked = sourceFiles('frontend/src').filter((rel) => {
     const code = codeOnly(read(rel));
     return /(?:to|href)=\{?["'`]\/(?:market-intel|signals)(?:[?"'`/#])/.test(code)

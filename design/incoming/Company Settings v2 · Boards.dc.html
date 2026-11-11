@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Settings v2 · redesign boards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&amp;family=Roboto+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#6d28d9;text-decoration:none}a:hover{color:#5b21b6}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:8px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#5f6368">Founder · Company settings › General · v2 · #4966</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Company settings — a company-profile workspace you can trust to save</h1>
+    <p style="margin:0;font-size:14px;color:#4a4553;max-width:980px;line-height:1.55">General is reorganised around intent: Company identity, Public presence, Matching profile and Business snapshot, each with one line on what it affects. A sticky preview on the right shows only the fields StudioOS makes public, and is marked when it includes unsaved changes. Under it, a save status covers twelve states. While the form is dirty, a sticky Save / Discard bar appears and never claims “Saved” before the server confirms. Partial saves, unknown outcomes and conflicts are shown precisely and tagged where they depend on #4960–#4964. The currency is a searchable combobox with Not recorded explicit; regions are chips (canonical list pending); the logo tile is one accessible upload control; the settings tabs are real navigation with aria-current. HQ and support sessions get a compact mode bar and genuinely read-only fields.</p>
+    <p style="margin:0;font:600 12px 'Roboto Mono',monospace;color:#5f6368">Sample now: Sun 8 Nov 2026 · founder licence · Tidepool Labs and its values are sample data</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="12">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:980px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Company Settings v2 Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r, hh) => ({ b, lab: lab || false, hint: '100%,' + (h || hh || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const F = (b, lab, h) => D(b, lab, 1440, h || 900);
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const C = (b, lab, w, hh) => D(b, lab, w, 0, 12, hh);
+    const W = (b, lab) => D(b, lab, 1200, 0, 12, 700);
+    const boards = [
+      ['CS-00', 'Current state and the new hierarchy', 'Today’s one long form, what goes wrong, and the four intent groups that replace it. The Worker’s public/private split decides what the preview may show.', [W('CS00')]],
+      ['CS-01', 'General · clean', 'Header with mark, name and settings navigation (Team · General · Legal · Projects, aria-current). Four groups on the left; the sticky preview and save status (“All changes saved · last saved”) on the right.', [F('CS01', false, 1480)]],
+      ['CS-02', 'General · dirty', 'Three changes: a new logo held until Save, an edited description and Canada added. Changed fields carry a violet edge, the preview reads “Includes unsaved changes”, and the sticky bar offers Discard · Save changes.', [F('CS02', false, 1540)]],
+      ['CS-03', 'Save states', 'A · Saving. B · Saved, confirmed by the server. C · Field validation: a summary at the top links to each field, and each error sits beside its field. D · Server failure, with edits kept.', [F('CS03', 'A · Saving', 1540), F('CS04', 'B · Saved', 1480), F('CS05', 'C · Fix 2 fields', 1640), F('CS06', 'D · Save failed', 1540)]],
+      ['CS-04', 'Partial, unknown and conflict', 'A · “Logo saved; 2 profile changes still need attention”, never “nothing was saved”. B · Connection dropped mid-save: actions wait while the company is read back. C · Someone else saved first: Review differences or Reload and reapply. All three depend on #4961/#4963 and are tagged.', [F('CS07', 'A · Partial', 1540), F('CS08', 'B · Checking outcome', 1540), F('CS09', 'C · Conflict', 1540)]],
+      ['CS-05', 'Read-only and archived', 'A · Support session: a compact mode bar (Super Admin previewing the Founder shell, writes not allowed, Back to HQ); fields render as read-only values and Save is absent (#4960). B · Archived: the reason, who and when, and Restore company (#4963).', [F('CS10', 'A · Support session, read-only', 1480), F('CS11', 'B · Archived', 1540)]],
+      ['CS-06', 'Default currency combobox', 'Searchable by code or name, keyboard model stated, Not recorded explicit, no guessed default. “Common” is a fixed list; “recent” would need stored history.', [C('CS20', false, 1100, 480)]],
+      ['CS-07', 'Regions and markets', 'The multi-select as it will work with a canonical list (#4964), and the honest transitional version over today’s comma-separated text.', [C('CS21', false, 1100, 380)]],
+      ['CS-08', 'Logo uploader', 'Empty, keyboard focus, drag-over, uploading, picked-not-saved and rejected file. The whole tile is one button; drop is never the only way.', [C('CS22', false, 1200, 440)]],
+      ['CS-09', 'URL fields', 'Valid with Open, normalisation shown before saving, invalid, and the LinkedIn hint. Server validation of URLs is #4962.', [C('CS23', false, 1000, 440)]],
+      ['CS-10', 'Narrative, numbers and revenue', 'Description near and over 280, employee count as a whole number, products and goals multiline, and revenue as transitional free text until bands exist.', [C('CS24', false, 1300, 470)]],
+      ['CS-11', 'Leaving with unsaved changes', 'Settings navigation, sidebar and Back ask before discarding; the dialog lists what would be lost (#4961 dirty-navigation guard).', [C('CS25', false, 600, 470)]],
+      ['CS-12', 'Save-state matrix', 'Twelve states: rail status, save-bar actions, what the preview shows and how each is announced.', [C('CS13', false, 1100, 500)]],
+      ['CS-13', 'Mobile 390', 'A · Header, section selector, collapsible preview, identity. B · Public presence and matching. C · Dirty: a sticky Save / Discard bar with 48px buttons above the safe area. D · Support session, read-only.', [P('CS12a', 'A · Top'), P('CS12b', 'B · Fields'), P('CS12c', 'C · Dirty'), P('CS12d', 'D · Read-only')]],
+      ['CS-14', 'Dark mode', 'The dirty state on the dark tokens; states keep their words and shapes.', [F('CS16', false, 1540)]],
+      ['CS-15', 'Components and accessibility', 'Spec for every component: labels, help and error ids, aria-invalid, combobox pattern, chip removal, live status, focus, touch targets.', [W('CS14')]],
+      ['CS-16', 'Handoff and requires engineering', 'Each element mapped to today’s files, frontend-only vs dependent on #4960–#4964.', [W('CS15')]]
+].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body>
+</html>

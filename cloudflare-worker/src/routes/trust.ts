@@ -1,3 +1,4 @@
+import { heldLicences, holdsLicence } from '../services/accountLicences';
 import { mayReadTrustScores } from '../services/scoreAccess';
 /**
  * Trust Center routes — Task #3 (Y-1).
@@ -366,7 +367,8 @@ trust.post('/intro/request', async (c) => {
       const sql = getSQL(env);
       const rows: any = await sql`SELECT id, email, name, role FROM users WHERE id = ${id} LIMIT 1`;
       await sql.end();
-      return rows.length ? rows[0] : null;
+      if (!rows.length) return null;
+      return { ...rows[0], licences: await heldLicences(env.DB, rows[0]) };
     },
     getPairwise: getPairwiseNda,
     isPairwiseActive: hasActivePairwiseNda,
@@ -422,7 +424,7 @@ export async function requestIntroLogic(
   body: { founder_user_id?: any },
   deps: IntroDeps,
 ) {
-  if (investor.role !== 'investor' && investor.role !== 'admin') {
+  if (!holdsLicence(investor, 'investor') && investor.role !== 'admin') {
     return { status: 403, body: { error: 'investor_role_required' } };
   }
   const founderUserId = Number(body?.founder_user_id);
@@ -435,7 +437,7 @@ export async function requestIntroLogic(
 
   const founder = await deps.lookupFounder(env, founderUserId);
   if (!founder) return { status: 404, body: { error: 'founder_not_found' } };
-  if (founder.role !== 'founder') return { status: 400, body: { error: 'target_is_not_a_founder' } };
+  if (!holdsLicence(founder, 'founder')) return { status: 400, body: { error: 'target_is_not_a_founder' } };
 
   const existing = await deps.getPairwise(env, founderUserId, investor.id);
   if (existing && await deps.isPairwiseActive(env, founderUserId, investor.id)) {
@@ -515,7 +517,7 @@ export async function requestIntroLogic(
 // ---------------------------------------------------------------------------
 trust.get('/intro/status', async (c) => {
   const investor = await requireAuth(c);
-  if (investor.role !== 'investor' && investor.role !== 'admin') {
+  if (!holdsLicence(investor, 'investor') && investor.role !== 'admin') {
     return c.json({ error: 'investor_role_required' }, 403);
   }
   const founderId = Number(c.req.query('founder'));

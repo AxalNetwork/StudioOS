@@ -6,15 +6,24 @@ import { railPressHeaders } from '../../../lib/railPage';
 import { reportError } from '../../../lib/log';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { aiTokens, refusalOf } from './newDeckModel';
-import { instruct, SURFACES } from './deckV2Adapter';
+import { deckInstructApi } from '../../../lib/api/deckInstruct';
+import { deckAreasApi } from '../../../lib/api/deckAreas';
+import AreaResults from './AreaResults';
+import { areaRunResults } from './areaRunResults';
 import { areaLabel } from './deckV2Model';
 import { areaKind } from './gridSelection';
 import { updateBlock } from './editorModel';
 import { INSTRUCTION_MAX, textBody } from './deckAssistModel';
 import { COST, EYE, GHOST, MUTED, PRIMARY, RefusalLine, TextProposal } from './AssistParts';
 import {
-  FIGURE_REFUSAL, INSTRUCTION_OFF, TYPED_OPTIONS, instructionField, instructionPlan, typedChange,
+  FIGURE_REFUSAL, INSTRUCTION_OFF, ONE_UNDO, RETRY, SEVERAL_RUNNING, SEVERAL_STILL, TYPED_OPTIONS, VARIANT_CHOICES,
+  instructionField, instructionPlan, labelResults, severalBody, severalHold, severalRefusals, stillRunning, typedChange,
 } from './instructionModel';
+
+/** How often, and for how long, the box reads a several-area run until every area has settled. */
+const POLL_MS = 1500;
+const POLL_FOR_MS = 3 * 60_000;
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * D1604 (#3716, pd19, pd20) — the instruction box, version 2: the one place a
@@ -34,8 +43,14 @@ import {
  *            on Accept, held until Save, one undo step (D1515: undoing it
  *            says the run is still charged). Enter is Send, and neither
  *            sends again while a quote is read or a run is in flight
- *            several areas: `deckV2Adapter.instruct` (#3773 / #3795), which
- *            answers "Coming later" on main
+ *            several areas (D1527, #3795, pd19 task 1): one quote for the
+ *            selection (`deckInstructApi.quote`, D1521) with its hold and
+ *            1–3 variants, then Run (`deckInstructApi.run`, keyed once per
+ *            press); the box reads the batch until every area settles and
+ *            draws one proposal per area with before and after, the
+ *            model's label and each variant (`AreaResults`). Accept places
+ *            one; Accept all places one per area as ONE undo step (D1515's
+ *            group); Retry sends the words again for a new quote
  *   figures  an instruction that names a figure is refused before any quote
  *            ("Nothing was charged"); the Worker refuses it too
  *
@@ -43,24 +58,27 @@ import {
  * sheet's bottom, full width, 44 px targets, above the safe area.
  */
 export default function InstructionBox({
-  deckId, cardIndex, card, areas = [], items = [], aiOn = true, readOnly = false, sheet = false,
-  onRemove, onPlace, onProposals, onTokens = null,
+  deckId, cardIndex, card, areas = [], items = [], aiOn = true, readOnly = false, sheet = false, model = null,
+  onRemove, onPlace, onProposals, onTokens = null, cards = null, sleep = pause,
 }) {
   const [text, setText] = useState('');
   const [step, setStep] = useState(null); // { kind: 'quote'|'running'|'refused'|'later', … }
   const [proposal, setProposal] = useState(null);
   const [deciding, setDeciding] = useState(false);
   const [placeError, setPlaceError] = useState(null);
+  const [variants, setVariants] = useState(1);
+  const [results, setResults] = useState(null); // D1527: the several-area run's proposals, as AreaResults draws them
   const plan = instructionPlan(areas, { aiOn, items });
   // The run in flight names its own option: an instruction, a tone or a language (`TYPED_OPTIONS`).
-  useRailOption(step?.kind === 'running' ? ({ ask: 'deck:rewrite', tone: 'deck:tone', translate: 'deck:translate' })[step.change.action] ?? null : null, 'Send');
+  useRailOption(step?.kind === 'running' ? ({ ask: 'deck:rewrite', tone: 'deck:tone', translate: 'deck:translate' })[step.change.action] ?? null
+    : step?.kind === 'several-running' ? 'deck:rewrite' : null, 'Send');
   const ids = areas.map((a) => a.id).join('|');
-  useEffect(() => { setStep(null); setProposal(null); setPlaceError(null); }, [ids]);
+  useEffect(() => { setStep(null); setProposal(null); setPlaceError(null); setResults(null); }, [ids]);
 
   if (readOnly || !areas.length) return null;
   const body = (change) => textBody(change.action, { id: plan.block.id, kind: plan.block.kind, text: plan.block.text }, { ...change, instruction: text });
   // A quote being read, a run in flight, or a decision being recorded: Send (and Enter) waits.
-  const waiting = step?.kind === 'quote' || step?.kind === 'running' || deciding;
+  const waiting = step?.kind === 'quote' || step?.kind === 'running' || step?.kind === 'several-quote' || step?.kind === 'several-running' || deciding;
 
   const send = () => {
     const words = text.trim();
@@ -68,12 +86,7 @@ export default function InstructionBox({
     setProposal(null); setPlaceError(null);
     // A figure is refused here, before anything is quoted or held.
     if (instructionField(words).figure) { setStep({ kind: 'refused', refusal: { message: FIGURE_REFUSAL } }); return; }
-    if (plan.kind === 'several') {
-      instruct({ deckId, card: cardIndex, areas: areas.map((a) => a.id), instruction: words }).then((a) => {
-        setStep({ kind: 'later', line: `Coming later: ${SURFACES.instruct.what}. ${a?.reason || ''}`.trim() });
-      });
-      return;
-    }
+    if (plan.kind === 'several') { quoteSeveral(words, variants); return; }
     const change = typedChange(words);
     const sent = body(change);
     setStep({ kind: 'quote', quote: null, change, body: sent });
@@ -85,6 +98,52 @@ export default function InstructionBox({
         setStep((s) => (s?.kind === 'quote' && s.body === sent ? { kind: 'refused', refusal } : s));
       },
     );
+  };
+
+  /**
+   * D1527: one quote for the whole selection; nothing runs until Run. The
+   * variants picker sits in the quote's step (the at-rest box stays as pd19
+   * draws it), and changing it quotes again with the same words.
+   */
+  const quoteSeveral = (words, n) => {
+    const sent = severalBody({ cardIndex, areas, instruction: words, variants: n });
+    setResults(null);
+    setStep({ kind: 'several-quote', quote: null, body: sent });
+    deckInstructApi.quote(deckId, sent).then(
+      (q) => setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { ...s, quote: q } : s)),
+      (e) => {
+        const refusal = refusalOf(e);
+        if (refusal?.topUp) onTokens?.();
+        setStep((s) => (s?.kind === 'several-quote' && s.body === sent ? { kind: 'refused', refusal } : s));
+      },
+    );
+  };
+
+  /** D1527: Run the quoted selection, then read the batch until every area has settled (or the box stops waiting). */
+  const runSeveral = async () => {
+    if (step?.kind !== 'several-quote' || !step.quote?.quote_uid) return;
+    const sent = { ...step.body, quote_uid: step.quote.quote_uid };
+    setStep({ kind: 'several-running' });
+    try {
+      const started = await deckInstructApi.run(deckId, sent);
+      let run = { proposals: started?.proposals ?? [], refused: started?.refused ?? [] };
+      const end = Date.now() + POLL_FOR_MS;
+      while (started?.batch_uid && stillRunning(run.proposals) && Date.now() < end) {
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(POLL_MS);
+        // eslint-disable-next-line no-await-in-loop
+        const read = await deckAreasApi.proposals(deckId, started.batch_uid);
+        run = { ...run, proposals: read?.proposals ?? run.proposals };
+      }
+      const { results: shaped } = areaRunResults(deckId, run);
+      setResults({ list: labelResults(shaped, areas, areaKind), still: stillRunning(run.proposals) });
+      setStep(null);
+      onProposals?.();
+    } catch (e) {
+      const refusal = refusalOf(e);
+      if (refusal?.topUp) onTokens?.();
+      setStep({ kind: 'refused', refusal }); reportError('pitch-instruction:several', e);
+    }
   };
 
   const run = () => {
@@ -174,8 +233,34 @@ export default function InstructionBox({
         </span>
       ) : null}
       {step?.kind === 'running' ? <span className={MUTED} role="status">Eadwyn is changing the words…</span> : null}
-      {step?.kind === 'later' ? <span className={MUTED} role="status" data-testid="pitch-instruction-later">{step.line}</span> : null}
+      {step?.kind === 'several-quote' ? (
+        <div className="flex flex-col gap-1.5" data-testid="pitch-instruction-several-quote">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={COST} data-testid="pitch-instruction-hold">{severalHold(step.quote, aiTokens)}</span>
+            <select className={`${GHOST} ${tap}`} aria-label="Variants per area" value={variants} disabled={!step.quote}
+              onChange={(e) => { const n = Number(e.target.value); setVariants(n); quoteSeveral(step.body.instruction, n); }} data-testid="pitch-instruction-variants">
+              {VARIANT_CHOICES.map((n) => <option key={n} value={n}>{n === 1 ? '1 variant' : `${n} variants`}</option>)}
+            </select>
+            <button type="button" className={`${PRIMARY} ${tap}`} disabled={!step.quote?.quote_uid || severalHold(step.quote, aiTokens).startsWith('None')} onClick={runSeveral} data-testid="pitch-instruction-run">Run</button>
+            <button type="button" className={`${GHOST} ${tap}`} onClick={() => setStep(null)}>Cancel</button>
+          </span>
+          {severalRefusals(step.quote, areas).map((r) => (
+            <span key={r.key} className={MUTED} data-testid={`pitch-instruction-area-refused-${r.key}`}>{r.label}: {r.message}</span>
+          ))}
+        </div>
+      ) : null}
+      {step?.kind === 'several-running' ? <span className={MUTED} role="status" data-testid="pitch-instruction-several-running">{SEVERAL_RUNNING}</span> : null}
       {step?.kind === 'refused' ? <RefusalLine refusal={step.refusal} testId="pitch-instruction-refused" /> : null}
+      {results ? (
+        <div className="flex flex-col gap-2" data-testid="pitch-instruction-results">
+          <AreaResults results={results.list} card={card} cards={cards} model={model} items={items} onPlace={onPlace} onProposals={onProposals} testId="pitch-instruction-areas" />
+          {results.still ? <span className={MUTED} data-testid="pitch-instruction-still">{SEVERAL_STILL}</span> : null}
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={`${MUTED} text-[11.5px]`}>{ONE_UNDO}</span>
+            <button type="button" className={`${GHOST} ${tap}`} disabled={waiting} onClick={send} data-testid="pitch-instruction-retry">{RETRY}</button>
+          </span>
+        </div>
+      ) : null}
       {proposal ? (
         <>
           <TextProposal proposal={proposal} busy={deciding} onAccept={() => decide('accept')} onDiscard={() => decide('discard')} testId="pitch-instruction-proposal" />

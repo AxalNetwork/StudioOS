@@ -73,23 +73,25 @@ function Positions({ rows, testId }) {
   );
 }
 
-function NoAccess({ projectId, venture, testId }) {
+/**
+ * D1027's ask, shared with CT22b (D1130): the button, its dialog and the
+ * line it leaves. A sent ask, one the Worker already holds, or one it says is
+ * not this person's to make closes the dialog with its line; any other refusal
+ * stays in it.
+ */
+export function AskForAccess({ projectId, venture, testId }) {
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState(null);
-  // A sent ask, or one the Worker already holds, closes the dialog with its line; any other refusal stays in it.
   const w = useWrite((out) => { if (out) { setOutcome(askOutcome(null)); setOpen(false); } });
   const send = () => w.run(async () => {
     try { return await capTableAccessApi.ask(projectId); } catch (e) {
       const o = askOutcome(e);
-      if (o.asked || o.reload) { setOutcome(o); setOpen(false); return null; }
+      if (o.asked || o.reload || o.final) { setOutcome(o); setOpen(false); return null; }
       throw e;
     }
   });
   return (
-    <div className="flex flex-col items-start gap-2" data-testid={`${testId}-no-access`}>
-      <span aria-hidden="true" className={`text-[20px] ${MUTED}`}>⊘</span>
-      <p className={`m-0 text-[14px] font-bold ${INK}`}>{NO_ACCESS}</p>
-      <p className={`m-0 text-[12.5px] ${MUTED}`}>{askLine(venture)}</p>
+    <>
       {outcome ? <p className={`m-0 text-[12.5px] font-semibold ${INK}`} role="status" data-testid={`${testId}-asked`}>{outcome.line}</p>
         : <button type="button" className={actionGhost} onClick={() => setOpen(true)} data-testid={`${testId}-ask`}>Ask for access</button>}
       {open && (
@@ -98,6 +100,17 @@ function NoAccess({ projectId, venture, testId }) {
           <p className="m-0">{askLine(venture)}</p>
         </CapTableDialog>
       )}
+    </>
+  );
+}
+
+function NoAccess({ projectId, venture, testId }) {
+  return (
+    <div className="flex flex-col items-start gap-2" data-testid={`${testId}-no-access`}>
+      <span aria-hidden="true" className={`text-[20px] ${MUTED}`}>⊘</span>
+      <p className={`m-0 text-[14px] font-bold ${INK}`}>{NO_ACCESS}</p>
+      <p className={`m-0 text-[12.5px] ${MUTED}`}>{askLine(venture)}</p>
+      <AskForAccess projectId={projectId} venture={venture} testId={testId} />
     </div>
   );
 }

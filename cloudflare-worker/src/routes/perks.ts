@@ -21,7 +21,8 @@
  *
  * ADMIN
  *   GET   /admin/queue          everything awaiting review
- *   POST  /admin/:uid/review    approve / reject / pause
+ *   POST  /admin/:uid/review    approve / reject / pause  { expected_revision }
+ *   POST  /admin/:uid/feature   feature / stop featuring a LIVE listing  { featured, expected_revision }
  *   POST  /admin/credits        a Super Admin's manual grant or deduction (D608)
  *   GET   /admin/credits/summary aggregate active non-admin holdings (Super Admin, D957)
  *   GET   /admin/credits/:userId one member's balance and ledger (Super Admin, D633)
@@ -67,6 +68,7 @@ import { programRefusal } from '../services/programEnforcement';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
+import { offerPage, offerPageResult } from '../util/offerPages';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { logAdminAction } from '../services/adminAudit';
 import { perkClaimsCounts } from '../services/perkClaims';
@@ -419,6 +421,9 @@ const LISTING_SELECT = `SELECT p.*,
 r.get('/mine', async (c) => {
   try {
     const user = await requireAuth(c);
+    const page = offerPage(c.req.query('page'));
+    const ledgerPage = offerPage(c.req.query('ledger_page'));
+    if (!page || !ledgerPage) return c.json({ detail: 'Invalid page' }, 400);
     const claims = await c.env.DB.prepare(
       `SELECT pc.uid, pc.credits_spent, pc.claimed_price_cents, pc.kind_at_claim,
               pc.code, pc.redeem_url, pc.status, pc.expires_at, pc.redeemed_at,
@@ -428,9 +433,9 @@ r.get('/mine', async (c) => {
          FROM perk_claims pc
          JOIN perks p ON p.id = pc.perk_id
         WHERE pc.user_id = ?
-        ORDER BY pc.created_at DESC
-        LIMIT 200`,
-    ).bind(user.id).all<any>();
+        ORDER BY pc.created_at DESC, pc.id DESC
+        LIMIT ? OFFSET ?`,
+    ).bind(user.id, page.limit, page.offset).all<any>();
     const today = todayIso();
     // D540 — each line carries the rule it was paid under, and a grant says
     // whether it was later revoked, so the page can show why and from what.
@@ -440,8 +445,22 @@ r.get('/mine', async (c) => {
                        WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
                          AND r.source_ref = 'revoke:' || l.id) AS revoked
          FROM perk_credit_ledger l WHERE l.user_id = ?
-        ORDER BY l.created_at DESC, l.id DESC LIMIT 200`,
-    ).bind(user.id).all<any>();
+        ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+    ).bind(user.id, ledgerPage.limit, ledgerPage.offset).all<any>();
+    const ledgerResult = offerPageResult(ledger.results || [], ledgerPage);
+    const balance = await balanceOf(c.env, user.id);
+    const firstLine = ledgerResult.items[0];
+    const newer = ledgerPage.page > 1 && firstLine ? await c.env.DB.prepare(
+      `SELECT COALESCE(SUM(delta), 0) AS n FROM perk_credit_ledger
+        WHERE user_id = ? AND (created_at > ? OR (created_at = ? AND id > ?))`,
+    ).bind(user.id, firstLine.created_at, firstLine.created_at, firstLine.id).first<{ n: number }>() : null;
+    const totals = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS claimed, COALESCE(SUM(pc.credits_spent), 0) AS credits_spent,
+              COALESCE(SUM(CASE WHEN pc.status = 'issued'
+                AND julianday(substr(pc.expires_at, 1, 10)) - julianday(?) BETWEEN 0 AND ?
+                THEN 1 ELSE 0 END), 0) AS expiring
+         FROM perk_claims pc JOIN perks p ON p.id = pc.perk_id WHERE pc.user_id = ?`,
+    ).bind(today, PERK_EXPIRING_WITHIN_DAYS, user.id).first<{ claimed: number; credits_spent: number; expiring: number }>();
     const items = (claims.results || []).map((x: any) => {
       const daysLeft = claimDaysLeft(x, today);
       return {
@@ -456,8 +475,11 @@ r.get('/mine', async (c) => {
       };
     });
     return c.json({
-      items,
-      ledger: (ledger.results || []).map((l: any) => ({
+      ...offerPageResult(items, page),
+      ledger_page: ledgerResult.page,
+      ledger_has_more: ledgerResult.has_more,
+      ledger_balance: balance - Number(newer?.n ?? 0),
+      ledger: ledgerResult.items.map((l: any) => ({
         ...l,
         revoked: l.kind === 'grant' && Number(l.revoked) === 1,
         reason: ledgerReason(l),
@@ -465,14 +487,13 @@ r.get('/mine', async (c) => {
       })),
       // D540 — 1 credit = US$1 of perk value (#1101).
       credit_usd_cents: CREDIT_USD_CENTS,
-      balance: await balanceOf(c.env, user.id),
+      balance,
       allowance_configured: await allowanceConfigured(c.env),
-      // The three My perks tiles (D413). Over every claim returned, never a
-      // filtered view; `credits_spent` sums what each claim recorded spending.
+      // The three My perks tiles (D413) cover the entire claim population.
       stats: {
-        claimed: items.length,
-        credits_spent: items.reduce((a: number, x: any) => a + Number(x.credits_spent), 0),
-        expiring: items.filter((x: any) => x.expiring).length,
+        claimed: Number(totals?.claimed ?? 0),
+        credits_spent: Number(totals?.credits_spent ?? 0),
+        expiring: Number(totals?.expiring ?? 0),
         expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
       },
       // What the canvas draws around a claim that nothing does yet, with the
@@ -487,6 +508,8 @@ r.get('/mine', async (c) => {
 r.get('/partner', async (c) => {
   try {
     const user = await partnerOnly(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     // "What does MY agency offer" — a claim about a firm, so it narrows. The
     // catalogue below is a marketplace and deliberately does not.
     const companyId = await activeCompanyFor(c, user);
@@ -495,15 +518,15 @@ r.get('/partner', async (c) => {
           `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
                   (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p WHERE p.partner_user_id = ?
-            ORDER BY p.created_at DESC LIMIT 200`,
-        ).bind(user.id)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+        ).bind(user.id, page.limit, page.offset)
       : c.env.DB.prepare(
           `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
                   (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p
             WHERE p.partner_user_id = ? AND (p.company_id = ? OR p.company_id IS NULL)
-            ORDER BY p.created_at DESC LIMIT 200`,
-        ).bind(user.id, companyId)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+        ).bind(user.id, companyId, page.limit, page.offset)
     ).all<any>();
     // `lifecycle` IS SERVED, NEVER COMPUTED ON THE PAGE. The window lives in
     // one constant above; a copy of it in the zone is how the strip and the
@@ -520,7 +543,7 @@ r.get('/partner', async (c) => {
         : null,
     }));
     return c.json({
-      items,
+      ...offerPageResult(items, page),
       expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
       // D413 — the canvas's "What review looks at" panel lists four criteria.
       // None of them is written down anywhere a reviewer reads or this route
@@ -696,13 +719,15 @@ r.get('/partner/:uid/claims', async (c) => {
     const user = await partnerOnly(c);
     const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     if (!perk) return c.json({ error: 'not_found' }, 404);
+    const page = offerPage(c.req.query('page'), 500);
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT uid, status, expires_at, redeemed_at, created_at
-         FROM perk_claims WHERE perk_id = ? ORDER BY created_at DESC LIMIT 500`,
-    ).bind(perk.id).all<any>();
+         FROM perk_claims WHERE perk_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    ).bind(perk.id, page.limit, page.offset).all<any>();
     const today = todayIso();
     return c.json({
-      items: (rows.results || []).map((x: any) => ({ ...x, state: claimState(x, today) })),
+      ...offerPageResult((rows.results || []).map((x: any) => ({ ...x, state: claimState(x, today) })), page),
       absent: { founder: 'Who made each claim is not shown: no founder has consented to share their company with a partner, and nothing records that consent yet.' },
     });
   } catch (e) { return mapError(c, e); }
@@ -807,13 +832,15 @@ r.get('/admin/listings', async (c) => {
 r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT p.*, u.email AS partner_email
          FROM perks p LEFT JOIN users u ON u.id = p.partner_user_id
         WHERE p.status = 'in_review'
-        ORDER BY p.created_at ASC LIMIT 200`,
-    ).all<any>();
-    return c.json({ items: rows.results || [] });
+        ORDER BY p.created_at ASC, p.id ASC LIMIT ? OFFSET ?`,
+    ).bind(page.limit, page.offset).all<any>();
+    return c.json(offerPageResult(rows.results || [], page));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -861,6 +888,8 @@ r.get('/admin/credits/summary', async (c) => {
 r.get('/admin/credits/:userId', async (c) => {
   try {
     await requireSuperAdmin(c);
+    const page = offerPage(c.req.query('page'), 500);
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const userId = intOrNull(c.req.param('userId'));
     if (!userId || userId <= 0) return refuse(c, 400, { code: 'invalid_user', message: 'Name the account by its user id.' });
     const member = await c.env.DB.prepare('SELECT id, name, email, role FROM users WHERE id = ?')
@@ -872,17 +901,31 @@ r.get('/admin/credits/:userId', async (c) => {
                        WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
                          AND r.source_ref = 'revoke:' || l.id) AS revoked
          FROM perk_credit_ledger l WHERE l.user_id = ?
-        ORDER BY l.created_at DESC, l.id DESC LIMIT 500`,
-    ).bind(userId).all<any>();
-    const lines = (ledger.results || []).map((x: any) => ({ ...x, revoked: Number(x.revoked) === 1 }));
+        ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+    ).bind(userId, page.limit, page.offset).all<any>();
+    const result = offerPageResult((ledger.results || []).map((x: any) => ({ ...x, revoked: Number(x.revoked) === 1 })), page);
     return c.json({
       member: { id: member.id, name: member.name ?? null, email: member.email ?? null, role: member.role ?? null },
       balance: await balanceOf(c.env, userId),
-      ledger: lines,
-      truncated: lines.length === 500,
+      ledger: result.items,
+      page: result.page,
+      page_size: result.page_size,
+      has_more: result.has_more,
+      truncated: result.has_more,
     });
   } catch (e) { return mapError(c, e); }
 });
+
+/**
+ * D4806 (#4806) — A REVIEW APPLIES TO THE LISTING AS THE REVIEWER SAW IT. Every editorial or publication action
+ * names the listing's revision (`expected_revision`, the listing's `updated_at` as the admin list returned it).
+ * A listing that changed since (edited, paused, approved by someone else) is refused as 409 `listing_changed`
+ * and nothing is written; the UPDATE itself repeats the check, so a change landing between the read and the
+ * write loses too. Missing, it is 400.
+ */
+const LISTING_CHANGED = { code: 'listing_changed', message: 'This listing changed after you opened it. Read it again before you decide. Nothing was changed.' };
+const REVISION_REQUIRED = { code: 'expected_revision_required', message: 'Send the revision of the listing you reviewed (expected_revision). Nothing was changed.' };
+const revisionOf = (b: any): string | null => (typeof b?.expected_revision === 'string' && b.expected_revision.trim() ? b.expected_revision.trim() : null);
 
 r.post('/admin/:uid/review', async (c) => {
   try {
@@ -894,6 +937,9 @@ r.post('/admin/:uid/review', async (c) => {
     const perk = await c.env.DB.prepare('SELECT * FROM perks WHERE uid = ?')
       .bind(c.req.param('uid')).first<PerkRow>();
     if (!perk) return refuse(c, 404, { code: 'not_found', message: 'No listing has that id.' });
+    const expected = revisionOf(b);
+    if (!expected) return refuse(c, 400, REVISION_REQUIRED);
+    if (expected !== perk.updated_at) return refuse(c, 409, LISTING_CHANGED);
     const note = str(b?.review_note, 1000);
     if (action === 'reject' && !note) return refuse(c, 400, { code: 'note_required', message: 'a rejection must say why — the partner sees this' });
     const moves: Record<string, readonly string[]> = {
@@ -901,33 +947,71 @@ r.post('/admin/:uid/review', async (c) => {
     };
     const notReviewable = (state: string) => refuse(c, 409, { code: 'not_reviewable', message: `This listing is ${state}; ${action} does not apply to that state. Read it again.` });
     if (!moves[action].includes(perk.status)) return notReviewable(perk.status);
-    const same = action === 'approve' && perk.status === 'live';
-    // D985 — putting a listing live needs the branch's Perks grant; a reject, a
-    // pause or an edit to a live listing stays open.
-    if (action === 'approve' && !same) {
+    // D4806: approving is putting a listing live. A listing that is already live is featured or un-featured by its
+    // own operation (`/feature`), never by an approve that could republish it.
+    if (action === 'approve' && perk.status === 'live') {
+      return refuse(c, 409, { code: 'already_live', message: 'This listing is already live. Use Feature or Stop featuring to change its feature. Nothing was changed.' });
+    }
+    // D985 — putting a listing live needs the branch's Perks grant; a reject or a
+    // pause stays open.
+    if (action === 'approve') {
       const notGranted = await programRefusal(c.env, 'perks');
       if (notGranted) return c.json(notGranted.body, notGranted.status);
     }
     const status = action === 'approve' ? 'live' : action === 'reject' ? 'rejected' : 'paused';
     const featured = b?.featured === undefined ? perk.featured : (b.featured ? 1 : 0);
     const editorial = b?.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);
-    const result = same ? await c.env.DB.prepare(
-      `UPDATE perks SET featured = ?, editorial_note = ?, updated_at = ?
-        WHERE id = ? AND status = ? AND updated_at = ?`,
-    ).bind(featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run() : await c.env.DB.prepare(
+    const stamp = nowIso();
+    const result = await c.env.DB.prepare(
       `UPDATE perks SET status = ?, review_note = ?, reviewed_by_user_id = ?, reviewed_at = ?,
               featured = ?, editorial_note = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?`,
-    ).bind(status, note || perk.review_note, admin.id, nowIso(), featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run();
-    if (Number(result.meta?.changes) !== 1) {
-      const current = await c.env.DB.prepare('SELECT status FROM perks WHERE id = ?').bind(perk.id).first<{ status: string }>();
-      return notReviewable(current?.status || 'missing');
-    }
+    ).bind(status, note || perk.review_note, admin.id, stamp, featured, editorial, stamp, perk.id, perk.status, expected).run();
+    if (Number(result.meta?.changes) !== 1) return refuse(c, 409, LISTING_CHANGED);
     await logAdminAction(c.env, admin.id, admin.email,
-      same ? 'perk.feature_updated' : action === 'approve' ? 'perk.approved' : action === 'reject' ? 'perk.rejected' : 'perk.paused', {
+      action === 'approve' ? 'perk.approved' : action === 'reject' ? 'perk.rejected' : 'perk.paused', {
         uid: perk.uid, before: perk.status, after: status, featured_changed: Number(featured) !== Number(perk.featured),
         ...(perk.partner_user_id ? { target_user_id: perk.partner_user_id } : {}),
       });
-    return c.json({ ok: true, status });
+    return c.json({ ok: true, status, revision: stamp });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * D4806 (#4806) — POST /admin/:uid/feature { featured, editorial_note?, expected_revision }. Features or stops
+ * featuring a listing that is LIVE and nothing else: it cannot publish, republish or change the status of a
+ * paused, rejected or edited listing, whatever the dialog was showing. A listing that changed since the
+ * reviewer opened it is refused (409 `listing_changed`); one that is not live is refused (409 `not_live`).
+ */
+r.post('/admin/:uid/feature', async (c) => {
+  try {
+    const admin = await requireAdmin(c);
+    await requireBranchNotSuspended(c);
+    const b = await c.req.json().catch(() => ({} as any));
+    if (typeof b?.featured !== 'boolean') return refuse(c, 400, { code: 'bad_featured', message: 'Say whether to feature the listing (featured: true) or stop featuring it (featured: false).' });
+    const perk = await c.env.DB.prepare('SELECT * FROM perks WHERE uid = ?').bind(c.req.param('uid')).first<PerkRow>();
+    if (!perk) return refuse(c, 404, { code: 'not_found', message: 'No listing has that id.' });
+    const expected = revisionOf(b);
+    if (!expected) return refuse(c, 400, REVISION_REQUIRED);
+    if (expected !== perk.updated_at) return refuse(c, 409, LISTING_CHANGED);
+    if (perk.status !== 'live') {
+      return refuse(c, 409, { code: 'not_live', message: `This listing is ${perk.status}. Only a live listing can be featured or stop being featured. Nothing was changed.` });
+    }
+    const featured = b.featured ? 1 : 0;
+    const editorial = b.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);
+    if (featured === Number(perk.featured) && (editorial ?? null) === (perk.editorial_note ?? null)) {
+      return refuse(c, 409, { code: 'no_change', message: featured ? 'This listing is already featured with that note. Nothing was changed.' : 'This listing is not featured. Nothing was changed.' });
+    }
+    const stamp = nowIso();
+    const result = await c.env.DB.prepare(
+      `UPDATE perks SET featured = ?, editorial_note = ?, updated_at = ?
+        WHERE id = ? AND status = 'live' AND updated_at = ?`,
+    ).bind(featured, editorial, stamp, perk.id, expected).run();
+    if (Number(result.meta?.changes) !== 1) return refuse(c, 409, LISTING_CHANGED);
+    await logAdminAction(c.env, admin.id, admin.email, 'perk.feature_updated', {
+      uid: perk.uid, before: perk.status, after: perk.status, featured_changed: featured !== Number(perk.featured),
+      ...(perk.partner_user_id ? { target_user_id: perk.partner_user_id } : {}),
+    });
+    return c.json({ ok: true, status: 'live', featured: !!featured, revision: stamp });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -938,14 +1022,16 @@ r.post('/admin/:uid/review', async (c) => {
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     // A listing past its end date is not on the shelf, whatever its status
     // says: it could not be claimed (D412), so it is not offered.
     const today = todayIso();
     const rows = await c.env.DB.prepare(
       `${LISTING_SELECT}
         WHERE p.status = 'live' AND (p.ends_at IS NULL OR p.ends_at >= ?)
-        ORDER BY p.featured DESC, p.created_at DESC LIMIT 200`,
-    ).bind(today).all<PerkRow>();
+        ORDER BY p.featured DESC, p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+    ).bind(today, page.limit, page.offset).all<PerkRow>();
     const perks = rows.results || [];
     const balance = await balanceOf(c.env, user.id);
     const claimed = await c.env.DB.prepare(
@@ -953,11 +1039,11 @@ r.get('/', async (c) => {
     ).bind(user.id).all<{ perk_id: number }>();
     const mine = new Set((claimed.results || []).map((x) => x.perk_id));
     return c.json({
-      items: perks.map((p) => ({
+      ...offerPageResult(perks.map((p) => ({
         ...publicPerk(p, today),
         claimed: mine.has(p.id),
         ...affordability(p, user, balance, today),
-      })),
+      })), page),
       balance,
       // Whether THIS account may claim at all, and why not, once for the page
       // rather than per card.
@@ -966,7 +1052,7 @@ r.get('/', async (c) => {
       // The page needs this to tell "you have spent your credits" apart from
       // "credits are not a thing on this account yet".
       allowance_configured: await allowanceConfigured(c.env),
-      categories: [...new Set(perks.map((p) => p.category))].sort(),
+      categories: [...new Set(perks.slice(0, page.size).map((p) => p.category))].sort(),
     });
   } catch (e) { return mapError(c, e); }
 });

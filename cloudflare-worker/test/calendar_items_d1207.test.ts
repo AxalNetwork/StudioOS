@@ -26,7 +26,9 @@ const uidOf = (n: number) => n.toString(16).padStart(32, 'a');
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
-  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  for (const name of ['235_calendar_events_kind.sql', '277_user_recovery_state.sql', '708_calendar_source_prefs.sql', '202611101741_5207_calendar_copy_jobs.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  }
   // 1 admin · 2, 3 founders · 4, 5, 6 investors · 7 cofounder · 8 removed advisor ·
   // 9 advisor with a sessions grant · 10 someone else's person · 11 lead partner ·
   // 12 a partner with a commitment row (not a party: only an investor commits) ·
@@ -227,7 +229,7 @@ test('D1207: either person on a check-in, or an admin, reschedules it, and the c
     f.db.prepare('INSERT INTO google_oauth_tokens (user_id,refresh_token) VALUES (2,?)').run(await encryptString(f.env, 'synthetic-refresh'));
     f.db.prepare("INSERT INTO calendar_sync_records (user_id,provider,source_kind,source_id,external_event_id,last_synced_at) VALUES (2,'google','founder_checkin',50,'copy-of-50',?)").run(at(-1));
     const next = at(50);
-    assert.equal((await f.request('/founder-checkins/50', 10, 'PATCH', { start_at: next })).status, 403);
+    assert.equal((await f.request('/founder-checkins/50', 10, 'PATCH', { start_at: next })).status, 404, 'a stranger is answered as for a missing id (#4570)');
     assert.equal((await f.request('/founder-checkins/51', 2, 'PATCH', { start_at: next })).status, 409);
     const moved = await f.request('/founder-checkins/50', 9, 'PATCH', { start_at: next, duration_min: 999 });
     assert.equal(moved.status, 200);

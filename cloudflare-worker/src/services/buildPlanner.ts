@@ -106,7 +106,7 @@ export async function readEvidenceSeen(env: Env, projectId: number, scope = 'ven
   const commitments = decision ? (await openCommitments(env, projectId, decision.id)).map(({ id, text }) => ({ id, text })) : [];
   const formation = (await env.DB.prepare('SELECT title FROM formation_steps WHERE project_id = ? ORDER BY id').bind(projectId).all<{ title: string }>()).results || [];
   return { seen: evidence.map(e => ({ id: e.id, direction: e.direction })), evidence: { themes, hypotheses: hypotheses.map(h => ({ ...h, claim: planLabel(h.claim) })).filter(h => h.claim), experiments: experiments.map(x => ({ ...x, title: planLabel(x.title) })), signals,
-    objections: objections.map(o => ({ ...o, refs: parse(o.refs) || [] })), segments: segments.map(s => ({ ...s, label: planLabel(s.label) })).filter(s => s.label), positioning,
+    objections: objections.map(o => ({ ...o, refs: (parse(o.refs) || []).sort((a: number, b: number) => a - b) })), segments: segments.map(s => ({ ...s, label: planLabel(s.label) })).filter(s => s.label), positioning,
     alternatives: [...alternatives.map(a => ({ ...a, kind: 'finding' as const, label: planLabel(a.label) })), ...competitors.map(c => ({ id: c.id, kind: 'competitor' as const, label: planLabel(c.label) }))].filter(a => a.label), features: features.map(f => ({ ...f, title: planLabel(f.title) })).filter(f => f.title),
     commitments: commitments.map(c => ({ ...c, text: planLabel(c.text) })).filter(c => c.text), formation: formation.map(f => planLabel(f.title)), hasEntity: project.entity_id != null, decision } };
 }

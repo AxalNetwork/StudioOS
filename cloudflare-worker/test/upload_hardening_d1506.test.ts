@@ -33,6 +33,10 @@ import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts'
 import { d1Over } from './_d1_sqlite.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { loadSchema } from './_schema_once.mjs';
+import { __setPublicResolverForTest } from '../src/services/webFetch.ts';
+// #4572 follow-up: a member-given URL's host is resolved before any fetch or socket; these tests answer DNS
+// with a public address (the private cases are refused by name, before DNS, as before).
+__setPublicResolverForTest(async () => ['93.184.216.34']);
 
 // ─────────────────────────────────────────────────────────── the batch autofill
 

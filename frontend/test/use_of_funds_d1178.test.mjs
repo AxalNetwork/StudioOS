@@ -4,6 +4,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_d1178.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -203,6 +204,17 @@ test('a scenario card, Make this the base\'s warning, and an Edit body with no r
   assert.match(scenarioBody({ name: 'x', raise: '1', target: '0' }).error, /1 to 120/);
 });
 
+test('scenario amounts use the recorded currency exponent', () => {
+  const form = { name: 'Seed', target: '18' };
+  assert.equal(scenarioBody({ ...form, raise: '1,234' }, 'jpy').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.25' }, 'JPY').error);
+  assert.equal(scenarioBody({ ...form, raise: '1.234' }, 'kwd').body.amount_to_raise_cents, 1234);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, 'USD').error);
+  assert.ok(scenarioBody({ ...form, raise: '1.234' }, null).error);
+  assert.equal(scenarioCard({ ...BASE, currency: 'jpy', amount_to_raise_cents: 1234 }).raise, '¥1,234');
+  assert.match(scenarioCard({ ...BASE, currency: undefined }).raise, /minor units.*currency not recorded/);
+});
+
 test('compare: Today is the record, each scenario Modelled, and nothing unrecorded is a zero', () => {
   const t = compareTable({ today: TODAY, scenarios: [BASE, LEAN] });
   const row = (k) => t.rows.find((r) => r.key === k);
@@ -237,7 +249,7 @@ test('every old address lands on Forecast with the venture, and Forecast reads t
     } finally { await v.close(); }
   }
   const listed = new Set(REDIRECT_ROUTES.map((r) => r.path));
-  for (const p of ['/raise/capital/model', '/build/financials']) assert.ok(listed.has(p), `${p} joins the redirect inventory`);
+  for (const p of ['/raise/capital/model', '/build/financials']) assert.equal(listed.has(p), false, `${p} retired by D2319`);
 });
 
 /* ------------------------------------------------------------------ *
@@ -396,8 +408,8 @@ test('on a phone, a page under a tab goes back to its tab', async () => {
 
 test('the wiring: the two routes, the two redirects, the links repointed, no browser pop-up, dark pairs', () => {
   const app = read('frontend/src/App.jsx');
-  assert.ok(app.includes('<Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />'));
-  assert.ok(app.includes('<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />'));
+  assert.equal(app.includes('<Route path="/raise/capital/model" element={<UseOfFundsMovedRedirect />} />'), false);
+  assert.equal(app.includes('<Route path="/build/financials" element={<UseOfFundsMovedRedirect />} />'), false);
   assert.ok(app.includes('<CycleRoute cycle="raise" slug="use-of-funds" uofSub="forecast" />'));
   assert.ok(app.includes('<CycleRoute cycle="raise" slug="use-of-funds" uofSub="compare" />'));
   assert.ok(read('cloudflare-worker/src/services/raiseCycle.ts').includes("model: '/raise/use-of-funds/runway/forecast'"));

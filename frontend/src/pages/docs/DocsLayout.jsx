@@ -499,7 +499,7 @@ export function HelpArticle({ sections, area, guide, user }) {
   const sub = section?.subsections.find((g) => g.id === guide);
   if (!section || !sub) return <GuideNotFound />;
 
-  const placement = guidePlacement(`${area}/${guide}`);
+  const placement = guidePlacement(`${area}/${guide}`, user, session);
   const areaTitle = placement?.areaTitle || section.title;
   const areaGuides = helpAreas(sections).find((item) => item.id === placement?.area)?.guides || [];
   const howto = Array.isArray(sub.howto) ? sub.howto : [];

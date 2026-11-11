@@ -101,7 +101,7 @@ test('each reader keeps a frame: a member the app\'s header, sidebar and footer,
 
 test('/products keeps its query and its hash when it redirects', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/products" element=\{<ProductsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/products" element=\{<ProductsRedirect \/>\} \/>/);
   assert.match(app, /function ProductsRedirect\(\) \{\s*const loc = useLocation\(\);\s*return <Navigate to=\{\{ pathname: '\/pricing\/products', search: loc\.search, hash: loc\.hash \}\} replace \/>;/);
 });
 

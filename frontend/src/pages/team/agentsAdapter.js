@@ -9,21 +9,17 @@
  * is a fact only the Worker states.
  *
  * WIRED (#3840, D1496, part 1): `roles`, `listAgents`, `addAgent`, `agent`,
- * `updateAgent`, `removeAgent`, `rulebook` and `saveRulebook` call
+ * `updateAgent`, `removeAgent`, `rulebook` and `saveRulebook` (and D4387's
+ * `sponsorCandidates` and `changeSponsor`, through `throughSponsor`) call
  * `teamAgentsApi` (`frontend/src/lib/api/teamAgents.js`, added by #3840 with
  * its routes in `cloudflare-worker/src/routes/team_agents.ts`). Every one of
  * those routes answers 404 `team_agents_off` while `TEAM_AGENTS_ENABLED` is
  * off, which `through` draws as "AI agents aren’t switched on yet."
  *
- * STILL UNAVAILABLE, one-line bodies until their routes land. Each builder
- * adds the method to `teamAgents.js` in the same PR as the route and replaces
- * only the matching body with `through(() => teamAgentsApi.<method>(…))`:
- *
- *   #3842 (part 2)  runQuote · runAgent
- *   #3843 (part 3)  queue · queueItem · decide (the route and `teamAgentsApi` landed;
- *                   S1 swaps these bodies and maps `Item` onto the board)
- *   #3844 (part 5)  toolChoices (the route and `teamAgentsApi.toolChoices` landed;
- *                   S1 swaps this body)
+ * WIRED (#3727 integration): #3842's runQuote/runAgent, #3843's queue,
+ * queueItem/decide and #3844's toolChoices use their merged clients too.
+ * The adapter preserves their DTOs; Approvals maps the Worker's queue fields
+ * onto TM7. Feature switches and permission refusals remain server-owned.
  *
  * HOW #3840'S REFUSALS ARE DRAWN (`through`):
  *   404 `team_agents_off`        unavailable: the switched-off state
@@ -52,10 +48,8 @@ import { fromWorkerLibrary, fromWorkerSkillPage, skillRefusalWords } from './ski
 
 export const AGENTS_OFF_REASON = 'AI agents aren’t switched on yet.';
 
-/** The switched-off answer: every #3840 route while `TEAM_AGENTS_ENABLED` is off, and every unbuilt function below. */
+/** The switched-off answer: every #3840 route while `TEAM_AGENTS_ENABLED` is off. */
 export const unavailable = (reason = AGENTS_OFF_REASON) => ({ available: false, reason });
-
-const off = async () => unavailable();
 
 /** The first floor item `rules.always_asks_human` dropped, or null. */
 export function droppedFloorItem(rules) {
@@ -75,9 +69,10 @@ export async function through(call, sent = null) {
   } catch (e) {
     const status = e?.status ?? e?.response?.status ?? null;
     const code = e?.code || e?.data?.code || e?.data?.error || null;
-    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (status === 404 && (code === 'team_agents_off' || code === 'custom_mcp_off')) return unavailable(code === 'custom_mcp_off' ? 'Connected read-only tools aren’t switched on yet.' : AGENTS_OFF_REASON);
+    if (['model_not_allowed', 'tool_not_allowed', 'invalid_allowlists', 'allowlists_unreadable'].includes(code) && e?.message) return { available: false, refused: true, code, reason: e.message };
     if (status === 403 && code === 'plan_required') return { available: false, locked: 'plan', reason: refusalWords('plan_required') };
-    if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) };
+    if (status === 403) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code) };
     if (status === 422 && code === 'rule_floor') {
       // #3840 names the section; the floor item outlined is the first one the rules sent dropped (TM4c).
       if (e?.data?.section === 'may_do_automatically') return { available: false, refused: true, code, highlight: null, reason: refusalWords('auto_floor') };
@@ -92,10 +87,10 @@ export async function through(call, sent = null) {
     if (status === 409 && code === 'not_open') {
       // Who decided it, and when and how when the Worker says (TM7b2: "Accepted 31 Oct 09:40 by …").
       const d = e?.data || {};
-      const decided = d.decided_by ? { by: d.decided_by, at: d.decided_at || d.decided_by.at || null, decision: d.decision || d.decided_by.decision || null } : null;
+      const decided = d.decided_by || d.status ? { by: d.decided_by, at: d.decided_at || d.decided_by?.at || null, decision: d.decision || d.status || d.decided_by?.decision || null } : null;
       return { available: false, refused: true, code, decided, reason: refusalWords(code, d.decided_by?.name) };
     }
-    if ((status === 400 || status === 409 || status === 422) && code) return { available: false, refused: true, code, reason: refusalWords(code, e?.data?.decided_by?.name) };
+    if ((status === 400 || status === 402 || status === 409 || status === 422 || status === 503) && code) return { available: false, refused: true, code, reason: refusalWords(code) === refusalWords('') ? (e?.message || refusalWords(code)) : refusalWords(code, e?.data?.decided_by?.name) };
     return { available: false, unreadable: true, reason: 'could not be read' };
   }
 }
@@ -116,6 +111,29 @@ export const agent = (uid) => through(() => teamAgentsApi.agent(uid));
 export const updateAgent = (uid, patch) => through(() => teamAgentsApi.updateAgent(uid, patch));
 /** `DELETE /api/teams/agents/:uid` → `{ ok: true }`: open proposals withdrawn, history kept. */
 export const removeAgent = (uid) => through(() => teamAgentsApi.removeAgent(uid));
+/**
+ * D4387 (#4387): the sponsor change. A refusal is drawn in the Worker's own
+ * words, each code its own sentence (`sponsor_not_member`, `sponsor_plan_required`,
+ * `sponsor_no_tokens`, `sponsor_tools` with its `tools` count, …); an answer
+ * with no code is unreadable, never a success.
+ */
+export async function throughSponsor(call) {
+  try {
+    return { available: true, value: await call() };
+  } catch (e) {
+    const status = e?.status ?? e?.response?.status ?? null;
+    const code = e?.code || e?.data?.code || e?.data?.error || null;
+    if (status === 404 && code === 'team_agents_off') return unavailable();
+    if (code && [400, 403, 404, 409, 422, 503].includes(status) && e?.message) {
+      return { available: false, refused: true, code, reason: e.message, tools: Number(e?.data?.tools) || null };
+    }
+    return { available: false, unreadable: true, reason: 'could not be read' };
+  }
+}
+/** `GET /api/teams/agents/:uid/sponsors` → `{ sponsor, candidates: [{ uid, name, current, can_sponsor, code, reason }] }`. */
+export const sponsorCandidates = (uid) => throughSponsor(() => teamAgentsApi.sponsorCandidates(uid));
+/** `PUT /api/teams/agents/:uid/sponsor` `{ sponsor_uid, reason, drop_tools? }` → `{ agent }`. */
+export const changeSponsor = (uid, body) => throughSponsor(() => teamAgentsApi.changeSponsor(uid, body));
 /** `GET /api/teams/:scope/:id/rulebooks/:role` → `{ role_key, default, effective, version, versions, diff, floor }`. */
 export const rulebook = (scope, id, role) => through(() => teamAgentsApi.rulebook(scope, id, role));
 /** `PUT /api/teams/:scope/:id/rulebooks/:role` `{ rules }` → `{ effective, version }`. */
@@ -124,30 +142,30 @@ export const saveRulebook = (scope, id, role, rules) => through(() => teamAgents
 // ---------------------------------------------------------------- #3842 part 2
 
 /** `GET /api/teams/agents/:uid/run/quote` → the hold shown before a run. */
-export const runQuote = (/* uid, { module, option } */) => off();
+export const runQuote = (uid, opts = {}) => through(() => teamAgentsApi.runQuote(uid, opts));
 /** `POST /api/teams/agents/:uid/run`. */
-export const runAgent = (/* uid, body */) => off();
+export const runAgent = (uid, body) => through(() => teamAgentsApi.runAgent(uid, body));
 
 // ---------------------------------------------------------------- #3843 part 3
 
-/** `GET /api/teams/:scope/:id/queue` → `{ items, decided, counts }`; `counts` is a block, never 0 for unread. */
-export const queue = (/* scope, id, filters */) => off();
+/** `GET /api/teams/:scope/:id/queue` → `{ items, counts, next_cursor }`; `counts` is a block, never 0 for unread. */
+export const queue = (scope, id, filters = {}) => through(() => teamAgentsApi.queue(scope, id, filters));
 /** `GET /api/teams/queue/:proposalUid`. */
-export const queueItem = (/* proposalUid */) => off();
+export const queueItem = (proposalUid) => through(() => teamAgentsApi.queueItem(proposalUid));
 /** `POST /api/teams/queue/:proposalUid/decide` → 409 `not_open` carries `decided_by`. */
-export const decide = (/* proposalUid, { decision, payload } */) => off();
+export const decide = (proposalUid, body) => through(() => teamAgentsApi.decide(proposalUid, body));
 
 // ---------------------------------------------------------------- #3844 part 5
 
 /** `GET /api/teams/tools` → the sponsor's approved read tools. */
-export const toolChoices = off;
+export const toolChoices = () => through(() => teamAgentsApi.toolChoices());
 
 // ---------------------------------------------------------------- D1612 skills: A1 (#3951) and A2 (#3956)
 //
-// Team › Skills (boards SK0–SK9). Every body stays `off()` until its route
-// lands; the builder replaces only the body with
-// `throughSkill(() => teamAgentsApi.<method>(…))` and adds the method to
-// `lib/api/teamAgents.js` in the same PR. The shapes are #3951's and #3956's.
+// Team › Skills (boards SK0–SK9). Reads and writes are wired to the Worker's
+// mounted routes (#4224, #4733); the shapes are #3951's and #3956's. There is
+// no `/:scope/:id/skills` or `/skills/import` route: a skill is created with
+// `POST /api/teams/skills` and an import is that route with `skill_md`.
 
 /** `through`, with the skill refusals (A1, A2) in their own words. */
 export async function throughSkill(call) {
@@ -166,14 +184,34 @@ const shaped = (out, fn) => (out.available ? { ...out, value: fn(out.value) } : 
 export const skillLibrary = async (companyUid) => shaped(await throughSkill(() => teamAgentsApi.skillLibrary(companyUid)), fromWorkerLibrary);
 /** `GET /api/teams/skills/:uid` (wired by #4224) → `{ skill (with steps, markdown, versions), can_edit }`. */
 export const skill = async (uid) => shaped(await throughSkill(() => teamAgentsApi.skill(uid)), fromWorkerSkillPage);
-/** `POST /api/teams/:scope/:id/skills` → 201 `{ skill }`, a draft. */
-export const createSkill = (/* scope, id, body */) => off();
+/**
+ * The Worker's skill body from the sheet's: the sheet's `taxonomy` rows are `{ skill_slug, level }`, the Worker's `tags` are
+ * `{ slug, level }`; the sheet's `description` is the Worker's `purpose`. No roles are sent (the Worker holds a skill with none to every role).
+ */
+export function toWorkerSkill(body = {}) {
+  const out = {};
+  if (body.name !== undefined) out.name = body.name;
+  if (body.description !== undefined || body.purpose !== undefined) out.purpose = body.purpose ?? body.description;
+  if (body.steps !== undefined) out.steps = body.steps;
+  if (body.tools !== undefined) out.tools = body.tools;
+  if (body.output_kind !== undefined) out.output_kind = body.output_kind;
+  if (Array.isArray(body.taxonomy)) out.tags = body.taxonomy.map((t) => ({ slug: t.skill_slug ?? t.slug, level: t.level }));
+  return out;
+}
+/** A company's skills only: the Worker has no project-scoped skill. */
+const notCompany = () => ({ available: false, refused: true, code: 'scope_invalid', reason: skillRefusalWords('scope_invalid') });
+/** `POST /api/teams/skills { scope: 'company', company, … }` → 201 `{ skill }`, a draft. */
+export const createSkill = (kind, id, body) => (kind === 'company'
+  ? throughSkill(() => teamAgentsApi.createSkill({ scope: 'company', company: id, ...toWorkerSkill(body) }))
+  : Promise.resolve(notCompany()));
 /** `PATCH /api/teams/skills/:uid` → `{ skill }`. */
-export const updateSkill = (/* uid, patch */) => off();
-/** `POST /api/teams/skills/:uid/publish` → `{ skill, version }`. */
-export const publishSkill = (/* uid, { note } */) => off();
-/** `POST /api/teams/:scope/:id/skills/import { markdown }` → 201 `{ skill, problems }`, always a draft. */
-export const importSkill = (/* scope, id, markdown */) => off();
+export const updateSkill = (uid, patch) => throughSkill(() => teamAgentsApi.updateSkill(uid, toWorkerSkill(patch)));
+/** `POST /api/teams/skills/:uid/publish` → `{ skill }` (no body: the Worker publishes the draft). */
+export const publishSkill = (uid) => throughSkill(() => teamAgentsApi.publishSkill(uid));
+/** `POST /api/teams/skills { scope: 'company', company, skill_md }` → 201 `{ skill }`, always a draft. There is no import route. */
+export const importSkill = (kind, id, markdown) => (kind === 'company'
+  ? throughSkill(() => teamAgentsApi.createSkill({ scope: 'company', company: id, skill_md: markdown }))
+  : Promise.resolve(notCompany()));
 
 // A2 #3956 — agents and skills: wired to `teamAgentsApi` with their routes (D1612 A2).
 /** `GET /api/teams/agents/:uid/skills` → `{ can_manage, skills, radar, values }`. */
@@ -194,3 +232,7 @@ export const coverage = (scope, id) => throughSkill(() => teamAgentsApi.coverage
 export const costEstimate = (uid, change = {}) => throughSkill(() => teamAgentsApi.costEstimate(uid, change));
 /** D4121: the same for an agent not yet added (AG3, the Add-an-agent Skills step). */
 export const draftCostEstimate = (scope, id, draft) => throughSkill(() => teamAgentsApi.draftCostEstimate(scope, id, draft));
+
+// D4422: inherited Team settings, through the same refusal boundary as agents.
+export const readAllowlists = (scope, id) => through(() => teamAgentsApi.readAllowlists(scope, id));
+export const saveAllowlists = (scope, id, lists) => through(() => teamAgentsApi.saveAllowlists(scope, id, lists));

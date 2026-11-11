@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { trustCenterAdminApi } from '../../lib/api/trustContent.js';
 import { reportError } from '../../lib/log';
+import { newOpKey } from '../../lib/opKey.js';
 import { AdminPageHeader, Card, Lightbox } from '../../ui';
 import Sheet from '../../ui/Sheet.jsx';
 import {
   NOTICE_DAYS, activeFrom, blankGroup, blankLine, blockRows, certificationProblem, certificationsPayload, confirmedCount,
-  REFUSALS, linesPayload, linesProblem, noteState, pendingChanges, publishLine, publishedLine, refusalText, startBody,
+  REFUSALS, linesPayload, linesProblem, noteState, pendingChanges, publishLine, publishedLine, publishRefusalText, refusalText, startBody,
   startCheckedAt, subprocessorRows,
 } from './trustContentModel';
 
@@ -251,16 +252,27 @@ function SubprocessorDialog({ editing, api, onClose, onDone }) {
   );
 }
 
-function PublishDialog({ read, api, onClose, onDone }) {
+function PublishDialog({ read, api, onClose, onDone, onStale }) {
   const p = pendingChanges(read);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // D4675 — one key for this Publish, resent on every retry from this dialog.
+  const [publishKey] = useState(newOpKey);
   const ns = noteState(note);
   const go = async () => {
     if (!ns.ok) { setError(REFUSALS.note_required); return; }
     setBusy(true); setError(null);
-    try { await api.publish(note.trim()); onDone(); } catch (e) { reportError('TrustContent:publish', e); setError(refusalText(e, 'It could not be published just now. Nothing was published. Try again.')); setBusy(false); }
+    try {
+      const res = await api.publish(note.trim(), { pending_token: read?.pending_token, publish_key: publishKey });
+      onDone(res);
+    } catch (e) {
+      reportError('TrustContent:publish', e);
+      // What this dialog lists is no longer what is pending: close it and re-read.
+      if (e?.code === 'changed_since_review' && onStale) { onStale(); return; }
+      setError(publishRefusalText(e));
+      setBusy(false);
+    }
   };
   return (
     <Lightbox label="Publish?" title="Publish?" sub={publishLine(p, confirmedCount(read?.subscribers))} onClose={onClose} testId="trust-content-publish-dialog"
@@ -419,7 +431,13 @@ export default function TrustContentPage({ api = trustCenterAdminApi }) {
       </div>
       {dialog?.kind === 'confirm' ? <ConfirmDialog ask={dialog.ask} onClose={() => setDialog(null)} onDone={after(dialog.done)} /> : null}
       {dialog?.kind === 'sub' ? <SubprocessorDialog editing={dialog.editing} api={api} onClose={() => setDialog(null)} onDone={after(dialog.editing ? `${dialog.editing.name}: the draft is saved.` : 'The subprocessor is added as a draft. Visitors see it after you publish.')} /> : null}
-      {dialog?.kind === 'publish' ? <PublishDialog read={read} api={api} onClose={() => setDialog(null)} onDone={after('Published. Visitors see the changes now, with your note under Changes to this page.')} /> : null}
+      {dialog?.kind === 'publish' ? (
+        <PublishDialog
+          read={read} api={api} onClose={() => setDialog(null)}
+          onDone={(res) => after(`${res?.replayed ? 'Already published by your earlier attempt. ' : 'Published. '}Visitors see the changes now, with your note under Changes to this page.`)()}
+          onStale={after(REFUSALS.changed_since_review)}
+        />
+      ) : null}
     </div>
   );
 }

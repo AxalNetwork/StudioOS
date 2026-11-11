@@ -17,8 +17,9 @@ test('the four tabs and their sub-tabs at the canvas addresses (SA0–SA8)', () 
     ['Overview', '/hq/ai-agents'], ['Roster', '/hq/ai-agents/roster'],
     ['Skills library', '/hq/ai-agents/skills'], ['Operations', '/hq/ai-agents/operations'],
   ]);
-  assert.deepEqual(SUBTABS.skills.map((t) => t.label), ['From Axal', 'Company skills']);
+  assert.deepEqual(SUBTABS.skills.map((t) => t.label), ['From Axal VC', 'Company skills']);
   assert.deepEqual(SUBTABS.operations.map((t) => t.label), ['Runs', 'Spend', 'Policies', 'Audit']);
+  assert.match(PAGE, />‹ \{FROM_AXAL_VC\}<\/Link>/, 'the skill detail back link uses the full Axal VC name');
 });
 
 test('every address the page answers is a registered, Super Admin-only route', () => {
@@ -39,10 +40,17 @@ test('viewFor maps each address to its board, and an unknown sub-path to its tab
   assert.deepEqual(viewFor('/hq/ai-agents/operations/nope'), { tab: 'operations', sub: 'runs' });
 });
 
+test('the HQ skill detail draws the shared taxonomy graph', () => {
+  assert.match(PAGE, /data-testid="hq-skill-graph"/);
+  assert.match(PAGE, /<AgentRadar vector=\{radarVector\(data\.skill\.radar\)\} radar=\{data\.skill\.radar\}/);
+  assert.match(PAGE, /Computed from this skill’s taxonomy\./);
+  assert.match(PAGE, /This skill has no taxonomy levels yet\./);
+});
+
 test('each build task names its issue, and none is live before its routes land', () => {
   assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.issue]), [['H1', 4158], ['H2', 4160], ['H3', 4161], ['H4', 4162], ['H5', 4163]]);
-  // D4158: H1's roster routes are mounted (routes/admin_ai_agents_roster.ts), so it is live; the rest wait.
-  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', false], ['H3', false], ['H4', false], ['H5', false]]);
+  // #4739: every board is wired, H2's review, golden cases, evals and retire included.
+  assert.deepEqual(Object.entries(BUILD).map(([k, b]) => [k, b.live]), [['H1', true], ['H2', true], ['H3', true], ['H4', true], ['H5', true]]);
   assert.equal(notYet('H4'), 'Not switched on yet. Platform AI policy and the kill switch arrives with #4162.');
 });
 
@@ -89,15 +97,14 @@ test('SA3 area tiles: the 8 areas in the radar order, counts and drafts', () => 
   assert.equal(tiles.find((t) => t.slug === 'legal_compliance').line, '0 skills');
 });
 
-test('SA6b: Pause arms only on the word PAUSE and a reason; the button stays off until #4162', () => {
+test('SA6b: Pause arms only on the word PAUSE and a reason; the live button requires confirmation', () => {
   assert.equal(PAUSE_WORD, 'PAUSE');
   assert.equal(pauseArmed({ typed: 'PAUSE', reason: 'Model provider incident' }), true);
   assert.equal(pauseArmed({ typed: 'PAU', reason: 'Model provider incident' }), false);
   assert.equal(pauseArmed({ typed: 'pause', reason: 'Model provider incident' }), false);
   assert.equal(pauseArmed({ typed: 'PAUSE', reason: 'short' }), false);
   assert.equal(reasonOk('   ten chars ok   '), true);
-  assert.match(PAGE, /<button type="button" disabled title=\{notYet\('H4'\)\} data-armed=/, 'the kill switch is never live before the Worker refuses runs');
-  assert.match(PAGE, /Nothing is paused from this page until then\./);
+  assert.match(read('pages/hq/aiAgents/Operations.jsx'), /api.pauseAll\(reason,\s*confirm\)/);
 });
 
 test('SA6 guardrails: the three platform rules, no advice wording in the panel', () => {
@@ -110,15 +117,14 @@ test('SA6 guardrails: the three platform rules, no advice wording in the panel',
 
 test('the page reads only routes that exist, and writes only through H1\'s roster', () => {
   const calls = [...PAGE.matchAll(/teamAgentsApi\.(\w+)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(calls)], ['roles', 'axalSkills']);
+  assert.deepEqual([...new Set(calls)], ['roles']);
   assert.match(read('lib/api/teamAgents.js'), /axalSkills: \(\) => request\('\/teams\/skills'\),/);
   // D4158: the roster's four methods are the page's only admin calls, and its only writes.
   const admin = [...PAGE.matchAll(/adminAiAgentsApi\.(\w+)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(admin)].sort(), ['roster', 'rosterAgent', 'rosterDefaults', 'rosterUpdate']);
   assert.doesNotMatch(PAGE, /method: '(POST|PUT|PATCH|DELETE)'/);
-  for (const label of ['Publish…', 'Re-run evals', 'Retire…']) {
-    assert.match(PAGE, new RegExp(`<button type="button" disabled className=\\{BTN\\} title=\\{notYet\\('H2'\\)\\}>${label.replace('…', '…')}</button>`), label);
-  }
+  // #4739: the lifecycle buttons are live (SkillLifecycle.jsx), not disabled behind "arrives with #4160".
+  assert.doesNotMatch(PAGE, /notYet\('H2'\)|arrives with #4160|not connected on this page yet/);
 });
 
 test('people are never shown by email on this page', () => {

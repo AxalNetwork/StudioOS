@@ -22,6 +22,10 @@ const dateLabel = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
 };
+const DAY_MS = 86_400_000;
+const LAUNCH_WINDOW_DAYS = 90;
+/** D5203 (#5203): the project-linked kinds a launch calendar shows: events and Grow's dated plans and sends. */
+const LAUNCH_KINDS = Object.freeze(['event_hosted', 'event_ticket', 'publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step']);
 const kindLabel = (value) => titleCase(value) || 'Event';
 const statusLabel = (value) => titleCase(value) || 'State not recorded';
 
@@ -49,11 +53,13 @@ export default function FounderGrowLaunch() {
       if (String(selected.id) !== requestedId) {
         setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(selected.id)); return next; }, { replace: true });
       }
-      const now = new Date();
-      const from = new Date(now); from.setFullYear(from.getFullYear() - 1);
-      const to = new Date(now); to.setFullYear(to.getFullYear() + 1);
+      // D5203 (#5203): 90 days either side (the Worker's personal window is at most
+      // 180 days) and only the launch kinds, not two years of every source.
+      const now = Date.now();
+      const from = new Date(now - LAUNCH_WINDOW_DAYS * DAY_MS);
+      const to = new Date(now + LAUNCH_WINDOW_DAYS * DAY_MS);
       const results = await Promise.allSettled([
-        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString() }),
+        api.listCalendarEvents({ from: from.toISOString(), to: to.toISOString(), kinds: LAUNCH_KINDS.join(',') }),
         // Founder side; `/me/attributions` is the partner's and refuses a founder.
         api.founderCoMarketing(selected.id),
       ]);
@@ -102,7 +108,7 @@ function LaunchContent({ project, events, attributions, upcoming, visible, view,
     <div className="fg-launch-tabs"><div className="fg-launch-actions"><Link to={`/calendar${query}`} data-testid="link-open-grow-launch-calendar"><CalendarDays size={13} /> Open calendar</Link></div></div>
     <div className="fg-launch-stats"><Stat label="Items" value={calendarUnavailable ? 'Unavailable' : events.length} note={calendarUnavailable ? 'Calendar source unavailable' : `${upcoming.length} upcoming project event${upcoming.length === 1 ? '' : 's'}`} muted={calendarUnavailable} /><Stat label="Registered" value="Unavailable" note="No registration source connected" muted /><Stat label="Best performer" value="Unavailable" note="No content performance source connected" muted /><Stat label="Leads attributed" value={attributionUnavailable ? 'Unavailable' : leadsAttributed} note={attributionUnavailable ? 'Attribution source unavailable' : `${attributions.length} project-linked event${attributions.length === 1 ? '' : 's'} total`} muted={attributionUnavailable} /></div>
     <section className="a5-card fg-launch-table"><Head title="Calendar" meta="Project-linked events · no inferred outcomes" />{calendarUnavailable ? <EmptyFeed error /> : <LaunchTable rows={visible} />}</section>
-    <section className="a5-focus fg-launch-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the launch honestly</h2></div><span>Source-derived</span></div><p>{calendarUnavailable ? 'The project calendar source is unavailable. FG7 does not invent scheduled items, publication results, registration counts, article readership, or launch outcomes.' : events.length ? `FG7 shows ${events.length} project-linked calendar event${events.length === 1 ? '' : 's'} and ${attributions.length} project-linked co-marketing attribution event${attributions.length === 1 ? '' : 's'}. Calendar participation is not presented as launch performance.` : 'No project-linked calendar events are stored for this startup. Published content, articles, registration counts, and performance outcomes remain unavailable.'}</p><div className="fg-launch-handoffs"><Link className="a5-link" to={`/calendar${query}`}>Open unified calendar <ChevronRight size={14} /></Link><Link className="a5-link" to={`/comarketing${query}`} data-testid="link-open-grow-launch-workspace">Open co-marketing workspace <ChevronRight size={14} /></Link></div></section>
+    <section className="a5-focus fg-launch-read"><div className="a5-head"><div><Sparkles size={15} /><h2>Read the launch honestly</h2></div><span>Source-derived</span></div><p>{calendarUnavailable ? 'The project calendar source is unavailable. FG7 does not invent scheduled items, publication results, registration counts, article readership, or launch outcomes.' : events.length ? `FG7 shows ${events.length} project-linked calendar event${events.length === 1 ? '' : 's'} and ${attributions.length} project-linked co-marketing attribution event${attributions.length === 1 ? '' : 's'}. Calendar participation is not presented as launch performance.` : 'No project-linked calendar events are stored for this startup. Published content, articles, registration counts, and performance outcomes remain unavailable.'}</p><div className="fg-launch-handoffs"><Link className="a5-link" to={`/calendar${query}`}>Open unified calendar <ChevronRight size={14} /></Link><Link className="a5-link" to={`/grow/partner-network/co-marketing${query}`} data-testid="link-open-grow-launch-workspace">Open co-marketing workspace <ChevronRight size={14} /></Link></div></section>
   </div>;
 }
 function LaunchTable({ rows }) {

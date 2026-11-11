@@ -111,3 +111,18 @@ export function InvestorTabs() {
     </Strip>
   );
 }
+
+/** D4298 (#4298, IN11): the Influencers program's seven tabs. Applications carries the count waiting on HQ. */
+export function InfluencerTabs({ queue }) {
+  return (
+    <Strip label="Influencers">
+      <Tab to="/admin/programs/influencer/how-it-runs" end testId="programs-tab-how">How it runs</Tab>
+      <Tab to="/admin/programs/influencer/applications" count={queue} testId="programs-tab-applications">Applications</Tab>
+      <Tab to="/admin/programs/influencer/influencers" testId="programs-tab-influencers">Influencers</Tab>
+      <Tab to="/admin/programs/influencer/offers" testId="programs-tab-offers">Offers</Tab>
+      <Tab to="/admin/programs/influencer/payouts" testId="programs-tab-payouts">Payouts</Tab>
+      <Tab to="/admin/programs/influencer/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/influencer/settings" testId="programs-tab-settings">Settings</Tab>
+    </Strip>
+  );
+}

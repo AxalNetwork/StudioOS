@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T11 — Financial Model Builder (port of backend/app/api/routes/financials.py).
  *
@@ -386,7 +387,7 @@ function ensureCanView(project: Project, user: { role: string; founder_id?: numb
 
 function ensureCanEdit(project: Project, user: { role: string; founder_id?: number | null }) {
   if (user.role === 'admin') return;
-  if (user.role === 'founder') {
+  if (holdsLicence(user, 'founder')) {
     if (!canAccessFounderResource(user as any, project.founder_id)) {
       throw new Error('Forbidden');
     }

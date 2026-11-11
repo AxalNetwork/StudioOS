@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * D579 (#1206) — a startup's EIN, encrypted at rest and owner-scoped (the
  * owner's answers 1A: store it; 2A: the founder, company editors and admins
@@ -47,7 +48,7 @@ export async function einAccess(
   env: Env, user: Pick<User, 'id' | 'role' | 'founder_id'>, project: EinProject,
 ): Promise<EinAccess> {
   if (user.role === 'admin') return 'admin';
-  if (user.role === 'partner' || user.role === 'investor') return null;
+  if ((holdsLicence(user, 'partner') || holdsLicence(user, 'investor')) && !holdsLicence(user, 'founder') && !holdsLicence(user, 'advisor')) return null;
   return (await canAccessProject(env, user, project, { write: true })) ? 'founder' : null;
 }
 

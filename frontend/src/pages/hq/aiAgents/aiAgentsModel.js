@@ -1,14 +1,17 @@
 /**
  * D4137 (#4137) — HQ › AI agents, the words and rules the page draws by.
  *
- * Pure, for the Node test. The page (`HqAiAgentsPage.jsx`) reads one route that
- * exists on main — `GET /api/teams/skills`, D1612's library, whose `hq` list is
- * the "From Axal" skills — and draws every other board with the build task that
- * switches it on. When a task lands, its builder flips `BUILD[key].live` and
- * wires the read; the words here stay as they are.
+ * Pure, for the Node test. The page (`HqAiAgentsPage.jsx`) reads the admin
+ * routes under `/api/admin/ai-agents` (H1–H5: the roster, the From Axal VC skills,
+ * company skills, the policy, runs, spend and the audit) and draws a board with
+ * the build task that switches it on only while that task has not landed. All
+ * five have (`BUILD[key].live`); the words here stay as they are. The lifecycle
+ * rules are in `skillLifecycleModel.js`, the policy's in `policyModel.js`, and the
+ * words for every refusal in `refusals.js`.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { REASON_MIN, wordsFor } from './refusals.js';
 
 /** The four tabs and their addresses (SA0–SA8). Overview is the landing tab. */
 export const BASE = '/hq/ai-agents';
@@ -20,9 +23,11 @@ export const TABS = [
 ];
 
 /** The second row under Skills library and under Operations. */
+export const FROM_AXAL_VC = 'From Axal VC';
+
 export const SUBTABS = {
   skills: [
-    { key: 'axal', label: 'From Axal', to: `${BASE}/skills` },
+    { key: 'axal', label: FROM_AXAL_VC, to: `${BASE}/skills` },
     { key: 'companies', label: 'Company skills', to: `${BASE}/skills/companies` },
   ],
   operations: [
@@ -58,14 +63,15 @@ export function viewFor(pathname = '') {
 /**
  * The build tasks behind the boards (#4137 H1–H5). `live: false` until the
  * task lands its routes; the page says "Not switched on yet" and names the
- * issue, and draws no control the server would only refuse.
+ * issue, and draws no control the server would only refuse. All five are live
+ * since #4739 wired H2's review, golden cases, evals and retire.
  */
 export const BUILD = {
   H1: { issue: 4158, live: true, what: 'The roster admin API', boards: 'SA1, SA2' },
-  H2: { issue: 4160, live: false, what: 'Review, golden cases and retire for From Axal skills', boards: 'SA3 actions, SA4' },
-  H3: { issue: 4161, live: false, what: 'Company skills moderation', boards: 'SA5' },
-  H4: { issue: 4162, live: false, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
-  H5: { issue: 4163, live: false, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
+  H2: { issue: 4160, live: true, what: `Review, golden cases and retire for ${FROM_AXAL_VC} skills`, boards: 'SA3 actions, SA4' },
+  H3: { issue: 4161, live: true, what: 'Company skills moderation', boards: 'SA5' },
+  H4: { issue: 4162, live: true, what: 'Platform AI policy and the kill switch', boards: 'SA6' },
+  H5: { issue: 4163, live: true, what: 'Runs, spend and the admin audit', boards: 'SA0 tiles, SA7, SA8' },
 };
 
 export const notYet = (key) => {
@@ -101,6 +107,7 @@ const levelWord = (l) => {
 
 /** A skill's area: the category most of its tags sit in (ties in radar order). */
 export function areaOf(card) {
+  if (card?.area?.slug) return card.area.slug;
   const counts = new Map();
   for (const t of card?.tags ?? []) if (t.category) counts.set(t.category, (counts.get(t.category) ?? 0) + 1);
   let best = null;
@@ -110,12 +117,13 @@ export function areaOf(card) {
 
 /** Its level: the highest tag level in its area. */
 export function levelOf(card) {
+  if (card?.level) return card.level;
   const area = areaOf(card);
   const ranks = (card?.tags ?? []).filter((t) => t.category === area).map((t) => (typeof t.level === 'number' ? t.level : LEVELS.findIndex((w) => w.toLowerCase() === String(t.level).toLowerCase()) + 1)).filter((n) => n > 0);
   return ranks.length ? levelWord(Math.max(...ranks)) : null;
 }
 
-/** SA3's status chip. `in_review` arrives with H2; today a skill is draft, published or retired. */
+/** SA3's status chip: a skill is a draft, in review, published or retired. */
 export const STATUS = {
   draft: { label: 'Draft', tone: 'draft' },
   in_review: { label: 'In review', tone: 'review' },
@@ -125,24 +133,91 @@ export const STATUS = {
 export const statusOf = (s) => STATUS[s] ?? { label: s ? String(s) : NOT_RECORDED, tone: 'muted' };
 
 /**
- * One SA3 row from a D1612 library card. Golden cases and the last eval are
- * H2's; until it lands they read "Not recorded", never a pass count.
+ * One SA3 row from a library card (`GET /api/admin/ai-agents/skills`). A skill
+ * with no golden cases or no eval run reads "Not recorded", never a pass count.
  */
-export function skillRow(card) {
+export function skillRow(card, librarySlugs = null) {
   const area = areaOf(card);
   return {
     uid: card.uid,
+    areaSlug: area ?? null,
+    roles: (card.roles ?? []).map((r) => (typeof r === 'string' ? { key: r, label: r } : r)).filter((r) => r?.key),
+    evals: evalState(card.golden),
+    source: sourceOf(card.slug, librarySlugs),
     name: card.name || card.slug || 'Untitled skill',
     slug: card.slug ?? null,
     area: area ? AREA_LABEL[area] : NOT_RECORDED,
     level: levelOf(card) ?? NOT_RECORDED,
     version: card.version ? `v${card.version}` : 'Not published',
     status: statusOf(card.status),
-    agents: shown(card.used_by),
+    statusKey: card.status ?? null,
+    agents: shown(card.agents ?? card.used_by),
     tools: (card.tools ?? []).map((t) => (typeof t === 'string' ? t : t.label ?? t.key)).filter(Boolean),
-    golden: NOT_RECORDED,
-    lastEval: NOT_RECORDED,
+    golden: card.golden ? `${card.golden.pass} / ${card.golden.total}` : NOT_RECORDED,
+    lastEval: card.last_eval ?? NOT_RECORDED,
   };
+}
+
+/**
+ * D4537: a stored skill's evaluation state, from the list's `golden` (live cases × required models under the current
+ * evidence). A missing result is never a pass: `partial` and `not_evaluated` are not `below_bar`, and `no_cases` is
+ * not `meets_bar`.
+ */
+export const EVAL_STATE = {
+  no_cases: { label: 'No golden cases', tone: 'muted' },
+  not_evaluated: { label: 'Not evaluated', tone: 'muted' },
+  partial: { label: 'Partly evaluated', tone: 'review' },
+  below_bar: { label: 'Below the bar', tone: 'draft' },
+  meets_bar: { label: 'Meets the bar', tone: 'published' },
+};
+export function evalState(golden) {
+  if (!golden || !Number.isFinite(golden.total)) return null;
+  if (golden.total === 0) return 'no_cases';
+  const missing = Number.isFinite(golden.not_evaluated) ? golden.not_evaluated : null;
+  if (missing == null) return null;
+  if (missing >= golden.total) return 'not_evaluated';
+  if (missing > 0) return 'partial';
+  return golden.meets_bar ? 'meets_bar' : 'below_bar';
+}
+
+/**
+ * D4537: where a stored skill's definition came from. `library` is a source-library file that was seeded into the
+ * store; `authored` was written in the store. Unknown until `GET /library` answers (null).
+ */
+export const SOURCE = { library: 'From a library file', authored: 'Authored in HQ' };
+export function sourceOf(slug, librarySlugs) {
+  if (!librarySlugs || !slug) return null;
+  return librarySlugs.has(slug) ? 'library' : 'authored';
+}
+
+/** D4537: the library files not in the store yet. They are definitions, never skills: no status, version or agents. */
+export function sourceOnlyRows(library = []) {
+  return library.filter((x) => x && !x.in_store).map((x) => ({
+    slug: x.slug,
+    name: x.name || x.slug,
+    area: AREA_LABEL[x.area] ?? NOT_RECORDED,
+    level: levelWord(x.level) ?? NOT_RECORDED,
+    cases: Number.isFinite(x.cases) ? x.cases : null,
+    check: x.check?.ok ? { ok: true, line: 'Valid' } : { ok: false, code: x.check?.code ?? null, line: x.check?.message || 'Not valid' },
+  }));
+}
+
+export const SKILL_FILTERS = { q: '', status: '', area: '', role: '', evals: '', source: '' };
+/** D4537: the From Axal list's filters. Each is exact; an empty one keeps every row. */
+export function filterSkills(rows, f = SKILL_FILTERS) {
+  const q = String(f.q ?? '').trim().toLowerCase();
+  return rows.filter((r) => (!q || `${r.name} ${r.slug ?? ''}`.toLowerCase().includes(q))
+    && (!f.status || r.statusKey === f.status)
+    && (!f.area || r.areaSlug === f.area)
+    && (!f.role || r.roles.some((x) => x.key === f.role))
+    && (!f.evals || r.evals === f.evals)
+    && (!f.source || r.source === f.source));
+}
+/** The roles the stored skills list, for the role filter, in first-seen order. */
+export function roleOptions(rows) {
+  const seen = new Map();
+  for (const r of rows) for (const x of r.roles) if (!seen.has(x.key)) seen.set(x.key, x.label);
+  return [...seen].map(([key, label]) => ({ key, label }));
 }
 
 /** SA3's area tiles: per area, its skills and how many are a draft or in review. */
@@ -156,12 +231,12 @@ export function areaTiles(cards = []) {
   });
 }
 
-/** SA0's KPI tiles. Only "Skills published" is read today; the rest wait for H5. */
+/** SA0's KPI tiles. The page fills the rest from H5's overview; a tile with no figure reads "Not recorded". */
 export function overviewTiles({ hqSkills = null } = {}) {
   const published = Array.isArray(hqSkills) ? hqSkills.filter((s) => s.status === 'published').length : null;
   return [
     { key: 'agents', label: 'Agents active', value: NOT_RECORDED, note: notYet('H5') },
-    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : 'From Axal. Company skills arrive with #4161.' },
+    { key: 'skills', label: 'Skills published', value: shown(published), note: published == null ? 'Could not be read.' : `${FROM_AXAL_VC}. Company skills are on their own tab.` },
     { key: 'runs', label: 'Runs this week', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'spend', label: 'AI spend this month', value: NOT_RECORDED, note: notYet('H5') },
     { key: 'accepted', label: 'Proposals accepted', value: NOT_RECORDED, note: notYet('H5') },
@@ -175,7 +250,7 @@ export const ROSTER_COLUMNS = ['Agent', 'Top values', 'Risk · natural fit', 'St
 // ─── SA1 / SA2 · Roster (H1, #4158) ─────────────────────────────────────────
 
 /** Every change on this panel takes a reason of at least 10 characters (the Worker refuses a shorter one). */
-export const REASON_MIN = 10;
+export { REASON_MIN };
 export const reasonOk = (r) => String(r ?? '').trim().length >= REASON_MIN;
 
 /** Risk 1 (most cautious) … 5 (boldest), the canvas's words. */
@@ -237,6 +312,7 @@ export const teamLine = (t) => [t?.company || NOT_RECORDED, t?.project].filter(B
 
 /** SA2's history: what changed, in words, and before → after. */
 const ACTION_WORDS = {
+  'cohort.add': 'Added to cohort', 'cohort.remove': 'Removed from cohort',
   'persona.offer': 'Offered in the gallery', 'persona.hide': 'Hidden from the gallery', 'persona.retire': 'Retired',
   'persona.rename': 'Name changed', 'persona.identity': 'Identity changed', 'persona.defaults': 'Defaults for teams changed',
 };
@@ -288,7 +364,7 @@ const REFUSALS = {
   model_not_offered: 'That model is not offered.',
   cap_above_platform: 'That cap is above the platform maximum.',
 };
-export const rosterRefusal = (e) => REFUSALS[e?.code ?? e?.data?.error] ?? e?.message ?? 'That change was not saved.';
+export const rosterRefusal = (e) => wordsFor(REFUSALS, e, 'That change was not saved.');
 /** SA5's columns. */
 export const COMPANY_COLUMNS = ['Skill', 'Company', 'Author', 'Area', 'Tools', 'Status'];
 /** SA7's columns. */

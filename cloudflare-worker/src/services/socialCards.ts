@@ -32,7 +32,7 @@ import {
   SITE_NAME, SITE_URL, ogEntryFor, ogImageKeys, ogImageUrl, ogTagsFor,
 } from '../../../frontend/src/lib/ogRegistry.js';
 
-export type CardKind = 'event' | 'article' | 'insight' | 'job' | 'person' | 'startup' | 'partner' | 'author';
+export type CardKind = 'event' | 'article' | 'insight' | 'job' | 'person' | 'startup' | 'partner' | 'author' | 'handle';
 export interface SocialMatch { kind: CardKind; key: string; path: string }
 
 export interface CardTags {
@@ -48,7 +48,7 @@ export interface CardTags {
 
 /** The run_worker_first globs this module answers, in `wrangler.toml` order. */
 export const SOCIAL_CARD_GLOBS = [
-  '/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*',
+  '/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*', '/@*',
 ] as const;
 
 /**
@@ -69,6 +69,7 @@ const PREFIXES: ReadonlyArray<[string, CardKind]> = [
   ['/startups/', 'startup'],
   ['/partners/', 'partner'],
   ['/authors/', 'author'],
+  // D4289 P2 (#4291): `axal.vc/@handle` and `/@handle/<channel>`, matched by `matchHandlePath`.
 ];
 
 /** The SPA's literal one-segment routes under these prefixes (App.jsx): pages, not records. */
@@ -85,7 +86,7 @@ export const RESERVED: Readonly<Partial<Record<CardKind, readonly string[]>>> = 
  */
 const SECTION_PATH: Record<CardKind, string | null> = {
   event: '/events', article: '/articles', insight: '/articles', job: '/jobs', author: '/authors',
-  person: null, startup: null, partner: null,
+  person: null, startup: null, partner: null, handle: null,
 };
 
 /**
@@ -102,6 +103,7 @@ const FAMILY_KEYS: Record<CardKind, readonly string[]> = {
   person: ['profile', 'default'],
   startup: ['profile', 'default'],
   partner: ['profile', 'default'],
+  handle: ['profile', 'default'],
 };
 
 /** The shell's own headers (`frontend/public/_headers`, `/*`). `_headers` is not applied to a Worker response, so they are set here from one place. Never the Worker's CSP. */
@@ -117,8 +119,18 @@ export const CARD_DEADLINE_MS = 1500;
 const TITLE_MAX = 70;
 const DESCRIPTION_MAX = 200;
 
+/** `/@jane` or `/@jane/yt` (a trailing slash allowed): the handle card; the key is `jane` or `jane/yt`. */
+export function matchHandlePath(pathname: string): SocialMatch | null {
+  const m = /^\/@([A-Za-z0-9_]{3,24})(?:\/([A-Za-z0-9_]{1,24}))?\/?$/.exec(pathname);
+  if (!m) return null;
+  const handle = m[1].toLowerCase();
+  const channel = m[2] ? m[2].toLowerCase() : null;
+  return { kind: 'handle', key: channel ? `${handle}/${channel}` : handle, path: `/@${handle}${channel ? `/${channel}` : ''}` };
+}
+
 /** Which card a pathname asks for, or null when it is not a record path. */
 export function matchSocialPath(pathname: string): SocialMatch | null {
+  if (pathname.startsWith('/@')) return matchHandlePath(pathname);
   for (const [prefix, kind] of PREFIXES) {
     if (!pathname.startsWith(prefix)) continue;
     let rest = pathname.slice(prefix.length);
@@ -284,6 +296,22 @@ export async function resolveCard(env: Env, m: SocialMatch): Promise<CardTags | 
       ).bind(slug, slug).first<any>();
       if (!r?.name) return null;
       return recordTags(m, { title: r.name, description: [oneLine(r.company), oneLine(r.specialization)].filter(Boolean).join(' · '), type: 'website' });
+    }
+    case 'handle': {
+      // D4289 P2 (#4291): an active influencer's page only; the disclosure rides in the description (FTC 16 CFR 255).
+      const [handle] = m.key.split('/');
+      const r = await db.prepare(
+        `SELECT COALESCE(u.display_name, u.name) AS name, i.page_line FROM influencers i JOIN users u ON u.id = i.user_id
+          WHERE i.handle = ? AND i.status = 'active' LIMIT 1`,
+      ).bind(handle).first<any>();
+      const name = oneLine(r?.name);
+      if (!name) return null;
+      const line = oneLine(r.page_line);
+      return recordTags(m, {
+        title: `${name} invites you to Axal VC`,
+        description: [line, `${name} earns a commission when you subscribe.`].filter(Boolean).join(' '),
+        type: 'profile',
+      });
     }
     case 'author': {
       // public.ts GET /authors/:userId's gate: an active user with a published article, by id or slug.

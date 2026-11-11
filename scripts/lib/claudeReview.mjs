@@ -82,14 +82,19 @@ const DEFAULTS = {
   maxContextBytes: 80_000,
   maxFiles: 150,
   contextRadius: 20,
-  maxRetries: 2,
-  timeoutSeconds: 300,
+  maxRetries: 0,
+  timeoutSeconds: 600,
+  jobSeconds: 900,
   maxCostUsd: 1,
   monthlyBudgetUsd: 25,
   minConfidence: 'medium',
   annotations: false,
   failOnError: false,
   refusalFallback: 'default',
+  // The provider tried when Anthropic answers that the credit balance is
+  // exhausted (KIMI_API_KEY set). Moonshot's Anthropic-compatible endpoint.
+  kimiModel: 'kimi-k2-turbo-preview',
+  kimiBaseUrl: 'https://api.moonshot.ai/anthropic',
 };
 
 const LIMITS = {
@@ -100,9 +105,12 @@ const LIMITS = {
   contextRadius: [0, 200],
   maxRetries: [0, 3],
   timeoutSeconds: [30, 600],
+  jobSeconds: [120, 900],
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9._-]{1,99}$/;
+/** The further Claude accounts the credit fallback may use, as ANTHROPIC_API_KEY_<n> secrets. */
+export const CLAUDE_FALLBACK_SLOTS = [2, 3];
 
 const truthy = (v) => /^(1|true|yes|on)$/i.test(String(v ?? '').trim());
 
@@ -173,7 +181,7 @@ export function readConfig(env = {}) {
   const enabled = truthy(env.CLAUDE_REVIEW_ENABLED);
   const model = String(env.ANTHROPIC_MODEL ?? '').trim();
   const highRiskModel = String(env.ANTHROPIC_MODEL_HIGH_RISK ?? '').trim();
-  if (enabled && !model) errors.push('ANTHROPIC_MODEL is not set: name a current Anthropic model ID as a repository variable');
+
   if (model && !MODEL_ID.test(model)) errors.push('ANTHROPIC_MODEL is not a model ID');
   if (highRiskModel && !MODEL_ID.test(highRiskModel)) errors.push('ANTHROPIC_MODEL_HIGH_RISK is not a model ID');
   const hasApiKey = String(env.ANTHROPIC_API_KEY ?? '').trim().length > 0;
@@ -181,9 +189,6 @@ export function readConfig(env = {}) {
   // Workload identity federation wins when it is configured: no long-lived
   // secret, a short-lived token per run. The API key is the fallback.
   const auth = federation ? 'federation' : hasApiKey ? 'api_key' : null;
-  if (enabled && !auth) {
-    errors.push('no Anthropic credential: set the federation variables ANTHROPIC_FEDERATION_RULE_ID and ANTHROPIC_ORGANIZATION_ID (preferred), or the ANTHROPIC_API_KEY repository secret (an API key from the Anthropic Console, never a Claude subscription login)');
-  }
 
   const effortRaw = String(env.CLAUDE_REVIEW_EFFORT ?? '').trim().toLowerCase();
   let effort = DEFAULTS.effort;
@@ -214,6 +219,45 @@ export function readConfig(env = {}) {
     }
   }
 
+  // The credit fallback: Kimi, only when its key is set and it is not switched
+  // off. The key is never copied into the config, only whether one is present.
+  const hasOpenaiKey = String(env.OPENAI_API_KEY ?? '').trim().length > 0;
+  const openaiModel = String(env.OPENAI_MODEL ?? '').trim();
+  const openaiBaseUrl = String(env.OPENAI_BASE_URL ?? '').trim() || 'https://api.openai.com/v1';
+  if (openaiModel && !MODEL_ID.test(openaiModel)) errors.push('OPENAI_MODEL is not a model ID');
+  if (hasOpenaiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(openaiBaseUrl)) errors.push('OPENAI_BASE_URL must be an https URL');
+  const hasGeminiKey = String(env.GEMINI_API_KEY ?? '').trim().length > 0;
+  const geminiModel = String(env.GEMINI_MODEL ?? '').trim();
+  const geminiBaseUrl = String(env.GEMINI_BASE_URL ?? '').trim() || 'https://generativelanguage.googleapis.com';
+  if (geminiModel && !MODEL_ID.test(geminiModel)) errors.push('GEMINI_MODEL is not a model ID');
+  if (hasGeminiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(geminiBaseUrl)) errors.push('GEMINI_BASE_URL must be an https URL');
+  const hasKimiKey = String(env.KIMI_API_KEY ?? '').trim().length > 0;
+  const kimiModel = String(env.KIMI_MODEL ?? '').trim() || DEFAULTS.kimiModel;
+  const kimiBaseUrl = String(env.KIMI_BASE_URL ?? '').trim() || DEFAULTS.kimiBaseUrl;
+  const providerRaw = String(env.CLAUDE_REVIEW_CREDIT_FALLBACK ?? '').trim().toLowerCase();
+  if (providerRaw && !['on', 'off'].includes(providerRaw)) errors.push(`CLAUDE_REVIEW_CREDIT_FALLBACK must be "on" or "off"; got "${providerRaw}"`);
+  if (hasKimiKey && !MODEL_ID.test(kimiModel)) errors.push('KIMI_MODEL is not a model ID');
+  if (hasKimiKey && !/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/i.test(kimiBaseUrl)) errors.push('KIMI_BASE_URL must be an https URL');
+  // The chain, in the order it is tried: further Claude accounts (their own
+  // Console organizations, so their own credit), then OpenAI, Gemini and Kimi. Each step is used
+  // when earlier accounts are unavailable or fail.
+  const fallbackWorkspaces = {};
+  for (const n of CLAUDE_FALLBACK_SLOTS) {
+    const name = `ANTHROPIC_WORKSPACE_ID_${n}`;
+    const workspaceId = String(env[name] ?? '').trim();
+    if (workspaceId && !FEDERATION_IDS.ANTHROPIC_WORKSPACE_ID.test(workspaceId)) errors.push(`${name} must be an Anthropic workspace ID (wrkspc_ followed by 8–64 letters or digits)`);
+    fallbackWorkspaces[n] = workspaceId || null;
+  }
+  const creditFallbacks = [];
+  if (providerRaw !== 'off') {
+    for (const n of CLAUDE_FALLBACK_SLOTS) {
+      if (String(env[`ANTHROPIC_API_KEY_${n}`] ?? '').trim()) creditFallbacks.push({ id: `claude${n}`, provider: 'anthropic', label: `Claude account ${n}`, secret: `ANTHROPIC_API_KEY_${n}`, workspaceId: fallbackWorkspaces[n] });
+    }
+    if (hasOpenaiKey && openaiModel) creditFallbacks.push({ id: 'openai', provider: 'openai', label: 'OpenAI', secret: 'OPENAI_API_KEY', model: openaiModel, baseURL: openaiBaseUrl });
+    if (hasGeminiKey && geminiModel) creditFallbacks.push({ id: 'gemini', provider: 'gemini', label: 'Gemini', secret: 'GEMINI_API_KEY', model: geminiModel, baseURL: geminiBaseUrl });
+    if (hasKimiKey) creditFallbacks.push({ id: 'kimi', provider: 'kimi', label: 'Kimi', secret: 'KIMI_API_KEY', model: kimiModel, baseURL: kimiBaseUrl });
+  }
+
   const config = {
     enabled,
     model: model || null,
@@ -229,6 +273,7 @@ export function readConfig(env = {}) {
     contextRadius: boundedInt(env.CLAUDE_REVIEW_CONTEXT_LINES, 'contextRadius', errors),
     maxRetries: boundedInt(env.CLAUDE_REVIEW_MAX_RETRIES, 'maxRetries', errors),
     timeoutSeconds: boundedInt(env.CLAUDE_REVIEW_TIMEOUT_SECONDS, 'timeoutSeconds', errors),
+    jobSeconds: boundedInt(env.CLAUDE_REVIEW_JOB_SECONDS, 'jobSeconds', errors),
     maxCostUsd: money(env.CLAUDE_REVIEW_MAX_COST_USD, 'maxCostUsd', errors),
     monthlyBudgetUsd: money(env.CLAUDE_REVIEW_MONTHLY_BUDGET_USD, 'monthlyBudgetUsd', errors),
     minConfidence,
@@ -236,9 +281,44 @@ export function readConfig(env = {}) {
     failOnError: truthy(env.CLAUDE_REVIEW_FAIL_ON_ERROR),
     reviewDrafts: env.CLAUDE_REVIEW_DRAFTS === undefined || String(env.CLAUDE_REVIEW_DRAFTS).trim() === '' ? true : truthy(env.CLAUDE_REVIEW_DRAFTS),
     refusalFallback,
+    creditFallbacks,
     rateOverrides,
   };
+  if (enabled && auth && !model && !creditFallbacks.length) errors.push('ANTHROPIC_MODEL is not set: name a current Anthropic model ID as a repository variable');
+  if (config.timeoutSeconds * (config.maxRetries + 1) > config.jobSeconds - 60) errors.push('timeoutSeconds × (maxRetries + 1) exceeds the job budget after the 60-second recording reserve');
   return { config, errors };
+}
+
+/**
+ * Whether an API error means the Anthropic account has no credit left: a 402,
+ * or the 400 Anthropic answers with "Your credit balance is too low". Only
+ * this sends the review to the credit fallback; every other failure is
+ * reported as it is.
+ */
+export function creditExhausted(e) {
+  if (e?.kind === 'billing') return true;
+  return e?.kind === 'bad_request' && /credit balance/i.test(String(e?.detail || ''));
+}
+
+/**
+ * The request for the credit fallback. Kimi's Anthropic-compatible endpoint
+ * takes the same messages, but not Anthropic's structured output, effort or
+ * betas, so the schema is stated in the system prompt and the answer is still
+ * checked by `validateReview`.
+ */
+export function fallbackRequest(params, model) {
+  return {
+    model,
+    max_tokens: params.max_tokens,
+    system: `${params.system}\n\nAnswer with one JSON object and nothing else: no prose and no code fence. It must match this JSON Schema:\n${JSON.stringify(REVIEW_OUTPUT_SCHEMA)}`,
+    messages: params.messages,
+  };
+}
+
+/** A JSON answer wrapped in a Markdown code fence, unwrapped; anything else unchanged. */
+export function unfence(text) {
+  const m = /^\s*```(?:json)?\s*\n([\s\S]*?)\n?```\s*$/.exec(String(text));
+  return m ? m[1] : text;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,38 +802,47 @@ export function budgetDecision({ worstCaseUsd, maxCostUsd, monthlyBudgetUsd, led
 // ---------------------------------------------------------------------------
 
 const RECORD_PREFIX = 'claude-review_v1_';
-const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)$/;
+// An optional last segment names the credit fallback account that answered
+// (claude2, claude3, kimi); none means the main account.
+const RECORD = /^claude-review_v1_(\d{4}-\d{2})_pr(\d+)_([0-9a-f]{16})_(ok|err|skip)_(\d+)(?:_r(\d+)a(\d+))?(?:_([a-z0-9]{1,16}))?$/;
 
 /**
  * The artifact name that records one review: month, pull request, input key,
- * outcome and cost in micro-dollars. Reading the month's spend and finding an
- * earlier review of the same inputs then needs only the artifact list.
+ * outcome, cost in micro-dollars and, for a credit fallback, the account that
+ * answered. Reading the month's spend and finding an earlier review of the
+ * same inputs then needs only the artifact list.
  */
-export function recordName({ month, pr, key, status, usd }) {
+export function recordName({ month, pr, key, status, usd, account = null, runId = null, runAttempt = '1' }) {
   if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('month must be YYYY-MM');
   if (!['ok', 'err', 'skip'].includes(status)) throw new Error('status must be ok, err or skip');
+  if (account !== null && !/^[a-z0-9]{1,16}$/.test(account)) throw new Error('account must be a short lowercase id');
+  if (runId !== null && runId !== undefined && (!/^[1-9][0-9]{0,19}$/.test(String(runId)) || !/^[1-9][0-9]{0,9}$/.test(String(runAttempt)))) throw new Error('run id and attempt must be positive integers');
+  const runSuffix = runId === null || runId === undefined ? '' : `_r${runId}a${runAttempt}`;
   const micro = Math.max(0, Math.round((usd || 0) * 1_000_000));
-  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}`;
+  return `${RECORD_PREFIX}${month}_pr${pr}_${String(key).slice(0, 16)}_${status}_${micro}${runSuffix}${account ? `_${account}` : ''}`;
 }
 
 export function parseRecordName(name) {
   const m = RECORD.exec(String(name || ''));
   if (!m) return null;
-  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000 };
+  return { month: m[1], pr: Number(m[2]), key: m[3], status: m[4], usd: Number(m[5]) / 1_000_000, account: m[8] || 'main', ...(m[6] ? { runId: m[6], runAttempt: m[7] } : {}) };
 }
 
 /**
- * This month's spend and any earlier successful review of the same inputs,
- * from a list of artifacts (`{ name, created_at, expired }`). `complete` is
- * false when the listing stopped before reaching the start of the month.
+ * This month's spend by one account and any earlier successful review of the
+ * same inputs (by any account), from a list of artifacts (`{ name,
+ * created_at, expired }`). Each account in the credit fallback chain has its
+ * own balance, so the monthly budget is counted per account: `account` is
+ * 'main' or a fallback step id. `complete` is false when the listing stopped
+ * before reaching the start of the month.
  */
-export function readLedger(artifacts, { month, key, listingComplete }) {
+export function readLedger(artifacts, { month, key, listingComplete, account = 'main' }) {
   let spentUsd = 0;
   let duplicate = null;
   for (const a of artifacts) {
     const r = parseRecordName(a.name);
     if (!r || r.month !== month) continue;
-    spentUsd += r.usd;
+    if (r.account === account) spentUsd += r.usd;
     if (!duplicate && r.status === 'ok' && r.key === String(key).slice(0, 16) && !a.expired) duplicate = a;
   }
   return { spentUsd, duplicate, complete: !!listingComplete };

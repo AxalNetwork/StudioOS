@@ -1,4 +1,4 @@
-import { BotError, botAvailability, dispatchBot, stopSessionBot, sessionBot, botView } from '../services/meetingBots';
+import { BotError, MEET_PATH, botAvailability, dispatchBot, stopSessionBot, sessionBot, botView } from '../services/meetingBots';
 import { makeMeetLink } from '../services/calendar/itemRead';
 /**
  * D684 (#1577) — a Zoom or Google Meet call scheduled from a Validate
@@ -365,8 +365,9 @@ function attachedLink(raw: unknown): { provider: MeetingProvider; joinUrl: strin
       return id ? { provider: 'zoom', joinUrl: url.toString(), externalRef: id } : null;
     }
     if (host === 'meet.google.com') {
-      const code = /^\/([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\/?$/i.exec(url.pathname)?.[1]?.toLowerCase();
-      return code ? { provider: 'google_meet', joinUrl: url.toString(), externalRef: code } : null;
+      // The call's own address, also when the link was copied as /meet/<code>.
+      const code = MEET_PATH.exec(url.pathname)?.[1]?.toLowerCase();
+      return code ? { provider: 'google_meet', joinUrl: `https://meet.google.com/${code}`, externalRef: code } : null;
     }
   } catch { /* invalid link */ }
   return null;
@@ -585,7 +586,7 @@ async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body
   }
   const link = attachedLink(attach?.join_url);
   if (!link || (body.provider != null && body.provider !== link.provider)) {
-    return refuse(c, 400, { code: 'meeting_link_invalid', message: 'Paste a Zoom or Google Meet join link for the call you host.' });
+    return refuse(c, 400, { code: 'meeting_link_invalid', message: 'Paste a Zoom or Google Meet join link for the call you host. A Google Meet link looks like https://meet.google.com/abc-defg-hij.' });
   }
   if (body.session_id == null && link.provider === 'zoom') return attachHostedZoom(c, s, body, link);
   const sessionId = Number(body.session_id);

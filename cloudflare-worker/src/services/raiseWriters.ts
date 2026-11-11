@@ -28,6 +28,7 @@ import { ownedRow } from './records/owned';
 import { addHolder, updateHolder, HolderError, type AddHolderArgs } from './capTableWrites';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { ensureTier } from '../middleware/requireTier';
+import { DECK_STUDIO_TIER } from './decks/studioAccess';
 import { watermarkFor } from './decks/variants';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { shareIncludeFromBody } from './decks/shareInclude';
@@ -88,10 +89,10 @@ export async function scoreReadinessItem(env: Env, a: {
 /** Each computed check's newest eligible score; manual history never sets its re-score clock. */
 async function newestScores(env: Env, projectId: number) {
   const res = await env.DB.prepare(
-    `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
+    `SELECT i.item_key, s.score, s.missing, s.scored_at, s.input_hash FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
-  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string }>();
-  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string }>();
+  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
+  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string; input_hash: string | null }>();
   for (const r of res.results || []) out.set(r.item_key, r);
   return out;
 }
@@ -132,8 +133,8 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
   }
   for (const c of computed) {
     await env.DB.prepare(
-      `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'computed', ?)`,
-    ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId).run();
+      `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by, input_hash) VALUES (?, ?, ?, ?, ?, 'computed', ?, ?)`,
+    ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId, c.input_hash ?? null).run();
     await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', c.score == null ? `Not scored: ${c.missing}` : `Re-scored by its check: ${c.score}/10`);
   }
   return { scored: computed.length + (pmf?.changed ? 1 : 0), items: [...computed.map((c) => c.key), ...(pmf?.changed ? ['pmf'] : [])], ...(pmf ? { pmf } : {}) };
@@ -394,7 +395,7 @@ async function linkInvestor(env: Env, projectId: number, b: Record<string, unkno
  * (`services/decks/shareInclude.ts`; left out, answer A).
  */
 export async function createDeckLink(env: Env, a: { projectId: number; user: User; body: Record<string, unknown> }) {
-  ensureTier(a.user, 'studio');
+  ensureTier(a.user, DECK_STUDIO_TIER);
   const b = a.body;
   const deckId = posInt(b.deck_id);
   const deck = deckId == null ? null : await env.DB.prepare('SELECT id, version FROM pitch_decks WHERE id = ? AND project_id = ?')
@@ -449,7 +450,7 @@ const sqlTime = (ms: number) => new Date(ms).toISOString().replace('T', ' ').sli
  * only on a link that never expires already.
  */
 export async function updateDeckLink(env: Env, a: { projectId: number; user: User; linkId: unknown; body: Record<string, unknown> }) {
-  ensureTier(a.user, 'studio');
+  ensureTier(a.user, DECK_STUDIO_TIER);
   const id = posInt(typeof a.linkId === 'string' && /^[1-9][0-9]{0,9}$/.test(a.linkId) ? Number(a.linkId) : a.linkId);
   const row = id == null ? null : await env.DB.prepare(
     `SELECT t.id, t.expires_at FROM pitch_deck_share_tokens t JOIN pitch_decks d ON d.id = t.deck_id
@@ -555,8 +556,13 @@ export async function saveUseOfFunds(env: Env, a: { projectId: number; userId: n
   const user = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(a.userId).first<User>();
   const owner = await env.DB.prepare("SELECT u.id FROM projects p JOIN users u ON u.founder_id=p.founder_id AND u.role='founder' AND u.is_active=1 WHERE p.id=? AND p.deleted_at IS NULL ORDER BY u.id LIMIT 1").bind(a.projectId).first<{id:number}>();
   if (!user || !owner) throw new WriterError(404, 'The founder plan is unavailable.');
-  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body); }
-  catch (e) { if (e instanceof PlanError) throw new WriterError(e.status, e.sentence); throw e; }
+  // D5375: this path no longer saves without the revision it was opened at. The record drawer's
+  // Edit split sends `expected_revision` (read with the record); a body without one is refused.
+  try { return await saveSplit(env, {projectId:a.projectId,user,founderUserId:owner.id}, a.body, true); }
+  catch (e) {
+    if (e instanceof PlanError) throw new WriterError(e.status, e.sentence, { code: e.code, error: e.code, ...(e.currentRevision !== undefined ? { current_revision: e.currentRevision } : {}) });
+    throw e;
+  }
 }
 
 // ---------------------------------------------------------------------------

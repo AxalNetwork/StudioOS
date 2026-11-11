@@ -69,7 +69,7 @@ function world() {
   db.exec(mig('460_validate_record_stores.sql'));
   db.exec(mig('464_verdict_decisions.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
-    '447_assistant_interviews.sql', '452_record_session_setup.sql', '453_interview_processing.sql']) db.exec(mig(m));
+    '447_assistant_interviews.sql', '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql']) db.exec(mig(m));
     applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
@@ -330,6 +330,7 @@ test('4: Record a decision preselects exactly that evidence; a partner gets neit
 test('4: no kind proposes a verdict, and no suggestion path writes a decision', async () => {
   const { env, db } = world();
   for (const kind of Object.keys(PLACEMENT_KINDS) as (keyof typeof PLACEMENT_KINDS)[]) {
+    if (kind === 'verdict_contribution') continue; // D4412: context only, never a decision
     assert.notEqual(PLACEMENT_KINDS[kind].slug, 'verdict', kind);
     for (const p of [{}, { attribute: 'role' }, { attribute: 'tools' }]) assert.notEqual(placementSlug(kind, p), 'verdict', kind);
   }

@@ -139,7 +139,8 @@ test('with no cap stated, Over-committed is absent — and the canvas’s 40 is 
   // is no line, which is what an unconfigured firm's answer actually is.
   assert.match(tile, /nr=\{d\?\.over_committed_count == null\}/,
     'Over-committed no longer reads absent when no cap is stated');
-  assert.ok(flat(tile).includes('no cap is stated, so nobody is over one'),
+  // D4822: in the canvas's words, which the zone's own "Capacity limits not set · Set capacity →" card expands.
+  assert.ok(flat(tile).includes('Capacity limits not set'),
     'the tile stopped saying why it is absent');
 
   // THE FIXTURE NUMBER IS THE WHOLE POINT OF THE REFUSAL. `CAP_H = 40` is the
@@ -340,10 +341,10 @@ test('the instNote carries the artboard’s finding, and the page’s limits are
     'the limits stopped saying whose the cap is');
   assert.ok(flat(limits).includes('A total with no internal hours is a floor'),
     'the limits stopped naming the floor');
-  // The WORKER still says it, and must: that sentence is what an unconfigured
-  // firm is told, and the page prints it back.
-  assert.ok(worker.includes('No capacity cap is recorded anywhere in this product.'),
-    'the worker’s refusal text for an unconfigured firm is gone');
+  // The WORKER still tells an unconfigured firm, and must: the page prints it back. D4822 put it in the canvas's
+  // words ("Capacity limits not set") with what setting one unlocks, instead of a claim about the product.
+  assert.ok(worker.includes('Capacity limits not set. Set available hours to identify over-allocation'),
+    'the worker’s text for an unconfigured firm is gone');
   assert.ok(zoneRaw.includes('d?.cap_note'), 'the page stopped printing the worker’s reason');
 });
 
@@ -359,8 +360,8 @@ test('the two writers are reachable, and the period chips actually re-read', () 
   // rather than filtering what came back — and the loader has to depend on it
   // or the chip moves nothing at all.
   assert.match(zone, /const period = view === 'next_week' \? nextPeriod\(\) : undefined;/);
-  const loader = between(zone, 'const load = useCallback(', 'useEffect(');
-  assert.ok(/\}, \[period\]\);/.test(loader),
+  const loader = between(zone, 'useZoneRead(async () => {', 'const state = {');
+  assert.ok(/\[period\]\);/.test(loader),
     'the loader no longer re-reads when the period chip changes');
   assert.ok(/api\.getPartnerCapacity\(period\)/.test(loader), 'the load stopped passing the period');
 });

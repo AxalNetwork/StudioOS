@@ -43,11 +43,11 @@ export default function partnerPipelineBoard(role, api) {
   return {
     sources: {
       leads: () => api.listPartnerLeads(),
-      // One fetch feeding two sections. `/quotes/analytics` answers the
-      // proposals header AND the whole analytics section, so asking for it
-      // twice would be two round trips for one answer.
-      quotes: () => Promise.all([api.myQuotes(), api.quotesAnalytics()])
-        .then(([mine, stats]) => ({ ...stats, items: mine?.items || [] })),
+      // These are deliberately separate reads. A proposal list remains useful
+      // while analytics is unavailable, and each section's retry must re-read
+      // only the endpoint that failed (#5362).
+      proposals: () => api.myQuotes(),
+      analytics: () => api.quotesAnalytics(),
       negotiations: () => api.listPartnerNegotiations(),
       retainers: () => api.listPartnerRetainers(),
     },
@@ -75,27 +75,24 @@ export default function partnerPipelineBoard(role, api) {
         ]),
         // The worker's own sentence: what the score is counted from, or that
         // nothing is scored because the firm has stated no rule to score with.
-        footnote: (d) => d?.scoring_note || null,
+        footnote: (d) => summary(d?.population_note, d?.scoring_note) || null,
       },
       {
         slug: 'proposals',
         anchor: 'pl-proposals',
         title: 'Proposal desk',
         span: 'half',
-        source: 'quotes',
+        source: 'proposals',
         cols: '1.5fr .9fr 1fr',
         columns: ['Value', 'State', 'Decided'],
         empty: 'No quote has been sent from this firm yet.',
         summary: (d) => summary(
-          count(d?.pipeline?.pending, 'open', 'open'),
-          d?.pipeline?.win_rate_pct === null || d?.pipeline?.win_rate_pct === undefined
-            ? null
-            : `${Math.round(d.pipeline.win_rate_pct)}% win rate`,
+          count((d?.items || []).filter((quote) => quote.status === 'pending').length, 'open', 'open'),
         ),
         rows: (d) => top(d?.items).map((q) => [
           usd(q.price), title(q.status), day(q.decided_at),
         ]),
-        footnote: (d) => d?.pipeline?.win_rate_basis || null,
+        footnote: () => 'Quotes sent by this firm. Win rate and decision-cycle measures are read independently in Pipeline analytics.',
       },
       {
         slug: 'negotiations',
@@ -106,9 +103,12 @@ export default function partnerPipelineBoard(role, api) {
         cols: '1.6fr 1fr 1fr',
         columns: ['Need', 'Quote', 'State'],
         empty: 'No quote has moved into terms yet.',
-        summary: (d) => summary(count((d?.items || []).filter((n) => n.negotiation).length, 'open', 'open')),
-        rows: (d) => top((d?.items || []).filter((n) => n.negotiation)).map((n) => [
-          n.need_title, usd(n.price), title(n.negotiation?.status),
+        // D4693: ONE RULE FOR "OPEN". The Worker says which negotiations are live (`open_count`, `negotiation.open`) and
+        // what to call each (`negotiation.label`); this board used to count every tracked row as open and print a
+        // `status` field the row does not have.
+        summary: (d) => summary(count(d?.open_count ?? (d?.items || []).filter((n) => n.negotiation?.open).length, 'open', 'open')),
+        rows: (d) => top((d?.items || []).filter((n) => n.negotiation?.open)).map((n) => [
+          n.need_title, usd(n.price), n.negotiation?.label || title(n.negotiation?.stage),
         ]),
         footnote: () =>
           'Where a proposal becomes terms. Each row opens the thread that carries '
@@ -123,13 +123,16 @@ export default function partnerPipelineBoard(role, api) {
         cols: '1.4fr 1fr 1fr .9fr',
         columns: ['Client', 'Monthly', 'Renews', 'Utilisation'],
         empty: 'No engagement is recorded as a retainer yet.',
+        // D4693: the total is ACTIVE retainers' monthly amounts, so the count beside it is the active count, and an
+        // ended retainer is not listed under a "Monthly" heading as if it still paid.
         summary: (d) => summary(
           usdCents(d?.mrr_cents) ? `${usdCents(d.mrr_cents)} recurring` : null,
-          count(d?.retainer_count, 'retainer'),
+          count(d?.active_count ?? d?.retainer_count, 'active retainer'),
         ),
-        rows: (d) => top((d?.items || []).filter((r) => r.retainer)).map((r) => [
+        rows: (d) => top((d?.items || []).filter((r) => r.retainer?.active ?? (r.retainer && !r.retainer.ended_at))).map((r) => [
           r.founder_name,
-          usdCents(r.retainer?.amount_cents),
+          // The MONTHLY figure (a quarterly amount divided by three), never the amount as recorded.
+          usdCents(r.retainer?.monthly_cents),
           day(r.retainer?.renews_at),
           r.utilisation_pct === null || r.utilisation_pct === undefined
             ? null : `${Math.round(r.utilisation_pct)}%`,
@@ -143,7 +146,7 @@ export default function partnerPipelineBoard(role, api) {
         anchor: 'pl-analytics',
         title: 'Pipeline analytics',
         span: 'full',
-        source: 'quotes',
+        source: 'analytics',
         cols: '1.4fr .9fr .9fr .9fr 1fr',
         columns: ['Shape', 'Quotes', 'Win rate', 'Cycle', 'Won'],
         empty: 'No quote has been decided yet, so there is nothing to break down.',

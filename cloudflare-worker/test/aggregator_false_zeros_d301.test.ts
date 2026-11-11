@@ -57,7 +57,9 @@ const isoWindow = (days) => {
   return { periodStart: periodStart.toISOString(), periodEnd: periodEnd.toISOString() };
 };
 
-test('a booking on the window\'s first day is counted (the datetime() fix)', async () => {
+test('a booking on the window\'s first day is counted (the datetime() fix)', async (t) => {
+  // Keep the seeded boundary and preview window identical across slow CI reads.
+  t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 10, 4, 12, 0, 0, 500) });
   const db = freshDb();
   seedUser(db, 1, 'a@axal.vc');
   const { periodStart } = isoWindow(7);

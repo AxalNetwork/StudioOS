@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /** D699: which cycles a company is active in (`CYCLE_STORES`) and the member's last visit per cycle. */
 import type { Env, User } from '../types';
 import { nowIso, newUid } from '../routes/_t13t14t15_helpers';
@@ -16,7 +17,7 @@ const cycleQuery = `SELECT ${Object.entries(CYCLE_STORES).map(([cycle, stores]) 
 ).join(', ')}`;
 
 export async function cyclesActive(env: Env, user: User, companyId: number): Promise<string[] | null> {
-  if (user.founder_id == null || (user.role !== 'founder' && Number(user.spinout_lab_active ?? 0) !== 1)) return [];
+  if (user.founder_id == null || (!holdsLicence(user, 'founder') && Number(user.spinout_lab_active ?? 0) !== 1)) return [];
   try {
     const row = await env.DB.prepare(cycleQuery)
       .bind(...Object.keys(CYCLE_STORES).flatMap(() => [companyId, user.founder_id]))

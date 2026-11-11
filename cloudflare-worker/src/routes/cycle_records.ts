@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D690 — one gated record, activity, action and form-options route for cycles. */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -7,6 +8,7 @@ import { projectInActiveCompany } from '../services/tenancyScope';
 import { canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
 import { activityFor } from '../services/cycleActivity';
+import { campaignOptions } from '../services/campaignOptions';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
 import { ownedRow, RECORD_ID } from '../services/records/owned';
 import { allowed } from '../services/records/read';
@@ -75,11 +77,12 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
       if (gate) return gate;
     }
     // D914: for an admin with a reason, the narrative's versions list is a read.
-    const reading = c.req.method === 'GET' && (!c.req.path.endsWith('/form-options') || (isNarrative(c) && isAdmin(user)));
+    const campaignPermission = cycle === 'grow' && slug === 'distribution' && c.req.query('campaign') === 'permission';
+    const reading = c.req.method === 'GET' && (!c.req.path.endsWith('/form-options') || (isNarrative(c) && isAdmin(user)) || campaignPermission);
     const ctx: RecordContext = { env: c.env, projectId, project, user };
     if (reading && cycle === 'raise' && slug === 'use-of-funds') {
       ctx.mercuryRead = 'refused';
-      if (user.role === 'founder' && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
+      if (holdsLicence(user, 'founder') && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
         try {
           const session = await selectJwt(c);
           if (session && !session.payload.impersonated_by) {
@@ -184,9 +187,13 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
   route.get('/:cycle/modules/:slug/form-options', async (c) => {
     const s = await scoped(c, registry, false);
     if (s instanceof Response) return s;
+    // A readable venture may disclose this boolean, never its writer-only choices.
+    if (s.cycle === 'grow' && s.slug === 'distribution' && c.req.query('campaign') === 'permission') return c.json({ can_write: (await writerAllowed(c, s.ctx, s.spec)) === null });
     // D914: the versions list is how an admin with a reason reads the narrative's tabs (`scoped` checked their read).
     const refusal = isNarrative(c) && isAdmin(s.ctx.user) ? null : await writerAllowed(c, s.ctx, s.spec);
     if (refusal) return refusal;
+    // D4487: the new planner's choices, on the existing writer-gated read.
+    if (s.cycle === 'grow' && s.slug === 'distribution' && c.req.query('campaign') === '1') return c.json({ ...await campaignOptions(c.env, s.ctx.projectId), can_write: true });
     if (!s.spec.formOptions) return c.json({});
     const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
     delete query.project;

@@ -2,6 +2,9 @@ import React from 'react';
 import { Card, Pill, Skeleton } from '../../../ui';
 import ZoneActions from '../../../workspaces/ZoneActions';
 import { FillLabel } from '../../../ui/useScopedFill.jsx';
+import { moneyCents } from '../../../workspaces/boards/format';
+import { amountToCents } from '../../../lib/moneyInput';
+import { LICENCE_SENTENCES, isLicenceSentence } from './licenceRefusal';
 
 /**
  * Shared pieces for the five Expertise zones.
@@ -29,24 +32,16 @@ export function Unrecorded({ children = 'Not recorded' }) {
  */
 export function money(cents, currency = 'USD') {
   if (cents == null) return null;
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  const symbol = currency === 'USD' ? '$' : `${currency} `;
-  const whole = n / 100;
-  return `${symbol}${whole.toLocaleString(undefined, {
-    minimumFractionDigits: n % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return moneyCents(cents, currency);
 }
 
-/** Dollars typed by a person into whole cents, or an error a person can act on. */
+/**
+ * What a person typed into a price box, as whole cents, or an error a person can
+ * act on (D4674). `12,50` is 12.50 and `1,5` is 1.50; an amount that could be
+ * read two ways is refused, not guessed (`lib/moneyInput.js`).
+ */
 export function dollarsToCents(input) {
-  const raw = String(input ?? '').trim().replace(/[$,\s]/g, '');
-  if (!raw) return { cents: null };
-  if (!/^\d+(\.\d{1,2})?$/.test(raw)) {
-    return { error: 'Enter an amount like 1500 or 1500.50' };
-  }
-  return { cents: Math.round(Number(raw) * 100) };
+  return amountToCents(input);
 }
 
 export function ZoneHeading({ title, blurb, action }) {
@@ -69,6 +64,9 @@ export function ZoneHeading({ title, blurb, action }) {
  * which asserts that nothing exists. Reading the error first means the page
  * can only ever claim a store is empty when it actually read the store.
  */
+// #5363: the licence refusal's sentences and reader (`licenceRefusal.js`).
+export { ADVISOR_LICENCE_REQUIRED, LICENCE_SENTENCES, isLicenceSentence, zoneError } from './licenceRefusal';
+
 export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, notice, children }) {
   // `actions` renders ABOVE all four states, on purpose. A zone's header row is
   // as true while the store is loading, or failed, or empty, as it is when rows
@@ -91,11 +89,33 @@ export function ZoneBody({ loading, error, isEmpty, empty, onRetry, actions, not
   const head = (row || notice) ? <>{row}{notice}</> : null;
   const wrap = (body) => (head ? <>{head}{body}</> : body);
   if (loading) {
-    return wrap(<div className="space-y-3" aria-busy="true"><Skeleton className="h-9" /><Skeleton className="h-28" /></div>);
+    // D4711: a skeleton is shapes; the sentence is what a screen reader hears.
+    return wrap(
+      <div className="space-y-3" aria-busy="true" role="status">
+        <span className="sr-only">Loading…</span>
+        <Skeleton className="h-9" /><Skeleton className="h-28" />
+      </div>,
+    );
+  }
+  if (error && isLicenceSentence(error)) {
+    // #5363: not a failed read, so no "Source unavailable" and no Try again.
+    return wrap(
+      <Card variant="dashed" padding="lg" role="alert" data-testid="advisor-licence-required">
+        <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
+          Advisor licence
+        </div>
+        <h3 className="mt-2 text-sm font-extrabold tracking-tight">{error}</h3>
+        <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-axal-muted">
+          This account does not hold the Advisor licence today, so nothing here can be read.
+        </p>
+      </Card>,
+    );
   }
   if (error) {
+    // D4711: `role="alert"` so a read that fails after the page is open is
+    // announced, not only drawn.
     return wrap(
-      <Card variant="dashed" padding="lg">
+      <Card variant="dashed" padding="lg" role="alert">
         <div className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
           Source unavailable
         </div>
@@ -137,6 +157,57 @@ export function NothingYet({ title, body, action }) {
  * which is the same absent-is-not-empty failure `ZoneBody` exists to prevent —
  * one level up, about the shape of the page instead of the state of a fetch.
  */
+/**
+ * #4689 — "Showing 100 of 101 · Show more" under a list that has more rows than
+ * it has read. Nothing is drawn once every row is on screen.
+ */
+export function MoreRows({ line, onMore, busy = false, error = '', testid }) {
+  if (!line) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[11.5px] text-axal-faint" data-testid={testid}>
+      <span className="tabular-nums">{line}</span>
+      <button type="button" className="font-semibold text-emerald-700 hover:underline disabled:opacity-60 dark:text-emerald-300"
+        onClick={onMore} disabled={busy}>
+        {busy ? 'Loading…' : 'Show more'}
+      </button>
+      {error ? <span role="status" className="text-red-700 dark:text-red-300">{error}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * D4711: a re-read after a write failed. The rows already on screen stay; this
+ * line says they may be out of date, and offers the re-read again. The write
+ * itself is reported by the zone's own SaveNote.
+ */
+export function StaleNote({ error, onRetry, testid }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className="mb-3 flex flex-wrap items-center gap-3 text-[12px] font-semibold text-amber-800 dark:text-amber-300" data-testid={testid}>
+      <span>{error}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Read it again</button>
+      ) : null}
+    </p>
+  );
+}
+
+/**
+ * #4714 (D4714): one source that did not answer, said where its content would
+ * be, with a retry scoped to that source. It is never an empty state: what
+ * could not be read is not "none".
+ */
+export function Unreadable({ children, onRetry }) {
+  return (
+    <p className="flex flex-wrap items-center gap-3 text-[11.5px] font-semibold leading-relaxed text-amber-800 dark:text-amber-300">
+      <span>{children}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="font-semibold text-emerald-700 hover:underline dark:text-emerald-300">Try again</button>
+      ) : null}
+    </p>
+  );
+}
+
 export function StatedLimit({ title, children }) {
   return (
     <Card variant="sunken" padding="md" className="mt-3">
@@ -169,22 +240,32 @@ export function StatedLimit({ title, children }) {
  * trigger never lands in the box.
  */
 export function Field({ label, hint, fill = null, children }) {
+  // D4711: the hint is the control's description, not only text beside it. A
+  // hint such as "blank reads as not recorded, not as free" is the rule the
+  // field follows, so a screen reader hears it on the field itself.
+  const hintId = React.useId();
+  const described = hint && React.isValidElement(children)
+    ? React.cloneElement(children, {
+      'aria-describedby': [children.props['aria-describedby'], hintId].filter(Boolean).join(' '),
+    })
+    : children;
+  const hintNode = hint ? <span id={hintId} className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span> : null;
   if (fill?.ctl) {
     return (
       <div className="block">
         <FillLabel fill={fill.ctl} name={fill.name} label={label} value={fill.value}>
           <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint" aria-hidden="true">{label}</span>
         </FillLabel>
-        <label className="block"><span className="sr-only">{label}</span>{children}</label>
-        {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
+        <label className="block"><span className="sr-only">{label}</span>{described}</label>
+        {hintNode}
       </div>
     );
   }
   return (
     <label className="block">
       <span className="text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-[11px] leading-relaxed text-axal-faint">{hint}</span>}
+      {described}
+      {hintNode}
     </label>
   );
 }
@@ -210,14 +291,41 @@ export const ghostButtonClass =
   'rounded-lg border border-axal-hairline px-3 py-1.5 text-[12px] font-semibold '
   + 'hover:bg-axal-ground disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
 
-/** Saved / failed, said once, above the thing that was saved. */
-export function SaveNote({ note }) {
-  if (!note) return null;
+/**
+ * Saved / failed, said once, above the thing that was saved.
+ *
+ * D4711: THE REGION IS ALWAYS THERE, EMPTY OR NOT. A screen reader announces a
+ * live region's changes, not its arrival: a `role="status"` mounted together
+ * with its sentence is read by some readers and silently skipped by others. So
+ * the region renders empty from the start and the sentence lands in it. A
+ * failure's sentence is `role="alert"` (it interrupts: the person has to
+ * act); a save is the polite status. Empty, it draws nothing visible.
+ */
+export function SaveNote({ note, testid }) {
+  // A failure is also `role="alert"` (#4698, D4924's Delivery forms): an alert
+  // interrupts, and it is how a refusal is found by role. A save stays the
+  // polite status around it.
   return (
-    <p className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-      {note.text}
-    </p>
+    <div role="status" aria-live="polite" aria-atomic="true" data-testid={testid}>
+      {note ? (
+        <p role={note.ok ? undefined : 'alert'} className={`mt-2 text-[12px] font-semibold ${note.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+          {note.text}
+        </p>
+      ) : null}
+    </div>
   );
 }
+
+/**
+ * D4670: what a refused read or write says, by the Worker's code. Anything
+ * else is the caller's own fixed sentence: a zone never prints raw error text.
+ */
+export const ASK_REFUSALS = Object.freeze({
+  attester_email_required: 'Give their email address: their code is sent there when they answer.',
+  attester_is_requester: 'That address is your own. Someone else confirms your claim.',
+  attester_name_required: 'Name the person you are asking.',
+  advisor_licence_required: LICENCE_SENTENCES.expertise,
+});
+export const refusalText = (err, fallback) => ASK_REFUSALS[err?.code] || fallback;
 
 export { Pill };

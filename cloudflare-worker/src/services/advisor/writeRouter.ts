@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * Task #10 (AC-1) — Personal-advisor write-router.
  *
@@ -68,7 +69,7 @@ async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSub
  * resolveFounderId() pattern in routes/projects.ts.
  */
 async function ensureFounderProject(env: Env, user: User): Promise<{ project_id: number; founder_id: number } | null> {
-  if (user.role !== 'founder' && user.role !== 'admin') return null;
+  if (!holdsLicence(user, 'founder') && user.role !== 'admin') return null;
   let founderId = user.founder_id || null;
   if (!founderId) {
     try {
@@ -82,6 +83,14 @@ async function ensureFounderProject(env: Env, user: User): Promise<{ project_id:
       return null;
     }
   }
+  // D4659: a Lab founder's answers land on their recorded venture; with
+  // several projects and none recorded, nothing is written to a guessed one.
+  try {
+    const { resolveVenture } = await import('../labVenture');
+    const v = await resolveVenture(env, user.id);
+    if (v.status === 'bound') return { project_id: v.project.id, founder_id: Number(founderId) };
+    if (v.status === 'needs_choice' || v.status === 'deleted') return null;
+  } catch { /* not a Lab founder, or enrollments unmigrated: the rule below */ }
   const proj = await env.DB.prepare(
     `SELECT id FROM projects WHERE founder_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1`,
   ).bind(founderId).first<{ id: number }>().catch(() => null);
@@ -452,7 +461,7 @@ const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // Pull from the pure catalog module (NOT routes/spinout_lab) so this
 // file doesn't drag Hono / auth / db into non-route consumers (e.g.
 // the advisor scenario test under --experimental-strip-types).
-import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
+import { MILESTONES } from '../spinoutLabCatalog.ts';
 import { bindingKey } from '../../util/schemaBootstrap';
 import { ensureDeckVersionColumns } from '../decks/deckVersionColumns';
 
@@ -466,44 +475,18 @@ function weekForMilestoneKey(key: string): number | null {
 export async function recordSpinoutMilestoneAndAdvance(
   env: Env, userId: number, key: string, _hintWeek: number,
 ): Promise<void> {
-  // Resolve the canonical week for this key. If the key isn't in
-  // the MILESTONES catalog (e.g. typo in a future bank entry) we
-  // bail out — never advance on an unknown milestone.
-  const week = weekForMilestoneKey(key);
-  if (!week) return;
-  // Insert is idempotent via UNIQUE(user_id, milestone_key).
-  const ins = await env.DB.prepare(
-    `INSERT OR IGNORE INTO spinout_lab_milestones (user_id, week, milestone_key)
-     VALUES (?, ?, ?)`,
-  ).bind(userId, week, key).run();
-  // D541 (#1104, question 1 A): a milestone Eadwyn records pays as the Lab
-  // page's would, and only from the answer that recorded it. The grant is
-  // idempotent on its own, and a failure here never blocks the week advance.
-  if (Number(ins?.meta?.changes ?? 0) === 1) {
-    try {
-      const { creditLabMilestone } = await import('../labMilestoneCredits');
-      await creditLabMilestone(env, userId, key);
-    } catch (e) {
-      console.warn('[writeRouter] lab milestone credit failed', key, (e as Error).message);
-    }
-  }
-  // Re-read user lab state. Bail if lab inactive — we never want to
-  // advance a non-active lab from a side-effect path.
-  const u = await env.DB.prepare(
-    `SELECT spinout_lab_active, spinout_lab_week FROM users WHERE id = ?`,
-  ).bind(userId).first<{ spinout_lab_active: number | null; spinout_lab_week: number | null }>();
-  if (!u || Number(u.spinout_lab_active) !== 1) return;
-  const rows = await env.DB.prepare(
-    `SELECT milestone_key FROM spinout_lab_milestones WHERE user_id = ?`,
-  ).bind(userId).all<{ milestone_key: string }>();
-  const completed = new Set<string>((rows.results || []).map((r) => r.milestone_key));
-  let newWeek = Math.max(1, Math.min(4, Number(u.spinout_lab_week ?? 1)));
-  while (newWeek < 4 && canonicalWeekMet(newWeek, completed)) newWeek += 1;
-  if (newWeek !== Number(u.spinout_lab_week)) {
-    await env.DB.prepare(`UPDATE users SET spinout_lab_week = ? WHERE id = ?`).bind(newWeek, userId).run();
-  }
-  if (newWeek === 4 && canonicalWeekMet(4, completed)) {
-    await env.DB.prepare(`UPDATE users SET spinout_lab_active = 0, is_incorporated = 1 WHERE id = ?`).bind(userId).run();
+  // An unknown key (a typo in a future bank entry) never advances anything.
+  if (!weekForMilestoneKey(key)) return;
+  // D4657: Eadwyn records through the same recorder as the Lab page: the
+  // enrollment policy, the cohort calendar, the saved-work evidence (the
+  // answer this router just wrote), the insert-once, the week advance and the
+  // D541 credit, paid only from the call whose insert recorded the milestone.
+  // A refusal or a failure never fails the answer that was saved.
+  try {
+    const { recordLabMilestone } = await import('../labProgress');
+    await recordLabMilestone(env, userId, key, 'advisor');
+  } catch (e) {
+    console.warn('[writeRouter] lab milestone not recorded', key, (e as Error).message);
   }
 }
 
@@ -898,7 +881,7 @@ export async function routeAnswer(
 
   // ---- Founder bank ---------------------------------------------------
   if (q.persona === 'founder') {
-    if (user.role !== 'founder' && user.role !== 'admin') {
+    if (!holdsLicence(user, 'founder') && user.role !== 'admin') {
       return { status: 'failed', error: 'founder questions require founder role' };
     }
     const ctx = await ensureFounderProject(env, user);
@@ -1097,13 +1080,13 @@ export async function routeAnswer(
         if (cur?.id) {
           // D898: the slides change in place, so the version's content hash no longer holds.
           await env.DB.prepare(`UPDATE pitch_decks SET slides = ?, content_hash = NULL WHERE id = ?`).bind(slidesJson, cur.id).run();
-          return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/build/deck' } };
+          return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: cur.id, page_url: '/raise/pitch' } };
         }
         const ins = await env.DB.prepare(
           `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by) VALUES (?, 1, ?, ?, 1, ?)`,
         ).bind(ctx.project_id, slidesJson, 'Draft', user.id).run();
         const newId = Number((ins as { meta?: { last_row_id?: number } }).meta?.last_row_id || 0);
-        return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/build/deck' } };
+        return { status: 'saved', saved_to: { table: 'pitch_decks', column: 'slides', id: newId || undefined, page_url: '/raise/pitch' } };
       } catch (e) {
         return { status: 'failed', error: (e as Error).message };
       }
@@ -1245,7 +1228,7 @@ export async function routeAnswer(
 
   // ---- Investor bank --------------------------------------------------
   if (q.persona === 'investor') {
-    if (user.role !== 'investor' && user.role !== 'admin') {
+    if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
       return { status: 'failed', error: 'investor questions require investor role' };
     }
     if (questionId === 'investor.profile.thesis') {
@@ -1308,7 +1291,7 @@ export async function routeAnswer(
     // detector. Compare via string cast so TS doesn't complain about
     // the unreachable-looking branch.
     const role = String(user.role || '');
-    if (role !== 'advisor' && role !== 'admin') {
+    if (!holdsLicence(user, 'advisor') && role !== 'admin') {
       return { status: 'failed', error: 'advisor questions require advisor role' };
     }
     const advisor = await ensureAdvisorRow(env, user);

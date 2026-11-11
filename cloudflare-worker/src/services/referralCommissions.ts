@@ -48,6 +48,43 @@ async function ensureClawbackColumns(env: Env): Promise<void> {
   READY.set(bindingKey(env), true);
 }
 
+/**
+ * D5037 (#5037) — what `clawbackReferralCommissionForRefund` WOULD reverse for a refund, read-only, for the refund
+ * review screen. The same proportional, cumulative rule, computed from the charge total and what will have been refunded
+ * after this refund. Writes nothing and runs no DDL; a failed read is `unknown`, never "no commission".
+ */
+export async function previewReferralClawback(
+  env: Env,
+  args: { paymentIntentId: string | null; chargeAmountCents: number | null; refundedToDateAfterCents: number },
+): Promise<
+  | { outcome: 'no_commission' }
+  | { outcome: 'already_reversed'; commission_id: number }
+  | { outcome: 'would_reverse'; commission_id: number; amount_cents: number; currency: string; full: boolean }
+  | { outcome: 'unknown'; detail: string }
+> {
+  if (!args.paymentIntentId) return { outcome: 'no_commission' };
+  let row: { id: number; amount_cents: number; currency: string | null; reversed_amount_cents: number | null } | null;
+  try {
+    row = await env.DB.prepare(
+      `SELECT id, amount_cents, currency, reversed_amount_cents FROM commissions
+        WHERE source_id = ? AND source_type = 'purchase' LIMIT 1`,
+    ).bind(args.paymentIntentId).first();
+  } catch {
+    return { outcome: 'unknown', detail: 'The referral commission ledger could not be read.' };
+  }
+  if (!row) return { outcome: 'no_commission' };
+  const reversed = Number(row.reversed_amount_cents ?? 0);
+  if (reversed >= row.amount_cents) return { outcome: 'already_reversed', commission_id: row.id };
+  const total = args.chargeAmountCents && args.chargeAmountCents > 0 ? args.chargeAmountCents : null;
+  const target = total
+    ? Math.round((row.amount_cents * Math.min(args.refundedToDateAfterCents, total)) / total)
+    : row.amount_cents;
+  return {
+    outcome: 'would_reverse', commission_id: row.id, amount_cents: Math.max(0, target - reversed),
+    currency: String(row.currency || 'USD').toUpperCase(), full: target >= row.amount_cents,
+  };
+}
+
 export async function clawbackReferralCommissionForRefund(
   env: Env,
   args: {
@@ -65,18 +102,27 @@ export async function clawbackReferralCommissionForRefund(
     chargeRefundedToDateCents?: number | null;
     adminId?: number;
     refundId: string;
+    /**
+     * D4292: which commission the refund reverses. Defaults to the purchase
+     * commission keyed by the PaymentIntent; a subscription invoice's
+     * commission is keyed by its invoice id (`subscription_invoice`).
+     */
+    sourceType?: 'purchase' | 'subscription_invoice';
+    sourceId?: string;
   },
 ): Promise<ClawbackResult> {
   try {
-    if (!args.paymentIntentId) return { outcome: 'no_commission' };
+    const sourceType = args.sourceType ?? 'purchase';
+    const sourceId = sourceType === 'purchase' ? args.paymentIntentId : args.sourceId;
+    if (!sourceId) return { outcome: 'no_commission' };
     await ensureClawbackColumns(env);
 
     const row = await env.DB.prepare(
       `SELECT id, amount_cents, COALESCE(reversed_amount_cents, 0) AS reversed_amount_cents
          FROM commissions
-        WHERE source_id = ? AND source_type = 'purchase'
+        WHERE source_id = ? AND source_type = ?
         LIMIT 1`,
-    ).bind(args.paymentIntentId).first<{
+    ).bind(sourceId, sourceType).first<{
       id: number; amount_cents: number; reversed_amount_cents: number;
     }>().catch(() => null);
 

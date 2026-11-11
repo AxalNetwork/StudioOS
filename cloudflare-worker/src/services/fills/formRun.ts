@@ -54,6 +54,8 @@ export interface FormGather {
   only?: string[];
   /** #4046 (B2): one line on how this form's words are written (an answer in the member's own voice). */
   guide?: string;
+  /** #3938 part 7: a retrieval step's hint (VA12's interviewees by meaning), read after the facts; never an answer. */
+  hint?: string;
 }
 
 /**
@@ -90,6 +92,8 @@ export const EXISTING_READS: Readonly<Record<string, string>> = Object.freeze({
   competitor_tracking: "SELECT why_it_matters AS value FROM competitor_tracking WHERE project_id = ? AND why_it_matters IS NOT NULL AND trim(why_it_matters) <> '' ORDER BY id DESC LIMIT 40",
   product_feedback: "SELECT DISTINCT theme AS value FROM product_feedback WHERE project_id = ? AND theme IS NOT NULL AND trim(theme) <> '' ORDER BY theme LIMIT 40",
   compliance_events: 'SELECT title AS value FROM compliance_events WHERE project_id = ? ORDER BY id DESC LIMIT 40',
+  // #4046: the venture's other channel names, so a new one is not a repeat. Never a spend or a bar.
+  growth_channels: 'SELECT name AS value FROM growth_channels WHERE project_id = ? ORDER BY id DESC LIMIT 40',
 });
 
 /** The venture's own records the form's restatement fields pick from. Literal statements only. */
@@ -263,6 +267,7 @@ export function formMessages(asked: readonly FillField[], gather: FormGather, op
     gather.existing.length ? `Already on file, do not repeat: ${JSON.stringify(gather.existing)}` : '',
     gather.context?.length ? `On record: ${JSON.stringify(gather.context)}` : '',
     gather.guide ?? '',
+    gather.hint ?? '',
     words ? `The founder's notes: ${words}` : '',
   ].filter(Boolean).join('\n');
   return {

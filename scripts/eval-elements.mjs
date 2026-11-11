@@ -44,16 +44,22 @@ export async function plan() {
 
 /** The zero-edit arm for the three sample ventures, keyed by venture. */
 export async function zeroEditArm() {
-  const { buildCards, standardOutline } = await import('../cloudflare-worker/src/services/decks/newDeck.ts');
+  const { CARD_CATALOGUE, buildCards, standardOutline } = await import('../cloudflare-worker/src/services/decks/newDeck.ts');
+  const { cardsFor } = await import('../cloudflare-worker/src/services/decks/narrativeBuild.ts');
   const { RUBRIC_GATE, deckRubric, placeholders } = await import('../cloudflare-worker/src/services/decks/rubric.ts');
   const { fitProblems } = await import('../cloudflare-worker/src/services/decks/designSystem.ts');
   const fixtures = await import('../cloudflare-worker/test/fixtures/pitchStoryFixtures.ts');
   const rows = {};
   for (const [venture, fn] of Object.entries(VENTURES)) {
     const rec = fixtures[fn]();
-    const outline = standardOutline('standard', 'seed_fund');
+    // D1516 (#3768): the build's own cut. The seed arc over the records, with every card that has no recorded
+    // proof left out ("<Title> not evidenced"), so the deck as generated carries no placeholder.
+    const keep = new Set(cardsFor('seed', 'seed_fund', rec.items).cards.map((c) => c.card));
+    const outline = standardOutline('standard', 'seed_fund').filter((r) => r.card === 'title' || keep.has(r.card));
     // What the founder unticks on the one-click run: every record the venture has not made (as D1511's run).
-    const exclude = new Set(rec.items.filter((i) => i.state !== 'recorded').map((i) => i.source_key));
+    // A slot the venture has no row for is not recorded either (the live build reads every slot, D1516).
+    const recorded = new Set(rec.items.filter((i) => i.state === 'recorded').map((i) => i.source_key));
+    const exclude = new Set([...rec.items.map((i) => i.source_key), ...CARD_CATALOGUE.flatMap((c) => c.sources)].filter((k) => !recorded.has(k)));
     const { slides } = buildCards(outline, rec.items, fixtures.wordsFor(outline), 'Synthetic venture', exclude, { series: rec.series, diagrams: rec.diagrams, rows: rec.rows });
     const cards = slides.filter((s) => !s.appendix);
     const measured = { score: deckRubric(slides).score, placeholders: placeholders(cards), overflow: fitProblems(cards).filter((p) => p.kind !== 'single_word_line').length };

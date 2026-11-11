@@ -69,8 +69,8 @@ const COPY = {
   },
   distribution: {
     title: 'Add channel', cta: 'Add channel', sub: 'A channel with its spend, so cost per customer can be read.', foot: 'Customers acquired are attributed to it.',
-    labels: ['Channel', 'Name', 'State', 'Spend · 30 days', 'Bar'],
-    chips: { kind: [['Content', 'Paid search', 'Paid social', 'Outbound', 'Referral', 'Partner', 'Events', 'Other'], 'content'], state: [['Testing', 'Active', 'Paused'], 'testing'] },
+    labels: ['Channel', 'Name', 'State', 'Spend · 30 days', 'Bar', 'What it’s for', 'Owner'],
+    chips: { kind: [['Organic', 'Ads', 'Newsletter', 'Outreach', 'Sign-ups', 'Partner'], 'organic'], state: [['Testing', 'Active', 'Paused'], 'testing'], owner_user_id: [['Not assigned'], ''] },
     placeholders: ['Channel name', '$1,440', 'Strong when CAC under $200'],
   },
   'revenue-and-traction': {
@@ -188,9 +188,9 @@ async function assertFields(m) {
   try {
     assert.ok(!ch.text().toLowerCase().includes('utm'));
     await ch.input('name', 'Podcasts'); await ch.input('spend', '1,440'); await ch.input('bar', '200');
-    await ch.choose('kind', 'paid_social');
+    await ch.choose('kind', 'ads');
     await ch.submit();
-    assert.deepEqual(ch.calls, [['channel', P, { name: 'Podcasts', kind: 'paid_social', state: 'testing', spend_cents: 144000, cac_bar_cents: 20000, bar_currency: 'usd' }]]);
+    assert.deepEqual(ch.calls, [['channel', P, { name: 'Podcasts', kind: 'ads', state: 'testing', purpose: null, owner_user_id: null, spend_cents: 144000, cac_bar_cents: 20000, bar_currency: 'usd' }]]);
   } finally { await ch.unmount(); }
   assert.ok(!Object.hasOwn(form(m, 'distribution').toBody({ name: 'X', bar: '' }), 'bar_currency'), 'no currency without its amount');
 

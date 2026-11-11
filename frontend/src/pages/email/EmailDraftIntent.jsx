@@ -6,7 +6,7 @@
  *   Ask       what it is for, tone, length and the live update blocks (D1344's
  *             request), and the cost line before the run, D1442's words:
  *             "Holds up to $X · you pay what it uses". Draft is pressable only
- *             once that line is on screen (`canDraft`).
+ *             once that line is on screen (`pressable`, D4666).
  *   Preview   the draft's subject and body as Eadwyn wrote them, "Used: … Nothing
  *             else was read.", its versions (‹ ›), Regenerate and Shorter.
  *   Accept    hands the subject and body to the Sheet's form (`onAccept`), which
@@ -17,11 +17,13 @@
  * It reads and writes nothing else: the draft runs through D1344's
  * `/api/mail/drafts` (`api.draft`, `api.revise`), as the composer did.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import AskIntent from '../../ui/AskIntent.jsx';
 import { ADD_TOKENS_PATH } from '../../lib/aiTokens';
 import { mailApi } from '../../lib/api/mail.js';
-import { BLOCKS, canDraft, cap, draftHoldLine, HOLD_READING, INTENTS, LENGTHS, TONES } from './emailModel.js';
+import { BLOCKS, cap, draftHoldLine, HOLD_READING, INTENTS, LENGTHS, reviseHoldLine, TONES } from './emailModel.js';
+import { pressable, refreshedFrom } from './estimateGate.js';
+import { useOperationEstimate } from './useOperationEstimate.js';
 import { BODY, BTN, Chips, ERROR, EYEBROW, MUTED, PRIMARY } from './emailParts.jsx';
 
 export default function EmailDraftIntent({ person, refs = [], project = null, onAccept, onClose, api = mailApi }) {
@@ -30,7 +32,6 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
   const [tone, setTone] = useState('warm');
   const [length, setLength] = useState('short');
   const [blocks, setBlocks] = useState([]);
-  const [estimate, setEstimate] = useState(null);
   const [versions, setVersions] = useState([]);
   const [at, setAt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -40,36 +41,39 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
     [person.ref, intent, tone, length, refs, blocks, project]);
   const draft = versions[at] ?? null;
 
-  // The estimate before every draft (D1344: `estimate` runs nothing and charges nothing).
-  useEffect(() => {
-    let live = true;
-    setEstimate(null);
-    if (!intent) return undefined;
-    api.estimate(ask).then((r) => { if (live) setEstimate(r?.estimate ?? null); })
-      .catch((e) => { if (live) setError(e?.message || 'The estimate could not be read. Try again.'); });
-    return () => { live = false; };
-  }, [ask, api, intent]);
+  // D4666: the estimate is of the operation on screen; Shorter has its own, of the draft it will revise.
+  const gate = useOperationEstimate(() => api.estimate(ask), { kind: 'draft', ask }, { enabled: !!intent });
+  const estimate = gate.estimate;
+  const shortGate = useOperationEstimate(
+    () => api.revise(draft.uid, { instruction: 'shorter', ...(project ? { project } : {}), estimate: true }),
+    { kind: 'revise', uid: draft?.uid ?? null, instruction: 'shorter', project },
+    { enabled: !!draft },
+  );
 
-  const run = async (go) => {
+  const run = async (go, which) => {
     setBusy(true); setError(null);
     try { const r = await go(); if (r?.draft) { setVersions((v) => [...v, r.draft]); setAt(versions.length); } }
-    catch (e) { setError(e?.status === 402 ? { line: e.message || 'Not enough AI tokens for this draft.', topUp: true } : (e?.message || 'Eadwyn could not draft this email. Try again.')); }
+    catch (e) {
+      const fresh = refreshedFrom(e);
+      if (fresh) { which?.accept(fresh); setError(e.message || 'This changed since you saw the estimate. Review the new one, then press again.'); setBusy(false); return; }
+      setError(e?.status === 402 ? { line: e.message || 'Not enough AI tokens for this draft.', topUp: true } : (e?.message || 'Eadwyn could not draft this email. Try again.'));
+    }
     finally { setBusy(false); }
   };
-  const press = () => run(() => api.draft(ask));
-  const shorter = () => draft && run(() => api.revise(draft.uid, { instruction: 'shorter', ...(project ? { project } : {}) }));
+  const press = () => gate.estimate && run(() => api.draft({ ...ask, quote: gate.estimate.quote }), gate);
+  const shorter = () => draft && shortGate.estimate && run(() => api.revise(draft.uid, { instruction: 'shorter', ...(project ? { project } : {}), quote: shortGate.estimate.quote }), shortGate);
   const hold = draftHoldLine(estimate);
-  const pressable = canDraft({ estimate, intent, busy });
+  const canPress = pressable(gate, busy) && !!intent;
 
   const footer = draft
     ? <span className="flex flex-wrap items-center gap-2">
-        <button type="button" className={PRIMARY} disabled={busy} onClick={() => onAccept?.({ ...draft, intent })} data-testid="email-intent-accept">Accept</button>
+        <button type="button" className={PRIMARY} disabled={busy} onClick={() => onAccept?.({ ...draft, intent: draft.intent ?? null })} data-testid="email-intent-accept">Accept</button>
         <button type="button" className={BTN} disabled={busy} onClick={onClose} data-testid="email-intent-discard">Discard</button>
         <span className={`text-[12px] ${MUTED}`}>Accept places it in the Body. Nothing is sent until you press Send.</span>
       </span>
     : <span className="flex flex-col gap-1.5">
-        <span className={`text-[12.5px] ${BODY}`} data-testid="email-intent-hold">{hold ?? HOLD_READING}</span>
-        <button type="button" className={`${PRIMARY} self-start`} disabled={!pressable} onClick={press} data-testid="email-intent-draft">{busy ? 'Drafting…' : 'Draft'}</button>
+        <span className={`text-[12.5px] ${BODY}`} data-testid="email-intent-hold">{hold ?? (gate.status === 'failed' ? <>{gate.error} <button type="button" className="underline" onClick={gate.retry}>Try again</button></> : HOLD_READING)}</span>
+        <button type="button" className={`${PRIMARY} self-start`} disabled={!canPress} onClick={press} data-testid="email-intent-draft">{busy ? 'Drafting…' : 'Draft'}</button>
       </span>;
 
   return (
@@ -77,15 +81,15 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
       {!draft ? (
         <div className="flex flex-col gap-3">
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>What is it for</span>
-            <Chips label="What is it for" testId="email-intent-intents" value={intent} onChange={setIntent} options={intents.map((i) => ({ value: i.key, label: i.label }))} /></section>
+            <Chips label="What is it for" testId="email-intent-intents" value={intent} onChange={setIntent} disabled={busy} options={intents.map((i) => ({ value: i.key, label: i.label }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Tone</span>
-            <Chips label="Tone" value={tone} onChange={setTone} options={TONES.map((t) => ({ value: t, label: cap(t) }))} /></section>
+            <Chips label="Tone" value={tone} onChange={setTone} disabled={busy} options={TONES.map((t) => ({ value: t, label: cap(t) }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Length</span>
-            <Chips label="Length" value={length} onChange={setLength} options={LENGTHS.map((l) => ({ value: l, label: cap(l) }))} /></section>
+            <Chips label="Length" value={length} onChange={setLength} disabled={busy} options={LENGTHS.map((l) => ({ value: l, label: cap(l) }))} /></section>
           <section className="flex flex-col gap-1.5"><span className={EYEBROW}>Insert a live update</span>
             <span className="flex flex-wrap gap-1.5" data-testid="email-intent-blocks">{BLOCKS.map((b) => {
               const on = blocks.includes(b.value);
-              return <button key={b.value} type="button" aria-pressed={on} className={BTN}
+              return <button key={b.value} type="button" aria-pressed={on} className={BTN} disabled={busy}
                 onClick={() => setBlocks((x) => (on ? x.filter((v) => v !== b.value) : [...x, b.value]))}>{on ? '✓' : '+'} {b.label}</button>;
             })}</span></section>
         </div>
@@ -102,10 +106,13 @@ export default function EmailDraftIntent({ person, refs = [], project = null, on
           <p className={`m-0 whitespace-pre-wrap text-[12.5px] ${BODY}`} data-testid="email-intent-body">{draft.body}</p>
           <p className={`m-0 text-[12px] ${MUTED}`}>Used: {(draft.sources ?? []).map((s) => s.label).join(', ') || 'nothing'}. Nothing else was read.</p>
           <span className="flex flex-wrap gap-1.5">
-            <button type="button" className={BTN} disabled={!pressable} onClick={press}>Regenerate</button>
-            <button type="button" className={BTN} disabled={busy} onClick={shorter}>Shorter</button>
+            <button type="button" className={BTN} disabled={!canPress} onClick={press}>Regenerate</button>
+            <button type="button" className={BTN} disabled={!pressable(shortGate, busy)} onClick={shorter} data-testid="email-intent-shorter">Shorter{shortGate.status === 'ready' ? '' : shortGate.status === 'failed' ? ' (estimate unavailable)' : ' (reading the estimate…)'}</button>
           </span>
           <span className={`text-[12px] ${MUTED}`}>{hold ?? HOLD_READING}</span>
+          {shortGate.status === 'ready' && <span className={`text-[12px] ${MUTED}`} data-testid="email-intent-shorter-hold">{reviseHoldLine('Shorter', shortGate.estimate)}</span>}
+          {(gate.status === 'failed' || shortGate.status === 'failed') && <span className={`text-[12px] ${MUTED}`} data-testid="email-intent-estimate-failed">
+            {(gate.status === 'failed' ? gate : shortGate).error} <button type="button" className="underline" onClick={() => { gate.retry(); shortGate.retry(); }}>Try again</button></span>}
         </section>
       )}
       {error ? <div className={ERROR} role="alert" data-testid="email-intent-error">

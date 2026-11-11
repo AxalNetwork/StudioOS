@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { contactsBookApi } from '../../lib/api/contacts';
 import { BTN } from './AccountCenter';
+import SharingCard from '../relationships/SharingCard.jsx';
 import {
   CAN, CANNOT, LINKEDIN_EXPORT_URL, deleteChoice, grantedScopes, lastImportLine, previewCounts, reviewActions,
 } from './linkedinModel';
@@ -22,7 +23,7 @@ import {
  * clients (swapped in tests). Every write reads the status again, so the counts
  * are the Worker's.
  */
-export default function LinkedInSection({ onChanged, books = contactsBookApi, statusRead = api.linkedinStatus }) {
+export default function LinkedInSection({ onChanged, books = contactsBookApi, statusRead = api.linkedinStatus, sharing = true }) {
   const [status, setStatus] = useState({ state: 'loading', value: null });
   const load = useCallback(async () => {
     try { setStatus({ state: 'ready', value: await statusRead() }); } catch { setStatus({ state: 'unreadable', value: null }); }
@@ -35,6 +36,8 @@ export default function LinkedInSection({ onChanged, books = contactsBookApi, st
         ? <p className={MUTED} data-testid="linkedin-status-unreadable">What LinkedIn granted could not be read. <button type="button" className={BTN.link} onClick={load}>Try again</button></p>
         : <Granted status={status.value} />}
       <ImportFlow status={status.value} onChanged={changed} books={books} />
+      {/* D1357 (#3572, RI1): who your teams may see you know, beside the import that brought them in. */}
+      {sharing ? <SharingCard testId="linkedin-sharing" /> : null}
     </div>
   );
 }

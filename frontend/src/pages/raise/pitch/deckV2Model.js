@@ -107,10 +107,12 @@ export const ELEMENT_GROUPS = Object.freeze([
     { id: 'projection_chart', label: 'Projection chart', ...A('typedTables', 3787) },
     { id: 'positioning', label: 'Positioning 2×2', ...A('diagrams', 3780) },
   ] },
+  // D1542 (#3780): Flow, Cycle and Matrix generate through the areas route (the `grid_diagram` job), on the model the
+  // rail's Diagrams group resolves on the server, so they name no rail option here; the rest stay later.
   { id: 'diagrams', label: 'Diagrams', items: [
-    { id: 'flow', label: 'Flow', ...A('diagrams', 3780) },
-    { id: 'cycle', label: 'Cycle', ...A('diagrams', 3780) },
-    { id: 'matrix', label: 'Matrix', ...A('diagrams', 3780) },
+    { id: 'flow', label: 'Flow', ...R('POST /api/decks/:id/areas') },
+    { id: 'cycle', label: 'Cycle', ...R('POST /api/decks/:id/areas') },
+    { id: 'matrix', label: 'Matrix', ...R('POST /api/decks/:id/areas') },
     { id: 'funnel', label: 'Funnel', ...A('diagrams', 3780) },
     { id: 'hierarchy', label: 'Hierarchy', ...A('diagrams', 3780) },
     { id: 'hub', label: 'Hub and spoke', ...A('diagrams', 3780) },
@@ -368,6 +370,9 @@ export const MORE_MENU = Object.freeze([
     { id: 'transition', label: 'Transition', write: true },
     // D1570 (#3817, pd33): the card's threads; opened here or from the card's ⋯, never from the header.
     { id: 'comments', label: 'Comments', adapter: 'comments' },
+    // D1569 (#3816): the card's script in an AI voice, quoted first and saved only on Accept; never in the header or the rail.
+    { id: 'voice', label: 'AI voice-over', ai: true, write: true },
+    { id: 'remove_card', label: 'Remove card…', write: true },
   ] },
   // D1370 (#3661, pd13 and pf1a): the preflight, free and read-only, between This card and the AI items.
   { id: 'before', label: 'Before you send', items: [

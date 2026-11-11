@@ -118,7 +118,7 @@ test('three program kinds join both lists, each answered within 3 days, on D982\
     assert.ok((ESCALATION_KINDS as readonly string[]).includes(k), k);
     assert.equal((SLA_HOURS as any)[k], 72, k);
   }
-  assert.deepEqual([...REQUESTABLE_PROGRAMS], PROGRAM_KEYS, 'the request list and the store name the same nine');
+  assert.deepEqual([...REQUESTABLE_PROGRAMS], PROGRAM_KEYS, 'the request list and the store name the same ten');
 });
 
 test('the fields: a program named, a terms change with its term and what is asked, and what it stands at never sent', () => {

@@ -78,7 +78,7 @@ const checks: MutationCheck[]=[
  const departed=await request(route,env,'/modules/operating-systems?project=101');
  snap([member.status,before,owned?.cells.tool,owned?.cells.owner,team?.cells.tool,team?.cells.owner,outside?.cells.owner,partner.status,partnerRow?.cells.owner,JSON.stringify(admin.body).includes('Private teammate account'),JSON.stringify(partner.body).includes('Private teammate account'),member.body.parts.tools.rows.some((r:any)=>r.cells.tool==='HubSpot' && r.cells.owner!=='You'),departed.body.parts.tools.rows.some((r:any)=>r.cells.tool==='Salesforce')],
  [200,3,'HubSpot','You','Salesforce','Two',null,200,null,false,false,false,false]);db.close();}},
- {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = tools.find(tool => tool.status === 'error' && getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
+ {name:'Tools counts and failing action include an unmapped failing provider',before:"const failingTool = failingTools.find(tool => getDescriptor(tool.provider_key));",after:"const failingTool = undefined;",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);const r=await request(route,env,'/modules/operating-systems?project=101');
  const action=r.body.parts.tools.rows.find((row:any)=>row.id==='tool-1').cells.action;
  snap([r.body.facts.tools_connected,r.body.facts.tools_failing,r.body.facts.tools_total,r.body.card.next?.text ?? null,r.body.card.next?.href ?? null,action,r.body.parts.tools.rows.find((row:any)=>row.id==='tool-0').cells.feeds],
@@ -119,7 +119,7 @@ const checks: MutationCheck[]=[
  const owner=await request(route,env,'/modules/operating-systems?project=101',2),member=await request(route,env,'/modules/operating-systems?project=101',1),admin=await request(route,env,'/modules/operating-systems?project=101',3);
  snap([owner.status,member.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,admin.body.records.rows.find((r:any)=>r.id==='crm').cells.provider,JSON.stringify(admin.body).includes('Private teammate account')],
  [403,'Salesforce','Salesforce',false]);db.close();}},
- {name:'A failing system links its provider rather than its kind',before:"reconnect(failedSystem.provider_key, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!])",after:"reconnect(failing, failedSystem.last_error_at, p.id, SYSTEM_LABEL[failing!])",run:async(route:any)=>{
+ {name:'A failing system links its provider rather than its kind',before:"reconnect(failedSystem.provider_key, failedSince, p.id, SYSTEM_LABEL[failing!])",after:"reconnect(failing, failedSince, p.id, SYSTEM_LABEL[failing!])",run:async(route:any)=>{
  const {db,env}=fixture();connectors(db);db.exec("INSERT INTO project_core_systems(project_id,kind,integration_id,updated_by) VALUES(101,'crm',12,2)");
  const r=await request(route,env,'/modules/operating-systems?project=101');snap([r.body.card.next.text,r.body.card.next.href],['Reconnect Salesforce · failing since 9 Oct','/build/connect?tool=salesforce&project_id=101']);db.close();}},
  {name:'Failed at is recorded per tool while a healthy tool has no failure time',before:"i.last_error_at, u.name AS owner_name",after:"NULL AS last_error_at, u.name AS owner_name",secondBefore:"failed_at: tool.last_error_at ?? null",secondAfter:"failed_at: null",run:async(route:any)=>{

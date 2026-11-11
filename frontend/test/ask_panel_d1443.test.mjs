@@ -3,7 +3,7 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/ask_panel_d1443.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { codeOnly } from './_codeOnly.mjs';
@@ -174,7 +174,8 @@ test('the seam: D1442 turned the quote and the waiting count on; nothing is off,
     eadwynApi.quote = async () => { throw new Error('The quote could not be read.'); };
     assert.equal((await askPanelAdapter.quote('u1', 'hi')).available, false, 'a failed quote is off');
 
-    railProposalsApi.list = async (q) => { asked.push(q); return { proposals: [{ uid: 'a' }, { uid: 'b' }] }; };
+    // #4737: only the rows the panel lists (a run chip's option) are counted; a form's row is not.
+    railProposalsApi.list = async (q) => { asked.push(q); return { proposals: [{ uid: 'a', rail_option: 'sessions:block' }, { uid: 'b', rail_option: 'sessions:block' }, { uid: 'c', rail_option: 'form:mvp_features' }, { uid: 'd' }] }; };
     assert.deepEqual(await askPanelAdapter.waiting('Founder · Build'), { available: true, data: { count: 2 } });
     assert.deepEqual(asked.at(-1), { page: 'Founder · Build', status: 'proposed' });
     railProposalsApi.list = async () => { throw new Error('nope'); };
@@ -184,7 +185,7 @@ test('the seam: D1442 turned the quote and the waiting count on; nothing is off,
 
   // PageAsk draws the count it read, and the panel prices once typing pauses.
   const button = codeOnly(read('frontend/src/ui/AskButton.jsx'));
-  assert.match(button, /askPanelAdapter\.waiting\(ask\.page\)\.then\(\(w\) => \{ if \(live\) setWaiting\(w\.available \? w\.data\?\.count \?\? null : null\); \}\)/);
+  assert.match(button, /askPanelAdapter\.waiting\(pageKey\)\.then\(\(w\) => \{ if \(live\) setWaiting\(w\.available \? w\.data\?\.count \?\? null : null\); \}\)/);
   assert.match(button, /<AskButtonView onClick=\{\(\) => openAskPanel\(label\)\} expanded=\{ask\.open\} waiting=\{waiting\}/);
   const panel = codeOnly(read('frontend/src/ui/AskPanel.jsx'));
   assert.match(panel, /setTimeout\(\(\) => \{\s*askPanelAdapter\.quote\(convUid, text, page\)/);
@@ -240,7 +241,7 @@ test('Ask buttons: PageAsk draws only where a rail serves the viewer; Team and R
   // D1443 part 5 (#3992): through HeaderAsk, the page's one header Ask, which is PageAsk.
   assert.match(codeOnly(read('frontend/src/pages/team/AskButton.jsx')), /return <HeaderAsk label=\{label\} \/>;/);
   assert.match(codeOnly(read('frontend/src/pages/cycles/RaiseOverviewLead.jsx')), /<HeaderAsk label="Raise · Overview" testId="raise-ask" \/>/);
-  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} \/>;/);
+  assert.match(codeOnly(read('frontend/src/ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} page=\{page\} state=\{state\} disabled=\{disabled\} sub=\{sub\} title=\{title\} ariaLabel=\{ariaLabel\} \/>;/);
 });
 
 test('the canvases are in design/incoming with the one named edit, and the decisions name them', () => {
@@ -255,4 +256,34 @@ test('the canvases are in design/incoming with the one named edit, and the decis
   assert.ok(existsSync(new URL('../../documentation/architecture/decisions/D1443.md', import.meta.url)));
   assert.match(read('documentation/architecture/decisions/D1444.md'), /AK9 · Studio/);
   assert.match(read('documentation/architecture/decisions/D1443.md'), /#3991/);
+});
+
+// #4737: D1443 describes the code that is on main. §5 lists the seam's off methods, and it must
+// say so only for a method `ASK_OFF_METHODS` lists; the dock is the portalled fixed one.
+test('D1443 §5 lists a method as off only if ASK_OFF_METHODS does, and the old in-rail dock is gone', () => {
+  const d = read('documentation/architecture/decisions/D1443.md');
+  const seam = d.slice(d.indexOf('### 5. The seam'), d.indexOf('### 6.'));
+  assert.ok(seam.length > 100, 'section 5 found');
+  const methods = ['start', 'conversations', 'conversation', 'ask', 'run', 'proposals', 'decide', 'quote', 'waiting'];
+  const through = (/\*\*Through to `main`:\*\*([^\n]*)/.exec(seam) || [])[1] || '';
+  for (const m of methods) {
+    const listedOff = new RegExp(`\\*\\*Off until[^\\n]*\\n(?:[^\\n]*\\n)*?[^\\n]*\`${m}\``).test(seam);
+    assert.equal(listedOff, ASK_OFF_METHODS.includes(m), `${m}: §5 and ASK_OFF_METHODS disagree about it being off`);
+    assert.ok(ASK_OFF_METHODS.includes(m) || through.includes(`\`${m}\``), `${m} is through to main, so §5 names it there`);
+  }
+  assert.doesNotMatch(seam, /Off until D1442/, 'D1442 turned the last two on');
+  // The dock was first drawn inside the rail's <aside>; #4260 and #4263 placed it at the document's level.
+  const dockClass = ['fwr', 'ask', 'dock'].join('-');
+  assert.ok(!d.includes(dockClass), `D1443 still names ${dockClass}`);
+  const leftover = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(new URL(dir, import.meta.url), { withFileTypes: true })) {
+      const rel = `${dir}${e.name}`;
+      if (e.isDirectory()) walk(`${rel}/`);
+      else if (/\.(jsx?|css|md)$/.test(e.name) && readFileSync(new URL(rel, import.meta.url), 'utf8').includes(dockClass)) leftover.push(rel);
+    }
+  };
+  walk('../src/');
+  assert.deepEqual(leftover, [], `${dockClass} appears under frontend/src`);
+  assert.match(d, /\.ead-ask-dock/, 'the portalled dock is described');
 });

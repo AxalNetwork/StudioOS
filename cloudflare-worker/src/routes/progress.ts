@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #8 — Customer Discovery + Roadmap (worker port of
  * backend/app/api/routes/progress.py, discovery & roadmap surfaces only).
@@ -121,17 +122,17 @@ async function loadProject(
     'SELECT id, name, founder_id, company_id FROM projects WHERE id = ?',
   ).bind(projectId).first<Project>();
   if (!row) return null;
-  if (isPrivileged(user.role)) return row;
+  if (isPrivileged(user)) return row;
   return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
 
-function isPrivileged(role: User['role']): boolean {
+function isPrivileged(user: User): boolean {
   // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
-  return role === 'admin' || role === 'partner';
+  return user.role === 'admin' || holdsLicence(user, 'partner');
 }
 
 function ensureCanView(project: Project, user: User): void {
-  if (isPrivileged(user.role)) return;
+  if (isPrivileged(user)) return;
   if (!canAccessFounderResource(user, project.founder_id)) {
     throw new Error('Forbidden');
   }
@@ -139,7 +140,7 @@ function ensureCanView(project: Project, user: User): void {
 
 function ensureCanEdit(project: Project, user: User): void {
   if (user.role === 'admin') return;
-  if (user.role === 'founder') {
+  if (holdsLicence(user, 'founder')) {
     if (!canAccessFounderResource(user, project.founder_id)) {
       throw new Error('Forbidden');
     }
@@ -381,7 +382,7 @@ progress.post('/discovery/:projectId', async (c) => {
   ensureCanEdit(project, user);
 
   // Task #6 — free-tier discovery interview cap.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(c.env);
     const existing = await c.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
@@ -749,7 +750,7 @@ progress.post('/discovery/:projectId/waitlist/:signupId/promote', async (c) => {
   }
 
   // Task #6 free-tier discovery-interview cap (mirrors create_interview).
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(c.env);
     const existing = await c.env.DB.prepare(
       'SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?',
@@ -1176,7 +1177,7 @@ export async function roadmapCreateChecks(env: Env, user: User, projectId: numbe
   | { error: { detail: string } }
   | { objective: string; kanbanStatus: string; keyResults: KeyResult[]; quarter: string | null; sortOrder: number }> {
   // Task #6 — free-tier OKR cap.
-  if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+  if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
     await ensureTierSchema(env);
     const existing = await env.DB.prepare(
       'SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ?',
@@ -2973,7 +2974,7 @@ function buildLifecycleChecklist(
   switch (stage) {
     case 'idea':
       return [
-        { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/build/command-center?tab=founder-portal', manual: true },
+        { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/studio', manual: true },
         { key: 'talk_cofounders', label: 'Talk to 3 potential co-founders', done: m('talk_cofounders'), href: '/build/team?tab=cofounder', manual: true },
         { key: 'first_hypothesis', label: 'Note your riskiest assumption', done: m('first_hypothesis'), href: '/validate/customer-research', manual: true },
       ];

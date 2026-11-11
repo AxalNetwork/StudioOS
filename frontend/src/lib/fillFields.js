@@ -49,6 +49,8 @@ const TEAM = 'Founder · Grow · Team expansion';
 const MARKET_INTEL = 'Founder · Validate · Market intelligence';
 const PRODUCT = 'Founder · Grow · Product improvement';
 const DURABLE = 'Founder · Grow · Durable company building';
+// #4046 (S1, 2026-11-04): Distribution's channel name, before the #3722 redesign moves it.
+const DISTRIBUTION = 'Founder · Grow · Distribution';
 
 export const FILL_FIELDS = Object.freeze([
   // AF1, AF3: Add feature. Impact is the founder's call, so it has no entry.
@@ -86,6 +88,7 @@ export const FILL_FIELDS = Object.freeze([
   { page: MARKET_INTEL, form: 'competitor', field: 'why', label: 'Why it matters', table: 'competitor_tracking', column: 'why_it_matters', class: 'composition', sources: ['eadwyn'] },
   { page: PRODUCT, form: 'feedback', field: 'theme', label: 'Theme name', table: 'product_feedback', column: 'theme', class: 'composition', sources: ['eadwyn'] },
   { page: DURABLE, form: 'obligation', field: 'title', label: 'Obligation', table: 'compliance_events', column: 'title', class: 'composition', sources: ['eadwyn'] },
+  { page: DISTRIBUTION, form: 'channel', field: 'name', label: 'Name', table: 'growth_channels', column: 'name', class: 'composition', sources: ['eadwyn'] },
   // D1329 (#3490, #2431 part 6): every other profile. These records are not a
   // venture's; `scopes.ts` holds each one's own write check. No amount, legal
   // name, approval, decision, outcome, term or member's record is listed.

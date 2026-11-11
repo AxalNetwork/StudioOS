@@ -102,6 +102,12 @@ const painTag: FillKind = {
     } as Gathered & { groups: Array<{ id: number; title: string }> };
   },
 
+  // #3938 part 6: VA11's retrieve step places each ungrouped phrase near the founder's own themes.
+  hints(gathered) {
+    const groups = (gathered as Gathered & { groups?: Array<{ id: number; title: string }> }).groups || [];
+    return { themes: groups.map((g) => g.title), items: (gathered.known || []).map((p) => ({ key: p, text: p })) };
+  },
+
   parse(text, gathered): Proposed[] {
     const groups = (gathered as Gathered & { groups?: Array<{ id: number; title: string }> }).groups || [];
     return parseTagProposals(text, gathered.known || [], groups).map((p) => ({
@@ -214,7 +220,11 @@ const hypothesis: FillKind = {
   async apply(ctx, payload) {
     // `insertHypothesis` — the same function `POST /hypotheses` calls, and the
     // only place the `H1, H2 …` allocation lives. See this file's header.
-    const written = await insertHypothesis(ctx.env, ctx.projectId, String(payload.claim || '').trim(), Number(ctx.user.id));
+    // `ctx.proposalId` (D4627, #4627) is the accept route's idempotency key:
+    // a retry of the SAME proposal, after a failure between this insert and
+    // `recordFill`, lands on the row it already created instead of handing
+    // out a second `Hn` next to an orphan with no provenance.
+    const written = await insertHypothesis(ctx.env, ctx.projectId, String(payload.claim || '').trim(), Number(ctx.user.id), ctx.proposalId ?? null);
     await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
       module: 'experiments', entityId: written.id, action: 'hypothesis_created', summary: `Hypothesis ${written.code} created` });
     return {
@@ -677,6 +687,12 @@ const feedbackTheme: FillKind = {
       themes,
       bodies: Object.fromEntries(rows.map((r) => [r.uid, String(r.body)])),
     } as FeedbackGathered;
+  },
+
+  // #3938 part 6: GR1's retrieve step places each unthemed item near the venture's own themes.
+  hints(gathered) {
+    const g = gathered as FeedbackGathered;
+    return { themes: g.themes || [], items: (g.known || []).map((uid) => ({ key: uid, text: g.bodies?.[uid] ?? '' })) };
   },
 
   parse(text, gathered): Proposed[] {

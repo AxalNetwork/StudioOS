@@ -176,11 +176,11 @@ test('the charts: who holds each program, and requests by month (null when unrea
 });
 
 test('terms: typed in units, sent as cents and basis points, only what changed', () => {
-  assert.equal(termInput('fee_cents', '2000'), 200000);
+  assert.equal(termInput('fee_cents', '2000', 'EUR'), 200000);
   assert.equal(termInput('hq_share_bps', '12.5'), 1250);
   assert.equal(termInput('capacity_uncapped', '1'), 1);
   assert.equal(termInput('reporting', ''), null);
-  assert.deepEqual(termsPayload(['fee_cents', 'credits_per_quarter'], { fee_cents: '2000', credits_per_quarter: '400' }, { fee_cents: 200000, credits_per_quarter: 300 }), { credits_per_quarter: 400 });
+  assert.deepEqual(termsPayload(['fee_cents', 'credits_per_quarter'], { fee_cents: '2000', credits_per_quarter: '400', currency: 'EUR' }, { fee_cents: 200000, credits_per_quarter: 300, currency: 'EUR' }), { credits_per_quarter: 400 });
   const s = liveSentence({ studio: 'Studio Lisbon', program: 'Perks', terms: { ...COMMON, starts_on: '2026-11-01' }, licence: { status: 'pending_activation' } });
   assert.equal(s, 'Studio Lisbon may run Perks from 1 Nov 2026 to the end of its licence, paying HQ €2,000 a year. It starts when the licence is active. It starts when the program schedule is signed.');
 });
@@ -189,7 +189,7 @@ test('one studio\'s rows: In use from the studio\'s reports (D1281), a frozen li
   // Mutation checked: the unconditional wait restored; a missing report drawn as a zero; the report date dropped.
   const rows = studioRows(STUDIO, DEFAULTS, REQUESTS.items, { status: 'ready', data: USAGE });
   const r = (k) => rows.find((x) => x.program.key === k);
-  assert.equal(rows.length, 9);
+  assert.equal(rows.length, 10, 'the nine and Influencers (D4289 P1)');
   assert.deepEqual([r('perks').inUse.text, r('perks').inUse.reason], ['People 9 · Claims 1,204', 'Reported 25 Oct 2026 for 2026-10.']);
   assert.deepEqual([r('refer-and-earn').inUse.text, r('refer-and-earn').inUse.reason],
     [NOT_RECORDED, 'This studio has not reported this program yet. Its last report was on 25 Oct 2026.']);
@@ -293,7 +293,7 @@ test('mounted grid: the tabs at their addresses, the tiles, both charts and a ce
   pin(t);
   const m = await mount('/admin/licences/programs');
   try {
-    assert.match(m.of('grants-header'), /Program grants.*HQ only.*Grid.*Requests.*1.*Default terms/s);
+    assert.match(m.of('grants-header'), /Program access by licence.*HQ only.*Grid.*Requests.*1.*Default terms/s);
     assert.equal(m.prop('grants-tab-requests', 'href'), '/admin/licences/programs/requests');
     assert.equal(m.prop('grants-tab-defaults', 'href'), '/admin/licences/programs/defaults');
     assert.match(m.of('grants-tile-studios'), /4.*2 active · 1 suspended · 1 pending activation/s);

@@ -82,7 +82,7 @@ export function packsView(read) {
 
 /** The pack a caller asked for (Models' Buy), else the first one; with no pack, the custom amount. */
 export function startingPack(rows, wanted, custom = null) {
-  if (!rows.length) return custom ? CUSTOM_KEY : null;
+  if (!rows.length || (wanted === CUSTOM_KEY && custom)) return custom ? CUSTOM_KEY : null;
   return rows.find((r) => r.key === String(wanted) || (wanted && r.priceId === wanted))?.key ?? rows[0].key;
 }
 

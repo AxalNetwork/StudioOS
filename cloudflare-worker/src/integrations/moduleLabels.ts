@@ -68,7 +68,7 @@ export const MODULE_HREFS: Record<string, string> = {
   data_room: '/raise/data-room',
   cap_table: '/raise/cap-table',
   investor_narrative: '/raise/investor-narrative',
-  pitch_deck: '/raise/pitch-deck',
+  pitch_deck: '/raise/pitch', // #4853: the Studio's own address, not the module cycle's
   deals_pipeline: '/deals',
   investor_portfolio: '/portfolio',
   deals_commit: '/deals/commit',

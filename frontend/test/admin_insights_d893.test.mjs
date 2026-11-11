@@ -412,10 +412,10 @@ test('a block and a tile draw each state, and the ready block offers its definit
 test('the address moved: the route, the redirect, the row, the rail map and the redirect count agree', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/admin\/insights" element=\{guard\(\['admin'\], <AdminInsights \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/admin\/held\/insights" element=\{<HeldInsightsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/admin\/held\/insights" element=\{<HeldInsightsRedirect \/>\} \/>/);
   assert.match(read('frontend/src/sidebarConfig.js'), /\{ to: '\/admin\/insights', icon: TrendingUp, label: 'Insights' \}/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/insights', key\(AD, 'Insights'\)\)/);
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/held\/insights' \}/);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/held\/insights' \}/);
   const redirect = read('frontend/src/pages/admin/insights/HeldInsightsRedirect.jsx');
   assert.match(redirect, /next\.set\('moved', MOVED_KEY\)/);
   assert.match(redirect, /hash: loc\.hash/);

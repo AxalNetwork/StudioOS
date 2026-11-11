@@ -5,10 +5,12 @@
  */
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { daysWord, fitCell, moneyText, scopeCell } from './flowModel';
+import { ScopeStrip } from '../../../components/scoring/scorecard/Scorecard';
+import { SCORE_TITLES, THESIS_PATH, daysWord, fitCell, moneyText, scopeCell, stripScopes } from './flowModel';
 
 const MUTED = 'text-[12px] text-axal-muted dark:text-gray-400';
 const CONF_DOT = { High: 'bg-violet-600 dark:bg-violet-400', Medium: 'bg-violet-400 dark:bg-violet-500', Low: 'bg-violet-200 dark:bg-violet-800' };
+const FLOW_UNREADABLE = 'Your deal flow could not be read.';
 
 /** A scope's band and its confidence; `words` writes the confidence, else a dot carries it with its label. */
 export function ScopeCell({ scores, scope, words = true, testId }) {
@@ -29,7 +31,7 @@ export function ScopeCell({ scores, scope, words = true, testId }) {
 /** Fit to my thesis (D1239): its own number with confidence, "Set your thesis", or why there is none. */
 export function FitCell({ fit, testId }) {
   const c = fitCell(fit);
-  if (c.kind === 'not_set') return <Link to="/account" className="text-[12px] font-semibold text-sky-700 underline hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-100" title={c.title} data-testid={testId}>{c.word}</Link>;
+  if (c.kind === 'not_set') return <Link to={THESIS_PATH} className="text-[12px] font-semibold text-sky-700 underline hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-100" title={c.title} data-testid={testId}>{c.word}</Link>;
   if (c.kind !== 'scored') return <span className={MUTED} title={c.title || undefined} data-testid={testId}>{c.word}</span>;
   return <span className="text-[12.5px] font-semibold text-sky-800 dark:text-sky-200" title={c.title} data-testid={testId}>{c.word}{c.confidence && <span className="font-normal text-axal-muted dark:text-gray-400"> · {c.confidence}</span>}</span>;
 }
@@ -40,14 +42,16 @@ export function AskCell({ row, withInstrument = true }) {
   return <span>{m}{withInstrument && row.instrument ? <span className={MUTED}> · {row.instrument}</span> : null}</span>;
 }
 
-export function DaysCell({ row }) {
+export function DaysCell({ row, flowUnknown = false, testId }) {
   const d = daysWord(row.daysInStage);
-  return d ? <span>{d}</span> : <span className={MUTED} title={row.inFlow ? 'The stage’s start is not recorded.' : 'Not on your deals.'}>—</span>;
+  return d
+    ? <span data-testid={testId}>{d}</span>
+    : <span className={MUTED} title={flowUnknown ? FLOW_UNREADABLE : (row.inFlow ? 'The stage’s start is not recorded.' : 'Not on your deals.')} data-testid={testId}>—</span>;
 }
 
-export function OwnerCell({ row }) {
-  if (!row.owner) return <span className={MUTED} title={row.inFlow ? 'Unassigned' : 'Not on your deals.'}>—</span>;
-  return <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[10.5px] font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-200" title={row.owner.name || 'Owner not named'}>{row.owner.initials || '?'}</span>;
+export function OwnerCell({ row, flowUnknown = false, testId }) {
+  if (!row.owner) return <span className={MUTED} title={flowUnknown ? FLOW_UNREADABLE : (row.inFlow ? 'Unassigned' : 'Not on your deals.')} data-testid={testId}>—</span>;
+  return <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-[10.5px] font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-200" title={row.owner.name || 'Owner not named'} data-testid={testId}>{row.owner.initials || '?'}</span>;
 }
 
 /** The venture: a door to the deal only where DEAL's rule holds (`can_open`). D1241: `onPeek` adds Details, the peek (DLS7). */
@@ -61,4 +65,17 @@ export function VentureCell({ row, onPeek = null }) {
       {onPeek && <button type="button" className="w-fit text-[11.5px] font-semibold text-violet-700 underline hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100" onClick={() => onPeek(row)} aria-haspopup="dialog" data-testid={`dealflow-peek-${row.id}`}>Details</button>}
     </span>
   );
+}
+
+/**
+ * D4635 (#4635): one venture's scorecard as a strip, from the supported scoring read (`POST /api/venture-scores/batch`),
+ * with its states named apart: a strip, locked by the founder, not shared with this reader, unreadable, or still reading.
+ */
+export function ScorecardCell({ scores, testId }) {
+  const s = scores?.state;
+  if (s === 'ok') return <span data-testid={testId}><ScopeStrip scopes={stripScopes(scores)} /></span>;
+  if (s === 'locked') return <span title={scores.reason || SCORE_TITLES.locked} data-testid={testId}><ScopeStrip locked /></span>;
+  if (s === 'not_shared') return <span className={MUTED} title={SCORE_TITLES.not_shared} data-testid={testId}>Not shared</span>;
+  if (s === 'failed' || s === 'unreadable') return <span className={MUTED} title={SCORE_TITLES.unreadable} data-testid={testId}>Unreadable</span>;
+  return <span className={MUTED} data-testid={testId}>Reading…</span>;
 }

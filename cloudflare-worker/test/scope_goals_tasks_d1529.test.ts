@@ -52,6 +52,8 @@ function world() {
   // D1614 W1 (#3969): the project board's columns on the same task store; project tasks now go through it.
   db.exec(stripForeignKeys(sql('migrations/762_scope_task_work_board.sql')));
   db.exec(stripForeignKeys(sql('migrations/763_task_comments_labels_milestones.sql')));
+  // #3968: the production board now reads E3's canonical run store.
+  db.exec(stripForeignKeys(tableFromBaseline(sql('migrations/728_agent_engine.sql'), 'agent_task_runs')));
   // D1614 W8 (#3994): W1's write clears needs_reassignment.
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(stripForeignKeys(sql('migrations/202611022205_work_workload.sql'))); // D1614 W4: the board reads the time block
@@ -312,6 +314,8 @@ test('cost is { available: false } until E3 and when the read throws; a known co
   // { available: true, value_microusd: 0 }; sumCosts skipping unknowns → the mixed sum reads 5.
   const w = world();
   try {
+    // This case explicitly exercises the pre-E3/unavailable-store branch.
+    w.db.exec('DROP TABLE agent_task_runs');
     const t = await task(w, { title: 'A' });
     const listed = (await call(w, EDITOR, 'GET', `${CO}/tasks`)).body.tasks[0];
     assert.deepEqual(listed.cost, { available: false });

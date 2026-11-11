@@ -18,6 +18,7 @@
  * Bound SQL only. Codes in logs, never a prompt, an output or a name. A cost
  * that cannot be read is `{ available: false }`, never 0.
  */
+import { inCohort } from '../services/agents/cohort';
 import type { Env } from '../types';
 import { PLATFORM_PAUSED_MESSAGE, platformPaused } from '../services/agents/aiPolicy';
 import { notify } from '../services/notify';
@@ -105,16 +106,20 @@ const inScope = (a: AgentRow, s: ScopeRef) =>
   a.scope_kind === s.kind && (s.kind === 'company' ? a.company_id === s.id : a.project_id === s.id);
 
 /** The engine and the halt, as admission reads them. */
-export async function engineRefusal(env: Env, by: number | null): Promise<Refusal | null> {
+export async function engineRefusal(env: Env, by: number | null, scope?: ScopeRef): Promise<Refusal | null> {
   // D4162 (#4162): HQ's kill switch first, on every admission path of both runtimes; an unreadable policy counts as on.
   if (await platformPaused(env)) return no(403, 'platform_paused', PLATFORM_PAUSED_MESSAGE);
   const mode = await engineMode(env);
   const paused = no(403, 'engine_paused', 'Agents are paused on the platform. You can still run them yourself.');
   if (mode === 'off' || mode === 'paused' || await haltedAll(env)) return paused;
-  if (mode === 'canary') {
+  if (mode === 'canary' || mode === 'cohort') {
     // Canary: only a platform admin's own start is admitted; the sweep and `after` admit nothing.
     const admin = by ? await env.DB.prepare("SELECT 1 AS ok FROM users WHERE id = ? AND role = 'admin' AND is_active = 1").bind(by).first<{ ok: number }>() : null;
-    if (!admin) return paused;
+    if (!admin) {
+      if (mode !== 'cohort') return paused;
+      try { if (!await inCohort(env, by, scope)) return paused; }
+      catch { return paused; } // Missing/unreadable cohort data never grants admission.
+    }
   }
   return null;
 }
@@ -124,8 +129,25 @@ export async function engineRefusal(env: Env, by: number | null): Promise<Refusa
  * object, which runs one admission at a time, so the counts cannot race
  * within a scope; the single-flight index covers anything else.
  */
+/** D4535: the shape of a workflow plan's per-attempt run uid (`skillWorkflow.ts` `planRun`). */
+export const PLANNED_RUN_UID_RE = /^wf-[0-9a-f]{40}$/;
+
 export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<Admission> {
-  const engine = await engineRefusal(env, t.by);
+  if (t.runUid !== undefined && !(typeof t.runUid === 'string' && PLANNED_RUN_UID_RE.test(t.runUid))) {
+    return no(400, 'invalid_run', 'A planned run is named by its plan\'s attempt uid.');
+  }
+  // D4535: a planned attempt admitted before answers with that run, and admits
+  // nothing new: the same attempt never becomes two runs. A planned uid already
+  // used by another agent or task is refused rather than reused.
+  if (t.runUid) {
+    const prior = await env.DB.prepare('SELECT agent_id, task_id, attempt FROM agent_task_runs WHERE uid = ?').bind(t.runUid)
+      .first<{ agent_id: number; task_id: number; attempt: number }>();
+    if (prior) {
+      if (prior.agent_id !== t.agentId || prior.task_id !== t.taskId) return no(409, 'run_uid_taken', 'That planned run belongs to another task.');
+      return { ok: true, run: { uid: t.runUid, attempt: prior.attempt }, replayed: true };
+    }
+  }
+  const engine = await engineRefusal(env, t.by, s);
   if (engine) return engine;
   const settings = await scopeSettings(env, s);
   if (settings.engine_paused) return no(403, 'scope_paused', 'Agents are paused on this team. An editor can resume them.');
@@ -151,7 +173,7 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
     admittedCompany = p?.company_id ?? null;
   }
   const attempt = Number((await env.DB.prepare('SELECT MAX(attempt) AS n FROM agent_task_runs WHERE task_id = ?').bind(task.id).first<{ n: number | null }>())?.n ?? 0) + 1;
-  const uid = crypto.randomUUID();
+  const uid = t.runUid ?? crypto.randomUUID();
   try {
     await env.DB.prepare(
       `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id)

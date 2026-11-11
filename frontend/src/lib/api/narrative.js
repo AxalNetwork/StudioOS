@@ -4,6 +4,7 @@ import { request } from '../api.js';
 // Every call names the venture (`?project=`); the venture's founder or an admin.
 //   read               GET  /cycles/raise/narrative/:version → sections and bindings
 //   saveSection        PUT  /cycles/raise/narrative/:version/sections/:section → changed fields
+//   saveVersion        PUT  /cycles/raise/narrative/:version → every changed section and answer in one write (D5069)
 // D914 (#2698) — the Investor narrative's admin read: the reasons an admin
 // gives for opening a venture's narrative, and its notes thread. Worker:
 // routes/cycle_raise.ts (`services/narrative/adminRead.ts`).
@@ -37,6 +38,13 @@ const enc = encodeURIComponent;
 export const narrativeApi = {
   read: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}?project=${enc(projectId)}`),
   saveSection: (projectId, version, section, body) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}?project=${enc(projectId)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  }),
+  // D5069: the whole of one Save version as ONE write — every changed section and
+  // every objection answer, or none of it. `expected_revision` is the revision the
+  // version was read at; a version that moved since is a 409 `changed_since_open`.
+  //   PUT /cycles/raise/narrative/:version { sections: [{ section, ...fields }], answers: [{ objection, section, how }], expected_revision } → { version, revision, saved, answered }
+  saveVersion: (projectId, version, body) => request(`/cycles/raise/narrative/${enc(version)}?project=${enc(projectId)}`, {
     method: 'PUT', body: JSON.stringify(body),
   }),
   // D1114 (#2994): Story's "Ask Eadwyn ▾". One metered run; it writes nothing.

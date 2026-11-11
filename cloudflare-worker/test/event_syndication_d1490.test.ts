@@ -298,11 +298,16 @@ test('per-event routes: a non-manager gets 404 on each; registrations are null w
   assert.deepEqual([row.channel, row.account_uid, row.capability, row.on, row.status, row.registrations, row.registrations_reason],
     ['luma', luma, 'creates_events', false, null, null, REGISTRATIONS_NOT_RECORDED]);
   assert.deepEqual(row.overrides, {}, 'D1493: no listing yet, no saved copy');
+  const hq = await f.call(SUPER, 'GET', '/api/admin/event-syndication/channels');
+  assert.equal(hq.body.channels.find((c: any) => c.channel === 'luma').auth, 'api_key');
+  assert.deepEqual([read.body.approved, row.adapter_ready, row.title_limit, row.text_limit], [false, true, f.luma!.adapter.title_limit, f.luma!.adapter.text_limit]);
   assert.match(REGISTRATIONS_NOT_RECORDED, /^Not recorded/);
   assert.equal((await f.call(ADMIN, 'GET', `/api/events/${EVENT}/syndication`)).status, 200, 'an admin manages it too');
   const preview = await f.call(HOST, 'POST', `/api/events/${EVENT}/syndication/preview`, { account_uid: luma, overrides: { title: 'Short title' } });
   assert.deepEqual([preview.status, preview.body.title, preview.body.capability], [200, 'Short title', 'creates_events']);
   assert.equal(f.luma!.calls.length, 0, 'a preview sends nothing');
+  await f.call(ADMIN, 'POST', `/api/admin/events/${EVENT}/approve`, {});
+  assert.equal((await f.call(HOST, 'GET', `/api/events/${EVENT}/syndication`)).body.approved, true);
 });
 
 test('PUT: over-limit overrides and a non-https ticket link are 400; another host\'s account is 404; a posted row is withdrawn, not unticked', async () => {
@@ -341,6 +346,7 @@ test('HQ routes: channels need a Super Admin; connect and disconnect too; a bran
   assert.equal(SYNDICATION_CHANNELS.length, 0, 'Part A ships no adapter');
   const list = await f.call(SUPER, 'GET', '/api/admin/event-syndication/channels');
   assert.equal(list.status, 200, list.text);
+  assert.ok(list.body.channels.every((c: any) => c.auth === null));
   assert.deepEqual(list.body.channels.map((c: any) => [c.channel, c.capability, c.adapter_ready, c.account]),
     [['luma', null, false, null], ['eventbrite', null, false, null], ['google_business', null, false, null], ['linkedin', null, false, null], ['facebook', null, false, null]]);
   assert.deepEqual([(await f.call(ADMIN, 'GET', '/api/admin/event-syndication/channels')).body.error], ['super_admin_required']);

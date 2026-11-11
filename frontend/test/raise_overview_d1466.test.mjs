@@ -166,7 +166,7 @@ test('RO07: From your tools says when each source was last read; a missing read 
   const t = text(out);
   assert.match(t, /Mercury 16\.5 months of runway · cash and net burn Read 28 Oct, 09:14/);
   assert.match(t, /GitHub Contributors to 2 repositories Last read · Not recorded/);
-  assert.match(out, /data-testid="tool-stripe"[\s\S]*?Not connected · <a[^>]*href="\/account\/integrations"[^>]*>Connect</);
+  assert.match(out, /data-testid="tool-stripe"[\s\S]*?Not connected · <a[^>]*href="\/account\/connectors"[^>]*>Connect</);
   assert.match(out, /data-testid="tool-notion"[\s\S]*?role="alert"[\s\S]*?Notion could not be read\./);
   assert.equal((out.match(/role="alert"/g) || []).length, 1, 'red only for the row that could not be read');
   assert.equal((out.match(/class="[^"]*text-red-700/g) || []).length, 1);

@@ -57,6 +57,11 @@ function builtFromMigrations(): DatabaseSync {
   db.exec(sqlOf('388'));
   db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
+  // D4643 (#4643): the attempt's own pass mark, time limit and reveal policy.
+  db.exec(sqlOf('202611062214'));
+  // D4650 part 2: course metadata. D4650 part 3: question explanations.
+  db.exec(sqlOf('202611071012'));
+  db.exec(sqlOf('202611071049'));
   // D1124 (#3004): webinars (D560) are program content, so their store is checked.
   db.exec(sqlOf('391'));
   // D954 (#2787): the enrolment events every enrol and removal now writes.
@@ -341,6 +346,54 @@ test('a program the caller is not in is not found; an enrolled member sees their
 
 // ---- #1251: My programs in one read --------------------------------------------------
 
+test('#4480: program detail returns only the caller’s active enrolment date, normalised to ISO', async () => {
+  const db = seeded();
+  try {
+    db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES (?, ?, 'open', 'published', ?)")
+      .run('dates-program', 'Date fixtures', SUPER);
+    const id = (db.prepare('SELECT id FROM learning_programs WHERE uid = ?').get('dates-program') as any).id;
+    const add = db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'active')");
+    add.run(id, MEMBER, SUPER, '2026-10-01 23:30:00');
+    add.run(id, PEER, SUPER, '2026-09-12T10:00:00.000Z');
+    add.run(id, SUPER, SUPER, '2026-10-05T12:00:00+02:00');
+    const mine = await prog(db, MEMBER, '/programs/dates-program');
+    assert.equal(mine.status, 200);
+    assert.equal(mine.body.enrolled_at, '2026-10-01T23:30:00.000Z');
+    assert.equal(mine.body.enrolled, true);
+    assert.equal((await prog(db, PEER, '/programs/dates-program')).body.enrolled_at, '2026-09-12T10:00:00.000Z');
+    const staffMember = (await prog(db, SUPER, '/programs/dates-program')).body;
+    assert.equal(staffMember.enrolled, true);
+    assert.equal(staffMember.enrolled_at, '2026-10-05T10:00:00.000Z');
+    for (const unknown of ['', 'not-a-date', '0', '2026-13-01T10:00:00Z']) {
+      db.prepare('UPDATE learning_enrollments SET enrolled_at = ? WHERE program_id = ? AND user_id = ?').run(unknown, id, MEMBER);
+      const reply = await prog(db, MEMBER, '/programs/dates-program');
+      assert.equal(reply.body.enrolled_at, null, 'an unknown stamp is not today or an invalid ISO string');
+      assert.equal(reply.body.enrolled, true);
+    }
+  } finally { db.close(); }
+});
+
+test('#4480: open-program outsiders, removed members and non-enrolled staff readers get no date key', async () => {
+  const db = seeded();
+  try {
+    db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES (?, ?, 'open', 'published', ?)")
+      .run('private-dates', 'Private date fixtures', SUPER);
+    const id = (db.prepare('SELECT id FROM learning_programs WHERE uid = ?').get('private-dates') as any).id;
+    db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'active')")
+      .run(id, PEER, SUPER, '2026-09-12T10:00:00.000Z');
+    db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status) VALUES (?, ?, ?, ?, 'removed')")
+      .run(id, MEMBER, SUPER, '2026-09-11T11:00:00.000Z');
+    db.prepare('INSERT INTO learning_program_admins (program_id, user_id, assigned_by) VALUES (?, ?, ?)').run(id, ASSIGNED, SUPER);
+    for (const who of [OUTSIDER, MEMBER, SUPER, ASSIGNED]) {
+      const reply = await prog(db, who, '/programs/private-dates');
+      assert.equal(reply.status, 200);
+      assert.equal(reply.body.enrolled, false);
+      assert.equal(Object.hasOwn(reply.body, 'enrolled_at'), false, `non-enrolled reader ${who} has no enrolment date key`);
+      assert.doesNotMatch(JSON.stringify(reply.body), /2026-09-12T10:00:00|2026-09-11T11:00:00/);
+    }
+  } finally { db.close(); }
+});
+
 /** `prog`, over a D1 binding the caller supplies (to count or fail its queries). */
 async function progOver(DB: any, who: number, path: string) {
   const res: Response = await programs.request(path, { headers: { Authorization: `Bearer ${await tokenFor(who)}` } },
@@ -441,4 +494,45 @@ test('no payload carries an email', () => {
   assert.ok(SEEN.length > 50, 'the payload check ran over too few responses');
   const leaked = SEEN.filter((t) => /@example\.test/.test(t));
   assert.deepEqual(leaked, [], 'a response carried an email');
+});
+
+// ---- D4810: Completion by program in one read; learners a page at a time ------------
+
+test('D4810: completion is one read for every published program in scope, finished by OD9, capped and said so', async () => {
+  const db = seeded();
+  const c = await content(db);
+  const nordics = await program(db, { name: 'Nordics', region: 'Nordics', enrolment: 'invite' }, [['item', c.video.uid]]);
+  const baltics = await program(db, { name: 'Baltics', enrolment: 'invite' }, [['item', c.video.uid]], null);
+  const enrol = (uid: string, who: number) => db.prepare(`INSERT INTO learning_enrollments (program_id, user_id, enrolled_by) SELECT id, ?, ? FROM learning_programs WHERE uid = ?`).run(who, SUPER, uid);
+  enrol(nordics, MEMBER); enrol(nordics, PEER); enrol(baltics, OUTSIDER);
+  db.prepare(`INSERT INTO learning_progress (user_id, subject_kind, subject_uid, status, completed_at) VALUES (?, 'item', ?, 'completed', datetime('now'))`).run(MEMBER, c.video.uid);
+  // A draft is not on the overview, so it is not counted.
+  db.prepare(`INSERT INTO learning_programs (uid, name, status, created_by) VALUES ('draft-1', 'A draft', 'draft', ?)`).run(SUPER);
+  const all = await prog(db, SUPER, '/programs/mine/completion');
+  assert.equal(all.status, 200, JSON.stringify(all.body));
+  assert.deepEqual(all.body.programs.map((p: any) => [p.uid, p.learners, p.finished]).sort(), [[baltics, 1, 0], [nordics, 2, 1]].sort());
+  assert.deepEqual([all.body.unreadable, all.body.capped], [[], false]);
+  // An assigned admin reads only their own programs; anyone else is refused.
+  assert.deepEqual((await prog(db, ASSIGNED, '/programs/mine/completion')).body.programs.map((p: any) => p.uid), [nordics]);
+  assert.equal((await prog(db, MEMBER, '/programs/mine/completion')).status, 403);
+  // 60 more published programs: still one read, the first 50 by name, and capped says the rest are left out.
+  const ins = db.prepare(`INSERT INTO learning_programs (uid, name, status, created_by) VALUES (?, ?, 'published', ?)`);
+  for (let i = 0; i < 60; i += 1) ins.run(`bulk-${i}`, `Bulk ${String(i).padStart(2, '0')}`, SUPER);
+  const big = await prog(db, SUPER, '/programs/mine/completion');
+  assert.deepEqual([big.body.programs.length, big.body.capped, big.body.max], [50, true, 50]);
+});
+
+test('D4810: the learners read takes a page and says the total; no limit reads every learner as before', async () => {
+  const db = seeded();
+  const c = await content(db);
+  const nordics = await program(db, { name: 'Nordics', enrolment: 'invite' }, [['item', c.video.uid]]);
+  for (const who of [MEMBER, PEER, OUTSIDER]) db.prepare(`INSERT INTO learning_enrollments (program_id, user_id, enrolled_by) SELECT id, ?, ? FROM learning_programs WHERE uid = ?`).run(who, SUPER, nordics);
+  const first = await prog(db, ASSIGNED, `/programs/${nordics}/learners?limit=2&offset=0`);
+  assert.deepEqual([first.body.learners.length, first.body.total, first.body.limit, first.body.offset], [2, 3, 2, 0]);
+  const rest = await prog(db, ASSIGNED, `/programs/${nordics}/learners?limit=2&offset=2`);
+  assert.equal(rest.body.learners.length, 1);
+  assert.deepEqual([...first.body.learners, ...rest.body.learners].map((l: any) => l.uid).sort(), [UID[MEMBER], UID[OUTSIDER], UID[PEER]].sort(), 'the pages cover every learner once');
+  const whole = await prog(db, ASSIGNED, `/programs/${nordics}/learners`);
+  assert.deepEqual([whole.body.learners.length, whole.body.total, whole.body.limit], [3, 3, null]);
+  for (const q of ['limit=0', 'limit=201', 'limit=2&offset=-1', 'limit=x']) assert.equal((await prog(db, ASSIGNED, `/programs/${nordics}/learners?${q}`)).status, 400, q);
 });

@@ -308,6 +308,7 @@ test('searchSemantic returns the chunk it was given — the Ask citation regress
 
   // And the reader of it still reads it.
   const research = read('src/routes/research.ts');
-  assert.match(research, /chunk: h\.chunk \?\? null/,
+  // D4605: the citation is built from the eligible passage's hit.
+  assert.match(research, /chunk: p\.hit\.chunk \?\? null/,
     'the Ask citation no longer carries the chunk it retrieved');
 });

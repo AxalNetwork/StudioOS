@@ -147,7 +147,7 @@ export function firstPartyConnection(key, status) {
  * (unreadable) and a missing field keep today's behaviour, and an `api_key`
  * connector is never `oauthOff`: the member brings that key.
  */
-export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, firstPartyCards = [], companies = null } = {}) {
+export function buildCatalogue({ providers = [], items = [], waitlist = [], firstParty = {}, firstPartyCards = [], companies = null, connectionsReadable = true } = {}) {
   const byKey = new Map();
   for (const it of items || []) if (it && !byKey.has(it.provider_key)) byKey.set(it.provider_key, withCompanies(it, companies));
   const joined = new Set((waitlist || []).map((w) => w.provider_key));
@@ -172,6 +172,9 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       by: p.made_by?.name || p.display_name,
       category: categoryOf(p),
       connection: byKey.get(p.key) || null,
+      // The catalogue remains useful when the member's connections read
+      // fails, but null is then unknown rather than "not connected".
+      connectionUnreadable: !connectionsReadable,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
       available: p.status !== 'coming_soon' && p.auth_type !== 'none' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
@@ -385,6 +388,7 @@ export function cardAction(p) {
   if (p.auth_type === 'none') return 'browse';
   if (!p.available && p.status === 'coming_soon') return p.joined ? 'joined' : 'notify';
   if (p.connection) return 'connected';
+  if (p.connectionUnreadable) return 'unavailable';
   if (!p.available) return 'unavailable';
   return 'add';
 }
@@ -752,6 +756,7 @@ export const TOOL_FILTERS = ['All', 'Connected', 'Not connected', 'Failing'];
 export function toolState(p) {
   if (p.auth_type === 'none') return 'browse';
   if (p.connection) return attentionReason(p.connection) ? 'failing' : 'connected';
+  if (p.connectionUnreadable) return 'unavailable';
   if (p.status === 'coming_soon') return 'soon';
   if (!p.available) return 'unavailable';
   return 'not_connected';
@@ -859,7 +864,7 @@ export function toolRow(p) {
     return { state: s, pill: ['Connected', 'ok'], detail: `${feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', ')}${synced}`, action: 'disconnect', actionLabel: 'Disconnect' };
   }
   if (s === 'soon') return { state: s, pill: ['Coming soon', 'neutral'], detail: feeds ? `Will feed ${feeds}` : 'What it will feed is not recorded', action: null, actionLabel: null };
-  if (s === 'unavailable') return { state: s, pill: [p.unreadable ? 'Status unreadable' : 'Not set up here', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: null, actionLabel: null };
+  if (s === 'unavailable') return { state: s, pill: [p.unreadable || p.connectionUnreadable ? 'Status unreadable' : 'Not set up here', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: null, actionLabel: null };
   return { state: s, pill: ['Not connected', 'neutral'], detail: feeds ? `Feeds ${feeds}` : (p.capabilities || []).slice(0, 2).join(', '), action: 'connect', actionLabel: 'Connect' };
 }
 

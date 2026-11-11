@@ -29,6 +29,8 @@ const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const M597 = readFileSync(new URL('../sql/migrations/597_company_archive_and_events.sql', import.meta.url), 'utf8');
 const M685 = readFileSync(new URL('../sql/migrations/685_company_legal_record_and_slugs.sql', import.meta.url), 'utf8');
+// #4963: profile_version (a rename is a compare-and-swap write) and the 'profile_update' kind.
+const M4963 = readFileSync(new URL('../sql/migrations/202611072255_company_profile_version.sql', import.meta.url), 'utf8');
 
 // People: Ada is the primary admin of Northwind (company 1) and owns the venture; Ben is a member of
 // Northwind and a co-founder of the venture with a founder account; Cy is a co-founder with no founder
@@ -44,6 +46,7 @@ function fixture() {
   for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks
+  db.exec(M4963);
   addAgentEngineTables(db); // #3850 (E6): a move changes the engine's goals and tasks in its own batch
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADA, 'founder', 'Ada Made-up', 'ada@example.test', 101);
@@ -299,7 +302,10 @@ test('every company membership route writes its event: join, rename, role change
   assert.equal((await call(db, env, DEE, 'DELETE', `/api/company/co-north/members/${DEE}`)).status, 200, 'an editor removing themselves leaves');
   assert.deepEqual(events(db).map((e) => [e.kind, e.company_id, e.actor_user_id, e.target_user_id, e.before_json && JSON.parse(e.before_json), e.after_json && JSON.parse(e.after_json)]), [
     ['join', east, DEE, DEE, null, { role_in_company: 'Admin', is_primary_admin: true }],
+    // #4963: every committed General change also records which fields changed and the revision, never their values.
+    ['profile_update', NORTH, ADA, null, { profile_version: 1 }, { profile_version: 2, fields: ['company_name'] }],
     ['rename', NORTH, ADA, null, { company_name: 'Northwind' }, { company_name: 'Northwind Labs' }],
+    ['profile_update', NORTH, ADA, null, { profile_version: 2 }, { profile_version: 3, fields: ['description'] }],
     ['role_change', NORTH, ADA, BEN, { role_in_company: 'Member' }, { role_in_company: 'Advisor' }],
     ['remove', NORTH, ADA, BEN, { role_in_company: 'Advisor', is_primary_admin: false }, null],
     ['leave', NORTH, DEE, DEE, { role_in_company: 'Admin', is_primary_admin: false }, null],
@@ -319,7 +325,7 @@ test('a venture\'s seat changes write their events, and the event writer refuses
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM scope_task_events WHERE detail_json LIKE '%seat_ended%'").get() as any).n, 1, 'one event, not one per removal');
   assert.deepEqual(events(db).map((e) => [e.kind, e.project_id, e.target_user_id]), [['seat_add', VENTURE, DEE], ['seat_remove', VENTURE, DEE]]);
 
-  assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer', 'currency_change'].sort());
+  assert.deepEqual([...MEMBERSHIP_EVENT_KINDS].sort(), ['archive', 'join', 'leave', 'project_move', 'project_transfer', 'remove', 'rename', 'restore', 'role_change', 'seat_add', 'seat_remove', 'transfer', 'currency_change', 'logo_change', 'profile_update'].sort());
   assert.throws(() => membershipEvent(env, { kind: 'join' }), /names a company or a venture/);
   assert.throws(() => membershipEvent(env, { kind: 'nope' as any, companyId: 1 }), /unknown/);
   // The migration's CHECK holds the same rule for any writer.

@@ -29,6 +29,7 @@
  * for PG16a. A failed grant read is every row's `grant` unreadable, never a
  * state. HQ's fan-out to a branch names no viewer, so it carries no grant.
  */
+import { withMentorEligible } from './mentorEligibility';
 import type { Env } from '../types';
 import { perkClaimsCounts } from './perkClaims';
 import { listStrategicAccess } from './referralSubmissions';
@@ -37,7 +38,7 @@ import { ownScope, previousAxis, scopeLabel } from './adminInsights';
 import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
-import { listPrograms, type ProgramKey, type ProgramRow, PROGRAM_KEYS, PROGRAM_STATUSES } from './programRegistry';
+import { extrasView, listPrograms, isRegistryKey, registryExtras, type ProgramKey, type ProgramRow, PROGRAM_STATUSES } from './programRegistry';
 import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
@@ -47,7 +48,7 @@ export const DEFAULT_PROGRAM_WEEKS: ProgramWeeks = 12;
 
 export const HQ_READS_REASON = 'HQ reads these figures.';
 export const LAB_PEOPLE_REASON =
-  'The Lab is left out until O-FND and #2374 say who a cohort\'s founders are.';
+  'The Lab is left out until a cohort\'s founders are defined.';
 export const REFERRAL_REWARDS_REASON = 'Referral rewards are not paid in perk credits yet.';
 export const PRODUCT_TESTING_HQ_ONLY = 'Runs at HQ. Its figures are for HQ only.';
 
@@ -57,10 +58,10 @@ export const PROGRAM_DEFINITIONS = {
   people:
     'Distinct accounts that took part in the period: an active mentor assignment, an active enrolment in a published Learning program, a Refer & Earn submission, or a perk claim. The Lab is left out until a cohort\'s founders are defined.',
   waiting:
-    'Items waiting for an admin now: cohort applications, Refer & Earn reviews (including those waiting on the member), perk listings in review and office-hours hosts. Ages are in the Approvals lanes\' bands: under 24 hours, 24 to 72, and 72 or more.',
+    'Items waiting for an admin now: cohort applications, Refer & Earn reviews (including those waiting on the member), strategic access requests, perk listings in review and office-hours hosts. Ages, where a queue records them, are in the Approvals lanes\' bands: under 24 hours, 24 to 72, and 72 or more.',
   credits:
     'Perk credits granted in the period by source, and spent, from the credit ledger. Deductions, revokes and refunds are summed apart, never netted.',
-  mentors: 'Distinct people holding an active assignment whose current role is Advisor.',
+  mentors: 'Distinct people holding an active assignment whose account is active and holds the Advisor licence, as their role or as an additional licence.',
   coverage:
     'Cohorts that are scheduled or running and not postponed, and how many have at least one active assignment held by a current Advisor.',
   learning: 'Published Learning programs, and the active enrolments in them. A person in two programs is two enrolments.',
@@ -177,47 +178,54 @@ async function hostQueue(env: Env, nowMs: number) {
 
 /** The queues the Waiting tile sums, and the one it names as left out. */
 export const WAITING_COVERED = ['cohort', 'referrals', 'perks', 'hosts'] as const;
+/** D4807: every queue an admin can act on, so the headline total and the queues beside it reconcile without a footnote. */
+export const WAITING_QUEUES = [...WAITING_COVERED, 'strategic'] as const;
 
 // ---------------------------------------------------------------------------
 // Card figures
 // ---------------------------------------------------------------------------
 
 /**
- * S-CNT: distinct people holding an active row whose current role is Advisor
- * and whose account is active. D960's one account rule (`users.is_active = 1`,
- * what `getCurrentUser` lets through) leaves a deactivated holder out.
+ * S-CNT: distinct people holding an active row whose account is an eligible
+ * mentor today: the Advisor licence (primary or an additional one, not
+ * revoked) on an active account (`services/mentorEligibility.ts`, D4807). A
+ * deactivated holder, or one whose licence was revoked, leaves the count.
  */
 async function activeMentors(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(DISTINCT a.advisor_user_id) AS n
        FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1`,
-  ).first<{ n: number }>();
+      WHERE a.is_active = 1 AND {ELIGIBLE}`,
+  )).first<{ n: number }>();
   return { count: n(r?.n) };
 }
 
-/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. A deactivated holder covers nothing (D960). */
+/** S-COV, over every cycle the rule takes (no cap): scheduled or running, not postponed. An ineligible holder covers nothing (D960, D4807). */
 async function mentorCoverage(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(*) AS cohorts,
             SUM(CASE WHEN EXISTS (
               SELECT 1 FROM advisor_cohort_assignments a JOIN users u ON u.id = a.advisor_user_id
-               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND lower(COALESCE(u.role, '')) = 'advisor' AND u.is_active = 1
+               WHERE a.cohort_cycle_id = c.id AND a.is_active = 1 AND {ELIGIBLE}
             ) THEN 1 ELSE 0 END) AS covered
        FROM cohort_cycles c
       WHERE c.status IN ('scheduled', 'active') AND COALESCE(c.app_status, '') <> 'postponed'`,
-  ).first<{ cohorts: number; covered: number }>();
+  )).first<{ cohorts: number; covered: number }>();
   const cohorts = n(r?.cohorts);
   const covered = n(r?.covered);
   return { cohorts, covered, uncovered: cohorts - covered };
 }
 
-/** Open rows whose holder is no longer an Advisor (a missing account counts as no longer one). */
+/**
+ * Open rows whose holder is no longer an eligible mentor (a missing account counts as no longer one):
+ * the role changed away from Advisor with no additional Advisor licence, the licence was revoked, or the
+ * account was deactivated. The key `holders_not_advisor` is the read's name for it.
+ */
 async function openRowsNotAdvisor(env: Env) {
-  const r = await env.DB.prepare(
+  const r = await env.DB.prepare(await withMentorEligible(env,
     `SELECT COUNT(*) AS n FROM advisor_cohort_assignments a LEFT JOIN users u ON u.id = a.advisor_user_id
-      WHERE a.is_active = 1 AND lower(COALESCE(u.role, '')) <> 'advisor'`,
-  ).first<{ n: number }>();
+      WHERE a.is_active = 1 AND NOT COALESCE({ELIGIBLE}, 0)`,
+  )).first<{ n: number }>();
   return n(r?.n);
 }
 
@@ -259,6 +267,15 @@ async function testingFigures(env: Env) {
   return { open: n(r?.open), applications: n(r?.applied) };
 }
 
+/** D4289 P1 (#4290): active influencers, and the applications waiting on HQ (not those waiting on the applicant). */
+async function influencerFigures(env: Env) {
+  const r = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM influencers WHERE status = 'active') AS active,
+            (SELECT COUNT(*) FROM influencer_applications WHERE status = 'applied') AS applications`,
+  ).first<{ active: number; applications: number }>();
+  return { active: n(r?.active), applications: n(r?.applications) };
+}
+
 // ---------------------------------------------------------------------------
 // People taking part (S-PPL)
 // ---------------------------------------------------------------------------
@@ -267,21 +284,25 @@ async function testingFigures(env: Env) {
 export const PEOPLE_COVERS: readonly ProgramKey[] = ['mentor-cohorts', 'learning', 'refer-and-earn', 'perks'];
 
 /**
- * Distinct accounts that took part in `[from, to)`: a mentor assignment active
- * at any point in it, an enrolment in a published Learning program active at
+ * Distinct accounts that took part in `[from, to)`: a mentor episode open at
+ * any point in it, a Learning enrolment episode in a published program open at
  * any point in it, a Refer & Earn submission made in it, or a perk claimed in
  * it. One UNION, so a person in two programs is one person.
+ *
+ * D4807: the first two read the episode views over the event tables (migration
+ * 202611072215), which no later assign, end, enrol or removal rewrites, so a
+ * reassignment or re-enrolment after the period closed does not change its count.
  */
-async function peopleIn(env: Env, from: string, to: string): Promise<number> {
+export async function peopleIn(env: Env, from: string, to: string): Promise<number> {
   const r = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM (
-       SELECT a.advisor_user_id AS who FROM advisor_cohort_assignments a
-        WHERE datetime(a.assigned_at) < datetime(?)
-          AND (a.is_active = 1 OR datetime(a.unassigned_at) >= datetime(?))
+       SELECT a.advisor_user_id AS who FROM advisor_cohort_episodes a
+        WHERE a.started_at < datetime(?)
+          AND (a.ended_at IS NULL OR a.ended_at >= datetime(?))
        UNION
-       SELECT e.user_id FROM learning_enrollments e JOIN learning_programs p ON p.id = e.program_id
-        WHERE p.status = 'published' AND datetime(e.enrolled_at) < datetime(?)
-          AND (e.status = 'active' OR datetime(e.updated_at) >= datetime(?))
+       SELECT e.user_id FROM learning_enrolment_episodes e JOIN learning_programs p ON p.id = e.program_id
+        WHERE p.status = 'published' AND e.started_at < datetime(?)
+          AND (e.ended_at IS NULL OR e.ended_at >= datetime(?))
        UNION
        SELECT s.referrer_user_id FROM referral_submissions s
         WHERE datetime(s.created_at) >= datetime(?) AND datetime(s.created_at) < datetime(?)
@@ -482,6 +503,7 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
   claims: Read<{ count: number }>;
   learning: Read<Awaited<ReturnType<typeof learningFigures>>>;
   testing: Read<{ open: number; applications: number }> | null;
+  influencers: Read<{ active: number; applications: number }>;
 }): { figures: Record<string, unknown> | null; needs_you: Record<string, unknown> | null } {
   switch (key) {
     case 'spinout-lab':
@@ -517,6 +539,11 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
       };
     case 'learning':
       return { figures: { programs: b.learning }, needs_you: null };
+    case 'influencer':
+      return {
+        figures: { influencers: b.influencers.available ? { available: true, count: b.influencers.active } : b.influencers },
+        needs_you: needs([b.influencers.available ? { available: true, count: b.influencers.applications } : b.influencers], 'Influencer applications'),
+      };
     case 'product-testing':
       return viewer.superAdmin && b.testing
         ? { figures: { programs: b.testing }, needs_you: null }
@@ -527,24 +554,24 @@ function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
 }
 
 function waitingTile(q: Queues) {
-  const parts = WAITING_COVERED.map((k) => [k, q[k]] as const);
+  const parts = WAITING_QUEUES.map((k) => [k, q[k]] as const);
   const bad = parts.filter(([, v]) => !v.available).map(([k]) => k);
-  const left_out = [{ queue: 'strategic', reason: 'Strategic access requests are counted separately; this total covers the Approvals lanes and their recorded ages.' }];
   if (bad.length) {
     return {
       available: false as const, unreadable: true as const,
       reason: `The ${bad.join(', ')} queue could not be read, so the total would be short. That is not the same as none.`,
-      covers: WAITING_COVERED, left_out,
+      covers: WAITING_QUEUES, left_out: [] as Array<{ queue: string; reason: string }>,
     };
   }
-  const read = parts.map(([, v]) => v as { count: number; oldest_hours: number | null });
-  const ages = read.map((v) => v.oldest_hours).filter((x): x is number => x !== null);
+  const read = parts.map(([, v]) => v as { count: number; oldest_hours?: number | null });
+  // A queue that records no age (strategic requests) adds to the count and to no age.
+  const ages = read.map((v) => v.oldest_hours ?? null).filter((x): x is number => x !== null);
   return {
     available: true as const,
     count: read.reduce((t, v) => t + v.count, 0),
     oldest_hours: ages.length ? Math.max(...ages) : null,
-    covers: WAITING_COVERED,
-    left_out,
+    covers: WAITING_QUEUES,
+    left_out: [] as Array<{ queue: string; reason: string }>,
   };
 }
 
@@ -555,9 +582,15 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
   const [
     registry, cohort, referrals, perks, hosts, strategic, claims,
     mentors, coverage, notAdvisor, live, learning, testing,
-    people, joinsReferrals, joinsLearning, joinsLab, credits,
+    people, joinsReferrals, joinsLearning, joinsLab, credits, influencers,
   ] = await Promise.all([
-    block('The program registry', async () => ({ rows: await listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }) })),
+    // D4873: member access and modules ride beside the registry read; their own failure leaves the rows readable.
+    block('The program registry', async () => {
+      const [rows, extras] = await Promise.all([
+        listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }), registryExtras(env),
+      ]);
+      return { rows, extras };
+    }),
     block('Cohort applications', () => cohortQueue(env, nowMs)),
     block('Refer & Earn reviews', () => referralQueue(env, nowMs)),
     block('Perk listings in review', () => perkQueue(env, nowMs)),
@@ -587,6 +620,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     block('Learning enrolments per week', () => learningWeekly(env, viewer, axis, before)),
     block('Lab applications per week', () => labWeekly(env, axis, before)),
     viewer.superAdmin ? block('The credit ledger', () => creditsByMonth(env, axis)) : Promise.resolve(null),
+    block('Influencers', () => influencerFigures(env)),
   ]);
 
   const q: Queues = { cohort, referrals, perks, hosts, strategic };
@@ -626,10 +660,12 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
         rows: rows.map((r) => ({
           key: r.key, group: r.grp, name: r.name, purpose: r.purpose ?? null, who: r.who ?? null,
           join_method: r.join_method ?? null, status: r.status, position: Number(r.position),
+          ...extrasView(registry.extras, r.key),
           ...(grants ? { grant: grantFieldOf(grants, r.key) } : {}),
           ...cardFigures(r.key, viewer, q, {
             mentors, coverage, notAdvisor, live, learning, claims: claims.available ? { available: true, count: claims.count } : claims,
             testing: testing as Read<{ open: number; applications: number }> | null,
+            influencers,
           }),
         })),
       }
@@ -702,6 +738,14 @@ export function unreadablePrograms(scope: Record<string, unknown>, reason: strin
 }
 
 /**
+ * D4808: the rows of a branch's answer HQ keeps. A program an approval or New program made carries a registry key and is
+ * kept with the nine; only a row with no valid key (a malformed answer) is dropped.
+ */
+export function keepRegistryRows(rows: unknown[]): any[] {
+  return rows.filter((x: any) => isRegistryKey(x?.key));
+}
+
+/**
  * HQ's read of one subsidiary: the branch's own answer, counts only, with
  * HQ's label on its scope and HQ's registry names on its rows (`countsOnly`
  * drops `name`, so a branch answers program keys and counts). Never throws.
@@ -723,8 +767,7 @@ export async function branchScopedPrograms(env: Env, code: string, params: Progr
   const clean = countsOnly(read) as Record<string, any>;
   const names = await listPrograms(env).then((rows) => new Map(rows.map((x) => [x.key, x.name])), () => new Map<string, string>());
   if (clean.programs?.available && Array.isArray(clean.programs.rows)) {
-    clean.programs.rows = clean.programs.rows
-      .filter((x: any) => (PROGRAM_KEYS as readonly string[]).includes(x?.key))
+    clean.programs.rows = keepRegistryRows(clean.programs.rows)
       .map((x: any) => ({ ...x, name: names.get(x.key) ?? null }));
   }
   return { ...clean, scope, as_of: r.as_of ?? clean.as_of ?? null, branch: { status: 'ok' } };

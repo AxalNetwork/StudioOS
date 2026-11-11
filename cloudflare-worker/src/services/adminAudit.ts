@@ -75,6 +75,36 @@ export function targetUserIdOf(details: Record<string, unknown>): number | null 
 }
 
 /**
+ * D4703 (#4703): the `admin_audit_log` row for a privileged change, as a
+ * statement the caller puts in the SAME `DB.batch` as the change itself, so
+ * the change and its record land together or not at all. `logAdminAction`
+ * below stays best-effort for actions whose record may lag; a platform setting
+ * or a switch must not change without its row.
+ *
+ * `onlyIfChanged`: the row is written only when the statement just before it
+ * in the batch changed a row (`changes() > 0`), so a refused or no-op write
+ * leaves no record of an act that did not happen. The caller must have run
+ * `ensureAdminAuditLogTable` first.
+ */
+export function adminAuditStatement(
+  env: Env,
+  adminUserId: number,
+  action: string,
+  details: Record<string, unknown>,
+  opts: { onlyIfChanged?: boolean } = {},
+) {
+  const payload = JSON.stringify(details ?? {});
+  return opts.onlyIfChanged
+    ? env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, filters_json)
+       SELECT ?, ?, ?, ? WHERE changes() > 0`,
+    ).bind(adminUserId, action, targetUserIdOf(details), payload)
+    : env.DB.prepare(
+      `INSERT INTO admin_audit_log (admin_user_id, action, viewed_user_id, filters_json) VALUES (?, ?, ?, ?)`,
+    ).bind(adminUserId, action, targetUserIdOf(details), payload);
+}
+
+/**
  * Record one privileged admin action in both stores that carry one.
  *
  * `activity_logs` gets the hashed-actor row (T22.1); `admin_audit_log` gets the

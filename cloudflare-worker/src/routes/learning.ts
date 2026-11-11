@@ -24,10 +24,13 @@
  * content (D558) is read with `enrolledSql`, selected `AS enrolled`, so the
  * check sees whether this caller is enrolled.
  */
+import { resumeLessons } from '../services/learningResume';
+import { COURSE_META_SELECT, courseMetaView } from '../services/learningCourseMeta';
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
+import { ASSESSED_LESSON_KINDS, refreshCourses } from '../services/learningCompletion';
 import { clampLimit, parseOffset } from '../util/pagination';
 import { mapError } from './_t13t14t15_helpers';
 import {
@@ -269,7 +272,7 @@ r.get('/catalog', async (c) => {
   return c.json({ items: rows.slice(0, limit), sources, limit, offset });
 });
 
-const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at, '
+const COURSE_SQL = 'SELECT id, uid, slug, title, summary, cover_url, level, estimated_minutes, resources_json, status, visibility, published_at, updated_at, ' + COURSE_META_SELECT + ', '
   + COURSE_ENROLLED + ' AS enrolled FROM learning_courses WHERE slug = ?';
 
 r.get('/courses/:slug', async (c) => {
@@ -299,6 +302,8 @@ r.get('/courses/:slug', async (c) => {
     course: {
       uid: course.uid, slug: course.slug, title: course.title, summary: course.summary, cover_url: course.cover_url,
       level: course.level, estimated_minutes: course.estimated_minutes, resources, status: course.status, published_at: course.published_at,
+      // D4650 (#4650, part 2): what the author recorded; a field not filled is null or an empty list.
+      meta: courseMetaView(course),
     },
     modules: (mods.results || []).map((m) => ({
       uid: m.uid, title: m.title, position: m.position,
@@ -441,6 +446,30 @@ r.post('/progress', async (c) => {
     return refuse(c, 404, { code: 'not_found', message: 'No such item, lesson or course.' });
   }
   const now = new Date().toISOString();
+  // D4643 (#4643): completion is authoritative. A course's row is derived from its required lessons
+  // (`refreshCourses`), whatever is posted for it; an exercise or exam lesson completes only by its result.
+  if (kind === 'course') {
+    const course = await c.env.DB.prepare('SELECT id FROM learning_courses WHERE uid = ?').bind(uid).first<{ id: number }>();
+    if (course) await refreshCourses(c.env, Number(user.id), [Number(course.id)], now);
+    const row = await c.env.DB.prepare(
+      `SELECT subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at FROM learning_progress
+        WHERE user_id = ? AND subject_kind = 'course' AND subject_uid = ?`,
+    ).bind(user.id, uid).first<any>();
+    return c.json({ progress: row });
+  }
+  let lessonCourse: number | null = null;
+  if (kind === 'lesson') {
+    const lesson = await c.env.DB.prepare(
+      'SELECT l.kind, m.course_id FROM learning_lessons l JOIN learning_course_modules m ON m.id = l.module_id WHERE l.uid = ?',
+    ).bind(uid).first<{ kind: string; course_id: number }>();
+    if (lesson && status === 'completed' && ASSESSED_LESSON_KINDS.includes(lesson.kind)) {
+      return refuse(c, 409, {
+        code: 'completed_by_result',
+        message: lesson.kind === 'exam' ? 'This lesson is complete when one of your attempts passes the exam.' : 'This lesson is complete when a reviewer accepts your exercise.',
+      });
+    }
+    lessonCourse = lesson ? Number(lesson.course_id) : null;
+  }
   // Always the caller's own row: the user id comes from the session, never the body.
   // A completed subject stays completed, and the percent never goes backwards.
   await c.env.DB.prepare(
@@ -455,6 +484,8 @@ r.post('/progress', async (c) => {
        completed_at = COALESCE(learning_progress.completed_at, excluded.completed_at),
        updated_at = excluded.updated_at`,
   ).bind(user.id, kind, uid, status, pct, pos, now, status === 'completed' ? now : null, now).run();
+  // A completed lesson moves its course's derived row with it.
+  if (kind === 'lesson' && status === 'completed' && lessonCourse != null) await refreshCourses(c.env, Number(user.id), [lessonCourse], now);
   const row = await c.env.DB.prepare(
     `SELECT subject_kind, subject_uid, status, percent, position_seconds, started_at, completed_at FROM learning_progress
       WHERE user_id = ? AND subject_kind = ? AND subject_uid = ?`,
@@ -465,19 +496,39 @@ r.post('/progress', async (c) => {
 r.get('/me', async (c) => {
   let user: any;
   try { user = await requireAuth(c); } catch (e) { return mapError(c, e); }
-  const rows = await c.env.DB.prepare(
-    `SELECT p.subject_kind, p.subject_uid, p.status, p.percent, p.started_at, p.completed_at, p.updated_at,
-            COALESCE(i.title, cr.title, l.title) AS title, i.kind AS item_kind, cr.slug AS course_slug
-       FROM learning_progress p
-       LEFT JOIN learning_items i ON p.subject_kind = 'item' AND i.uid = p.subject_uid
-       LEFT JOIN learning_courses cr ON p.subject_kind = 'course' AND cr.uid = p.subject_uid
-       LEFT JOIN learning_lessons l ON p.subject_kind = 'lesson' AND l.uid = p.subject_uid
-      WHERE p.user_id = ?
-      ORDER BY p.updated_at DESC, p.id DESC LIMIT 500`,
-  ).bind(user.id).all<any>();
+  // #4648: the learner's record is read per kind. One LIMIT over every kind let a learner with hundreds of item rows push
+  // their course rows out of the list, so Continue learning showed none while "Courses in progress" (a count of the
+  // course rows) said otherwise. Each kind now has its own bound, and the course rows the home draws are never starved.
+  const [courseRows, otherRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT p.subject_kind, p.subject_uid, p.status, p.percent, p.started_at, p.completed_at, p.updated_at,
+              cr.title AS title, NULL AS item_kind, cr.slug AS course_slug
+         FROM learning_progress p
+         LEFT JOIN learning_courses cr ON cr.uid = p.subject_uid
+        WHERE p.user_id = ? AND p.subject_kind = 'course'
+        ORDER BY p.updated_at DESC, p.id DESC LIMIT 500`,
+    ).bind(user.id).all<any>(),
+    c.env.DB.prepare(
+      `SELECT p.subject_kind, p.subject_uid, p.status, p.percent, p.started_at, p.completed_at, p.updated_at,
+              COALESCE(i.title, l.title) AS title, i.kind AS item_kind, NULL AS course_slug
+         FROM learning_progress p
+         LEFT JOIN learning_items i ON p.subject_kind = 'item' AND i.uid = p.subject_uid
+         LEFT JOIN learning_lessons l ON p.subject_kind = 'lesson' AND l.uid = p.subject_uid
+        WHERE p.user_id = ? AND p.subject_kind IN ('item', 'lesson')
+        ORDER BY p.updated_at DESC, p.id DESC LIMIT 500`,
+    ).bind(user.id).all<any>(),
+  ]);
+  const rows = {
+    results: [...(courseRows.results || []), ...(otherRows.results || [])]
+      .sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))),
+  };
   const list = rows.results || [];
+  // D5356: each in-progress course row names the lesson to resume and its saved position, by the same rule as
+  // "Next for you" (services/learningResume.ts). A course with none keeps `resume: null` and its course link.
+  const resume = await resumeLessons(c.env, Number(user.id));
   return c.json({
-    in_progress: list.filter((x) => x.status === 'started'),
+    in_progress: list.filter((x) => x.status === 'started')
+      .map((x) => (x.subject_kind === 'course' ? { ...x, resume: resume.get(x.subject_uid) ?? null } : x)),
     completed: list.filter((x) => x.status === 'completed'),
   });
 });

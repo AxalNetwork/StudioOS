@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarPlus, Video } from 'lucide-react';
-import { Pill, RailFrame, Unrecorded, WorkerRail } from '../../ui';
+import { Pill, RailFrame, Unrecorded } from '../../ui';
 import { reportError } from '../../lib/log';
 import WebinarPanel from './WebinarPanel';
 import { LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, SectionCard } from './LearningStates';
+import { AddToPlan } from './PlanSheet';
 import { statusOf } from './LearningWired';
 import { webinarPhase } from './learningModel';
 import {
@@ -122,20 +123,11 @@ export function WebinarPage({ uid }) {
 
   return (
     <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Learning"
-          // Violet, the founder accent, as on every learner page of the canvas.
-          role="founder"
-          stance="Read-only learning view"
-          note="Eadwyn reads back what this page has loaded, on a click. It does not register you, cancel a registration or join for you."
-          coverage={webinarCoverage(state)}
-        />
-      )}
       data-testid="learning-webinar"
     >
       <div className="space-y-4">
-        <LearningHeader eyebrow="Learning · Webinar" title={webinar?.title || 'Webinar'} back={WEBINARS} />
+        <LearningHeader eyebrow="Learning · Webinar" title={webinar?.title || 'Webinar'} back={WEBINARS}
+          action={webinar?.uid ? <AddToPlan subject={{ kind: 'webinar', uid: webinar.uid, title: webinar.title, startsAt: webinar.starts_at }} /> : null} />
         <WebinarView
           state={state}
           now={now}

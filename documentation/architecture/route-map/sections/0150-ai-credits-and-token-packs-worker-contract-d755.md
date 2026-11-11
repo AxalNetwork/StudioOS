@@ -21,7 +21,7 @@ D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486
 | `POST /api/admin/catalog/token-packs/adopt` | Super Admin | `{price_id}`: records an existing one-time USD price of whole dollars from $5 to $500. |
 | `PATCH /api/admin/catalog/token-packs/:uid` | Super Admin | `on_sale`, `bonus_usd` (0–10% of face) and `sort`. The amount never changes. |
 | `POST /api/admin/catalog/token-packs/:uid/archive` | Super Admin | Off sale for good, and the Stripe price archived. |
-| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached five minutes at the edge (D816), its own rate-limit bucket, no person named. D816 adds each plan's `monthly`, `yearly` and `yearly_saving_percent` (below). |
+| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, `public, max-age=60, stale-while-revalidate=60` with an ETag and 304 (D5318; five minutes under D816), its own rate-limit bucket, no person named. D816 adds each plan's `monthly`, `yearly` and `yearly_saving_percent` (below). |
 
 D806 (#2245): Billing's invoices and the card's address (`routes/billing.ts`, `services/billingInvoices.ts`).
 
@@ -40,8 +40,8 @@ Introduction packs retire with CR5 (#1915): `POST /api/payments/intro-credits/in
 - a visitor sees the plan cards, built from the public read because `/api/catalog/products` needs a session, and the Token packs with Sign in to buy (`/login?next=%2Fplans-and-pricing%23token-packs`);
 - Subscribe and Preview go to `/login?next=%2Fplans-and-pricing`;
 - the promo box, the cart, the add-ons, active licences, the product modal, the admin tools and the phone's account bar are not drawn for a visitor, and their reads are not made;
-- `/plans-and-pricing/:productId`, `/checkout` and `/checkout/confirmation` still need sign-in;
-- `/products` redirects with its query and hash, so `/products#token-packs` lands on the packs.
+- `/plans-and-pricing/:productId` (retired D2319), `/checkout` and `/checkout/confirmation` still need sign-in;
+- `/products` (retired D2319) redirects with its query and hash, so `/products#token-packs` (retired D2319) lands on the packs.
 
 The `/pricing` page (D786 part 2) takes every card's price from the same read; a plan the read does not sell says "Not offered yet". A visitor reads it in the public site's frame, a member inside the app's top bar and left sidebar. The door pages' tokens block links to `/pricing/products#token-packs`.
 

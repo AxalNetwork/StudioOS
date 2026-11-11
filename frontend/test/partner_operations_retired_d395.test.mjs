@@ -52,13 +52,10 @@ const SUCCESSOR = {
 
 // ── The redirects ───────────────────────────────────────────────────────────
 
-test('D395: every retired address is a replace-redirect to its successor, never a page', () => {
+test('D2319 retires the unused Partner operations aliases', () => {
   for (const [from, to] of Object.entries(SUCCESSOR)) {
     const line = routeLine(from);
-    assert.ok(line, `${from} has no route — a retired address must redirect, never 404`);
-    const m = line.match(/element=\{<Navigate to="([^"]+)" replace \/>\}/);
-    assert.ok(m, `${from} is not a replace-redirect: ${line.trim()}`);
-    assert.equal(m[1], to, `${from} lands on ${m[1]}, not ${to}`);
+    assert.equal(line, null, `${from} retired by D2319`);
   }
   assert.doesNotMatch(APP, /PartnerOperationsWorkspace/, 'the operations workspace is still referenced');
 });
@@ -97,7 +94,7 @@ test('D395: no link in the product still points at a retired address, except the
   // for the retired prefix must be App.jsx's own, not a second opinion.
   const linking = srcFilesWith('/partner/operations')
     .filter((f) => !f.endsWith('sidebarConfig.js') && !f.endsWith('shellConfig.js'));
-  assert.deepEqual(linking, ['frontend/src/App.jsx'], 'only the redirect lines may name a retired address');
+  assert.deepEqual(linking, [], 'D2319 removes the last alias mounts');
   const pairs = legacyRedirects('partner').filter((r) => r.from.startsWith('/partner/operations'));
   assert.ok(pairs.length > 0, 'no partner zone records where its content came from');
   for (const { from, to } of pairs) {

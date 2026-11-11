@@ -27,11 +27,13 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  AXIS_12, HQ_READS, LAB_PEOPLE, PART4_CLAIMS, PART4_STRATEGIC, catalogueBody, labAppsBody, pendingBlock, unreadable,
+  AXIS_12, HQ_READS, LAB_PEOPLE, PART4_CLAIMS, catalogueBody, labAppsBody, pendingBlock, unreadable,
 } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
-import { GRANT_UNREADABLE, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, grantBadgeOf, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE } from '../src/pages/admin/programs/programsModel.js';
+import { DIMENSIONS, GRANT_UNREADABLE, LINE_ADMIN, LINE_SUPER, NOT_READ_YET, PROGRAMS, grantBadgeOf, NOT_RECORDED, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_TITLE, programDimensions } from '../src/pages/admin/programs/programsModel.js';
+import { StaleNote } from '../src/pages/admin/programs/parts.jsx';
+import { programsTitle } from '../src/pages/admin/programs/useProgramsTitle.js';
 import {
   CREDIT_FOOT, DEFAULT_WEEKS, JOIN_SERIES, NOTHING_OVER_72, NOT_PER_STUDIO, PERIODS, REENROLMENT_LINE, WAITING_ROWS, WAIT_BANDS,
   blockState, catalogueCards, catalogueTiles, creditsChart, deltaText, joinsChart, labApplications, waitingChart, weekLabel, weeksFrom, withWeeks,
@@ -86,12 +88,13 @@ test('People taking part: the count, its delta on the period before, what it cov
   assert.equal(deltaText(90, 100), '−10%');
 });
 
-test('Waiting for you: the sum with its oldest and an Overdue from 72 hours; Could not be read when any queue fails; strategic left out with its reason', () => {
+test('Waiting for you: the sum of every queue with its oldest and an Overdue from 72 hours; Could not be read when any queue fails; nothing is left out', () => {
   const t = tile(ready(catalogueBody()), 'waiting');
-  assert.equal(t.value, '7');
+  assert.equal(t.value, '8', 'cohort 2 + referrals 3 + strategic 1 + perks 1 + hosts 1');
   assert.equal(t.sub, 'oldest 3 days');
   assert.equal(t.overdue, true);
-  assert.deepEqual(t.extra, [`Strategic referral access: ${NOT_READ_YET}. ${PART4_STRATEGIC}`]);
+  assert.deepEqual(t.extra, [], 'no footnote reconciles the total: strategic access is in it');
+  assert.match(t.cover, /strategic referral access/);
   const at71 = tile(ready(catalogueBody({ waitingTile: { available: true, count: 2, oldest_hours: 71, left_out: [] } })), 'waiting');
   assert.equal(at71.overdue, false, 'Overdue starts at 72 hours');
   const at72 = tile(ready(catalogueBody({ waitingTile: { available: true, count: 2, oldest_hours: 72, left_out: [] } })), 'waiting');
@@ -154,12 +157,16 @@ test('Waiting by program: the five queues as rows with literal doors, in three b
   assert.deepEqual(WAIT_BANDS.map((b) => b.key), ['under_24', 'from_24_to_72', 'over_72']);
   const c = waitingChart(ready(catalogueBody()));
   assert.equal(c.chart.type, 'stackbars');
-  assert.deepEqual(c.chart.rows.map((r) => r.key), ['cohort', 'referrals', 'perks', 'hosts'], 'strategic is not a bar');
+  assert.deepEqual(c.chart.rows.map((r) => r.key), ['cohort', 'referrals', 'perks', 'hosts'], 'strategic records no ages, so it is a row in words, not a bar');
+  const strategic = c.rows.find((r) => r.key === 'strategic');
+  assert.deepEqual([strategic.state, strategic.count, strategic.text, strategic.sub], ['ready', 1, '1 waiting', 'no recorded age']);
+  // D4807: the headline and the rows beside it reconcile.
+  const sum = c.rows.filter((r) => r.state === 'ready').reduce((t, r) => t + r.count, 0);
+  assert.equal(String(sum), tile(ready(catalogueBody()), 'waiting').value);
   const ref = c.rows.find((r) => r.key === 'referrals');
   assert.equal(ref.sub, 'since submitted · oldest 3 days · 1 waiting on the member');
   assert.deepEqual(ref.parts.map((p) => p.value), [1, 1, 1]);
   assert.equal(c.rows.find((r) => r.key === 'perks').sub, 'since last edit · oldest 5 hours');
-  assert.deepEqual([c.rows[2].state, c.rows[2].word, c.rows[2].reason], ['pending', NOT_READ_YET, PART4_STRATEGIC]);
   assert.equal(c.foot, null, 'a referral has waited 72 hours');
   const calm = waitingChart(ready(catalogueBody({ waiting: { referrals: { ...catalogueBody().waiting.referrals, bands: { under_24: 3, from_24_to_72: 0, over_72: 0 } } } })));
   assert.equal(calm.foot, NOTHING_OVER_72);
@@ -196,13 +203,13 @@ test('Credits in and out by month: granted above the axis by source, spent below
 
 test('the cards: the registry\'s order, status words and figures; the constant stands while it reads, so the doors are always drawn', () => {
   const { cards } = catalogueCards(ready(catalogueBody()));
-  assert.equal(cards.length, 9);
+  assert.equal(cards.length, 9, 'the read\'s nine rows');
   assert.equal(cards.find((c) => c.key === 'referral-partners').status, 'Partly built');
   assert.equal(cards.find((c) => c.key === 'investor-cohorts').status, 'Not built yet');
   assert.equal(cards.find((c) => c.key === 'ai-native-venture').status, 'Proposed');
   assert.equal(cards.find((c) => c.key === 'referral-partners').grant, 'HQ-held', 'the held-mode badges stay');
-  assert.equal(catalogueCards(loading()).cards.length, 9);
-  assert.equal(catalogueCards(failed()).cards.length, 9);
+  assert.equal(catalogueCards(loading()).cards.length, 10, 'the constant: nine, and Influencers (D4298)');
+  assert.equal(catalogueCards(failed()).cards.length, 10);
 });
 
 test('Lab applications: counts.pending, exact; a failed read fails that line only; under a studio, "Not read here yet"', () => {
@@ -291,21 +298,22 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.match(view.textOf('programs-asof'), /^Updated \d\d:\d\d$/);
     assert.deepEqual(catalogueCalls(view), ['/api/admin/programs?weeks=12'], 'no scope for an Admin');
     assert.equal(view.props('programs-period-12').className.includes('bg-'), true);
-    assert.equal(view.textOf('programs-tile-running-value'), '6 of 9');
-    assert.match(view.textOf('programs-tile-running'), /2 not offered yet · 1 proposed/);
+    // D4873 (PG01): the headline says what is operational; an Admin reads no studio offering, so no "unavailable to studios".
+    assert.equal(view.textOf('programs-tile-running-value'), '6 operational');
+    assert.equal(view.textOf('programs-tile-running-parts'), '1 proposed');
     assert.equal(view.textOf('programs-tile-people-value'), '312');
     assert.equal(view.textOf('programs-tile-people-delta'), '+8%');
-    assert.match(view.textOf('programs-tile-people'), /Spin-Out Lab is left out: /);
-    assert.equal(view.textOf('programs-tile-waiting-value'), '7');
+    assert.equal(view.textOf('programs-tile-people-note'), 'Excludes Spin-Out Lab');
+    assert.equal(view.textOf('programs-tile-waiting-value'), '8');
     assert.ok(view.has('programs-tile-waiting-overdue'));
-    assert.match(view.textOf('programs-tile-waiting'), /Strategic referral access: Not read here yet\./);
-    assert.equal(view.textOf('programs-tile-credits'), `Credits paid out${NOT_READ_YET}${HQ_READS}`);
+    assert.doesNotMatch(view.textOf('programs-tile-waiting'), /Not read here yet/, 'nothing is left out of the total');
+    assert.equal(view.textOf('programs-tile-credits'), `Credits · 12 weeks${NOT_READ_YET}${HQ_READS}`);
     assert.equal(view.textOf('programs-chart-joins-axis'), 'per week');
     assert.ok(view.has('programs-chart-joins-chart'));
     assert.equal(view.textOf('programs-chart-joins-missing-perks'), `Perk claims: ${NOT_READ_YET}. ${PART4_CLAIMS}`);
     assert.equal(view.textOf('programs-chart-joins-foot'), 'Referrals rose 21% on the period before.');
     assert.match(view.textOf('programs-chart-joins'), /A re-enrolment counts again\./);
-    assert.equal(view.textOf('programs-waiting-strategic'), `Strategic referral access${NOT_READ_YET}. ${PART4_STRATEGIC}Open`);
+    assert.equal(view.textOf('programs-waiting-strategic'), 'Strategic referral accessno recorded age1 waitingOpen');
     assert.equal(view.textOf('programs-chart-credits-unread'), `${NOT_READ_YET}${HQ_READS}`);
     assert.equal(view.textOf('programs-catalogue-count'), '9 programs');
     assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
@@ -314,14 +322,16 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.equal(view.textOf('programs-card-mentor-cohorts-figure'), '1 mentor · 2 of 4 cohorts coveredCohorts scheduled or running.', 'deactivated accounts are left out (D960), so no line says otherwise');
     assert.equal(view.textOf('programs-card-mentor-cohorts-needs'), '!Needs you 4');
     assert.equal(view.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
-    assert.equal(view.textOf('programs-card-refer-and-earn-strategic'), `Strategic referral access: ${NOT_READ_YET}${PART4_STRATEGIC}`);
+    assert.equal(view.has('programs-card-refer-and-earn-strategic'), false, 'a strategic queue that was read draws no "not read" line');
     assert.equal(view.textOf('programs-card-perks-figure'), '5 live');
     assert.equal(view.textOf('programs-card-perks-claims'), `Claims: ${NOT_READ_YET}${PART4_CLAIMS}`);
     assert.equal(view.textOf('programs-card-learning-figure'), '2 published programs · 7 active enrolments in themassigned to you');
     assert.match(view.textOf('programs-card-investor-cohorts-status'), /Not built yet$/);
     assert.equal(view.textOf('programs-card-product-testing-foot'), PRODUCT_TESTING_FOOT);
     assert.ok(!view.has('programs-card-product-testing-figure'));
-    assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held');
+    // D4873: a row draws the offering and the grants as columns; with no grant field read, the grants are not guessed.
+    assert.equal(view.textOf('programs-card-referral-partners-dimensions-offering'), 'Held by HQ');
+    assert.equal(view.textOf('programs-card-referral-partners-dimensions-grants'), NOT_READ_YET);
     const hrefs = view.hrefs();
     assert.ok(!hrefs.includes('/admin/profiling-trends'), 'retired Profiling trends has no catalogue door');
     for (const d of ['/admin/programs/spinout-lab', '/admin/programs/mentor-cohorts', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',
@@ -349,7 +359,7 @@ test('the period sets weeks= on the read; the tiles and charts follow it while t
     hold = false;
     await view.click('programs-period-52');
     assert.equal(catalogueCalls(view).at(-1), '/api/admin/programs?weeks=52');
-    assert.equal(view.textOf('programs-tile-running-value'), '6 of 9');
+    assert.equal(view.textOf('programs-tile-running-value'), '6 operational');
     await view.click('programs-period-12');
     assert.equal(view.at.path, '/admin/programs');
   } finally { await view.close(); }
@@ -361,7 +371,7 @@ test('loading (PG17) and failed (PG18a): each chart in its own skeleton, then Un
   const pending = await mounted('/admin/programs', worker({ catalogue: never }));
   try {
     for (const k of ['joins', 'waiting', 'credits']) assert.match(pending.textOf(`programs-chart-${k}-loading`), /^Reading…/, k);
-    assert.equal(pending.textOf('programs-catalogue-count'), '9 programs');
+    assert.equal(pending.textOf('programs-catalogue-count'), '10 programs');
     assert.ok(pending.hrefs().includes('/admin/programs/perks'));
   } finally { await pending.close(); }
   let fail = true;
@@ -388,12 +398,15 @@ test('one failed block fails only itself: the Lab series, a queue, a card figure
     assert.match(view.textOf('programs-card-perks-figure').trim(), /^Live perks could not be read\./);
     assert.match(view.textOf('programs-card-spinout-lab-applications').trim(), /^Lab applications could not be read\./);
     assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
-    assert.equal(view.textOf('programs-tile-waiting-value'), '7');
+    assert.equal(view.textOf('programs-tile-waiting-value'), '8');
   } finally { await view.close(); }
   const queue = await mounted('/admin/programs', worker({ catalogue: () => response(catalogueBody({ waiting: { perks: unreadable('Perk listings') } })) }));
   try {
-    assert.match(queue.textOf('programs-tile-waiting'), /Could not be read/);
-    assert.ok(!queue.has('programs-tile-waiting-value'));
+    // D4873 (PG06): a queue that was not read makes the headline "N+", marked Incomplete and naming the queue,
+    // never a complete-looking sum.
+    assert.match(queue.textOf('programs-tile-waiting-value'), /^\d+\+$/);
+    assert.equal(queue.textOf('programs-tile-waiting-partial'), '◐Incomplete');
+    assert.match(queue.textOf('programs-tile-waiting-parts'), /Perk listings not read/);
     assert.match(queue.textOf('programs-waiting-perks'), /Could not be read\. Perk listings could not be read/);
     assert.match(queue.textOf('programs-waiting-referrals'), /3 waiting/);
   } finally { await queue.close(); }
@@ -403,16 +416,17 @@ test('the catalogue for a Super Admin (PG2): HQ\'s line, the credits tile and ch
   const view = await mounted('/admin/programs', worker({ user: SUPER, catalogue: (q) => response(catalogueBody({ superAdmin: true, weeks: Number(q.get('weeks')) })) }), { user: SUPER });
   try {
     assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
-    assert.equal(view.textOf('programs-tile-credits-value'), '3,050 paid out');
+    assert.equal(view.textOf('programs-tile-credits-value'), '3,050 granted');
     assert.ok(view.has('programs-chart-credits-chart'));
     assert.equal(view.textOf('programs-chart-credits-referral'), 'Referrals: Not recorded. Referral rewards are not paid in perk credits yet.');
     assert.equal(view.textOf('programs-chart-credits-foot'), CREDIT_FOOT);
     for (const k of ['spinout-lab', 'mentor-cohorts', 'refer-and-earn', 'perks']) assert.ok(!view.has(`programs-card-${k}-needs`), `${k} draws a Needs-you pill for HQ`);
     assert.equal(view.textOf('programs-card-product-testing-figure'), '2 open · 9 applied, not withdrawn');
     assert.ok(view.hrefs().includes('/admin?tab=product-testing'));
+    await view.click('programs-layout-cards'); // D4873: "Who · Join" is the card layout's line
     assert.match(view.textOf('programs-card-learning-who'), /Join: Open or by invitation$/);
     assert.ok(!/in the programs assigned to you/.test(view.textOf('programs-chart-joins')));
-    await view.click('programs-chart-credits-as-table');
+    await view.click('programs-activity-as-table'); // D4873: Activity has one Chart / Table control for its three charts
     assert.match(view.textOf('programs-chart-credits-table'), /Spent on perk claims/);
   } finally { await view.close(); }
 });
@@ -451,11 +465,13 @@ test('no per-studio read while R12 reads, and an Admin\'s ?scope= is not sent', 
 test('the phone catalogue (PG20a): no header buttons, so no studio filter; Joins stays; Waiting by program and Credits are not drawn; 44px doors', async () => {
   const view = await mounted('/admin/programs', worker({ user: SUPER, scopes: WITH_NORTH }), { user: SUPER, phone: true });
   try {
-    assert.ok(!view.has('programs-studio') && !view.has('programs-refresh') && !view.has('programs-asof'));
+    // D4873 (PG07b): on a phone, scope and period come first; Refresh and the clock are not drawn.
+    assert.ok(view.has('programs-studio') && view.has('programs-period'));
+    assert.ok(!view.has('programs-refresh') && !view.has('programs-asof'));
     assert.ok(view.has('programs-chart-joins-chart'));
     assert.ok(!view.has('programs-chart-waiting') && !view.has('programs-chart-credits'));
-    assert.equal(view.textOf('programs-tile-waiting-value'), '7', 'the tile carries the total');
-    assert.match(view.props('programs-tiles').className, /^grid gap-3\.5 sm:grid-cols-2/, 'one column below sm');
+    assert.equal(view.textOf('programs-tile-waiting-value'), '8', 'the tile carries the total');
+    assert.match(view.props('programs-tiles').className, /^grid grid-cols-2 /, 'PG07b: the strip is 2×2 on a phone');
   } finally { await view.close(); }
   const src = codeOnly(read('frontend/src/pages/admin/programs/ProgramsCatalogue.jsx'));
   assert.match(src, /const OPEN = 'inline-flex min-h-\[44px\]/);
@@ -497,4 +513,118 @@ test('D1124 · the grant badge from D956\'s field (#2789): the canvas\'s words p
   assert.equal(cards.find((c) => c.key === 'perks').grantBadge.word, 'Requested');
   assert.equal(cards.find((c) => c.key === 'learning').grantBadge, null);
   assert.equal(cards.find((c) => c.key === 'learning').grant, 'HQ-held');
+});
+
+/* ------------------------------------------------------------------ *
+ * D4807 (#4807): partial figures say so; no internal reference is drawn
+ * ------------------------------------------------------------------ */
+
+test('D4807: a figure that leaves a program out says "Partial" beside the number; one that leaves nothing out does not', () => {
+  const people = tile(ready(catalogueBody()), 'people');
+  assert.equal(people.partial, 'Partial · excludes Spin-Out Lab');
+  const whole = tile(ready(catalogueBody({ people: { available: true, count: 5, previous: 4, covers: ['learning'], left_out: [] } })), 'people');
+  assert.equal(whole.partial, null);
+  assert.equal(tile(ready(catalogueBody()), 'waiting').partial, undefined, 'Waiting for you leaves nothing out');
+});
+
+test('D4807: the catalogue draws a partial pill beside People taking part and no internal decision or issue reference anywhere', async () => {
+  const view = await mounted('/admin/programs', worker());
+  try {
+    // D4873 (PG01): Incomplete, with its coverage and what it excludes beside the number.
+    assert.equal(view.textOf('programs-tile-people-partial'), '◐Incomplete');
+    assert.equal(view.textOf('programs-tile-people-note'), 'Excludes Spin-Out Lab');
+    const page = view.textOf('programs-catalogue');
+    // Decision numbers (D4807), issue numbers (#2374), open-question keys (O-FND, OD-AIN) are for engineers.
+    const internal = page.match(/\bO-FND\b|\bOD-[A-Z0-9]+\b|\bD\d{3,5}\b|#\d{3,5}\b/g);
+    assert.equal(internal, null, `internal references drawn: ${internal}`);
+  } finally { await view.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * D4807: five dimensions, never one status word; honest loading and failure; stale; scope; title
+ * ------------------------------------------------------------------ */
+
+const dim = (card, opts) => Object.fromEntries(programDimensions(card, opts).map((d) => [d.key, d.value]));
+const program = (key) => PROGRAMS.find((p) => p.key === key);
+
+test('D4807: five dimensions, each its own row: Learning is Live and running yet not open to members, and its offering is not its grants', () => {
+  assert.deepEqual(DIMENSIONS.map((d) => d.label), ['Build state', 'Operation', 'Member access', 'Studio offering', 'Studio grants']);
+  const learning = dim(program('learning'), { grantBadge: grantBadgeOf({ state: 'granted_to', granted_count: 0 }) });
+  assert.equal(learning.build, 'Live');
+  assert.equal(learning.operation, 'Operational'); // D4873: the canvas's word for a live program
+  assert.equal(learning.access, program('learning').who === 'Not open to members yet' ? 'Not open to members yet' : 'Open or by invitation');
+  assert.equal(learning.offering, 'Held by HQ');
+  assert.equal(learning.grants, 'Granted to 0 studios', 'the policy says HQ holds it; the grants say no studio does');
+  // A program that is not built has no operation, whatever its assignment door says.
+  const investors = dim(program('investor-cohorts'), {});
+  assert.deepEqual([investors.build, investors.operation, investors.access, investors.offering], ['Not built yet', 'Not running', 'Assigned by an admin', 'Not offered to studios yet']);
+  assert.equal(dim(program('referral-partners'), {}).operation, 'Running in part');
+});
+
+test('D4807: a Super Admin reads the HQ offering; no grant field is "Not read here yet", an unreadable one "Could not be read"; a paused or unrecorded status is not guessed', () => {
+  assert.equal(dim(program('product-testing'), { superAdmin: true }).offering, 'HQ only');
+  assert.equal(dim(program('product-testing'), { superAdmin: false }).offering, 'Runs at HQ only');
+  assert.equal(dim(program('perks'), {}).grants, NOT_READ_YET);
+  assert.equal(dim(program('perks'), { grantBadge: grantBadgeOf({ available: false, unreadable: true, reason: 'down' }) }).grants, 'Could not be read');
+  const paused = dim({ ...program('perks'), status: 'Paused' }, {});
+  assert.deepEqual([paused.build, paused.operation], [NOT_RECORDED, 'Paused'], 'a paused program records no build state here');
+  const unrecorded = dim({ ...program('perks'), status: 'Status not recorded' }, {});
+  assert.deepEqual([unrecorded.build, unrecorded.operation], [NOT_RECORDED, NOT_RECORDED]);
+});
+
+test('D4807: while the registry reads or fails, every dimension says so in words about the read, not the constant\'s facts', () => {
+  for (const [state, word] of [['loading', 'Reading…'], ['unreadable', 'Could not be read'], ['pending', NOT_READ_YET], ['unrecorded', NOT_RECORDED]]) {
+    const dims = programDimensions(program('perks'), { state });
+    assert.equal(dims.length, 5);
+    assert.ok(dims.every((d) => d.value === word && d.state === state), `${state}: ${word}`);
+  }
+});
+
+test('D4807: cards from a registry that has not answered carry the read\'s word, never "Live" or "HQ-held" as if it were known', () => {
+  const loading = catalogueCards({ status: 'loading', data: null, error: null });
+  assert.equal(loading.cards.length, 10, 'the doors are still drawn');
+  assert.ok(loading.cards.every((c) => c.status === 'Reading…' && c.grant === 'Reading…' && c.hqGrant === 'Reading…' && c.fallback === 'loading'));
+  const failed = catalogueCards({ status: 'error', data: null, error: new Error('down') });
+  assert.ok(failed.cards.every((c) => c.status === 'Could not be read' && c.grant === 'Could not be read' && c.fallback === 'unreadable'));
+  const ok = catalogueCards(ready(catalogueBody()));
+  assert.ok(ok.cards.every((c) => c.fallback === undefined && c.status !== 'Reading…'));
+  assert.equal(ok.cards.find((c) => c.key === 'perks').status, 'Live');
+});
+
+test('D4807: the stale note is a status that says the last reading is on screen; a fresh one draws nothing', () => {
+  assert.match(renderToStaticMarkup(React.createElement(StaleNote, { stale: true })), /role="status"[^>]*>Showing the last reading while the new one loads\./);
+  assert.equal(renderToStaticMarkup(React.createElement(StaleNote, { stale: false })), '');
+});
+
+test('D4807: the tab title names the page and scope, not the public site\'s default', () => {
+  assert.equal(programsTitle('Programs', 'HQ'), 'Programs · HQ — Axal VC StudioOS');
+  assert.equal(programsTitle('Perks · Programs'), 'Perks · Programs — Axal VC StudioOS');
+  assert.ok(!/From idea to funded company/.test(programsTitle('Programs', 'HQ')));
+});
+
+test('D4807: mounted, the cards draw their five dimensions, the scope control says Scope, and the tab title is the page\'s', async () => {
+  const view = await mounted('/admin/programs', worker({ user: SUPER, scopes: WITH_NORTH, catalogue: (q) => response(catalogueBody({ superAdmin: true, weeks: Number(q.get('weeks')) })) }), { user: SUPER });
+  try {
+    await view.click('programs-layout-cards'); // D4873: the cards list the five as labelled rows; the rows draw them as columns
+    const dims = view.textOf('programs-card-learning-dimensions');
+    for (const label of ['Build state', 'Operation', 'Member access', 'Studio offering', 'Studio grants']) assert.ok(dims.includes(label), label);
+    assert.match(view.textOf('programs-studio'), /^Scope · /);
+    assert.equal(document.title, 'Programs · HQ — Axal VC StudioOS');
+  } finally { await view.close(); }
+});
+
+test('D4807: mounted, a catalogue that never answers draws Reading… on its cards, and one that fails draws Could not be read, not Live', async () => {
+  const waiting = await mounted('/admin/programs', worker({ catalogue: never }));
+  try {
+    assert.match(waiting.textOf('programs-card-perks-status'), /Reading…/);
+    assert.doesNotMatch(waiting.textOf('programs-card-perks'), /\bLive\b/);
+    assert.equal(waiting.textOf('programs-card-perks-dimensions-access'), 'Reading…', 'the rows say it in each column');
+    await waiting.click('programs-layout-cards');
+    assert.match(waiting.textOf('programs-card-perks-dimensions'), /Build stateReading…/);
+  } finally { await waiting.close(); }
+  const failing = await mounted('/admin/programs', worker({ catalogue: () => down() }));
+  try {
+    assert.match(failing.textOf('programs-card-perks-status'), /Could not be read/);
+    assert.doesNotMatch(failing.textOf('programs-card-perks'), /\bLive\b/);
+  } finally { await failing.close(); }
 });

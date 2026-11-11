@@ -107,10 +107,13 @@ export function StreamVideoField({ id, field, fileName = '', busy = false, onCho
     );
   } else if (kind === 'ready') {
     body = (
-      <div className="flex flex-wrap items-center gap-2" data-testid="stream-ready">
-        <CheckCircle2 size={15} className="text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
-        <span className="text-[12.5px] text-axal-ink dark:text-gray-200">{fileName || 'The video on Stream'}</span>
-        <Pill tone="ok">{readyLine(field.video)}</Pill>
+      <div className="flex items-center gap-2" data-testid="stream-ready">
+        <CheckCircle2 size={15} className="shrink-0 text-emerald-600 dark:text-emerald-300" aria-hidden="true" />
+        {/* The canvas's 2026-11-04 revision: a long file name truncates, and the ready pill sits under it. */}
+        <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+          <span className="max-w-full truncate text-[12.5px] font-semibold text-axal-ink dark:text-gray-200" title={fileName || undefined} data-testid="stream-ready-name">{fileName || 'The video on Stream'}</span>
+          <Pill tone="ok">{readyLine(field.video)}</Pill>
+        </span>
         {pick('Replace', `${SECONDARY} border-transparent`)}
       </div>
     );

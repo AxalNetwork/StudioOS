@@ -1,0 +1,34 @@
+{
+  "skill": "marketing-competitive-intelligence",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "research.library": {
+        "synthetic_fixture": true,
+        "skill_name": "Marketing Competitive Intelligence",
+        "task_scope": "Tracks competitors' positioning, campaign themes, audience claims and messaging shifts using dated evidence.",
+        "evidence": [
+          "competitor messaging shift"
+        ],
+        "omitted_field": "observation date"
+      },
+      "grow.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for competitor messaging shift."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "competitor messaging shift"
+    ],
+    "must_say_not_recorded": [
+      "observation date"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

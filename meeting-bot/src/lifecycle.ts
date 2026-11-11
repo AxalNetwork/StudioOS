@@ -96,7 +96,7 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
         if(admission==='stopped')return await early();
         if(admission==='timeout'){control.abort();return await failure('not_admitted');}
       }finally{cancel();}
-    }catch(e){return control.signal.aborted?await early():await failure(codeOf(e));}
+    }catch(e){return control.signal.aborted?await early():await failure(codeOf(e),detailOf(e));}
     const announced=await attempt(withRetry(()=>adapter.sendChat(cfg.notice),clock,NOTICE_TRIES));
     if(announced==='stopped'||control.signal.aborted)return await early();
     if(!announced)return await failure('notice_failed');

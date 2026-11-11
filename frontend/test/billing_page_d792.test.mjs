@@ -170,6 +170,11 @@ test('Payment details: the card, none on file, Stripe unreadable, and Manage in 
   } finally { await m.unmount(); }
   m = await mount(h(PaymentDetailsCard, { role: 'founder', overview: UNREADABLE }));
   try { assert.match(m.text(), /Billing could not be read from Stripe\./); } finally { await m.unmount(); }
+  m = await mount(h(PaymentDetailsCard, { role: 'founder', overview: ready({ has_customer: true, payment_methods: [], degraded: ['payment_methods'] }) }));
+  try {
+    assert.match(m.text(), /This is not a claim that no card is saved\./);
+    assert.doesNotMatch(m.text(), new RegExp(NO_CARD));
+  } finally { await m.unmount(); }
 });
 
 test('Auto-reload: the limit line with Open limits, and the Paused state in place of On', async () => {
@@ -205,5 +210,13 @@ test('the page lays the cards out in the canvas\'s order, and stacks them on a p
   assert.match(src, /md:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1\.3fr\)\]/);
   const cards = readFileSync(new URL('../src/pages/account/BillingCards.jsx', import.meta.url), 'utf8');
   assert.match(cards, /grid grid-cols-2 gap-2\.5 sm:grid-cols-4/);
-  assert.match(page, /<BillingConsole key=\{role\} role=\{role\} billing=\{billing\} \/>\n\s*\{panel\}/, 'the role\'s panel follows');
+  assert.match(page, /const reads = useBillingReads\(\{ role \}\);/);
+  assert.match(page, /<BillingConsole key=\{role\} role=\{role\} billing=\{billing\} reads=\{reads\} \/>\n\s*\{panel\}/, 'the role\'s panel follows and shares the overview read');
+  assert.match(page, /overview=\{reads\.overview\}/, 'the embedded dashboard receives the same overview as Payment details');
+  const dashboard = readFileSync(new URL('../src/components/BillingDashboard.jsx', import.meta.url), 'utf8');
+  assert.match(dashboard, /const refreshAll = \(\) => \{ sharedOverview\.reload\(\); onChanged\?\.\(\); \};/);
+  for (const mutation of ['billingPaymentMethodDefault', 'billingPaymentMethodDetach', 'onCardAdded']) {
+    assert.match(dashboard, new RegExp(`${mutation}[\\s\\S]*?refreshAll\\(\\)`), `${mutation} refreshes the shared billing read`);
+  }
+  assert.match(dashboard, /paymentMethodsUnreadable[\s\S]*?This is not a claim that no card is saved\./);
 });

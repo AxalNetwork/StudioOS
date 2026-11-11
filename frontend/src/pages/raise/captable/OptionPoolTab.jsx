@@ -12,6 +12,7 @@ import {
   CARTA_URL, EVENT_KINDS, GRANT_SORTS, METHODS, TOP_UP_LINE,
   burnDown, eventBody, filterGrants, grantRows, harbourChecks, isCarta, poolTiles, valuationBody, vestedFoot,
 } from './poolModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1023 (#2860, CT5, CT5c) — Option pool at `/raise/cap-table/option-pool`:
@@ -52,7 +53,7 @@ function useRead(load, projectId, reload) {
     setState({ status: 'loading', data: null });
     Promise.resolve().then(() => load(projectId))
       .then((data) => { if (alive) setState({ status: 'ready', data }); })
-      .catch((e) => { if (alive) setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: e?.message || '' }); });
+      .catch((e) => { if (alive) setState({ status: [403, 404].includes(e?.status) ? 'refused' : 'error', data: null, message: userFacingRaiseError(e, { fallback: '' }) }); });
     return () => { alive = false; };
   }, [load, projectId, reload]);
   return state;

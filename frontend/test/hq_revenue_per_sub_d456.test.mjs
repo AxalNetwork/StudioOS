@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -19,8 +20,9 @@ test('HQ Home MTD revenue no longer blames U1 alone', () => {
 });
 
 test('Revenue page splits revenue per subsidiary from token P&L reasons', () => {
-  const page = codeOnly(read('frontend/src/pages/hq/RevenuePage.jsx'));
-  assert.match(page, /title="Revenue per subsidiary"/);
+  const page = codeOnly(revenuePageSource());
+  // D5039 (canvas RV06): the zone is "Subsidiaries", reporting health first.
+  assert.match(page, /title="Subsidiaries"/);
   assert.match(page, /token_pl_per_subsidiary_reason/);
   assert.doesNotMatch(page, /derived_metrics_reason/);
   assert.match(page, /hq-revenue-usage-coverage/);

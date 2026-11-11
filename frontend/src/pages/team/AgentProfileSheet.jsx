@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Lightbox, Pill, Sheet, Unrecorded } from '../../ui';
-import { AgentPill } from './AgentMark.jsx';
+import { AgentIdentity, AgentPill } from './AgentMark.jsx';
 import AgentCard, { RiskScale } from './AgentCard.jsx';
 import AxalValuesBars from '../../components/profile/AxalValuesBars.jsx';
 import { agentValueBars, fixedCaption } from './personaModel.js';
 import * as agents from './agentsAdapter.js';
 import AgentSkillsCard from './AgentSkillsCard.jsx';
+// D1531 (#3742 E8, TM5m): its memory and scheduled duties.
+import { AgentDuties, AgentMemory } from './AgentMemory.jsx';
+import SponsorSheet from './SponsorSheet.jsx';
 import { BTN_DANGER, BTN_PRIMARY, BTN_SECONDARY, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
-import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
+import { agentName, agentSkillsScope, budgetLine, dayTime, eventWords, pauseWords } from './teamModel.js';
 
 /**
  * D1497 (#3727, TM5a, TM5b) — an agent's profile, a Sheet at 640, from
@@ -27,7 +30,8 @@ import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamMo
  * the agent; for a manager they save through "Save name", never silently.
  *
  * D1612 (#3952, SK4): below the profile, its Skills and Values
- * (`AgentSkillsCard`, A2 #3956 through the adapter).
+ * (`AgentSkillsCard`, A2 #3956 through the adapter). #4363: its Skills link
+ * opens the Skills tab of the scope the agent works in (`agentSkillsScope`).
  *
  * D4119 (#4119, AG5): the profile opens on the persona (D4117): its full
  * card with the status line, its Story and goal, and its Values, the same
@@ -35,6 +39,10 @@ import { agentName, budgetLine, dayTime, eventWords, pauseWords } from './teamMo
  * highlighted and captioned "Fixed · part of who [Name] is", with the risk
  * scale. The persona is the agent's name, so the first-name and surname
  * fields are gone; no job title is drawn (the Worker sends none).
+ *
+ * D4387 (#4387): a manager's "Change sponsor" opens `SponsorSheet`, as TM9b's
+ * "Choose a new sponsor" does (`editSponsor`), and TM9b's "Raise the cap"
+ * opens Edit cap (`editCap`).
  */
 
 const PROPOSAL_KEYS = [['proposed', 'Proposed'], ['accepted', 'Accepted'], ['edited', 'Edited'], ['discarded', 'Discarded'], ['withdrawn', 'Withdrawn']];
@@ -58,6 +66,7 @@ export function Confirm({ title, body, button, danger, onCancel, onConfirm, refu
 export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
   const a = data.agent || {};
   const persona = a.persona || null;
+  const outside = a.source === 'mcp_client';
   const used = data.month_spend?.available ? data.month_spend.value_microusd : null;
   const cap = a.monthly_cap_microusd ?? data.cap_microusd ?? null;
   const pct = used != null && cap ? Math.min(100, (used / cap) * 100) : null;
@@ -85,7 +94,7 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
             <div className="border-t border-axal-hairline pt-2 dark:border-gray-800"><RiskScale risk={persona.risk} /></div>
           </section>
         </>
-      ) : <Unrecorded>Who this agent is was not recorded</Unrecorded>}
+      ) : outside ? <AgentIdentity name={agentName(a)} role="Connected app" /> : <Unrecorded>Who this agent is was not recorded</Unrecorded>}
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Permissions</h3>
         <div role="table" aria-label="Permissions" className="rounded-axal-md border border-axal-hairline dark:border-gray-700">
@@ -105,7 +114,7 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
       </section>
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Budget</h3>
-        {used == null ? <Unrecorded /> : (
+        {outside ? <p className={`m-0 ${MUTED}`}>Runs on your own assistant</p> : used == null ? <Unrecorded /> : (
           <>
             <p className="m-0 font-mono text-[13px] text-axal-ink dark:text-gray-100">{budgetLine(used, cap)}{cap == null ? <> · cap <Unrecorded /></> : null}</p>
             {pct != null ? (
@@ -115,7 +124,7 @@ export function AgentProfile({ data, canManage, onAsk, legend = [] }) {
             ) : null}
           </>
         )}
-        {resets ? <p className={`m-0 mt-1 ${MONO}`}>Resets {resets}</p> : null}
+        {!outside && resets ? <p className={`m-0 mt-1 ${MONO}`}>Resets {resets}</p> : null}
       </section>
       <section>
         <h3 className="m-0 mb-1.5 text-[13px] font-bold text-axal-ink dark:text-gray-100">Proposals</h3>
@@ -167,9 +176,9 @@ function CapEditor({ name, current, refusal, onCancel, onSave }) {
   );
 }
 
-export default function AgentProfileSheet({ uid, canManage, editCap = false, onClose, onChanged }) {
+export default function AgentProfileSheet({ uid, scope = null, canManage, editCap = false, editSponsor = false, onClose, onChanged }) {
   const [block, setBlock] = useState(null);
-  const [confirm, setConfirm] = useState(editCap ? 'cap' : null);
+  const [confirm, setConfirm] = useState(editCap ? 'cap' : editSponsor ? 'sponsor' : null);
   const [refusal, setRefusal] = useState('');
   const [legend, setLegend] = useState([]);
   useEffect(() => { let alive = true; agents.agent(uid).then((b) => { if (alive) setBlock(b); }); return () => { alive = false; }; }, [uid]);
@@ -191,13 +200,16 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
     <>
       <Sheet width={640} onClose={onClose} testId="agent-profile-sheet"
         title={a ? <>{name}<span className="sr-only">{tagline ? `, AI agent: ${tagline}` : ', AI agent'}</span></> : 'AI agent'}
-        sub={a ? <>AI agent · Platform model · {a.model_label || a.model_id || <Unrecorded />}</> : undefined}
+        sub={a ? a.source === 'mcp_client' ? <>AI agent · Connected app</> : <>AI agent · Platform model · {a.model_label || a.model_id || <Unrecorded />}</> : undefined}
         headerActions={a ? <span className="flex items-center gap-1.5"><AgentPill />{pause ? <span className="rounded-axal-pill bg-axal-amber px-2 py-0.5 text-[11px] font-semibold text-axal-amber-deep">Paused</span> : null}</span> : null}
         footer={manage ? (
           <div className="flex justify-end gap-2">
-            <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
+            <button type="button" className={BTN_SECONDARY} disabled={a.source === 'mcp_client' && a.paused_reason === 'awaiting_connection'} onClick={() => setConfirm('pause')} data-testid="agent-pause">{a.status === 'paused' ? 'Resume' : 'Pause'}</button>
             <button type="button" className={BTN_DANGER} onClick={() => setConfirm('remove')} data-testid="agent-remove">Remove</button>
-            <button type="button" className={BTN_PRIMARY} onClick={() => { setRefusal(''); setConfirm('cap'); }} data-testid="agent-edit-cap">Edit cap</button>
+            {a.source !== 'mcp_client' ? <>
+              <button type="button" className={BTN_SECONDARY} onClick={() => setConfirm('sponsor')} data-testid="agent-change-sponsor">Change sponsor</button>
+              <button type="button" className={BTN_PRIMARY} onClick={() => { setRefusal(''); setConfirm('cap'); }} data-testid="agent-edit-cap">Edit cap</button>
+            </> : null}
           </div>
         ) : null}>
         {!block ? <p className={`m-0 px-5 py-5 ${MUTED}`}>Reading…</p>
@@ -205,21 +217,31 @@ export default function AgentProfileSheet({ uid, canManage, editCap = false, onC
             : (
               <>
                 <AgentProfile data={block.value} canManage={manage} legend={legend} />
-                <div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} /></div>
+                {a.source !== 'mcp_client' ? <><div className="px-5 pb-5"><AgentSkillsCard agent={{ uid: a?.uid || uid, role_key: a?.role_key, scope: a?.scope || null }} canManage={manage} skillsScope={agentSkillsScope(scope, a)} /></div>
+                <div className="flex flex-col gap-5 border-t border-axal-hairline px-5 py-5 dark:border-gray-800">
+                  <AgentMemory uid={a?.uid || uid} canManage={manage} />
+                  <AgentDuties uid={a?.uid || uid} />
+                </div></> : null}
               </>
             )}
       </Sheet>
       {confirm === 'pause' ? (
         <Confirm testId="agent-pause-confirm" title={a?.status === 'paused' ? `Resume ${name}?` : `Pause ${name}?`}
-          body={a?.status === 'paused' ? 'It can run again in its modules, up to its monthly cap.' : 'It stops running until you resume it. Open proposals stay in Approvals for people to decide.'}
+          body={a?.source === 'mcp_client'
+            ? a.status === 'paused' ? 'It can use its permitted tools again. Proposals still wait for a person.' : 'It cannot use Axal VC tools until you resume it. Open proposals stay in Approvals.'
+            : a?.status === 'paused' ? 'It can run again in its modules, up to its monthly cap.' : 'It stops running until you resume it. Open proposals stay in Approvals for people to decide.'}
           button={a?.status === 'paused' ? 'Resume' : 'Pause'} refusal={refusal} onCancel={() => setConfirm(null)} onConfirm={() => act('pause')} />
       ) : null}
-      {confirm === 'cap' && a && manage ? (
+      {confirm === 'cap' && a && manage && a.source !== 'mcp_client' ? (
         <CapEditor name={name} current={a.monthly_cap_microusd} refusal={refusal}
           onCancel={() => setConfirm(null)} onSave={(micro) => act('cap', { monthly_cap_microusd: micro })} />
       ) : null}
+      {confirm === 'sponsor' && a && manage && a.source !== 'mcp_client' ? (
+        <SponsorSheet uid={a.uid || uid} name={name} toolCount={Array.isArray(a.tools) ? a.tools.length : 0}
+          onCancel={() => setConfirm(null)} onSaved={() => { setConfirm(null); onChanged?.(); }} />
+      ) : null}
       {confirm === 'remove' ? (
-        <Confirm testId="agent-remove-confirm" danger title={`Remove ${name}?`} body="Its open proposals are withdrawn. Its history is kept."
+        <Confirm testId="agent-remove-confirm" danger title={`Remove ${name}?`} body={a?.source === 'mcp_client' ? 'Its connected app is disconnected and its open proposals are withdrawn. Its history is kept.' : 'Its open proposals are withdrawn. Its history is kept.'}
           button="Remove" refusal={refusal} onCancel={() => setConfirm(null)} onConfirm={() => act('remove')} />
       ) : null}
     </>

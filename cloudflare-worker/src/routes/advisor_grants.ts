@@ -1,3 +1,4 @@
+import { holdsLicence, heldLicences } from '../services/accountLicences';
 /**
  * `/api/advisor-grants/*` — a founder opens their record to a named advisor.
  *
@@ -41,13 +42,13 @@ const nowIso = () => new Date().toISOString();
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 
 /** An advisor by role, right now — not "was an advisor when the grant was made". */
-const isAdvisorNow = (u: any) => u?.role === 'advisor';
+const isAdvisorNow = (u: any) => (u && holdsLicence(u, 'advisor'));
 /**
  * D1570 (#3817, owner decision Q = B): an Operating Partner may hold a grant
  * too, but only one that opens nothing but the deck's comments (`scope_deck`).
  * `routes/deck_comments.ts` re-checks the role on every read, as the brief does.
  */
-const isPartnerNow = (u: any) => u?.role === 'partner';
+const isPartnerNow = (u: any) => (u && holdsLicence(u, 'partner'));
 
 interface GrantRow {
   id: number; uid: string; project_id: number; advisor_user_id: number;
@@ -114,15 +115,17 @@ grants.get('/:projectUid', async (c) => {
       WHERE g.project_id = ? ORDER BY g.created_at DESC`,
   ).bind(project.id).all<any>();
   return c.json({
-    items: (rows.results || []).map((r: any) => grantDto(r, {
+    items: await Promise.all((rows.results || []).map(async (r: any) => {
+      const licences = await heldLicences(c.env.DB, { id: r.advisor_user_id, role: r.advisor_role });
+      return grantDto(r, {
       advisor_email: r.advisor_email,
       advisor_name: r.advisor_name,
       // The second half of the gate, surfaced: a grant to someone who is no
       // longer an advisor is inert, and the founder should see that rather
       // than believe access they revoked is still in force — or that access
       // they left open still is.
-      advisor_is_advisor: r.advisor_role === 'advisor' || (r.advisor_role === 'partner' && !!r.scope_deck && !r.scope_project && !r.scope_data_room && !r.scope_sessions),
-    })),
+      advisor_is_advisor: licences.includes('advisor') || (licences.includes('partner') && !!r.scope_deck && !r.scope_project && !r.scope_data_room && !r.scope_sessions),
+    }); })),
     project: { uid: project.uid, name: project.name },
   });
 });
@@ -141,6 +144,7 @@ grants.post('/:projectUid', async (c) => {
   // Same shape as the data room: no invitation is sent, and the screen says so
   // rather than implying one was.
   if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
+  Object.assign(advisor, { licences: await heldLicences(c.env.DB, advisor) });
   if (advisor.id === user.id) return c.json({ detail: 'You already own this record' }, 400);
   // D1570: a grant that opens only the deck's comments may go to an Operating Partner.
   const deckOnly = body.scope_deck === true && body.scope_project === false && !body.scope_data_room && !body.scope_sessions;
@@ -251,15 +255,15 @@ grants.get('/:projectUid/documents', async (c) => {
       ORDER BY s.created_at DESC LIMIT 200`,
   ).bind(project.founder_id).all<any>();
   return c.json({
-    items: (rows.results || []).map((r: any) => ({
+    items: await Promise.all((rows.results || []).map(async (r: any) => ({
       uid: r.uid, document_uid: r.document_uid, title: r.title, kind: r.kind,
       created_at: r.created_at,
       advisor_email: r.advisor_email, advisor_name: r.advisor_name,
       // Same surfacing the grant list does: a share to someone who is no longer
       // an advisor is inert, and the founder should see that rather than
       // believe a document is being read.
-      advisor_is_advisor: r.advisor_role === 'advisor',
-    })),
+      advisor_is_advisor: (await heldLicences(c.env.DB, { id: r.advisor_user_id, role: r.advisor_role })).includes('advisor'),
+    }))),
   });
 });
 
@@ -277,6 +281,7 @@ grants.post('/:projectUid/documents', async (c) => {
     'SELECT id, role FROM users WHERE LOWER(email) = ?',
   ).bind(email).first<{ id: number; role: string }>();
   if (!advisor) return c.json({ detail: 'No account with that address' }, 404);
+  Object.assign(advisor, { licences: await heldLicences(c.env.DB, advisor) });
   if (!isAdvisorNow(advisor)) {
     return c.json({
       detail: 'That account is not an advisor. Every read of a shared document '

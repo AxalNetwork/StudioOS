@@ -25,7 +25,7 @@ import type { Env } from '../types';
 import { aiLicenceKey } from './aiBudget';
 import { chooseStoragePlanKey, storagePlan, STORAGE_PLANS, STORAGE_TIERS, type StoragePlanKey } from './storagePlans';
 import { planByKey } from './planCatalogue';
-import { readStorageByOwner, storageState, STORAGE_KINDS, type StorageState } from './storageUsage';
+import { readStorageByOwner, storageState, STORAGE_KINDS, type OwnerTotals, type StorageState } from './storageUsage';
 
 export const STATES: ReadonlyArray<StorageState> = ['ok', 'near_80', 'near_95', 'full', 'over', 'no_allowance'];
 const AREAS_UNREADABLE = 'Some stored files could not be read, so no member’s total is complete.';
@@ -57,8 +57,43 @@ async function readPlans(env: Env): Promise<Map<number, StoragePlanKey> | null> 
   }
 }
 
+const POPULATIONS_NOTE =
+  'Members hold every plan but staff; staff hold the admin plan; unattributed are stored files whose owner is no account or is not recorded. '
+  + 'Every stored file read by these areas is in one population and in the total.';
+
+type PopulationTotals = { accounts: number; accounts_with_files: number; files: number; measured_bytes: number; unknown_size_files: number };
+
+/**
+ * D4856 (#4856): who the bytes belong to, as three populations that add up to
+ * the total. Staff are the admin plan, the rule `members_with_files` already
+ * excluded them by; an owner id that is no user's is unattributed. Each carries
+ * its own accounts, files, measured bytes and unknown-size files, so no figure
+ * pairs one population's numerator with another's denominator.
+ */
+function readPopulations(owners: Map<number, OwnerTotals>, unowned: OwnerTotals, plans: Map<number, StoragePlanKey>) {
+  const blank = (): PopulationTotals => ({ accounts: 0, accounts_with_files: 0, files: 0, measured_bytes: 0, unknown_size_files: 0 });
+  const members = blank(), staff = blank(), unattributed = blank();
+  const add = (p: PopulationTotals, t: OwnerTotals | undefined) => {
+    p.accounts += 1;
+    if (!t) return;
+    p.accounts_with_files += 1; // an owner is read only for files it has
+    p.files += t.files; p.measured_bytes += t.measured_bytes; p.unknown_size_files += t.unknown_size_files;
+  };
+  const addFiles = (p: PopulationTotals, t: OwnerTotals) => {
+    p.files += t.files; p.measured_bytes += t.measured_bytes; p.unknown_size_files += t.unknown_size_files;
+  };
+  for (const [id, key] of plans) add(key === 'admin' ? staff : members, owners.get(id));
+  for (const [id, t] of owners) if (!plans.has(id)) add(unattributed, t);
+  addFiles(unattributed, unowned);
+  const total = { files: 0, measured_bytes: 0, unknown_size_files: 0 };
+  for (const p of [members, staff, unattributed]) {
+    total.files += p.files; total.measured_bytes += p.measured_bytes; total.unknown_size_files += p.unknown_size_files;
+  }
+  return { members, staff, unattributed, total };
+}
+
 export async function readPlatformStorage(env: Env) {
-  const [{ owners, unreadable }, plans] = await Promise.all([readStorageByOwner(env), readPlans(env)]);
+  const [{ owners, unowned, unreadable }, plans] = await Promise.all([readStorageByOwner(env), readPlans(env)]);
   const complete = unreadable.length === 0;
 
   let files = 0, measured = 0, unknown = 0;
@@ -67,6 +102,8 @@ export async function readPlatformStorage(env: Env) {
     files += t.files; measured += t.measured_bytes; unknown += t.unknown_size_files;
     for (const k of STORAGE_KINDS) kinds[k] += t.kinds[k];
   }
+  files += unowned.files; measured += unowned.measured_bytes; unknown += unowned.unknown_size_files;
+  for (const k of STORAGE_KINDS) kinds[k] += unowned.kinds[k];
 
   const byPlan = plans === null ? null : (Object.keys(STORAGE_PLANS) as StoragePlanKey[]).map((key) => {
     const plan = storagePlan(key)!;
@@ -111,17 +148,24 @@ export async function readPlatformStorage(env: Env) {
       by_state: complete ? states : null,
     };
   });
-  let withFiles: number | null = null;
-  if (plans !== null) {
-    withFiles = 0;
-    for (const [id, key] of plans) if (key !== 'admin' && (owners.get(id)?.files ?? 0) > 0) withFiles += 1;
-  }
+  const populations = plans === null ? null : readPopulations(owners, unowned, plans);
 
   return {
     complete,
+    // D4703 (#4703): when this was read, and whether the byte totals are a
+    // floor: an unreadable area or a file of unknown size means the true
+    // figure is at least this, never exactly it.
+    read_at: new Date().toISOString(),
+    measured_is_floor: !complete || unknown > 0,
     unreadable_areas: unreadable,
     reason: complete ? null : AREAS_UNREADABLE,
-    totals: { members: plans?.size ?? null, members_with_files: withFiles, files, measured_bytes: measured, unknown_size_files: unknown, complete },
+    // D4856 (#4856): `totals` is the whole platform and nothing else. The member
+    // and staff counts that sat here (`members` counted staff, `members_with_files`
+    // did not) now live in `populations`, each beside its own bytes.
+    totals: { files, measured_bytes: measured, unknown_size_files: unknown, complete },
+    populations,
+    populations_reason: plans === null ? PLANS_UNREADABLE : null,
+    populations_note: POPULATIONS_NOTE,
     by_kind: STORAGE_KINDS.map((key) => ({ key, measured_bytes: kinds[key] })),
     by_plan: byPlan,
     by_plan_reason: plans === null ? PLANS_UNREADABLE : complete ? null : AREAS_UNREADABLE,

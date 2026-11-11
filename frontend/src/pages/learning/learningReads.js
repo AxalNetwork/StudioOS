@@ -25,8 +25,8 @@ import { articles, publications, eventsPublic } from '../../lib/api';
 // D527: a domain module is imported from its own file, as research's are.
 import { learningApi } from '../../lib/api/learning.js';
 import {
-  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
-  mySubmissionRows, parseVtt, previewOf, publicationRow, statsTiles,
+  ALL_LIMIT, ARTICLES_PAGE_SIZE, EVENTS_PAGE_SIZE, articleRow, catalogRow, clockLabel, eventRow, examRow, exerciseRow, itemHref, myAttemptRows,
+  mySubmissionRows, parseVtt, previewOf, publicationRow, resumeAt, statsTiles,
 } from './learningModel';
 
 function listOf(reply, key, what) {
@@ -63,9 +63,19 @@ export async function readEvents({ q = '' } = {}) {
  * The federated catalog: every kind (All), or one kind a page at a time
  * (Courses, Videos). `sources` is the route's own per-kind state, kept whole.
  */
-export async function readCatalog({ kind = null, q = '', offset = 0 } = {}) {
-  const reply = await learningApi.catalog({ kind: kind || undefined, q: q || undefined, limit: ALL_LIMIT, offset: kind ? offset : undefined });
-  const rows = listOf(reply, 'items', 'The catalogue').map(catalogRow);
+export async function readCatalog({ kind = null, q = '', offset = 0, topic = '', level = '', max_minutes = null } = {}, client = learningApi) {
+  let reply;
+  try {
+    reply = await client.catalog({ kind: kind || undefined, q: q || undefined, topic: topic || undefined, level: level || undefined,
+      max_minutes: max_minutes == null || max_minutes === '' ? undefined : max_minutes, limit: ALL_LIMIT, offset: kind ? offset : undefined });
+  } catch (error) {
+    // D4477: only the known route refusal is product copy; never a raw exception message.
+    if ((error?.code || error?.data?.code) === 'bad_max_minutes') {
+      return { rows: [], sources: {}, offset: 0, kind, refusal: 'max_minutes is a whole number of minutes from 1 to 1440.' };
+    }
+    throw error;
+  }
+  const rows = listOf(reply, 'items', 'The catalogue').map((row) => ({ ...catalogRow(row), query: q }));
   if (!reply.sources || typeof reply.sources !== 'object') throw new Error('The catalogue came back without its sources.');
   return { rows, sources: reply.sources, offset: kind ? offset : 0, kind };
 }
@@ -113,17 +123,34 @@ export async function readItemPreview(uid, now = Date.now()) {
   return url;
 }
 
-/** Where a row of `GET /me` opens: a course, an item, or nowhere for a bare lesson. */
+/**
+ * Where a row of `GET /me` opens: a course, an item, or nowhere for a bare lesson. D5356: a course row the Worker
+ * names a resume lesson for opens that lesson inside the course (the player starts at the item's saved position);
+ * one with none keeps its course link.
+ */
 export function meRowHref(row) {
-  if (row?.subject_kind === 'course') return row.course_slug ? `/learning/courses/${encodeURIComponent(row.course_slug)}` : null;
+  if (row?.subject_kind === 'course') {
+    if (!row.course_slug) return null;
+    const course = `/learning/courses/${encodeURIComponent(row.course_slug)}`;
+    const lesson = typeof row.resume?.lesson_uid === 'string' && row.resume.lesson_uid ? row.resume.lesson_uid : null;
+    return lesson ? `${course}/${encodeURIComponent(lesson)}` : course;
+  }
   if (row?.subject_kind === 'item') return itemHref({ kind: row.item_kind, uid: row.subject_uid });
   return null;
+}
+
+/** D5356: what Continue resumes, in words: "Resume Valuation at 04:12", or null when it opens the course. */
+export function resumeLabel(row) {
+  const r = row?.subject_kind === 'course' ? row.resume : null;
+  if (!r || typeof r.lesson_uid !== 'string' || !r.lesson_uid || !row.course_slug) return null;
+  const at = clockLabel(resumeAt(r.position_seconds));
+  return `Resume ${r.lesson_title || 'the lesson'}${at ? ` at ${at}` : ''}`;
 }
 
 /** The caller's own record: what they have started and finished, each row with where it opens. */
 export async function readMe() {
   const reply = await learningApi.me();
-  const withHref = (rows) => rows.map((r) => ({ ...r, href: meRowHref(r) }));
+  const withHref = (rows) => rows.map((r) => ({ ...r, href: meRowHref(r), resume_label: resumeLabel(r) }));
   return {
     in_progress: withHref(listOf(reply, 'in_progress', 'Your learning record')),
     completed: withHref(listOf(reply, 'completed', 'Your learning record')),
@@ -150,6 +177,17 @@ export async function markLessonComplete({ course, lessonUid, slug }) {
   return fresh;
 }
 
+/**
+ * #4646: the first sign that a learner has begun a lesson. A partly watched first lesson writes only an item position,
+ * and Continue learning and the in-progress count read course rows, so the course would not appear until the lesson was
+ * marked complete. This records the lesson and its course as started (the route never moves a completed row back or a
+ * percent down), so the course shows up in Continue learning from the first minute.
+ */
+export async function recordLessonStarted({ courseUid, lessonUid }) {
+  if (lessonUid) await learningApi.recordProgress({ subject_kind: 'lesson', subject_uid: lessonUid, status: 'started' });
+  if (courseUid) await learningApi.recordProgress({ subject_kind: 'course', subject_uid: courseUid, status: 'started' });
+}
+
 /** "Mark complete" on a standalone video or reading. Returns the stored progress row. */
 export async function markItemComplete(uid) {
   const reply = await learningApi.recordProgress({ subject_kind: 'item', subject_uid: uid, status: 'completed' });
@@ -173,15 +211,17 @@ export async function recordItemPosition(uid, seconds, percent = null) {
 }
 
 /** #4180: one page of the exercises a member may open, with the route's total. */
-export async function readExercises({ offset = 0 } = {}) {
-  const reply = await learningApi.exercises({ limit: ALL_LIMIT, offset });
-  return { rows: listOf(reply, 'items', 'The exercise list').map(exerciseRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+export async function readExercises({ offset = 0, q = '' } = {}) {
+  const query = String(q || '').trim();
+  const reply = await learningApi.exercises({ limit: ALL_LIMIT, offset, ...(query ? { q: query } : {}) });
+  return { rows: listOf(reply, 'items', 'The exercise list').map(exerciseRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset, q: query };
 }
 
 /** #4180: one page of the exams a member may open, with the route's total. */
-export async function readExams({ offset = 0 } = {}) {
-  const reply = await learningApi.exams({ limit: ALL_LIMIT, offset });
-  return { rows: listOf(reply, 'items', 'The exam list').map(examRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset };
+export async function readExams({ offset = 0, q = '' } = {}) {
+  const query = String(q || '').trim();
+  const reply = await learningApi.exams({ limit: ALL_LIMIT, offset, ...(query ? { q: query } : {}) });
+  return { rows: listOf(reply, 'items', 'The exam list').map(examRow), total: Number.isFinite(Number(reply.total)) ? Number(reply.total) : null, offset, q: query };
 }
 
 /** #4180: My learning's exercises, one row per exercise. */

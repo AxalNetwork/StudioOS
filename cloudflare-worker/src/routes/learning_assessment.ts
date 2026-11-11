@@ -30,7 +30,7 @@ import { mapError, newUid } from './_t13t14t15_helpers';
 import { canSeeLearning, canReadLearnerWork, canReviewLearning, enrolledSql } from '../services/learningAccess';
 import { completeAssessmentLessons } from '../services/learningCompletion';
 import {
-  deadlineMs, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
+  deadlineMs, explanations, grade, memberQuestion, normaliseAnswers, revealed, shuffled, SUBMIT_GRACE_SECONDS, type StoredQuestion,
 } from '../services/learningAssessment';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -44,6 +44,9 @@ const nowIso = () => new Date().toISOString();
 
 // ---- exercises -----------------------------------------------------------------------
 
+/** D4479: the LR10 answer limit, measured in Unicode code points. */
+export const EXERCISE_ANSWER_MAX_CHARS = 2000;
+
 // `enrolled` (D558) binds the caller's id first, then the uid.
 const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, checklist_json, visibility, status, published_at, '
   + enrolledSql('exercise', 'learning_exercises.uid') + ' AS enrolled FROM learning_exercises WHERE uid = ?';
@@ -51,7 +54,7 @@ const EXERCISE_SQL = 'SELECT id, uid, title, instructions, submission_kind, chec
 function exerciseView(x: any) {
   let checklist: string[] | null = null;
   if (x.submission_kind === 'checklist') { try { checklist = JSON.parse(x.checklist_json || '[]'); } catch { checklist = []; } }
-  return { uid: x.uid, title: x.title, instructions: x.instructions, submission_kind: x.submission_kind, checklist, status: x.status, published_at: x.published_at };
+  return { uid: x.uid, title: x.title, instructions: x.instructions, submission_kind: x.submission_kind, checklist, ...(x.submission_kind === 'text' ? { answer_max_chars: EXERCISE_ANSWER_MAX_CHARS } : {}), status: x.status, published_at: x.published_at };
 }
 
 const SUBMISSION_COLS = 'uid, body, status, feedback, submitted_at, reviewed_at';
@@ -83,7 +86,7 @@ r.post('/exercises/:uid/submissions', async (c) => {
   } else {
     const text = typeof b?.body === 'string' ? b.body.trim() : '';
     if (!text) return refuse(c, 400, { code: 'bad_answer', message: 'An answer needs some text.' });
-    if (text.length > 50_000) return refuse(c, 400, { code: 'bad_answer', message: 'An answer is at most 50,000 characters.' });
+    if ([...text].length > EXERCISE_ANSWER_MAX_CHARS) return refuse(c, 400, { code: 'bad_answer', message: 'An answer is at most 2,000 characters.' });
     body = text;
   }
   const latest = await c.env.DB.prepare(
@@ -104,7 +107,7 @@ r.post('/exercises/:uid/submissions', async (c) => {
 
 const EXAM_SQL = 'SELECT id, uid, title, intro, pass_mark_percent, time_limit_minutes, max_attempts, shuffle, reveal, visibility, status, published_at, '
   + enrolledSql('exam', 'learning_exams.uid') + ' AS enrolled FROM learning_exams WHERE uid = ?';
-const QUESTIONS_SQL = 'SELECT uid, prompt, kind, options_json, correct_json, position FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id';
+const QUESTIONS_SQL = 'SELECT uid, prompt, kind, options_json, correct_json, position, explanation, revision_json FROM learning_exam_questions WHERE exam_id = ? ORDER BY position, id';
 
 function examIntro(x: any, questionCount: number) {
   return {
@@ -114,15 +117,29 @@ function examIntro(x: any, questionCount: number) {
   };
 }
 
-/** Close every open attempt of this member on this exam whose clock has run out. */
+/**
+ * D4643 (#4643): the rules an attempt is held to, as it started. An attempt
+ * stores the pass mark, time limit and reveal policy it began under; an
+ * attempt from before D4643 stores none and is read with the exam's current
+ * rules, as it always was. An author's later edit applies to new attempts.
+ */
+export function policyOf(a: { pass_mark_percent?: unknown; time_limit_minutes?: unknown; reveal?: unknown }, exam: any) {
+  const set = (v: unknown) => v !== null && v !== undefined;
+  return {
+    pass_mark_percent: Number(set(a.pass_mark_percent) ? a.pass_mark_percent : exam.pass_mark_percent),
+    time_limit_minutes: set(a.time_limit_minutes) ? Number(a.time_limit_minutes) : (exam.time_limit_minutes ?? null),
+    reveal: String(set(a.reveal) ? a.reveal : exam.reveal),
+  };
+}
+
+/** Close every open attempt of this member on this exam whose clock has run out, each by its own time limit. */
 async function closeExpired(env: Env, exam: any, userId: number) {
-  if (!exam.time_limit_minutes) return;
   const open = await env.DB.prepare(
-    'SELECT id, started_at FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ? AND submitted_at IS NULL',
-  ).bind(exam.id, userId).all<{ id: number; started_at: string }>();
+    'SELECT id, started_at, time_limit_minutes FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ? AND submitted_at IS NULL',
+  ).bind(exam.id, userId).all<{ id: number; started_at: string; time_limit_minutes: number | null }>();
   const now = Date.now();
   for (const a of open.results || []) {
-    const dl = deadlineMs(a.started_at, exam.time_limit_minutes);
+    const dl = deadlineMs(a.started_at, policyOf(a, exam).time_limit_minutes);
     if (dl !== null && now > dl + SUBMIT_GRACE_SECONDS * 1000) {
       await env.DB.prepare(
         `UPDATE learning_exam_attempts SET submitted_at = ?, score_percent = 0, passed = 0, timed_out = 1 WHERE id = ? AND submitted_at IS NULL`,
@@ -159,30 +176,113 @@ r.post('/exams/:uid/attempts', async (c) => {
   const all = ((await c.env.DB.prepare(QUESTIONS_SQL).bind(exam.id).all<StoredQuestion>()).results || []);
   if (!all.length) return refuse(c, 409, { code: 'no_questions', message: 'This exam has no questions yet.' });
   // An attempt already open is resumed, not doubled.
+  const OPEN_SQL = 'SELECT uid, started_at, question_order_json, pass_mark_percent, time_limit_minutes, reveal FROM learning_exam_attempts '
+    + 'WHERE exam_id = ? AND user_id = ? AND submitted_at IS NULL ORDER BY id LIMIT 1';
   let created = false;
-  let attempt = await c.env.DB.prepare(
-    'SELECT uid, started_at, question_order_json FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ? AND submitted_at IS NULL ORDER BY id DESC LIMIT 1',
-  ).bind(exam.id, user.id).first<any>();
+  let attempt = await c.env.DB.prepare(OPEN_SQL).bind(exam.id, user.id).first<any>();
   if (!attempt) {
     const order = JSON.stringify((Number(exam.shuffle) === 1 ? shuffled(all) : all).map((q) => q.uid));
     const uid = newUid();
     const started = nowIso();
-    // The attempt limit is checked inside the insert, so two starts at once cannot both pass it.
+    // D4643: ONE statement decides, so two starts at once (a retry, a second tab) cannot both insert. It inserts
+    // only when no attempt is open AND the limit allows one more; the rules it starts under are copied onto it.
     const ins = await c.env.DB.prepare(
-      `INSERT INTO learning_exam_attempts (uid, exam_id, user_id, started_at, question_order_json)
-       SELECT ?, ?, ?, ?, ? WHERE ? IS NULL OR (SELECT COUNT(*) FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ?) < ?`,
-    ).bind(uid, exam.id, user.id, started, order, exam.max_attempts, exam.id, user.id, exam.max_attempts).run();
-    if (!Number(ins?.meta?.changes ?? 0)) {
+      `INSERT INTO learning_exam_attempts (uid, exam_id, user_id, started_at, question_order_json, pass_mark_percent, time_limit_minutes, reveal)
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ? AND submitted_at IS NULL)
+          AND (? IS NULL OR (SELECT COUNT(*) FROM learning_exam_attempts WHERE exam_id = ? AND user_id = ?) < ?)`,
+    ).bind(uid, exam.id, user.id, started, order, exam.pass_mark_percent, exam.time_limit_minutes ?? null, exam.reveal,
+      exam.id, user.id, exam.max_attempts, exam.id, user.id, exam.max_attempts).run();
+    created = Number(ins?.meta?.changes ?? 0) > 0;
+    // Inserted or not, the open attempt is the one to answer with: ours, or the one a simultaneous start opened.
+    attempt = await c.env.DB.prepare(OPEN_SQL).bind(exam.id, user.id).first<any>();
+    if (!attempt) {
       return refuse(c, 409, { code: 'no_attempts_left', message: `This exam allows ${exam.max_attempts} attempt${exam.max_attempts === 1 ? '' : 's'}, and all have been used.` });
     }
-    attempt = { uid, started_at: started, question_order_json: order };
-    created = true;
+    if (created && attempt.uid !== uid) created = false;
   }
-  const dl = deadlineMs(attempt.started_at, exam.time_limit_minutes);
+  const dl = deadlineMs(attempt.started_at, policyOf(attempt, exam).time_limit_minutes);
+  // D5356 part 2: the choices saved on the server for this open attempt, so another device resumes them.
+  const draft = await attemptDraft(c.env, attempt.uid, inOrder(all, attempt.question_order_json));
   return c.json({
     attempt: { uid: attempt.uid, started_at: attempt.started_at, deadline: dl === null ? null : new Date(dl).toISOString() },
     questions: inOrder(all, attempt.question_order_json).map(memberQuestion),
+    draft,
   }, created ? 201 : 200);
+});
+
+// ---- D5356 part 2: an open attempt's choices, held on the server ---------------------------------------------------
+
+/** The highest revision a client may send; a save is an integer step, so this is years of clicks. */
+export const DRAFT_REVISION_MAX = 1_000_000_000;
+
+/**
+ * The saved choices of an open attempt, re-validated against its questions (an edited exam drops what no longer fits),
+ * or null when nothing is saved or the column is not on this database yet.
+ */
+async function attemptDraft(env: Env, attemptUid: string, shown: StoredQuestion[]) {
+  try {
+    const row = await env.DB.prepare('SELECT draft_answers_json, draft_revision, draft_saved_at FROM learning_exam_attempts WHERE uid = ?')
+      .bind(attemptUid).first<{ draft_answers_json: string | null; draft_revision: number; draft_saved_at: string | null }>();
+    if (!row || !row.draft_answers_json) return null;
+    let raw: unknown = null;
+    try { raw = JSON.parse(row.draft_answers_json); } catch { raw = null; }
+    return { answers: normaliseAnswers(raw, shown) ?? {}, revision: Number(row.draft_revision) || 0, saved_at: row.draft_saved_at };
+  } catch (e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) return null;
+    throw e;
+  }
+}
+
+/**
+ * PUT /exams/:uid/attempts/:attempt/answers — save an open attempt's choices. Only the caller's own attempt, open and
+ * inside its time limit; the choices are validated against the attempt's questions and options; `revision` must be
+ * above the last accepted one, so a delayed request cannot overwrite a newer save (409 `stale_revision`, with the
+ * saved copy). It never grades, never reveals and never uses an allowance: it writes three draft columns only.
+ */
+r.put('/exams/:uid/attempts/:attempt/answers', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const exam = await visibleExam(c, user); if (exam instanceof Response) return exam;
+  const a = await c.env.DB.prepare(
+    'SELECT id, uid, user_id, started_at, submitted_at, question_order_json, pass_mark_percent, time_limit_minutes, reveal FROM learning_exam_attempts WHERE uid = ? AND exam_id = ?',
+  ).bind(c.req.param('attempt'), exam.id).first<any>();
+  // Another member's attempt answers as if it did not exist.
+  if (!a || Number(a.user_id) !== Number(user.id)) return refuse(c, 404, { code: 'not_found', message: 'No such attempt.' });
+  if (a.submitted_at) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted, so nothing more is saved.' });
+  const dl = deadlineMs(a.started_at, policyOf(a, exam).time_limit_minutes);
+  if (dl !== null && Date.now() > dl + SUBMIT_GRACE_SECONDS * 1000) {
+    return refuse(c, 409, { code: 'time_limit_passed', message: 'The time limit has passed, so nothing more is saved.' });
+  }
+  const body = await c.req.json().catch(() => null) as { answers?: unknown; revision?: unknown } | null;
+  const revision = Number(body?.revision);
+  if (!Number.isSafeInteger(revision) || revision < 1 || revision > DRAFT_REVISION_MAX) {
+    return refuse(c, 400, { code: 'bad_revision', message: 'revision is a whole number from 1, one higher than the last save.' });
+  }
+  const all = ((await c.env.DB.prepare(QUESTIONS_SQL).bind(exam.id).all<StoredQuestion>()).results || []);
+  const shown = inOrder(all, a.question_order_json);
+  const answers = normaliseAnswers(body?.answers, shown);
+  if (!answers) return refuse(c, 400, { code: 'bad_answers', message: 'answers maps each question uid to the option indexes chosen; a single-choice question takes one.' });
+  const saved = new Date().toISOString();
+  let upd;
+  try {
+    // One statement decides: the attempt is still open and this revision is newer than the stored one.
+    upd = await c.env.DB.prepare(
+      `UPDATE learning_exam_attempts SET draft_answers_json = ?, draft_revision = ?, draft_saved_at = ?
+        WHERE id = ? AND user_id = ? AND submitted_at IS NULL AND draft_revision < ?`,
+    ).bind(JSON.stringify(answers), revision, saved, a.id, user.id, revision).run();
+  } catch (e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) {
+      return refuse(c, 503, { code: 'drafts_not_recorded', message: 'Saving choices on the server is not set up on this database yet. They are still kept on this device.' });
+    }
+    throw e;
+  }
+  if (!Number(upd?.meta?.changes ?? 0)) {
+    const now = await attemptDraft(c.env, a.uid, shown);
+    const still = await c.env.DB.prepare('SELECT submitted_at FROM learning_exam_attempts WHERE id = ?').bind(a.id).first<{ submitted_at: string | null }>();
+    if (still?.submitted_at) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted, so nothing more is saved.' });
+    return refuse(c, 409, { code: 'stale_revision', message: 'A newer save of these choices is already on the server.', extra: { draft: now } });
+  }
+  return c.json({ draft: { answers, revision, saved_at: saved } });
 });
 
 function attemptView(a: any, exam: any, questions: StoredQuestion[]) {
@@ -190,26 +290,28 @@ function attemptView(a: any, exam: any, questions: StoredQuestion[]) {
     uid: a.uid, started_at: a.started_at, submitted_at: a.submitted_at, score_percent: a.score_percent,
     passed: a.passed === null || a.passed === undefined ? null : Number(a.passed) === 1, timed_out: Number(a.timed_out) === 1,
   };
-  // Answers and the correct ones only after submission, and only if the exam reveals them.
-  if (!a.submitted_at || exam.reveal !== 'score_and_answers') return { ...base, answers_revealed: false };
+  // Answers and the correct ones only after submission, and only if the attempt's own policy reveals them (D4643).
+  if (!a.submitted_at || policyOf(a, exam).reveal !== 'score_and_answers') return { ...base, answers_revealed: false };
   let answers: Record<string, number[]> = {};
   try { answers = a.answers_json ? JSON.parse(a.answers_json) : {}; } catch { answers = {}; }
   const shown = inOrder(questions, a.question_order_json);
-  return { ...base, answers_revealed: true, answers, correct: revealed(shown) };
+  // D4650 (#4650, part 3): the explanations travel only with the answers they explain.
+  return { ...base, answers_revealed: true, answers, correct: revealed(shown), explanations: explanations(shown) };
 }
 
 r.post('/exams/:uid/attempts/:attempt/submit', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
   const exam = await visibleExam(c, user); if (exam instanceof Response) return exam;
   const a = await c.env.DB.prepare(
-    'SELECT id, uid, user_id, started_at, submitted_at, question_order_json, answers_json, score_percent, passed, timed_out FROM learning_exam_attempts WHERE uid = ? AND exam_id = ?',
+    'SELECT id, uid, user_id, started_at, submitted_at, question_order_json, answers_json, score_percent, passed, timed_out, pass_mark_percent, time_limit_minutes, reveal FROM learning_exam_attempts WHERE uid = ? AND exam_id = ?',
   ).bind(c.req.param('attempt'), exam.id).first<any>();
   // Another member's attempt answers as if it did not exist.
   if (!a || Number(a.user_id) !== Number(user.id)) return refuse(c, 404, { code: 'not_found', message: 'No such attempt.' });
   if (a.submitted_at) return refuse(c, 409, { code: 'already_submitted', message: 'This attempt was already submitted.' });
   const all = ((await c.env.DB.prepare(QUESTIONS_SQL).bind(exam.id).all<StoredQuestion>()).results || []);
   const shown = inOrder(all, a.question_order_json);
-  const dl = deadlineMs(a.started_at, exam.time_limit_minutes);
+  const policy = policyOf(a, exam);
+  const dl = deadlineMs(a.started_at, policy.time_limit_minutes);
   const now = Date.now();
   if (dl !== null && now > dl + SUBMIT_GRACE_SECONDS * 1000) {
     await c.env.DB.prepare(
@@ -220,7 +322,8 @@ r.post('/exams/:uid/attempts/:attempt/submit', async (c) => {
   const answers = normaliseAnswers((await c.req.json().catch(() => ({} as any)))?.answers, shown);
   if (!answers) return refuse(c, 400, { code: 'bad_answers', message: 'answers maps each question uid to the option indexes chosen; a single-choice question takes one.' });
   const g = grade(shown, answers);
-  const passed = g.score_percent >= Number(exam.pass_mark_percent) ? 1 : 0;
+  // D4643: graded by the pass mark the attempt started under.
+  const passed = g.score_percent >= policy.pass_mark_percent ? 1 : 0;
   const submitted = new Date(now).toISOString();
   const upd = await c.env.DB.prepare(
     `UPDATE learning_exam_attempts SET submitted_at = ?, answers_json = ?, score_percent = ?, passed = ? WHERE id = ? AND submitted_at IS NULL`,
@@ -242,7 +345,7 @@ r.post('/exams/:uid/attempts/:attempt/submit', async (c) => {
   return c.json({ attempt: attemptView(after, exam, all), correct_count: g.correct, question_count: g.total, lesson_progress });
 });
 
-const ATTEMPTS_COLS = 'uid, user_id, started_at, submitted_at, question_order_json, answers_json, score_percent, passed, timed_out';
+const ATTEMPTS_COLS = 'uid, user_id, started_at, submitted_at, question_order_json, answers_json, score_percent, passed, timed_out, pass_mark_percent, time_limit_minutes, reveal';
 
 r.get('/exams/:uid/attempts', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;

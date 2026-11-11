@@ -13,7 +13,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, getCurrentUser } from '../auth';
 import { effectiveVisibilityFor, visibleToViewer } from '../services/userSettings';
-import { ensureProfileExpansionSchema } from '../services/profileExpansion';
+import { effectiveDisplayName, ensureProfileExpansionSchema } from '../services/profileExpansion';
 import { ensureFollowsSchema } from './follows';
 import { kvGetJSON, kvPutJSON, createL1 } from '../kv';
 import { bindingKey } from '../util/schemaBootstrap';
@@ -28,6 +28,7 @@ import { isRedirectKey } from '../services/redirectRoutes';
 import { REGISTRY } from '../integrations/registry';
 import { MCP_PROVIDERS } from '../integrations/mcpProviders';
 import { channelRollout } from '../services/channels/connections';
+import { jsonWithEtag } from '../util/httpCache';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -178,14 +179,19 @@ publicRoutes.get('/ai/models', (c) => {
 // and the token packs on sale. D1 only, never Stripe, and no person in it: the
 // allowance is a projection with no recorded_by and no name. D816 (#2262): each
 // plan also carries its monthly and yearly price and the computed yearly
-// saving, and the read is cached at the edge for five minutes; the
-// `public_plans` rate-limit bucket bounds it per IP.
+// saving; the `public_plans` rate-limit bucket bounds it per IP.
+// D5318 (#5318, H10): the body depends on the D1 catalogue mirror and the
+// Worker's Stripe mode only, never on the caller (a signed-in read answers the
+// same bytes), so it is `public`. It is a price, so the window is short: fresh
+// for 60 s, then served stale for at most 60 s more while one request
+// revalidates, so a price or plan change shows within 120 s (D816's five
+// minutes was longer). A revalidation whose ETag still matches answers 304.
+export const PLANS_CACHE_CONTROL = 'public, max-age=60, s-maxage=60, stale-while-revalidate=60';
 publicRoutes.get('/plans-and-packs', async (c) => {
   try {
     const { plansAndPacks } = await import('../services/aiCredits');
     const body = await plansAndPacks(c.env);
-    c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
-    return c.json(body);
+    return await jsonWithEtag(c, body, PLANS_CACHE_CONTROL);
   } catch (e) {
     return refuse(c, 503, { code: 'plans_unreadable', message: 'Unreadable: the plans and token packs could not be read.', raw: e, audience: 'member' });
   }
@@ -267,7 +273,9 @@ function safeJsonParse<T>(raw: unknown, fallback: T): T {
 const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
   founder: { name: true, bio: true, headshot: true, socials: false, projects: true, traction: true, background: true },
   investor: { name: true, bio: true, headshot: true, socials: false, thesis: true, portfolio_summary: false, background: true },
-  partner: { name: true, bio: true, headshot: true, socials: false, services: true, background: true },
+  // D4615: `reviews` and `pricing` are switches Settings shows partners; the card does not render either yet, so
+  // they only need the same default here as there, so Settings and the served profile read one value.
+  partner: { name: true, bio: true, headshot: true, socials: false, services: true, background: true, reviews: true, pricing: false },
   admin: { name: true, bio: true, headshot: true, socials: false, background: true },
 };
 
@@ -276,6 +284,9 @@ const _PROFILE_DEFAULTS: Record<string, Record<string, boolean>> = {
  * Exported (D414) so the Messages counterparty card applies the SAME rules as
  * this public card rather than a copy of them.
  */
+/** D4615 — every public-profile switch a member may set, across roles. */
+export const PUBLIC_PROFILE_FIELD_KEYS: ReadonlySet<string> = new Set(Object.values(_PROFILE_DEFAULTS).flatMap((d) => Object.keys(d)));
+
 export function effectiveFlags(privacyPrefs: any, role: string): Record<string, boolean> {
   const base = { ...(_PROFILE_DEFAULTS[role] || _PROFILE_DEFAULTS.admin) };
   const pp = (safeJsonParse<any>(privacyPrefs, {}) || {}).public_profile || {};
@@ -351,8 +362,8 @@ export async function publicPersonCard(env: Env, handle: string, viewer: PublicV
     handle: row.uid,
     role,
     joined_at: row.created_at || null,
-    name: flags.name ? (row.display_name || row.name || null) : null,
-    display_name: flags.name ? (row.display_name || row.name || null) : null,
+    name: flags.name ? effectiveDisplayName(row) : null,
+    display_name: flags.name ? effectiveDisplayName(row) : null,
     headline: row.headline || null,
     bio: flags.bio ? (row.bio || null) : null,
     headshot_url: flags.headshot && row.headshot_r2_key ? `/api/settings/headshot/${row.uid}` : null,
@@ -697,6 +708,61 @@ async function fetchHealthSnapshot(c: Parameters<typeof requireAuth>[0]): Promis
   }
 }
 
+/**
+ * Probe StudioOS's own MCP endpoint through its public OAuth discovery. This
+ * checks the live Worker route and its resource metadata without attempting a
+ * member sign-in, invoking a tool, or contacting an external MCP provider.
+ */
+async function probeMcpServer(c: Parameters<typeof requireAuth>[0]): Promise<ServiceHealth> {
+  const enabled = c.env.MCP_SERVER_ENABLED === 'true' && !!(c.env as unknown as { OAUTH_KV?: unknown }).OAUTH_KV;
+  const base = {
+    name: 'MCP server',
+    match: 'mcp server assistants',
+    availability: enabled ? 'Enabled' : 'Not enabled',
+  };
+  if (!enabled) {
+    return { ...base, status: 'unknown', monitoring: 'not_monitored',
+      note: 'Live service health is not monitored here because the MCP server is disabled or its OAuth store is missing.' };
+  }
+
+  try {
+    const origin = new URL(c.req.url).origin;
+    const [authorizationResponse, resourceResponse, transportResponse] = await Promise.all([
+      fetch(`${origin}/.well-known/oauth-authorization-server`, { headers: { 'User-Agent': 'axal-status-page' } }),
+      fetch(`${origin}/.well-known/oauth-protected-resource/mcp`, { headers: { 'User-Agent': 'axal-status-page' } }),
+      fetch(`${origin}/mcp`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'axal-status-page',
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-06-18',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 'status-probe', method: 'tools/list', params: {} }),
+      }),
+    ]);
+    if (!authorizationResponse.ok || !resourceResponse.ok || transportResponse.status !== 401) {
+      return { ...base, status: 'down' };
+    }
+
+    const [authorization, resource] = await Promise.all([
+      authorizationResponse.json() as Promise<Record<string, unknown>>,
+      resourceResponse.json() as Promise<Record<string, unknown>>,
+    ]);
+    const reachable = authorization.issuer === origin
+      && authorization.authorization_endpoint === `${origin}/api/oauth/authorize`
+      && authorization.token_endpoint === `${origin}/api/oauth/token`
+      && resource.resource === `${origin}/mcp`
+      && Array.isArray(resource.authorization_servers)
+      && resource.authorization_servers.includes(origin)
+      && (transportResponse.headers.get('www-authenticate') || '').includes(`${origin}/.well-known/oauth-protected-resource/mcp`);
+    return { ...base, status: reachable ? 'operational' : 'down',
+      note: reachable ? 'Live check: MCP transport and OAuth discovery responded; sign-in is required.' : undefined };
+  } catch {
+    return { ...base, status: 'down' };
+  }
+}
+
 async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<ServiceHealth[]> {
   const env = c.env;
   const snap = await fetchHealthSnapshot(c);
@@ -739,6 +805,7 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
   services.push({ name: 'Published pages', match: 'publications', status: presence('PUBLICATIONS') });
   services.push({ name: 'Backups', match: 'backups', status: presence('BACKUPS') });
   services.push({ name: 'Document rendering', match: 'browser rendering pdf', status: presence('BROWSER') });
+  services.push(await probeMcpServer(c));
 
   // Public capability coverage, not member connection checks. Never contact a
   // remote MCP server, read credentials or run a tool on this anonymous GET.
@@ -746,8 +813,6 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
     services.push({ name, match, availability, status: 'unknown', monitoring: 'not_monitored',
       note: 'Availability reflects platform settings. Live service health is not monitored here.' });
   };
-  unmonitored('MCP server', 'mcp server assistants',
-    env.MCP_SERVER_ENABLED === 'true' && bound('OAUTH_KV') ? 'Enabled' : 'Not enabled');
   unmonitored('Member API keys', 'member api keys', env.API_KEYS_ENABLED === 'true' ? 'Enabled' : 'Not enabled');
   unmonitored('MCP clients', 'mcp clients shared client', 'Available');
   for (const provider of Object.values(MCP_PROVIDERS)) {

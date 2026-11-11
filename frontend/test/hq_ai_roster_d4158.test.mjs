@@ -90,7 +90,9 @@ test('5: values are shown and never sent; the dialogs say what retiring does', (
 test('6: the words — refusals, teams by name, and history before → after', () => {
   assert.equal(rosterRefusal({ code: 'trademark_unchecked' }), 'Tick "Trademark check done" before changing the name.');
   assert.equal(rosterRefusal({ code: 'values_fixed' }), 'Values, risk and natural fit cannot be changed.');
-  assert.equal(rosterRefusal({ code: 'something_new', message: 'The Worker said so.' }), 'The Worker said so.');
+  // #4739: the Worker's own sentence comes from the body on `e.data`; the error's raw text is never shown.
+  assert.equal(rosterRefusal({ status: 422, data: { error: 'something_new', message: 'The Worker said so.' } }), 'The Worker said so.');
+  assert.equal(rosterRefusal({ message: 'socket hang up' }), 'That change was not saved.');
   assert.equal(teamLine({ company: 'Northwind Labs', project: 'Atlas Pilot' }), 'Northwind Labs › Atlas Pilot');
   assert.equal(teamLine({ company: null, project: null }), NOT_RECORDED);
   assert.equal(historyLine({ before: { status: 'offered' }, after: { status: 'hidden' } }), 'status: offered → status: hidden');

@@ -31,7 +31,8 @@ import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { canRead, loadScope, type Scope } from '../services/agents/teams';
 import { notify } from '../services/notify';
-import { workCards, WorkRefusal, NO_WORK_RUNS_RECORDED, type WorkRunReader } from '../services/agents/workBoard';
+import { workCards, WorkRefusal, type WorkRunReader } from '../services/agents/workBoard';
+import { recordedWorkRuns } from '../services/agents/workRuns';
 import {
   acceptDraft, addComment, createLabel, createMilestone, deleteComment, deleteLabel, deleteMilestone, discardDraft, editComment,
   listDrafts, listLabels, listMilestones, reviewTask, setTaskLabels, setTaskMilestone, taskByNumber, timeline, updateLabel, updateMilestone,
@@ -41,7 +42,7 @@ import {
 type C = Context<{ Bindings: Env }>;
 type Project = Extract<Scope, { kind: 'project' }>;
 
-export function workItemRoutes(enabled: (env: Env) => boolean, publish: Publish = notify, readRuns: WorkRunReader = NO_WORK_RUNS_RECORDED) {
+export function workItemRoutes(enabled: (env: Env) => boolean, publish: Publish = notify, readRuns: WorkRunReader = recordedWorkRuns) {
   const router = new Hono<{ Bindings: Env }>();
   const absent = () => new WorkRefusal(404, 'not_found', 'There is no project task here.');
   async function body(c: C) {
@@ -107,7 +108,7 @@ export function workItemRoutes(enabled: (env: Env) => boolean, publish: Publish 
   }));
   router.post('/project/:id/work/drafts/:uid/accept', handle(async (c) => {
     const { s, user } = await project(c);
-    return c.json({ task: await card(c, await acceptDraft(c.env, s, c.req.param('uid') ?? '', user)) }, 201);
+    return c.json({ task: await card(c, await acceptDraft(c.env, s, c.req.param('uid') ?? '', user, await c.req.json().catch(() => ({})))) }, 201);
   }));
   router.post('/project/:id/work/drafts/:uid/discard', handle(async (c) => {
     const { s, user } = await project(c);

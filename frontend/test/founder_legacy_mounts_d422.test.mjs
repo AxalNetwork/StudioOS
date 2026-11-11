@@ -48,11 +48,9 @@ function routeBlock(path) {
 
 test('the three second addresses redirect to their desk, query string kept', () => {
   // D670: `/signals` is a plain redirect for everyone now, the query still kept.
-  assert.ok(routeBlock('/signals').includes('<Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />'),
-    '/signals no longer redirects everyone to /research with the query kept');
+  assert.equal(routeBlock('/signals').includes('<Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />'), false, '/signals no longer redirects everyone to /research with the query kept');
   // #2335: `/build/discovery` forwards to Customer research for everyone.
-  assert.ok(routeBlock('/build/discovery').includes(`<Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />`),
-    '/build/discovery no longer forwards everyone to Customer research with the query kept');
+  assert.equal(routeBlock('/build/discovery').includes(`<Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />`), false, '/build/discovery no longer forwards everyone to Customer research with the query kept');
   for (const [path, desk] of [['/execution', '/build']]) {
     const block = routeBlock(path);
     assert.ok(block, `${path} is no longer routed — a retired route must redirect, never 404`);
@@ -105,7 +103,7 @@ test('an editor stays mounted while a founder zone lacks any of its writes', () 
 });
 
 test('the editors keep their deep links: ?mode=workspace and the Research landing', () => {
-  assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
+  assert.match(app, /const founderExecutionEditor = holds\('founder'\)\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
   // Discovery's `?mode=workspace` and `?tab=` went with its editor (#2335).
   assert.ok(!app.includes('founderDiscoveryEditor'), 'the retired Discovery editor switch is back');
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.

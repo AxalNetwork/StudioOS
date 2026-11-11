@@ -113,6 +113,86 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-11-04 — My events with recommendations, and the New event cover step (#3724)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs` and replace the 10-25 versions:
+- **`My Events Page.dc.html`** (artifact `BpnR4TosBL3NQumJUTtKRs`): My events with "Recommended for you", Why this, Not for me, Tune recommendations and People to invite, plus the New event editor with its cover step. The logo path was rewritten to `/axal-mark.png`.
+- **`My Events · Boards.dc.html`** (artifact `7vEqinMZBc4u53iyCVzskH`): boards ME1 to ME13 and NE1 to NE5. Its bundle imported the page as "My Events v2 Page"; the import was renamed to "My Events Page" so it resolves to the file here.
+
+The integration is D3724 (`documentation/architecture/decisions/D3724.md`), which lists the parts still waiting on Worker routes.
+
+## Landed 2026-11-04 — Share cards, the centred revision (#3705)
+
+Both artifacts were re-read with `scripts/read-canvas.mjs` and replace their files:
+- **`Share Cards Page.dc.html`** (`NuqvJUKoNJbwYfqwZG44WY`): the card is now centred. The mark and "AXAL VC" sit at the top, then the eyebrow chip, the title and the description in the middle, and "axal.vc" at the foot. Violet arcs fill the top-right and bottom-left corners. Trust and legal cards keep the lavender ground and hairline frame, with a document glyph above the eyebrow; the private card has a round violet lock. The left band is gone.
+- **`Share Cards · Boards.dc.html`** (`XJKVGprpDKwwSVNiNbZehv`): the boards SC0 to SC12 against the revised page.
+
+`scripts/generate-og-images.mjs` draws the revision, and the 28 cards in `frontend/public/og/` are re-rendered. The record text the Worker injector (D1439) writes already matched the boards, so no Worker change was needed.
+
+## Landed 2026-11-04 — Learning on Stream, the studio's ready row (#3726)
+
+Both artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The page** (artifact `H2JdjkLfSYqaY6QMDh6uFo`) replaces `Learning Stream Page.dc.html`. Its one change is the studio's upload field: a ready video's file name truncates and its "Ready" pill sits under it.
+- **The boards** (artifact `EaVXvZy3xJ5v5wqdGf6bpw`) are unchanged.
+
+The same day the owner lifted Learning's coming-soon gate for every profile (D3726, update of 2026-11-04).
+
+## Landed 2026-11-04 — The agent engine's screens, TM10–TM19 and TM5m (#3742 E8)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Agent Engine Page.dc.html`** (artifact `NvMDWjvwjLSwe9ZXeU6TjX`) is new. It draws goals and the planner (TM10), the handoff trail (TM13), evaluation (TM14), the agent-for-a-goal sheet (TM15), move notices (TM18), the engine's states (TM19) and an agent's memory and duties (TM5m). The logo is `/axal-mark.png` and the portraits `/agents/<key>.png`.
+- **`Agent Engine · Boards.dc.html`** (artifact `DE8S63W88XcmjVo84CXMdF`) is new: one board per screen and state, each importing the page by name.
+
+The integration is D1531 (`documentation/architecture/decisions/D1531.md`).
+## Landed 2026-11-04 — Pitch › Present: pair a phone as a remote (#3828)
+
+The owner's artifact `KBaBZ9jqPoEFTSqqS1WzQD`, republished, was decoded by `scripts/read-canvas.mjs`. Its page is the bundle's second file, taken out as it was: it already pointed at the shared runtime and Google Fonts. The logo paths were rewritten.
+- **`Pitch · Boards.dc.html`** keeps every PS board and adds PR1 to PR6.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`.** All 124 earlier frames are kept. It adds 20:
+  - pr1 to pr1e: Present's code panel and its states;
+  - pr2 to pr2d: the phone's code entry and its states;
+  - pr3 and pr3m: connected, and ⋯ Disconnect;
+  - pr4a to pr4c: the connection states;
+  - pr5a and pr5b: tablet;
+  - pr6a and pr6b: light.
+
+The build is D1581 §PR (`documentation/architecture/decisions/D1581.md`).
+## Landed 2026-11-04 — HQ › AI agents: the agents' values, revised (#4137)
+
+The owner's two HQ › AI agents artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards** (artifact `9ecDUL1qvu1FZLfWfMaUbV`) are unchanged.
+- **The page** (artifact `LxnWj8iKZPZyfvLYJoeFT9`) replaces `HQ AI Agents Page.dc.html`. Its only change is the 16 agents' top values: every one is now an Axal value, and Empathy, Courage and Craft are gone.
+
+The owner chose to store the canvas's values and its two areas per agent. That Worker change is #4388 (S16).
+
+## Landed 2026-11-04 — Work: assignees from the team only, and My tasks (#3968, #3994)
+
+The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
+- **The boards replace `Work Compliance · Boards.dc.html`** (artifact `XJd9TTJgzjdasWvuJv6ArV`). Every earlier board is kept, and WK7's note now says its rows are the Team's people and agents only. Two boards are new:
+  - **WK9, Assignees · the team only:** w9 (a project task), w9m (@-mentions), w9c (a company compliance task) and w9s (states: a seat ended, no match, an admin on HQ read-only access);
+  - **WK13, My tasks:** w13 (Founder › Studio, grouped by team), w13b (where each licence finds it) and w13p (phone).
+- **The page replaces `Work Compliance Page.dc.html`** (artifact `6snU4LwGECSELCgYtneiB3`). Every earlier frame is kept, and it adds w9, w9m, w9c, w9s, w13, w13b and w13p.
+
+The frontend is #3994's (PR #4381). Every Worker read those screens need is on main.
+
+## Landed 2026-11-04 — Pitch deck templates and the Gallery's covers (#3876)
+
+The owner's four artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Pitch Deck Templates · Boards.dc.html`** (artifact `RBKVDL4jz2C2DjFLQamWtk`) is new: one board per template, TPL-01 to TPL-24, six per stage. Each imports the page below.
+- **`Pitch Deck Templates Page.dc.html`** (artifact `M4e1veoddTFbYEzTEt7JHt`) is new. It draws each template's title card large, then its swatch, type, decor, chrome, art and tone, then every card in order on the 12 × 6 grid. Its themes match `templateLibrary.ts` exactly. It rewrites TPL-01 to TPL-12's placeholders for AI-native companies (`HD1`, `SUP1`, `TL1`), which is #3876's content work.
+- **The page replaces `Pitch Deck Studio v2 Page.dc.html`** (artifact `UJXCEzoW75JuqpM2njFxQH`). Every earlier frame is kept (119 of 119). It adds pd29c (24 covers, one row per stage), pd29s (selected, Use this template), pd29y (Yours, Save as my template), pd29strip (TPL-07's preview strip) and the tx01 to tx24 cover exports.
+- **The boards replace `Pitch Deck Studio v2 · Boards.dc.html`** (artifact `AByWUAWjZT6e6VbeDWp5HN`). They add PF1 to PF5 and PD-29b to PD-29d. Every earlier board is kept.
+
+The Gallery's integration is D3876 (`documentation/architecture/decisions/D3876.md`).
+
+## Landed 2026-11-03 — Who knows them, relationship intelligence (#3572, #3564)
+
+The owner's two relationship-intelligence artifacts were decoded by `scripts/read-canvas.mjs`:
+- **`Who knows them · Boards.dc.html`** (artifact `P5Ptt9j9Pf8b7iPSCnMmyz`) lays out the boards RI1 to RI8: the sharing setting, the strip on a record, asking for an introduction, the introducer's inbox, the introductions log, follow-ups, withdraw and phone. Each board imports the page.
+- **`Who Knows Them Page.dc.html`** (artifact `3ky9hz8rYRY1ApqcoRjSAQ`) draws 29 frames: ri1 to ri7 and their states (ri1n, ri1s, ri2s, ri3c, ri4e), phone (ri1p to ri7p) and dark (ri1-d to ri7-d, ri2p-d, ri3p-d, ri4p-d).
+
+The build is D1357 (`documentation/architecture/decisions/D1357.md`): the frontend is #3572, and the Worker parts are 8a and 8b.
+
 ## Landed 2026-11-03 — Influencer program (#4289)
 
 The owner's two artifacts were decoded by `scripts/read-canvas.mjs`:
@@ -2486,3 +2566,68 @@ Both hashes match S1's decode, so this is the content S1 read. The font link was
 | D711 | S14 | #1865 | L0–L7: every library document passes the paper rules |
 
 **Counts unchanged: 97 / 28 / 26**, recounted. Nothing entered `canvases/`.
+
+## Landed 2026-11-07 — Admin v2 redesigns: Approvals, Community, Contracts and Platform (#4814, #4820, #4811, #4860)
+
+The owner's Claude Design canvas "Axal VC – platform design" carries four new board sets, drawn on 2026-11-07 from the issue briefs. Each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Approvals v2 Page.dc.html`**, **`Approvals v2 · Boards.dc.html`**: boards AP-01 to AP-19 (D4814).
+- **`Community v2 Page.dc.html`**, **`Community v2 · Boards.dc.html`**: boards CM01 to CM12e (D4820).
+- **`Contracts v2 Page.dc.html`**, **`Contracts v2 · Boards.dc.html`**: boards CT01 to CT16 and spec boards CT90 to CT94 (D4811).
+- **`Platform v2 Page.dc.html`**, **`Platform v2 · Boards.dc.html`**: boards PL01 to PL12 (D4860).
+
+The v1 `Approvals` and `Community` canvases stay in place: the live pages are built to them, and their tests read them. Each v2 replaces its v1 when its build lands. None is built yet; each surface's build is its own task. The canvases' figures are sample content: the decision files list which figures need a read or a store confirmed.
+
+## Landed 2026-11-07 — HQ and Research v2 redesigns: Security, Research, Programs, Fund administration and Licences (#4803, #3701, #4873, #4812, #4819)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs. As before, each landed under the name Claude Design gave it, as a page plus its boards, and each board file imports its page by that name:
+- **`Security v2 Page.dc.html`**, **`Security v2 · Boards.dc.html`**: boards SE01 to SE12 and spec boards SEA to SEE (D4803, covering #4800 to #4803).
+- **`Research v2 Page.dc.html`**, **`Research v2 · Boards.dc.html`**: boards RS01 to RS12 and spec boards RSA to RSC (D3701, the canonical V2 prompt).
+- **`Programs v2 Page.dc.html`**, **`Programs v2 · Boards.dc.html`**: boards PG01 to PG08 (D4873).
+- **`Fund Admin v2 Page.dc.html`**, **`Fund Admin v2 · Boards.dc.html`**: boards FA01 to FA14 (D4812).
+- **`Licences v2 Page.dc.html`**, **`Licences v2 · Boards.dc.html`**: boards L00 to L22 (D4819).
+
+None is built yet; each surface's build is its own task. Figures are sample content, except where a decision file says a board shows the live state (Licences L0, the zero-licence ledger). Each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-08 — HQ Support and Revenue v2 (#5034, #5039)
+
+Two more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-08 from the issue briefs, each as a page plus its boards under the names Claude Design gave them:
+- **`Support v2 Page.dc.html`**, **`Support v2 · Boards.dc.html`**: boards SU01a to SU14 (D5034).
+- **`Revenue v2 Page.dc.html`**, **`Revenue v2 · Boards.dc.html`**: boards RV01 to RV15 (D5039).
+
+Neither is built yet. Subsidiaries, people, tickets, customers and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Deals, Delivery, Practice, Pipeline and Cohorts v2 (#4815, #4822, #4874, #4838, #4813)
+
+Five more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-07 from the issue briefs, each as a page plus its boards under the names Claude Design gave them:
+- **`Deals v2 Page.dc.html`**, **`Deals v2 · Boards.dc.html`**: boards DE01 to DE18 (D4815). The shell follows the owner's #3704 rule over the prompt's account switcher.
+- **`Delivery v2 Page.dc.html`**, **`Delivery v2 · Boards.dc.html`**: boards DL01 to DL09 (D4822).
+- **`Practice v2 Page.dc.html`**, **`Practice v2 · Boards.dc.html`**: boards PX00 to PX13 (D4874).
+- **`Pipeline v2 Page.dc.html`**, **`Pipeline v2 · Boards.dc.html`**: boards PP01 to PP10 (D4838).
+- **`Cohorts v2 Page.dc.html`**, **`Cohorts v2 · Boards.dc.html`**: boards CH01 to CH19 (D4813).
+
+None is built yet. Companies, people, clients and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-09 — Company settings, Skill library and Portfolio v2 (#4966, #4956, #4817)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", each as a page plus its boards under the names Claude Design gave them:
+- **`Company Settings v2 Page.dc.html`**, **`Company Settings v2 · Boards.dc.html`**: boards CS-00 to CS-16, drawn 2026-11-08 (D4966).
+- **`Skill Library v2 Page.dc.html`**, **`Skill Library v2 · Boards.dc.html`**: boards SK-01 to SK-16 and specs SK-A to SK-D, drawn 2026-11-08 (D4956). It extends `Agents Skills v2` (D4116) rather than replacing it.
+- **`Portfolio v2 Page.dc.html`**, **`Portfolio v2 · Boards.dc.html`**: boards PF-01 to PF-12, drawn 2026-11-07 (D4817). The shell follows #3704: Portfolio opens from the Account menu.
+
+None is built yet. Companies, people, skills and amounts are sample content; each decision file lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Pitch Studio v2, Platform States, and the Licences and Contracts v2 addendum (#4839, #5129, #5303)
+
+Three more board sets from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10, each as a page plus its boards under the names Claude Design gave them:
+- **`Pitch Studio v2 Page.dc.html`**, **`Pitch Studio v2 · Boards.dc.html`**: sections PS-00 to PS-13, 42 frames (D4839). A design and interaction pass over Pitch Deck Studio v2 (D1604), which stays the baseline.
+- **`Platform States Page.dc.html`**, **`Platform States · Boards.dc.html`**: boards ST-00 to ST-14 (D5129). The shared data-state vocabulary every surface cites; drawn to Question 2's pick A.
+- **`Licences and Contracts v2 Addendum Page.dc.html`**, **`Licences and Contracts v2 Addendum · Boards.dc.html`**: boards L23 to L40 and CT-17 to CT-20 (#5303; addendum sections in D4819 and D4811). Extends the Licences v2 and Contracts v2 canvases rather than forking them.
+
+None is built yet. Ventures, people, investors and amounts are sample content, except the addendum's package names, programs, base fees and guidance ranges, which are the seeded ones; each decision lists what is frontend-only and what needs backend work.
+
+## Landed 2026-11-10 — Admin › Deals (#5459)
+
+One more board set from the owner's Claude Design canvas "Axal VC – platform design", drawn on 2026-11-10 and revised the same day for the owner's two amendments, as a page plus its boards under the names Claude Design gave them:
+- **`Administrator Deal Preparation Page.dc.html`**, **`Administrator Deal Preparation · Boards.dc.html`**: sections ADPW-00 to ADPW-26, 56 frames (D5459). The Admin profile's **Deals** workspace at `/admin/deals`; the investor Deals redesign stays `Deals v2` (D4815).
+
+Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.

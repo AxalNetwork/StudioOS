@@ -56,6 +56,8 @@
  *   MAGIC_MAIL_BUDGET_MS     default 120000 (well inside the 15-min TTL)
  */
 import { pathToFileURL } from 'node:url';
+import { probeOutcome } from './lib/probeOutcome.mjs';
+import { describeRefusal } from './check-magic-link-insert.mjs';
 
 const HOST = (process.env.MAGIC_PROBE_HOST || 'https://axal.vc').replace(/\/+$/, '');
 const START_BUDGET_MS = Number(process.env.MAGIC_START_BUDGET_MS || 5000);
@@ -157,6 +159,11 @@ export function verdicts({ startMs, mailMs, signedIn, startBudgetMs, mailBudgetM
   return { rows, ok: rows.every((r) => r.ok) };
 }
 
+/** #4571 R2-09: this run's outcome. The one probe that can say VERIFIED_END_TO_END. */
+export function liveOutcome({ startStatus, refusal, rows }) {
+  return probeOutcome({ startStatus, refusal, rows, endToEnd: true });
+}
+
 /** A successful verify redirects to `…?magic=ok`; every failure carries `magic_error`. */
 export function verifyOutcome({ status, location }) {
   const loc = String(location || '');
@@ -232,6 +239,8 @@ async function main() {
 
   const requestedAtMs = Date.now();
   let startMs = NaN;
+  let startStatus = null;
+  let refusal = null;
   try {
     const t0 = Date.now();
     const res = await fetch(`${HOST}/api/auth/magic/start`, {
@@ -241,19 +250,34 @@ async function main() {
       body: JSON.stringify({ email: address }),
     });
     startMs = Date.now() - t0;
+    startStatus = res.status;
     // 202 is the documented answer whether or not the account exists — it is
     // deliberately not an enumeration oracle, so it proves nothing about
     // delivery. Only the arrival below does.
     if (res.status === 429) {
       console.error('check-magic-link-live: rate-limited (429). magic-start allows 3 per 900s per address.');
       console.error('  Widen the schedule rather than the limit; a probe that trips its own limiter proves nothing.');
+      console.log(`  outcome: ${liveOutcome({ startStatus: 429, refusal: null, rows: [] })}`);
       process.exit(1);
     }
-    if (!res.ok && res.status !== 202) {
-      console.error(`check-magic-link-live: /magic/start returned ${res.status}`);
+    if (res.status !== 202) {
+      // #4571 R2-09: say WHO refused (edge or Worker), as the insert probe does.
+      refusal = describeRefusal({ status: res.status, headers: res.headers, body: await res.text().catch(() => '') });
+      console.error(`check-magic-link-live: /magic/start REFUSED — ${refusal.line}`);
+      console.error(`  ${refusal.reading}`);
     }
   } catch (e) {
     console.error(`check-magic-link-live: /magic/start threw — ${e.message}`);
+  }
+
+  // A refusal ends the run: an inbox wait after it would test nothing, and its
+  // checks are reported as NOT CHECKED, never as a failed delivery.
+  if (startStatus !== 202) {
+    console.log('  – mail_delivered: NOT CHECKED — /magic/start did not accept the request');
+    console.log('  – sign_in_completed: NOT CHECKED — no link was asked for');
+    console.log(`  outcome: ${liveOutcome({ startStatus, refusal, rows: [] })}`);
+    console.error('check-magic-link-live: FAILED — task #168 is not verified.');
+    process.exit(1);
   }
 
   let mailMs = NaN;
@@ -289,6 +313,7 @@ async function main() {
     startBudgetMs: START_BUDGET_MS, mailBudgetMs: MAIL_BUDGET_MS,
   });
   for (const r of rows) console.log(`  ${r.ok ? '✓' : '✗'} ${r.key}: ${r.detail}`);
+  console.log(`  outcome: ${liveOutcome({ startStatus, refusal, rows })}`);
 
   if (!ok) {
     console.error('check-magic-link-live: FAILED — task #168 is not verified.');

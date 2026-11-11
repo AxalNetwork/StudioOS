@@ -103,7 +103,7 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
   // the needs board: `/partner/needs` now forwards to Leads itself, which
   // draws the shell's rail, and the Pipeline tab points there.
   const app = read('App.jsx');
-  assert.match(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], <MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>\)\}/);
+  assert.doesNotMatch(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], <MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>\)\}/);
   assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /\{ to: '\/pipeline\/leads', label: 'Leads'/);
 });
 

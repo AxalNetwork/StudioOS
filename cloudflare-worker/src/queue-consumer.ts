@@ -28,6 +28,7 @@ import { DECK_GEN_JOB, driveQueuedSlice } from './services/decks/queueRuntime';
 // `interview_process` is not in it: a deferral below spends one of the
 // message's Cloudflare retries.
 export const AI_JOB_TYPES = new Set([
+  'interview_output',
   'ai_scoring',
   'traction_review',
   'liquidity_valuation',

@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 import { programsApi } from '../../../lib/api/programs';
-import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, StatusPill, SUB, Unread } from './parts';
-import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, withoutMoved } from './programsModel';
+import { DIALOG_BODY, DIALOG_LINES, DialogButtons, GrantBadge, MovedNotice, ProgramDimensions, StatusPill, SUB, Unread } from './parts';
+import useProgramsTitle from './useProgramsTitle';
+import { NOT_RECORDED, PAGES, crumbText, grantBadgeOf, movedNotice, programByKey, programDimensions, withoutMoved } from './programsModel';
 import { CSV_DONE, CSV_LINES, CSV_PROGRAMS, refusalSentence } from './programPagesModel';
 
 const CRUMB = 'font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -26,19 +27,22 @@ const CRUMB_LINK = 'text-axal-muted hover:text-axal-violet dark:text-gray-400 da
  * logged (`POST /api/admin/programs/:key/export`). Pause waits for OD-PAUSE,
  * so the menu does not offer it.
  */
-export default function ProgramFrame({ program, superAdmin = false, status = null, actions = null, actionsOnPhone = true, tabs = null, children }) {
+export default function ProgramFrame({ program, superAdmin = false, status = null, actions = null, actionsOnPhone = true, tabs = null, detail = null, meta = null, children }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const phone = usePhoneWidth();
-  const page = PAGES[program];
-  const card = programByKey(program);
+  // D4808: a program the nine do not include passes its own `meta` (title, line, facts) from the registry.
+  const page = meta || PAGES[program];
+  const card = programByKey(program) || { status: null, grant: null, hqGrant: null };
   const moved = movedNotice(loc.pathname, loc.search);
-  const grantBadge = useGrantBadge(program);
+  // D4810: the page's own detail read when it passes one, so the frame never reads it again.
+  const grantBadge = useGrantBadge(program, detail);
+  useProgramsTitle(`${page.title} · Programs`);
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-24 pt-6 sm:px-6 lg:pb-10" data-testid={`programs-page-${program}`}>
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="programs-crumb">
         {phone
-          ? <Link to="/admin/programs" className={CRUMB_LINK}>{crumbText(program, true)}</Link>
+          ? <Link to="/admin/programs" className={CRUMB_LINK}>{meta ? '‹ Programs' : crumbText(program, true)}</Link>
           : <><Link to="/admin/programs" className={CRUMB_LINK}>Programs</Link>{` › ${page.title}`}</>}
       </nav>
 
@@ -49,6 +53,8 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
             <StatusPill status={status || card.status} testId="programs-header-status" />
             <GrantBadge grant={superAdmin ? card.hqGrant : card.grant} badge={grantBadge} testId="programs-header-grant" />
           </div>
+          {/* D4873 (part 4): with the page's own detail read, member access and the grant are the registry's, not the constant's. */}
+          <ProgramDimensions dims={programDimensions({ ...card, status: status || card.status, ...(detailRow(detail) ? { row: detailRow(detail) } : {}) }, { superAdmin, grantBadge })} testId="programs-header-dimensions" />
           {page.line
             ? <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400" data-testid="programs-header-line">{page.line}</p>
             : <Unread word={NOT_RECORDED} reason={page.lineReason} testId="programs-header-line" />}
@@ -81,14 +87,21 @@ export default function ProgramFrame({ program, superAdmin = false, status = nul
  * Until it answers, or if the read fails, the held mode's constant stands:
  * a failed page read is not a grant state.
  */
-function useGrantBadge(program) {
+/** D4873: the registry row a page's detail read answered, with its grant beside it; null while it reads or failed. */
+const detailRow = (detail) => (detail?.read?.status === 'ready' && detail.read.data?.program
+  ? { ...detail.read.data.program, grant: detail.read.data.grant } : null);
+
+function useGrantBadge(program, detail = null) {
   const [badge, setBadge] = useState(null);
+  const shared = Boolean(detail);
   useEffect(() => {
+    if (shared) return undefined;
     let live = true;
     setBadge(null);
     programsApi.program(program).then((d) => { if (live) setBadge(grantBadgeOf(d?.grant)); }, () => {});
     return () => { live = false; };
-  }, [program]);
+  }, [program, shared]);
+  if (shared) return detail.read?.status === 'ready' ? grantBadgeOf(detail.read.data?.grant) : null;
   return badge;
 }
 

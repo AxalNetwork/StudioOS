@@ -32,6 +32,8 @@ export const FILL_PAGES = Object.freeze({
   'validate/market-intelligence': 'Founder · Validate · Market intelligence',
   'grow/product-improvement': 'Founder · Grow · Product improvement',
   'grow/durable-company-building': 'Founder · Grow · Durable company building',
+  // #4046 (S1, 2026-11-04): the channel's name.
+  'grow/distribution': 'Founder · Grow · Distribution',
 });
 
 /**
@@ -53,13 +55,16 @@ export const EDIT_FILL_FORMS = Object.freeze({
   // #4046 (Group A1). Feedback's Edit picks a theme from chips, so only Log feedback offers one.
   'edit-competitor': 'competitor',
   'edit-obligation': 'obligation',
+  // #4046: a channel's Edit reads its row by uid.
+  'edit-channel': 'channel',
 });
 
 /**
  * #4046: the tables whose rows a form names by a text key (`ROW_KEYS` in the
- * Worker's routes/fills.ts): a competitor by its candidate id, feedback by its uid.
+ * Worker's routes/fills.ts): a competitor by its candidate id, feedback and a
+ * channel by its uid.
  */
-export const KEYED_FILL_TABLES = Object.freeze(['competitor_tracking', 'product_feedback']);
+export const KEYED_FILL_TABLES = Object.freeze(['competitor_tracking', 'product_feedback', 'growth_channels']);
 const TEXT_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/;
 
 /**

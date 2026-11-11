@@ -78,8 +78,22 @@ export async function completeAssessmentLessons(
   if (!lessons.length) return { lessons: 0, courses: [] };
   await env.DB.batch(lessons.map((l) => env.DB.prepare(PROGRESS_UPSERT)
     .bind(userId, 'lesson', l.lesson_uid, 'completed', null, at, at, at)));
+  const courses = await refreshCourses(env, userId, lessons.map((l) => Number(l.course_id)), at);
+  return { lessons: lessons.length, courses };
+}
+
+/**
+ * D4643 (#4643): a course's own progress row, derived on the server and only
+ * here: completed required lessons over required lessons (`COURSE_MEASURE`),
+ * `completed` at 100, else `started`, no percent with no required lesson. An
+ * optional lesson never moves it. Never downgraded (`PROGRESS_UPSERT`).
+ * Called after any lesson completes, by a passing attempt, an accepted
+ * exercise or the member's own "Mark complete" on a reading or video lesson,
+ * and in place of whatever a member posts for a course.
+ */
+export async function refreshCourses(env: Env, userId: number, courseIds: number[], at = new Date().toISOString()): Promise<CompletionResult['courses']> {
   const courses: CompletionResult['courses'] = [];
-  for (const courseId of [...new Set(lessons.map((l) => Number(l.course_id)))]) {
+  for (const courseId of [...new Set(courseIds)]) {
     const m = await env.DB.prepare(COURSE_MEASURE).bind(userId, courseId)
       .first<{ course_uid: string; required_count: number; completed_count: number }>();
     if (!m) continue;
@@ -89,5 +103,8 @@ export async function completeAssessmentLessons(
       .bind(userId, 'course', m.course_uid, status, percent, at, status === 'completed' ? at : null, at).run();
     courses.push({ uid: m.course_uid, percent, status });
   }
-  return { lessons: lessons.length, courses };
+  return courses;
 }
+
+/** Lesson kinds that complete by their result (an accepted exercise, a passing exam), never by the member's own "Mark complete". */
+export const ASSESSED_LESSON_KINDS: readonly string[] = Object.freeze(['exercise', 'exam']);

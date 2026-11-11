@@ -11,7 +11,7 @@
  * investor is never named and no amount of theirs is drawn: the round is a
  * count of investors and a total.
  */
-import { dealMoney } from '../../components/deals/dealMoney';
+import { dealMoney, roundAsk } from '../../components/deals/dealMoney';
 import { NOT_RECORDED } from '../../lib/absence';
 
 export { NOT_RECORDED };
@@ -187,7 +187,7 @@ export function proposedTerms(deal) {
   const pct = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : `${Number(v)}%`);
   const rows = [
     ['Instrument', deal?.instrument || null],
-    ['Round size', dealMoney(deal?.target_raise ?? deal?.amount, cur)],
+    ['Round size', dealMoney(roundAsk(deal), cur)],
     ['Valuation cap', dealMoney(deal?.valuation_cap, cur)],
     ['Minimum', dealMoney(deal?.minimum_check, cur)],
     ['Carry', pct(deal?.carry_pct)],
@@ -223,16 +223,33 @@ export const ROUTE_NOTE = 'The studio sets the route in the closing room. No pre
 
 const STATUS_WORD = { pending: 'Pending', confirmed: 'Confirmed', withdrawn: 'Withdrawn' };
 
-/** Your commitment: the live one, if any; withdrawn ones are history. */
-export function myCommitment(read, currency = 'USD') {
+/** D4633: whom a commitment is held for, said outright. */
+export function firmLine(row) {
+  if (!row) return null;
+  if (row.company_id == null) return 'Held in your own name.';
+  return `Held for ${row.company_name || 'your firm'}.`;
+}
+
+/**
+ * Your commitment: the live one, if any; withdrawn ones are history.
+ * D4633: `read.dealId` is the deal the read was for. A read for another deal
+ * (an answer that arrived after the page moved on) reads as loading, never as
+ * this deal's commitment. The live row is the one in the firm context the
+ * Worker read under (`in_context`). D5355 retired the pre-firm compatibility
+ * branch after a production count found no such rows.
+ */
+export function myCommitment(read, currency = 'USD', dealId = undefined) {
   if (!read || read.status === 'loading') return { state: 'loading' };
+  if (dealId !== undefined && read.dealId !== undefined && String(read.dealId) !== String(dealId)) return { state: 'loading' };
   if (read.status === 'unreadable') return { state: 'unreadable' };
-  const rows = Array.isArray(read.items) ? read.items : [];
-  const live = rows.find((r) => r.status === 'pending' || r.status === 'confirmed');
-  const history = rows.filter((r) => r !== live).map((r) => ({ uid: r.uid, line: `${dealMoney(r.amount, currency) || NOT_RECORDED} · ${STATUS_WORD[r.status] || r.status} · recorded ${dayOf(r.created_at) || 'on a date not recorded'}` }));
+  const rows = (Array.isArray(read.items) ? read.items : []).filter((r) => dealId === undefined || r.deal_id == null || String(r.deal_id) === String(dealId));
+  const liveOf = (r) => r.status === 'pending' || r.status === 'confirmed';
+  const live = rows.find((r) => liveOf(r) && r.in_context !== false);
+  const history = rows.filter((r) => r !== live && !liveOf(r)).map((r) => ({ uid: r.uid, line: `${dealMoney(r.amount, currency) || NOT_RECORDED} · ${STATUS_WORD[r.status] || r.status} · recorded ${dayOf(r.created_at) || 'on a date not recorded'}` }));
   if (!live) return { state: 'none', history };
   return {
     state: 'ready',
+    firm: firmLine(live),
     uid: live.uid,
     amount: dealMoney(live.amount, currency) || NOT_RECORDED,
     status: STATUS_WORD[live.status],
@@ -255,7 +272,7 @@ export function roundLines(read, deal) {
   const r = read.data || {};
   const cur = r.currency || deal?.currency || 'USD';
   const n = Number(r.investors);
-  const target = Number(deal?.target_raise ?? deal?.amount);
+  const target = roundAsk(deal) ?? NaN;
   const confirmed = Number(r.confirmed_total);
   return {
     state: 'ready',

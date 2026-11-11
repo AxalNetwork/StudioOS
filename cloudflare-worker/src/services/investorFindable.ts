@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * D702 — "Let investors find my venture" (`projects.investor_findable`,
  * migration 467): who an investor may find, in one place.
@@ -25,7 +26,7 @@ import { investorProjectIds } from '../routes/_investorProjectScope';
 import { hasActivePairwiseNda } from './trust';
 
 function isInvestorUser(user: Pick<User, 'role'> | null | undefined): boolean {
-  return String(user?.role || '').toLowerCase() === 'investor';
+  return !!user && user.role !== 'admin' && holdsLicence(user, 'investor');
 }
 
 /** A database that never ran migration 467 has no column, so nobody chose. */
@@ -46,13 +47,13 @@ export async function hiddenFromInvestor(
   const ids = [...new Set(projectIds.map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0))];
   if (ids.length === 0) return hidden;
 
-  let candidates: Array<{ id: number; founder_user_id: number | null }> = [];
+  let candidates: Array<{ id: number; founder_id: number | null; founder_user_id: number | null }> = [];
   try {
     const rows = await env.DB.prepare(
-      `SELECT p.id, (SELECT MIN(u.id) FROM users u WHERE u.founder_id = p.founder_id) AS founder_user_id
+      `SELECT p.id, p.founder_id, (SELECT MIN(u.id) FROM users u WHERE u.founder_id = p.founder_id) AS founder_user_id
          FROM projects p
         WHERE p.id IN (SELECT value FROM json_each(?)) AND p.investor_findable = 0`,
-    ).bind(JSON.stringify(ids)).all<{ id: number; founder_user_id: number | null }>();
+    ).bind(JSON.stringify(ids)).all<{ id: number; founder_id: number | null; founder_user_id: number | null }>();
     candidates = rows.results || [];
   } catch (e) {
     if (isMissingColumn(e)) return hidden;
@@ -64,6 +65,9 @@ export async function hiddenFromInvestor(
   for (const p of candidates) {
     const id = Number(p.id);
     if (related.has(id)) continue;
+    // A second investor licence cannot hide an independently authorized venture.
+    const { canAccessProject } = await import('./projectAccess');
+    if (await canAccessProject(env, user as User, p)) continue;
     if (p.founder_user_id != null && await hasActivePairwiseNda(env, Number(p.founder_user_id), Number(user.id))) continue;
     hidden.add(id);
   }

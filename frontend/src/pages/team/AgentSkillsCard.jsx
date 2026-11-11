@@ -3,6 +3,7 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, HonestBlock, MUTED } from './teamUi.jsx';
 import { AgentRadar, RunCostLine, SkillRow } from './SkillParts.jsx';
 import { AddSkillsSheet } from './SkillSheets.jsx';
+import SkillsLink from './SkillsLink.jsx';
 import { radarVector, scopeChip, updateLabel } from './skillsModel.js';
 
 /**
@@ -15,6 +16,9 @@ import { radarVector, scopeChip, updateLabel } from './skillsModel.js';
  * a retired Axal skill keeps working at its pin and says so. Values are the
  * dimensions the company set, labelled "Set by [Company]", never a score.
  * Changes write the whole list through `agents.setAgentSkills`.
+ *
+ * #4363: the header links to the Skills tab of the agent's scope
+ * (`skillsScope`, a Team scope), where every skill it could have lives.
  */
 
 export function ValuesCard({ values }) {
@@ -89,7 +93,7 @@ export function AgentSkillsView({ value, agent, canManage, onAdd, onUpdate, onRe
   );
 }
 
-export default function AgentSkillsCard({ agent, canManage }) {
+export default function AgentSkillsCard({ agent, canManage, skillsScope = null }) {
   const [block, setBlock] = useState(null);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -119,7 +123,10 @@ export default function AgentSkillsCard({ agent, canManage }) {
   }, [agent.uid, pinKey, !!value]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <section className="flex flex-col gap-2 rounded-axal-lg border border-axal-hairline bg-white px-4 py-3.5 dark:border-gray-700 dark:bg-gray-900" data-testid="agent-skills-card">
-      <h3 className="m-0 text-[14px] font-bold text-axal-ink dark:text-gray-100">Skills and values</h3>
+      <header className="flex items-center gap-2">
+        <h3 className="m-0 flex-1 text-[14px] font-bold text-axal-ink dark:text-gray-100">Skills and values</h3>
+        <SkillsLink scope={skillsScope} testId="agent-skills-library" />
+      </header>
       {!block ? <p className={`m-0 ${MUTED}`}>Reading…</p>
         : !block.available ? (block.unreadable
           ? <div role="alert" className="flex items-center gap-2 text-[13px] font-semibold text-axal-destructive dark:text-red-300">Skills could not be read.<button type="button" className={BTN_TEXT} onClick={load}>Try again</button></div>

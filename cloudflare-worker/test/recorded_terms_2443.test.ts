@@ -6,6 +6,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import deals from '../src/routes/deals.ts';
+import dealWorkroom from '../src/routes/deal_workroom.ts';
 import networkfx from '../src/routes/networkfx.ts';
 import legalcap from '../src/routes/legalcap.ts';
 import capital from '../src/routes/capital.ts';
@@ -38,12 +39,15 @@ function fixture() {
       .run(id,role,`synthetic${id}@example.invalid`,'Synthetic member',id === 3 ? 30 : null,'approved');
   }
   db.exec("INSERT INTO projects(id,name,founder_id) VALUES(1,'Synthetic venture',30),(2,'Other venture',30)");
+  // The deal workroom reads `currency`, which a migration adds after the baseline.
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('deals') WHERE name='currency'").get()) db.exec("ALTER TABLE deals ADD COLUMN currency TEXT");
   db.exec("INSERT INTO deals(id,project_id,status,minimum_check,capital_committed) VALUES(1,1,'active',100,9999)");
   db.exec("INSERT INTO user_company_links(uid,user_id,company_id) VALUES('synthetic-1',1,10),('synthetic-2',2,20)");
   db.exec('INSERT INTO deal_invitations(deal_id,investor_user_id,company_id) VALUES(1,1,10),(1,2,20)');
   const env: any = { DB:d1Over(db), JWT_SECRET:secret, ENVIRONMENT:'development' };
   const app = new Hono<any>();
-  app.route('/api/deals',deals).route('/api/networkfx',networkfx).route('/api/legalcap',legalcap)
+  // As index.ts mounts them: the workroom's literal paths before the deal routes.
+  app.route('/api/deals',dealWorkroom).route('/api/deals',deals).route('/api/networkfx',networkfx).route('/api/legalcap',legalcap)
     .route('/api/capital',capital).route('/api/contacts',contacts).route('/api/decks',deckActions);
   app.onError((err,c) => c.json({error:err.message},500));
   return { db, env, app };
@@ -66,8 +70,11 @@ test('pending repeats update one firm-scoped row, count only confirmed, audit an
     const read = await call(f,4,'/api/deals/1',undefined,'GET');
     assert.equal(read.status,200,JSON.stringify(read.body));assert.equal(read.body.capital_committed,300);
     r=await call(f,1,'/api/deals/1/commitments',{amount:400});assert.equal(r.status,409);
-    assert.equal((await call(f,2,`/api/deals/1/commitments/${uid}/withdraw`,{})).status,404);
-    assert.equal((await call(f,1,`/api/deals/1/commitments/${uid}/withdraw`,{})).status,200);
+    // D4632: the old door is retired and changes nothing; the withdrawal records its reason.
+    assert.equal((await call(f,1,`/api/deals/1/commitments/${uid}/withdraw`,{})).status,410);
+    assert.equal(f.db.prepare('SELECT status FROM commitments').get()?.status,'confirmed');
+    assert.equal((await call(f,2,`/api/deals/1/commitments/${uid}/withdrawal`,{reason:'Not mine'})).status,404);
+    assert.equal((await call(f,1,`/api/deals/1/commitments/${uid}/withdrawal`,{reason:'Allocation closed.'})).status,200);
     assert.equal(f.db.prepare('SELECT status FROM commitments').get()?.status,'withdrawn');
     assert.equal(f.db.prepare('SELECT capital_committed FROM deals').get()?.capital_committed,0);
     assert.equal(f.db.prepare("SELECT COUNT(*) n FROM activity_logs WHERE action='deal_commitment_withdrawn' AND user_id=1").get()?.n,1);
@@ -105,7 +112,7 @@ test('legal generation names absent terms and writes no document or money',async
 });
 test('spin-out refuses missing paper terms before any automatic side effects',async()=>{
   const f=fixture();try {
-    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,force:true});assert.equal(r.status,400,JSON.stringify(r.body));
+    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,override:{kind:'no_passed_gate',reason:'Synthetic test: no gate recorded'}});assert.equal(r.status,400,JSON.stringify(r.body));
     for(const table of ['subsidiaries','legal_documents','capital_calls']) assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get()?.n,0);
   }finally{f.db.close();}
 });
@@ -174,7 +181,7 @@ test('a valid spin-out creates only supplied papers and never attempts a capital
     f.db.exec("INSERT INTO syndicates(id,deal_id,name,status,created_by) VALUES(1,1,'Synthetic','open',2)");
     const base=f.env.DB;let calls=0;
     f.env.DB={...base,prepare(sql:string){if(/INSERT\s+INTO\s+capital_calls/i.test(sql))calls++;return base.prepare(sql);}};
-    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,force:true,variables});
+    const r=await call(f,4,'/api/legalcap/subsidiary/spinout',{deal_id:1,override:{kind:'no_passed_gate',reason:'Synthetic test: no gate recorded'},variables});
     assert.equal(r.status,201,JSON.stringify(r.body));assert.equal(calls,0);assert.equal(r.body.capital_call,null);
     const papers=f.db.prepare('SELECT content FROM legal_documents').all();assert.equal(papers.length,3);
     for(const paper of papers){const content=JSON.parse(String(paper.content));assert.equal(content.vars.amount,'123');assert.equal(content.vars.holding_equity_pct,'10');}

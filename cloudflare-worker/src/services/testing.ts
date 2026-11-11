@@ -23,6 +23,7 @@
  * rule, and `mail_link_testing_d812.test.ts` holds the three to the same
  * people. Nothing here emails anyone.
  */
+import { heldLicences } from './accountLicences';
 import type { Env } from '../types';
 import { notify } from './notify';
 import { newUid, nowIso } from '../routes/_t13t14t15_helpers';
@@ -32,6 +33,12 @@ import { requireActiveTester, testerStatusOf } from './testerPool';
 export type Owner = { kind: 'hq' } | { kind: 'partner'; partnerId: number };
 
 export const ROLES = ['founder', 'partner', 'investor', 'exploring', 'advisor'] as const;
+/** Primary Admin remains excluded from the tester pool; other members use their held union. */
+async function eligibleRoles(env: Env, user: { id: number; role: string; licences?: readonly string[] }): Promise<string[]> {
+  if (user.role === 'admin') return ['admin'];
+  return [...new Set([String(user.role), ...(user.licences || await heldLicences(env.DB, user))])];
+}
+
 export const MAX_QUESTIONS = 5;
 export const PROGRAMME_STATUSES = ['draft', 'submitted', 'approved', 'open', 'testing', 'closed', 'rejected'] as const;
 
@@ -227,10 +234,10 @@ export async function memberProgrammes(env: Env, user: { id: number; role: strin
             (SELECT a.status FROM testing_applications a WHERE a.programme_id = p.id AND a.user_id = ?) AS my_status
        FROM testing_programmes p LEFT JOIN partners pt ON pt.id = p.owner_partner_id
       WHERE p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
       ORDER BY p.closes_at IS NULL, p.closes_at, p.id`,
-  ).bind(user.id, now, now, String(user.role)).all();
+  ).bind(user.id, now, now, JSON.stringify(await eligibleRoles(env, user))).all();
   return (results || []).map((r: any) => ({ ...programmeDto(r), my_status: r.my_status ?? null }));
 }
 
@@ -340,9 +347,9 @@ export async function summary(env: Env, user: { id: number; role: string }) {
   const open = !active ? { n: 0 } : await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM testing_programmes p
       WHERE p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places`,
-  ).bind(now, now, String(user.role)).first<{ n: number }>();
+  ).bind(now, now, JSON.stringify(await eligibleRoles(env, user))).first<{ n: number }>();
   const { results } = await env.DB.prepare(
     `${SELECT_APPLICATION} WHERE a.user_id = ? AND a.status = 'picked' ORDER BY p.testing_starts IS NULL, p.testing_starts, a.id`,
   ).bind(user.id).all();
@@ -738,18 +745,27 @@ export async function createProgramme(env: Env, owner: Owner, actor: number, bod
 export async function editProgramme(env: Env, owner: Owner, actor: number, uid: string, body: any) {
   const p = await ownProgramme(env, owner, uid);
   const input = programmeInput(body, true);
-  const keys = Object.keys(input);
+  const keys = COLUMNS.filter((key) => Object.hasOwn(input, key));
   if (keys.length === 0) throw refuse(400, 'invalid_request', 'Nothing to change.');
+  merged(p, input); // Validate the resulting date ranges before the write.
+  const datePairs = [['opens_at', 'closes_at'], ['testing_starts', 'testing_ends']] as const;
+  const checkedDates = datePairs.filter((pair) => pair.some((key) => Object.hasOwn(input, key))).flat();
+  const dateGuard = checkedDates.map((key) => ` AND ${key} IS ?`).join('');
   const ok = await changed(env, [
     env.DB.prepare(
-      `UPDATE testing_programmes SET product_name = ?, logo_key = ?, summary = ?, tester_tasks = ?, time_needed = ?,
-         opens_at = ?, closes_at = ?, testing_starts = ?, testing_ends = ?, places = ?, eligible_roles = ?, questions = ?,
+      `UPDATE testing_programmes SET ${keys.map((key) => `${key} = ?`).join(', ')},
          status = 'draft', updated_at = datetime('now')
-       WHERE id = ? AND status IN ('draft', 'rejected')`,
-    ).bind(...merged(p, input), p.id),
+       WHERE id = ? AND status IN ('draft', 'rejected')${dateGuard}`,
+    ).bind(...keys.map((key) => input[key]), p.id, ...checkedDates.map((key) => p[key] ?? null)),
     eventAfter(env, p.id, null, actor, 'edited', { fields: keys }),
   ]);
-  if (!ok) throw refuse(409, 'not_editable', 'Only a draft can be edited.');
+  if (!ok) {
+    const latest = await ownProgramme(env, owner, uid);
+    if (['draft', 'rejected'].includes(latest.status)) {
+      throw refuse(409, 'dates_changed', 'The programme dates changed. Reload and try again.');
+    }
+    throw refuse(409, 'not_editable', 'Only a draft can be edited.');
+  }
   return programmeDto(await ownProgramme(env, owner, uid));
 }
 
@@ -862,10 +878,10 @@ export async function mayApplyTo(env: Env, user: { id: number; role: string }, p
   const r = await env.DB.prepare(
     `SELECT 1 AS ok FROM testing_programmes p
       WHERE p.id = ? AND p.status = 'open' AND (p.closes_at IS NULL OR p.closes_at > ?) AND (p.opens_at IS NULL OR p.opens_at <= ?)
-        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value = ?)
+        AND EXISTS (SELECT 1 FROM json_each(p.eligible_roles) r WHERE r.value IN (SELECT value FROM json_each(?)))
         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
         AND NOT EXISTS (SELECT 1 FROM testing_applications a WHERE a.programme_id = p.id AND a.user_id = ?)`,
-  ).bind(programmeId, now, now, String(user.role), user.id).first();
+  ).bind(programmeId, now, now, JSON.stringify(await eligibleRoles(env, user)), user.id).first();
   return !!r;
 }
 
@@ -876,7 +892,7 @@ export async function apply(env: Env, user: { id: number; role: string }, uid: s
   const now = nowIso();
   const accepting = p.status === 'open' && (!p.closes_at || p.closes_at > now) && (!p.opens_at || p.opens_at <= now);
   if (!accepting) throw refuse(409, 'not_open', 'This programme is not taking applications.');
-  if (!parse<string[]>(p.eligible_roles, []).includes(String(user.role))) {
+  if (!(await eligibleRoles(env, user)).some(role => parse<string[]>(p.eligible_roles, []).includes(role))) {
     throw refuse(403, 'not_eligible', 'This programme is not open to your role.');
   }
   if (Number(p.picked_count) >= Number(p.places)) throw refuse(409, 'programme_full', 'Every place on this programme is taken.');
@@ -892,11 +908,23 @@ export async function apply(env: Env, user: { id: number; role: string }, uid: s
   const ok = await changed(env, [
     env.DB.prepare(
       `INSERT OR IGNORE INTO testing_applications (uid, programme_id, user_id, answers, availability, consent_email_at, consent_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(appUid, p.id, user.id, JSON.stringify(answers), availability, consent ? now : null, consent ? CONSENT_VERSION : null),
+       SELECT ?, p.id, ?, ?, ?, ?, ? FROM testing_programmes p
+       WHERE p.id = ? AND p.status = 'open'
+         AND (p.opens_at IS NULL OR julianday(p.opens_at) <= julianday('now'))
+         AND (p.closes_at IS NULL OR julianday(p.closes_at) > julianday('now'))
+         AND p.eligible_roles IS ? AND p.questions IS ?
+         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
+         AND EXISTS (SELECT 1 FROM product_testers WHERE user_id = ? AND status = 'active')`,
+    ).bind(appUid, user.id, JSON.stringify(answers), availability, consent ? now : null, consent ? CONSENT_VERSION : null,
+      p.id, p.eligible_roles, p.questions, user.id),
     eventAfter(env, p.id, appUid, user.id, 'applied', { consent_email: consent }),
   ]);
-  if (!ok) throw refuse(409, 'already_applied', 'You have already applied to this programme.');
+  if (!ok) {
+    const prior = await env.DB.prepare('SELECT id FROM testing_applications WHERE programme_id = ? AND user_id = ?')
+      .bind(p.id, user.id).first();
+    if (prior) throw refuse(409, 'already_applied', 'You have already applied to this programme.');
+    throw refuse(409, 'programme_changed', 'The programme or your eligibility changed. Reload and try again.');
+  }
   await tell(env, user.id, 'testing_applied', `You applied to test ${p.product_name}`,
     `${p.owner_name || 'The team'} will let you know if you are picked.`, { programme_uid: uid, application_uid: appUid });
   return (await myApplications(env, user.id)).find((a) => a.uid === appUid);

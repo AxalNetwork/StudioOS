@@ -434,7 +434,7 @@ test('the routes, the redirects, the row, the rail and the reads the page must n
   }
   assert.ok(app.includes(`<Route path="/admin/programs/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />`));
   assert.ok(app.includes('<Route path="/admin/spinout-lab" element={<LabRedirect />} />'));
-  assert.ok(app.includes('<Route path="/admin/spinout-lab/preview" element={<LabPreviewRedirect />} />'));
+  assert.equal(app.includes('<Route path="/admin/spinout-lab/preview" element={<LabPreviewRedirect />} />'), false);
   assert.doesNotMatch(app, /<AdminSpinoutLab standalone/, 'the old console is mounted at an address again');
   // #2375: /admin/spinout-lab is kept for good; sent cohort notices carry it.
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/spinout-lab', keep: true \}/);

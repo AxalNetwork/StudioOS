@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #1 (AG) — Founder Risk surface.
  *
@@ -26,13 +27,13 @@ type Pull = {
   created_at: string;
 };
 
-function isPrivileged(role: User['role']): boolean {
+function isPrivileged(user: User): boolean {
   // Investor removed from the read-allowlist per the IDOR contract (matches
   // progress.ts / financials.ts — audit M2). Founder-risk pulls are raw,
   // un-masked signals about a founder; an investor reading them across
   // founders would be a cross-founder IDOR. NDA-gated investor access would be
   // a future masked feature, not a blanket read.
-  return role === 'admin' || role === 'partner';
+  return user.role === 'admin' || holdsLicence(user, 'partner');
 }
 
 async function loadFounderId(env: Env, founderId: number): Promise<{ id: number } | null> {
@@ -75,8 +76,8 @@ function serialize(p: Pull | null, founderId: number): SerializedPull {
 }
 
 function ensureCanRead(user: User, founderId: number): boolean {
-  if (isPrivileged(user.role)) return true;
-  if (user.role === 'founder') {
+  if (isPrivileged(user)) return true;
+  if (holdsLicence(user, 'founder')) {
     return canAccessFounderResource(user, founderId);
   }
   return false;

@@ -16,7 +16,7 @@ import { TILE } from './studioLayoutModel';
 
 const HOLD_MS = 500;
 
-export default function StudioModuleGrid({ items, titleOf, hrefOf, tiles, editing = false, edit, withheld = false, extra = [] }) {
+export default function StudioModuleGrid({ items, moduleOf, tiles, editing = false, edit, withheld = false, extra = [] }) {
   const [dragKey, setDragKey] = useState(null);
   const [over, setOver] = useState(null);
   const [lifted, setLifted] = useState(null);
@@ -26,9 +26,9 @@ export default function StudioModuleGrid({ items, titleOf, hrefOf, tiles, editin
   const count = items.length;
   const indexOf = (key) => items.findIndex((e) => e.key === key);
 
-  const say = (key, at) => setSaid(`${titleOf(key)}, position ${at + 1} of ${count}.`);
+  const say = (key, at) => setSaid(`${moduleOf(key).title}, position ${at + 1} of ${count}.`);
   const lift = (key) => { setLifted(key); setOrigin(indexOf(key)); say(key, indexOf(key)); };
-  const drop = () => { if (lifted) setSaid(`${titleOf(lifted)} dropped.`); setLifted(null); setOrigin(null); };
+  const drop = () => { if (lifted) setSaid(`${moduleOf(lifted).title} dropped.`); setLifted(null); setOrigin(null); };
 
   const onHandleKey = (key) => (e) => {
     if (e.key === ' ' || e.key === 'Enter') {
@@ -64,7 +64,7 @@ export default function StudioModuleGrid({ items, titleOf, hrefOf, tiles, editin
     <>
       <div className="sm-grid" data-testid="studio-module-grid" data-editing={editing ? 'true' : undefined}>
         {items.map((entry, i) => {
-          const mod = { key: entry.key, title: titleOf(entry.key), href: hrefOf(entry.key) };
+          const mod = moduleOf(entry.key);
           const spec = withheld ? { state: TILE.WITHHELD } : (tiles[entry.key] || { state: TILE.LOADING });
           const tileProps = editing ? {
             onDragOver: (e) => { if (!dragKey) return; e.preventDefault(); setOver(i); },

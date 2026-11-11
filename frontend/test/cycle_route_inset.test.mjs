@@ -15,7 +15,7 @@ import { CYCLE_GUTTER } from '../src/pages/cycles/cyclePaths.js';
 
 test('the cycle route body carries the canvas gutter, not WorkspaceShell\'s p-5', () => {
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
-  const body = /<div className=\{CYCLE_GUTTER\} data-testid="cycle-route-body">/.exec(route);
+  const body = /<div className=\{distribution \? 'min-w-0' : CYCLE_GUTTER\} data-testid="cycle-route-body">/.exec(route);
   assert.ok(body, 'the cycle route body is found');
   const classes = CYCLE_GUTTER.split(/\s+/);
   for (const c of ['px-[22px]', 'pt-[14px]', 'pb-[18px]', 'lg:px-6', 'lg:pt-[22px]', 'lg:pb-[30px]']) {

@@ -44,7 +44,26 @@ export const TEMPLATE_METHOD = 'tpl:';
 export type TemplateMeta = {
   uid: string; name: string; description: string | null; stage: Stage | null; audience_tags: string[]; deck_audience: string | null;
   style: string | null; swatch: string | null; card_count: number;
+  /** #3876: what the Gallery's cover draws beyond the swatch, from the template's theme; null when it has none. */
+  cover: TemplateCover | null;
 };
+export type TemplateCover = { accent: string | null; accent_ink: string | null; display_font: string | null };
+
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+const FAMILY = /^[A-Za-z][A-Za-z0-9 ]{0,39}$/;
+/**
+ * #3876: a cover's accent, its ink and the display face, read from a theme
+ * (`theme_json`). Each is kept only when it is a #RRGGBB hex or a plain family
+ * name, so nothing else reaches a style; a theme that names none is null.
+ */
+export function coverOf(theme: any): TemplateCover | null {
+  const colours = theme && typeof theme === 'object' ? theme.colours : null;
+  const fonts = theme && typeof theme === 'object' ? theme.fonts : null;
+  const accent = typeof colours?.accent === 'string' && HEX.test(colours.accent) ? colours.accent : null;
+  const accent_ink = typeof colours?.accent_ink === 'string' && HEX.test(colours.accent_ink) ? colours.accent_ink : null;
+  const display_font = typeof fonts?.display === 'string' && FAMILY.test(fonts.display) ? fonts.display : null;
+  return accent || accent_ink || display_font ? { accent, accent_ink, display_font } : null;
+}
 
 const PLACEHOLDER = /^\[[A-Z][^\[\]]{0,39}\]$/;
 const isStr = (v: unknown): v is string => typeof v === 'string';
@@ -113,6 +132,7 @@ export function metaOf(t: any): TemplateMeta {
   return {
     uid: t.uid, name: t.name, description: t.description ?? null, stage: t.stage ?? null, audience_tags: Array.isArray(t.audience_tags) ? t.audience_tags : [],
     deck_audience: t.deck_audience ?? null, style: t.style ?? null, swatch: t.swatch ?? null, card_count: Number(t.card_count) || 0,
+    cover: coverOf(t.theme),
   };
 }
 

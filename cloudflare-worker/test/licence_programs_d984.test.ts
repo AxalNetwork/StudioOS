@@ -158,6 +158,7 @@ test('on HQ, the Administrator reads the nine programs in order, each in its own
     perks: 'switched_off',
     learning: 'granted',
     'product-testing': 'hq_only',
+    influencer: 'hq_only',
   });
   assert.equal(p['refer-and-earn'].word, 'Not recorded', 'another licence\'s grant is not this one\'s, and no row is never "Not granted"');
   assert.equal(p['refer-and-earn'].grant, null);

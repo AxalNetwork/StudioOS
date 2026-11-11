@@ -96,12 +96,16 @@ test('D290: the response echoes the reason the audit row holds — the same byte
   assert.ok(r.body.impersonation_session_id > 0);
 });
 
-test('D290: when the audit write fails the session is still granted and the reason is null, not the typed text', async () => {
+// D4669 — REVERSED. D290 granted the session when its record could not be
+// written, reporting the reason as null. A support token now names its record
+// and is ended by ending it, so a token with no record would be one nobody
+// could end: the session is not opened, and no token or reason goes out.
+test('D4669: when the session record cannot be written the session is not opened — no token, no reason', async () => {
   const db = freshDb();
   const r = await open(db, (sql) => /INSERT INTO impersonation_sessions/i.test(sql));
-  assert.equal(r.status, 200, `a failed audit write turned a granted session into ${r.status}`);
-  assert.equal(typeof r.body.token, 'string', 'no token was minted');
-  assert.equal(r.body.impersonation_session_id, null, 'a session id was reported for a row that was not written');
-  assert.equal(r.body.reason, null, 'the response echoes a reason no audit row holds');
+  assert.equal(r.status, 503, `a session with no record was answered ${r.status}`);
+  assert.equal(r.body.code, 'support_session_unrecorded');
+  assert.equal(r.body.token, undefined, 'a token was minted for a session with no record');
+  assert.equal(r.body.reason, undefined, 'the response echoes a reason no record holds');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM impersonation_sessions').get() as any).n, 0);
 });

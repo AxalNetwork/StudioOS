@@ -21,7 +21,7 @@ import { askableRows, quoteLine, savedChannels, syndicationCard } from '../src/p
 const h = React.createElement;
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 
-const LUMA = { uid: 's-1', channel: 'luma', account_uid: 'acc-luma', display_name: 'Luma · Axal', on: true, status: 'selected', overrides: { description: 'Kept description', ticket_url: 'https://axal.vc/t' } };
+const LUMA = { uid: 's-1', channel: 'luma', account_uid: 'acc-luma', display_name: 'Luma · Axal', adapter_ready: true, on: true, status: 'selected', overrides: { description: 'Kept description', ticket_url: 'https://axal.vc/t' } };
 const READ = {
   eligible: true, reason: null,
   rows: [
@@ -175,6 +175,6 @@ test('no suggestion chips; the client paths; the editor mounts it under Visibili
   assert.match(client, /assist: .*\n\s+method: 'POST', timeoutMs: 60_000/);
   const editor = read('pages/events/EventEditorPage.jsx');
   const note = editor.indexOf('{syndicateNote(form.visibility)}');
-  const ask = editor.indexOf("{isEdit && form.visibility === 'public' && <SyndicationAsk eventId={id} />}");
+  const ask = editor.indexOf("<SyndicationAsk eventId={id} onSaved=");
   assert.ok(note > 0 && ask > note, 'under the Visibility note');
 });

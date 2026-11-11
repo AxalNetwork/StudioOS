@@ -2,7 +2,7 @@
  * D1419 (#3698) — the module half of every Studio home, below its fixed
  * blocks (Eadwyn's chat, the founder strip, the profile card): the notices,
  * "Your modules", the grid or SM8d's empty box, and in Customise the edit
- * bar, the module map, the locked sheet and the reset confirm.
+ * bar, the Artifact map, the locked sheet and the reset confirm.
  *
  * The home owns the reads and hands in one spec per module (`tiles/*`); this
  * file owns the layout. `extra` are tiles drawn after the placed ones that
@@ -12,19 +12,19 @@
 import { Plus } from 'lucide-react';
 import ModuleMapLightbox from './ModuleMapLightbox';
 import StudioModuleGrid from './StudioModuleGrid';
-import { ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
+import { LeaveDialog, ModuleLockedSheet, ResetDialog, SavedLine, StudioEditBar, StudioLayoutNotice, StudioNoProfile } from './StudioParts';
 import { placedLine } from './studioLayoutModel';
 import { fallbackTitle } from './studioFallback';
 import './studioModules.css';
 
 export const EDIT_HINT = 'Drag a module by its handle, choose a size, or remove it. Move up and Move down are in each module’s ⋯ menu.';
 export const EDIT_HINT_PHONE = 'Press and hold a module to move it, or use Move up and Move down in its ⋯ menu. On the phone every module is full width.';
-export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Module map.';
+export const EMPTY_LINE = 'Your Studio has no modules. Add modules from the Artifact map.';
 
 export default function StudioModules({ studio, tiles, extra = [], withheld = false }) {
   const byKey = new Map((studio.catalogue || []).map((m) => [m.key, m]));
-  const titleOf = (key) => byKey.get(key)?.title || fallbackTitle(key);
-  const hrefOf = (key) => byKey.get(key)?.href || null;
+  const moduleOf = (key) => byKey.get(key) || { key, title: fallbackTitle(key) };
+  const titleOf = (key) => moduleOf(key).title;
   const openMap = () => { if (!studio.editing) studio.customise(); studio.setMapOpen(true); };
 
   if (studio.noProfile) return <section className="sm-root" data-testid="studio-modules"><StudioNoProfile /></section>;
@@ -35,7 +35,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
     : studio.readOnly ? ['Default layout', `${items.length} modules`] : ['Your modules', placedLine(items)];
 
   return (
-    <section className="sm-root" data-testid="studio-modules" data-editing={studio.editing ? 'true' : undefined}>
+    <section className="sm-root" data-testid="studio-modules" data-tour="studio-modules" data-editing={studio.editing ? 'true' : undefined}>
       <StudioLayoutNotice studio={studio} titleOf={titleOf} />
       <div className="sm-head">
         <h2>{head[0]}</h2>
@@ -65,8 +65,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
           {(items.length > 0 || extra.length > 0) && (
             <StudioModuleGrid
               items={items}
-              titleOf={titleOf}
-              hrefOf={hrefOf}
+              moduleOf={moduleOf}
               tiles={tiles}
               editing={studio.editing}
               edit={studio.edit}
@@ -80,6 +79,7 @@ export default function StudioModules({ studio, tiles, extra = [], withheld = fa
       {studio.editing && <ModuleMapLightbox studio={studio} />}
       <ModuleLockedSheet studio={studio} />
       <ResetDialog studio={studio} />
+      <LeaveDialog studio={studio} />
     </section>
   );
 }

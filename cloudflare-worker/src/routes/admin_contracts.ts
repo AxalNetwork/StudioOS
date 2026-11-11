@@ -12,6 +12,7 @@ import { mintDownloadToken } from '../services/signedDownload';
 import { sendAgreementAssignedEmail } from '../services/email';
 import { fanOut } from '../services/branches';
 import { usageFromContractRows, usageRowsFor } from '../services/contractTemplateUsage';
+import { agreementFilters, loadLicenceAgreementContexts, matchesAgreementFilters, type AgreementContext } from '../services/contractAgreementSources';
 import { generatedList, generatedSpecimen, isGeneratedKey } from '../services/generatedDocuments';
 import { BUNDLED_SENT_DIRECTLY, librarySlugFor } from '../services/legalDocTypes';
 import { publishedContractTemplates, publicationFields, publishContractTemplates, preparePublishedContract, ContractPreparationError,
@@ -29,6 +30,13 @@ import { renderLegalPdf } from '../services/legalPaperRender';
 import { buildLegalDocx, docxFilename, DOCX_CONTENT_TYPE } from '../services/legalDocx';
 import { fileRowStatement, newFileUid } from '../services/legalDocumentFiles';
 import { refuse } from '../util/refusal';
+import { logAdminAction } from '../services/adminAudit';
+import { checksOf, recordOf, sendRefusal } from '../services/crossBorder';
+import { signedCopyOf, sniffDocument } from '../services/governance';
+import { confirmationFor } from '../services/governanceHighRisk';
+import { SEARCH_LIMIT, rank, searchAgreements, searchGovernance, searchQuery, searchTemplates, type SearchResult } from '../services/contractSearch';
+import { templateSafety, templateUseRefusal, RESTRICTED_TITLE, RESTRICTED_REASON, isRestrictedSlug } from '../services/templateSafety';
+import { contractAttention, isAttentionFilter, matchesAttention } from '../services/contractAttention';
 import {
   listTemplates as storeListTemplates,
   getTemplate as storeGetTemplate,
@@ -52,8 +60,11 @@ adminContracts.get('/published-templates', async (c) => {
   await requireAdmin(c);
   try {
     const templates = await publishedContractTemplates(c.env);
+    // D4811: each publication carries its overlays, so New envelope does not
+    // offer one the send would refuse.
     return c.json({ items: templates.map(({ body_md: _body, ...template }) => ({
       ...template, fields: publicationFields({ ...template, body_md: _body }),
+      safety: templateSafety({ slug: template.slug, is_stub: 0, body_md: _body }),
     })) });
   } catch {
     return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503);
@@ -85,6 +96,7 @@ function publicationRefusal(c: AppContext, e: unknown) {
     template_not_found: 'Template not found.',
     published_version_changed: 'This template changed since it was opened. Open it again to publish the saved version.',
     template_has_no_body: 'A stub has no body to publish.',
+    template_restricted: `${RESTRICTED_TITLE}. ${RESTRICTED_REASON} Nothing was published.`,
     not_published: 'This template has no recorded publication.',
   };
   return c.json({ error: text[e.code], code: e.code }, e.status);
@@ -92,11 +104,19 @@ function publicationRefusal(c: AppContext, e: unknown) {
 
 adminContracts.post('/published-templates/:slug/publish', async (c) => {
   const admin = await requireHqAuthoring(c);
-  let input: { version?: unknown };
+  let input: { version?: unknown; reason?: unknown; confirm?: unknown };
   try { input = await c.req.json(); } catch { input = {}; }
   if (!input || !Number.isSafeInteger(input.version)) return c.json({ error: 'Send the version to publish.', code: 'version_required' }, 400);
+  // D4811 part 13 (CT-16 "Activate template"): publishing makes a version approved for use, so it is a
+  // high-risk action: a reason, the typed word PUBLISH, then a recent step-up (after the form checks,
+  // so a mistyped word never asks for a code). The reason is kept in the publication's audit row.
+  // D4811 part 15 (CT-16, owner's answer 2026-11-09): Activate is the Super Admin's alone.
+  if (!isSuperAdmin(admin as any)) return refuse(c, 403, { code: 'super_admin_only', message: 'Only the Super Admin publishes a template. Nothing was published.' });
+  const confirmed = confirmationFor('PUBLISH', input);
+  if (!confirmed.ok) return refuse(c, confirmed.refusal.status, { code: confirmed.refusal.code, message: confirmed.refusal.message.replace('saved', 'published') });
+  await requireStepUp(c);
   try {
-    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email));
+    const published = await publishOneTemplate(c.env, c.req.param('slug'), input.version as number, admin.id, await hashEmail(admin.email), confirmed.reason);
     if (!published) return c.json({ error: 'Publication could not be recorded. Try again.', code: 'publication_failed' }, 503);
     const { body_md: _body, ...publication } = published;
     return c.json({ ok: true, publication });
@@ -115,12 +135,16 @@ adminContracts.post('/published-templates/push', async (c) => {
   let templates;
   try { templates = await publishedContractTemplates(c.env); }
   catch { return c.json({ error: 'Published templates are unreadable. Try again.', code: 'publications_unreadable' }, 503); }
+  // D4811: a restricted template's publication is not pushed; a branch then
+  // withdraws it, as it withdraws one HQ no longer lists.
+  const withheld = templates.filter(t => templateUseRefusal({ slug: t.slug, is_stub: 0, body_md: t.body_md })).map(t => t.slug);
+  templates = templates.filter(t => !withheld.includes(t.slug));
   const payload = { templates: templates.map(t => ({ slug: t.slug, title: t.title, category: t.category, version: t.version })), pushed_at: new Date().toISOString() };
   const branches = await fanOut<{ stored: number; withdrawn: number }>(c.env, 'publishTemplate', [payload]);
   return c.json({ ok: true, template_count: templates.length, answered: branches.filter(b => b.status === 'ok').length, total: branches.length,
     branches: branches.map(b => ({ code: b.code, status: b.status, ...(b.data ? { stored: b.data.stored, withdrawn: b.data.withdrawn } : {}),
       ...(b.reason ? { reason: b.reason } : {}), ...(b.timed_out ? { timed_out: true } : {}) })),
-    pushed_at: payload.pushed_at,
+    pushed_at: payload.pushed_at, withheld,
     ...(branches.length ? {} : { branches_reason: 'No branch Worker is bound. No branch received the catalogue.' }) });
 });
 
@@ -172,7 +196,8 @@ export function envelopeHandler(operation: 'preview' | 'send', given?: Record<st
     let prepared;
     try { prepared = await preparePublishedContract(c.env, input, admin.id, isSuperAdmin(admin)); }
     catch (e) {
-      if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields }, e.status);
+      // D4811: a restricted or incomplete template also says why (`detail`).
+      if (e instanceof ContractPreparationError) return c.json({ error: e.code, code: e.code, fields: e.fields, ...(e.detail ? { message: e.detail } : {}) }, e.status);
       return c.json({ error: 'The document could not be prepared. Nothing was sent. Try again.', code: 'preparation_unreadable' }, 503);
     }
     // D711 — the paper every copy of this envelope prints on.
@@ -407,7 +432,7 @@ interface UnifiedContract {
   file_size: number | null;
   file_content_type: string | null;
   file_sha256: string | null;
-  source: 'documents' | 'esign' | 'pairwise_nda' | 'partner_deal';
+  source: 'documents' | 'esign' | 'pairwise_nda' | 'partner_deal' | 'licence_agreement' | 'licence_contract';
   // Task #2 — e-sign provider for esign-source rows. 'native' = in-house
   // signing flow; 'docusign' = routed through DocuSign. Always 'native'
   // for documents-source rows.
@@ -439,6 +464,13 @@ interface UnifiedContract {
    * signed in, so usage counts that document once, not once per source.
    */
   envelope_uuid?: string | null;
+  /**
+   * D5050 — the licence agreement this document is: a master territory licence agreement, or a package or
+   * program agreement version. On an `esign` row it is that envelope's version (the envelope is the
+   * document, so there is no second row); on a `licence_agreement` / `licence_contract` row it is a version
+   * with no envelope on file. Absent on every other row.
+   */
+  agreement?: AgreementContext;
 }
 
 function decorateDocType<T extends UnifiedContract>(row: T): T {
@@ -575,9 +607,18 @@ async function loadDocumentsContracts(sql: ReturnType<typeof getSQL>): Promise<U
     }
   }
 
+  // D4811 part 18: an externally signed copy attached to a legacy agreement is its execution evidence.
+  const evidence = new Map<string, { r2_key: string; file_sha256: string }>();
+  try {
+    const ev: any[] = await sql.unsafe('SELECT agreement_uid, r2_key, file_sha256 FROM agreement_evidence', []);
+    for (const r of ev) evidence.set(String(r.agreement_uid), { r2_key: r.r2_key, file_sha256: r.file_sha256 });
+  } catch { /* the table is not migrated here yet: no evidence attached */ }
+
   return docs.map(d => {
     const p = d.project_id ? projectMap.get(d.project_id) : null;
-    return decorateDocType(enrichDocRow(d, p?.name || null, p?.founder_email || null));
+    const ev = evidence.get(String(d.uid));
+    const row = ev ? { ...d, file_key: ev.r2_key, file_sha256: ev.file_sha256 } : d;
+    return decorateDocType(enrichDocRow(row, p?.name || null, p?.founder_email || null));
   });
 }
 
@@ -724,19 +765,69 @@ async function loadPartnerDealContracts(sql: ReturnType<typeof getSQL>, strict =
   });
 }
 
+/**
+ * D5050 — the licence agreements into the union. A version whose envelope is an `esign` row of the union is
+ * attached to that row (one document, one row); a version with none becomes its own row, so a draft is listed
+ * too and reads Draft, never as signed.
+ */
+function withLicenceAgreements(esignRows: UnifiedContract[], contexts: AgreementContext[]): UnifiedContract[] {
+  const byEnvelope = new Map(esignRows.map((r) => [r.uid, r]));
+  const own: UnifiedContract[] = [];
+  for (const a of contexts) {
+    const envelopeRow = a.envelope_uuid ? byEnvelope.get(a.envelope_uuid) : undefined;
+    if (envelopeRow) { envelopeRow.agreement = a; continue; }
+    const source = a.store === 'licence_contracts' ? 'licence_contract' : 'licence_agreement';
+    const status = a.legal_status === 'executed' ? 'signed' : a.legal_status === 'voided' ? 'void'
+      : a.legal_status === 'awaiting_signature' ? 'sent' : 'draft';
+    own.push(decorateDocType({
+      id: 0,
+      uid: `${source}:${a.agreement_uid}`,
+      title: [a.program_name || a.package_name || a.template_slug, a.agreement_type_label, a.licence_ref].filter(Boolean).join(' — '),
+      doc_type: a.template_slug,
+      status,
+      template_name: a.template_slug,
+      project_id: null,
+      project_name: null,
+      recipient_email: null,
+      recipient_name: a.counterparty,
+      signed_by: null,
+      signed_at: a.signed_at,
+      signed_ip: null,
+      days_to_sign: null,
+      created_at: a.created_at,
+      updated_at: a.superseded_at || a.created_at,
+      file_key: null,
+      file_size: null,
+      file_content_type: null,
+      file_sha256: null,
+      source,
+      raw_status: a.legal_status,
+      can_resend: false,
+      envelope_uuid: a.envelope_uuid,
+      agreement: a,
+    }));
+  }
+  // A stable id per own row, after the store rows, so the paging order (source, id, uid) is total.
+  own.forEach((r, i) => { r.id = i + 1; });
+  return own;
+}
+
 export async function loadAllContracts(sql: ReturnType<typeof getSQL>, strict = false): Promise<UnifiedContract[]> {
   // Task #3 — true 4-source union: legacy documents + e-sign envelopes
   // (live signing) + pairwise NDAs (Y-1) + partner deals (X-1). Each
   // loader returns rows already normalised to UnifiedContract; failures
   // on the optional sources (table missing on older D1) collapse to []
   // inside the loader so the union is always best-effort.
-  const [docRows, esignRows, pairwiseRows, partnerRows] = await Promise.all([
+  // D5050 — plus the licence agreements (master licence, package and program), folded into their envelopes.
+  const [docRows, esignRows, pairwiseRows, partnerRows, agreementContexts] = await Promise.all([
     loadDocumentsContracts(sql),
     loadEsignContracts(sql),
     loadPairwiseNdaContracts(sql, strict),
     loadPartnerDealContracts(sql, strict),
+    loadLicenceAgreementContexts(sql as any),
   ]);
-  const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows];
+  const agreementRows = withLicenceAgreements(esignRows, agreementContexts);
+  const merged = [...docRows, ...esignRows, ...pairwiseRows, ...partnerRows, ...agreementRows];
   merged.sort((a, b) => {
     const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
     const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -830,14 +921,23 @@ adminContracts.get('/', async (c) => {
   if (provider && !['native', 'docusign'].includes(provider)) return c.json({ error: 'Unknown provider' }, 400);
   if (partyRole && !['founder', 'investor', 'advisor', 'partner', 'axal'].includes(partyRole)) return c.json({ error: 'Unknown party role' }, 400);
   if (projectId && (!/^\d+$/.test(projectId) || !Number.isSafeInteger(Number(projectId)) || Number(projectId) < 1)) return c.json({ error: 'Invalid project id' }, 400);
+  // D4811 part 3 — a metric strip cell's records (`services/contractAttention.ts`).
+  const attention = c.req.query('attention') || '';
+  if (attention && !isAttentionFilter(attention)) return c.json({ error: 'invalid_contract_query', message: 'Choose a valid attention filter.', field: 'attention' }, 400);
   const template = c.req.query('template') || '';
   const signedRecent = c.req.query('signed_recent');
   if (signedRecent && signedRecent !== 'true') return c.json({ error: 'signed_recent must be true' }, 400);
+  // D5050 — agreement type, legal state, licence, program, package and signed-date filters.
+  const af = agreementFilters(c.req.query());
+  if (!af.ok) return c.json({ error: 'invalid_contract_query', message: `Choose a valid ${af.field.replace(/_/g, ' ')}.`, field: af.field }, 400);
 
   const sql = getSQL(c.env);
   try {
     let rows = await loadAllContracts(sql, true);
     if (c.req.query('recorded') === 'true') rows = await recordedSigningDates(c, rows);
+    // A stalled send is known only from a recorded send date, so that filter always reads the recorded rows.
+    if (attention === 'stalled' && c.req.query('recorded') !== 'true') rows = await recordedSigningDates(c, rows);
+    if (attention) { const now = Date.now(); rows = rows.filter(r => matchesAttention(r as any, attention as any, now)); }
 
     if (status && status !== 'all') rows = rows.filter(r => status === 'awaiting_signature'
       ? ['sent', 'generated'].includes(r.status) : r.status === status);
@@ -847,6 +947,7 @@ adminContracts.get('/', async (c) => {
       rows = rows.filter(r => r.status === 'signed' && r.signed_at != null
         && Date.parse(r.signed_at) >= cutoff && Date.parse(r.signed_at) <= now);
     }
+    rows = rows.filter(r => matchesAgreementFilters(r.agreement, af.filters, r.agreement?.signed_at ?? r.signed_at));
     if (docType)   rows = rows.filter(r => r.doc_type === docType);
     if (projectId) rows = rows.filter(r => r.project_id === parseInt(projectId));
     if (provider === 'native' || provider === 'docusign') {
@@ -861,7 +962,10 @@ adminContracts.get('/', async (c) => {
         (r.recipient_email || '').toLowerCase().includes(q) ||
         (r.recipient_name || '').toLowerCase().includes(q) ||
         (r.template_name || '').toLowerCase().includes(q) ||
-        (r.project_name || '').toLowerCase().includes(q)
+        (r.project_name || '').toLowerCase().includes(q) ||
+        // D5050 — the licence, its holder, the program and the package a licence agreement belongs to.
+        [r.agreement?.licence_ref, r.agreement?.counterparty, r.agreement?.program_name, r.agreement?.package_name]
+          .some(v => (v || '').toLowerCase().includes(q))
       );
     }
 
@@ -883,7 +987,7 @@ adminContracts.get('/', async (c) => {
     return c.json({
       total, limit, offset, sort, direction,
       items,
-      meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals'], unioned: true },
+      meta: { sources: ['documents', 'esign_envelopes', 'pairwise_ndas', 'partner_deals', 'licence_contracts', 'licence_program_agreements'], unioned: true },
     });
   } catch {
     return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
@@ -968,6 +1072,38 @@ adminContracts.get('/templates/store/:slug/fields', async (c) => {
   }
 });
 
+/**
+ * D4811 part 3 — the strip's two library cells. Legal review required: the
+ * templates counsel has not reviewed (restricted, D803) and the governance
+ * records in review; Restricted: those templates and the confidential
+ * governance records. Counts only. Governance is HQ's (D4563): a branch
+ * Worker reads it as not recorded, and a failed read is unreadable, never 0.
+ */
+async function reviewAttention(c: AppContext) {
+  let templates: number | null = null;
+  try {
+    const rows = (await c.env.DB.prepare('SELECT slug FROM legal_templates WHERE is_active = 1').all<{ slug: string }>()).results || [];
+    templates = rows.filter(r => isRestrictedSlug(r.slug)).length;
+  } catch { templates = null; }
+  let review: number | null = null, confidential: number | null = null;
+  let governance: 'hq' | 'branch' | 'unreadable' = 'hq';
+  if (c.env.BRANCH_CODE) governance = 'branch';
+  else {
+    try {
+      const g = await c.env.DB.prepare(
+        `SELECT SUM(CASE WHEN status = 'review' THEN 1 ELSE 0 END) AS review,
+                SUM(CASE WHEN confidential = 1 AND status <> 'archived' THEN 1 ELSE 0 END) AS confidential
+           FROM governance_documents`,
+      ).first<{ review: number | null; confidential: number | null }>();
+      review = Number(g?.review ?? 0); confidential = Number(g?.confidential ?? 0);
+    } catch { governance = 'unreadable'; }
+  }
+  return {
+    legal_review: { templates, governance: review, governance_scope: governance },
+    restricted: { templates, governance: confidential, governance_scope: governance },
+  };
+}
+
 // GET /api/admin/contracts/stats — aggregate counters across the union.
 adminContracts.get('/stats', async (c) => {
   await requireAdmin(c);
@@ -1007,6 +1143,11 @@ adminContracts.get('/stats', async (c) => {
         : null,
       signed_last_30d: signedRecent,
       pending_signature: byStatus.sent + byStatus.generated,
+      // D4811 part 3 — the metric strip (board CT-01), over the rows the page lists.
+      attention: {
+        ...contractAttention((recorded ? rows : await recordedSigningDates(c, loaded)) as any[], Date.now()),
+        ...(await reviewAttention(c)),
+      },
     });
   } catch {
     return c.json({ error: 'Contracts are unreadable. Try again.', code: 'contracts_unreadable' }, 503);
@@ -1230,6 +1371,52 @@ adminContracts.get('/partner-deals', async (c) => {
 });
 
 // GET /api/admin/contracts/:uid — detail (UNION-aware).
+/**
+ * D4811 part 4 — GET /api/admin/contracts/search?q=&historical=true
+ * (`services/contractSearch.ts`, board CT-13). One ranked list across
+ * templates, agreements and governance records, current versions first and
+ * earlier versions only on request. A store that cannot be read is named in
+ * `unreadable`, never reported as no match. Governance is HQ's; a
+ * confidential record is the Super Admin's alone, and is not even counted
+ * for anyone else.
+ */
+adminContracts.get('/search', async (c) => {
+  const admin = await requireAdmin(c);
+  const q = searchQuery(c.req.query('q'));
+  if (!q) return c.json({ error: 'invalid_search', message: 'Type at least 2 characters (at most 200) to search.', field: 'q' }, 400);
+  const historical = c.req.query('historical') === 'true';
+  const superAdmin = isSuperAdmin(admin as any);
+  const unreadable: string[] = [];
+  const results: SearchResult[] = [];
+  let hidden = 0;
+  try {
+    const t = await searchTemplates(c.env, q);
+    results.push(...t.current.filter(r => r.score > 0));
+    const h = t.historical.filter(r => r.score > 0);
+    if (historical) results.push(...h); else hidden += h.length;
+  } catch { unreadable.push('template'); }
+  const governanceScope = c.env.BRANCH_CODE ? 'branch' : 'hq';
+  if (governanceScope === 'hq') {
+    try {
+      const g = await searchGovernance(c.env, q, superAdmin);
+      results.push(...g.current.filter(r => r.score > 0));
+      const h = g.historical.filter(r => r.score > 0);
+      if (historical) results.push(...h); else hidden += h.length;
+    } catch { unreadable.push('governance'); }
+  }
+  const sql = getSQL(c.env);
+  try { results.push(...searchAgreements(await loadAllContracts(sql, true), q)); }
+  catch { unreadable.push('agreement'); }
+  finally { await sql.end(); }
+  const ranked = rank(results);
+  const counts = { template: 0, agreement: 0, governance: 0 };
+  for (const r of ranked) counts[r.type] += 1;
+  return c.json({
+    q, historical, total: ranked.length, items: ranked.slice(0, SEARCH_LIMIT).map(({ score, ...r }) => r),
+    counts, hidden_historical: historical ? 0 : hidden, unreadable, governance_scope: governanceScope, limit: SEARCH_LIMIT,
+  });
+});
+
 adminContracts.get('/:uid/history', async (c) => {
   const admin = await requireAdmin(c);
   const sql = getSQL(c.env);
@@ -1457,6 +1644,10 @@ adminContracts.post('/:uid/resend', async (c) => {
     // single recipient or signing token, so resend is not meaningful.
     // Return a deterministic 400 (action_not_supported) so the UI can
     // surface a clear toast instead of a 500.
+    // D4811 part 17 (CT-15): an agreement with open cross-border checks is not sent for signature.
+    const crossBorder = sendRefusal(await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>() ?? null);
+    if (crossBorder) return refuse(c, 409, { code: crossBorder.code, message: crossBorder.message, extra: { open: crossBorder.open } });
+
     if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
       return c.json(
         { error: 'Resend is not supported for this contract source', source: ref.source },
@@ -1520,10 +1711,135 @@ adminContracts.post('/:uid/resend', async (c) => {
   }
 });
 
+// D4811 (#4811) part 18 — attach execution evidence to a legacy agreement
+// marked signed with none (CT-02 "Attach execution evidence", CT-12 B): the
+// externally signed copy (PDF, at most 25 MB), the date it was signed, the
+// signatory and the uploader's attestation. Written once; a store whose row
+// carries its own evidence (an envelope) is refused, as is an agreement that
+// is not marked signed or already has evidence.
+adminContracts.get('/:uid/evidence', async (c) => {
+  await requireAdmin(c);
+  const row = await c.env.DB.prepare('SELECT agreement_uid, file_sha256, file_bytes, signed_on, signatory, attested_by, attached_at FROM agreement_evidence WHERE agreement_uid = ?')
+    .bind(c.req.param('uid')).first<any>().catch(() => null);
+  return c.json({ evidence: row ?? null });
+});
+
+adminContracts.post('/:uid/evidence', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref: ContractRowRef = null;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was attached.' });
+  if (ref.source !== 'documents') return refuse(c, 409, { code: 'evidence_not_supported', message: 'This agreement carries its own signing record; there is no copy to attach here. Nothing was attached.' });
+  if (String(ref.row.status).toLowerCase() !== 'signed') return refuse(c, 409, { code: 'not_marked_signed', message: 'Only an agreement marked signed takes execution evidence. Nothing was attached.' });
+  const prior = await c.env.DB.prepare('SELECT 1 AS ok FROM agreement_evidence WHERE agreement_uid = ?').bind(uid).first();
+  if (prior) return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. It is written once. Nothing was attached.' });
+  if (!c.env.FILES) return refuse(c, 503, { code: 'storage_unavailable', message: 'File storage is not available here. Nothing was attached.' });
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get('file');
+  if (!file || typeof file === 'string') return refuse(c, 422, { code: 'file_required', message: 'Choose the signed PDF. Nothing was attached.' });
+  const bytes = new Uint8Array(await (file as File).arrayBuffer());
+  if (!bytes.length || bytes.length > 25 * 1024 * 1024) return refuse(c, 413, { code: 'file_size', message: 'The signed copy must be a PDF of at most 25 MB. Nothing was attached.' });
+  if (sniffDocument(bytes) !== 'application/pdf') return refuse(c, 415, { code: 'pdf_required', message: 'Upload the signed copy as a PDF. Nothing was attached.' });
+  const copy = signedCopyOf({ signed_on: form?.get('signed_on'), signatory: form?.get('signatory'), attest: form?.get('attest') }, new Date().toISOString().slice(0, 10));
+  if (!copy.ok) return refuse(c, 422, { code: copy.code, message: copy.message.replace('uploaded', 'attached') });
+  const sha = await sha256HexBytes(bytes);
+  const key = `contracts/evidence/${uid}.pdf`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: 'application/pdf' }, customMetadata: { agreement_uid: uid } });
+  try {
+    await c.env.DB.prepare('INSERT INTO agreement_evidence (agreement_uid, r2_key, file_sha256, file_bytes, signed_on, signatory, attested_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(uid, key, sha, bytes.length, copy.signed_on, copy.signatory, Number(admin.id)).run();
+  } catch {
+    return refuse(c, 409, { code: 'already_evidenced', message: 'This agreement already has its execution evidence. Nothing was attached.' });
+  }
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_evidence_attached', { uid, sha256: sha, bytes: bytes.length, signed_on: copy.signed_on });
+  return c.json({ evidence: { agreement_uid: uid, file_sha256: sha, file_bytes: bytes.length, signed_on: copy.signed_on, signatory: copy.signatory, attested_by: Number(admin.id) } }, 201);
+});
+
+// D4811 (#4811) part 17 — the cross-border record (board CT-15): seven checks
+// on an agreement with a foreign counterparty. Governing law is what was
+// entered, never defaulted. While a check is open, resend refuses (below).
+adminContracts.get('/:uid/cross-border', async (c) => {
+  await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row ?? null);
+  return c.json({ uid, record: row ?? null, checks: checksOf(row ?? null), open: blocked?.open ?? [] });
+});
+
+adminContracts.put('/:uid/cross-border', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid') ?? '';
+  const sql = getSQL(c.env);
+  let ref: ContractRowRef = null;
+  try { ref = await findContractByUid(sql, uid); } finally { await sql.end(); }
+  if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available. Nothing was saved.' });
+  const parsed = recordOf(await c.req.json().catch(() => ({})));
+  if (!parsed.ok) return refuse(c, parsed.refusal.status, { code: parsed.refusal.code, message: parsed.refusal.message });
+  const v = parsed.value;
+  await c.env.DB.prepare(`INSERT INTO agreement_cross_border (agreement_uid, counterparty_jurisdiction, governing_law, performance_countries,
+      tax_status, tax_note, data_transfer_status, data_transfer_note, local_counsel_status, local_counsel_note, sanctions_status, sanctions_note, updated_by, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(agreement_uid) DO UPDATE SET counterparty_jurisdiction = excluded.counterparty_jurisdiction, governing_law = excluded.governing_law,
+      performance_countries = excluded.performance_countries, tax_status = excluded.tax_status, tax_note = excluded.tax_note,
+      data_transfer_status = excluded.data_transfer_status, data_transfer_note = excluded.data_transfer_note,
+      local_counsel_status = excluded.local_counsel_status, local_counsel_note = excluded.local_counsel_note,
+      sanctions_status = excluded.sanctions_status, sanctions_note = excluded.sanctions_note, updated_by = excluded.updated_by, updated_at = excluded.updated_at`)
+    .bind(uid, v.counterparty_jurisdiction, v.governing_law, v.performance_countries, v.tax_status, v.tax_note, v.data_transfer_status, v.data_transfer_note,
+      v.local_counsel_status, v.local_counsel_note, v.sanctions_status, v.sanctions_note, Number(admin.id), new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')).run();
+  const row = await c.env.DB.prepare('SELECT * FROM agreement_cross_border WHERE agreement_uid = ?').bind(uid).first<any>();
+  const blocked = sendRefusal(row);
+  await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_cross_border_saved', { uid, source: ref.source, open: blocked?.open.length ?? 0 });
+  return c.json({ uid, record: row, checks: checksOf(row), open: blocked?.open ?? [] });
+});
+
 // POST /api/admin/contracts/:uid/void — UNION dispatch.
 // Task #5 (Z): now requires a free-text `reason` (>=5 chars) and mirrors
 // the void into `dd_audit_log` when the envelope is referenced by any
 // open dd_findings row (so the diligence audit trail captures it).
+// D4811 (#4811) part 11 — the "Link recipient" repair (boards CT-01, CT-02): an
+// agreement whose recipient has no company is linked to a deal, and through it
+// to the company. Only the stores that carry a company link can be repaired:
+// a legacy `documents` row takes the deal's company, an envelope takes the deal.
+// A row that is already linked is never relinked here, and nothing else on it
+// changes. Pairwise NDAs and partner deals have no company link to make.
+adminContracts.post('/:uid/link', async (c) => {
+  const admin = await requireAdmin(c);
+  const uid = c.req.param('uid');
+  const body = await c.req.json().catch(() => ({} as any));
+  const dealId = Number(body?.deal_id);
+  if (!Number.isInteger(dealId) || dealId <= 0) {
+    return refuse(c, 422, { code: 'deal_required', message: 'Choose the deal this agreement belongs to. Nothing was linked.' });
+  }
+  const sql = getSQL(c.env);
+  try {
+    const ref = await findContractByUid(sql, uid);
+    if (!ref) return refuse(c, 404, { code: 'contract_not_found', message: 'That agreement is not available.' });
+    if (ref.source === 'pairwise_nda' || ref.source === 'partner_deal') {
+      return refuse(c, 409, { code: 'link_not_supported', message: 'This agreement is kept between its parties and has no company link to make. Nothing was linked.' });
+    }
+    const deals: any[] = await sql`SELECT d.id, d.uid, d.project_id, p.name AS project_name FROM deals d JOIN projects p ON p.id = d.project_id WHERE d.id = ${dealId} LIMIT 1`;
+    if (!deals.length) return refuse(c, 404, { code: 'deal_not_found', message: 'That deal is not available. Nothing was linked.' });
+    const deal = deals[0];
+    const already = ref.source === 'documents' ? ref.row.project_id != null : ref.row.deal_id != null;
+    if (already) {
+      return refuse(c, 409, { code: 'already_linked', message: 'This agreement is already linked. It is not relinked from here. Nothing was changed.' });
+    }
+    if (ref.source === 'documents') {
+      await sql`UPDATE documents SET project_id = ${deal.project_id}, updated_at = CURRENT_TIMESTAMP WHERE uid = ${ref.row.uid} AND project_id IS NULL`;
+    } else {
+      await sql`UPDATE esign_envelopes SET deal_id = ${deal.id} WHERE id = ${ref.row.id} AND deal_id IS NULL`;
+    }
+    await logAdminAction(c.env, Number(admin.id), String(admin.email ?? ''), 'contract_linked', {
+      uid, source: ref.source, deal_id: Number(deal.id), project_id: Number(deal.project_id),
+    });
+    return c.json({ ok: true, uid, source: ref.source, deal_id: Number(deal.id), project_name: deal.project_name });
+  } finally {
+    await sql.end();
+  }
+});
+
 adminContracts.post('/:uid/void', async (c) => {
   // Task #6 — voiding a contract is irreversible from the recipient's POV
   // (their magic link stops working). Gate on TOTP step-up.
@@ -1745,6 +2061,8 @@ adminContracts.get('/templates/store', async (c) => {
       ...formatView(t),
       counsel_draft: COUNSEL_DRAFT_SLUGS.has(t.slug),
       counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
+      // D4811: the overlays, computed here so the page never guesses them.
+      safety: templateSafety(t),
       ...(publications ? { published_version: publications.get(t.slug)?.version ?? null,
         has_unpublished_changes: publications.has(t.slug) ? !!t.is_stub || !t.body_md.trim() || publications.get(t.slug)?.version !== t.version
           : !t.is_stub && !!t.body_md.trim() } : {}),
@@ -1842,7 +2160,7 @@ adminContracts.get('/templates/store/:slug', async (c) => {
   if (!tpl) return c.json({ error: 'Template not found', code: 'not_found', slug }, 404);
   return c.json({
     template: { ...tpl, layer: tpl.category, layer_label: TEMPLATE_LAYERS[tpl.category]?.label || tpl.category,
-      ...formatView(tpl), format_options: formatOptions(tpl.slug, tpl.category) },
+      ...formatView(tpl), format_options: formatOptions(tpl.slug, tpl.category), safety: templateSafety(tpl) },
   });
 });
 

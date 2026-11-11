@@ -195,14 +195,24 @@ test('an introduction request reaches the teammate alone, sends nothing to the c
     const uid = ask.body.request.uid;
     assert.equal((await call(f, 4, 'GET', '/api/relationships/intro-requests')).body.sent[0].uid, uid);
     assert.equal((await call(f, 2, 'GET', '/api/relationships/intro-requests')).body.received[0].uid, uid);
-    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, { sent: [], received: [] });
-    assert.equal((await call(f, 4, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' })).status, 404, 'the asker cannot answer for the teammate');
+    // #4611: the log answers with its page and its whole-scope totals, so the
+    // shape is ten fields. The claim is unchanged and still exact — a member on
+    // neither side of the request reads nothing of it — and every count is zero
+    // because the scope is empty for them rather than because the page is.
+    assert.deepEqual((await call(f, 3, 'GET', '/api/relationships/intro-requests')).body, {
+      sent: [], received: [], follow_ups_due: 0,
+      totals: { sent: 0, received: 0, sent_pending: 0, received_pending: 0 },
+      page_size: 0, has_more: false, next_cursor: null, limit: 200,
+    });
+    assert.equal((await call(f, 4, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'accepted' })).status, 404, 'the asker cannot answer for the teammate');
     assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'maybe' })).status, 400);
-    const made = await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' });
-    assert.deepEqual([made.status, made.body.request.status], [200, 'made']);
+    // D4329: Accept and Made are two steps; Made is recorded when the intro is sent (relationships_intro_lifecycle_d4329).
+    assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'made' })).body.error, 'decision_invalid');
+    const made = await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'accepted' });
+    assert.deepEqual([made.status, made.body.request.status], [200, 'accepted']);
     assert.equal((await call(f, 2, 'POST', `/api/relationships/intro-requests/${uid}/decide`, { decision: 'declined' })).body.error, 'decided');
     assert.deepEqual(f.db.prepare('SELECT kind, status, parent_uid FROM relationship_interactions ORDER BY id').all().map((r: any) => [r.kind, r.status, r.parent_uid]),
-      [['intro_requested', 'made', null], ['intro_made', 'made', uid]]);
+      [['intro_requested', 'accepted', null], ['intro_accepted', 'accepted', uid]]);
     assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 2, ref: 21, note: 'x'.repeat(1001) })).body.error, 'note_too_long');
     await share(f, 2, false);
     assert.equal((await call(f, 4, 'POST', '/api/relationships/intro-request', { teammate: 2, ref: 21 })).status, 404, 'withdrawn: no new request');
@@ -248,5 +258,49 @@ test('every share, withdrawal, who-knows read and introduction request is audite
       { actor_user_id: 2, owner_user_id: 2, event: 'share', subject: 'withdraw:*' },
     ]);
     assert.ok(!JSON.stringify(f.audits()).includes('@'), 'no email in the audit');
+  } finally { f.close(); }
+});
+
+test('D4464: summary follows current team sharing and caller-only introduction counts', async () => {
+  const f = fixture();
+  try {
+    await share(f, 2, true); await share(f, 3, true); await share(f, 4, true);
+    const intro = f.db.prepare("INSERT INTO relationship_interactions(uid,kind,requester_user_id,teammate_user_id,team_key,person_name,status,made_at) VALUES (?,'intro_requested',?,?,'project:1','Synthetic person',?,?)");
+    intro.run('sent',4,2,'pending',null); intro.run('received',2,4,'pending',null);
+    intro.run('foreign',3,2,'pending',null);
+    intro.run('recent',4,2,'made',new Date().toISOString());
+    intro.run('old',4,2,'made','2020-01-01');
+    const r = await call(f, 4, 'GET', '/api/relationships/summary');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.sharing, { opted_in: true, teams_shared: 1, teams_total: 1 });
+    assert.equal(r.body.teammates_sharing, 1, 'only a current teammate sharing eligible contacts');
+    assert.deepEqual(r.body.requests, { sent_pending: 1, received_pending: 1, made_90d: 1 });
+    assert.deepEqual(r.body.recording['requests.made_90d'], { recorded: true });
+    await call(f, 2, 'PUT', '/api/relationships/sharing/teams/project%3A1', { share: false });
+    assert.equal((await call(f, 4, 'GET', '/api/relationships/summary')).body.teammates_sharing, 0);
+    const other = await call(f, 5, 'GET', '/api/relationships/summary');
+    assert.deepEqual(other.body.requests, { sent_pending: 0, received_pending: 0, made_90d: 0 });
+    assert.equal(other.body.teammates_sharing, 0);
+    const support = await call(f, 4, 'GET', '/api/relationships/summary', undefined, { impersonated_by: 1 });
+    assert.equal(support.status, 403);
+    assert.equal(support.body.error, 'support_session_refused');
+  } finally { f.close(); }
+});
+
+test('D4464: a failed summary statement is null with a reason and HTTP 503, never a false zero', async () => {
+  const f = fixture();
+  try {
+    f.db.exec('DROP TABLE relationship_interactions');
+    const r = await call(f, 4, 'GET', '/api/relationships/summary');
+    assert.equal(r.status, 503);
+    assert.equal(r.body.error, 'relationships_unreadable');
+    assert.deepEqual(r.body.requests, { sent_pending: null, received_pending: null, made_90d: null });
+    for (const key of ['sent_pending', 'received_pending', 'made_90d']) {
+      assert.equal(r.body.recording[`requests.${key}`].recorded, false);
+      assert.ok(r.body.recording[`requests.${key}`].reason.length > 0);
+    }
+    assert.equal(r.body.teammates_sharing, 0, 'the readable count remains recorded');
+    assert.equal(r.body.recording.teammates_sharing.recorded, true);
+
   } finally { f.close(); }
 });

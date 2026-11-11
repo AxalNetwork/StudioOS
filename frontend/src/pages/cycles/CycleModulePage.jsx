@@ -8,6 +8,7 @@ import { MODULE_LINK_CLASS } from './founderToolNavigation.js';
 import { cardView, cellView, cycleOf, isPlainClick, pageButtons, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
+import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
 
 /**
  * D661 (#1474) — one module page for all 26 modules, drawn to
@@ -66,7 +67,30 @@ export function Cell({ cell, first = false, linkState = undefined, plain = false
  * passes its `state` on, so an Add's `/new` address carries `state.under`
  * and closing it can go back to the page that opened it (D695).
  */
-export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null }) {
+/**
+ * D5076: `progressive` is the module's zero-state copy (`progressiveList.js`).
+ * With it, the table draws by stage: zero → one guided first action and
+ * nothing else; few → rows, one Add and a plain count; many → everything.
+ */
+export function ZeroState({ copy, add, more = [], lovable = null, testid = 'records-zero' }) {
+  const addHref = safeHref(add?.href);
+  const className = 'inline-flex min-h-[44px] items-center justify-center rounded-[10px] bg-axal-violet px-4 py-2.5 text-[13.5px] font-bold text-white hover:bg-axal-violet-deep';
+  return (
+    <div className="flex flex-col items-start gap-2.5 px-4 py-5" data-testid={testid}>
+      <h3 className="m-0 text-[16px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{copy.heading}</h3>
+      <p className="m-0 max-w-[60ch] text-[13px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{copy.outcome}</p>
+      {add?.onClick ? <button type="button" onClick={add.onClick} className={className} data-testid="records-zero-action">{add.text}</button>
+        : addHref ? <Link to={addHref} state={add.state} data-testid="records-zero-action" aria-haspopup={add.onOpen ? 'dialog' : undefined}
+          onClick={add.onOpen ? (e) => { if (isPlainClick(e)) { e.preventDefault(); add.onOpen(); } } : undefined} className={className}>{add.text}</Link> : null}
+      {/* Another form's Add (never the same one twice) and LV7 stay reachable, subordinate to the first action. */}
+      {more.map((m) => <Link key={m.text} to={safeHref(m.href)} state={m.state} data-testid="records-zero-secondary-add"
+        className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">{m.text}</Link>)}
+      {lovable && <div className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="records-zero-secondary"><BuildInLovable lovable={lovable} /></div>}
+    </div>
+  );
+}
+
+export function RecordsTable({ title, records, status = 'ready', message = '', query = {}, onQuery, onRetry, add, rowAction, rowHref, lovable = null, progressive = null }) {
   const [text, setText] = useState(query.q || '');
   const cols = Array.isArray(records?.cols) ? records.cols : [];
   const rows = Array.isArray(records?.rows) ? records.rows : [];
@@ -79,9 +103,22 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
   const tracks = cols.map((_, i) => (i === 0 ? 'minmax(0,1.6fr)' : 'minmax(0,1fr)'));
   const grid = { gridTemplateColumns: [...tracks, ...(acts && tracks.length ? ['auto'] : [])].join(' ') || '1fr' };
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
+  const stage = progressive && status === 'ready' ? listStage(records, query) : 'many';
+  const controls = stage === 'many';
+
+  if (stage === 'zero') {
+    const usable = (a) => a?.text && (a.onClick || safeHref(a.href));
+    const firstRaw = addButtons.find(usable) || null;
+    const first = dominantAdd(firstRaw ? [firstRaw] : [], null, progressive);
+    return (
+      <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records" data-stage="zero">
+        <ZeroState copy={progressive} add={first} more={addButtons.filter((a) => a !== firstRaw && a?.text && !a.onClick && safeHref(a.href))} lovable={lovable} />
+      </section>
+    );
+  }
 
   return (
-    <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records">
+    <section className="overflow-hidden rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-records" data-stage={progressive ? stage : undefined}>
       <div className="flex flex-col gap-2.5 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{title}</h2>
@@ -95,11 +132,11 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
           {/* D1082 (#2947, LV7): Build in Lovable beside Add must-have, from the module read's `parts.lovable`. */}
           {lovable && <BuildInLovable lovable={lovable} />}</div>
         </div>
-        <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
+        {controls && <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
             className="w-full rounded-[9px] border border-axal-hairline bg-white px-3 py-2 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
-        </form>
-        {(filters.length > 0 || sorts.length > 0) && (
+        </form>}
+        {controls && (filters.length > 0 || sorts.length > 0) && (
           <div className="flex flex-wrap items-center gap-1.5">
             {filters.map((f) => (
               <select key={f.key} aria-label={f.label} className={CONTROL} value={query.filter?.[f.key] || ''}
@@ -148,7 +185,7 @@ export function RecordsTable({ title, records, status = 'ready', message = '', q
             </div>
           ); })}
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5" data-testid="records-count">
-            <span className="text-[12px] text-axal-muted dark:text-gray-400">{count.label}</span>
+            <span className="text-[12px] text-axal-muted dark:text-gray-400">{controls ? count.label : fewCountLabel(records, progressive)}</span>
             {count.pages > 1 && (
               <nav aria-label="Pages" className="flex gap-1">
                 <button type="button" className={CONTROL} disabled={count.page <= 1} onClick={() => onQuery?.({ ...query, page: count.page - 1 })} aria-label="Previous page">‹</button>
@@ -179,9 +216,25 @@ function RowAction({ action }) {
   );
 }
 
+/**
+ * D5076: before the first record, the connector and Eadwyn parts are a closed
+ * "Sources" region under the first action: still one click away, never the
+ * page's first read (BD7, BD8: Sources below the core work).
+ */
+export function Sources({ children, phone = false }) {
+  return (
+    <details className={`group rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900 ${phone ? 'mt-[18px]' : ''}`.trim()} data-testid="module-sources">
+      <summary className="flex min-h-[44px] cursor-pointer items-center px-4 text-[12.5px] font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100">
+        Bring it in from your tools
+      </summary>
+      <div className="flex min-w-0 flex-col gap-3 border-t border-axal-hairline px-4 py-3 dark:border-gray-800">{children}</div>
+    </details>
+  );
+}
+
 export default function CycleModulePage({
   cycle, slug, moduleName, cards, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query, onQuery, onRetryRecords, action, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
 }) {
   const meta = cycleOf(cycle);
   if (!meta) return null;
@@ -192,9 +245,19 @@ export default function CycleModulePage({
   const name = card?.name || data?.module?.name || moduleName || slug;
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
   const recs = records ?? data?.records;
+  // D5076: on a Build module with no records, the zero state's first action is
+  // the page's one dominant action: the header's and the card's step give way.
+  const progressive = progressiveFor(meta.key, slug);
+  const recsStatus = recordsStatus || (recs ? 'ready' : status);
+  const zero = !!progressive && showRecords && status === 'ready' && recsStatus === 'ready' && listStage(recs, query) === 'zero';
+  // The card's step is the table's own Add on a progressive module: draw it once, in the table.
+  const addTexts = (Array.isArray(add) ? add : [add || recs?.add]).map((x) => x?.text).filter(Boolean);
+  const dupNext = !!progressive && !!card?.next?.text && addTexts.includes(card.next.text);
+  const shownCard = (zero || dupNext) && card?.next ? { ...card, next: null } : card;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug}>
-      <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} />
+    <div className="flex min-w-0 flex-col gap-4" data-testid="cycle-module" data-cycle={meta.key} data-module={slug} data-stage={progressive && status === 'ready' && recsStatus === 'ready' ? listStage(recs, query) : undefined}>
+      {header === undefined ? <CycleHeader cycle={meta.key} cards={cards || (card ? [card] : [])} active={slug} action={zero ? null : action} title={name} sub={[card?.caption, 'Records below; the tabs above move between modules.'].filter(Boolean).join(' ')} search={search} more={more} /> : header}
+      {header === null && more ? <div className="flex justify-end">{more}</div> : null}
       {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
       {subnav}
       {status === 'refused' ? (
@@ -212,7 +275,7 @@ export default function CycleModulePage({
               <h2 className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">{name} · at a glance</h2>
               {card?.range && <span className="text-[11px] text-axal-faint dark:text-gray-500">{card.range}</span>}
             </div>
-            <CardBody card={card} onRetry={onRetry} search={search} />
+            <CardBody card={shownCard} onRetry={onRetry} search={search} />
             {view.state === 'ok' && card.caption && <span className="text-[12.5px] leading-relaxed text-axal-ink/80 dark:text-gray-300">{card.caption}</span>}
             {/* D757 §2.6 (#1928): Verdict's interview evidence since the last decision, writers only. */}
             {interviewLine && <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
@@ -223,11 +286,13 @@ export default function CycleModulePage({
               {item.label || `Open ${name}`}
             </Link>
           ))}
-          <RecordsTable
+          {/* #3938 (D1478 part 9): a control that acts on the records themselves (Partner network's Rank by fit). */}
+          {aboveRecords}
+          {showRecords && <RecordsTable
             key={`${meta.key}/${slug}`}
             title={data?.module?.records_title || name}
             records={recs}
-            status={recordsStatus || (recs ? 'ready' : status)}
+            status={recsStatus}
             message={recordsMessage}
             query={query}
             onQuery={onQuery}
@@ -235,9 +300,10 @@ export default function CycleModulePage({
             add={add}
             lovable={lovable}
             rowAction={rowAction}
+            progressive={progressive}
             rowHref={(row) => rowLinks(recs, row) ? recordHref(meta.key, slug, recordId(row), search) : null}
-          />
-          {children}
+          />}
+          {zero && children ? <Sources>{children}</Sources> : children}
         </>
       )}
     </div>

@@ -1,3 +1,5 @@
+import { heldLicences } from '../services/accountLicences';
+import { decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 /**
  * `/api/research/*` — the document library, and Ask over it.
  *
@@ -42,12 +44,13 @@ import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth, requireSuperAdmin } from '../auth';
 import { Jobs } from '../models/jobs';
 import { mintDownloadToken } from '../services/signedDownload';
-import { searchSemantic, deleteChunkedEntity, researchNamespace } from '../services/vectorize';
+import { searchSemanticOutcome, deleteChunkedEntity, researchNamespace, type SearchHit } from '../services/vectorize';
 import { run as runAI } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { orderByRanking, rank } from '../services/ai/decide';
 import { companyScope, esignEnvelopeScope } from '../services/tenancyScope';
 import { fundOverlapNote } from '../services/researchFundRead';
+import { markCited, referenceCheck } from '../services/researchCitations';
 import { CompanyQueryError, getCompany, listCompanies, parseCompanyQuery } from '../services/researchCompanyDirectory';
 import { DirectoryQueryError, getFund, listDirectory, parseDirectoryQuery } from '../services/researchFundDirectory';
 import { catalogPriceCents, proposalName, readingIsStale } from '../services/marketReadingRead';
@@ -76,10 +79,11 @@ import { refuse } from '../util/refusal';
 // The data room's own gate, imported rather than retyped: the grant check, the
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
-import { activeGrant, ndaActive, logAccess } from './data_room';
+import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -121,6 +125,8 @@ const KINDS = new Set(['playbook', 'client', 'document', 'report', 'primary', 'l
  * would be a table pretending to be a control. The page states the value.
  */
 const SCORE_FLOOR = 0.55;
+/** D4605: the index states Ask may answer from. */
+const ANSWERABLE_STATES = ['indexed', 'partial'];
 
 const nowIso = () => new Date().toISOString();
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
@@ -178,14 +184,82 @@ const dto = (r: DocRow, source: 'own' | 'client' = 'own', sourceLabel: string | 
   read_only: source === 'client',
   // What Ask can actually reach. An own document is answerable when it is
   // indexed; a shared one never is, because it is indexed somewhere else.
-  in_ask: source === 'own' && r.index_state === 'indexed',
+  // D4605: a partly indexed document answers from the passages it has.
+  in_ask: source === 'own' && ANSWERABLE_STATES.includes(r.index_state),
 });
 
-/** Always scoped to the caller. There is no route here that reads another user's row. */
+/**
+ * The caller's OWN row. Every WRITE path here uses this and must keep using it:
+ * metadata, re-index and delete are the owner's, which is exactly what
+ * `read_only` means on a shared row.
+ */
 async function ownDoc(env: Env, userId: number, uid: string): Promise<DocRow | null> {
   return env.DB.prepare(
     `SELECT * FROM research_documents WHERE uid = ? AND owner_user_id = ?`
   ).bind(uid, userId).first<DocRow>();
+}
+
+/**
+ * #4610 — A DOCUMENT THIS CALLER MAY READ: their own, or one an ACTIVE share
+ * opens to them. Read authorization only, and deliberately a separate function
+ * from `ownDoc` rather than a flag on it.
+ *
+ * THE BUG. `GET /documents` lists shared documents on purpose — that is what
+ * `source: 'client'` and the "From Verwood" chip are for — and `LibraryZone`
+ * drew an `Open` button on every row. `Open` called the download route, which
+ * resolved through `ownDoc`, so for a shared row it 404'd. The adjacent comment
+ * in that page argues that "a client's document offers neither" Metadata nor
+ * Re-index nor Remove "because drawing either would be a control that cannot
+ * act", and `research_library_shares.test.mjs` asserts that rule by name — and
+ * `Open` sat outside the guard both of them describe. A reader was listed a
+ * document, told where it came from, given a button, and refused. The phone
+ * cards drew no `Open` at all, so the two viewports disagreed about whether the
+ * feature existed.
+ *
+ * WHY A SEPARATE FUNCTION. Read and write are different permissions and the
+ * only safe way to keep them different is for them to be different lookups. If
+ * this were `ownDoc(…, { orShared: true })` then every existing caller would
+ * be one argument away from granting a recipient the owner's delete. There is
+ * no such argument: `PATCH`, `DELETE` and the re-index queue still call
+ * `ownDoc` and are unreachable through a share.
+ *
+ * THE SHARE MUST BE LIVE, not merely to have existed. A revoke is
+ * `status = 'revoked'`, never a delete (migration 218), so `status = 'active'`
+ * is the whole of it and a revoked share stops reading the moment it is
+ * revoked — the same predicate the list uses, so a row that is listed is a row
+ * that opens and the reverse.
+ *
+ * INDEXING IS NOT IMPLIED AND IS NOT TOUCHED. The current policy is that a
+ * client's share is readable but is not indexed into the recipient's Ask
+ * namespace, which is why `dto()` computes `in_ask` as `source === 'own' && …`.
+ * This grants a download; it says nothing about Ask, and `in_ask` is unchanged.
+ */
+async function readableDoc(env: Env, userId: number, uid: string): Promise<{ row: DocRow; source: 'own' | 'client'; projectId: number | null } | null> {
+  const own = await ownDoc(env, userId, uid);
+  if (own) return { row: own, source: 'own', projectId: null };
+  // The project the share came through, by the SAME correlated subquery the
+  // list uses for its "From Verwood" chip — the newest active grant this reader
+  // holds over a project belonging to the document's owner. It is what the
+  // founder's own access log is keyed on, and it is read here rather than
+  // stored on the share so a project renamed after the share still resolves.
+  const shared = await env.DB.prepare(
+    `SELECT d.*, (
+              SELECT g.project_id
+                FROM advisor_client_grants g
+                JOIN projects p ON p.id = g.project_id
+               WHERE g.advisor_user_id = s.advisor_user_id
+                 AND g.status = 'active'
+                 AND p.founder_id = d.owner_user_id
+               ORDER BY g.id DESC LIMIT 1
+            ) AS grant_project_id
+       FROM advisor_client_document_shares s
+       JOIN research_documents d ON d.id = s.document_id
+      WHERE d.uid = ? AND s.advisor_user_id = ? AND s.status = 'active'
+      LIMIT 1`
+  ).bind(uid, userId).first<DocRow & { grant_project_id: number | null }>();
+  if (!shared) return null;
+  const projectId = Number.isSafeInteger(Number(shared.grant_project_id)) ? Number(shared.grant_project_id) : null;
+  return { row: shared, source: 'client', projectId };
 }
 
 // ---------------------------------------------------------------------------
@@ -234,8 +308,28 @@ research.get('/documents', async (c) => {
   return c.json({
     items,
     // The library's own reach, stated rather than left for a reader to count.
-    indexed: items.filter((i) => i.index_state === 'indexed').length,
-    not_indexed: items.filter((i) => i.index_state !== 'indexed').length,
+    // D4605: `indexed` counts what Ask can answer from, a partly indexed document included.
+    //
+    // #4610 — `answerable` IS `in_ask`, THE SAME FIELD THE ROWS CARRY.
+    // `indexed` counted `ANSWERABLE_STATES.includes(index_state)` over every
+    // item including SHARED ones, while each row's own `in_ask` is
+    // `source === 'own' && …`. So an indexed client share was counted in
+    // "N answerable" and then labelled, correctly, "Indexed in their library,
+    // not yours" on its own row — the header pill and the row disagreed about
+    // the same document, and an account holding only shares was told it had
+    // answerable documents when Ask could use none of them. `answerable` is
+    // now the count of rows whose `in_ask` is true, so the two cannot differ:
+    // one field, counted, not a second rule that happens to resemble it.
+    //
+    // `indexed` is kept, unchanged, beside it: it is a true statement about
+    // INDEX STATE, which is a different question from answerability and is the
+    // one the Index-state column answers. The page reads whichever it means.
+    answerable: items.filter((i) => i.in_ask === true).length,
+    not_answerable: items.filter((i) => i.in_ask !== true).length,
+    indexed: items.filter((i) => ANSWERABLE_STATES.includes(i.index_state)).length,
+    not_indexed: items.filter((i) => !ANSWERABLE_STATES.includes(i.index_state)).length,
+    // D4612: still being read, so the page knows to keep watching and Re-index leaves it alone.
+    pending: items.filter((i) => i.index_state === 'pending').length,
     // The `pr4` artboard's fourth tile. Counted here rather than in the page so
     // the tile and the `Client docs` chip cannot disagree about what the word
     // means: this is provenance (migration 222), NOT `kind = 'client'`, which
@@ -278,9 +372,9 @@ research.post('/documents/:uid/reindex', async (c) => {
   try {
     await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
   } catch {
-    // The hourly sweep walks `index_state` past a watermark and will catch it,
-    // which is why the upload path swallows this too. The row is already
-    // 'pending', so the page reports the truth either way.
+    // #5350's hourly recovery picks up a pending row after 60 minutes when no
+    // live job exists. The row is already 'pending', so the page reports the
+    // truth while that bounded retry waits.
   }
   const fresh = await ownDoc(c.env, user.id, doc.uid);
   return c.json({ item: fresh ? dto(fresh) : null });
@@ -347,7 +441,9 @@ research.post('/documents', async (c) => {
   // useful (listed, downloadable) while `index_state` is 'pending'.
   const id = (ins as any).meta?.last_row_id;
   if (id) {
-    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch { /* the hourly sweep will catch it */ }
+    // A failed producer write leaves the row pending; #5350's hourly recovery
+    // enqueues it after 60 minutes when no live job exists.
+    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch {}
   }
 
   await noteStorageLanded(c.env, storage);
@@ -384,8 +480,13 @@ research.patch('/documents/:uid', async (c) => {
 
 research.get('/documents/:uid/download', async (c) => {
   const user = await requireAuth(c);
-  const row = await ownDoc(c.env, user.id, c.req.param('uid'));
-  if (!row) return c.json({ detail: 'Not found' }, 404);
+  // #4610: ownership OR an active permitted share. A document that is neither
+  // is 404 in the same words whether it belongs to somebody else or does not
+  // exist, so the refusal confirms nothing — and a revoked share is in that
+  // same 404 the instant it is revoked.
+  const readable = await readableDoc(c.env, user.id, c.req.param('uid'));
+  if (!readable) return c.json({ detail: 'Not found' }, 404);
+  const row = readable.row;
   // The shipped, audited path: one-time HMAC token, TTL clamped to 300s, jti
   // consumed in KV, every hit written to activity_logs by routes/files.ts.
   // Deliberately NOT an S3 presigned URL — wrangler.toml says why for this
@@ -397,6 +498,26 @@ research.get('/documents/:uid/download', async (c) => {
     userId: user.id,
     ttlSec: 120,
   });
+  /**
+   * #4610 — THE FOUNDER'S OWN RECORD OF THE READ, for a shared document only.
+   *
+   * `advisor_client_access_log` was built by migration 218 as "the founder's
+   * own record of an advisor's reading", `open_document` is one of the two
+   * actions it declares, and `GET /:projectUid/access-log` already LEFT JOINs
+   * `research_documents` to name the file — waiting for rows nothing wrote.
+   * Opening somebody else's document is exactly the event that table exists
+   * for, and until now the only trace was a `signed_download` row in
+   * `activity_logs`, which the founder cannot see.
+   *
+   * Best-effort, after the token is minted: an audit write must not be able to
+   * deny a reader a file they are authorized to read. Own documents write
+   * nothing here — there is no third party whose record it would be.
+   */
+  if (readable.source === 'client' && readable.projectId != null) {
+    await c.env.DB.prepare(
+      `INSERT INTO advisor_client_access_log (project_id, advisor_user_id, action, document_id) VALUES (?, ?, 'open_document', ?)`,
+    ).bind(readable.projectId, user.id, row.id).run().catch(() => {});
+  }
   return c.json({ url: `/api/files/dl/${token}`, expires_at, name: row.title });
 });
 
@@ -465,6 +586,14 @@ interface AskAnswerRow {
   cached: number; cost_micro_usd: number; saved: number; discarded?: number; use_note?: string | null; created_at: string;
 }
 
+/** The stored citations JSON as an array; a malformed value is no citations. */
+function storedCitations(raw: string | null | undefined): Array<{ n?: number | null }> {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.filter((x) => x && typeof x === 'object') : [];
+  } catch { return []; }
+}
+
 const answerDto = (r: AskAnswerRow) => ({
   uid: r.uid,
   question: r.question,
@@ -475,12 +604,11 @@ const answerDto = (r: AskAnswerRow) => ({
   // Stored as text, returned as the array the page renders. A malformed value
   // degrades to no citations rather than failing the whole thread — the answer
   // is still worth reading, and an exception here would take the session with it.
-  citations: ((): unknown[] => {
-    try {
-      const parsed = JSON.parse(r.citations || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  })(),
+  // D4613: each citation says whether the answer cites it, so retrieved
+  // context and cited support are told apart on every read, old rows included.
+  citations: markCited(r.answer, storedCitations(r.citations)),
+  // D4613: the answer's bracketed references checked against its own sources.
+  reference_check: referenceCheck(r.answer, storedCitations(r.citations)),
   model: r.model,
   prompt_tokens: r.prompt_tokens,
   completion_tokens: r.completion_tokens,
@@ -496,7 +624,70 @@ const answerDto = (r: AskAnswerRow) => ({
 });
 
 /**
+ * #4610 — THE SCOPE'S WHOLE TOTALS, FROM SQL, NOT FROM THE PAGE.
+ *
+ * `askTotals` below counts whatever array it is handed. That was the only
+ * totals function, and it was handed the 200-row slice — so `asked`, `saved`
+ * and `cost_usd` plateaued at 200 and then stopped moving for ever, while the
+ * Library's "Questions asked" tile and Ask's own strip printed them as the
+ * reader's whole history. A reader with 340 questions was told 200, and the
+ * number stayed 200 no matter how many more they asked.
+ *
+ * These come from one aggregate over the whole selected scope, so they do not
+ * change when the page does — the acceptance criterion in one sentence. The
+ * `discarded` scope is counted here too, which it could not be before: Archived
+ * was a client-side filter over `scope=all`'s 200 rows, so an archived answer
+ * past that window was unreachable from the tab that exists to find it.
+ *
+ * ONE STATEMENT PER SCOPE, no spliced predicate — the rule the three read
+ * queries below already follow, and for the same reason.
+ */
+async function scopeTotals(env: Env, userId: number, scope: string, sessionId: number | null) {
+  const SUMS = `COUNT(*) AS asked,
+        COUNT(CASE WHEN reason = 'answered' THEN 1 END) AS answered,
+        COUNT(CASE WHEN reason = 'no_source' THEN 1 END) AS no_source,
+        COUNT(CASE WHEN reason = 'model_unavailable' THEN 1 END) AS model_unavailable,
+        COUNT(CASE WHEN reason = 'retrieval_unavailable' THEN 1 END) AS retrieval_unavailable,
+        COUNT(CASE WHEN saved = 1 THEN 1 END) AS saved,
+        COUNT(CASE WHEN discarded = 1 THEN 1 END) AS discarded,
+        COALESCE(SUM(cost_micro_usd), 0) AS cost_micro_usd`;
+  type Row = {
+    asked: number; answered: number; no_source: number; model_unavailable: number;
+    retrieval_unavailable: number; saved: number; discarded: number; cost_micro_usd: number;
+  };
+  let row: Row | null = null;
+  if (scope === 'saved') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1`).bind(userId).first<Row>();
+  } else if (scope === 'discarded') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1`).bind(userId).first<Row>();
+  } else if (scope === 'all') {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE owner_user_id = ?`).bind(userId).first<Row>();
+  } else if (sessionId != null) {
+    row = await env.DB.prepare(`SELECT ${SUMS} FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ?`).bind(sessionId, userId).first<Row>();
+  } else {
+    // No session yet is not a failed read: a reader who has never asked has no
+    // thread, and zero is the true answer for a scope that is genuinely empty.
+    return { asked: 0, answered: 0, no_source: 0, model_unavailable: 0, retrieval_unavailable: 0, saved: 0, discarded: 0, cost_usd: 0 };
+  }
+  // AN UNREADABLE AGGREGATE IS NOT ZERO. D1 throws on a failed read, so a null
+  // row means the statement answered without its columns. Throwing sends the
+  // page to its unavailable state instead of letting it print eight zeroes and
+  // a cost of nothing over a history that exists.
+  if (!row || !Number.isSafeInteger(Number(row.asked))) throw new Error('Ask totals unreadable');
+  return {
+    asked: Number(row.asked), answered: Number(row.answered), no_source: Number(row.no_source),
+    model_unavailable: Number(row.model_unavailable), retrieval_unavailable: Number(row.retrieval_unavailable),
+    saved: Number(row.saved), discarded: Number(row.discarded),
+    // Summed in whole micro-dollars by SQLite and divided once, for the same
+    // reason `askTotals` sums in micros: a long history's total must not be the
+    // accumulated error of N float additions.
+    cost_usd: Number(row.cost_micro_usd || 0) / 1e6,
+  };
+}
+
+/**
  * Totals for the header strip, counted over whatever slice is being returned.
+ * `page_totals` in the response; `totals` is `scopeTotals` above.
  *
  * `answered` and `asked` are separate figures rather than one ratio because
  * the artboard prints "2 of 3" and a single number cannot say that. `no_source`
@@ -509,6 +700,8 @@ function askTotals(items: ReturnType<typeof answerDto>[]) {
     answered: items.filter((i) => i.reason === 'answered').length,
     no_source: items.filter((i) => i.reason === 'no_source').length,
     model_unavailable: items.filter((i) => i.reason === 'model_unavailable').length,
+    // D4605: the library could not be searched. Not an evidence gap.
+    retrieval_unavailable: items.filter((i) => i.reason === 'retrieval_unavailable').length,
     saved: items.filter((i) => i.saved).length,
     // Summed from the per-answer receipts, never re-derived from tokens and a
     // current rate: a price list that moves must not silently restate what a
@@ -615,36 +808,118 @@ research.get('/ask/sessions', async (c) => {
     ).bind(user.id).first<AskSessionRow>();
   }
 
-  // THREE WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
-  // `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
-  // value is a literal chosen by a ternary, and it is right to: the next person
-  // to add a fourth scope reaches for the same seam with a variable in hand.
-  // The `saved = 1` predicate is written out where it applies.
+  /**
+   * #4610 — FOUR WHOLE STATEMENTS, AND EACH IS A KEYSET PAGE.
+   *
+   * FOUR, NOT THREE: `discarded` is a server scope now. Archived was a
+   * client-side filter over `scope=all`'s window, so an archived answer past
+   * the 200th was unreachable from the one tab that exists to find it.
+   *
+   * WHOLE STATEMENTS RATHER THAN ONE WITH A FRAGMENT SPLICED IN.
+   * `check-sql-prepare` refuses a `${…}` inside a prepared query even when the
+   * value is a literal chosen by a ternary, and it is right to: the next person
+   * to add a fifth scope reaches for the same seam with a variable in hand.
+   * The `saved = 1` and `discarded = 1` predicates are written out where they
+   * apply.
+   *
+   * THE 200 WAS A CAP, NOT A PAGE. It truncated silently in both directions:
+   * `saved` and `all` are `id DESC`, so they dropped the OLDEST answers, while
+   * `session` is `id ASC` and dropped the NEWEST — a reader whose thread passed
+   * 200 exchanges stopped seeing the answer they had just been given. Nothing
+   * told them either way, and `research_ask_session.test.mjs` pinned the three
+   * statements' shape without pinning what the bound did to the reader.
+   *
+   * The cursor is the row id, which is unique and monotonic, so the ordering is
+   * already total and no tiebreaker is needed.
+   *
+   * EVERY SCOPE READS NEWEST-FIRST, INCLUDING `session`, AND THAT IS THE POINT.
+   * The session read was `id ASC`, which with a bare cap dropped the newest
+   * exchanges — and simply paginating an ASC read would have made it worse, not
+   * better: the first page a reader is handed would be their OLDEST two hundred
+   * questions and the answer they had just been given would be several pages
+   * away. So the SQL walks back from the newest row in every scope, and the
+   * session's page is reversed below for display, which is where the thread's
+   * oldest-first reading order belongs. "The newest successfully written answer
+   * appears after submission" is then true of the first page by construction,
+   * rather than true only while the history is short.
+   */
+  const scopeOrder = scope === 'session' || (!['saved', 'all', 'discarded'].includes(scope)) ? 'asc' : 'desc';
+  const limit = listLimit(c.req.query('limit'));
+  // `decodeCursor` refuses a malformed cursor by THROWING a Response, which
+  // `index.ts` turns into that response. This handler answers it itself rather
+  // than relying on that plumbing: a cursor read as "the first page" would
+  // restart a walk the caller believes is advancing, so the refusal must be
+  // the one thing that cannot go missing here.
+  let after: ReturnType<typeof decodeCursor> = null;
+  try { after = decodeCursor(c.req.query('cursor'), 1); } catch {
+    return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+  }
+  const from = after ? Number(after[0]) : null;
+  if (after && !Number.isSafeInteger(from)) return c.json({ detail: 'That page cursor is not valid. Reload the history from the start.' }, 400);
+
   let rows: { results: AskAnswerRow[] };
   if (scope === 'saved') {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT 200`
-    ).bind(user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND saved = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
+  } else if (scope === 'discarded') {
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND discarded = 1 AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (scope === 'all') {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT 200`
-    ).bind(user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(user.id, from, limit + 1).all<AskAnswerRow>();
   } else if (session) {
-    rows = await c.env.DB.prepare(
-      `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id ASC LIMIT 200`
-    ).bind(session.id, user.id).all<AskAnswerRow>();
+    rows = from == null
+      ? await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, limit + 1).all<AskAnswerRow>()
+      : await c.env.DB.prepare(
+        `SELECT * FROM research_ask_answers WHERE session_id = ? AND owner_user_id = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      ).bind(session.id, user.id, from, limit + 1).all<AskAnswerRow>();
   } else {
     rows = { results: [] };
   }
-
-  const items = (rows.results || []).map(answerDto);
+  const read = trimPage((rows.results || []), limit);
+  // The cursor is always the OLDEST row of the page, because every scope walked
+  // back from the newest. That is `read.rows`'s last element before the session
+  // scope is reversed, so it is taken here and not after.
+  const last = read.rows[read.rows.length - 1];
+  // A thread reads oldest-first on screen while being read newest-first from
+  // the store, so the session scope's page is reversed for display. Every other
+  // scope is a log and stays newest-first, as it was.
+  const page = scopeOrder === 'asc' ? [...read.rows].reverse() : read.rows;
+  const items = page.map(answerDto);
   return c.json({
     scope,
     session: session ? { uid: session.uid, created_at: session.created_at, last_asked_at: session.last_asked_at } : null,
     items,
-    totals: askTotals(items),
-    // The count of sessions the reader has, so the page can say whether `All
-    // history` would show anything this thread does not.
+    // #4610: `totals` IS THE WHOLE SELECTED SCOPE, from its own aggregate, so
+    // it does not move when the page does. `page_totals` is this page, kept so
+    // a caller that wants the slice's own figures has them under a name that
+    // says which they are — the defect was one object serving as both.
+    totals: await scopeTotals(c.env, user.id, scope, session?.id ?? null),
+    page_totals: askTotals(items),
+    page_size: items.length,
+    has_more: read.hasMore,
+    next_cursor: read.hasMore && last ? encodeCursor([Number(last.id)]) : null,
+    limit,
+    // The scope's order, so a reader paging `session` knows the cursor walks
+    // forward in time while every other scope walks back.
+    order: scopeOrder,
     score_floor: SCORE_FLOOR,
   });
 });
@@ -686,6 +961,82 @@ research.patch('/ask/answers/:uid', async (c) => {
   return c.json({ item: row ? answerDto(row) : null });
 });
 
+/**
+ * D4605 — one passage Ask may answer from: the hit, its document, and the text
+ * the model reads (the whole chunk, or the preview of a vector written before
+ * the chunk was stored whole).
+ */
+export interface EligiblePassage { hit: SearchHit; document_uid: string; revision: string | null; text: string; full: boolean }
+
+/** What the reranker reads of each passage, and the model's whole source budget. */
+export const RANK_CONTEXT_CHARS = 2000;
+export const ASK_CONTEXT_BUDGET = 16000;
+
+/**
+ * D4605: the document row is the authority. A hit counts only while its
+ * document is the caller's, is `indexed` or `partial`, and the hit was written
+ * by the document's current index run (`indexed_at`). A vector with no
+ * revision predates revisions and is accepted for a document indexed before
+ * them, reading its preview; it gains its whole passage on its next re-index.
+ */
+export async function eligiblePassages(env: Env, userId: number, hits: SearchHit[]): Promise<EligiblePassage[]> {
+  const docs = new Map<number, { uid: string; index_state: string; indexed_at: string | null } | null>();
+  const out: EligiblePassage[] = [];
+  for (const hit of hits) {
+    if (!docs.has(hit.entity_id)) {
+      const row = await env.DB.prepare(
+        'SELECT uid, index_state, indexed_at FROM research_documents WHERE id = ? AND owner_user_id = ?'
+      ).bind(hit.entity_id, userId).first<{ uid: string; index_state: string; indexed_at: string | null }>();
+      docs.set(hit.entity_id, row ?? null);
+    }
+    const doc = docs.get(hit.entity_id);
+    if (!doc || !ANSWERABLE_STATES.includes(doc.index_state)) continue;
+    if (hit.revision != null && hit.revision !== doc.indexed_at) continue;
+    const full = typeof hit.passage === 'string' && hit.passage.length > 0;
+    out.push({ hit, document_uid: doc.uid, revision: hit.revision ?? null, text: full ? hit.passage! : hit.snippet, full });
+  }
+  return out;
+}
+
+/** D4605: the passages that fit the model's source budget, best first; the first always fits. */
+export function withinBudget(passages: EligiblePassage[], budget = ASK_CONTEXT_BUDGET): EligiblePassage[] {
+  const kept: EligiblePassage[] = [];
+  let used = 0;
+  for (const p of passages) {
+    const size = p.text.length + p.hit.title.length + 16;
+    if (kept.length && used + size > budget) break;
+    kept.push(kept.length ? p : { ...p, text: p.text.slice(0, budget) });
+    used += size;
+  }
+  return kept;
+}
+
+/**
+ * D3701 (Research v2, RS-07): how much of the cited passage a citation keeps,
+ * so the answer can show "its exact passage" without the page re-reading the
+ * index. The excerpt is the start of the text the model was given for that
+ * citation, never a summary of it, and `passage_truncated` says when it is
+ * cut. It is stored in the answer's citations JSON (migration 221), which is
+ * read only by the answer's owner, about the owner's own document.
+ */
+export const CITATION_PASSAGE_CHARS = 600;
+
+/** D4605: a citation names the document, the index run, the chunk and its page. */
+export function citationOf(p: EligiblePassage, documentUid: string) {
+  const text = String(p.text || '').trim();
+  return {
+    title: p.hit.title,
+    document_uid: documentUid,
+    revision: p.revision,
+    chunk: p.hit.chunk ?? null,
+    page: p.hit.page ?? null,
+    score: Number(p.hit.score.toFixed(3)),
+    // D3701: the passage itself. Null, not '', when the index gave no text.
+    passage: text ? text.slice(0, CITATION_PASSAGE_CHARS) : null,
+    passage_truncated: text.length > CITATION_PASSAGE_CHARS,
+  };
+}
+
 research.post('/ask', async (c) => {
   const user = await requireAuth(c);
   const body = await c.req.json().catch(() => ({} as any));
@@ -693,34 +1044,50 @@ research.post('/ask', async (c) => {
   if (!question) return c.json({ detail: 'question_required' }, 400);
   const session = await resolveAskSession(c, user.id, String(body?.session_uid || ''));
 
-  const hits = await searchSemantic(c.env, question, {
+  const searched = await searchSemanticOutcome(c.env, question, {
     topK: 8,
     type: 'research_doc',
     namespace: researchNamespace(user.id),
     ownerUserId: user.id,
   });
+  // D4605: a search that could not run is not a search that found nothing.
+  // It is recorded as its own outcome, so history and the strip keep the gap
+  // in the evidence apart from a service failure, and the reader is told to
+  // try again rather than to upload a document that would not have helped.
+  if (!searched.ok) {
+    const answer_uid = await recordAnswer(c, session, {
+      question, answer: null, reason: 'retrieval_unavailable', best_score: null, citations: [],
+    });
+    return c.json({
+      question, answer: null, reason: 'retrieval_unavailable', retryable: true,
+      failure: searched.failure, citations: [], score_floor: SCORE_FLOOR,
+      session_uid: session.uid, answer_uid, cost_usd: 0,
+    });
+  }
+  const hits = searched.hits;
+  // D4605: the document row decides eligibility, not the index. A passage
+  // counts only while its document is the caller's, is indexed (wholly or in
+  // part), and the passage was written by the document's current index run; a
+  // removed document, one being re-indexed, and a vector a previous run left
+  // behind contribute nothing.
+  const eligible = await eligiblePassages(c.env, user.id, hits.filter((h) => h.score >= SCORE_FLOOR));
   // #3938 (task 4): retrieve, then rank, then write. The reranker orders the passages that passed the
   // floor against the question, so the answer reads (and cites) the best first. A refused or failed
   // rank keeps the index's order: the answer's own run below states any refusal.
-  const retrieved = hits.filter((h) => h.score >= SCORE_FLOOR);
-  let usable = retrieved;
-  if (retrieved.length > 1) {
+  let usable = eligible;
+  if (eligible.length > 1) {
     const ranked = await rank(c.env, {
       userId: user.id, surface: AI_SURFACE.researchAsk,
       rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
-    }, { query: question, contexts: retrieved.map((h) => `${h.title}\n${h.snippet}`.slice(0, 1500)) });
-    if (ranked.ok) usable = orderByRanking(retrieved, ranked.ranking);
+    }, { query: question, contexts: eligible.map((p) => `${p.hit.title}\n${p.text}`.slice(0, RANK_CONTEXT_CHARS)) });
+    if (ranked.ok) usable = orderByRanking(eligible, ranked.ranking);
   }
-  const documentUids = await Promise.all(usable.map(async (hit) => {
-    const document = await c.env.DB.prepare(
-      'SELECT uid FROM research_documents WHERE id = ? AND owner_user_id = ?'
-    ).bind(hit.entity_id, user.id).first<{ uid: string }>();
-    return document?.uid ?? null;
-  }));
+  usable = withinBudget(usable);
+  const documentUids = usable.map((p) => p.document_uid);
 
   if (!usable.length) {
     const indexed = await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state = 'indexed'`
+      `SELECT COUNT(*) AS n FROM research_documents WHERE owner_user_id = ? AND index_state IN ('indexed', 'partial')`
     ).bind(user.id).first<{ n: number }>();
     const best = hits.length ? Number(hits[0].score.toFixed(3)) : null;
     // Nothing was retrieved, so no model ran and nothing is charged. The row
@@ -747,8 +1114,9 @@ research.post('/ask', async (c) => {
     });
   }
 
+  // D4605: the whole passage, not the 280-character preview a list shows.
   const context = usable
-    .map((h, i) => `[${i + 1}] ${h.title}\n${h.snippet}`)
+    .map((p, i) => `[${i + 1}] ${p.hit.title}${p.hit.page != null ? ` (page ${p.hit.page})` : ''}\n${p.text}`)
     .join('\n\n');
   const prompt = [
     'Answer the question using ONLY the sources below.',
@@ -764,6 +1132,13 @@ research.post('/ask', async (c) => {
   let answer: string | null = null;
   let usage: { model?: string; prompt_tokens?: number; completion_tokens?: number; cached?: boolean; est_cost_usd?: number } | null = null;
   let off = false;
+  // D3701 part 4 (RS-11): a run the router refused before it ran (out of AI
+  // tokens, a spend limit, a review hold, the guard). Answered in the shared
+  // refusal's words and status (D766, `refuseRun`), and NOT recorded as
+  // `model_unavailable`: that said "the model didn't respond" about a run
+  // that never started, and sent the reader to try again instead of to Add
+  // tokens. Nothing ran, so nothing is charged or stored.
+  let refused: { refusal?: string | null; error?: string } | null = null;
   try {
     const out = await runAI(c.env, {
       task: 'research_ask',
@@ -782,6 +1157,7 @@ research.post('/ask', async (c) => {
     });
     answer = out.ok && out.output ? out.output.trim() : null;
     off = out.refusal === 'assist_off';
+    if (!out.ok && out.refusal && out.refusal !== 'assist_off') refused = { refusal: out.refusal, error: out.error };
     // The router's own receipt, already written to `ai_usage_logs`. Taken
     // whether or not the answer arrived — a model that ran and returned
     // nothing still cost what it cost, and hiding that would make the session
@@ -793,6 +1169,12 @@ research.post('/ask', async (c) => {
 
   // D765: off on this page, nothing ran, so no answer is recorded either.
   if (off) return refuseAssistOff(c);
+  // D3701 part 4: refused before running. `refuseRun` is null for a model that
+  // could not be reached, which stays `model_unavailable` below.
+  if (refused) {
+    const r = refuseRun(c, refused);
+    if (r) return r;
+  }
 
   const receipt = {
     model: usage?.model ?? null,
@@ -805,10 +1187,10 @@ research.post('/ask', async (c) => {
   if (!answer) {
     // The retrieval worked and the model did not. Reporting that as
     // `no_source` would blame the library for a failure that is not its.
-    const citations = usable.map((h, i) => ({ title: h.title, document_uid: documentUids[i], chunk: h.chunk ?? null, score: Number(h.score.toFixed(3)) }));
+    const citations = usable.map((p, i) => citationOf(p, documentUids[i]));
     const answer_uid = await recordAnswer(c, session, {
       question, answer: null, reason: 'model_unavailable',
-      best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+      best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
     });
     return c.json({
       question, answer: null, reason: 'model_unavailable',
@@ -820,23 +1202,19 @@ research.post('/ask', async (c) => {
     });
   }
 
-  const citations = usable.map((h, i) => ({
-    n: i + 1,
-    title: h.title,
-    document_uid: documentUids[i],
-    chunk: h.chunk ?? null,
-    score: Number(h.score.toFixed(3)),
-  }));
+  const citations = usable.map((p, i) => ({ n: i + 1, ...citationOf(p, documentUids[i]) }));
   const answer_uid = await recordAnswer(c, session, {
     question, answer, reason: 'answered',
-    best_score: Number(usable[0].score.toFixed(3)), citations, ...receipt,
+    best_score: Number(usable[0].hit.score.toFixed(3)), citations, ...receipt,
   });
 
   return c.json({
     question,
     answer,
     reason: 'answered',
-    citations,
+    // D4613: the same marking and check the history read applies.
+    citations: markCited(answer, citations),
+    reference_check: referenceCheck(answer, citations),
     score_floor: SCORE_FLOOR,
     session_uid: session.uid,
     answer_uid,
@@ -1392,13 +1770,12 @@ const DRAFT_SURFACES: Record<string, {
       ).bind(session.id, userId).all<{ question: string; answer: string | null; reason: string; citations: string }>();
       return (rows.results || []).map((r) => {
         if (r.reason !== 'answered') return `Q: ${r.question}\nA: (no retrievable source — unanswered)`;
-        let cites = '';
-        try {
-          const list = JSON.parse(r.citations || '[]');
-          if (Array.isArray(list) && list.length) {
-            cites = `\nSources: ${list.map((x: any) => `[${x.n}] ${x.title}`).join(', ')}`;
-          }
-        } catch { /* a malformed citation list costs the brief its sources, not its answer */ }
+        // D4613: only the sources the answer actually cites carry through as
+        // its sources; a passage it was given and never cited is not support.
+        // A malformed citation list costs the brief its sources, not its answer.
+        const list = markCited(r.answer, storedCitations(r.citations) as Array<{ n?: number | null; title?: string; cited?: boolean }>);
+        const cited = list.filter((x) => x.cited);
+        const cites = cited.length ? `\nSources: ${cited.map((x) => `[${x.n}] ${x.title}`).join(', ')}` : '';
         return `Q: ${r.question}\nA: ${r.answer}${cites}`;
       });
     },
@@ -1596,7 +1973,7 @@ const DRAFT_SURFACES: Record<string, {
     // unpriced entries as a SCORING gap rather than a tidying one, because
     // Pipeline scores leads against exactly these rows.
     instruction: [
-      'Say where revenue concentrates across this catalog and which entries have sold nothing.',
+      'Say where requests concentrate across this catalog and which entries have been requested or booked least. Requests are not sales and no revenue figure exists: do not state one.',
       'Name any entry with no price as a gap in lead scoring, not as a cosmetic one: an unpriced service scores as a capability and not as a fit.',
       'Use only the figures below. Do not estimate a price for anything that has none.',
     ].join(' '),
@@ -1605,15 +1982,17 @@ const DRAFT_SURFACES: Record<string, {
         `SELECT o.title AS title, o.engagement_model AS model, o.price_cents AS cents,
                 o.summary AS summary,
                 (SELECT COUNT(*) FROM service_engagements se
-                  WHERE se.offering_id = o.id AND se.status <> 'cancelled') AS sold
+                  WHERE se.offering_id = o.id) AS requested,
+                (SELECT COUNT(*) FROM service_engagements se
+                  WHERE se.offering_id = o.id AND se.status IN ('accepted', 'in_progress', 'delivered', 'reviewed', 'invoiced', 'paid')) AS booked
            FROM service_offerings o WHERE o.owner_user_id = ? ORDER BY o.id ASC LIMIT 100`
       ).bind(userId).all<{
-        title: string; model: string | null; cents: number | null; summary: string | null; sold: number;
+        title: string; model: string | null; cents: number | null; summary: string | null; requested: number; booked: number;
       }>();
       const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString('en-US')}`;
       return (rows.results || []).map((r) =>
         `${r.title} — ${r.model || 'engagement model not recorded'}; `
-        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; sold ${r.sold} time${r.sold === 1 ? '' : 's'}`
+        + `${r.cents == null ? 'NO PRICE RECORDED' : money(r.cents)}; requested ${r.requested} time${r.requested === 1 ? '' : 's'}, booked ${r.booked}`
         + `${r.summary ? `; includes ${r.summary}` : ''}`);
     },
   },
@@ -1644,7 +2023,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
           ORDER BY d.sent_at ASC LIMIT 100`
       ).bind(me.partner_id).all<{
@@ -1692,7 +2071,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? ORDER BY e.created_at DESC LIMIT 100`
       ).bind(me.partner_id).all<{
         scope: string | null; client: string | null; seats: number;
@@ -1743,7 +2122,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM partner_retainers r
            JOIN engagements e ON e.id = r.engagement_id
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND r.ended_at IS NULL
           ORDER BY r.renews_at IS NULL, r.renews_at LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -1799,7 +2178,7 @@ const DRAFT_SURFACES: Record<string, {
            FROM quote_negotiations g
            JOIN quotes q ON q.id = g.quote_id
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND g.stage <> 'closed'
           ORDER BY g.last_moved_at ASC LIMIT 25`
       ).bind(me.partner_id).all<{
@@ -1845,7 +2224,7 @@ const DRAFT_SURFACES: Record<string, {
                 (SELECT COUNT(*) FROM quote_versions v WHERE v.quote_id = q.id) AS versions
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
            LEFT JOIN engagements e ON e.quote_id = q.id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
           WHERE q.partner_id = ?
@@ -1902,7 +2281,7 @@ const DRAFT_SURFACES: Record<string, {
                 n.category AS shape, f.name AS client
            FROM quotes q
            LEFT JOIN founder_needs n ON n.id = q.need_id
-           LEFT JOIN users f ON f.id = n.founder_id
+           LEFT JOIN founders f ON f.id = n.founder_id
           WHERE q.partner_id = ? AND q.status IN ('accepted', 'rejected', 'submitted')
           ORDER BY q.decided_at IS NULL, q.decided_at DESC
           LIMIT 200`
@@ -1955,7 +2334,7 @@ const DRAFT_SURFACES: Record<string, {
           `SELECT n.title, n.description, n.category, n.budget_min, n.budget_max, n.timeline,
                   f.name AS client
              FROM founder_needs n
-             LEFT JOIN users f ON f.id = n.founder_id
+             LEFT JOIN founders f ON f.id = n.founder_id
             WHERE n.status = 'open'
               AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.need_id = n.id AND q.partner_id = ?)
               AND NOT EXISTS (SELECT 1 FROM partner_lead_passes lp WHERE lp.need_id = n.id AND lp.partner_id = ?)
@@ -2040,7 +2419,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE d.engagement_id = e.id AND d.sent_at IS NOT NULL AND d.opened_at IS NULL) AS unopened
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
            LEFT JOIN users o ON o.id = h.owner_user_id
@@ -2109,7 +2488,7 @@ const DRAFT_SURFACES: Record<string, {
                   WHERE b.engagement_id = e.id AND b.cleared_at IS NULL AND b.side <> 'client') AS our_blocked
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
           ORDER BY e.created_at DESC LIMIT 50`
       ).bind(me.partner_id).all<{
@@ -2246,7 +2625,7 @@ const DRAFT_SURFACES: Record<string, {
                   ORDER BY s.granted_at DESC LIMIT 1) AS seat_scope
            FROM engagements e
            LEFT JOIN founder_needs n ON n.id = e.need_id
-           LEFT JOIN users f ON f.id = e.founder_id
+           LEFT JOIN founders f ON f.id = e.founder_id
            LEFT JOIN partner_retainers r ON r.engagement_id = e.id
            LEFT JOIN partner_engagement_health h ON h.engagement_id = e.id
           WHERE e.partner_id = ? AND e.cancelled_at IS NULL
@@ -2336,10 +2715,16 @@ const DRAFT_SURFACES: Record<string, {
       if (!me?.partner_id) return [];
       const rows = await c.env.DB.prepare(
         `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                -- D4672: a consent counts only about the claim as it now reads (its pinned
+                -- hash is the item's current one), and an ask is pending only while its
+                -- link is live and about that same revision.
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL) AS live,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256) AS live,
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL) AS pending,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256
+                    AND (k.expires_at IS NULL OR datetime(k.expires_at) > datetime('now'))) AS pending,
                 (SELECT COUNT(*) FROM partner_proof_consents k
                   WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
            FROM partner_proof_items p
@@ -2484,7 +2869,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?')
         .bind(userId).first<{ role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // SCOPED THROUGH THE ONE HELPER THAT OWNS THE PREDICATE.
       // `scopedDecisions` is `routes/ic.ts`'s single list read; a draft surface
       // running its own `SELECT ... FROM ic_decisions` would be the second copy
@@ -2536,7 +2921,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The SAME predicate `esign.get('/')` puts in its WHERE clause, from the
       // same shared helper — not a second copy of it. An envelope carries the
       // executed paper of a deal; an unscoped read here would hand one firm's
@@ -2592,7 +2977,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The same scope every read in `routes/positions.ts` uses. An empty
       // accessible set means an empty draft, never an unscoped one — the CSV
       // predicate treats NULL as "all rows", so [] must short-circuit here
@@ -2655,7 +3040,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // Same scope as every read in `routes/positions.ts` and the same
       // short-circuit: the CSV predicate reads NULL as "all rows", so an empty
       // accessible set must never reach the query.
@@ -2754,7 +3139,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'partner' && role !== 'investor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).some(licence => licence === 'partner' || licence === 'investor')) return [];
       // The same scope and the same short-circuit as every Portfolio read: the
       // CSV predicate reads NULL as "all rows", so an empty accessible set must
       // never reach the query.
@@ -2838,7 +3223,7 @@ const DRAFT_SURFACES: Record<string, {
       const me = await c.env.DB.prepare('SELECT id, role FROM users WHERE id = ?')
         .bind(userId).first<{ id: number; role: string | null }>();
       const role = String(me?.role || '');
-      if (role !== 'admin' && role !== 'advisor') return [];
+      if (role !== 'admin' && !(await heldLicences(c.env.DB, { id: userId, role })).includes('advisor')) return [];
       // The caller's OWN advisor row. No row means no practice, which means an
       // empty gather and a 409 — never a fallback to whichever advisor sorted
       // first.
@@ -2879,7 +3264,7 @@ const DRAFT_SURFACES: Record<string, {
         + `; kind ${s.kind || 'not recorded'}`
         // The price is spelled as unset rather than zeroed: 0 is a price an
         // advisor may genuinely mean, and the instruction turns on this word.
-        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; price ${s.price_cents == null ? 'NOT SET' : suffixAmount(Number(s.price_cents), String(s.currency || 'USD').toUpperCase(), { trimWhole: true })}`
         + `; duration ${s.duration_note || 'not recorded'}`
         + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
       ));
@@ -3301,60 +3686,9 @@ const DRAFT_SURFACES: Record<string, {
     },
   },
 
-  'grow/customers': {
-    // A5's band: "Segment: platform leads at 50-200 engineer orgs, cold, no
-    // reply in 14 days. + 3-touch sequence, each opening on the
-    // handoff-opacity pain THEIR OWN SEGMENT NAMED in your interviews."
-    //
-    // The italics are the artboard's and they are the whole instruction. A
-    // model asked for outreach copy writes a generic cold email; what makes
-    // this one worth the tokens is that it opens on something the recipient's
-    // own segment said. So the material carries the founder's recorded pains
-    // alongside the signups, and the instruction requires the opening line to
-    // come from one of them or to say that none applies.
-    //
-    // THE FUNNEL HAS FOUR STAGES, NOT THE ARTBOARD'S FIVE. `crm_status` is
-    // new / invited / followed_up / promoted (`routes/progress.ts`), and a
-    // model handed "Demo", "Trial" and "Paid" would place people in stages
-    // this product cannot record them in.
-    instruction: [
-      'Draft one outreach sequence for the signups below who have gone furthest without converting.',
-      'Open each touch on a pain the founder has actually recorded, quoting it. If no recorded pain fits the segment, say so and write no opener rather than inventing one.',
-      'Use only the four stages the record has — new, invited, followed up, promoted. Do not place anyone at a demo, a trial or a paid plan: none of those is recorded.',
-      'Name no company and no person the list below does not name.',
-    ].join(' '),
-    gather: async (c, userId, scope) => {
-      const pid = await founderProject(c, userId, scope);
-      if (pid == null) return [];
-      const stages = await c.env.DB.prepare(
-        `SELECT COALESCE(crm_status, 'new') AS stage, COALESCE(source, 'source not recorded') AS source,
-                COUNT(*) AS n, MAX(created_at) AS latest
-           FROM waitlist_signups WHERE project_id = ?
-          GROUP BY COALESCE(crm_status, 'new'), COALESCE(source, 'source not recorded')
-          ORDER BY n DESC LIMIT 40`
-      ).bind(pid).all<{ stage: string; source: string; n: number; latest: string | null }>();
-      const lines = (stages.results || []).map((r) =>
-        `${r.n} signup${r.n === 1 ? '' : 's'} at stage "${r.stage.replace('_', ' ')}" from ${r.source}; `
-        + `most recent ${r.latest ? String(r.latest).slice(0, 10) : 'not recorded'}`);
-      if (!lines.length) return [];
-      // The founder's OWN pain map: a group's title plus how many distinct
-      // phrases they have filed under it. Grouping is the founder's act — the
-      // Validate desk never names a theme for them — so a title here is
-      // something they wrote, not something a model decided.
-      const pains = await c.env.DB.prepare(
-        `SELECT g.title,
-                (SELECT COUNT(*) FROM pain_group_aliases a WHERE a.group_id = g.id) AS phrases
-           FROM pain_groups g WHERE g.project_id = ?
-          ORDER BY phrases DESC, g.sort_order LIMIT 12`
-      ).bind(pid).all<{ title: string; phrases: number }>();
-      const painLines = (pains.results || []).map((r) =>
-        `Recorded pain: "${r.title}" — ${r.phrases} phrase${r.phrases === 1 ? '' : 's'} grouped under it`);
-      lines.push(painLines.length
-        ? painLines.join('\n')
-        : 'NO PAIN IS RECORDED for this startup — there is nothing a touch can open on.');
-      return lines;
-    },
-  },
+  // D4493 (#4493): 'grow/customers' (A5's outreach-sequence band) is retired. The
+  // Distribution sequence builder's Ask drafts a sequence through D4488's task
+  // (kind `sequence`) and keeps the `draft:grow/customers` rail row's models.
 
   'grow/talent': {
     // A5's band: "Ranked first of 14 on three receipts you can check: shipped
@@ -3598,6 +3932,7 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'raise/narrative-fix': 'Founder · Raise · Investor narrative',
   'raise/capital': 'Founder · Raise · Cap table',
   'raise/liquidity': 'Founder · Raise · Cap table',
+  // D4493: kept for the moved rail row's page; the surface itself is retired above.
   'grow/customers': 'Founder · Grow · Distribution',
   'grow/talent': 'Founder · Grow · Team expansion',
   'network/re-engagement': 'Founder · Network',
@@ -3783,13 +4118,15 @@ research.delete('/drafts/:uid', async (c) => {
 const FUND_STAGE_FIT = new Set(['right', 'wrong']);
 const FUND_PATH = new Set(['warm', 'cold']);
 const FUND_STATUS = new Set(['researching', 'passed']);
+/** D4613: a fund-directory uid, as the directory writes them. */
+const CATALOGUE_UID_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 interface FundRow {
   id: number; uid: string; owner_user_id: number; project_id: number | null;
   name: string; cheque_min_cents: number | null; cheque_max_cents: number | null;
   stage_fit: string | null; path: string | null; status: string;
   pass_reason: string | null; thesis: string | null; note: string | null;
-  source_url: string | null; created_at: string; updated_at: string;
+  source_url: string | null; catalogue_uid?: string | null; created_at: string; updated_at: string;
 }
 
 const fundDto = (r: FundRow) => ({
@@ -3808,6 +4145,8 @@ const fundDto = (r: FundRow) => ({
   thesis: r.thesis,
   note: r.note,
   source_url: r.source_url,
+  // D4613: the fund-directory row this came from; null for a hand-written fund.
+  catalogue_uid: r.catalogue_uid ?? null,
   created_at: r.created_at,
   // The dossier's "Last updated" tile. Every write to the row stamps it —
   // PATCH, and a brief accepted into the note.
@@ -4013,25 +4352,41 @@ research.post('/funds', async (c) => {
   const body = await c.req.json<any>().catch(() => ({}));
   const name = clampText(body.name, 200);
   if (!name) return c.json({ detail: 'A fund needs a name' }, 400);
+  // D4613: an add from the fund directory names the directory row it came
+  // from. Checked against a fixed character set before it reaches SQL (bound
+  // there regardless), and absent for a fund typed in by hand.
+  const rawCatalogue = body.catalogue_uid;
+  const catalogueUid = rawCatalogue == null || rawCatalogue === '' ? null : String(rawCatalogue);
+  if (catalogueUid !== null && !CATALOGUE_UID_RE.test(catalogueUid)) {
+    return c.json({ detail: 'catalogue_uid_invalid' }, 400);
+  }
   const uid = newUid();
   const now = nowIso();
-  await c.env.DB.prepare(
-    `INSERT INTO research_funds
+  // D4613: INSERT OR IGNORE against the partial unique index on (owner,
+  // catalogue_uid). A repeat of the same catalogue add — a double click, or a
+  // retry after a lost response — writes nothing and answers with the row the
+  // first one wrote. A hand-written fund (NULL catalogue_uid) never collides.
+  const write = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO research_funds
        (uid, owner_user_id, project_id, name, cheque_min_cents, cheque_max_cents,
-        stage_fit, path, status, pass_reason, thesis, note, source_url, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        stage_fit, path, status, pass_reason, thesis, note, source_url, catalogue_uid, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     uid, user.id, clampInt(body.project_id), name,
     clampInt(body.cheque_min_cents), clampInt(body.cheque_max_cents),
     oneOf(body.stage_fit, FUND_STAGE_FIT), oneOf(body.path, FUND_PATH),
     oneOf(body.status, FUND_STATUS) || 'researching',
     clampText(body.pass_reason, 1000), clampText(body.thesis, 2000),
-    clampText(body.note, 2000), clampText(body.source_url, 500), now, now,
+    clampText(body.note, 2000), clampText(body.source_url, 500), catalogueUid, now, now,
   ).run();
-  const row = await c.env.DB.prepare(
-    `SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`
-  ).bind(uid, user.id).first<FundRow>();
-  return c.json(fundDto(row as FundRow), 201);
+  const created = Number(write.meta?.changes ?? 1) > 0;
+  const row = created
+    ? await c.env.DB.prepare(`SELECT * FROM research_funds WHERE uid = ? AND owner_user_id = ?`).bind(uid, user.id).first<FundRow>()
+    : await c.env.DB.prepare(`SELECT * FROM research_funds WHERE owner_user_id = ? AND catalogue_uid = ?`).bind(user.id, catalogueUid).first<FundRow>();
+  if (!row) return c.json({ detail: 'The fund did not save' }, 500);
+  // 201 for the row this request wrote, 200 for the one an earlier request
+  // wrote. `existing` says which, so the page can say "already on My funds".
+  return c.json({ ...fundDto(row), existing: !created }, created ? 201 : 200);
 });
 
 // ---------------------------------------------------------------------------
@@ -4685,29 +5040,30 @@ research.get('/diligence', async (c) => {
   ).bind(user.id, user.id).all<any>();
 
   // "Open to you" is what THIS investor may open, not what the founder marked
-  // `open`. An investor holding a live NDA with the founder who granted the
-  // room may open the `nda` files too — the download route already lets them —
+  // `open`. An investor holding a live NDA with the venture's founder
+  // may open the `nda` files too — the download route already lets them —
   // so counting only `visibility = 'open'` told a signed investor that files
-  // were behind an NDA they had already signed. One NDA check per granting
-  // founder, through the data room's own `ndaActive`, never a second copy of
+  // were behind an NDA they had already signed. One NDA check per venture,
+  // through the data room's own `projectNdaActive` (D4631 part 2: the venture's
+  // NDA by the shared rule, whoever granted the room), never a second copy of
   // its predicate here.
-  const ndaByFounder = new Map<number, boolean>();
+  const ndaByProject = new Map<number, boolean>();
   for (const r of rows.results || []) {
-    const founder = Number(r.granted_by_user_id);
-    if (!ndaByFounder.has(founder)) ndaByFounder.set(founder, await ndaActive(c.env, founder, user.id));
+    const pid = Number(r.project_id);
+    if (!ndaByProject.has(pid)) ndaByProject.set(pid, await projectNdaActive(c.env, pid, user.id));
   }
 
   // D691 decision 6 — the counts are what this investor's tier admits.
   const counted = new Map<number, { total: number; open: number }>();
   for (const r of rows.results || []) {
     const pid = Number(r.project_id);
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(pid) === true;
     // D1103 — and only what the grant's folders hold.
     counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
   const items = (rows.results || []).map((r: any) => {
-    const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
+    const nda = ndaByProject.get(Number(r.project_id)) === true;
     const { total, open } = counted.get(Number(r.project_id)) ?? { total: 0, open: 0 };
     return {
       grant_uid: r.grant_uid,
@@ -4748,7 +5104,7 @@ research.get('/diligence', async (c) => {
 // The list above says which rooms are open to you; these two are the room and
 // the document pages behind it (canvases b6a5f992 and 96463a46). They read the
 // data room's own tables and pass through the data room's own gate —
-// `activeGrant`, `ndaActive` and `logAccess` from `data_room.ts` — so there is
+// `activeGrant`, `projectNdaActive` and `logAccess` from `data_room.ts` — so there is
 // one definition of "this investor may see this" in the worker, not two.
 //
 // KEYED BY GRANT UID, NOT PROJECT UID. The grant is the thing the investor
@@ -4806,7 +5162,7 @@ async function heldRoom(env: Env, userId: number, grantUid: string): Promise<Hel
     `SELECT id, uid, name FROM projects WHERE id = ?`
   ).bind(grant.project_id).first<{ id: number; uid: string; name: string }>();
   if (!project) return null;
-  return { grant, project, nda: await ndaActive(env, grant.granted_by_user_id, userId) };
+  return { grant, project, nda: await projectNdaActive(env, project.id, userId) };
 }
 
 /**

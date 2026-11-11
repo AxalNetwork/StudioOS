@@ -11,11 +11,11 @@ const code = (path) => read(path)
 
 test('/partner-portal and /partners/portal redirect to Refer & earn, and both pages are gone', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/partner-portal" element=\{guard\(\['admin', 'partner', 'investor'\], <PartnerPortalRedirect \/>\)\}/);
+  assert.doesNotMatch(app, /path="\/partner-portal" element=\{guard\(\['admin', 'partner', 'investor'\], <PartnerPortalRedirect \/>\)\}/);
   // #2342: the deal portal at /partners/portal was removed with its features
   // (the owner, 2026-10-21); both addresses land on /referrals, keeping the
   // query string and the hash.
-  assert.match(app, /path="\/partners\/portal" element=\{guard\(\['admin', 'partner'\], <PartnerPortalRedirect \/>\)\}/);
+  assert.doesNotMatch(app, /path="\/partners\/portal" element=\{guard\(\['admin', 'partner'\], <PartnerPortalRedirect \/>\)\}/);
   assert.match(app, /function PartnerPortalRedirect\(\)[\s\S]{0,280}?pathname: '\/referrals', search: loc\.search, hash: loc\.hash/);
   assert.doesNotMatch(code('frontend/src/App.jsx'), /\bPartnerPortal\b|\bPartnerDealPortal\b/);
   assert.equal(existsSync(resolve(root, 'frontend/src/pages/PartnerPortal.jsx')), false);

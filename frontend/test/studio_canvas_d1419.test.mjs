@@ -150,9 +150,12 @@ test('refusals are read by status and code: no Studio, an unreadable row, a stal
 test('an administrator always names the profile; a member never does', () => {
   assert.equal(layoutProfileFor({ role: 'admin' }, 'investor'), 'investor');
   assert.equal(layoutProfileFor({ role: 'investor' }, 'investor'), undefined);
+  // D4362 (#4362) supersedes SM11: an admin customises the Studio they switch to, as their own layout.
   const admin = deriveStudio({ profile: 'investor', viewer: { role: 'admin' }, modules: FOUNDER, layout: DEFAULT });
-  assert.equal(admin.canCustomise, false, 'an admin preview has no Customise (SM11)');
-  assert.equal(admin.readOnly, true);
+  assert.equal(admin.canCustomise, true, 'an admin arranges their own layout of the Studio they switch to (D4362)');
+  assert.equal(admin.readOnly, false);
+  assert.equal(admin.admin, true);
+  assert.equal(deriveStudio({ profile: 'investor', viewer: { role: 'admin' }, readOnly: true, modules: FOUNDER, layout: DEFAULT }).canCustomise, false, 'readOnly still means no Customise');
 });
 
 // ---------------------------------------------------------------- the tile
@@ -242,6 +245,13 @@ test('SM8b: dropped modules are named above the grid; SM12a: no Studio profile s
 test('the module map: groups, Recommended, a locked entry names its plan, the cap turns every Add off, and an empty search says so', () => {
   // Mutations checked: Add left on at 12; the plan name dropped from the locked line.
   const body = (draft, query = '') => text(h(ModuleMapBody, { profile: 'founder', catalogue: FOUNDER.modules, groups: FOUNDER.groups, draft, onAdd() {}, onLocked() {}, query }));
+  const preview = html(h(ModuleMapBody, { profile: 'founder', catalogue: FOUNDER.modules, groups: FOUNDER.groups, draft: [], onAdd() {}, onLocked() {}, query: 'Customer research' }));
+  assert.match(renderedText(preview), /Customer research, in a line\./);
+  assert.match(preview, /aria-label="Add Customer research"/);
+  assert.match(preview, /src="\/site\/tool-discovery\.webp"/);
+  const map = html(h(StudioModules, { studio: { ...founder(), editing: true, mapOpen: true }, tiles: TILES }));
+  assert.match(map, /role="dialog"[^>]*aria-label="Artifact map"/);
+  assert.match(map, /data-testid="studio-map-company_progress"[^>]*>[^]*?class="sm-artifact-mark"/);
   const open = body(DEFAULT.layout.slice(0, 1));
   assert.match(open, /Founder modules · 1 of 12 placed/);
   assert.match(open, /Recommended for you2/);
@@ -281,13 +291,13 @@ function fakeApi({ layout = DEFAULT, modules = FOUNDER, save = null } = {}) {
   };
 }
 
-async function mount({ api, viewer = member, profile = 'founder', readOnly = false }) {
+async function mount({ api, viewer = member, profile = 'founder', readOnly = false, withheld = false }) {
   const restore = installDocument();
   const previous = globalThis.matchMedia;
   globalThis.matchMedia = (q) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} });
   function Page() {
     const studio = useStudioLayout({ profile, viewer, readOnly, api });
-    return h('div', null, h(CustomiseButton, { studio }), h(StudioModules, { studio, tiles: TILES }));
+    return h('div', null, h(CustomiseButton, { studio }), h(StudioModules, { studio, tiles: TILES, withheld }));
   }
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
@@ -375,12 +385,31 @@ test('a failed save keeps the edits: 409 is "changed in another tab" with Reload
   }
 });
 
-test('an administrator previewing sends the profile on every read and is offered no Customise (SM11)', async () => {
+test('an administrator sends the profile on every read, save and reset, and arranges their own layout (D4362, superseding SM11)', async () => {
   // Mutation checked: not sending `profile` for an admin (every read is 400 invalid_profile).
+  const api = fakeApi();
+  const v = await mount({ api, viewer: { role: 'admin', name: 'Hal Admin' }, profile: 'investor', withheld: true });
+  try {
+    assert.deepEqual(api.calls, [['modules', 'investor'], ['layout', 'investor']]);
+    assert.equal(v.has(byTestId('button-studio-customise')), true, 'an admin is offered Customise');
+    assert.match(v.text(), /Withheld in administrator preview/, 'the preview\'s tiles are withheld');
+    await v.click(byTestId('button-studio-customise'));
+    await v.click(byLabel('Remove Lab tools'));
+    assert.match(v.text(), /Withheld in administrator preview/, 'arranging unlocks no tile');
+    await v.click(byTestId('button-studio-done'));
+    const saves = api.calls.filter((c) => c[0] === 'save');
+    assert.deepEqual(saves, [['save', [{ key: 'company_progress', size: 'full' }, { key: 'eadwyn_questions', size: '1/2' }], null, 'investor']], 'saved as the admin\'s investor layout');
+    await v.click(byTestId('button-studio-customise'));
+    await v.click(byTestId('button-studio-reset'));
+    await v.click((p) => p.children === 'Replace layout');
+    assert.deepEqual(api.calls.filter((c) => c[0] === 'reset'), [['reset', 'investor']], 'reset names the admin\'s Studio');
+  } finally { await v.close(); }
+});
+
+test('a readOnly Studio is offered no Customise and reads "Default layout"', async () => {
   const api = fakeApi();
   const v = await mount({ api, viewer: { role: 'admin', name: 'Hal Admin' }, profile: 'investor', readOnly: true });
   try {
-    assert.deepEqual(api.calls, [['modules', 'investor'], ['layout', 'investor']]);
     assert.equal(v.has(byTestId('button-studio-customise')), false);
     assert.match(v.text(), /Default layout3 modules/);
   } finally { await v.close(); }

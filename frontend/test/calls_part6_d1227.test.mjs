@@ -23,10 +23,10 @@ const h = React.createElement;
 test('/raise/calls/:uid forwards to the call under Capital relationships, and is counted', () => {
   const app = read('frontend/src/App.jsx');
   // Mutation checked: keep RaiseCallPage on the old address → this fails.
-  assert.match(app, /<Route path="\/raise\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/raise\/capital-relationships\/calls\/:uid" \/>\)\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/raise\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <ParamRedirect to="\/raise\/capital-relationships\/calls\/:uid" \/>\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/capital-relationships\/calls\/:uid" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <RaiseCallPage \/>\)\} \/>/);
   // Mutation checked: drop the entry → the beacon cannot count the old address.
-  assert.ok(REDIRECT_ROUTES.some((r) => r.path === '/raise/calls/:uid' && !r.keep), 'counted until #2319');
+  assert.equal(REDIRECT_ROUTES.some((r) => r.path === '/raise/calls/:uid'), false, 'retired by D2319');
 });
 
 test('the redirect keeps the call, its query and its hash', async () => {

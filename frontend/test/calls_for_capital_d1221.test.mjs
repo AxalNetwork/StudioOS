@@ -91,7 +91,7 @@ test('the wiring: Raise’s Calls tab, the one-call route, the redirect, the tab
   assert.deepEqual([CYCLES.raise.history.path, CYCLES.raise.history.hash], ['/raise/capital-relationships/calls', '']);
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/raise/capital-relationships/calls/:uid" element={guard(labRoles(['admin', 'founder']), <RaiseCallPage />)} />`));
-  assert.ok(app.includes('<HistoryRedirect to="/raise/capital-relationships/calls" hash="" />'));
+  assert.equal(app.includes('<Route path="/raise/calls"'), false);
   assert.ok(read('frontend/src/pages/raise/caprel/CapRelTool.jsx').includes('<CallsTab calls={read.data?.parts?.calls}'));
   assert.ok(read('frontend/src/pages/founder/RoundCallPage.jsx').includes("'/raise/capital-relationships/calls/'+encodeURIComponent(uid)"));
   for (const f of ['Calls for Capital Page.dc.html', 'Calls for Capital · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);

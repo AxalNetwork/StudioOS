@@ -1,0 +1,34 @@
+{
+  "skill": "dashboard-information-hierarchy",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "build.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Dashboard Information Hierarchy",
+        "task_scope": "Organizes dashboard metrics and actions by decision priority, role, urgency and drill-down path.",
+        "evidence": [
+          "decision-priority metric hierarchy"
+        ],
+        "omitted_field": "metric owner"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for decision-priority metric hierarchy."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "decision-priority metric hierarchy"
+    ],
+    "must_say_not_recorded": [
+      "metric owner"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

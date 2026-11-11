@@ -108,7 +108,9 @@ function listAll() {
 }
 
 function listAgainst(ref) {
-  const out = tryGitOrEmpty(["diff", `${ref}...HEAD`, "--name-only", "--diff-filter=AM"]);
+  // --no-renames: rename detection reads old blobs, which a blobless CI clone
+  // fetches one by one; a renamed file is checked as an addition instead.
+  const out = tryGitOrEmpty(["diff", `${ref}...HEAD`, "--name-only", "--no-renames", "--diff-filter=AM"]);
   return out ? out.split("\n").filter(Boolean) : [];
 }
 

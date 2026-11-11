@@ -13,7 +13,7 @@
  */
 const ALL = [
   'spinout-lab', 'ai-native-venture', 'mentor-cohorts', 'investor-cohorts', 'referral-partners',
-  'refer-and-earn', 'perks', 'learning', 'product-testing',
+  'refer-and-earn', 'influencer', 'perks', 'learning', 'product-testing',
 ];
 const CAPACITY = ['spinout-lab', 'mentor-cohorts', 'learning'];
 export const TERM_APPLIES = {

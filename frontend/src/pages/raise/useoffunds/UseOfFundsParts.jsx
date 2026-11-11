@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { toMajorString } from '../../../lib/money.js';
 import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
@@ -6,6 +7,7 @@ import {
   NOT_RECORDED, SECTIONS, centsFromTyped, dayText, money, roundSourceRows, sectionOf, splitCheck, sourceText,
 } from './useOfFundsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1177 (#3104) — the Use of funds tool's shared parts: the plan read, the
@@ -216,17 +218,25 @@ function DialogButtons({ busy, onClose, go, goLabel, disabled, testId }) {
   );
 }
 
-const refusal = (e) => (e?.message ? `${e.message}` : 'It was not saved. Read the plan again before retrying.');
+const refusal = (e) => userFacingRaiseError(e, { fallback: 'It was not saved. Read the plan again before retrying.', scope: 'raise:use-of-funds' });
+/** D5069: the plan changed after the dialog opened. Nothing was written. */
+export const isStale = (e) => e?.status === 409 && (e?.code === 'changed_since_open' || e?.data?.code === 'changed_since_open');
+/** Review latest: closes the dialog and reads the plan again; the person's typed values stay in their head, not in a stale save. */
+function ReviewLatest({ onReview }) {
+  return <button type="button" className="self-start rounded-[9px] border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-bold text-axal-ink hover:border-axal-violet dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" onClick={onReview} data-testid="uof-review-latest">Review latest</button>;
+}
+export const REVIEWED = 'Showing the latest plan. Your change was not saved; make it again from here.';
 
 /** UF3: the raise, the five shares with their amounts, the live total and the target runway. */
 export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api = useOfFundsApi }) {
   const start = Object.fromEntries(SECTIONS.map((s) => [s.key, String(base?.lines?.find((l) => l.category_key === s.key)?.share_pct ?? '')]));
   const [shares, setShares] = useState(start);
-  const [amount, setAmount] = useState(base?.amount_to_raise_cents != null ? String(base.amount_to_raise_cents / 100) : '');
+  const [amount, setAmount] = useState(toMajorString(base?.amount_to_raise_cents, 'USD') ?? '');
   const [target, setTarget] = useState(base?.target_runway_months ?? 18);
   const [custom, setCustom] = useState(![18, 24].includes(Number(base?.target_runway_months ?? 18)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const check = splitCheck(shares);
   const cents = centsFromTyped(amount);
   const months = Number(target);
@@ -234,9 +244,9 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.saveSplit(projectId, { amount_to_raise_cents: cents, runway_months: months, sections: SECTIONS.map((s) => ({ key: s.key, pct: Number(shares[s.key]) })) });
+      await api.saveSplit(projectId, { amount_to_raise_cents: cents, runway_months: months, sections: SECTIONS.map((s) => ({ key: s.key, pct: Number(shares[s.key]) })), expected_revision: base?.revision });
       onSaved('The split is saved. The deck’s Ask slide is marked out of sync.');
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -284,27 +294,29 @@ export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api
         </fieldset>
         <p className={`m-0 text-[12px] ${MUTED}`}>The pitch deck’s Ask slide reads this split. Saving marks it out of sync.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-split-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Sheet>
   );
 }
 
 /** UF6: a milestone names what a section's money pays for, by a month. An empty cost stays Not costed, never 0. */
-export function AddMilestoneDialog({ projectId, onClose, onSaved, api = useOfFundsApi }) {
+export function AddMilestoneDialog({ projectId, revision, onClose, onSaved, api = useOfFundsApi }) {
   const [label, setLabel] = useState('');
   const [section, setSection] = useState('product');
   const [by, setBy] = useState('');
   const [cost, setCost] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const cents = cost.trim() === '' ? null : centsFromTyped(cost);
   const byOk = by === '' || /^\d{4}-(0[1-9]|1[0-2])$/.test(by);
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.createMilestone(projectId, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents });
+      await api.createMilestone(projectId, { label: label.trim(), category_key: section, due_on: by || null, cost_cents: cents, expected_revision: revision });
       onSaved(cents == null ? 'The milestone is added. It stays Not costed until you add a cost.' : 'The milestone is added.');
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -322,6 +334,48 @@ export function AddMilestoneDialog({ projectId, onClose, onSaved, api = useOfFun
           <input className={`${FIELD} ${MONO}`} inputMode="decimal" placeholder="Leave empty to keep it Not costed" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="uof-milestone-cost" />
           <span className={`text-[12px] ${MUTED}`}>An empty cost stays Not costed, never 0.</span></label>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-milestone-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
+ * D5375: edit or remove one planned hire. The hire's own `revision` goes with the save and the removal, so a
+ * hire changed in another tab is refused (409, the dialog stays open, Review latest) instead of replaced.
+ * The cost a year and its currency are not edited here, so nothing is converted through a fixed factor.
+ */
+export function EditHireDialog({ projectId, hire, onClose, onSaved, api = useOfFundsApi }) {
+  const [role, setRole] = useState(hire?.role ?? '');
+  const [section, setSection] = useState(hire?.category_key ?? 'product');
+  const [from, setFrom] = useState(hire?.start_month ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
+  const fromOk = from === '' || /^\d{4}-(0[1-9]|1[0-2])$/.test(from);
+  const run = async (work, done) => {
+    setBusy(true); setError('');
+    try { await work(); onSaved(done); } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
+    setBusy(false);
+  };
+  const save = () => run(() => api.updateHire(projectId, hire.id, { role: role.trim(), category_key: section, start_month: from || null, expected_revision: hire.revision }), 'The hire is saved.');
+  const remove = () => run(() => api.deleteHire(projectId, hire.id, hire.revision), 'The hire is removed.');
+  return (
+    <Lightbox label="Edit hire" title="Edit hire" sub="A planned hire, by the section it is paid from." onClose={onClose} width={520} phone="sheet" testId="uof-edit-hire"
+      footer={<div className="flex justify-between gap-2 max-md:flex-col">
+        <button type="button" className={BTN_GHOST} onClick={remove} disabled={busy} data-testid="uof-hire-remove">Remove hire</button>
+        <DialogButtons busy={busy} onClose={onClose} go={save} goLabel="Save hire" disabled={!role.trim() || !fromOk} testId="uof-hire-save" />
+      </div>}>
+      <div className="flex flex-col gap-3 text-axal-ink dark:text-gray-100">
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Role</span><input className={FIELD} value={role} onChange={(e) => setRole(e.target.value)} data-testid="uof-hire-role" /></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>Section</span>
+          <select className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} data-testid="uof-hire-section">
+            {SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></label>
+        <label className="flex flex-col gap-1"><span className={EYEBROW}>From</span><input className={`${FIELD} ${MONO}`} placeholder="2027-03" value={from} onChange={(e) => setFrom(e.target.value)} data-testid="uof-hire-from" />
+          {!fromOk ? <span className="text-[12px] text-red-700 dark:text-red-300">A month is written like 2027-03.</span> : null}</label>
+        {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-hire-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Lightbox>
   );
@@ -330,17 +384,19 @@ export function AddMilestoneDialog({ projectId, onClose, onSaved, api = useOfFun
 /** UF13d: the plan, the round and the cap-table scenario then read the same raise. Only a recorded size is offered. */
 export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOfFundsApi }) {
   const base = plan?.base?.value;
-  const options = roundSourceRows(plan).filter((r) => r.cents != null);
+  const baseCurrency = (base?.currency ?? 'usd').toLowerCase();
+  const options = roundSourceRows(plan).filter((r) => r.cents != null && r.currency?.toLowerCase() === baseCurrency);
   const [pick, setPick] = useState(options.find((o) => o.chosen)?.key ?? options[0]?.key ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
   const chosen = options.find((o) => o.key === pick);
   const save = async () => {
     setBusy(true); setError('');
     try {
-      await api.updateScenario(projectId, base.id, { amount_to_raise_cents: chosen.cents });
+      await api.updateScenario(projectId, base.id, { amount_to_raise_cents: chosen.cents, expected_revision: base.revision });
       onSaved(`This plan now raises ${chosen.raise}. Your split keeps its shares.`);
-    } catch (e) { setError(refusal(e)); }
+    } catch (e) { setError(refusal(e)); setStale(isStale(e)); }
     setBusy(false);
   };
   return (
@@ -352,9 +408,10 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
             <input type="radio" name="round" checked={pick === o.key} onChange={() => setPick(o.key)} className="mt-1" />
             <span><span className={`${MONO} font-bold`}>{o.raise}</span> · {o.label} · <span className={MUTED}>{o.source}</span></span>
           </label>
-        )) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No recorded round size to choose from.</p>}
+        )) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No recorded round size in {baseCurrency.toUpperCase()}.</p>}
         <p className={`m-0 text-[12px] ${MUTED}`}>Choosing a size changes this plan’s raise. Your split keeps its shares.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-round-error">{error}</p> : null}
+        {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}
       </div>
     </Sheet>
   );

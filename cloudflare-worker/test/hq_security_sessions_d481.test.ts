@@ -26,7 +26,7 @@ import { Hono } from 'hono';
 import security from '../src/routes/admin_security.ts';
 import { requireAuth, JWT_EXPIRY_HOURS } from '../src/auth.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { revokeUserSession } from '../src/services/userSessions.ts';
+import { listActiveSessions, revokeUserSession } from '../src/services/userSessions.ts';
 import {
   loadTokenAnomalies, TOKEN_ANOMALY_FLOOR, TOKEN_ANOMALY_MULTIPLE, TOKEN_ANOMALY_BASELINE_DAYS,
 } from '../src/services/tokenAnomalies.ts';
@@ -165,6 +165,41 @@ test('the list: active, unrevoked sessions in the window, the caller marked Curr
   assert.equal(r.body.impersonations.available, true);
 });
 
+test('D4699: newest sign-in first by id, and before_id continues strictly below, each session once', async () => {
+  const db = freshDb();
+  const all = (await call(db, AS_SUPER, 'GET', '/sessions')).body;
+  const ids = all.rows.map((x: any) => x.id);
+  assert.deepEqual(ids, [...ids].sort((a: number, b: number) => b - a), 'not newest id first');
+  assert.equal(all.cursor, null, 'one page holds them all: no cursor');
+  // A seen-just-now session does not jump the queue: the order is the sign-in's, which never moves.
+  db.exec("UPDATE user_sessions SET last_seen_at = datetime('now', '+1 minute') WHERE jti = 'jti-o1'");
+  assert.deepEqual((await call(db, AS_SUPER, 'GET', '/sessions')).body.rows.map((x: any) => x.id), ids, 'a last_seen_at change moved rows');
+  // Pages of two through the service, as the route pages its 200.
+  const pages: number[][] = [];
+  let before: number | null = null;
+  for (let n = 0; n < 10; n += 1) {
+    const page = await listActiveSessions(env(db), null, 2, before);
+    pages.push(page.rows.map((x) => x.id));
+    if (!page.next_before_id) break;
+    before = page.next_before_id;
+  }
+  assert.deepEqual(pages.flat(), ids, 'paging lost, repeated or reordered a session');
+  assert.equal(pages.length, Math.ceil(ids.length / 2));
+  // The route continues from the cursor it is given.
+  const tail = (await call(db, AS_SUPER, 'GET', `/sessions?before_id=${ids[1]}`)).body;
+  assert.deepEqual(tail.rows.map((x: any) => x.id), ids.slice(2));
+  assert.equal(tail.total, all.total, 'the count is the whole window, on every page');
+});
+
+test('D4699: a before_id out of shape is a 400 naming it, never the first page', async () => {
+  const db = freshDb();
+  for (const bad of ['0', '-3', 'abc', '1.5', '1e3']) {
+    const r = await call(db, AS_SUPER, 'GET', `/sessions?before_id=${encodeURIComponent(bad)}`);
+    assert.equal(r.status, 400, bad);
+    assert.equal(r.body.field, 'before_id');
+  }
+});
+
 test('"active" is a token that could still open a door: a signed-out account and an expired token drop out of the list AND the counts', async () => {
   const db = freshDb();
   // Seen a minute ago but minted past the token lifetime: last_seen_at alone
@@ -235,10 +270,12 @@ test('the write bar holds: a super admin on a session without the authenticator 
 
 test('an unreadable session table is a 503 saying so — never an empty list', async () => {
   const db = freshDb();
-  // auth.ts reads user_sessions by jti and, when the table is absent, falls
-  // back to the iat floor alone — so the gate still answers and the LIST is
-  // what fails, which is the state under test.
-  db.exec('DROP TABLE user_sessions');
+  // D4669 — auth.ts now REFUSES a token whose session table cannot be read
+  // (it used to fall back to the iat floor alone), so dropping the table
+  // would turn the gate away before the list is asked. The list's own read
+  // is broken instead: it selects `last_seen_at`, which the gate's read does
+  // not, so the gate answers and the LIST is what fails — the state under test.
+  db.exec('ALTER TABLE user_sessions DROP COLUMN last_seen_at');
   const r = await call(db, AS_SUPER, 'GET', '/sessions');
   assert.equal(r.status, 503, 'a failed read came back as a list');
   assert.equal(r.body.code, 'sessions_unreadable');
@@ -397,7 +434,10 @@ test('ending a support session sets ended_at ONLY — the row, its admin and its
     assert.equal(after.admin_user_id, before.admin_user_id, 'admin_user_id was rewritten');
     assert.equal(after.context, before.context, 'context was rewritten');
     assert.equal(after.started_at, before.started_at);
-    assert.match(r.body.message, /stays valid until it expires/, 'the response claims the access stopped now');
+    // D4669 — the support token names its record, so ending it ends the
+    // access; the response says so instead of the old "stays valid" caveat.
+    assert.match(r.body.message, /refused from its next request/, 'the response does not say the access stopped');
+    assert.doesNotMatch(r.body.message, /stays valid until it expires/);
   }
   // routes/branch_support_sessions.ts's own selection, verbatim.
   const seen = db.prepare(

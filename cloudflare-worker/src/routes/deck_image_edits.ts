@@ -54,12 +54,12 @@ import {
 } from '../services/decks/imageEdits';
 import { imageSize, sha256Hex, stripMetadata, type ImageMime } from '../services/decks/imageBytes';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
-import { isImageTool, runImageTool, toolQuoteMicro, toolState, toolStates, TOOL_WORDS, type ToolDeps } from '../services/decks/imageTools';
+import { isImageTool, runImageTool, toolQuoteMicro, toolState, toolStates, TOOL_WORDS, upscaleTarget, UPSCALE_TOO_LARGE_MESSAGE, type ToolDeps } from '../services/decks/imageTools';
 import { gatewayImageModelFor } from '../services/ai/catalogue';
 import { railFor, refuseRun } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import { auditDeckWrite, getDeckRow, projectOwned, themeOfRow } from './decks';
-import { imageUrl } from './deck_images';
+import { imageUrl, TAKEN_DOWN_SENTENCE } from './deck_images';
 
 const deckImageEdits = new Hono<{ Bindings: Env }>();
 
@@ -77,6 +77,8 @@ async function imageOf(c: any, user: User): Promise<any | Response> {
   const row = await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first();
   if (!row) return c.json({ error: 'not found' }, 404);
   try { await projectOwned(c, user, Number(row.project_id), { write: true }); } catch { return c.json({ error: 'not found' }, 404); }
+  // #4375: an image HQ took down is not edited, cut out or upscaled: its bytes are gone.
+  if (row.taken_down_at) return refuse(c, 410, { code: 'image_taken_down', message: TAKEN_DOWN_SENTENCE });
   return row;
 }
 
@@ -256,6 +258,10 @@ deckImageEdits.get('/images/tools', async (c) => {
   return c.json({ tools: toolStates(c.env) });
 });
 
+/** A row's recorded pixel size, or null. */
+const sizeOf = (r: any): { width: number; height: number } | null =>
+  Number(r?.width) > 0 && Number(r?.height) > 0 ? { width: Number(r.width), height: Number(r.height) } : null;
+
 /** The parent and the tool, checked, or the response that refuses them. Nothing is held here. */
 async function toolPlan(c: any, user: User): Promise<{ parent: any; tool: 'remove_background' | 'upscale' } | Response> {
   const tool = c.req.param('tool');
@@ -277,6 +283,8 @@ deckImageEdits.post('/images/:uid/tools/:tool/quote', async (c) => {
     if (p.status === 503) { const b = await p.clone().json().catch(() => ({})) as any; return c.json({ ai: false, reason: b.error ?? 'image_tool_off', message: b.message ?? '' }); }
     return p;
   }
+  // D4316: an image already at Upscale's cap is said so before any price, and nothing is held.
+  if (p.tool === 'upscale' && upscaleTarget(sizeOf(p.parent)) === null) return c.json({ ai: false, reason: 'image_large_enough', message: UPSCALE_TOO_LARGE_MESSAGE });
   const m = gatewayImageModelFor(p.tool)!;
   const hold = await toolQuoteMicro(c.env, Number(user.id), m);
   const short = await balanceRefusal(c.env, Number(user.id), hold);
@@ -297,36 +305,41 @@ deckImageEdits.post('/images/:uid/tools/:tool', async (c) => {
   const bytes = new Uint8Array(await new Response(obj.body).arrayBuffer());
   const mime = (MIMES as readonly string[]).includes(p.parent.mime) ? p.parent.mime : sniffMime(bytes);
   if (mime !== 'image/png' && mime !== 'image/jpeg') {
-    return refuse(c, 422, { code: 'image_unreadable', message: 'Background removal takes a PNG or a JPEG. Nothing was run.' });
+    return refuse(c, 422, { code: 'image_unreadable', message: `${TOOL_WORDS[p.tool]} takes a PNG or a JPEG. Nothing was run.` });
   }
+  // D4316: Upscale's target comes from the image's own pixels, read from the file when the row has none.
+  const parentSize = sizeOf(p.parent) ?? imageSize(bytes, mime) ?? null;
   let ticket;
   try { ticket = await assertStorageRoom(c.env, { projectId }, IMAGE_BYTES_ESTIMATE, user); }
   catch (e) { if (e instanceof Response) return e; throw e; }
   // One press is one execution: a retried request with the same key is not charged twice.
   const executionId = String(c.req.header('Idempotency-Key') || crypto.randomUUID()).replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 120) || crypto.randomUUID();
-  const r = await runImageTool(c.env, { tool: p.tool, userId, bytes, mime, executionId, surface: AI_SURFACE.raisePitch, option: TOOL_OPTION }, toolDeps);
+  const r = await runImageTool(c.env, { tool: p.tool, userId, bytes, mime, executionId, surface: AI_SURFACE.raisePitch, option: TOOL_OPTION, size: parentSize }, toolDeps);
   if (!r.ok) return refuse(c, r.status, { code: r.code, message: r.message });
-  const cut = stripMetadata(r.bytes, 'image/png');
-  const size = imageSize(cut, 'image/png');
+  // A cutout is a PNG; an upscale keeps its original's format (D4316).
+  const outMime = r.mime;
+  const cut = stripMetadata(r.bytes, outMime);
+  // The child records its own pixel size, so the editable PowerPoint crops the upscaled picture as it drew the original.
+  const size = imageSize(cut, outMime);
   const sha = await sha256Hex(cut);
   const taken = await c.env.DB.prepare('SELECT 1 FROM deck_images WHERE project_id = ? AND sha256 = ?').bind(projectId, sha).first();
   const uid = crypto.randomUUID();
-  const key = `deck-images/${projectId}/${uid}.${EXTENSION['image/png']}`;
+  const key = `deck-images/${projectId}/${uid}.${EXTENSION[outMime]}`;
   try {
-    await c.env.FILES!.put(key, cut, { httpMetadata: { contentType: 'image/png' }, customMetadata: { projectId: String(projectId), userId: String(userId), parent: String(p.parent.uid) } });
+    await c.env.FILES!.put(key, cut, { httpMetadata: { contentType: outMime }, customMetadata: { projectId: String(projectId), userId: String(userId), parent: String(p.parent.uid) } });
   } catch {
-    return refuse(c, 503, { code: 'image_unsaved', message: 'The background was removed but the result could not be stored. It was charged for the run; try again in a moment.' });
+    return refuse(c, 503, { code: 'image_unsaved', message: `${TOOL_WORDS[p.tool]} ran, but the result could not be stored. It was charged for the run; try again in a moment.` });
   }
   // A child, as an edit's is: `parent_uid` and `image_tool` together, never `edit_op` (migration 766).
   await c.env.DB.prepare(`INSERT INTO deck_images (uid, project_id, deck_id, card, card_uid, r2_key, mime, size_bytes, width, height, sha256, source, prompt, style, aspect, use,
       overlay, alt, state, model, ai_usage_log_id, charged_microusd, created_by, parent_uid, image_tool)
-    VALUES (?, ?, ?, ?, ?, ?, 'image/png', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`)
-    .bind(uid, projectId, p.parent.deck_id ?? null, p.parent.card ?? null, p.parent.card_uid ?? null, key, cut.byteLength, size?.width ?? null, size?.height ?? null,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?)`)
+    .bind(uid, projectId, p.parent.deck_id ?? null, p.parent.card ?? null, p.parent.card_uid ?? null, key, outMime, cut.byteLength, size?.width ?? null, size?.height ?? null,
       taken ? null : sha, p.parent.source, p.parent.style ?? null, p.parent.aspect ?? null, p.parent.use, p.parent.overlay ?? null, p.parent.alt ?? null,
       r.model, r.usage_log_id ?? null, r.charged_microusd, userId, p.parent.uid, p.tool).run();
   await noteStorageLanded(c.env, ticket);
   const where = p.parent.card == null ? 'The deck' : `Card ${Number(p.parent.card) + 1}`;
-  await auditDeckWrite(c, user, projectId, 'deck_image_tool', `${where}: an image's background removed`);
+  await auditDeckWrite(c, user, projectId, 'deck_image_tool', p.tool === 'upscale' ? `${where}: an image upscaled` : `${where}: an image's background removed`);
   const row = await c.env.DB.prepare('SELECT * FROM deck_images WHERE uid = ?').bind(uid).first();
   return c.json({
     image: view(c, row), parent_uid: p.parent.uid, tool: p.tool,

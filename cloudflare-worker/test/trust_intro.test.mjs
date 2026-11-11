@@ -58,7 +58,8 @@ async function loadLogic() {
   const outputText = transpileTs(wrapped);
   // D278 — the body now calls util/refusal's refusalBody; hand it the real one.
   const { refusalBody } = await import('../src/util/refusal.ts');
-  return new Function('refusalBody', `${outputText}; return __logic;`)(refusalBody);
+  const { holdsLicence } = await import('../src/services/accountLicences.ts');
+  return new Function('refusalBody', 'holdsLicence', `${outputText}; return __logic;`)(refusalBody, holdsLicence);
 }
 
 /* ------------------------------------------------------------------ */

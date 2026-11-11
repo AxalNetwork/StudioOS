@@ -34,7 +34,7 @@ import {
 } from '../src/pages/learning/programReads.js';
 import { MyProgramsSection } from '../src/pages/learning/MyPrograms.jsx';
 import ProgramsTable from '../src/pages/learning/ProgramsTable.jsx';
-import ProgramLearnersTable, { LearnerRecord } from '../src/pages/learning/ProgramLearnersTable.jsx';
+import ProgramLearnersTable, { LearnerRecord, ReadOnlyStrip } from '../src/pages/learning/ProgramLearnersTable.jsx';
 import ProgramDetail, { ContentPicker, PeopleResults, ProgramFields } from '../src/pages/learning/ProgramDetail.jsx';
 import {
   AssignedProgramsView, ProgramLearnersView, ProgramPage, ProgramsPage, learnersCoverage,
@@ -84,9 +84,9 @@ const DACH = {
 const CONTENTS = [
   { subject_kind: 'exam', subject_uid: 'x-check', position: 2, title: 'Nordic check', status: 'published', href: '/learning/exams/x-check' },
   { subject_kind: 'course', subject_uid: 'c-101', position: 0, title: 'Nordic 101', status: 'published', href: '/learning/courses/nordic-101' },
-  { subject_kind: 'item', subject_uid: 'v-welcome', position: 1, title: 'Cohort welcome', status: 'published', href: '/learning/items/v-welcome' },
+  { subject_kind: 'item', subject_uid: 'v-welcome', kind: 'video', position: 1, title: 'Cohort welcome', status: 'published', href: '/learning/items/v-welcome' },
   { subject_kind: 'exercise', subject_uid: 'e-plan', position: 3, title: 'Your plan', status: 'published', href: '/learning/exercises/e-plan' },
-  { subject_kind: 'item', subject_uid: 'r-rules', position: 4, title: 'Regional rules', status: 'draft', href: '/learning/items/r-rules' },
+  { subject_kind: 'item', subject_uid: 'r-rules', kind: 'reading', position: 4, title: 'Regional rules', status: 'draft', href: '/learning/items/r-rules' },
 ];
 /** `completionFor`: one entry per content row, in the contents' order. */
 const MIA = {
@@ -188,7 +188,7 @@ const CONTRACT = [
   [W('routes/learning_programs.ts'), "programs: (res.results || []).map((p) => ({ ...programView(p), enrolled: p.my_status === 'active' }))", P('MyPrograms.jsx'), '.filter((p) => !p.enrolled)'],
   [W('routes/learning_programs.ts'), "r.post('/programs/:uid/enrol', async", P('programReads.js'), 'learningApi.enrolInProgram(uid)'],
   [W('routes/learning_programs.ts'), "return c.json({ enrolment: { program_uid: p.uid, status: 'active', enrolled_at: t } }, 201);", P('programReads.js'), '(await learningApi.enrolInProgram(uid))?.enrolment || null'],
-  [W('routes/learning_programs.ts'), "message: 'This program enrols by invitation.'", P('MyPrograms.jsx'), "setSaid({ uid, message: err?.message || 'You could not be enrolled.' });"],
+  [W('routes/learning_programs.ts'), "message: 'This program enrols by invitation.'", P('MyPrograms.jsx'), "setSaid({ uid, message: homeRefusal(err, 'Your enrolment could not be confirmed. Try again.') });"],
   [W('routes/learning_programs.ts'), "message: 'You were removed from this program; ask its administrator.'", P('MyPrograms.jsx'), 'error={said?.uid === p.uid ? said.message : '],
   // An assigned admin, read-only.
   [W('routes/learning_programs.ts'), "r.get('/programs/mine', async", P('programReads.js'), 'learningApi.assignedPrograms()'],
@@ -230,7 +230,7 @@ const CONTRACT = [
   [W('services/learningPrograms.ts'), "status: sub?.status ?? 'not_submitted'", P('programModel.js'), "return dash('Not submitted');"],
   ['cloudflare-worker/sql/migrations/390_learning_exercises_exams.sql', "CHECK (status IN ('submitted', 'accepted', 'needs_work'))", P('programModel.js'), "if (s === 'needs_work') return"],
   [W('services/learningPrograms.ts'), "status: !e ? 'not_attempted' : e.passed ? 'passed' : 'not_passed', best_score_percent: e?.best ?? null, attempts: e?.attempts ?? 0", P('programModel.js'), 'const best = wholeOf(entry.best_score_percent);'],
-  [W('services/learningPrograms.ts'), 'uid: l.uid, name: l.name ?? null, enrolled_at: l.enrolled_at,', P('ProgramLearnersTable.jsx'), 'completionCell(entryFor(learner.completion, c))'],
+  [W('services/learningPrograms.ts'), 'uid: l.uid, name: l.name ?? null, enrolled_at: l.enrolled_at,', P('ProgramLearnersTable.jsx'), 'completionCell(entryFor(learner.completion, c), c.kind)'],
   // The console's user search, which "Assign" and "Enrol" use: a flat array without the envelope, email included.
   [W('routes/admin.ts'), 'SELECT id, uid, email, name, role, is_active', P('programModel.js'), "return { uid: String(u?.uid ?? ''), name: u?.name || null, role: u?.role || null, active:"],
   [W('routes/admin.ts'), 'return c.json(rows);', P('programReads.js'), 'Array.isArray(reply) ? reply : reply?.results'],
@@ -445,16 +445,16 @@ test('choosing content and people: five lists that answer alone (D1124: webinars
 // ── The pure half ──────────────────────────────────────────────────────────
 
 test('a learner\'s standing per content: a tick, a percent, a score, a review, a dash, and never a zero for nothing', () => {
-  const cell = (e) => completionCell(e);
+  const cell = (e) => completionCell(e, CONTENTS.find((content) => content.subject_uid === e?.subject_uid)?.kind);
   assert.deepEqual(MIA.completion.map(cell).map((c) => [c.mark, c.label]), [
-    ['✓', 'Completed'], ['✓', 'Completed'], ['100%', 'Passed, best score 100% · 1 attempt'], ['Submitted', 'Submitted, not reviewed yet'], ['—', 'Not started'],
+    ['✓', 'Completed'], ['Watched', 'Watched'], ['100%', 'Passed, best score 100% · 1 attempt'], ['Submitted', 'Submitted, not reviewed yet'], ['—', 'Not started'],
   ]);
   assert.deepEqual(PIA.completion.map(cell).map((c) => [c.mark, c.label, c.tone]), [
-    ['50%', 'In progress, 1 of 2 required lessons', 'neutral'], ['40%', 'In progress, 40%', 'neutral'],
+    ['50%', 'In progress, 1 of 2 required lessons', 'neutral'], ['Not watched', 'Not watched', 'neutral'],
     ['40%', 'Not passed, best score 40% · 2 attempts', 'warn'], ['Needs work', 'Needs work', 'warn'], ['—', 'Not started', 'none'],
   ]);
-  assert.deepEqual(OTTO.completion.map(cell).map((c) => c.label), ['Not started', 'Not started', 'Not attempted', 'Not submitted', 'Not started']);
-  assert.ok(OTTO.completion.map(cell).every((c) => c.mark === '—'), 'a course with percent 0 and nothing started was drawn as a number');
+  assert.deepEqual(OTTO.completion.map(cell).map((c) => c.label), ['Not started', 'Not watched', 'Not sat', 'Not submitted', 'Not started']);
+  assert.ok(OTTO.completion.map(cell).every((c) => !/^0(?:%|$)/.test(c.mark)), 'a course with percent 0 and nothing started was drawn as a number');
   // Started with no percent or none done yet, a course with no required lesson, a passed exam with no score, and a kind not measured yet.
   assert.deepEqual(cell({ subject_kind: 'item', status: 'in_progress', percent: null }), { mark: 'Started', tone: 'neutral', label: 'In progress' });
   assert.deepEqual(cell({ subject_kind: 'item', status: 'in_progress', percent: 0 }), { mark: 'Started', tone: 'neutral', label: 'In progress' });
@@ -528,16 +528,16 @@ test('My programs: each program with its region, the member\'s progress and what
     onEnrol: () => {},
   }));
   const nordics = flat(sliceFrom(markup, 'my-program-p-nordics', 'list-open-programs'));
-  assert.match(nordics, /^.*?Nordics Nordics 3 of 4 complete What it holds · 5/);
+  assert.match(nordics, /^.*?Nordics Nordics 3 of 4 complete Open › What it holds · 5/);
   // In stored order; a published subject opens its page; the draft is said, not linked.
-  assert.match(nordics, /Course Nordic 101 Completed Video or reading Cohort welcome Completed Exam Nordic check Passed, best score 100% · 1 attempt Exercise Your plan Submitted, not reviewed yet Video or reading Regional rules Not published yet/);
+  assert.match(nordics, /Course Nordic 101 Completed Video or reading Cohort welcome Watched Exam Nordic check Passed, best score 100% · 1 attempt Exercise Your plan Submitted, not reviewed yet Video or reading Regional rules Not published yet/);
   assert.match(markup, /href="\/learning\/courses\/nordic-101"/);
   assert.match(markup, /href="\/learning\/exams\/x-check"/);
   assert.doesNotMatch(markup, /href="\/learning\/items\/r-rules"/, 'a draft the member cannot open was linked');
   assert.match(markup, /style="width:75%"/, 'the bar is not the route\'s count');
   // Open to join: the programs the member is not in, each with Join.
   const join = sliceFrom(markup, 'list-open-programs');
-  assert.match(flat(join), /Open to join .* Open cohort Region not recorded Join Anyone may join this one\./);
+  assert.match(flat(join), /Open to join .* Open cohort Region not recorded Open to join Join Anyone may join this one\./);
   assert.ok(tagOf(markup, 'button-join-p-open'));
   assert.doesNotMatch(markup, /button-join-p-nordics/, 'a program the member is in was offered to join');
   assert.match(flat(markup), /Most programs are by invitation: a Super Admin enrols their members\./);
@@ -567,11 +567,11 @@ test('My programs: nothing started is not a zero, one failed program is that pro
   assert.match(html(h(MyProgramsSection, { enrolled: { status: 'idle' }, open: { status: 'idle' } })), /data-testid="learning-loading"/);
   assert.match(text(h(MyProgramsSection, { enrolled: { status: 'unreadable' }, open: openState([]), onRetry: { enrolled: () => {} } })),
     /Your programs could not be read\. This is not a claim that you are in none\./);
-  assert.match(text(h(MyProgramsSection, { enrolled: mineState([]), open: openState([]) })), /You are in no program yet/);
+  assert.match(text(h(MyProgramsSection, { enrolled: mineState([]), open: openState([]) })), /You are not in a program yet\./);
   // The open list failing is named on its own line; the member's programs still draw.
   const openFailed = text(h(MyProgramsSection, { enrolled: mineState([]), open: { status: 'unreadable' }, onRetry: { open: () => {} } }));
   assert.match(openFailed, /The programs open to self-enrolment could not be read, so this is not a claim that there are none\./);
-  assert.match(openFailed, /You are in no program yet/);
+  assert.match(openFailed, /You are not in a program yet\./);
 });
 
 test('joining: the button calls the route, and its refusal is shown beside the program it was for', () => {
@@ -637,22 +637,22 @@ test('the learners view: each member against the content in order, never an emai
     state: { status: 'ready', ...withEmail }, learnerState: { status: 'ready', contents: CONTENTS, learner: PIA }, selectedUid: 'u-pia', learnerHref: href,
   }));
   const out = flat(markup);
-  assert.match(out, /Read-only Assigned to you by a Super Admin\. Content and enrolment are managed at HQ\./);
+  assert.match(out, /Read only · Assigned admin · Nordics/);
   assert.match(out, /Members against content 3 members · 5 items/);
   assert.match(out, /Member Course Nordic 101 Video or reading Cohort welcome Exam Nordic check Exercise Your plan Video or reading Regional rules/, 'the columns are not in stored order');
-  assert.match(flat(sliceFrom(markup, 'learner-row-u-mia', 'learner-row-u-pia')), /Mia Member ✓ Completed ✓ Completed 100% Passed, best score 100% · 1 attempt Submitted Submitted, not reviewed yet — Not started/);
-  assert.match(flat(sliceFrom(markup, 'learner-row-u-pia', 'learner-row-u-otto')), /Pia Peer 50% In progress, 1 of 2 required lessons 40% In progress, 40% 40% Not passed, best score 40% · 2 attempts Needs work Needs work — Not started/);
-  assert.match(flat(sliceFrom(markup, 'learner-row-u-otto', 'program-learners-legend')), /Name not recorded — Not started — Not started — Not attempted — Not submitted — Not started/);
+  assert.match(flat(sliceFrom(markup, 'learner-row-u-mia', 'learner-row-u-pia')), /Mia Member ✓ Completed Watched Watched 100% Passed, best score 100% · 1 attempt Submitted Submitted, not reviewed yet — Not started/);
+  assert.match(flat(sliceFrom(markup, 'learner-row-u-pia', 'learner-row-u-otto')), /Pia Peer 50% In progress, 1 of 2 required lessons Not watched Not watched 40% Not passed, best score 40% · 2 attempts Needs work Needs work — Not started/);
+  assert.match(flat(sliceFrom(markup, 'learner-row-u-otto', 'program-learners-legend')), /Name not recorded — Not started Not watched Not watched Not sat Not sat — Not submitted — Not started/);
   assert.doesNotMatch(markup, /u-otto@example\.test/, 'an email reached the table');
   assert.doesNotMatch(flat(sliceFrom(markup, 'learner-row-u-otto', 'program-learners-legend')), /\b0%?\b/, 'nothing started was drawn as 0');
-  assert.match(out, /A member who never opened an item shows a dash, not 0\./);
+  assert.match(out, /A course never opened shows a dash, not 0\./);
   // Each name opens that member's record at its own address; the chosen one is marked.
   assert.match(tagOf(markup, 'link-learner-u-mia'), /href="\/learning\/programs\/p-nordics\?learner=u-mia"/);
   assert.match(tagOf(markup, 'link-learner-u-pia'), /aria-current="true"/);
   assert.doesNotMatch(tagOf(markup, 'link-learner-u-mia'), /aria-current/);
   // The record: the chosen member's own read, every content row in order.
   const record = flat(sliceFrom(markup, 'learner-record'));
-  assert.match(record, /Member record Pia Peer Enrolled 2 Oct 2026 Course Nordic 101 In progress, 1 of 2 required lessons Video or reading Cohort welcome In progress, 40% Exam Nordic check Not passed, best score 40% · 2 attempts Exercise Your plan Needs work Video or reading Regional rules Not started/);
+  assert.match(record, /Member record Pia Peer Enrolled 2 Oct 2026 Course Nordic 101 In progress, 1 of 2 required lessons Video or reading Cohort welcome Not watched Exam Nordic check Not passed, best score 40% · 2 attempts Exercise Your plan Needs work Video or reading Regional rules Not started/);
   // Read-only: no write control anywhere on the view.
   assert.doesNotMatch(markup, /<button|<form|<input|<select|<textarea/, 'the read-only view offers a write');
   assert.deepEqual(learnersCoverage({ status: 'ready', ...LEARNERS_REPLY }), ['3 members and 5 content items in “Nordics”']);
@@ -856,24 +856,24 @@ test('the studio\'s list: every program, New program at its own address, and the
 
 // ── The four pages ─────────────────────────────────────────────────────────
 
-test('the four pages: each its own frame, header and rail, reading from its first render', () => {
+test('the four pages: each its own frame and header without an assistant rail, reading from its first render', () => {
   const programs = html(h(ProgramsPage, { sub: 'Programs a Super Admin has assigned to you.' }), '/learning/programs');
   assert.match(programs, /data-testid="learning-programs"/);
   assert.match(programs, /data-testid="programs-assigned"/);
   assert.match(programs, /data-testid="learning-loading"/);
-  assert.match(flat(programs), /Eadwyn AI .{0,24}?Learning programs/);
+  assert.doesNotMatch(flat(programs), /Eadwyn AI/, 'assigned admin views have no AI rail');
   assert.match(tagOf(programs, 'link-learning-back'), /href="\/learning"/);
   const program = html(h(ProgramPage, { uid: 'p-nordics', sub: 'Read-only.' }), '/learning/programs/p-nordics?learner=u-pia');
   assert.match(program, /data-testid="learning-program"/);
   assert.match(program, /data-testid="program-learners"/);
-  assert.match(flat(program), /Read-only Assigned to you by a Super Admin\./);
-  assert.match(flat(program), /Eadwyn AI .{0,24}?Learning programs/);
+  assert.match(flat(program), /Read only · Assigned admin · Program not recorded/);
+  assert.doesNotMatch(flat(program), /Eadwyn AI/, 'assigned admin views have no AI rail');
   assert.match(tagOf(program, 'link-learning-back'), /href="\/learning\/programs"/);
   assert.match(sliceFrom(program, 'learner-record'), /learning-loading/, 'the chosen member\'s record is not read');
   const studio = html(h(StudioProgramsPage, { sub: 'Programs group content for a region.' }), '/learning/studio/programs');
   assert.match(studio, /data-testid="learning-studio-programs"/);
   assert.match(tagOf(studio, 'link-program-new'), /href="\/learning\/studio\/programs\?new=program"/);
-  assert.match(flat(studio), /Eadwyn AI .{0,24}?Learning studio/);
+  assert.doesNotMatch(flat(studio), /Eadwyn AI/);
   assert.match(tagOf(studio, 'link-learning-back'), /href="\/learning\/studio"/);
   assert.doesNotMatch(html(h(StudioProgramsPage, { sub: '' }), '/learning/studio/programs?new=program'), /link-program-new"/, 'New program is offered with its form open');
   const one = html(h(StudioProgramPage, { uid: 'p-nordics', sub: 'Content in order, assigned admins and members.' }), '/learning/studio/programs/p-nordics');
@@ -891,14 +891,13 @@ test('the four pages: each its own frame, header and rail, reading from its firs
   assert.ok(adminSrc.includes(`?${asked}=\${encodeURIComponent(u)}`), 'a name links to an address the page does not read');
   assert.match(codeOnly(read('frontend/src/pages/learning/ProgramStudio.jsx')),
     /const created = await createProgram\(form\);\s*navigate\(`\/learning\/studio\/programs\/\$\{encodeURIComponent\(created\.program\.uid\)\}`\);/);
-  // A literal accent on each rail: steel for the assigned admin, oxblood for HQ.
-  const rails = [['LearningPrograms.jsx', 'admin'], ['ProgramStudio.jsx', 'super_admin']];
-  for (const [file, role] of rails) {
-    const mounts = [...codeOnly(read(`frontend/src/pages/learning/${file}`)).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-    assert.equal(mounts.length, 1, `${file} mounts ${mounts.length} rails`);
-    assert.ok(mounts[0].includes(`role="${role}"`), `${file}'s rail is not role="${role}"`);
-    assert.match(mounts[0], /note="Eadwyn /);
-  }
+  // D4478: neither assigned programs nor HQ authoring mounts an assistant.
+  assert.doesNotMatch(adminSrc, /WorkerRail|ProgramsRail/, 'assigned program pages have no AI rail');
+  const studioSrc = codeOnly(read('frontend/src/pages/learning/ProgramStudio.jsx'));
+  assert.doesNotMatch(studioSrc, /WorkerRail|StudioRail/);
+  assert.doesNotMatch(one, /data-testid="worker-rail-frame"/);
+  assert.doesNotMatch(studio, /data-rail="true"/);
+
 });
 
 test('the calls stay in one file, through methods the clients already declare', () => {
@@ -924,4 +923,20 @@ test('the calls stay in one file, through methods the clients already declare', 
     'learningApi.programLearner', 'learningApi.programLearners', 'learningApi.programs',
   ]);
   for (const [client, method] of called) assert.ok(declared[client].includes(`  ${method}: (`), `${client}.${method} is not a method the client declares`);
+});
+
+
+test('D4481: assigned-admin strip names the program and the matrix uses the requested status words', () => {
+  const strip = html(h(ReadOnlyStrip, { programName: 'Spin-Out Lab · Lisbon' }));
+  assert.match(flat(strip), /Read only · Assigned admin · Spin-Out Lab · Lisbon/);
+  assert.match(strip, /bg-axal-amber/);
+  assert.match(strip, /lucide-lock/);
+  assert.deepEqual(completionCell({ subject_kind: 'item', status: 'completed' }, 'video'), { mark: 'Watched', tone: 'ok', label: 'Watched' });
+  assert.deepEqual(completionCell({ subject_kind: 'item', status: 'not_started' }, 'video'), { mark: 'Not watched', tone: 'none', label: 'Not watched' });
+  assert.equal(completionCell({ subject_kind: 'item', status: 'in_progress', percent: 40 }, 'video').tone, 'neutral');
+  assert.deepEqual(completionCell({ subject_kind: 'exam', status: 'not_attempted' }), { mark: 'Not sat', tone: 'none', label: 'Not sat' });
+  assert.deepEqual(completionCell({ subject_kind: 'webinar', status: 'not_registered' }), { mark: 'Not registered', tone: 'none', label: 'Not registered' });
+  assert.equal(completionCell({ subject_kind: 'item', status: 'completed' }, 'reading').label, 'Completed');
+  assert.equal(completionCell({ subject_kind: 'item', status: 'completed' }).label, 'Completed');
+  assert.deepEqual(completionCell(null), { mark: 'Not recorded', tone: 'absent', label: 'Not recorded' });
 });

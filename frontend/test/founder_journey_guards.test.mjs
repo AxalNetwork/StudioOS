@@ -68,11 +68,14 @@ test('assigning founder/investor resets the onboarding row so the wizard can fir
 });
 
 test('the founder signup lane promises nothing the system does not enforce', () => {
-  const src = fe('src/pages/RegisterPage.jsx');
-  assert.ok(
-    !/72[\s-]?hours?/i.test(src),
-    'RegisterPage re-promises a 72-hour SLA — nothing in the codebase enforces one',
-  );
+  // #4651: the lane copy lives in registerCopy.js now; both files are held.
+  for (const f of ['src/pages/RegisterPage.jsx', 'src/lib/registerCopy.js']) {
+    assert.ok(
+      !/72[\s-]?hours?/i.test(fe(f)),
+      `${f} re-promises a 72-hour SLA — nothing in the codebase enforces one`,
+    );
+  }
+  assert.match(fe('src/lib/registerCopy.js'), /Submit your pitch/, 'the guard reads the file the founder copy is in');
 });
 
 test('the exploring holding screen offers the founder lane its real next step', () => {
@@ -82,10 +85,8 @@ test('the exploring holding screen offers the founder lane its real next step', 
   assert.ok(src.includes('exploring-lane-cta'), 'lane CTA testid missing');
 });
 
-test('/studio (founder Studio, D564, D1419) leads with Continue where you left off', () => {
-  // D1419 (#3698): "Do these next" left the page; Continue reads its first open item.
+test('/studio keeps the retired checklist shortcuts off the page', () => {
   const src = fe('src/pages/founder/FounderStudioBody.jsx');
-  assert.match(src, /<Link to=\{actions\.items\[0\]\.href\}[^>]*data-testid="link-founder-continue">Continue where you left off<\/Link>/,
-    'the founder Studio no longer leads with what to do next');
+  assert.doesNotMatch(src, /link-founder-continue|Continue where you left off/);
   assert.ok(!fe('src/pages/Dashboard.jsx').includes('VentureNextStep'), 'the retired strip is mounted again');
 });

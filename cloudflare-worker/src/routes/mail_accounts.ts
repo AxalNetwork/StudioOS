@@ -10,11 +10,21 @@
  *   POST   /accounts/mcp                   D1343: { connection_uid, address, display_name? } a member's own MCP mail server
  *                                          (a D852 custom connector with an approved send tool); verified, nothing sent
  *   POST   /accounts/:uid/verify           checks the mailbox again; an expired token turns the row `expired`
- *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay
+ *   DELETE /accounts/:uid                  revoke at the provider where it can, forget the credentials; sent rows stay.
+ *                                          Answers { ok, account } from the persisted row; 409 connection_changed when a newer
+ *                                          connection was saved while this disconnect was in flight (#4654)
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
  *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
+ *                                          `intro_uid?` (D4329): the intro for an accepted introduction request;
+ *                                          only its teammate may send it, and the send records it as made
+ *                                          D4493: a sequence step's draft must be due, to that prospect, keep its
+ *                                          opt-out line; its voice note is attached; the send moves the step on
  *   GET    /sent?page=&person=             D1344: the member's own sent log, newest first, 20 a page, with the refs each quoted;
  *                                          `person` keeps the rows sent from that person's drafts
+ *
+ * #4654: a mailbox has one state. A verify or send that completes after the member disconnected or reconnected changes
+ * nothing; a connection started before a newer one or before a disconnect is 409 connection_superseded (the OAuth
+ * callback redirects with `?mail=superseded`); see `services/mail/accounts.ts`.
  *
  * Another member's uid is 404, as one that does not exist. A support session
  * is refused: mail goes out in the member's own name. Rate limited per member.
@@ -28,18 +38,21 @@ import { ADAPTERS } from '../services/mail/adapters';
 import { checkSettings } from '../services/mail/adapters/imap';
 import { headerSafe } from '../services/mail/adapters/mime';
 import { authorizeUrl, configured, exchangeCode, gmailEnabled, OUTLOOK_READ_SCOPE, type OAuthProvider } from '../services/mail/adapters/oauth';
-import { AdapterError } from '../services/mail/adapters/types';
+import { AdapterError, type Attachment, type MailAdapter } from '../services/mail/adapters/types';
+import { SequenceRefused, sequenceAdvance, sequenceSendGate, VOICE_MIME } from '../services/distribution/sequences';
 import {
-  accountOf, accountView, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, saveAccount,
-  spendOauthState, spendSendNonce, type AccountRow,
+  accountOf, accountView, ConnectionSuperseded, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, persisted,
+  saveAccount, spendOauthState, spendSendNonce, type AccountRow,
 } from '../services/mail/accounts';
 import { indexHmac } from '../services/columnCipher';
 import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
+import { admit, discard, fingerprintOf, opByKey, opByUid, opView, OP_KEY, settleTo, SENDS_PER_HOUR as OPS_PER_HOUR, type OpRow } from '../services/mail/sendOps';
+import { claimIntroDelivery, introForSend, introHeldBy, markMadeOnSend, RelationshipRefusal } from '../services/relationships';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
 
-export const SENDS_PER_HOUR = 20;
+export const SENDS_PER_HOUR = OPS_PER_HOUR;
 const EMAIL = /^[^\s@<>()",;:\\[\]]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i;
 const NOT_FOUND = 'Mailbox not found.';
 
@@ -61,15 +74,25 @@ const redirectUri = (c: Context<{ Bindings: Env }>) => c.env.MAIL_OAUTH_REDIRECT
 
 function adapterRefusal(c: Context<any>, e: unknown): Response {
   if (e instanceof AdapterError) {
-    const status = e.code === 'expired' ? 409 : e.code === 'unconfigured' ? 503 : e.code === 'unreachable' ? 502 : 400;
+    const status = e.code === 'expired' || e.code === 'consent' ? 409 : e.code === 'unconfigured' ? 503 : e.code === 'unreachable' ? 502 : 400;
     return refuse(c, status, { code: `mailbox_${e.code}`, message: e.sentence });
   }
   return refuse(c, 503, { code: 'mailbox_unreadable', message: 'The mailbox could not be used. Try again.', raw: e instanceof Error ? e.name : 'error' });
 }
 
+/** A connection that lost to a newer one or to a disconnect (#4654): our sentence, 409, nothing changed. */
+function supersededRefusal(c: Context<any>, e: ConnectionSuperseded): Response {
+  return refuse(c, 409, { code: 'connection_superseded', message: e.sentence });
+}
+
+/** The mailbox the member disconnected while an operation was in flight reads as one that is gone, not as one that expired. */
+async function goneOrNot(c: Context<{ Bindings: Env }>, user: User, row: AccountRow): Promise<Response | null> {
+  return (await accountOf(c.env, user, row.uid)) ? null : refuse(c, 404, { code: 'not_found', message: NOT_FOUND });
+}
+
 /** Records what a use of the mailbox did to it: rotated credentials, or the provider's demand to reconnect. */
 async function afterUse(env: Env, row: AccountRow, e: unknown) {
-  if (e instanceof AdapterError && e.code === 'expired') await markExpired(env, row, e.sentence);
+  if (e instanceof AdapterError && (e.code === 'expired' || e.code === 'consent')) await markExpired(env, row, e.sentence);
   else if (e instanceof AdapterError) await markError(env, row, e.sentence);
 }
 
@@ -102,6 +125,7 @@ mailAccounts.get('/accounts/oauth/callback', async (c) => {
   const back = (status: string) => c.redirect(`/email?mail=${status}`, 302);
   const spent = await spendOauthState(c.env, c.req.query('state'));
   if (!spent) return back('expired');
+  const startedAt = spent.issued_at || new Date().toISOString();
   const code = c.req.query('code');
   if (!code || c.req.query('error')) return back('declined');
   const provider = spent.provider.startsWith('outlook') ? 'outlook' : spent.provider === 'gmail' ? 'gmail' : null;
@@ -113,9 +137,11 @@ mailAccounts.get('/accounts/oauth/callback', async (c) => {
     await saveAccount(c.env, user, {
       provider, address: got.address, display_name: got.name, scopes: got.scopes,
       can_read: provider === 'outlook' && got.scopes.split(/\s+/).some((s) => s.endsWith(OUTLOOK_READ_SCOPE)), creds: got.creds,
-    });
+    }, startedAt);
     return back('connected');
   } catch (e) {
+    // A connect started before a newer one, or before the member's disconnect, is not applied (#4654): it did not fail, it lost.
+    if (e instanceof ConnectionSuperseded) return back('superseded');
     console.warn('[mail] oauth callback failed:', e instanceof AdapterError ? e.code : 'error');
     return back('failed');
   }
@@ -128,12 +154,13 @@ mailAccounts.post('/accounts/imap', async (c) => {
   const address = String(b.address ?? '').trim().toLowerCase();
   if (!EMAIL.test(address) || address.length > 320) return refuse(c, 400, { code: 'address_invalid', message: 'Give the mailbox’s email address.' });
   const name = typeof b.display_name === 'string' && b.display_name.trim() && headerSafe(b.display_name) ? b.display_name.trim().slice(0, 120) : null;
+  const startedAt = new Date().toISOString();
   try {
     const creds = checkSettings(b as any);
     await ADAPTERS.imap!.verify(c.env, creds);
-    const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds });
+    const account = await saveAccount(c.env, user, { provider: 'imap', address, display_name: name, scopes: '', can_read: false, creds }, startedAt);
     return c.json({ account }, 201);
-  } catch (e) { return adapterRefusal(c, e); }
+  } catch (e) { return e instanceof ConnectionSuperseded ? supersededRefusal(c, e) : adapterRefusal(c, e); }
 });
 
 // D1343 (#3551): a member's own MCP mail server, chosen as a mailbox. Its send tool is the one the
@@ -152,11 +179,12 @@ mailAccounts.post('/accounts/mcp', async (c) => {
   if (!row) return refuse(c, 404, { code: 'connector_not_found', message: 'That connector was not found.' });
   if (!configOf(row)?.mail_send) return refuse(c, 409, { code: 'send_tool_not_approved', message: 'Choose the tool that sends your email on that connector first.' });
   const creds = { kind: 'mcp' as const, connection_uid: uid, user_id: Number(user.id) };
+  const startedAt = new Date().toISOString();
   try {
     await ADAPTERS.mcp!.verify(c.env, creds);
-    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds });
+    const account = await saveAccount(c.env, user, { provider: 'mcp', address, display_name: name, scopes: '', can_read: false, creds }, startedAt);
     return c.json({ account }, 201);
-  } catch (e) { return adapterRefusal(c, e); }
+  } catch (e) { return e instanceof ConnectionSuperseded ? supersededRefusal(c, e) : adapterRefusal(c, e); }
 });
 
 mailAccounts.post('/accounts/:uid/verify', async (c) => {
@@ -167,12 +195,16 @@ mailAccounts.post('/accounts/:uid/verify', async (c) => {
   const adapter = ADAPTERS[row.provider];
   const creds = await openCreds(c.env, row);
   if (!adapter || !creds) {
+    // Credentials that are gone because the member disconnected meanwhile are a disconnected mailbox, not an expired one.
+    const gone = await goneOrNot(c, user, row);
+    if (gone) return gone;
     await markExpired(c.env, row, 'The mailbox’s saved access could not be opened. Connect it again.');
   } else {
+    // The provider's answer, good or bad, is written only while the mailbox is the one it was asked about (#4654).
     try { await markUsed(c.env, row, (await adapter.verify(c.env, creds)).creds); }
     catch (e) { await afterUse(c.env, row, e); }
   }
-  return c.json({ account: accountView((await c.env.DB.prepare('SELECT * FROM mail_accounts WHERE id = ?').bind(row.id).first<AccountRow>())!) });
+  return c.json({ account: accountView(await persisted(c.env, row)) });
 });
 
 mailAccounts.delete('/accounts/:uid', async (c) => {
@@ -184,7 +216,13 @@ mailAccounts.delete('/accounts/:uid', async (c) => {
   // Revoked at the provider where it can be; forgotten here either way.
   if (creds) { try { await ADAPTERS[row.provider]?.revoke(c.env, creds); } catch { /* forgotten below */ } }
   await forget(c.env, row);
-  return c.json({ ok: true });
+  // The reply is the persisted state, not an assumption: revoked, with nothing sealed left to use.
+  const after = await persisted(c.env, row);
+  if (after.status !== 'revoked') {
+    // A newer connection was saved while this disconnect was in flight, and it stays (#4654): say what is true.
+    return refuse(c, 409, { code: 'connection_changed', message: 'This mailbox was connected again while you were disconnecting it, so it is still connected.' });
+  }
+  return c.json({ ok: after.credentials === null, account: accountView(after) });
 });
 
 mailAccounts.post('/send/confirm', async (c) => {
@@ -224,36 +262,190 @@ mailAccounts.post('/send', async (c) => {
     if (!got) return refuse(c, 404, { code: 'draft_not_found', message: 'Draft not found.' });
     refs = got;
   }
-  const since = new Date(Date.now() - 3600_000).toISOString().replace('T', ' ').slice(0, 19);
-  const sent = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM mail_sent WHERE user_id = ? AND created_at > ?').bind(user.id, since).first<{ n: number }>();
-  if (Number(sent?.n ?? 0) >= SENDS_PER_HOUR) return refuse(c, 429, { code: 'send_rate_limited', message: `You have sent ${SENDS_PER_HOUR} emails in the last hour. Try again later.` });
-  // The composer's pressed Send: a one-use nonce, spent before anything goes out.
-  if (!await spendSendNonce(c.env, user, b.nonce)) return refuse(c, 403, { code: 'confirmation_required', message: 'Press Send in the composer to send this email.' });
+  // D4329 (#4329): an intro written for an accepted introduction request. Checked before anything goes
+  // out: only the teammate on that request, while it is accepted. The send then records it as made.
+  const introUid = b.intro_uid == null || b.intro_uid === '' ? null : String(b.intro_uid);
+  // D4604: an intro already made still lets a replay of the operation that made it recover (below); any other send is refused.
+  let introMade: RelationshipRefusal | null = null;
+  if (introUid) {
+    try { await introForSend(c.env, user, introUid); } catch (e) {
+      if (e instanceof RelationshipRefusal && e.code === 'intro_already_made') introMade = e;
+      else if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      else throw e;
+    }
+  }
+  // D4493 (#4493): a sequence step's draft must still be due, go to that prospect's own
+  // address and keep its opt-out line. Checked before the nonce is spent, like the intro.
+  let sequence: Awaited<ReturnType<typeof sequenceSendGate>> = null;
+  try { sequence = await sequenceSendGate(c.env, user, draftUid, to, text); } catch (e) {
+    if (e instanceof SequenceRefused) return refuse(c, e.status, { code: e.code, message: e.sentence });
+    throw e;
+  }
+  let attachments: Attachment[] | undefined;
+  if (sequence?.attachmentKey) {
+    if (row.provider === 'mcp') return refuse(c, 409, { code: 'attachment_unsupported', message: 'This mailbox’s mail server cannot send a voice note. Send this step from another mailbox.' });
+    const obj = sequence.attachmentKey.startsWith(`grow-voice/${sequence.projectId}/`) ? await c.env.FILES?.get(sequence.attachmentKey) : null;
+    if (!obj) return refuse(c, 409, { code: 'recording_missing', message: 'The voice note could not be read. Record it again before sending.' });
+    const mime = obj.httpMetadata?.contentType || 'audio/webm';
+    const ext = VOICE_MIME[mime] || 'webm';
+    attachments = [{ filename: `voice-note.${ext}`, mime, bytes: new Uint8Array(await obj.arrayBuffer()) }];
+  }
+  // D4665: the operation. The composer's key survives its retries; a caller that sends none gets a fresh one.
+  const rawKey = b.operation_key == null || b.operation_key === '' ? null : String(b.operation_key);
+  if (rawKey !== null && !OP_KEY.test(rawKey)) return refuse(c, 400, { code: 'operation_key_invalid', message: 'The send could not be identified. Close the composer and try again.' });
+  const opKey = rawKey ?? crypto.randomUUID().replace(/-/g, '');
+  const fingerprint = await fingerprintOf({ account_uid: row.uid, to, subject, body: text, draft_uid: draftUid, intro_uid: introUid });
+  const hash = await indexHmac(c.env, 'mail_sent', 'recipient', to);
+  const log = (op: OpRow, messageId: string | null, error: string | null) => c.env.DB.prepare(
+    `INSERT INTO mail_sent (uid, user_id, account_id, recipient, recipient_hash, subject, provider_message_id, draft_uid, refs_json, sent_at, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO NOTHING`,
+  ).bind(op.uid, user.id, row.id, to, hash, subject, messageId, draftUid, JSON.stringify(refs), error ? null : new Date().toISOString(), error).run();
+  /** What follows acceptance. None of it can change the outcome, and each step is safe to run again. */
+  const reconcile = async (op: OpRow, messageId: string | null) => {
+    const logged = await log(op, messageId, null).then(() => true).catch(() => false);
+    if (logged) await settleTo(c.env, op, 'accepted', ['accepted'], { sentUid: op.uid }).catch(() => false);
+    if (logged && sequence) await sequenceAdvance(c.env, sequence).catch(() => null);
+    // D4604: the accepted operation is itself the proof of delivery, so a sent-log write that failed does not hold the
+    // introduction's record back. Each call is conditional and safe to repeat.
+    return introUid ? await introRecord(c.env, user, introUid, op.uid) : null;
+  };
+  const acceptedBody = async (op: OpRow, intro: IntroRecord | null) => ({
+    operation: opView(op),
+    sent: { uid: op.uid, account_uid: row.uid, to, subject, provider_message_id: op.provider_message_id, draft_uid: draftUid, refs, intro_uid: introUid },
+    ...(introUid ? { intro: intro ?? { uid: introUid, status: 'accepted', recorded: false } } : {}),
+  });
+
+  // A replay of an operation this member already made recovers it: no nonce, no provider.
+  const known = await opByKey(c.env, user, opKey);
+  if (known) {
+    if (known.fingerprint !== fingerprint || known.account_id !== row.id) return refuse(c, 409, { code: 'operation_changed', message: 'This email was changed after it was first sent. Start a new send.' });
+    return recovered(c, known, async (op) => {
+      const intro = await reconcile(op, op.provider_message_id);
+      return c.json({ ...(await acceptedBody({ ...op, sent_uid: op.uid }, intro)), recovered: true }, 200);
+    });
+  }
+  if (introMade) return refuse(c, introMade.status, { code: introMade.code, message: introMade.sentence });
+
+  const admission = await admit(c.env, user, row.id, opKey, fingerprint);
+  if (admission.kind === 'limited') return refuse(c, 429, { code: 'send_rate_limited', message: `You have sent ${SENDS_PER_HOUR} emails in the last hour. Try again later.` });
+  if (admission.kind === 'existing') return recovered(c, admission.op, async () => c.json({ operation: opView(admission.op), recovered: true }, 200));
+  const op = admission.op;
+  // D4604: this operation claims the intro's delivery before the nonce is spent or the provider is reached. Another
+  // operation that is unconfirmed or already delivered holds it: nothing is sent, and the place is freed.
+  if (introUid) {
+    try { await claimIntroDelivery(c.env, user, introUid, op.uid); } catch (e) {
+      await discard(c.env, op).catch(() => null);
+      if (e instanceof RelationshipRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      throw e;
+    }
+  }
+  // The composer's pressed Send: a one-use nonce, spent before anything goes out. A wrong one frees the place.
+  if (!await spendSendNonce(c.env, user, b.nonce)) {
+    await discard(c.env, op).catch(() => null);
+    return refuse(c, 403, { code: 'confirmation_required', message: 'Press Send in the composer to send this email.' });
+  }
 
   const adapter = ADAPTERS[row.provider];
   const creds = await openCreds(c.env, row);
-  const uid = crypto.randomUUID().replace(/-/g, '');
-  const hash = await indexHmac(c.env, 'mail_sent', 'recipient', to);
-  const log = (messageId: string | null, error: string | null) => c.env.DB.prepare(
-    `INSERT INTO mail_sent (uid, user_id, account_id, recipient, recipient_hash, subject, provider_message_id, draft_uid, refs_json, sent_at, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, user.id, row.id, to, hash, subject, messageId, draftUid, JSON.stringify(refs), error ? null : new Date().toISOString(), error).run();
   if (!adapter || !creds) {
+    const gone = await goneOrNot(c, user, row);
+    if (gone) {
+      // The mailbox went between admission and send: the place is settled as refused and the attempt is logged, so a
+      // retry sees a final operation rather than a pending one.
+      await settleTo(c.env, op, 'refused', ['pending'], { code: 'not_found' }).catch(() => null);
+      await log(op, null, 'The mailbox was disconnected before this email could be sent.').catch(() => null);
+      return gone;
+    }
     const sentence = 'The mailbox’s saved access could not be opened. Connect it again.';
-    await markExpired(c.env, row, sentence);
-    await log(null, sentence);
+    await settleTo(c.env, op, 'refused', ['pending'], { code: 'mailbox_expired' });
+    await markExpired(c.env, row, sentence).catch(() => null);
+    await log(op, null, sentence).catch(() => null);
     return refuse(c, 409, { code: 'mailbox_expired', message: sentence });
   }
+  let out: Awaited<ReturnType<MailAdapter['send']>>;
   try {
-    const out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text });
-    await markUsed(c.env, row, out.creds);
-    await log(out.messageId, null);
-    return c.json({ sent: { uid, account_uid: row.uid, to, subject, provider_message_id: out.messageId, draft_uid: draftUid, refs } }, 201);
+    // D5333: a sequence step carries its one-click opt-out URL as List-Unsubscribe, where the adapter can set it.
+    out = await adapter.send(c.env, creds, { from: row.address, fromName: row.display_name, to, subject, body: text, ...(attachments ? { attachments } : {}),
+      ...(sequence ? { listUnsubscribe: sequence.listUnsubscribe } : {}) });
   } catch (e) {
-    await afterUse(c.env, row, e);
-    await log(null, e instanceof AdapterError ? e.sentence : 'The email could not be sent.');
+    // Only the adapter's own refusal is definite. Anything else left the provider's answer unknown.
+    const definite = e instanceof AdapterError && e.code !== 'uncertain';
+    if (!definite) {
+      const sentence = e instanceof AdapterError ? e.sentence : 'The mail server may or may not have taken the email. Check your Sent folder before sending it again.';
+      await settleTo(c.env, op, 'uncertain', ['pending'], { code: 'uncertain' });
+      await log(op, null, sentence).catch(() => null);
+      return c.json({ operation: opView({ ...op, state: 'uncertain', error_code: 'uncertain' }), error: { code: 'send_uncertain', message: sentence } }, 202);
+    }
+    await settleTo(c.env, op, 'refused', ['pending'], { code: `mailbox_${(e as AdapterError).code}` });
+    await afterUse(c.env, row, e).catch(() => null);
+    await log(op, null, (e as AdapterError).sentence).catch(() => null);
     return adapterRefusal(c, e);
   }
+  // The provider has the email. Record that first; everything after it is bookkeeping that may fail alone.
+  const accepted: OpRow = { ...op, state: 'accepted', provider_message_id: out.messageId };
+  await settleTo(c.env, op, 'accepted', ['pending'], { messageId: out.messageId }).catch(() => null);
+  await markUsed(c.env, row, out.creds).catch(() => null);
+  const intro = await reconcile(accepted, out.messageId);
+  return c.json(await acceptedBody(accepted, intro), 201);
+});
+
+/**
+ * D4604: the introduction's record after its delivery was accepted, as stored. `made` when this send (or an earlier
+ * reconcile of it) made it; otherwise `accepted` with `recorded: false`, which the desk reconciles without sending again.
+ */
+type IntroRecord = { uid: string; status: string; recorded?: false };
+async function introRecord(env: Env, user: User, introUid: string, opUid: string): Promise<IntroRecord> {
+  const made = await markMadeOnSend(env, user, introUid, opUid).catch(() => null);
+  if (made) return { uid: introUid, status: made.status };
+  const row = await env.DB.prepare("SELECT status, mail_sent_uid FROM relationship_interactions WHERE uid = ? AND teammate_user_id = ? AND kind = 'intro_requested'")
+    .bind(introUid, user.id).first<{ status: string; mail_sent_uid: string | null }>().catch(() => null);
+  if (row?.status === 'made' && row.mail_sent_uid === opUid) return { uid: introUid, status: 'made' };
+  return { uid: introUid, status: 'accepted', recorded: false };
+}
+
+/** Answers for an operation that already exists, by its recorded state. `accepted` hands the recovery to the caller. */
+async function recovered(c: Context<any>, op: OpRow, whenAccepted: (op: OpRow) => Promise<Response>): Promise<Response> {
+  if (op.state === 'accepted') return whenAccepted(op);
+  if (op.state === 'refused') return refuse(c, 409, { code: 'send_refused', message: 'The mail server did not take this email, so nothing was sent. Start a new send.' });
+  if (op.state === 'uncertain') {
+    return c.json({ operation: opView(op), error: { code: 'send_uncertain', message: 'The mail server may or may not have taken this email. Check your Sent folder, then say whether it arrived.' } }, 202);
+  }
+  return c.json({ operation: opView(op), message: 'This email is still being sent.' }, 202);
+}
+
+/** The recorded state of one of the member's own send operations. */
+mailAccounts.get('/send/operations/:uid', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const op = await opByUid(c.env, user, c.req.param('uid'));
+  if (!op) return refuse(c, 404, { code: 'not_found', message: NOT_FOUND });
+  return c.json({ operation: opView(op) });
+});
+
+/**
+ * The member's own word on an `uncertain` operation, after looking in their Sent folder: it arrived (accepted)
+ * or it did not (refused, which frees the place). Anything else about the operation is not theirs to change.
+ */
+mailAccounts.post('/send/operations/:uid/resolve', async (c) => {
+  const user = await member(c);
+  if (user instanceof Response) return user;
+  const b = await body(c);
+  if (b.outcome !== 'arrived' && b.outcome !== 'not_arrived') return refuse(c, 400, { code: 'outcome_invalid', message: 'Say whether the email arrived or not.' });
+  const op = await opByUid(c.env, user, c.req.param('uid'));
+  if (!op) return refuse(c, 404, { code: 'not_found', message: NOT_FOUND });
+  if (op.state !== 'uncertain') return refuse(c, 409, { code: 'operation_settled', message: 'This email’s outcome is already recorded.' });
+  const to = b.outcome === 'arrived' ? 'accepted' : 'refused';
+  await settleTo(c.env, op, to, ['uncertain'], { code: `member_${b.outcome}` });
+  // D4604: the intro this operation was delivering, if any. Arrived records it as made (no resend); not arrived
+  // releases the claim, so the intro can be written again.
+  const introUid = await introHeldBy(c.env, user, op.uid).catch(() => null);
+  let intro: IntroRecord | null = null;
+  if (to === 'accepted') {
+    await c.env.DB.prepare('UPDATE mail_sent SET sent_at = ?, error = NULL WHERE uid = ? AND user_id = ? AND sent_at IS NULL')
+      .bind(new Date().toISOString(), op.uid, user.id).run().catch(() => null);
+    if (introUid) intro = await introRecord(c.env, user, introUid, op.uid);
+  } else if (introUid) intro = { uid: introUid, status: 'accepted' };
+  return c.json({ operation: opView((await opByUid(c.env, user, op.uid)) ?? op), ...(intro ? { intro } : {}) });
 });
 
 // D1344 (#3552, EM7): the member's own sent log. A row names its recipient to the member who sent it

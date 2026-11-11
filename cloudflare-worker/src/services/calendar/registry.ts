@@ -19,6 +19,15 @@ import type { CalendarEvent } from '../calendar';
 
 export type SourceFamily = 'meetings' | 'events' | 'validate' | 'grow' | 'deadlines' | 'raise' | 'tasks' | 'learning' | 'external' | 'agents';
 export const SOURCE_FAMILIES: readonly SourceFamily[] = ['meetings', 'events', 'validate', 'grow', 'deadlines', 'raise', 'tasks', 'learning', 'external', 'agents'];
+/**
+ * Each family's name as a member reads it. D5205 (#5205): moved here from `prefs.ts` (which re-exports it) so
+ * the page can import the whole registry with no database code behind it: `/calendar`'s Kinds filter, its
+ * families and its legend are built from this file, not from a second list in the frontend.
+ */
+export const FAMILY_LABELS: Readonly<Record<SourceFamily, string>> = Object.freeze({
+  meetings: 'Meetings', events: 'Events', validate: 'Validate', grow: 'Grow', deadlines: 'Deadlines',
+  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars', agents: 'AI agents',
+});
 
 export interface SourceDef {
   family: SourceFamily;
@@ -72,6 +81,11 @@ export const SOURCES: Readonly<Record<CalendarEvent['kind'], SourceDef>> = Objec
   work_item: { family: 'tasks', module: 'Work › Board', label: 'Work item', page_only: true, pushable: false },
   // #3957: scheduled AI agent work sessions, page only; their work comes back as proposals in Approvals.
   agent_session: { family: 'agents', module: 'Team › Agents', label: 'AI agent session', page_only: true, pushable: false },
+  // #5131 (D1486 §e): Grow's dated plans and sends. Page only: a plan's days and a send's time are not provider copies.
+  grow_campaign: { family: 'grow', module: 'Grow › Campaigns', label: 'Campaign', page_only: true, pushable: false },
+  ad_flight: { family: 'grow', module: 'Grow › Ads', label: 'Ad flight', page_only: true, pushable: false },
+  newsletter_send: { family: 'grow', module: 'Grow › Newsletter', label: 'Newsletter send', page_only: true, pushable: false },
+  sequence_step: { family: 'grow', module: 'Grow › Sequences', label: 'Sequence step', page_only: true, pushable: false },
 });
 
 export const SOURCE_KINDS = Object.keys(SOURCES) as CalendarEvent['kind'][];

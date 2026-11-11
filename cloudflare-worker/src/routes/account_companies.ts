@@ -1,3 +1,4 @@
+import { holdsOnlyLicence } from '../services/accountLicences';
 /**
  * D1136 / #3016 — Companies and projects part 2: the caller's own reads, and
  * answering an invitation while signed in.
@@ -313,7 +314,7 @@ account.get('/account/invitations', async (c) => {
           ORDER BY i.created_at DESC, i.id DESC`, [user.id, email]),
     ]);
     // Investors are never project members (projects.ts), so their venture invitations are listed but cannot be accepted.
-    const canJoinVentures = user.role !== 'investor';
+    const canJoinVentures = !holdsOnlyLicence(user, 'investor');
     return c.json({
       company: company.available ? ok(company.value.map((r) => ({
         uid: r.uid, company_uid: r.company_uid, company_name: r.company_name, logo_url: r.logo_url ?? null,
@@ -446,7 +447,7 @@ const SEATS = new Set(['cofounder', 'advisor']);
 account.post('/projects/invitations/:id{[0-9]+}/accept', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (user.role === 'investor') return refuse(c, 403, { code: 'investor', message: 'Investors cannot join ventures as members.' });
+    if (holdsOnlyLicence(user, 'investor')) return refuse(c, 403, { code: 'investor', message: 'Investors cannot join ventures as members.' });
     const inv = await openProjectInvitation(c, user);
     if (inv instanceof Response) return inv;
     const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(inv.project_id).first<Row>();

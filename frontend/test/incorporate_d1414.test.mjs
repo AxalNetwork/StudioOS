@@ -2,7 +2,8 @@
 // your own projects only, the `?project=` prefill and its refusal, Start
 // fresh, the catalog quote's one price (owner Q5), the status timeline from
 // the order's own row, the company only when the order carries `company_uid`
-// (Q9), no gate (Q6), no bank link (Q7), the device draft, and the dead
+// (Q9), no gate (Q6), the bank step with Mercury (Q7, settled by #4356), the
+// device draft, and the dead
 // `api.incorporateProject` gone. Mounted on a stubbed fetch.
 //
 // Run with:
@@ -133,7 +134,7 @@ test('the timeline is the order\'s own row: no EIN or bank status invented; File
   const filed = timeline({ status: 'filed', paid_at: '2026-10-30', packet_document_id: 5, filed_on: '2026-11-02' });
   assert.deepEqual(filed.map((s) => s.done), [true, true, true]);
   assert.equal(filed[2].line, 'Filed with the state · 2 Nov');
-  assert.ok(!JSON.stringify([...paid, ...filed]).match(/EIN|bank/i), 'EIN is its own row, and there is no bank row');
+  assert.ok(!JSON.stringify([...paid, ...filed]).match(/EIN|bank/i), 'EIN is its own row, and the bank is its own step (BankStep, #4356)');
   assert.deepEqual(deadline83b({ trackers: [] }), { kind: 'none' });
   assert.equal(deadline83b(null).kind, 'unread');
   assert.equal(deadline83b({ trackers: [{ deadline_date: '2026-11-29', days_left: 29, mailed_at: null }] }).line, 'Due 29 Nov · 29 days left');
@@ -165,7 +166,7 @@ test('the company is the order\'s (owner Q9, #3855): drawn only from company_uid
   assert.match(renderedText(done), /\[Orbit Notes Inc\.\] is on its way/);
   assert.doesNotMatch(done, /done-open-company/);
   assert.match(done, /href="\/account\/portfolio\/projects\/2"/, 'Back to the project, always');
-  assert.doesNotMatch(renderedText(done), /bank/i, 'no bank link (owner Q7)');
+  assert.match(renderedText(done), /Open a bank account/, 'the bank step is a next step (#4356; Q7 settled: Mercury)');
 });
 
 // ---------------------------------------------------------------- mounted
@@ -214,7 +215,7 @@ test('mounted: the walk with a prefilled project; the quote is one price with th
     assert.match(w.of('incorporation-timeline'), /Submitted.*Paid · 30 Oct.*Packet ready.*Filed.*Waiting for Axal VC to record the filing/s);
     assert.match(w.of('timeline-ein'), /EINNot recorded.*Add EIN/s);
     assert.ok(!w.has('timeline-company'), 'no company before the order carries it');
-    assert.doesNotMatch(w.text(), /bank/i);
+    assert.doesNotMatch(w.text(), /bank/i, 'the bank row waits for Filed (#4356)');
     await w.click('incorporate-primary');
     assert.ok(w.has('incorporate-done'));
     assert.ok(!w.has('done-open-company'));
@@ -260,12 +261,12 @@ test('the dead client is gone: no api.incorporateProject, no drift entry, and th
   assert.match(read('frontend/src/pages/IncorporatePage.jsx'), /export \{ default \} from '\.\/incorporate\/IncorporateFlow\.jsx';/);
 });
 
-test('house rules in the source: own projects only, no gate, no bank, no Fill, no field trigger before #3706', () => {
+test('house rules in the source: own projects only, no gate, the bank is Mercury, no Fill, no field trigger before #3706', () => {
   const dir = 'frontend/src/pages/incorporate';
   const src = readdirSync(dir).filter((f) => /\.jsx?$/.test(f)).map((f) => codeOnly(read(`${dir}/${f}`))).join('\n');
   assert.doesNotMatch(src, /listProjects\(/, 'the every-venture read');
   assert.doesNotMatch(src, /See plans|Validate \+ Build|ensureTier/, 'no plan gate (owner Q6)');
-  assert.doesNotMatch(src, /bank account/i, 'no bank link (owner Q7)');
+  assert.match(src, /Mercury/, 'the bank step names Mercury (#4356; Q7 settled)');
   assert.doesNotMatch(src, /\bFill\b/);
   assert.doesNotMatch(src, /FillFormTrigger|FillTrigger|Ask Eadwyn to fill/, 'no field trigger until #3706');
   assert.match(src, /import AskButton from '\.\.\/team\/AskButton\.jsx';/, 'Ask is the shared button, which draws nothing until its panel exists');

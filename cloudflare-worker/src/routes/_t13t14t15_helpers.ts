@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Shared helpers for T13/T14/T15 ports.
  */
@@ -16,15 +17,15 @@ export function isAdmin(u: User): boolean {
 }
 
 export function isFounder(u: User): boolean {
-  return role(u) === 'founder';
+  return holdsLicence(u, 'founder');
 }
 
 export function isPartner(u: User): boolean {
-  return role(u) === 'partner';
+  return holdsLicence(u, 'partner');
 }
 
 export function isInvestor(u: User): boolean {
-  return role(u) === 'investor';
+  return holdsLicence(u, 'investor');
 }
 
 export function nowIso(): string {

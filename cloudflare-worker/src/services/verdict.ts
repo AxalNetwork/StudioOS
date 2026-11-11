@@ -4,7 +4,8 @@
  *
  * THE ONE MODULE. Only this file reads or writes `validation_decisions`,
  * `validation_decision_evidence` and `validation_decision_commitments`
- * (migrations 211 and 464). Every reader of "the current decision" calls
+ * (migrations 211 and 464), and D4586's `validation_decision_method` and
+ * `validation_decision_exclusions` (migration 202611091102). Every reader of "the current decision" calls
  * `currentDecision`, so the old verdict page, the summary CSV and the new
  * module can never disagree about it. `services/records/owned.ts` may test
  * that an id is the venture's, and nothing else.
@@ -17,10 +18,17 @@
  * inside it (`INSERT … SELECT`), never read before it, so two decisions
  * recorded at once leave exactly one current and a correct chain.
  *
- * THE BAR. Below `DECISION_EVIDENCE_BAR` checked pieces of evidence a
+ * THE BAR. Below `DECISION_EVIDENCE_BAR` counted pieces of evidence a
  * decision is kept as withheld: never current, superseding nothing, with its
  * own row and its own record. The bar counts what the founder checks,
- * contradicting items included.
+ * contradicting items included. Since D4586 (methodology v2) it counts
+ * distinct underlying sources, only the decision's own hypothesis's evidence,
+ * and only experiments with an observed result (`decisionEvidenceV2`). The
+ * checked links that do not count are kept in `validation_decision_exclusions`
+ * with their reason, and `validation_decision_evidence` holds only what
+ * counted, so `evidence_count` means the same for v1 and v2 decisions. A
+ * decision with no `validation_decision_method` row is a v1 decision and is
+ * never recomputed.
  *
  * FAILURES THROW. A read that fails is a 503 or an unreadable card, never an
  * empty history: "no decision yet" and "the decision could not be read" are
@@ -33,6 +41,7 @@ import { logCycleWriteStatement } from './cycleActivity';
 import { safeCard, PAGE_SIZE, type Card } from './cycleCards';
 import type { Ctx, FilterSpec, RecordQuery, Records, SortSpec } from './cycleValidate';
 import { ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
+import { decisionEvidenceV2, sourceKey, type DecisionEvidence, type EvidenceRow, type Exclusion } from './validateMethodology';
 
 /**
  * Pieces of evidence a decision must rest on before a verdict is given.
@@ -73,6 +82,10 @@ export type EvidenceItem = {
   direction: 'supports' | 'contradicts';
   date: string | null;
   hypothesis_id?: number | null;
+  /** The record behind the link (`validateEvidence.ts`); without it, the link is its own source. */
+  ref_id?: string;
+  /** Experiments only: whether a result is recorded (D4586 § 4). */
+  observed?: boolean;
 };
 
 export type EvidenceSource = (env: Env, projectId: number) => Promise<EvidenceItem[]>;
@@ -138,6 +151,8 @@ export type Recorded = {
   state: DecisionState;
   supersedes_id: number | null;
   pivot_hypothesis_id: number | null;
+  /** D4586: what the decision was counted on, as recorded in `validation_decision_method`. */
+  coverage: DecisionEvidence;
 };
 
 const KIND_WORD: Record<DecisionKind, string> = { proceed: 'Proceed', pivot: 'Pivot', stop: 'Stop' };
@@ -240,7 +255,17 @@ export async function recordDecision(
     }
   }
 
-  const state: DecisionState = items.length >= bar ? 'given' : 'withheld';
+  // D4586 (methodology v2): what counts toward the bar. Each link the founder
+  // checked is kept: the counted ones as the decision's evidence, the others
+  // with the reason they did not count.
+  const rows: EvidenceRow[] = items.map((it) => ({
+    id: it.id, kind: String(it.kind || 'evidence') as EvidenceRow['kind'], ref_id: String(it.ref_id ?? it.id),
+    hypothesis_id: Number(it.hypothesis_id), direction: DIRECTIONS.has(it.direction) ? it.direction : 'supports',
+    ...(it.kind === 'experiment' ? { observed: it.observed === true } : {}),
+  }));
+  const coverage = decisionEvidenceV2(rows, scope === 'venture' ? 'venture' : (hypothesisId as number), await interviewPeople(env, projectId, rows), bar);
+  const reasonOf = new Map<string, Exclusion>(coverage.excluded.map((x) => [x.id, x.reason]));
+  const state: DecisionState = coverage.state;
   const word = KIND_WORD[decision];
   const recordedSummary = state === 'given'
     ? `Recorded ${word} for ${scopeWord}`
@@ -281,7 +306,18 @@ export async function recordDecision(
   }
   // Each item as it reads now, so the record does not change when the
   // evidence is edited later.
-  for (const it of items) {
+  for (const [i, it] of items.entries()) {
+    const reason = reasonOf.get(it.id);
+    if (reason) {
+      stmts.push(env.DB.prepare(
+        `INSERT INTO validation_decision_exclusions (uid, decision_id, kind, ref_id, source_key, label, direction, reason)
+         VALUES (?, (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        crypto.randomUUID(), projectId, String(it.kind || 'evidence'), it.id, sourceKey(rows[i]), String(it.label || it.id),
+        rows[i].direction, reason,
+      ));
+      continue;
+    }
     stmts.push(env.DB.prepare(
       `INSERT INTO validation_decision_evidence (uid, decision_id, kind, ref_id, label, strength, direction, on_date)
        VALUES (?, (SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?)`,
@@ -292,6 +328,14 @@ export async function recordDecision(
       it.date ?? null,
     ));
   }
+  stmts.push(env.DB.prepare(
+    `INSERT INTO validation_decision_method (decision_id, methodology_version, links, sources, counted, counted_supporting,
+       counted_contradicting, interviews, interviewees, organizations, bar)
+     VALUES ((SELECT MAX(id) FROM validation_decisions WHERE project_id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    projectId, coverage.methodology_version, coverage.links, coverage.sources, coverage.counted, coverage.counted_supporting,
+    coverage.counted_contradicting, coverage.interviews, coverage.interviewees, coverage.organizations, coverage.bar,
+  ));
   stmts.push(logCycleWriteStatement(env, {
     ...verdictWrite(user, projectId, 'validation_decision_recorded', recordedSummary),
     readback: { table: 'validation_decisions', by: 'max' },
@@ -311,7 +355,53 @@ export async function recordDecision(
     state,
     supersedes_id: row.supersedes_id == null ? null : Number(row.supersedes_id),
     pivot_hypothesis_id: row.pivot_hypothesis_id == null ? null : Number(row.pivot_hypothesis_id),
+    coverage,
   };
+}
+
+/**
+ * D4586 § 2: the interviewee and company of each interview the checked links
+ * reach, read only so `decisionEvidenceV2` can count distinct values. Neither
+ * is returned or stored.
+ */
+async function interviewPeople(env: Env, projectId: number, rows: EvidenceRow[]) {
+  const ids = [...new Set(rows.filter((r) => r.kind === 'interview' && /^[1-9][0-9]{0,9}$/.test(r.ref_id)).map((r) => Number(r.ref_id)))];
+  const people = new Map<string, { name: string | null; company: string | null }>();
+  if (!ids.length) return people;
+  const res = await env.DB.prepare(
+    'SELECT id, interviewee_name, interviewee_company FROM discovery_interviews WHERE project_id = ? AND id IN (SELECT value FROM json_each(?))',
+  ).bind(projectId, JSON.stringify(ids)).all<{ id: number; interviewee_name: string | null; interviewee_company: string | null }>();
+  for (const r of res.results || []) people.set(String(r.id), { name: r.interviewee_name, company: r.interviewee_company });
+  return people;
+}
+
+export type DecisionMethod = {
+  methodology_version: number; links: number; sources: number; counted: number; counted_supporting: number;
+  counted_contradicting: number; interviews: number; interviewees: number | null; organizations: number | null; bar: number;
+};
+export type DecisionExclusionRow = {
+  id: number; uid: string; kind: string; ref_id: string; source_key: string; label: string;
+  direction: 'supports' | 'contradicts'; reason: Exclusion;
+};
+
+/**
+ * D4586 — the methodology one decision was recorded under: its coverage and
+ * the checked links that did not count. `method` is null for a decision
+ * recorded before methodology v2, which reads as v1 and is never recomputed.
+ */
+export async function decisionMethod(env: Env, decisionId: number): Promise<{ method: DecisionMethod | null; excluded: DecisionExclusionRow[] }> {
+  const [m, x] = await Promise.all([
+    env.DB.prepare(
+      `SELECT methodology_version, links, sources, counted, counted_supporting, counted_contradicting, interviews,
+              interviewees, organizations, bar
+         FROM validation_decision_method WHERE decision_id = ?`,
+    ).bind(decisionId).first<DecisionMethod>(),
+    env.DB.prepare(
+      `SELECT id, uid, kind, ref_id, source_key, label, direction, reason
+         FROM validation_decision_exclusions WHERE decision_id = ? ORDER BY id`,
+    ).bind(decisionId).all<DecisionExclusionRow>(),
+  ]);
+  return { method: m ?? null, excluded: x.results || [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -692,10 +782,12 @@ const isOldRoute = (d: Pick<DecisionRow, 'state' | 'evidence_count'>) => d.state
  *   when no deadline is ahead.
  */
 /** D757 §2.6 (#1925): the card's one read-only interview line; null when it cannot be read. */
-export type VerdictCard = Card & { interview_evidence?: { count: number; contradicting: number; text: string } | null };
+export type VerdictCard = Card & { contributions?: { text: string; href: string }[]; interview_evidence?: { count: number; contradicting: number; text: string } | null };
 
 export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
   return safeCard({ slug: 'verdict', name: 'Verdict', range: 'All time', caption: 'Every decision, oldest to newest, never overwritten.', source: 'Decisions' }, async (): Promise<Omit<VerdictCard, 'slug' | 'name' | 'range' | 'caption'>> => {
+    const hasFindings = ctx.canWrite && (await (await import('./interviewFindings')).presentTables(ctx.env, ['interview_findings'])).has('interview_findings');
+    const contributions = hasFindings ? (await ctx.env.DB.prepare("SELECT interview_id, payload_json FROM interview_findings WHERE project_id = ? AND kind = 'verdict_contribution' ORDER BY id DESC LIMIT 50").bind(ctx.projectId).all<{ interview_id: number; payload_json: string }>()).results?.map((r) => ({ text: String(JSON.parse(r.payload_json).text), href: `/validate/customer-research/${r.interview_id}?project=${ctx.projectId}` })) ?? [] : [];
     const add = { text: 'Record a decision', href: `/validate/verdict/new?project=${ctx.projectId}` };
     const [any, current, interview_evidence] = await Promise.all([
       decisionsFor(ctx.env, ctx.projectId, { pageSize: 1 }),
@@ -703,11 +795,11 @@ export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
       interviewLine(ctx),
     ]);
     if (any.total === 0) {
-      return { state: 'empty', series: null, next: add, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
+      return { state: 'empty', series: null, next: add, contributions, reason: 'No decision yet. Decisions appear here once evidence is in.', interview_evidence };
     }
     if (!current) {
       return {
-        state: 'too_little', series: null, next: add, interview_evidence,
+        state: 'too_little', series: null, next: add, interview_evidence, contributions,
         reason: 'No verdict for the venture yet. Withheld decisions and decisions on one hypothesis are in the table.',
       };
     }
@@ -732,7 +824,7 @@ export async function verdictCard(ctx: Ctx): Promise<VerdictCard> {
         }
         : null,
       reason: null,
-      interview_evidence,
+      interview_evidence, contributions,
     };
   });
 }

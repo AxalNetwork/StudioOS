@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 /**
@@ -156,6 +157,8 @@ function serialize(s: ScenarioRow, withResult = true): any {
     computed_at: s.computed_at || null,
     created_at: s.created_at,
     updated_at: s.updated_at,
+    // D5069: what a save sends back as `expected_revision`.
+    revision: s.updated_at,
   };
   if (withResult) out.result = s.result_json ? safeJson<SimulateResult>(s.result_json, null as any) : null;
   return out;
@@ -174,13 +177,13 @@ async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow |
 
 /** Membership paths are independent of the member's own active company. */
 function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
-  return !(user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id);
+  return !(holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id);
 }
 async function computeProjectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
   const principal = { ...user, role: user.role.toLowerCase() } as any;
   if (principal.role === 'admin') return { ...project, capRead: false, capWrite: false };
-  if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
-  const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
+  if (holdsOnlyLicence(principal, 'investor')) return { ...project, capRead: false, capWrite: false };
+  const owner = holdsLicence(principal, 'founder') && !!principal.founder_id && principal.founder_id === project.founder_id;
   // A recorded membership first, for every non-owner. Since D889 (#2438)
   // canAccessProject requires one of a partner too; this check stays explicit.
   const member = owner ? null : await getProjectMembershipRole(env, project.id, principal.id);
@@ -222,7 +225,7 @@ async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<P
   if (!row) return null;
   if (isCompanyExempt(user, row)) {
     const answer = await projectPermissions(c, user, row);
-    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+    if (!answer.capRead && holdsLicence(user, 'founder')
       && !projectInActiveCompany(await activeCompanyFor(c, user), row)) return null;
     return answer;
   }
@@ -238,7 +241,7 @@ async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Pro
   if (!proj) return null;
   if (isCompanyExempt(user, proj)) {
     const answer = await projectPermissions(c, user, proj);
-    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+    if (!answer.capRead && holdsLicence(user, 'founder')
       && !projectInActiveCompany(await activeCompanyFor(c, user), proj)) throw new HttpError(404, 'Scenario not found');
     return answer;
   }
@@ -259,7 +262,7 @@ async function ensureScenarioReadOr404(c: Ctx, uid: string, user: AuthUser): Pro
 
 async function auditMemberWrite(c: Ctx, user: AuthUser, project: ProjectRow | null) {
   if (!project || user.role.toLowerCase() === 'admin' ||
-    (user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id)) return;
+    (holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === project.founder_id)) return;
   const key = `captable_write:${project.id}`;
   if (c.get(key as never)) return;
   await c.env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
@@ -580,6 +583,16 @@ captable.get('/scenarios/:uid', async (c) => {
   } catch (e) { return asJsonError(c, e); }
 });
 
+/** D5069: a save made from a read that is no longer the row's. Nothing was written. */
+function changedSinceOpen(c: Ctx, current: string | null): Response {
+  return c.json({
+    error: 'changed_since_open',
+    code: 'changed_since_open',
+    message: 'This cap table scenario was changed somewhere else after you opened it. Nothing of yours was saved. Review the latest, then make your change again.',
+    current_revision: current,
+  }, 409);
+}
+
 captable.put('/scenarios/:uid', async (c) => {
   ensureTier(await requireAuth(c), 'studio');
   const user = await requireAuth(c);
@@ -587,6 +600,13 @@ captable.put('/scenarios/:uid', async (c) => {
   try { row = await ensureScenarioWriteOr404(c, c.req.param('uid'), user); }
   catch (e) { return asJsonError(c, e); }
   const body = await c.req.json().catch(() => ({}));
+  // D5069: a save says which revision it was made from. Without one it cannot be
+  // told from a save over newer work, so it is refused rather than last-write-wins.
+  const expected = body?.expected_revision;
+  if (typeof expected !== 'string' || !expected || expected.length > 64) {
+    return refuse(c, 400, { code: 'expected_revision_required', message: 'Say which revision you are editing (expected_revision), as read with the scenario.' });
+  }
+  if (row.updated_at !== expected) return changedSinceOpen(c, row.updated_at);
   const name = String(body?.name || '').trim();
   if (!name || name.length > 200) return c.json({ detail: 'name must be 1..200 chars' }, 400);
   const inputs: Inputs = body?.inputs || {};
@@ -611,7 +631,8 @@ captable.put('/scenarios/:uid', async (c) => {
   }
   const projectId = body?.project_id !== undefined ? body.project_id : row.project_id;
   // D691 — the save, the entry keys and D632's activity row live in saveScenario().
-  const saved = await saveScenario(c.env, { actor: user, name, inputs, projectId, row });
+  const saved = await saveScenario(c.env, { actor: user, name, inputs, projectId, row, expectedRevision: expected });
+  if (!saved.ok && saved.reason === 'changed_since_open') return changedSinceOpen(c, saved.currentRevision);
   if (!saved.ok) {
     return c.json({ detail: { code: 'project_has_cap_table', message: 'This project already has a cap table. Edit that one instead.' } }, 409);
   }
@@ -1147,7 +1168,7 @@ async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: numb
     const reason = typeof (b.reason ?? b.correction_reason) === 'string' ? String(b.reason ?? b.correction_reason).trim() : '';
     if (reason.length < CAPTABLE_SUPPORT_REASON_MIN || reason.length > CAPTABLE_SUPPORT_REASON_MAX) throw new RecordError(400, 'reason_required', 'A studio correction needs a support reason the founder can read.', { missing: ['reason'] });
   }
-  const founderOwns = role === 'founder' && !!user.founder_id && user.founder_id === proj.founder_id;
+  const founderOwns = holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === proj.founder_id;
   const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
     : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
   if (records && actorRole === 'cofounder') {

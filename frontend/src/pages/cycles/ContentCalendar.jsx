@@ -81,7 +81,7 @@ export default function ContentCalendar({ part, channels, projectId, reload, api
   );
 }
 
-function PieceDialog({ item, channels, onClose, onSave }) {
+export function PieceDialog({ item, channels, onClose, onSave }) {
   const [f, setF] = useState(() => ({ title: item?.title || '', planned_on: item?.planned_on || '', status: item?.status || 'idea', channel_uid: item?.channel_uid || '', url: item?.url || '' }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -124,7 +124,7 @@ function PieceDialog({ item, channels, onClose, onSave }) {
   );
 }
 
-function DeleteDialog({ item, onClose, onConfirm }) {
+export function DeleteDialog({ item, onClose, onConfirm }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const go = async () => {

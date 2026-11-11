@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D852 (#2475) — a member's own remote MCP servers ("Add a custom connector").
  * Mounted at `/api/connectors/custom`, ahead of the connectors router. Every
@@ -90,7 +91,7 @@ async function gate(c: C, user: User): Promise<Response | null> {
   if (!customMcpEnabled(c.env)) return c.json({ error: 'custom_connectors_off' }, 404);
   if (await isSupportSession(c)) return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot connect a member\'s MCP server.' });
   const role = String(user.role || '');
-  if (role !== 'founder' && role !== 'admin') return c.json({ error: 'custom_connectors_off' }, 404);
+  if (!holdsLicence(user, 'founder') && role !== 'admin') return c.json({ error: 'custom_connectors_off' }, 404);
   if (!userMeetsTier(user, 'growth')) return c.json(tierUpsell('growth'), 402);
   return null;
 }

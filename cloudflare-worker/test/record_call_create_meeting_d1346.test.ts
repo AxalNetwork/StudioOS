@@ -182,6 +182,25 @@ test('D1376: with the Meet permission the call is a space Axal creates: Open and
   assert.ok(!r.text.includes('g-at'), 'no token in the reply');
 });
 
+test('a space whose meetingUri comes back as /meet/<code> is given out as the call\'s own address', async (t) => {
+  const f = world();
+  await connectGoogle(f, SPACE_SCOPE);
+  const calls = mockFetch(t, {
+    'POST https://oauth2.googleapis.com/token': () => json({ access_token: 'g-at', expires_in: 3599, token_type: 'Bearer' }),
+    'POST https://meet.googleapis.com/v2/spaces': () => json({ name: 'spaces/sp1abc', meetingUri: `https://meet.google.com/meet/${MEET_CODE}`, meetingCode: MEET_CODE }),
+  });
+  const r = await call(f.env, 'POST', '/meetings/instant', { provider: 'google_meet', duration_min: 45 });
+  assert.equal(r.status, 201, r.text);
+  assert.deepEqual(r.body, { provider: 'google_meet', join_url: `https://meet.google.com/${MEET_CODE}`, open: true, auto_transcribe: true });
+  const sent = JSON.parse(calls.find((c) => c.key.endsWith('/v2/spaces'))!.body!);
+  assert.deepEqual(sent.config, { accessType: 'OPEN', artifactConfig: { transcriptionConfig: { autoGenerationType: 'ON' } } });
+  assert.ok(!calls.some((c) => c.key.includes('/calendar/v3/')), 'no Calendar event');
+  const [row] = f.db.prepare('SELECT * FROM meet_created_spaces').all() as any[];
+  assert.deepEqual([row.user_id, row.meeting_code, row.space_name, row.auto_transcribe], [ME, MEET_CODE, 'spaces/sp1abc', 1]);
+  assert.equal(Date.parse(row.ends_at) - Date.parse(row.starts_at), 45 * 60_000, 'the slot an import reads');
+  assert.ok(!r.text.includes('g-at'), 'no token in the reply');
+});
+
 test('D1376: an account whose plan refuses automatic transcripts still gets an Open space; without the permission, the Calendar event as before', async (t) => {
   const f = world();
   await connectGoogle(f, SPACE_SCOPE);
@@ -265,7 +284,10 @@ test('GET /meetings/bot: deployed is true with the per-minute prices; off for th
   mockFetch(t, {});
   const r = await call(world(DEPLOYED).env, 'GET', '/meetings/bot');
   assert.equal(r.body.available, true);
-  assert.deepEqual(r.body.platforms, { zoom: true, google_meet: true, teams: true });
+  // D1451: Teams has its own switch, off by default.
+  assert.deepEqual(r.body.platforms, { zoom: true, google_meet: true, teams: false });
+  const teamsOn = await call(world({ ...DEPLOYED, MEETING_BOT_TEAMS: 'on' }).env, 'GET', '/meetings/bot');
+  assert.deepEqual(teamsOn.body.platforms, { zoom: true, google_meet: true, teams: true });
   assert.equal(r.body.price.bot_microusd_per_minute, 2790, 'D886 §5: 2,232 × 1.25, rounded up');
   assert.ok(Number.isSafeInteger(r.body.price.transcription_microusd_per_minute) && r.body.price.transcription_microusd_per_minute > 0);
   const canary = await call(world({ ...DEPLOYED, MEETING_BOT: 'canary' }).env, 'GET', '/meetings/bot');

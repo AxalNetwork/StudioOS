@@ -314,27 +314,3 @@ export function settingsEntry(scope) {
 
 /** Whether a location is one of the scope's settings pages (the entry is lit). */
 export const settingsActive = (entry, pathname = '') => !!entry && entry.prefixes.some((pre) => pathname === pre || pathname.startsWith(`${pre}/`));
-
-/** Portfolio as a main-navigation row (D4152 §3): a place, not a setting. */
-export const PORTFOLIO_ROW = Object.freeze({ to: '/account/portfolio', label: 'Portfolio', match: ['/account/portfolio', '/account/companies'] });
-
-/**
- * The role's groups with Portfolio in the main navigation, right after the
- * Studio row (D4152 §3). A shell with no Studio row (the HQ shell) is left as
- * it is and keeps Portfolio at the foot (`portfolioInNav` false). A shell
- * that already has a "Portfolio" row (an investor's holdings, `/portfolio`)
- * gets this one as "Companies", so two rows never share a name.
- */
-export function withPortfolioRow(groups, icon = null) {
-  const list = Array.isArray(groups) ? groups : [];
-  const items = list.flatMap((g) => g.items || []);
-  if (items.some((i) => i.to === PORTFOLIO_ROW.to)) return { groups: list, portfolioInNav: true };
-  const at = list.findIndex((g) => (g.items || []).some((i) => i.label === 'Studio'));
-  if (at < 0) return { groups: list, portfolioInNav: false };
-  const row = { ...PORTFOLIO_ROW, icon, label: items.some((i) => i.label === 'Portfolio') ? 'Companies' : 'Portfolio' };
-  const g = list[at];
-  const i = g.items.findIndex((x) => x.label === 'Studio');
-  const next = list.slice();
-  next[at] = { ...g, items: [...g.items.slice(0, i + 1), row, ...g.items.slice(i + 1)] };
-  return { groups: next, portfolioInNav: true };
-}

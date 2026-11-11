@@ -1374,7 +1374,7 @@ export default function SpinoutLabMarketPage() {
             {/* The deck's Competition slide stays the investor-ready surface. */}
             <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
               {deckUnlocked ? (
-                <Link to="/build/deck" data-testid="link-deck-competitors" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-violet-700 dark:text-violet-300">
+                <Link to="/raise/pitch" data-testid="link-deck-competitors" className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-violet-700 dark:text-violet-300">
                   Map competitors in the deck <ArrowRight size={13} />
                 </Link>
               ) : (

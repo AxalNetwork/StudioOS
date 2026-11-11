@@ -25,6 +25,7 @@
  * remain mocked; D1231's KYB case is the account entity's decision source.
  */
 import type { Env } from '../types';
+import { heldLicences } from './accountLicences';
 import { bindingKey } from '../util/schemaBootstrap';
 import { branchOf } from '../util/branch';
 import { expireKycFromObligations } from './kycCase';
@@ -195,17 +196,35 @@ export async function seedObligations(
   env: Env,
   userId: number,
   role: string,
-  opts: { pruneStaleForRole?: boolean } = {},
+  opts: { pruneStaleForRole?: boolean; failOnError?: boolean } = {},
 ): Promise<{ inserted: number; pruned: number }> {
   await ensureTrustSchema(env);
-  const defs = obligationsForRole(role).map(d => ({ ...d }));
+  // D4472: seed/prune the union, so a founder grant never waives a held
+  // investor licence's KYC, and a primary-role correction keeps real grants.
+  let licences: string[];
+  try {
+    const primary = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first<{ role: string }>();
+    licences = await heldLicences(env.DB, { id: userId, role: primary?.role || role });
+  }
+  catch (error) {
+    console.warn('[trust] licences unreadable', error);
+    if (opts.failOnError) throw error;
+    licences = [role];
+  }
+  const roles = licences.length ? licences : [role];
+  const byKey = new Map<string, ObligationDef>();
+  for (const held of roles) for (const def of obligationsForRole(held)) {
+    const prior = byKey.get(def.key);
+    if (!prior || def.required > prior.required) byKey.set(def.key, { ...def });
+  }
+  const defs = [...byKey.values()];
   // Task #3 (Y-1) — investor KYB conditional on entity status.
   // If the user has populated a corporate_profiles row (entity_type
   // set), KYB becomes a hard requirement. The kyb_v1 def above is
   // seeded as required:0 for individual investors; we flip it here
   // for entity investors. Defensive: if corporate_profiles is missing
   // (older deployments) we leave the default.
-  if (role === 'investor') {
+  if (roles.includes('investor')) {
     let isEntity = false;
     try {
       const cp: any = await env.DB.prepare(
@@ -225,7 +244,7 @@ export async function seedObligations(
   // outstanding obligation. Force-waive in-place so trust summaries and
   // scoring queries (which already respect `required=0` / `status='waived'`)
   // naturally exclude them. Preserves the audit row instead of deleting.
-  if (role !== 'investor') {
+  if (!roles.includes('investor')) {
     try {
       await env.DB.prepare(
         `UPDATE legal_obligations
@@ -234,7 +253,10 @@ export async function seedObligations(
             AND obligation_key = 'kyc_v1'
             AND status <> 'waived'`,
       ).bind(userId).run();
-    } catch (e) { console.error('[trust] kyc_v1 legacy waive failed', e); }
+    } catch (e) {
+      console.error('[trust] kyc_v1 legacy waive failed', e);
+      if (opts.failOnError) throw e;
+    }
   }
   let inserted = 0;
   for (const d of defs) {
@@ -259,6 +281,7 @@ export async function seedObligations(
       if (r?.id) inserted += 1;
     } catch (e) {
       console.error('[trust] seed insert failed', d.key, e);
+      if (opts.failOnError) throw e;
     }
   }
   let pruned = 0;
@@ -279,7 +302,10 @@ export async function seedObligations(
           pruned += 1;
         }
       }
-    } catch (e) { console.error('[trust] prune failed', e); }
+    } catch (e) {
+      console.error('[trust] prune failed', e);
+      if (opts.failOnError) throw e;
+    }
   }
   return { inserted, pruned };
 }

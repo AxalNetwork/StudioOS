@@ -1,0 +1,41 @@
+{
+  "skill": "design-development-handoff",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "feature": "Invoice drawer",
+        "design_version": "v6",
+        "token": "surface.panel",
+        "loading_state": null,
+        "owner": null
+      },
+      "github.repos": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Invoice drawer",
+      "v6",
+      "surface.panel"
+    ],
+    "must_say_not_recorded": [
+      "loading state"
+    ],
+    "must_not_include": [
+      "implementation approved"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why loading state is missing rather than inventing it.",
+    "Do not assert: implementation approved.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Invoice drawer; v6; surface.panel. loading state: Not recorded. Human review required."
+}

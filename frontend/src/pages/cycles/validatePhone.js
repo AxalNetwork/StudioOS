@@ -21,6 +21,7 @@
 // browser never formats money.
 
 import { safeHref } from './cycleModel.js';
+import { plainAmount } from '../../lib/money.js';
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const sentence = (t) => { const s = String(t || '').trim(); return !s ? '' : /[.!?]$/.test(s) ? s : `${s}.`; };
@@ -51,8 +52,17 @@ export const ROOT_ACTION_PATHS = { validate: 'record', build: 'connect', raise: 
 export function phoneFocus(raw, search = '', cycle = 'validate') {
   const f = raw?.focus;
   const href = safeHref(f?.cta?.href);
+  // D4589 (#4589): the Worker's policy also sends `rule`, `secondary` and, when
+  // a fact it needs could not be read, `state: 'unavailable'` with no CTA. That
+  // is drawn as said, never replaced by a card's next: a failed read is not
+  // guidance. Desktop (`ValidateNextAction.jsx`) draws this same object.
+  const secondary = (Array.isArray(f?.secondary) ? f.secondary : [])
+    .map((s) => ({ label: String(s?.label || ''), href: safeHref(s?.href) })).filter((s) => s.label && s.href);
+  if (f && typeof f === 'object' && f.headline && f.state === 'unavailable') {
+    return { rule: f.rule || 'unavailable', unavailable: true, eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: null, href: null, then: null, secondary };
+  }
   if (f && typeof f === 'object' && f.headline && href) {
-    return { eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: f.cta.text || f.cta.label || 'Open', href, then: f.then || null };
+    return { rule: f.rule || null, eyebrow: f.eyebrow || `${nameOf(cycle)} · Next`, headline: f.headline, why: f.why || null, cta: f.cta.text || f.cta.label || 'Open', href, then: f.then || null, secondary };
   }
   if (cycle === 'validate') {
     const research = card(raw, 'customer-research');
@@ -202,7 +212,8 @@ export function acceptAllBatches(rows) {
 export function verdictInterviewLine(data) {
   if (data?.parts?.can_write !== true) return null;
   const line = data?.card?.interview_evidence;
-  return line && typeof line.text === 'string' && line.text ? line.text : null;
+  const contributions = Array.isArray(data?.card?.contributions) ? data.card.contributions.map((x) => x.text).filter(Boolean) : [];
+  return [line && typeof line.text === 'string' ? line.text : null, ...contributions.map((x) => `Interview contribution: ${x}`)].filter(Boolean).join(' · ') || null;
 }
 
 // A finding kind's words, as the Worker's `findingLine`
@@ -220,12 +231,16 @@ export function amountWord(p) {
   const cents = posInt(p?.amount_cents);
   if (!cents) return null;
   const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
-  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+  // D5373: at the currency's own decimals (1,200 USD, 12,000 JPY, 1.250 KWD); a finding's currency column defaults to 'usd'.
+  const code = String(p.currency || 'usd').toUpperCase();
+  return `${plainAmount(cents, code, { trimWhole: true }) ?? `${cents} minor units`} ${code}${period}`;
 }
 
 /** `{ what, detail }` for a finding kind, or null for any other kind. */
 export function findingLine(kind, p = {}) {
   switch (kind) {
+    case 'quotable_line': return { what: 'Quotable line', detail: 'Accepted quotation' };
+    case 'verdict_contribution': return { what: 'Contribution to Verdict', detail: String(p.text ?? '') };
     case 'firmographic': return { what: ATTRIBUTE_WORD[String(p.attribute)] ?? 'Firmographic', detail: String(p.value ?? '') };
     case 'job_to_be_done': return { what: 'Job to be done', detail: String(p.job ?? '') };
     case 'market_fact': return { what: `Market fact · ${capital(String(p.topic ?? 'other'))}`, detail: String(p.fact ?? '') };

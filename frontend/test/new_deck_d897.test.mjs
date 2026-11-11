@@ -101,8 +101,8 @@ test('the prompt is flagged as the Worker would refuse it, and "one" is not a fi
   assert.ok(promptWarning('Say we have 200 customers'));
   assert.ok(promptWarning('Fourteen of twenty-three said yes'));
   assert.equal(promptWarning('Lead with one ledger and the team'), null);
-  // The same rule as services/decks/newDeck.ts: the word list is copied, so both must change together.
-  const worker = read('cloudflare-worker/src/services/decks/newDeck.ts');
+  // The same rule as services/decks/numbers.ts (D1588 moved it out of newDeck.ts): the word list is copied, so both must change together.
+  const worker = read('cloudflare-worker/src/services/decks/numbers.ts');
   const words = (src) => JSON.stringify(src.match(/NUMBER_WORDS = \[([^\]]+)\]/)[1].match(/'[a-z]+'/g));
   assert.equal(words(read('frontend/src/pages/raise/pitch/newDeckModel.js')), words(worker));
   for (const t of ['$5', '40%', 'a dozen', '3x']) assert.ok(numberIn(t), t);
@@ -162,7 +162,7 @@ test('every write\'s dialog says what it changes and what it costs', () => {
   const brief = fastBrief({ fast_path: { audience: 'pre_seed_fund', length: 'short' }, audiences: [{ id: 'pre_seed_fund', label: 'Pre-seed fund' }], standard: { short: [1, 2, 3, 4, 5, 6] } });
   assert.deepEqual(brief, { audience: 'pre_seed_fund', length: 'short', label: 'Pre-seed fund', cards: 6, why: null });
   assert.match(fastPathLine({ ai: true, hold_microusd: 6000 }, brief), /^6 cards from everything on record, for the Pre-seed fund audience\. Review sources afterwards\. About \$0\.0060 in AI tokens\.$/);
-  assert.equal(fastPathLine(null), 'A deck from everything on record. Review sources afterwards.', 'before the read, no audience is named');
+  assert.equal(fastPathLine(null), 'A deck from everything on record. Review sources afterwards. Reading the price…', 'before the read, no audience is named, and no price is claimed (D4597)');
   assert.match(buildSentence(null, null), /^StudioOS builds the deck from your records\./);
   // #3877's inferred brief wins over fast_path when the read carries it.
   const inferred = fastBrief({ fast_path: { audience: 'seed_fund', length: 'standard' }, inferred: { audience: 'angel', length: 'short', why: 'Your venture is at idea stage.' }, audiences: [{ id: 'angel', label: 'Angel' }] });
@@ -195,7 +195,7 @@ async function mount(url, over = {}) {
   stub(api, 'deckUpdate', async (id, body) => ({ id: 13, version: 5, title: body.title, slides: body.slides, theme: body.theme }));
   stub(api, 'getMe', async () => null);
   stub(newDeckApi, 'context', over.context || (async () => CONTEXT));
-  stub(newDeckApi, 'quote', async (b) => ({ step: b.step, ai: true, hold_microusd: b.step === 'outline' ? 1100 : 6000, model: 'synthetic' }));
+  stub(newDeckApi, 'quote', async (b) => ({ step: b.step, ai: true, hold_microusd: b.step === 'outline' ? 1100 : 6000, model: 'synthetic', quote_uid: `dq_${b.step}` }));
   stub(newDeckApi, 'outline', over.outline || (async () => ({ proposal: { id: 77, slides: [], outline: { rows: ROWS } }, outline: { rows: ROWS, proposed_by: 'Eadwyn' }, cost: { charged_microusd: 900 } })));
   stub(newDeckApi, 'build', over.build || (async () => ({
     proposal: { id: 77, base_deck_id: 9, slides: BUILT_SLIDES, kept: null, outline: { audience: 'series_a_fund', rows: ROWS } },
@@ -472,7 +472,7 @@ test('the route is static, the studio opens it, and the fast path builds a propo
   const one = read('frontend/src/pages/raise/pitch/OneClickBuild.jsx');
   assert.match(one, /newDeckApi\.context\(projectId\)/);
   // D1540 (#3791): the build also sends back the quote it showed.
-  assert.match(one, /newDeckApi\.build\(\{ project_id: projectId, one_click: true, audience: brief\.audience, length: brief\.length, round_ref: roundRef, \.\.\.\(ex\.length \? \{ exclude: ex \} : \{\}\), \.\.\.\(quote\?\.quote_uid \? \{ quote_uid: quote\.quote_uid \} : \{\}\) \}, railPressHeaders\('deck:build'\)\)/);
+  assert.match(one, /newDeckApi\.build\(\{ project_id: projectId, one_click: true, audience: brief\.audience, length: brief\.length, round_ref: roundRef, \.\.\.\(ex\.length \? \{ exclude: ex \} : \{\}\), \.\.\.\(quoteUidOf\(price\) \? \{ quote_uid: quoteUidOf\(price\) \} : \{\}\) \}, railPressHeaders\('deck:build'\)\)/);
   assert.match(one, /newDeckApi\.quote\(\{ project_id: projectId, one_click: true, step: 'build', audience: brief\.audience, length: brief\.length/);
   assert.match(one, /disabled=\{!brief \|\| switchedOff\}[^>]*data-testid=\{`\$\{testId\}-build`\}/, 'Build waits for the read, never a guessed brief');
   for (const f of ['StudioHome.jsx', 'PitchStudio.jsx', 'newDeckModel.js', 'NewDeck.jsx', 'OneClickBuild.jsx', 'oneClickModel.js']) {

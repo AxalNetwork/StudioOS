@@ -152,7 +152,7 @@ test('money is drawn in its own currency, and two currencies are never added', (
   assert.equal(money(1550, 'eur'), '€15.50');
   assert.equal(money(0, 'usd'), 'Free');
   assert.equal(money(null, 'usd'), 'Not recorded');
-  assert.equal(money(4000, 'xyz1'), '40 XYZ1', 'a code Intl does not know is still named');
+  assert.equal(money(4000, 'xyz1'), '4,000 minor units (currency "XYZ1" is not one we can price in)', 'D5373: a code that is not a listed currency is named beside the stored count, never divided by 100');
   assert.equal(moneyTotals([{ cents: 4000, currency: 'usd' }, { cents: 1500, currency: 'usd' }, { cents: 4000, currency: 'eur' }]), '$55 · €40');
   assert.equal(moneyTotals([]), 'Free');
 });
@@ -369,7 +369,7 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
   // D921 adds the selected review event's history and free-seat preview (D918 §6, §7).
   for (const call of ['adminEvents.list(', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
-  for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
+  for (const write of ['approveWithChannels(eventSyndicationApi, adminEvents,', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
   assert.doesNotMatch(src, /analytics[\w.?]*\.summary\b/, 'R2\'s summary is all-time and hides its failure');
   assert.ok(src.includes('adminEvents.summary(eventId)') && src.includes('adminEvents.history(eventId)'), 'D922: one event\'s own summary and history (D918)');
@@ -406,6 +406,7 @@ const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = null, history = null, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
+    if (/\/api\/events\/\d+\/syndication$/.test(url)) return response({ eligible: false, approved: false, reason: 'Not approved for the public calendar', rows: [] });
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
     if (method === 'POST' && m) return writes[m[2]] ? writes[m[2]](options) : response({ event: { id: Number(m[1]) } });
     if (url.includes('/api/admin/events/overview')) return overview instanceof Function ? overview() : response(overview);

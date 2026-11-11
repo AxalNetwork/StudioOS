@@ -170,7 +170,9 @@ test('the source token is its only key: purpose-scoped, one hour, one item and o
   assert.ok(await verifySourceToken(f.env, await hmacToken(`${SOURCE_TOKEN_PURPOSE}:${JWT_SECRET}`, `${SOURCE_TOKEN_PURPOSE}|vid-1|${KEY}|${Math.floor(Date.now() / 1000) + 600}`)), 'the same construction with this purpose verifies');
   // Tampered and expired.
   const [p, s] = token.split('.');
-  assert.equal(await refused(`${p}.${s.slice(0, -2)}AA`), 404);
+  // Change a full base64 digit so the signature always decodes to different bytes.
+  const tampered = `${s[0] === 'A' ? 'B' : 'A'}${s.slice(1)}`;
+  assert.equal(await refused(`${p}.${tampered}`), 404);
   assert.equal(await verifySourceToken(f.env, (await signSourceToken(f.env, 'vid-1', KEY, Date.now() - 2 * 3600_000))!), null, 'an hour-old token is spent');
   // The item replaced its file: the old token reads nothing.
   f.db.prepare('UPDATE learning_items SET r2_key = ? WHERE uid = ?').run(`learning/videos/vid-1/${'9'.repeat(32)}.mp4`, 'vid-1');
@@ -196,6 +198,10 @@ test('a copy is verified only when ready with a duration above 0, and the item m
   assert.deepEqual(listed.find((i: any) => i.uid === 'vid-2').stream_copy, { state: 'none' });
   assert.equal('stream_copy' in listed.find((i: any) => i.uid === 'vid-link'), false);
   assert.equal(JSON.stringify(listed).includes(KEY), false, 'the content read never sends the bucket key');
+  // #4742: ITEM_SELECT carries `stream_uid` too, so the Studio draws "Stream · Ready" for a verified copy.
+  // Mutation checked: drop `stream_uid` from ITEM_SELECT → both of these read `undefined` and fail.
+  assert.equal(listed.find((i: any) => i.uid === 'vid-1').stream_uid, COPY, 'the content read carries stream_uid once the item plays it');
+  assert.equal(listed.find((i: any) => i.uid === 'vid-2').stream_uid, null, 'an item with no Stream video carries stream_uid: null, not absent');
 
   // A copy of a file the item has since replaced is verified but plays nothing.
   const g = fixture();
@@ -207,6 +213,34 @@ test('a copy is verified only when ready with a duration above 0, and the item m
   assert.equal(item(g, 'vid-2').stream_uid, null);
 });
 
+// #4742 — a schema snapshot that predates the Stream migration (`below: 800`, i.e. every
+// numbered migration but none of the 12-digit timestamp ones, D4106) has no `stream_uid`
+// column at all. `GET /items` and `GET /items/:uid` must still answer, with `stream_uid`
+// simply absent, never a 500 — exactly the gap that broke learning_programs_d558.test.ts
+// and learning_video_d561.test.ts (both build a `below`-schema fixture) when `ITEM_SELECT`
+// first grew a hard dependency on the column.
+test('GET /items and GET /items/:uid degrade gracefully on a schema that predates stream_uid', async () => {
+  const db = new DatabaseSync(':memory:', { enableDoubleQuotedStringLiterals: true });
+  loadSchema(db, { below: 800 });
+  db.exec(`
+    INSERT INTO users (id, uid, email, name, role, is_active) VALUES (${SUPER}, 'u-super', 'super@example.test', 'Sam Super', 'admin', 1);
+    INSERT INTO super_admins (user_id) VALUES (${SUPER});
+    INSERT INTO learning_items (uid, kind, title, visibility, status, created_by) VALUES ('vid-old', 'video', 'Pre-Stream video', 'open', 'draft', 1);
+  `);
+  // Mutation checked: query `stream_uid` straight off this db without a fallback → both calls below throw.
+  assert.throws(() => db.prepare('SELECT stream_uid FROM learning_items').all(), /no such column: stream_uid/);
+  const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' };
+  const app = new Hono<any>().route('/api/admin/learning', adminLearning);
+  const f = { db, env, app } as unknown as F;
+  const list = await call(f, SUPER, 'GET', '/api/admin/learning/items');
+  assert.equal(list.status, 200);
+  assert.equal(list.body.items.find((i: any) => i.uid === 'vid-old').title, 'Pre-Stream video');
+  assert.equal('stream_uid' in list.body.items.find((i: any) => i.uid === 'vid-old'), false, 'absent, not null: the schema never answered the question');
+  const single = await call(f, SUPER, 'GET', '/api/admin/learning/items/vid-old');
+  assert.equal(single.status, 200);
+  assert.equal('stream_uid' in single.body.item, false);
+});
+
 test('the content table reads Copying…, Verified and Copy failed with the route’s words', async () => {
   const f = fixture();
   await copy(f);
@@ -215,6 +249,18 @@ test('the content table reads Copying…, Verified and Copy failed with the rout
   await applyStatus(f.env, { uid: COPY, status: { state: 'error', errorReasonCode: 'ERR_SYNTH', errorReasonText: 'Synthetic failure.' } });
   listed = (await call(f, SUPER, 'GET', '/api/admin/learning/items')).body.items;
   assert.deepEqual(listed.find((i: any) => i.uid === 'vid-1').stream_copy, { state: 'failed', stream_uid: COPY, error_code: 'ERR_SYNTH', error_message: 'Synthetic failure.' });
+});
+
+test('D4649: a copy table that cannot be read is "unreadable" on each uploaded file, never "none"', async () => {
+  const f = fixture();
+  await copy(f);
+  // The copies can no longer be read. "none" here would offer Copy to Stream for a file already copying.
+  f.db.exec('DROP TABLE learning_stream_videos');
+  const listed = (await call(f, SUPER, 'GET', '/api/admin/learning/items')).body.items;
+  assert.deepEqual(listed.find((i: any) => i.uid === 'vid-1').stream_copy, { state: 'unreadable' });
+  assert.deepEqual(listed.find((i: any) => i.uid === 'vid-2').stream_copy, { state: 'unreadable' });
+  assert.equal('stream_copy' in listed.find((i: any) => i.uid === 'vid-link'), false, 'a link carries no copy state');
+  // Mutation checked: `copyStates` returning its empty map from the catch → both read { state: 'none' }.
 });
 
 // ─────────────────────────────────────────────── the sweep

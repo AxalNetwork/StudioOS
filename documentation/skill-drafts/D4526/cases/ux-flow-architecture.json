@@ -1,0 +1,41 @@
+{
+  "skill": "ux-flow-architecture",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "build.records": {
+        "flow_id": "F7",
+        "states": [
+          "draft",
+          "pending",
+          "complete"
+        ],
+        "event": "submit",
+        "network_failure": "may happen after server acceptance",
+        "idempotency_key": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "F7",
+      "pending",
+      "duplicate"
+    ],
+    "must_say_not_recorded": [
+      "idempotency key"
+    ],
+    "must_not_include": [
+      "retry creates a new order"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why idempotency key is missing rather than inventing it.",
+    "Do not assert: retry creates a new order.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "F7; pending; duplicate. idempotency key: Not recorded. Human review required."
+}

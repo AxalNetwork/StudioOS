@@ -2,10 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import OnboardingWizard, { TextField, TextArea, ChoiceField } from '../components/OnboardingWizard';
 import { authV2, OnboardingCanvas } from '../components/auth/AuthShell';
-import { spinoutLab } from '../lib/api';
 import { useAuth } from '../hooks/useAuthSync';
 import useForcedLightTheme from '../hooks/useForcedLightTheme';
-import { reportError } from '../lib/log';
 
 // Auth & Onboarding v2 — Founder wizard (A3a–c).
 const STAGE_NOT_FORMED = 'not_formed';
@@ -204,13 +202,9 @@ export default function OnboardingFounderPage() {
       values?.stage === STAGE_NOT_FORMED &&
       values?.lab_choice === 'apply';
 
-    if (wantsLab) {
-      try {
-        await spinoutLab.start();
-      } catch (e) {
-        reportError('spinout-lab:start', e);
-      }
-    }
+    // D4657: choosing the Lab here means applying for it. The workspace opens
+    // when the founder is admitted to a cohort and it starts, so nothing is
+    // started from onboarding; /spinout-lab shows the application.
 
     try {
       await refresh({ force: true });

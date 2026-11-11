@@ -86,18 +86,8 @@ const API = raw('frontend/src/lib/api.js');
 const ROUTE = raw('cloudflare-worker/src/routes/branch_home.ts');
 const SERVICE = raw('cloudflare-worker/src/services/branchHome.ts');
 
-test('/branch redirects to Studio and does not mount the digest', () => {
-  const at = APP.indexOf('path="/branch"');
-  assert.ok(at > 0, '/branch must still be a registered route');
-  const next = APP.indexOf('<Route', at);
-  const row = APP.slice(at, next > at ? next : at + 240);
-  // D473 — the path stays. It no longer renders the digest.
-  assert.match(row, /<BranchDigestRedirect\b/);
-  assert.doesNotMatch(row, /<BranchHome\b/);
-  assert.ok(
-    !row.includes('BranchZonePending'),
-    '/branch still renders the pending notice, which promises three blocks this PR ships',
-  );
+test('D2319 retires the /branch alias; the digest API remains', () => {
+  assert.equal(APP.includes('path="/branch"'), false, 'D2319 retires the digest alias');
   assert.match(API, /branchHome:/, 'the api method is gone');
   assert.match(ROUTE, /'\/home'/, 'the worker route is gone');
 });

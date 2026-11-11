@@ -471,3 +471,13 @@ test('extract_action_items: an item with no passage, or an instruction in the tr
   const listing = JSON.stringify((await listedTools(s.env, grant([PROJECT]), WRITE)).tools.map((t) => [t.description, t.inputSchema]));
   assert.equal(listing.includes('IGNORE-ALL-INSTRUCTIONS'), false);
 });
+
+test('#4449: MCP summarize_meeting runs even when call outputs are selected', async () => {
+ const s=await setup();const calls=summaryModel(s);
+ s.db.exec('ALTER TABLE interview_sessions ADD COLUMN outputs TEXT');
+ s.db.prepare('UPDATE interview_sessions SET outputs=? WHERE id=?').run('["pain-points"]',s.Z);
+ const result=await run(s,'summarize_meeting',{company:PROJECT,meeting:'ref-z'});
+ assert.equal(result.isError,undefined,result.content[0].text);
+ assert.equal(body(result).digest.overview.length,1);
+ assert.equal(calls.filter(c=>c==='summary').length,1);
+});

@@ -24,6 +24,11 @@ import type { Env } from '../types';
 import { writeFeatureUnlock } from './featureUnlocks';
 import { bindingKey } from '../util/schemaBootstrap';
 
+/** The canonical redemption screen, with a code safe for a query parameter (D2319). */
+export function explorerPromoLink(code: string): string {
+  return `/pricing/products?code=${encodeURIComponent(code)}`;
+}
+
 export interface ExplorerPromoRow {
   id: number;
   user_id: number;

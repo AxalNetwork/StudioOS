@@ -115,14 +115,25 @@ test('a refused batch renders as a boundary, never as an empty cohort', () => {
   const kit = codeOnly(read(`${ZONE_DIR}/kit.jsx`));
   assert.match(kit, /export function NoBatch/);
   assert.match(kit, /this is a boundary, not an empty cohort/);
+  // RE-AIMED IN D4813. Each zone used to catch its own read failure inline;
+  // the cohort-keyed zones now read through `useCohortRead` (or the shared
+  // week record), whose one implementation, `guardedRead`, catches it and also
+  // drops a late answer for another cohort. A zone still either catches its
+  // own read or goes through that path — never neither.
+  const model = codeOnly(read(`${ZONE_DIR}/cohortModel.js`));
+  assert.match(model, /export async function guardedRead[\s\S]*?catch \(e\)/,
+    'the shared read path must catch a failed read and report it');
   for (const f of zonePages()) {
     const src = codeOnly(read(`${ZONE_DIR}/${f}`));
     assert.match(src, /<ZoneBody/, `${f} must use the shared four-state body`);
-    assert.match(src, /catch \(e\)/, `${f} must catch its own read failure`);
+    assert.ok(/catch \(e\)/.test(src) || /useCohortRead\(/.test(src) || /ws\.weeks/.test(src),
+      `${f} must catch its own read failure or read through the shared guarded path`);
   }
   // `available: false` from the worker is a failed Lab read, and treating it
-  // as empty would report that failure as a batch with no progress.
-  assert.match(codeOnly(read(`${ZONE_DIR}/ThisWeekZone.jsx`)), /data\.available === false/);
+  // as empty would report that failure as a batch with no progress. The week
+  // record is read once, in the workspace provider, since D4813.
+  assert.match(codeOnly(read(`${ZONE_DIR}/CohortWorkspace.jsx`)), /data\.available === false/);
+  assert.match(codeOnly(read(`${ZONE_DIR}/ThisWeekZone.jsx`)), /ws\.weeks/);
 });
 
 test('founder-sourced rows carry the seam mark and say whose record it is', () => {
@@ -185,7 +196,7 @@ test('the admin grant has a page, and no zone page can reach it', () => {
   // D953 (#2371): the page is Programs › Mentor cohort access › People, which
   // mounts the console's body; the old address redirects there and still lights
   // the Programs row.
-  assert.match(app, /<Route path="\/admin\/advisor-cohorts" element=\{<AdvisorCohortsRedirect \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/admin\/advisor-cohorts" element=\{<AdvisorCohortsRedirect \/>\} \/>/);
   assert.match(app, /<Route path="\/admin\/programs\/mentor-cohorts\/people" element=\{guard\(\['admin'\], <AdminMentorCohortAccess \/>\)\} \/>/);
   // D962 (#2795): People passes its reload hooks too; the body is still mounted, embedded.
   assert.match(read('frontend/src/pages/admin/programs/MentorCohortAccess.jsx'), /<AdvisorCohortAssignmentsBody embedded\b/);

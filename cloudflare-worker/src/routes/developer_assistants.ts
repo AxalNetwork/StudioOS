@@ -18,7 +18,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { SCOPES, mcpEnabled, publicOrigin, MCP_PATH } from '../mcp/oauth';
+import { offeredScopes, mcpEnabled, publicOrigin, MCP_PATH } from '../mcp/oauth';
 import { registeredTools, TOOL_TIMEOUT_MS } from '../mcp/server';
 import { GRANT_CALLS_PER_MINUTE, USER_CALLS_PER_MINUTE, grantableCompanies } from '../mcp/grants';
 import { LIMITS } from '../services/assistantInterviews';
@@ -31,10 +31,11 @@ developerAssistants.get('/overview', async (c) => {
   let user: User;
   try { user = (await requireAuth(c)) as User; } catch { return c.json({ detail: 'Unauthorized' }, 401); }
   const grantable = await grantableCompanies(c.env, user);
+  const scopes = offeredScopes(c.env);
   return c.json({
     server_url: `${publicOrigin(c.env)}${MCP_PATH}`,
-    scopes: SCOPES.map((scope) => ({ scope, label: SCOPE_COPY[scope] })),
-    tools: registeredTools().map((t) => ({
+    scopes: scopes.map((scope) => ({ scope, label: SCOPE_COPY[scope] })),
+    tools: registeredTools().filter(t => (scopes as readonly string[]).includes(t.requiredScope)).map((t) => ({
       name: t.name, title: t.title, description: t.description, required_scope: t.requiredScope, read_only: t.readOnly !== false,
     })),
     limits: {

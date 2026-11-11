@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import { PACKET_NOT_BUILT, PAID_STATUSES } from '../lib/incorporationPricing';
+import { plainStripeAmount } from '../lib/money';
 
 const POLL_MS = 3000;
 const MAX_POLLS = 60;
@@ -138,7 +139,7 @@ export default function IncorporateSuccessPage() {
                 <div className="text-gray-900 dark:text-gray-100">{status.jurisdiction_id}</div>
                 <div className="text-gray-600">Amount</div>
                 <div className="text-gray-900 dark:text-gray-100">
-                  {(status.amount_cents / 100).toFixed(2)} {status.currency?.toUpperCase()}
+                  {plainStripeAmount(status.amount_cents, String(status.currency ?? '').toUpperCase())} {status.currency?.toUpperCase()}
                 </div>
                 <div className="text-gray-600">Status</div>
                 <div className="text-gray-900 dark:text-gray-100">{status.status}</div>

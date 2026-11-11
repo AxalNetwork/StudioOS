@@ -22,7 +22,8 @@
 
 export const PATH = '/admin/approvals';
 export const TITLE = 'Approvals';
-export const LINE = 'Everything that waits on an admin, oldest first. Decide here, or open the page that decides it.';
+// D4814: the intro copy, as the issue words it.
+export const LINE = 'Review every waiting decision here. Continue to the relevant review surface when required.';
 export const LANES_LINE = 'Each lane is one kind of decision. Most are decided on their own page.';
 export const DECIDED_LINE = 'Decisions made here and on each lane’s own page, newest first.';
 export const RAIL_NOTE = 'Eadwyn reads what is waiting here. Nothing is decided until you decide it.';
@@ -93,8 +94,9 @@ export const HQ_LANES = [
   { key: 'ai_runs', label: 'Held AI runs', door: 'Platform › AI allowances' },
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
-  { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
-  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program grants › Requests' },
+  // D5302: HQ's proposal queue is built (D964), and the Worker's lane is decided there and keeps its history.
+  { key: 'proposals', label: 'Program proposals', door: 'Programs › Proposals' },
+  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
 export const HQ_ONLY_TITLE = 'This lane belongs to the Super Admin.';
@@ -180,7 +182,7 @@ export const PITCH_TABS = [
 
 /** Wellbeing's tabs. D1046: part 5's declined state is its own tab. */
 export const EXPERT_TABS = [
-  { key: 'verify', label: 'To verify', path: '' },
+  { key: 'verify', label: 'Needs verification', path: '' },
   { key: 'incomplete', label: 'Profile incomplete', path: '/incomplete' },
   { key: 'verified', label: 'Verified', path: '/verified' },
   { key: 'declined', label: 'Declined', path: '/declined' },
@@ -189,7 +191,7 @@ export const EXPERT_TABS = [
 
 /** D1046: Product testers' tabs, one per stored status (D1042), `applied` drawn as Waiting. */
 export const TESTER_TABS = [
-  { key: 'waiting', status: 'applied', label: 'Waiting', path: '' },
+  { key: 'waiting', status: 'applied', label: 'Pending', path: '' },
   { key: 'active', status: 'active', label: 'Active', path: '/active' },
   { key: 'paused', status: 'paused', label: 'Paused', path: '/paused' },
   { key: 'declined', status: 'declined', label: 'Declined', path: '/declined' },
@@ -250,7 +252,7 @@ export function pitchRows(items, now = Date.now()) {
   return (Array.isArray(items) ? items : []).map((p) => {
     const h = hoursSince(p.created_at, now);
     return {
-      key: p.uid || p.id, title: p.title || 'Untitled pitch', type: assetWord(p.asset_type),
+      key: p.uid || p.id, id: p.id ?? null, title: p.title || 'Untitled pitch', type: assetWord(p.asset_type),
       partner: p.partner_company || p.partner_name || 'Not recorded', submitter: p.partner_company && p.partner_name ? p.partner_name : null,
       date: dayText(p.proposed_date) || 'No date', audience: p.target_audience || 'Not given',
       ageHours: h, age: ageText(h), band: bandOf(h), code: p.attribution_code || null,
@@ -302,7 +304,7 @@ export function expertBoard(reply, tab, now = Date.now()) {
   const rows = list.filter((e) => expertState(e) === tab).map((e) => {
     const hrs = hoursSince(e.created_at, now);
     return {
-      key: e.uid, name: e.name || 'Not recorded', headline: e.headline || null,
+      key: e.uid, id: e.id ?? null, name: e.name || 'Not recorded', headline: e.headline || null,
       pct: e.profile_completion_pct == null ? null : Math.round(Number(e.profile_completion_pct)),
       ageHours: hrs, age: ageText(hrs), band: bandOf(hrs),
       credentials: credentialsText(e.credentials), decidedOn: dayText(e.decided_at),
@@ -531,10 +533,10 @@ export function doneLine(kind, who, extra = {}) {
   }[kind] || 'Saved.';
 }
 
-/** A refusal in the Worker's own sentence (the client's `e.message`), or one that says nothing changed. */
+/** A refusal in the Worker's own sentence. A 5xx/network failure has an unknown outcome until the item is read again. */
 export function refusalLine(e) {
   const said = typeof e?.message === 'string' && e.message.includes(' ') && e.message !== 'Request failed' ? e.message : null;
   if (said && e?.status && e.status < 500) return said;
-  if (e?.status >= 500 || !e?.status) return 'This could not be saved. Nothing changed. Read the item again before retrying.';
+  if (e?.status >= 500 || !e?.status) return 'The outcome could not be confirmed. Read the item again before retrying.';
   return 'This was refused. Nothing changed. Read the item again before retrying.';
 }

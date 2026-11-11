@@ -296,37 +296,151 @@ export type ProviderSwitches = Partial<Record<'AI_PROVIDER_ANTHROPIC', string>>;
  * `AI_PROVIDER_BRIA` is exactly 'on'. The owner turns it on after buying
  * AI Gateway credits and sending Bria's sub-processor notice (#1008).
  *
- * Bria only (M = B). Cloudflare lists no Bria upscale model, so Upscale has no
- * row: it stays "Coming later" until a model is chosen.
+ * ONE SWITCH PER PROVIDER. Each provider is its own sub-processor, so each row
+ * names its own switch: Bria's background removal runs while `AI_PROVIDER_BRIA`
+ * is 'on' (M = B), and Pruna's upscale (D4316, the owner's answer A on #4316)
+ * while `AI_PROVIDER_PRUNA` is 'on'. Turning one on never turns on the other.
  */
 export type ImageToolId = 'remove_background' | 'upscale';
+export const IMAGE_TOOL_SWITCH = 'AI_PROVIDER_BRIA' as const;
+/** D4316: Pruna's own switch, off by default; on only after its 10-day sub-processor notice (#1008). */
+export const UPSCALE_TOOL_SWITCH = 'AI_PROVIDER_PRUNA' as const;
+export type ImageToolSwitch = typeof IMAGE_TOOL_SWITCH | typeof UPSCALE_TOOL_SWITCH;
 export interface GatewayImageModel {
   id: string;
-  provider: 'bria';
+  provider: 'bria' | 'pruna';
   name: string;
   tool: ImageToolId;
+  /** The wrangler var that turns this provider on, exactly 'on'. */
+  switch: ImageToolSwitch;
   /** USD per image, exactly as printed. */
   usdPerImage: string;
   source: string;
   read: string;
 }
-export const IMAGE_TOOL_SWITCH = 'AI_PROVIDER_BRIA' as const;
 export const GATEWAY_IMAGE_MODELS: readonly GatewayImageModel[] = Object.freeze([
   {
     id: 'bria/remove-background',
     provider: 'bria',
     name: 'Bria RMBG 2.0',
     tool: 'remove_background',
+    switch: IMAGE_TOOL_SWITCH,
     usdPerImage: '0.018',
     source: 'https://developers.cloudflare.com/ai/models/bria/remove-background/',
     read: '2026-11-03',
   },
+  // D4316 (#4316): Pruna P-Image-Upscale, the owner's answer A (2026-11-04). About $0.005 an image, as
+  // #4316 and Pruna's own page quote it. Cloudflare's page points to the dashboard for the price, and was
+  // not reachable from the session that wrote this row: the owner confirms the figure there before the switch.
+  {
+    id: 'pruna/p-image-upscale',
+    provider: 'pruna',
+    name: 'Pruna P-Image-Upscale',
+    tool: 'upscale',
+    switch: UPSCALE_TOOL_SWITCH,
+    usdPerImage: '0.005',
+    source: 'https://developers.cloudflare.com/ai/models/pruna/p-image-upscale/',
+    read: '2026-11-04',
+  },
 ]);
 export const gatewayImageModelFor = (tool: ImageToolId): GatewayImageModel | null => GATEWAY_IMAGE_MODELS.find((m) => m.tool === tool) ?? null;
 export const imageToolsOn = (env: Partial<Record<typeof IMAGE_TOOL_SWITCH, string>>): boolean => env[IMAGE_TOOL_SWITCH] === 'on';
+/** D4316: whether this row's own provider is switched on (exactly 'on'). */
+export const imageToolOn = (env: Partial<Record<ImageToolSwitch, string>>, m: GatewayImageModel): boolean => env[m.switch] === 'on';
 
 
 export const providerModelById = (id: string): ProviderModel | null => PROVIDER_MODELS.find((m) => m.id === id) ?? null;
 
 /** Offered only while its provider's switch is exactly 'on'. */
 export const providerOffered = (m: ProviderModel, env: ProviderSwitches): boolean => env[PROVIDER_SWITCH[m.provider]] === 'on';
+
+// ─────────────────────────────────── D4556: third-party text models through AI Gateway
+
+/**
+ * D4556 (#4556): a third-party text model from AI Gateway's catalogue, called on
+ * the Workers AI binding (`env.AI.run(id, input, { gateway: { id } })`, Path A).
+ * Cloudflare holds the provider's credential and bills Unified Billing credits at
+ * the provider's own rates (plus 5% on each credit purchase), so there is no key
+ * here. NOT in `CATALOGUE` (Cloudflare's own models, held equal to its fixture),
+ * and not a `ProviderId` (those are D851's direct providers, each with a key).
+ *
+ * OFF BY DEFAULT, and gated three ways, each refusing before anything is held:
+ *   1. the switch, exactly 'on' (`AI_PROVIDER_GATEWAY_OPENAI`);
+ *   2. the required config (`aiProviders.ts` `gatewayConfig`): the gateway's id
+ *      in `CF_AI_GATEWAY_SLUG_PROVIDERS`, a gateway of its own, and
+ *      `AI_GATEWAY_PROVIDERS_ZDR` exactly 'on', the owner's statement that the
+ *      gateway's Zero Data Retention setting is on;
+ *   3. the workload policy below: a row runs only the task and data classes it
+ *      lists, and only while its ZDR status is a confirmed 'yes'. Unknown is
+ *      not eligible.
+ *
+ * A row names a catalogue model, never a model alias (`custom/…`), a dynamic
+ * route (`dynamic/…`) or `cloudflare/auto`: Axal decides the model, and the
+ * gateway's routing never may (D4556 §3).
+ */
+export type GatewayDataClass = 'public' | 'internal' | 'confidential' | 'restricted';
+export const GATEWAY_DATA_CLASSES: readonly GatewayDataClass[] = Object.freeze(['public', 'internal', 'confidential', 'restricted']);
+export type ZdrStatus = 'yes' | 'no' | 'unknown';
+
+/** The units a chat-completions model reports, each priced per 1M. `tokens_in` is uncached input only. */
+export type GatewayTextUnit = 'tokens_in' | 'tokens_cached' | 'tokens_out';
+
+export interface GatewayTextModel {
+  /** The catalogue id the binding takes, `<provider>/<model>`. */
+  id: string;
+  provider: 'openai';
+  name: string;
+  format: 'chat_completions';
+  /** The answer's `model` must start with this, or the answer is not this row's model. */
+  servedModelPrefix: string;
+  /** USD per 1M of each unit, exactly as Cloudflare's model page prints it. */
+  rates: Readonly<Record<GatewayTextUnit, string>>;
+  contextTokens: number;
+  /** What the slice uses the model for. Nothing else is claimed. */
+  capabilities: Readonly<{ text: true; streaming: false; tools: false; structured_output: false; vision: false }>;
+  zdr: ZdrStatus;
+  /** The workloads it may run: one task, and the data classes approved for it. */
+  workloads: readonly Readonly<{ task: string; dataClasses: readonly GatewayDataClass[] }>[];
+  source: string;
+  read: string;
+}
+
+export const GATEWAY_TEXT_SWITCH = 'AI_PROVIDER_GATEWAY_OPENAI' as const;
+export const GATEWAY_TEXT_SLUG_VAR = 'CF_AI_GATEWAY_SLUG_PROVIDERS' as const;
+export const GATEWAY_TEXT_ZDR_VAR = 'AI_GATEWAY_PROVIDERS_ZDR' as const;
+export const GATEWAY_TEXT_PRICING_VERSION = 'g1-2026-11-06';
+
+export const GATEWAY_TEXT_MODELS: readonly GatewayTextModel[] = Object.freeze([
+  {
+    id: 'openai/gpt-5-mini',
+    provider: 'openai',
+    name: 'GPT-5 mini',
+    format: 'chat_completions',
+    servedModelPrefix: 'gpt-5-mini',
+    // Input, cached input, output (D4556 §2.4).
+    rates: Object.freeze({ tokens_in: '0.25', tokens_cached: '0.025', tokens_out: '2.00' }),
+    contextTokens: 128_000,
+    capabilities: Object.freeze({ text: true as const, streaming: false as const, tools: false as const, structured_output: false as const, vision: false as const }),
+    zdr: 'yes',
+    // The admin publication summary: 3-5 bullets over k≥5 aggregates (`publications.ts`), public by design.
+    workloads: Object.freeze([Object.freeze({ task: 'publication', dataClasses: Object.freeze(['public'] as GatewayDataClass[]) })]),
+    source: 'https://developers.cloudflare.com/ai/models/openai/gpt-5-mini/',
+    read: '2026-11-06',
+  },
+]);
+
+export const gatewayTextModelById = (id: string): GatewayTextModel | null => GATEWAY_TEXT_MODELS.find((m) => m.id === id) ?? null;
+
+/** Offered only while its switch is exactly 'on'. */
+export const gatewayTextOn = (env: Partial<Record<typeof GATEWAY_TEXT_SWITCH, string>>): boolean => env[GATEWAY_TEXT_SWITCH] === 'on';
+
+/**
+ * Why this row may not run this task on this data, or null when it may. A ZDR
+ * status that is not a confirmed 'yes' refuses everything, before the task.
+ */
+export function gatewayTextEligibility(m: GatewayTextModel, task: string, dataClass: unknown): 'zdr_not_confirmed' | 'task_not_eligible' | 'data_class_not_approved' | null {
+  if (m.zdr !== 'yes') return 'zdr_not_confirmed';
+  const w = m.workloads.find((x) => x.task === task);
+  if (!w) return 'task_not_eligible';
+  return (w.dataClasses as readonly unknown[]).includes(dataClass) ? null : 'data_class_not_approved';
+}

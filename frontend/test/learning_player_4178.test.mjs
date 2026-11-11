@@ -272,7 +272,7 @@ test('lr7 the hover preview: a ready video\'s signed preview, read once per vide
 
 test('the layout: chapters beside the player on a wide screen, below it on a tablet or phone; the package is pinned exactly', () => {
   const m = html(h(LessonPlayer, { status: 'ready', lesson: null, item: VIDEO, video: videoPlayback({ ...VIDEO, video_stream: READY }) }));
-  assert.match(m, /data-testid="lesson-player-layout" class="grid gap-4 lg:grid-cols-\[minmax\(0,1fr\)_18rem\] lg:items-start"|class="grid gap-4 lg:grid-cols-\[minmax\(0,1fr\)_18rem\] lg:items-start" data-testid="lesson-player-layout"/);
+  assert.match(m, /data-testid="lesson-player-layout" class="grid min-w-0 gap-4 lg:grid-cols-\[minmax\(0,1fr\)_18rem\] lg:items-start"|class="grid min-w-0 gap-4 lg:grid-cols-\[minmax\(0,1fr\)_18rem\] lg:items-start" data-testid="lesson-player-layout"/);
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.match(pkg.dependencies['@cloudflare/stream-react'], /^\d+\.\d+\.\d+$/, 'an exact pin');
 });

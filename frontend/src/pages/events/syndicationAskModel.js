@@ -27,7 +27,8 @@ const FIELD_LABEL = { title: 'Title', description: 'Description' };
 /** The rows Ask is offered on (see the header). */
 export function askableRows(read) {
   if (!read || !read.eligible || !Array.isArray(read.rows)) return [];
-  return read.rows.filter((r) => r && r.uid && r.on === true && r.status !== 'posted' && r.account_uid);
+  return read.rows.filter((r) => r && r.uid && r.on === true && r.adapter_ready === true
+    && !['posted', 'withdrawn', 'cancelled', 'skipped'].includes(r.status) && r.account_uid);
 }
 
 /** One card from a proposal row: its words from the Ask panel, plus the field and value it saves. */

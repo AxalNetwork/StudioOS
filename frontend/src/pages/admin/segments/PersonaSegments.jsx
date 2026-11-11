@@ -1,6 +1,8 @@
+import { ScopeControls, SuggestionsInset, useScopedOverview } from './SegmentScopeControls';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
+import { personaSegmentScopesApi } from '../../../lib/api/personaSegmentScopes';
 import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
@@ -12,8 +14,8 @@ import AdminBoardFrame from '../AdminBoardFrame';
 import { ActivityTab } from './SegmentPage';
 import { AcceptedEdit, SuggestChangeDialog, SuggestionsList, UnclassifiedTab, useSegmentProfiles } from './SegmentWork';
 import {
-  ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, NOT_PER_PROFILE, NOT_YET, OFFER_KINDS,
-  PAGE_LINE, PHONE_QUERY, PROFILE_FILTERS, RAIL_NOTE, SCOPE_LINE, SEG_TITLE, STATUS_WORD,
+  ACCOUNTS_PATH, ADMIN_RAIL_NOTE, ALL_FAILED, ALL_FAILED_LINE, BLOCK_FAILED, CONTENT_PATH, NOT_PER_PROFILE, OFFER_KINDS,
+  PAGE_LINE, PHONE_QUERY, PROFILE_FILTERS, RAIL_NOTE, SEG_TITLE, STATUS_WORD,
   advisorsWithout, confidenceRead, failed, howSetRead, movedNotices, needsLine, needsTable, overviewTiles, profileLine,
   segmentCardsRead, segmentsByProfileRead, subAccountChips, tabOf, weeklyRead,
 } from './segModel';
@@ -48,7 +50,6 @@ const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:b
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 /** A text button or link: 44px tall on a phone (SEG14), its own size above. */
@@ -85,7 +86,7 @@ function Bar({ label, count, max, tone = 'violet', hollow = false }) {
       <span className="flex h-2.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
         {count > 0 && <span className={`rounded-full ${hollow ? HOLLOW : FILL[tone]}`} style={{ width: `${w}%` }} />}
       </span>
-      <span className={`${MONO} text-right text-axal-ink dark:text-gray-100`}>{count.toLocaleString('en-US')}</span>
+      <span className={`${MONO} text-right text-axal-ink dark:text-gray-100`}>{count === null || count === undefined ? 'Not recorded' : count.toLocaleString('en-US')}</span>
     </li>
   );
 }
@@ -105,7 +106,7 @@ function BarTable({ caption, rows, id }) {
         {rows.map((r) => (
           <tr key={`${r.group || ''}|${r.label}`} className="border-t border-axal-hairline dark:border-gray-700">
             <th scope="row" className="py-1.5 pr-3 font-normal text-axal-ink dark:text-gray-100">{r.group ? `${r.group} · ${r.label}` : r.label}</th>
-            <td className={`py-1.5 text-right ${MONO} text-axal-ink dark:text-gray-100`}>{r.count.toLocaleString('en-US')}</td>
+            <td className={`py-1.5 text-right ${MONO} text-axal-ink dark:text-gray-100`}>{r.count === null || r.count === undefined ? 'Not recorded' : r.count.toLocaleString('en-US')}</td>
           </tr>
         ))}
       </tbody>
@@ -114,7 +115,7 @@ function BarTable({ caption, rows, id }) {
 }
 
 /** D1004: the three reads Overview draws from, each answering alone, once per visit and on Refresh. */
-function useOverviewReads(tick) {
+function useOverviewReads(tick, scoped = false) {
   const [seg, setSeg] = useState({ status: 'loading', data: null });
   const [profiles, setProfiles] = useState({ status: 'loading', data: null });
   const [coverage, setCoverage] = useState({ status: 'loading', data: null });
@@ -128,9 +129,9 @@ function useOverviewReads(tick) {
     );
     return () => { live = false; };
   };
-  useEffect(() => one(() => personaSegmentsApi.read(), setSeg, 'segments'), [tick, own.seg]);
-  useEffect(() => one(() => personaSegmentsApi.segmentProfiles(), setProfiles, 'profiles'), [tick, own.profiles]);
-  useEffect(() => one(() => personaSegmentsApi.segmentCoverage(), setCoverage, 'coverage'), [tick, own.coverage]);
+  useEffect(() => scoped ? undefined : one(() => personaSegmentsApi.read(), setSeg, 'segments'), [tick, own.seg, scoped]);
+  useEffect(() => scoped ? undefined : one(() => personaSegmentsApi.segmentProfiles(), setProfiles, 'profiles'), [tick, own.profiles, scoped]);
+  useEffect(() => scoped ? undefined : one(() => personaSegmentsApi.segmentCoverage(), setCoverage, 'coverage'), [tick, own.coverage, scoped]);
   const retry = useCallback((k) => setOwn((o) => ({ ...o, [k]: o[k] + 1 })), []);
   return { seg, profiles, coverage, retry };
 }
@@ -163,6 +164,7 @@ function Figure({ v, onRetry }) {
     );
   }
   if (v.notPerProfile) return <><span className={`${MONO} text-[26px] font-medium text-axal-muted dark:text-gray-400`}>—</span><span className={SUB}>{NOT_PER_PROFILE}</span></>;
+  if (v.value === null || v.value === undefined) return <span className={SUB}>Not recorded</span>;
   return (
     <>
       <span className={`${MONO} text-[26px] font-medium text-axal-ink dark:text-gray-100`}>{Number(v.value).toLocaleString('en-US')}</span>
@@ -183,22 +185,11 @@ function Chip({ on, onClick, children, disabled, title, role = 'radio', 'data-te
 }
 
 /** The profile filter, the sub-account chips and, for HQ, the scope (SEG1, SEG7). */
-function Filters({ superAdmin, profile, setProfile, lpOn, setLpOn, seg }) {
+function Filters({ profile, setProfile, lpOn, setLpOn, seg }) {
   const sub = seg.status === 'ready' ? subAccountChips(seg.data) : null;
   return (
     <div className="flex flex-col gap-1.5" data-testid="seg-filters">
       <div className="flex flex-wrap items-center gap-[7px]">
-        {superAdmin && (
-          <>
-            <label className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-axal-ink dark:text-gray-100">
-              <span>Scope</span>
-              <select className="h-8 max-sm:h-11 rounded-full border border-axal-hairline bg-white px-2.5 text-[12px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value="hq" disabled data-testid="seg-scope-select">
-                <option value="hq">HQ-held accounts</option>
-              </select>
-            </label>
-            <span aria-hidden="true" className="mx-1 h-[26px] w-px bg-axal-hairline dark:bg-gray-700" />
-          </>
-        )}
         <div role="radiogroup" aria-label="Profile" className="flex flex-wrap gap-[7px]" data-testid="seg-profile-filter">
           {PROFILE_FILTERS.map((f) => <Chip key={f.role} on={profile === f.role} onClick={() => setProfile(f.role)} data-testid={`seg-filter-${f.role}`}>{f.label}</Chip>)}
         </div>
@@ -208,7 +199,7 @@ function Filters({ superAdmin, profile, setProfile, lpOn, setLpOn, seg }) {
             ? <span className="text-[12px] font-semibold text-amber-800 dark:text-amber-300">Sub-accounts could not be read.</span>
             : (
               <>
-                <Chip role="toggle" on={lpOn} onClick={() => setLpOn(!lpOn)} title={sub.lp.definition} data-testid="seg-chip-lp">LPs <span className={MONO}>{sub.lp.total.toLocaleString('en-US')}</span></Chip>
+                <Chip role="toggle" on={lpOn} onClick={() => setLpOn(!lpOn)} title={sub.lp.definition} data-testid="seg-chip-lp">LPs <span className={MONO}>{sub.lp.total === null ? 'Not recorded' : sub.lp.total.toLocaleString('en-US')}</span></Chip>
                 {sub.productTester.recorded === false
                   ? <Chip role="toggle" on={false} disabled title={sub.productTester.reason} data-testid="seg-chip-testers">Product testers · Not recorded</Chip>
                   : null}
@@ -216,9 +207,8 @@ function Filters({ superAdmin, profile, setProfile, lpOn, setLpOn, seg }) {
             )}
         </div>
       </div>
-      {superAdmin && <span className={SUB} data-testid="seg-scope-line">{SCOPE_LINE} The scope across studios arrives with D997 part 6.</span>}
       {sub && !sub.failed && sub.productTester.recorded === false && <span className={SUB}>Product testers: Not recorded. {sub.productTester.reason}</span>}
-      {lpOn && sub && !sub.failed && <span className={SUB} data-testid="seg-lp-line">{sub.lp.definition} {sub.lp.noSegment.toLocaleString('en-US')} have no segment.</span>}
+      {lpOn && sub && !sub.failed && <span className={SUB} data-testid="seg-lp-line">{sub.lp.definition} {sub.lp.noSegment === null ? 'Not recorded' : sub.lp.noSegment.toLocaleString('en-US')} have no segment.</span>}
     </div>
   );
 }
@@ -319,6 +309,7 @@ function NeedsBlock({ coverage, profile, onRetry }) {
   const phone = usePhoneWidth(PHONE_QUERY);
   if (coverage.status === 'loading') return <Loading id="needs" />;
   if (coverage.status === 'error') return <BlockFailed id="needs" title="Needs and offers" onRetry={onRetry} />;
+  if (coverage.data?.recorded === false) return <section className={`${CARD} space-y-2 p-4`} data-testid="seg-needs-not-recorded"><h2 className={H2}>Needs and offers</h2><p className={SUB}>Not recorded · {coverage.data.reason}</p></section>;
   const t = needsTable(coverage.data, { profile, q });
   return (
     <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="seg-h-needs" data-testid="seg-needs">
@@ -377,8 +368,10 @@ function NeedsBlock({ coverage, profile, onRetry }) {
   );
 }
 
-function Overview({ superAdmin, tick }) {
-  const { seg, profiles, coverage, retry } = useOverviewReads(tick);
+function Overview({ superAdmin, tick, scope, scopeApi }) {
+  const local = useOverviewReads(tick, superAdmin);
+  const scoped = useScopedOverview(scope, tick, superAdmin, scopeApi);
+  const { seg, profiles, coverage, retry } = superAdmin ? scoped : local;
   const [profile, setProfile] = useState('all');
   const [lpOn, setLpOn] = useState(false);
   const [tables, setTables] = useState({});
@@ -414,23 +407,15 @@ function Overview({ superAdmin, tick }) {
         <Tile id="tagged" label="In a segment">{tileOf(t.tagged)}</Tile>
         <Tile id="untagged" label="No segment">
           {tileOf(t.untagged)}
-          {!loading && !t.untagged.failed && <Link to="/admin/persona-segments/unclassified" className={`${TAP} text-[12px] font-semibold text-axal-violet underline dark:text-violet-300`} data-testid="seg-tile-open-unclassified">Open Unclassified ›</Link>}
+          {!loading && !t.untagged.failed && (!superAdmin || scope === 'hq') && <Link to="/admin/persona-segments/unclassified" className={`${TAP} text-[12px] font-semibold text-axal-violet underline dark:text-violet-300`} data-testid="seg-tile-open-unclassified">Open Unclassified ›</Link>}
         </Tile>
         <Tile id="differ" label="Segment and profile differ">{tileOf(t.differ)}</Tile>
         <Tile id="moved30" label="Moved by an admin, 30 days">{tileOf(t.moved)}</Tile>
       </div>
       <span className={SUB}>Counted over every account but admins. Deactivated accounts are counted apart.</span>
 
-      <Filters superAdmin={superAdmin} profile={profile} setProfile={setProfile} lpOn={lpOn} setLpOn={setLpOn} seg={seg} />
+      <Filters profile={profile} setProfile={setProfile} lpOn={lpOn} setLpOn={setLpOn} seg={seg} />
 
-      {superAdmin && (
-        <section className={`${CARD} flex flex-col gap-2 px-[18px] py-4`} data-testid="seg-suggestions-inset">
-          <span className={EYE}>Suggestions</span>
-          <h2 className={H2}>Waiting for HQ</h2>
-          <span className={TAG}>{NOT_YET}</span>
-          <span className={SUB}>An Admin&apos;s suggestions, and accepting or declining them, arrive with D997 part 6 (#2818).</span>
-        </section>
-      )}
 
       {empty && profile === 'all' ? (
         <section className={`${CARD} flex flex-col items-center gap-2 px-7 py-8 text-center`} data-testid="seg-empty">
@@ -447,14 +432,14 @@ function Overview({ superAdmin, tick }) {
               <span className={SUB}>By each member&apos;s account profile. A hollow bar is members of that profile with no segment.</span>
               {asTable('by-profile') ? <BarTable id="by-profile" caption="Segments by profile" rows={by.groups.flatMap((g) => [...g.bars.map((b) => ({ group: g.label, label: b.label, count: b.count })), { group: g.label, label: 'No segment', count: g.none }])} /> : by.groups.map((g) => (
                 <div key={g.role || 'other'} className="flex flex-col gap-1.5" data-testid={`seg-group-${g.role || 'other'}`}>
-                  <span className={EYE}>{g.label} · {g.total.toLocaleString('en-US')}</span>
+                  <span className={EYE}>{g.label} · {g.total === null ? 'Not recorded' : g.total.toLocaleString('en-US')}</span>
                   {g.total === 0 ? <span className={SUB}>No {g.label.toLowerCase()} yet.</span> : (
                     <ul className="m-0 flex list-none flex-col gap-1 p-0">
                       {g.bars.map((b) => <Bar key={b.id} label={b.label} count={b.count} max={groupMax} tone={g.tone} />)}
                       <Bar label="No segment" count={g.none} max={groupMax} hollow />
                     </ul>
                   )}
-                  {g.role === 'advisor' && g.bars.length === 0 && g.total > 0 && <span className={SUB}>No segment for Advisors yet. {g.none.toLocaleString('en-US')} advisors have none.</span>}
+                  {g.role === 'advisor' && g.bars.length === 0 && g.total > 0 && <span className={SUB}>No segment for Advisors yet. {g.none === null ? 'Not recorded' : g.none.toLocaleString('en-US')} advisors have none.</span>}
                 </div>
               ))}
             </section>
@@ -472,7 +457,7 @@ function Overview({ superAdmin, tick }) {
           {loading ? <Loading id="confidence" span="lg:col-span-6" /> : bands.failed ? <BlockFailed id="confidence" title="How sure the sign-up suggestion was" onRetry={() => retry('seg')} span="lg:col-span-6" /> : (
             <section className={`${CARD} col-span-12 flex flex-col gap-2.5 px-[18px] py-4 lg:col-span-6`} aria-labelledby="seg-h-sure" data-testid="seg-confidence">
               <div className="flex items-start justify-between gap-2"><h2 id="seg-h-sure" className={H2}>How sure the sign-up suggestion was</h2><ViewToggle id="confidence" table={asTable('confidence')} onToggle={flip('confidence')} /></div>
-              <span className={SUB}>Over the {bands.total.toLocaleString('en-US')} members whose segment was suggested at sign-up.</span>
+              <span className={SUB}>Over the {bands.total === null ? 'Not recorded' : bands.total.toLocaleString('en-US')} members whose segment was suggested at sign-up.</span>
               {asTable('confidence') ? <BarTable id="confidence" caption="How sure the sign-up suggestion was" rows={bands.counts} />
                 : <ul className="m-0 flex list-none flex-col gap-1 p-0">{bands.counts.map((b) => <Bar key={b.label} label={b.label} count={b.count} max={bandMax} />)}</ul>}
               {bands.unrecorded > 0 && <span className={SUB} data-testid="seg-confidence-unrecorded">No confidence recorded for {bands.unrecorded}.</span>}
@@ -492,10 +477,11 @@ function Overview({ superAdmin, tick }) {
   );
 }
 
-export function PersonaSegmentsPage({ superAdmin }) {
+export function PersonaSegmentsPage({ superAdmin, scopeApi = personaSegmentScopesApi }) {
   const loc = useLocation();
   const tab = tabOf(loc.pathname) || 'overview';
   const [tick, setTick] = useState(0);
+  const [scope, setScope] = useState('hq');
   const [asOf, setAsOf] = useState(null);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   const [edit, setEdit] = useState(null);
@@ -554,7 +540,10 @@ export function PersonaSegmentsPage({ superAdmin }) {
         tabs={tabs}
         data-testid="seg-header"
       />
-      {tab === 'overview' && <Overview superAdmin={superAdmin} tick={tick} />}
+      {tab === 'overview' && <>
+        {superAdmin && <><ScopeControls scope={scope} onChange={setScope} tick={tick} api={scopeApi} /><SuggestionsInset scope={scope} tick={tick} api={scopeApi} /></>}
+        <Overview superAdmin={superAdmin} tick={tick} scope={scope} scopeApi={scopeApi} />
+      </>}
       {sent ? <p role="status" className="m-0 text-[12.5px] font-semibold text-emerald-800 dark:text-emerald-300" data-testid="seg-page-note">{sent}</p> : null}
       {tab === 'unclassified' && <UnclassifiedTab superAdmin={superAdmin} />}
       {tab === 'activity' && (

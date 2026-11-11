@@ -29,6 +29,10 @@ import { ELEMENT_ROUTES, GRID_PAGE } from './elementModels';
 import { MAX_AREA_RETRIES, MAX_BUSY_RETRIES, backoffMs, governorFor, isBusy, waitForSlot, type GovernorClient } from './aiGovernor';
 import { stepRecordRef, type StepExecutor, type StepRow } from './genRuntime';
 import { pipelineStep } from './imageDraw';
+import { afterOf, refineMessages, wordsOf } from './ensembles';
+import { judgeArea } from './judge';
+import { readChoice } from '../ai/decide';
+import { AI_SURFACE } from '../aiSurfaces';
 
 export type ExecutorDeps = {
   run?: (env: Env, opts: RunOptions) => Promise<RunResult>;
@@ -92,6 +96,58 @@ export function stepExecutor(env: Env, deps: ExecutorDeps = {}): StepExecutor {
     const passed: Partial<RunOptions> = {};
     for (const k of STEP_INPUT_KEYS) if (input[k] !== undefined) (passed as any)[k] = input[k];
     const option = typeof input.option === 'string' ? input.option : (ELEMENT_ROUTES[step.element]?.option ?? null);
+    // D1551 (#3798): the ensembles' second calls read what their drafts wrote.
+    const afterRows = async () => {
+      const seqs = afterOf(input);
+      if (!seqs.length) return [] as StepRow[];
+      const rows = await env.DB.prepare('SELECT * FROM deck_area_batch_steps WHERE batch_uid = ?1 AND seq IN (SELECT value FROM json_each(?2)) ORDER BY seq')
+        .bind(step.batch_uid, JSON.stringify(seqs)).all<StepRow>();
+      return (rows.results || []) as StepRow[];
+    };
+    if (step.kind === 'refine') {
+      // A refine whose draft wrote nothing runs nothing and is free; the draft's own failure stands.
+      const [draft] = await afterRows();
+      const words = draft && draft.state === 'done' ? wordsOf(draft.result) : null;
+      const refine = input.refine as { label: string; limit: number; voice: string; card: string } | undefined;
+      if (!words || !refine) { await gov.release(lease.id).catch(() => {}); return { ok: false, charged_microusd: 0, error_code: 'draft_missing' }; }
+      const m = refineMessages(refine, words);
+      passed.systemPrompt = m.systemPrompt;
+      passed.messages = [{ role: 'user', content: m.user }];
+    }
+    if (step.kind === 'judge') {
+      try {
+        const drafts = (await afterRows()).sort((a, b) => Number(inputOf(a).variant ?? 0) - Number(inputOf(b).variant ?? 0));
+        const judge = (input.judge ?? {}) as { element?: string; source?: string | null };
+        const variants = drafts.map((d, i) => ({ n: i + 1, state: d.state === 'done' ? 'ready' as const : 'failed' as const, payload: { kind: 'text', after: wordsOf(d.result) ?? '' } }));
+        let usageLogId: number | null = null;
+        const out = await judgeArea({
+          // Inside the run's one hold (AUTO-5): the judge's line of the quote is its whole budget.
+          perJudgeMicrousd: Number(step.quote_microusd), budgetMicrousd: Number(step.quote_microusd),
+          decide: async (q) => {
+            // The same `run` as every other step, so the judge is metered, idempotent and under the parent hold.
+            const r = await run(env, {
+              task: 'module_decision' as RunOptions['task'], userId: account, model: q.model, surface: AI_SURFACE.raisePitch,
+              rail: { page: GRID_PAGE, option, record: ref }, parentHold: ctx.parentHold ?? undefined,
+              idempotencyKey: `${ref}:judge`, executionId: step.batch_uid,
+              specialist: { operation: 'decision', questions: { [q.key]: { type: 'choice', instructions: q.instructions, criteria: q.options } } },
+              text: q.text,
+            } as RunOptions);
+            const charged_microusd = await chargedFor(env, parentUid, ref);
+            if (!r.ok) return { ok: false as const, result: r, charged_microusd };
+            usageLogId = r.usageLogId ?? null;
+            return { ok: true as const, answer: readChoice(r.output, q.key, Object.keys(q.options)), model: r.usage?.model ?? q.model, usageLogId, charged_microusd };
+          },
+        }, { element: String(judge.element ?? step.element), source: judge.source ?? null, variants: variants as any, seed: `${step.batch_uid}:${step.seq}`, generators: drafts.map((d) => d.model_used ?? d.model) });
+        const charged = await chargedFor(env, parentUid, ref);
+        if (out.state !== 'ranked') return { ok: false, charged_microusd: charged, error_code: out.refusal.code, model_used: out.model ?? step.model };
+        return {
+          ok: true, charged_microusd: charged, model_used: out.model, usage_log_id: usageLogId,
+          variant: { judge: { best: out.judgement.best, of: out.judgement.of, score: out.judgement.score, clears: out.judgement.clears, ranking: out.judgement.ranking } },
+        };
+      } finally {
+        await gov.release(lease.id).catch(() => {});
+      }
+    }
     let last: RunResult | null = null;
     let fellBack = false;
     // D1505 (#3756): an image step is the image pipeline, not a bare draw:

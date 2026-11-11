@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import {
@@ -16,6 +16,8 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
+import { useMutations, useZoneRead } from './useZoneMutations';
+import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 
 /**
  * Delivery · Capacity — `/delivery/capacity`.
@@ -66,7 +68,7 @@ import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
 
 /**
  * The period label one month on, in the `YYYY-MM` shape `currentPeriod()` on
- * the worker produces. `Next week` reads it; nothing writes it, so a period
+ * the worker produces. `Next month` reads it; nothing writes it, so a period
  * nobody has logged against comes back empty and says so.
  */
 function nextPeriod(now = new Date()) {
@@ -95,83 +97,104 @@ function firstNames(people) {
 }
 
 export default function PartnerCapacityZone() {
-  const [state, setState] = useState({
-    loading: true, error: '', data: null, people: null, engagements: null,
-  });
-  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState('this_week');
+  const period = view === 'next_week' ? nextPeriod() : undefined;
+
+  // The first read shows the skeleton; every later one (a save, or the week
+  // chip) keeps the forms and what was typed into them on screen (#4698).
+  const { state: read, load: loadMain } = useZoneRead(async () => {
+    const [capacity, ppl, health] = await Promise.all([
+      api.getPartnerCapacity(period),
+      api.listPartnerPeople(),
+      api.getPartnerDeliveryHealth(),
+    ]);
+    return {
+      data: capacity || {},
+      people: Array.isArray(ppl?.items) ? ppl.items : [],
+      engagements: Array.isArray(health?.items) ? health.items : [],
+    };
+  }, 'The capacity record did not load.', [period]);
+  const state = {
+    loading: read.loading,
+    error: read.error,
+    data: read.data?.data ?? null,
+    people: read.data?.people ?? null,
+    engagements: read.data?.engagements ?? null,
+  };
+  const load = loadMain;
+
   const [note, setNote] = useState(null);
   const [granting, setGranting] = useState(false);
-  const [grant, setGrant] = useState({ engagement_id: '', holder_user_id: '', scope: '' });
+  const EMPTY_GRANT = { engagement_id: '', holder_user_id: '', scope: '' };
+  const [grant, setGrant] = useState(EMPTY_GRANT);
   const [hours, setHours] = useState({ engagement_id: '', person_user_id: '', hours: '' });
   const [cap, setCap] = useState({ person_user_id: '', weekly_hours: '', note: '' });
   const [internal, setInternal] = useState({ person_user_id: '', hours: '' });
-  const [view, setView] = useState('this_week');
 
-  // ══ TWO OF THE `pd3` CHIPS CHANGE THE PERIOD, NOT THE ROWS ═══════════════
-  // Hours are logged per period, so `This week` and `Next week` are two reads
-  // of the same store rather than two views of one read — which is why the
-  // period is part of the load rather than a filter over what came back, and
-  // why next week is usually empty rather than quiet.
-  const period = view === 'next_week' ? nextPeriod() : undefined;
-
-  const load = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    try {
-      const [capacity, ppl, health] = await Promise.all([
-        api.getPartnerCapacity(period),
-        api.listPartnerPeople(),
-        api.getPartnerDeliveryHealth(),
-      ]);
-      setState({
-        loading: false,
-        error: '',
-        data: capacity || {},
-        people: Array.isArray(ppl?.items) ? ppl.items : [],
-        engagements: Array.isArray(health?.items) ? health.items : [],
-      });
-    } catch (e) {
-      setState({
-        loading: false,
-        error: e?.message || 'The capacity record did not load.',
-        data: null, people: null, engagements: null,
-      });
-    }
-  }, [period]);
-  useEffect(() => { load(); }, [load]);
-
-  // D637 — hours by entry, read on its own so a failure here says so here and
-  // leaves the rest of the page standing.
+  // Client hours by entry. A reload keeps the table that is already drawn
+  // rather than replacing it with "Loading hours…", and an older response
+  // never overwrites a newer one.
   const [entries, setEntries] = useState({ kind: 'loading' });
+  const entriesSeq = useRef(0);
   const loadEntries = useCallback(async () => {
-    setEntries({ kind: 'loading' });
+    entriesSeq.current += 1;
+    const mine = entriesSeq.current;
+    setEntries((prev) => (prev.kind === 'ready' ? prev : { kind: 'loading' }));
     try {
       const r = await api.listPartnerHourEntries(period);
+      if (mine !== entriesSeq.current) return;
       setEntries({ kind: 'ready', periods: r?.periods || [], entries: Array.isArray(r?.entries) ? r.entries : [] });
     } catch (e) {
+      if (mine !== entriesSeq.current) return;
       setEntries({ kind: 'unreadable', message: e?.message || '' });
     }
   }, [period]);
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
-  const run = useCallback(async (fn, ok, scope) => {
-    setBusy(true);
+  const { run: runMutation, isPending } = useMutations();
+  const grantToggle = useRef(null);
+  const [focusGrant, setFocusGrant] = useState(0);
+  useEffect(() => {
+    if (focusGrant) grantToggle.current?.focus?.();
+  }, [focusGrant, read.data]);
+
+  // One operation, one key (see `useMutations`). Resolves true only for a
+  // confirmed success; the caller resets its form on that and on nothing else.
+  const act = useCallback(async (key, fn, ok, scope) => {
     setNote(null);
-    try {
-      await fn();
-      setNote({ ok: true, text: ok, scope });
-      await Promise.all([load(), loadEntries()]);
-    } catch (e) {
-      setNote({ ok: false, text: e?.message || 'That did not save.', scope });
-    } finally {
-      setBusy(false);
+    const r = await runMutation(key, fn);
+    if (r.skipped) return false;
+    if (!r.ok) {
+      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      return false;
     }
-  }, [load, loadEntries]);
+    setNote({ ok: true, text: ok, scope });
+    load();
+    loadEntries();
+    return true;
+  }, [runMutation, load, loadEntries]);
 
   const d = state.data;
   const people = Array.isArray(d?.people) ? d.people : [];
-  const seats = Array.isArray(d?.seats) ? d.seats : [];
+  // D4822 part 2: `?engagement=` narrows the seats to that engagement. The roster stays the firm's: a person's room
+  // is a fact about their whole month, not one client's slice of it, and the bar says so.
+  const focus = useEngagementFocus();
+  const allSeats = Array.isArray(d?.seats) ? d.seats : [];
+  const seats = allSeats.filter((s) => matchesFocus(s, focus.key));
   const roster = state.people || [];
   const engagements = state.engagements || [];
+  const focusId = focusEngagementId([engagements, allSeats], focus.key);
+  useEffect(() => {
+    if (!focusId) return;
+    setGrant((g) => (g.engagement_id ? g : { ...g, engagement_id: focusId }));
+    setHours((h) => (h.engagement_id ? h : { ...h, engagement_id: focusId }));
+  }, [focusId]);
+  // D4822 (canvas `Capacity limits not set`): no firm default and no personal limit means nobody can be over.
+  const limitsUnset = d?.cap_hours == null && !people.some((p) => p.cap_hours != null);
+  const periodWords = (() => {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(d?.period || ''));
+    return m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : null;
+  })();
   const liveSeats = seats.filter((s) => !s.revoked_at);
   const over = people.filter((p) => p.over_committed === true);
 
@@ -204,172 +227,8 @@ export default function PartnerCapacityZone() {
   // arrived, and `error` is cleared so the shared "This did not load" card —
   // the exact confusion `isNoPartnerProfile` exists to prevent — cannot fire.
   const unlinked = isNoPartnerProfile(state.error);
-
-  return (
-    <>
-      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
-          An action states what the zone DOES and an export over nothing
-          loaded renders disabled and says so; a filter chip is a claim about
-          ROWS, and a selectable `Published` over a store this account cannot
-          read is the "an empty set reads as an answer" failure
-          `zoneFilterBuilder.js` exists to prevent, reached from a new
-          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
-      <ZoneToolbar
-        className="mb-3"
-        role="partner"
-        filters={unlinked ? [] : partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
-        actions={rowActions}
-      />
-      <ZoneBody
-        loading={state.loading}
-        error={unlinked ? null : state.error}
-        onRetry={load}
-        notice={unlinked ? <NoPartnerProfile /> : null}
-        isEmpty={unlinked || (people.length === 0 && seats.length === 0)}
-        empty={(
-          <NothingYet
-            title="No seat granted and no hours logged"
-            body={
-              'This zone is people rather than projects: who is committed to what, '
-              + 'and who holds access inside a client’s systems. Grant a seat or '
-              + 'log a period’s hours and the roster starts filling in.'
-            }
-            action={engagements.length > 0
-              ? <button type="button" className={buttonClass} onClick={() => setGranting(true)}>Grant a seat</button>
-              : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
-          />
-        )}
-      >
-        <div className="space-y-6">
-          <ZoneHeading
-            title="Capacity & allocation"
-            blurb={
-              'People, not projects. Where the firm is over-committed — and where '
-              + 'an over-committed person also holds a granted seat inside a '
-              + 'client’s systems, which is a trust exposure rather than only a '
-              + 'throughput one.'
-            }
-            action={engagements.length > 0 && (
-              <button type="button" className={ghostButtonClass} onClick={() => setGranting((v) => !v)}>
-                {granting ? 'Cancel' : 'Grant a seat'}
-              </button>
-            )}
-          />
-
-          {/* ══ THE `pd3` STRIP ═══════════════════════════════════════════════
-              `Over-committed · Seats held · Project hours · Seat hours`, each
-              counted over the WHOLE roster rather than the chip-narrowed list:
-              a firm's project hours do not change because the reader narrowed
-              to seat-holders. */}
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <CapTile
-              label="Over-committed"
-              value={String(d?.over_committed_count ?? 0)}
-              nr={d?.over_committed_count == null}
-              note={d?.over_committed_count == null
-                ? 'no cap is stated, so nobody is over one'
-                : (firstNames(over) || 'none')}
-            />
-            <CapTile
-              label="Seats held"
-              value={String(d?.live_seats ?? liveSeats.length)}
-              note="each scoped and revocable"
-            />
-            <CapTile
-              label="Project hours"
-              value={`${d?.project_hours_total ?? 0} h`}
-              note={`this period · ${d?.period || '—'}`}
-            />
-            <CapTile
-              label="Seat hours"
-              value={`${d?.seat_hours_total ?? 0} h`}
-              note="inside client systems"
-            />
-          </div>
-
-          <Instrument
-            testid="delivery-capacity"
-            title="People"
-            meta={d?.cap_hours == null
-              ? 'No cap stated · seat hours counted, not estimated'
-              : `Cap ${d.cap_hours} h · seat hours counted, not estimated`}
-            cols="1.1fr 1.6fr .8fr .8fr .8fr 1.1fr"
-            head={['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total']}
-            rows={visible.map((p) => {
-              const places = Array.isArray(p.seat_places) ? p.seat_places : [];
-              const live = places.filter((s) => !s.revoked);
-              const lead = live[0] || places[0];
-              return {
-                key: p.user_id,
-                rowClass: p.over_committed === true ? 'bg-red-50/40 dark:bg-red-950/10' : '',
-                cells: [
-                  p.name ? { text: p.name } : { nr: true },
-                  // WHERE THE SEAT IS, not how many. "Two seats" is a number;
-                  // "Halverton · Board, KPIs" is the exposure. An em dash here
-                  // is a known nothing — they hold no seat — rather than an
-                  // unknown, which is why it is not `Not recorded`.
-                  places.length === 0
-                    ? { text: '—' }
-                    : {
-                      text: places.map((s) => s.client).filter(Boolean).join(', ') || undefined,
-                      ...(lead?.scope
-                        ? { grant: `Granted · ${lead.scope}`, grantRevoked: Boolean(lead.revoked) }
-                        : {}),
-                      sub: places.length > live.length
-                        ? `${places.length - live.length} revoked, kept on the record`
-                        : undefined,
-                    },
-                  // ZERO IS AN ANSWER HERE AND ABSENCE IS NOT. The hours book
-                  // exists, so nothing logged against this person reads as
-                  // unmeasured rather than as a person who did no work.
-                  p.project_hours == null ? { nr: true } : { text: `${p.project_hours} h` },
-                  p.seat_hours == null ? { nr: true } : { text: `${p.seat_hours} h` },
-                  // INTERNAL HOURS ARE STATED OR THEY ARE ABSENT. No book
-                  // records unbilled time by default, so an absent row means
-                  // nobody said — never zero.
-                  p.internal_hours == null
-                    ? { nr: true }
-                    : { text: `${p.internal_hours} h`, sub: p.internal_note || undefined },
-                  // THE TOTAL IS THE WEEK, and it says so when it is only part
-                  // of one. Against a stated cap it reads `N of C h` and
-                  // carries `Over`; with no cap it is a number and says there
-                  // is nothing to be over.
-                  p.total_hours == null
-                    ? { nr: true }
-                    : {
-                      text: p.cap_hours == null
-                        ? `${p.total_hours} h`
-                        : `${p.total_hours} of ${p.cap_hours} h`,
-                      ...(p.over_committed === true ? { pill: 'Over', pillTone: 'danger' } : {}),
-                      sub: p.internal_hours == null
-                        ? 'internal hours not stated — a floor, not a measurement'
-                        : (p.cap_hours == null ? 'no cap stated' : undefined),
-                    },
-                ],
-              };
-            })}
-            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a week assembled from billable rows alone under-reports in the reassuring direction.'}
-          />
-
-          {visible.length === 0 && people.length > 0 && (
-            <p className="text-[12px] text-axal-muted">
-              Nobody is in this state. {people.length} on the roster for {d?.period}.
-            </p>
-          )}
-
-          <ZoneDraft
-            surface="delivery/capacity"
-            railOption="draft:capacity-findings"
-            label="Draft · capacity findings"
-            accept="Accept findings"
-            run="Read the roster"
-            foot="Hours read from engagement rows."
-            empty="Who is over cap, by how much, and which overage sits behind a granted seat — separating schedulable overflow from seat commitments, because only one of them can be moved without going back to the founder."
-            nothingToDraft="Nobody holds a seat or has logged hours this period, so there is nothing to read."
-          />
-
-          {granting && (
-            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700">
+  const grantForm = (
+            <div className="rounded-lg border border-axal-hairline bg-axal-ground p-3 dark:border-gray-700" data-testid="seat-grant-form">
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Engagement">
                   <select className={inputClass} value={grant.engagement_id}
@@ -398,19 +257,28 @@ export default function PartnerCapacityZone() {
               </div>
               <button
                 type="button" className={`${buttonClass} mt-3`}
-                disabled={busy || !grant.engagement_id || !grant.holder_user_id}
+                disabled={!grant.engagement_id || !grant.holder_user_id}
+                aria-disabled={isPending('grant') || undefined}
                 onClick={async () => {
-                  await run(
-                    () => api.grantPartnerSeat(grant.engagement_id, {
-                      holder_user_id: Number(grant.holder_user_id), scope: grant.scope,
+                  if (isPending('grant')) return;
+                  const sending = grant;
+                  const ok = await act(
+                    'grant',
+                    () => api.grantPartnerSeat(sending.engagement_id, {
+                      holder_user_id: Number(sending.holder_user_id), scope: sending.scope,
                     }),
                     'Seat recorded.', 'grant',
                   );
-                  setGrant({ engagement_id: '', holder_user_id: '', scope: '' });
-                  setGranting(false);
+                  // Reset and close only on a confirmed seat; a refusal keeps
+                  // the engagement, holder and scope as chosen.
+                  if (ok) {
+                    setGrant(EMPTY_GRANT);
+                    setGranting(false);
+                    setFocusGrant((n) => n + 1);
+                  }
                 }}
               >
-                Record the seat
+                {isPending('grant') ? 'Recording…' : 'Record the seat'}
               </button>
               {roster.length === 0 && (
                 <p className="mt-2 text-[11.5px] leading-relaxed text-axal-faint">
@@ -421,12 +289,15 @@ export default function PartnerCapacityZone() {
               )}
               <SaveNote note={note?.scope === 'grant' ? note : null} />
             </div>
-          )}
+  );
 
+  const writeSections = (
+    <>
           {/* ══ THE FIRM'S OWN NUMBER ═════════════════════════════════════════
               Nothing here computes a cap or offers a default. A firm types what
               it considers a full week; leaving it empty and saving clears the
               statement, so the first number typed is never permanent. */}
+          <div id="capacity-limits" />
           <Section title="The week this firm says it has">
             <div className="grid gap-3 md:grid-cols-4">
               <Field label="Whose" hint="The firm's default, or one person's override.">
@@ -452,21 +323,24 @@ export default function PartnerCapacityZone() {
               </Field>
               <div className="flex items-end">
                 <button
-                  type="button" className={buttonClass} disabled={busy}
+                  type="button" className={buttonClass} aria-disabled={isPending('cap') || undefined}
                   onClick={async () => {
-                    const raw = cap.weekly_hours.trim();
-                    await run(
+                    if (isPending('cap')) return;
+                    const sending = cap;
+                    const raw = sending.weekly_hours.trim();
+                    const ok = await act(
+                      'cap',
                       () => api.setPartnerCapacityCap({
-                        person_user_id: cap.person_user_id ? Number(cap.person_user_id) : null,
+                        person_user_id: sending.person_user_id ? Number(sending.person_user_id) : null,
                         // EMPTY CLEARS, it does not save a zero. Zero hours
                         // would say this person works none, which is a claim;
                         // no row says nobody has stated a cap.
                         weekly_hours: raw === '' ? null : Number(raw),
-                        note: cap.note,
+                        note: sending.note,
                       }),
                       raw === '' ? 'Cap cleared.' : 'Cap saved.', 'cap',
                     );
-                    setCap({ person_user_id: '', weekly_hours: '', note: '' });
+                    if (ok) setCap({ person_user_id: '', weekly_hours: '', note: '' });
                   }}
                 >
                   {cap.weekly_hours.trim() === '' ? 'Clear' : 'Save cap'}
@@ -476,7 +350,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
               {d?.cap_hours == null
                 ? d?.cap_note
-                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
+                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. Hours are logged by month, so each month is compared with the cap over its own days (${d.period}: ${d.period_cap_hours} h). A person with their own number overrides it.`}
             </p>
             <SaveNote note={note?.scope === 'cap' ? note : null} />
           </Section>
@@ -500,18 +374,22 @@ export default function PartnerCapacityZone() {
               <div className="flex items-end">
                 <button
                   type="button" className={buttonClass}
-                  disabled={busy || !internal.person_user_id}
+                  disabled={!internal.person_user_id}
+                  aria-disabled={isPending('internal') || undefined}
                   onClick={async () => {
-                    const raw = internal.hours.trim();
-                    await run(
+                    if (isPending('internal')) return;
+                    const sending = internal;
+                    const raw = sending.hours.trim();
+                    const ok = await act(
+                      'internal',
                       () => api.setPartnerInternalHours({
-                        person_user_id: Number(internal.person_user_id),
+                        person_user_id: Number(sending.person_user_id),
                         period: d.period,
                         hours: raw === '' ? null : Number(raw),
                       }),
                       raw === '' ? 'Statement cleared.' : 'Internal hours saved.', 'internal',
                     );
-                    setInternal({ person_user_id: '', hours: '' });
+                    if (ok) setInternal({ person_user_id: '', hours: '' });
                   }}
                 >
                   {internal.hours.trim() === '' ? 'Clear' : 'Save'}
@@ -550,16 +428,20 @@ export default function PartnerCapacityZone() {
               <div className="flex items-end">
                 <button
                   type="button" className={buttonClass}
-                  disabled={busy || !hours.engagement_id || !hours.person_user_id || hours.hours.trim() === ''}
+                  disabled={!hours.engagement_id || !hours.person_user_id || hours.hours.trim() === ''}
+                  aria-disabled={isPending('hours') || undefined}
                   onClick={async () => {
-                    await run(
+                    if (isPending('hours')) return;
+                    const sending = hours;
+                    const ok = await act(
+                      'hours',
                       () => api.savePartnerHours(
-                        hours.engagement_id, hours.person_user_id, d.period,
-                        { hours: Number(hours.hours) },
+                        sending.engagement_id, sending.person_user_id, d.period,
+                        { hours: Number(sending.hours) },
                       ),
                       'Hours logged.', 'hours',
                     );
-                    setHours({ engagement_id: '', person_user_id: '', hours: '' });
+                    if (ok) setHours({ engagement_id: '', person_user_id: '', hours: '' });
                   }}
                 >
                   Log
@@ -569,14 +451,214 @@ export default function PartnerCapacityZone() {
             <SaveNote note={note?.scope === 'hours' ? note : null} />
             <div className="mt-3">
               <HoursEntries
-                read={entries} busy={busy} onRetry={loadEntries}
+                read={entries} onRetry={loadEntries}
+                isBusy={(e, p) => isPending(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`)}
                 onDelete={(e, p) => {
                   if (!window.confirm(`Delete ${e.hours[p]} h for ${e.person_name || 'this person'} in ${p}? The month then reads Not recorded, not 0.`)) return;
-                  run(() => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
+                  act(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`, () => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
                 }}
               />
             </div>
           </Section>
+    </>
+  );
+  // The seat form closes on success, so its confirmation is drawn outside it.
+  const grantedNote = !granting && note?.scope === 'grant' ? <SaveNote note={note} /> : null;
+  const refreshNote = read.refreshError ? (
+    <p role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">
+      The capacity record could not be refreshed just now, so what is shown may be out of date. {read.refreshError}
+    </p>
+  ) : null;
+
+  return (
+    <>
+      {/* ACTIONS YES, FILTERS NO, when the account cannot read the store.
+          An action states what the zone DOES and an export over nothing
+          loaded renders disabled and says so; a filter chip is a claim about
+          ROWS, and a selectable `Published` over a store this account cannot
+          read is the "an empty set reads as an answer" failure
+          `zoneFilterBuilder.js` exists to prevent, reached from a new
+          direction. `profile_zone_actions.test.mjs` asserts both halves. */}
+      <ZoneToolbar
+        className="mb-3"
+        role="partner"
+        filters={unlinked ? [] : partnerZoneFilters('delivery/capacity', { value: view, onChange: setView })}
+        actions={rowActions}
+      />
+      <ZoneBody
+        loading={state.loading}
+        error={unlinked ? null : state.error}
+        onRetry={load}
+        notice={unlinked ? <NoPartnerProfile /> : null}
+        isEmpty={unlinked || (people.length === 0 && seats.length === 0)}
+        empty={(
+          <div className="space-y-4">
+          <NothingYet
+            title="No seat granted and no hours logged"
+            body={
+              'This zone is people rather than projects: who is committed to what, '
+              + 'and who holds access inside a client’s systems. Grant a seat or '
+              + 'log a period’s hours and the roster starts filling in.'
+            }
+            action={engagements.length > 0
+              ? <button type="button" ref={grantToggle} className={buttonClass} aria-expanded={granting} onClick={() => setGranting((v) => !v)}>{granting ? 'Cancel' : 'Grant a seat'}</button>
+              : <Link to="/pipeline/proposals" className="text-[12.5px] font-semibold text-amber-700 underline">Open proposals</Link>}
+          />
+          {refreshNote}
+          {grantedNote}
+          {granting && engagements.length > 0 && grantForm}
+          {/* THE FIRST RECORD IS WRITTEN FROM HERE. The cap, the internal hours
+              and the client hours are the other ways the roster starts filling
+              in, and they were drawn only inside the populated body, so an
+              empty store could not be started (#4698). An account that is not
+              attached to a firm has nothing to write into. */}
+          {!unlinked && writeSections}
+          </div>
+        )}
+      >
+        <div className="space-y-6" aria-busy={read.refreshing || undefined}>
+          {refreshNote}
+          {grantedNote}
+          <EngagementFocusBar focusKey={focus.key} label={focusLabel([...allSeats, ...engagements], focus.key)} shown={seats.length} total={allSeats.length} noun="seats · the roster below is the whole firm’s" onClear={focus.clear} />
+          <ZoneHeading
+            title="People and allocation"
+            blurb="Know who has room, who is overloaded and which commitments are difficult to move."
+            action={engagements.length > 0 && (
+              <button type="button" ref={grantToggle} className={ghostButtonClass} aria-expanded={granting} onClick={() => setGranting((v) => !v)}>
+                {granting ? 'Cancel' : 'Grant a seat'}
+              </button>
+            )}
+          />
+
+          {/* D4822: the time basis, impossible to misread. Hours are monthly totals; limits are hours a week. */}
+          <p className="text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid="capacity-basis">
+            {periodWords ? `${periodWords} · monthly totals` : 'Monthly totals'}
+            <span className="font-normal text-axal-muted"> · limits are hours a week, compared over the month’s days</span>
+          </p>
+          {limitsUnset && (
+            <div className="rounded-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid="capacity-limits-unset">
+              <p className="text-[14.5px] font-bold text-axal-ink dark:text-gray-100">Capacity limits not set</p>
+              <p className="mt-0.5 text-[13px] text-axal-muted">Set available hours to identify over-allocation.</p>
+              <a href="#capacity-limits" className="mt-2 inline-flex min-h-[44px] items-center text-[14px] font-semibold text-amber-700 underline">Set capacity →</a>
+            </div>
+          )}
+
+          {/* ══ THE `pd3` STRIP ═══════════════════════════════════════════════
+              `Over-committed · Seats held · Project hours · Seat hours`, each
+              counted over the WHOLE roster rather than the chip-narrowed list:
+              a firm's project hours do not change because the reader narrowed
+              to seat-holders. */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <CapTile
+              label="Over-committed"
+              value={String(d?.over_committed_count ?? 0)}
+              nr={d?.over_committed_count == null}
+              note={d?.over_committed_count == null
+                ? 'Capacity limits not set'
+                : (firstNames(over) || 'none')}
+            />
+            <CapTile
+              label="Seats held"
+              value={String(d?.live_seats ?? liveSeats.length)}
+              note="each scoped and revocable"
+            />
+            <CapTile
+              label="Project hours"
+              value={`${d?.project_hours_total ?? 0} h`}
+              note={`this period · ${d?.period || '—'}`}
+            />
+            <CapTile
+              label="Seat hours"
+              value={`${d?.seat_hours_total ?? 0} h`}
+              note="inside client systems"
+            />
+          </div>
+
+          <Instrument
+            testid="delivery-capacity"
+            title="People"
+            meta={d?.cap_hours == null
+              ? 'No cap stated · seat hours counted, not estimated'
+              : `Cap ${d.cap_hours} h a week = ${d.period_cap_hours} h in ${d.period} · seat hours counted, not estimated`}
+            cols="1.1fr 1.6fr .8fr .8fr .8fr 1.1fr"
+            head={['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total']}
+            rows={visible.map((p) => {
+              const places = Array.isArray(p.seat_places) ? p.seat_places : [];
+              const live = places.filter((s) => !s.revoked);
+              const lead = live[0] || places[0];
+              return {
+                key: p.user_id,
+                rowClass: p.over_committed === true ? 'bg-red-50/40 dark:bg-red-950/10' : '',
+                cells: [
+                  p.name ? { text: p.name } : { nr: true },
+                  // WHERE THE SEAT IS, not how many. "Two seats" is a number;
+                  // "Halverton · Board, KPIs" is the exposure. An em dash here
+                  // is a known nothing — they hold no seat — rather than an
+                  // unknown, which is why it is not `Not recorded`.
+                  places.length === 0
+                    ? { text: '—' }
+                    : {
+                      text: places.map((s) => s.client).filter(Boolean).join(', ') || undefined,
+                      ...(lead?.scope
+                        ? { grant: `Granted · ${lead.scope}`, grantRevoked: Boolean(lead.revoked) }
+                        : {}),
+                      sub: places.length > live.length
+                        ? `${places.length - live.length} revoked, kept on the record`
+                        : undefined,
+                    },
+                  // ZERO IS AN ANSWER HERE AND ABSENCE IS NOT. The hours book
+                  // exists, so nothing logged against this person reads as
+                  // unmeasured rather than as a person who did no work.
+                  p.project_hours == null ? { nr: true } : { text: `${p.project_hours} h` },
+                  p.seat_hours == null ? { nr: true } : { text: `${p.seat_hours} h` },
+                  // INTERNAL HOURS ARE STATED OR THEY ARE ABSENT. No book
+                  // records unbilled time by default, so an absent row means
+                  // nobody said — never zero.
+                  p.internal_hours == null
+                    ? { nr: true }
+                    : { text: `${p.internal_hours} h`, sub: p.internal_note || undefined },
+                  // THE TOTAL IS THE MONTH, and it says so when it is only part
+                  // of one. Against a stated cap it reads `N of C h` where C is
+                  // the weekly cap over THIS month's days (the figure the
+                  // Worker compared with), and carries `Over`; with no cap it
+                  // is a number and says there is nothing to be over.
+                  p.total_hours == null
+                    ? { nr: true }
+                    : {
+                      text: p.period_cap_hours == null
+                        ? `${p.total_hours} h`
+                        : `${p.total_hours} of ${p.period_cap_hours} h`,
+                      ...(p.over_committed === true ? { pill: 'Over', pillTone: 'danger' } : {}),
+                      sub: p.internal_hours == null
+                        ? 'internal hours not stated — a floor, not a measurement'
+                        : (p.period_cap_hours == null ? 'no cap stated' : `${p.cap_hours} h a week over ${d?.period_days} days`),
+                    },
+                ],
+              };
+            })}
+            note={'A person over their cap while holding a granted seat is the row this zone exists for, and it is read differently from the rest: a stretched operator inside a client’s own systems is a trust exposure, because the grant assumes attention the calendar no longer has. Reallocating project work does not fix it; renegotiating the seat does. Seat hours are counted from the hours logged against engagements where that person holds the grant — not estimated, and not moved into the project column when a founder later revokes it, because the work was still done inside their systems. A total with no internal hours behind it is marked a floor: the client book cannot hold admin or recruiting time, and a month assembled from billable rows alone under-reports in the reassuring direction.'}
+          />
+
+          {visible.length === 0 && people.length > 0 && (
+            <p className="text-[12px] text-axal-muted">
+              Nobody is in this state. {people.length} on the roster for {d?.period}.
+            </p>
+          )}
+
+          <ZoneDraft
+            surface="delivery/capacity"
+            railOption="draft:capacity-findings"
+            label="Draft · capacity findings"
+            accept="Accept findings"
+            run="Read the roster"
+            foot="Hours read from engagement rows."
+            empty="Who is over cap, by how much, and which overage sits behind a granted seat — separating schedulable overflow from seat commitments, because only one of them can be moved without going back to the founder."
+            nothingToDraft="Nobody holds a seat or has logged hours this period, so there is nothing to read."
+          />
+
+          {granting && grantForm}
+
+          {writeSections}
 
           <Section title="Seats inside client systems">
             {seats.length === 0 ? (
@@ -593,8 +675,8 @@ export default function PartnerCapacityZone() {
                       {s.founder_name || s.need_title || s.engagement_uid}
                     </span>
                     <SeatScopeEditor
-                      seat={s} busy={busy}
-                      onSave={(scope) => run(() => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
+                      seat={s} busy={isPending(`seat-scope:${s.id}`) || isPending(`seat-revoke:${s.id}`)}
+                      onSave={(scope) => act(`seat-scope:${s.id}`, () => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
                     />
                     <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
@@ -604,9 +686,10 @@ export default function PartnerCapacityZone() {
                       ? <Pill tone="neutral">Revoked {formatDay(s.revoked_at)}</Pill>
                       : (
                         <button
-                          type="button" className={`${ghostButtonClass} ml-auto`} disabled={busy}
+                          type="button" className={`${ghostButtonClass} ml-auto`}
+                          aria-disabled={isPending(`seat-revoke:${s.id}`) || isPending(`seat-scope:${s.id}`) || undefined}
                           title="Records the revocation. The seat stays on this page struck through — the fact that access existed is worth keeping."
-                          onClick={() => run(() => api.revokePartnerSeat(s.id), 'Seat revoked.', `seat:${s.id}`)}
+                          onClick={() => { if (!isPending(`seat-revoke:${s.id}`)) act(`seat-revoke:${s.id}`, () => api.revokePartnerSeat(s.id), 'Seat revoked.', `seat:${s.id}`); }}
                         >
                           Revoke
                         </button>
@@ -631,7 +714,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2">
               <strong>A total with no internal hours is a floor.</strong> The
               client hours book cannot hold admin, recruiting or the proposal that
-              lost — its rows require an engagement — so a week assembled from it
+              lost — its rows require an engagement — so a month assembled from it
               alone under-reports by exactly the part nobody is billed for, and
               in the reassuring direction. Rows say so rather than quietly
               totalling less.

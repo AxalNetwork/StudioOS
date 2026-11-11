@@ -245,10 +245,24 @@ test('a payout takes one currency, and balances are per currency', async () => {
   assert.equal(me.body.mixed_currency, true);
   assert.equal(me.body.balance_cents, null, 'a sum across currencies is not a figure');
   assert.deepEqual(me.body.by_currency, [
-    { currency: 'EUR', balance_cents: 0, claimed_cents: 3000, lifetime_cents: 3000 },
-    { currency: 'USD', balance_cents: 2000, claimed_cents: 0, lifetime_cents: 2000 },
+    { currency: 'EUR', balance_cents: 0, claimed_cents: 3000, held_cents: 0, lifetime_cents: 3000 },
+    { currency: 'USD', balance_cents: 2000, claimed_cents: 0, held_cents: 0, lifetime_cents: 2000 },
   ]);
   assert.equal(me.body.commissions.find((c: any) => c.id === eur).payout_id, eurOut.body.id);
+});
+
+test('D4292: a pending commission is held, outside the balance, and no payout can claim it', async () => {
+  const db = freshDb();
+  accrue(db, [[1000, 'USD']]);
+  db.prepare(`INSERT INTO commissions (user_id, amount_cents, currency, source_type, source_id, status)
+              VALUES (?, 700, 'USD', 'subscription_invoice', 'in_held', 'pending')`).run(PARTNER);
+  const me = await call(db, partner, '/commissions/me');
+  assert.deepEqual(me.body.by_currency, [{ currency: 'USD', balance_cents: 1000, claimed_cents: 0, held_cents: 700, lifetime_cents: 1700 }]);
+  const tooMuch = await call(db, partner, '/payout/request', { method: 'POST', body: { amount_cents: 1700, payout_method: 'wire', currency: 'USD' } });
+  assert.equal(tooMuch.status, 400, 'the held commission does not fund a payout');
+  const ok = await call(db, partner, '/payout/request', { method: 'POST', body: { amount_cents: 1000, payout_method: 'wire', currency: 'USD' } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal((db.prepare("SELECT status FROM commissions WHERE source_id = 'in_held'").get() as any).status, 'pending');
 });
 
 test('one currency keeps the old totals', async () => {

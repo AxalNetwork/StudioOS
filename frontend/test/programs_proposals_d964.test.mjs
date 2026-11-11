@@ -15,7 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
@@ -23,11 +23,14 @@ import { pageKeyFor } from '../src/lib/railPages.js';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
 import ProposePage from '../src/pages/admin/programs/ProposePage.jsx';
 import ProposalsPage from '../src/pages/admin/programs/ProposalsPage.jsx';
+import ProposalReviewPage from '../src/pages/admin/programs/ProposalReviewPage.jsx';
 import { LINE_SUPER } from '../src/pages/admin/programs/programsModel.js';
 import {
   NOT_SAVED, PROPOSALS_CLOSED, emptyForm, fieldsFrom, formFrom, joinLine, missingSentence, newProgramFields, proposalRefusal,
   reviewRows, studioOptions, toggleReward,
+  historyLine, revisionLabel, shownRevision, stampLabel, submittedLabel,
 } from '../src/pages/admin/programs/proposalsModel.js';
+import { statusChips } from '../src/pages/admin/programs/ProposalTables.jsx';
 
 const h = React.createElement;
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -89,6 +92,13 @@ function worker(o = {}) {
   };
 }
 const fieldsOut = (b) => (b ? { ...b } : {});
+/** D4808: the review page at its address, which carries the proposal's uid. */
+const ReviewAt = () => h(Routes, null, h(Route, { path: '/admin/programs/proposals/:uid', element: h(ProposalReviewPage) }));
+// D4873 (part 3): a sent proposal carries its revision and the history the Worker returns with it.
+const SENT = proposal({
+  uid: 'pp-q1', name: 'Fitness Sprint', status: 'sent', sent_at: '2026-10-16T08:00:00Z', revision: 1,
+  revisions: [{ revision: 1, sent_at: '2026-10-16T08:00:00Z', spec: { name: 'Fitness Sprint' }, spec_recorded: true, outcome: null, hq_note: null, decided_at: null }],
+});
 
 async function mounted(url, page, handle, { user = null } = {}) {
   const restore = installDocument();
@@ -218,7 +228,7 @@ test('Your proposals: an empty list says so with the door, a failed read says so
   } finally { await failed.close(); }
 });
 
-test('a Super Admin\'s catalogue: New program, the tab strip with the amber count, the line, and Proposals from studios', async () => {
+test('a Super Admin\'s catalogue: New program, the tab strip with the amber count, the line, and a compact proposal line (D4808)', async () => {
   const view = await mounted('/admin/programs', ProgramsCatalogue, worker({ user: SUPER }), { user: SUPER });
   try {
     assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
@@ -226,8 +236,22 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
     assert.ok(!view.has('programs-propose'), 'HQ does not propose to itself');
     assert.equal(view.textOf('programs-tab-catalogue'), 'Catalogue');
     assert.equal(view.textOf('programs-tab-proposals-count'), '1', 'the proposals sent to HQ');
-    assert.match(view.textOf('proposals-queue-row-pp-q1'), /Fitness Sprint.*Studio North.*16 Oct.*Sent to HQ.*Decide/s);
-    assert.match(view.textOf('proposals-queue-row-pp-q2'), /Studio East.*Sent back.*Open/s);
+    // D4808: the catalogue keeps a summary and one door; the search, filters and review are at /admin/programs/proposals.
+    assert.equal(view.textOf('proposals-summary-text'), '1 proposal is waiting on HQ.');
+    assert.ok(view.has('proposals-summary-open'));
+    assert.ok(!view.has('proposals-queue'), 'no second copy of the queue on the catalogue');
+    assert.ok(!view.has('proposals-queue-search'));
+  } finally { await view.close(); }
+});
+
+test('the proposals page: the queue with its filters, and a sent proposal leads to Review, not straight to Decide (D4808)', async () => {
+  const view = await mounted('/admin/programs/proposals', ProposalsPage, worker({ user: SUPER }), { user: SUPER });
+  try {
+    assert.match(view.textOf('proposals-queue-row-pp-q1'), /Fitness Sprint.*Studio North.*Sent 16 Oct.*Sent to HQ.*Review/s);
+    // D4873 (PG04): every row opens the review drawer; the status filter is a radio group with its counts.
+    assert.match(view.textOf('proposals-queue-row-pp-q2'), /Studio East.*Sent back.*Review/s);
+    assert.match(view.textOf('proposals-queue-status'), /Waiting for HQ 1.*Sent back 1.*Approved 0.*Declined 0/s);
+    assert.ok(!view.has('proposals-queue-decide-pp-q1'), 'Decide is not one click from the queue any more');
     assert.ok(view.requests.some((r) => r.url === '/api/admin/programs/proposals?sort=oldest'), 'oldest first');
     await view.change('proposals-queue-studio', 'lic-e');
     assert.ok(view.requests.some((r) => r.url === '/api/admin/programs/proposals?sort=oldest&licence=lic-e'));
@@ -238,43 +262,57 @@ test('a Super Admin\'s catalogue: New program, the tab strip with the amber coun
  * Decide (PG15a)
  * ------------------------------------------------------------------ */
 
-test('Decide: the note is required for Send back and Decline before anything is sent, and a refusal keeps the dialog open', async () => {
+test('Decide (D4873, PG04): the note is required for Send back and Decline before anything is sent; each goes through a review; a refusal keeps it open', async () => {
   let refuse = true;
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    user: SUPER,
-    decide: (uid, body) => (refuse ? refusal('not_waiting', 409) : response({ proposal: proposal({ uid, status: body.outcome === 'decline' ? 'declined' : 'sent_back' }) })),
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({
+    user: SUPER, one: { 'pp-q1': { proposal: SENT } },
+    decide: (uid, body) => (refuse ? refusal('not_waiting', 409) : response({ proposal: proposal({ uid, revision: 1, status: body.outcome === 'decline' ? 'declined' : 'sent_back' }) })),
   }), { user: SUPER });
   try {
-    await view.click('proposals-queue-decide-pp-q1');
-    assert.ok(view.has('proposals-decide-dialog'));
-    assert.match(view.text(), /Decide on Fitness Sprint/);
-    assert.match(view.text(), /From Studio North · sent 16 Oct\./);
-    await view.change('proposals-decide-send_back', true, 'checked');
-    await view.click('proposals-decide-confirm');
+    assert.ok(view.has('proposal-review'), 'the review is a drawer over the list');
+    assert.match(view.textOf('proposal-review-sent'), /Revision 1 · submitted 16 Oct 2026, 08:00 UTC by Studio North · read-only/);
+    await view.click('proposals-decide-send_back');
     assert.equal(view.textOf('proposals-decide-refusal'), 'Write a note to the studio. It is required to send a proposal back or decline it.');
+    await view.click('proposals-decide-decline');
     assert.deepEqual(view.writes(), [], 'no decision is sent without its note');
-    await view.change('proposals-decide-decline', true, 'checked');
-    await view.click('proposals-decide-confirm');
-    assert.deepEqual(view.writes(), [], 'Decline needs it too');
     await view.change('proposals-decide-note', 'It overlaps the Spin-Out Lab.');
+    await view.click('proposals-decide-decline');
+    assert.match(view.textOf('proposals-decide-review'), /Decline revision 1\?.*This is final/s, 'Scope, then Review');
+    assert.deepEqual(view.writes(), [], 'the review sends nothing');
     await view.click('proposals-decide-confirm');
-    assert.deepEqual(view.writes(), [{ method: 'POST', url: '/api/admin/programs/proposals/pp-q1/decision', body: { outcome: 'decline', note: 'It overlaps the Spin-Out Lab.' } }]);
-    assert.ok(view.has('proposals-decide-dialog'), 'a refusal keeps the dialog open');
+    assert.deepEqual(view.writes(), [{ method: 'POST', url: '/api/admin/programs/proposals/pp-q1/decision', body: { outcome: 'decline', note: 'It overlaps the Spin-Out Lab.', expected_revision: 1 } }]);
+    assert.ok(view.has('proposals-decide-review'), 'a refusal keeps the review open');
     assert.equal(view.textOf('proposals-decide-refusal'), 'Another decision landed first, or this proposal is no longer waiting. Reload to see it.');
     refuse = false;
     await view.click('proposals-decide-confirm');
-    assert.ok(!view.has('proposals-decide-dialog'), 'a decision that lands closes it');
+    assert.ok(!view.has('proposals-decide-review'), 'a decision that lands closes the review');
+    assert.match(view.textOf('proposal-review-decided'), /Decision recorded on revision 1: declined\./, 'Result');
   } finally { await view.close(); }
 });
 
-test('Decide: an approval needs no note, and the dialog says an approval sets no grant yet', async () => {
-  const view = await mounted('/admin/programs/proposals', ProposalsPage, worker({ user: SUPER }), { user: SUPER });
+test('Decide (D4873, PG04): Approve names the revision and its scope, needs no note, and the review says an approval sets no grant yet', async () => {
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({ user: SUPER, one: { 'pp-q1': { proposal: SENT } } }), { user: SUPER });
   try {
-    await view.click('proposals-queue-decide-pp-q1');
+    assert.equal(view.textOf('proposal-review-decide'), 'Approve revision 1');
+    await view.click('proposals-decide-approve_catalogue');
+    await view.click('proposal-review-decide');
     assert.match(view.textOf('proposals-decide-grant'), /an approval sets no grant yet/);
-    await view.change('proposals-decide-approve_catalogue', true, 'checked');
     await view.click('proposals-decide-confirm');
-    assert.deepEqual(view.writes(), [{ method: 'POST', url: '/api/admin/programs/proposals/pp-q1/decision', body: { outcome: 'approve_catalogue', note: null } }]);
+    assert.deepEqual(view.writes(), [{ method: 'POST', url: '/api/admin/programs/proposals/pp-q1/decision', body: { outcome: 'approve_catalogue', note: null, expected_revision: 1 } }]);
+  } finally { await view.close(); }
+});
+
+test('Decide (D4873): a proposal sent again while the drawer was open is refused, says so, and is read again', async () => {
+  let reads = 0;
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({
+    user: SUPER, one: { 'pp-q1': () => { reads += 1; return response({ proposal: SENT }); } },
+    decide: () => refusal('revision_changed', 409),
+  }), { user: SUPER });
+  try {
+    await view.click('proposal-review-decide');
+    await view.click('proposals-decide-confirm');
+    assert.match(view.textOf('proposals-decide-refusal'), /sent again after you opened it.*Nothing was decided\./);
+    assert.equal(reads, 2, 'the drawer reads the proposal again');
   } finally { await view.close(); }
 });
 
@@ -297,9 +335,13 @@ test('New program: a Super Admin\'s only, Basics and How it runs, and program_ke
     assert.equal(view.textOf('programs-new-refusal'), 'A program with this name already exists. Change the name and try again.');
     assert.ok(view.has('programs-new-dialog'), 'the dialog stays open');
     taken = false;
+    const before = view.requests.filter((r) => r.url.startsWith('/api/admin/programs?') || r.url === '/api/admin/programs').length;
     await view.click('programs-new-create');
     assert.ok(!view.has('programs-new-dialog'));
-    assert.match(view.textOf('programs-new-done'), /Operator Fellowship is added as Proposed, with an empty playbook draft\./);
+    assert.match(view.textOf('programs-new-done'), /Operator Fellowship is added as Proposed, with an empty playbook draft you edit and publish on its page\./);
+    // D4808: the catalogue is read again, and Open program is a door to the new program's own page.
+    assert.ok(view.requests.filter((r) => r.method === 'GET' && r.url.startsWith('/api/admin/programs')).length > before, 'the catalogue refreshed');
+    assert.ok(view.has('programs-new-open'));
   } finally { await view.close(); }
 });
 
@@ -410,11 +452,67 @@ test('Propose: a proposal HQ has decided opens read only, with HQ\'s note; an un
  * ------------------------------------------------------------------ */
 
 test('the source: no toast or confirm, no canvas sample, no Product testers audience, and the tools never read as switched on', () => {
-  const files = ['ProposePage.jsx', 'ProposalsPage.jsx', 'ProposalTables.jsx', 'ProposalFields.jsx', 'DecideDialog.jsx', 'NewProgramDialog.jsx', 'proposalsModel.js']
+  const files = ['ProposePage.jsx', 'ProposalsPage.jsx', 'ProposalTables.jsx', 'ProposalFields.jsx', 'ProposalReviewSheet.jsx', 'NewProgramDialog.jsx', 'proposalsModel.js']
     .map((f) => codeOnly(read(`frontend/src/pages/admin/programs/${f}`))).join('\n');
   assert.doesNotMatch(files, /window\.confirm|useToast|localStorage|sessionStorage/);
   for (const sample of ['[Studio', '[Operator', '[12]', '[10:4', 'Studio Lisbon', 'Studio Nairobi']) assert.ok(!files.includes(sample), `a canvas sample: ${sample}`);
   assert.doesNotMatch(read('frontend/src/pages/admin/programs/proposalsModel.js'), /WHO_WORDS = Object\.freeze\(\[[^\]]*Product testers/);
   assert.match(read('frontend/src/pages/admin/programs/ProposePage.jsx'), /`Needs \$\{label/, 'each tool reads as a need');
   assert.match(read('frontend/src/lib/apiModules.generated.js'), /\nexport \* from '\.\/api\/programProposals\.js';\n/);
+});
+
+/* ------------------------------------------------------------------ *
+ * D4873 (#4873, part 3): revisions in the review drawer (PG04)
+ * ------------------------------------------------------------------ */
+
+const TWO = proposal({
+  uid: 'pp-q1', name: 'Climate founders circle', status: 'sent', sent_at: '2026-11-04T10:12:00Z', revision: 2,
+  purpose: 'A monthly peer circle, with a quarterly HQ session.', eligibility: 'Active founder licence.',
+  revisions: [
+    { revision: 1, sent_at: '2026-10-12T09:00:00Z', spec: { name: 'Climate founders circle', purpose: 'A monthly peer circle.', eligibility: null }, spec_recorded: true, outcome: 'sent_back', hq_note: 'Add eligibility', decided_at: '2026-10-13T09:00:00Z' },
+    { revision: 2, sent_at: '2026-11-04T10:12:00Z', spec: { name: 'Climate founders circle', purpose: 'A monthly peer circle, with a quarterly HQ session.', eligibility: 'Active founder licence.' }, spec_recorded: true, outcome: null, hq_note: null, decided_at: null },
+  ],
+});
+
+test('D4873: the revision words: labels, UTC stamps, history lines, the queue\'s Submitted cell and its status chips', () => {
+  assert.equal(revisionLabel(2), 'Revision 2');
+  assert.equal(revisionLabel(null), 'Revision not recorded');
+  assert.equal(stampLabel('2026-11-04T10:12:00Z'), '4 Nov 2026, 10:12 UTC');
+  assert.equal(historyLine(TWO.revisions[0]), '12 Oct · Revision 1 sent · sent back by HQ: “Add eligibility”');
+  assert.equal(historyLine(TWO.revisions[1]), '4 Nov · Revision 2 sent · waiting for HQ');
+  assert.equal(shownRevision(TWO).revision, 2, 'the latest by default');
+  assert.equal(shownRevision(TWO, 1).revision, 1);
+  const now = Date.parse('2026-11-07T14:30:00Z');
+  assert.equal(submittedLabel({ status: 'sent', sent_at: '2026-11-04T10:12:00Z' }, now), 'Sent 4 Nov · 3 days');
+  assert.equal(submittedLabel({ status: 'approved', sent_at: '2026-10-20T10:00:00Z', decided_at: '2026-10-21T10:00:00Z' }, now), 'Decided 21 Oct');
+  assert.deepEqual(statusChips({ sent: 1, sent_back: 1, approved: 1, declined: 0 }), { sent: 'Waiting for HQ 1', sent_back: 'Sent back 1', approved: 'Approved 1', declined: 'Declined 0' });
+  assert.deepEqual(statusChips(null), { sent: 'Waiting for HQ', sent_back: 'Sent back', approved: 'Approved', declined: 'Declined' }, 'no count while it reads, never 0');
+});
+
+test('D4873: the drawer shows the latest revision\'s full spec read-only, its history, and an earlier revision as it was sent, with no decision on it', async () => {
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({ user: SUPER, one: { 'pp-q1': { proposal: TWO } } }), { user: SUPER });
+  try {
+    assert.match(view.textOf('proposal-review-sent'), /^Revision 2 · submitted 4 Nov 2026, 10:12 UTC by Studio North · read-only$/);
+    assert.match(view.textOf('proposal-review-eligibility'), /Active founder licence\./);
+    assert.match(view.textOf('proposal-review-history'), /Revision 1 sent · sent back by HQ: “Add eligibility”.*Revision 2 sent · waiting for HQ/s);
+    assert.equal(view.textOf('proposal-review-decide'), 'Approve revision 2');
+    await view.click('proposal-review-revision-1');
+    assert.match(view.textOf('proposal-review-sent'), /^Revision 1 · submitted 12 Oct 2026/);
+    assert.match(view.textOf('proposal-review-purpose'), /^PurposeA monthly peer circle\.$/, 'revision 1 as it was sent, not the edit');
+    assert.ok(!view.has('proposal-review-decide'), 'an earlier revision is never decided');
+    assert.match(view.textOf('proposal-review-older'), /HQ decides the latest, revision 2/);
+  } finally { await view.close(); }
+});
+
+test('D4873: a revision whose fields were not recorded says so, never the proposal\'s current fields', async () => {
+  const lost = proposal({
+    uid: 'pp-q1', name: 'Clinic Track', status: 'sent_back', sent_at: '2026-09-30T10:00:00Z', revision: 1, purpose: 'Edited since.',
+    revisions: [{ revision: 1, sent_at: '2026-09-30T10:00:00Z', spec: null, spec_recorded: false, outcome: 'sent_back', hq_note: 'More.', decided_at: '2026-10-01T10:00:00Z' }],
+  });
+  const view = await mounted('/admin/programs/proposals/pp-q1', ReviewAt, worker({ user: SUPER, one: { 'pp-q1': { proposal: lost } } }), { user: SUPER });
+  try {
+    assert.match(view.textOf('proposal-review-unrecorded'), /Not recorded.*sent before revisions were kept, and edited since/s);
+    assert.ok(!view.has('proposal-review-spec'), 'the edit is not shown as what was sent');
+    assert.ok(!view.has('proposals-decide'), 'a sent-back proposal is not decided');
+  } finally { await view.close(); }
 });

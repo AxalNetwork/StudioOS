@@ -186,16 +186,11 @@ test('the rail docs no longer claim what the code disproves', () => {
   const assist = read('frontend/src/ui/AssistRail.jsx');
   assert.doesNotMatch(assist, /declares every surface `kind: 'fixed'`/,
     'AssistRail says every surface is fixed-mode; two declare a choice');
-  // A task-class count in prose is only true if it matches the router's union.
-  const router = read('cloudflare-worker/src/services/aiRouter.ts');
-  const union = router.slice(router.indexOf('export type TaskClass'));
-  const n = (union.slice(0, union.indexOf(';')).match(/\| '/g) || []).length;
-  assert.ok(n >= 20, `TaskClass union not parsed (${n})`);
-  const WORDS = { 23: 'twenty-three', 24: 'twenty-four', 25: 'twenty-five', 26: 'twenty-six', 27: 'twenty-seven', 29: 'twenty-nine', 30: 'thirty', 31: 'thirty-one', 32: 'thirty-two', 33: 'thirty-three', 34: 'thirty-four', 35: 'thirty-five', 36: 'thirty-six', 37: 'thirty-seven', 39: 'thirty-nine', 40: 'forty', 42: 'forty-two', 43: 'forty-three', 44: 'forty-four' };
-  assert.ok(WORDS[n], `the union has ${n} members; teach this test the word and update the prose`);
-  assert.match(assist, new RegExp(`${WORDS[n]} task classes`), 'AssistRail\'s task-class count is stale');
-  assert.match(read('cloudflare-worker/src/services/aiSpend.ts'), new RegExp(`${WORDS[n]} task classes`),
-    'aiSpend.ts\'s task-class count is stale');
+  // Task membership belongs to TaskClass; prose must not duplicate a changing total.
+  const countClaim = /\b(?:\d+|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-[a-z]+)?) (?:registered )?task classes\b/;
+  assert.doesNotMatch(assist, countClaim, 'AssistRail must not pin a task-class total');
+  assert.doesNotMatch(read('cloudflare-worker/src/services/aiSpend.ts'), countClaim,
+    'aiSpend must not pin a task-class total');
   const rail = read(RAIL);
   assert.doesNotMatch(rail, /returns totals, not the latest row/,
     'WorkerRail says the spend endpoint returns no latest row; it returns last_run');

@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { RailFrame, WorkerRail } from '../../ui';
+
+/**
+ * D4873 (#4873, part 2): a board's next steps for its rail (`ui/RailSteps.jsx`). The board's body knows them,
+ * from what it read; the frame holds them and hands them to the rail, so the frame stays the page's outermost
+ * element. `useBoardSteps()` returns the setter, a no-op outside a frame.
+ */
+const BoardSteps = createContext(() => {});
+export const useBoardSteps = () => useContext(BoardSteps);
 
 /**
  * D774 (#2100) — the rail on an Admin board that drew none.
@@ -22,13 +30,20 @@ import { RailFrame, WorkerRail } from '../../ui';
  * `workspace` is the board's name on the canvas (`lib/railOptions/admin.js`
  * lists them), and `note` is the board's own sentence under the switch.
  */
-export default function AdminBoardFrame({ workspace, note, children, 'data-testid': testId }) {
+/**
+ * D4814 part 5 (AP-19): `operations` gives the board the operations rail
+ * (D4860): collapsed to its spine on every visit, opened on purpose, pinnable,
+ * and never touching the shared collapse preference. Approvals passes it so
+ * the queue keeps the width.
+ */
+export default function AdminBoardFrame({ workspace, note, children, operations = false, 'data-testid': testId }) {
   const user = useAuth()?.user ?? null;
+  const [steps, setSteps] = useState(null);
   let rail = null;
   if (isSuperAdminUser(user)) {
-    rail = <WorkerRail workspace={workspace} note={note} role="super_admin" data-testid="hq-board-rail" />;
+    rail = <WorkerRail workspace={workspace} note={note} steps={steps} role="super_admin" operations={operations} data-testid="hq-board-rail" />;
   } else if (user?.role === 'admin') {
-    rail = <WorkerRail workspace={workspace} note={note} role="admin" data-testid="admin-board-rail" />;
+    rail = <WorkerRail workspace={workspace} note={note} steps={steps} role="admin" operations={operations} data-testid="admin-board-rail" />;
   }
-  return <RailFrame rail={rail} data-testid={testId}>{children}</RailFrame>;
+  return <RailFrame rail={rail} data-testid={testId}><BoardSteps.Provider value={setSteps}>{children}</BoardSteps.Provider></RailFrame>;
 }

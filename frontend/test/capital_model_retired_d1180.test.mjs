@@ -16,6 +16,7 @@ import UseOfFundsMovedRedirect from '../src/pages/raise/useoffunds/UseOfFundsMov
 import { FORWARD_REDIRECTS, REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
 import { FOUNDER_TOOLS } from '../src/pages/cycles/founderToolNavigation.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -32,18 +33,15 @@ test('the Capital workspace is gone: #3128 already forwarded Raise Pipeline, so 
   assert.equal(existsSync('frontend/src/pages/CapitalWorkspacePage.jsx'), false);
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /CapitalWorkspacePage/);
-  assert.equal(
-    app.split('\n').find((l) => l.includes('<Route path="/raise/capital/pipeline" element='))?.trim(),
-    '<Route path="/raise/capital/pipeline" element={<CapRelMovedRedirect tab="pipeline" moved="pipeline" />} />',
-  );
+  assert.equal(app.includes('<Route path="/raise/capital/pipeline"'), false, 'D2319 retires the alias');
 });
 
 test('?mode=workspace and the model\'s old addresses land on Forecast with the venture; the workspace mode counts itself', async () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\n\s*\? <UseOfFundsMovedRedirect count="\/raise\/capital\?mode=workspace" \/>\s*\n\s*: <FounderRaiseCapital \/>/);
   for (const p of ['/raise/capital/model', '/build/financials']) {
-    assert.ok(app.includes(`path="${p}" element={<UseOfFundsMovedRedirect />}`), p);
-    assert.ok(REDIRECT_ROUTES.some((r) => r.path === p), `${p} is no longer counted`);
+    assert.equal(app.includes(`path="${p}" element={<UseOfFundsMovedRedirect />}`), !isRetiredRedirect(`${p}`), p);
+    assert.equal(REDIRECT_ROUTES.some((r) => r.path === p), false, `${p} retired by D2319`);
   }
   assert.ok(FORWARD_REDIRECTS.some((r) => r.path === '/raise/capital?mode=workspace'));
   assert.equal(redirectPatternFor('/raise/capital', '?mode=workspace'), null, 'the address bar counts the Capital page as a redirect');

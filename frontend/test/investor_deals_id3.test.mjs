@@ -299,7 +299,7 @@ test('one helper owns the scoped read, and both callers go through it', () => {
   // And the gather refuses an unprivileged caller before it reads anything.
   const at = RESEARCH.indexOf("'deals/commit': {");
   const surface = RESEARCH.slice(at, RESEARCH.indexOf('\n  },', at));
-  assert.match(surface, /role !== 'admin' && role !== 'partner' && role !== 'investor'/,
+  assert.match(surface, /role !== 'admin' && !\(await heldLicences\(c\.env\.DB, \{ id: userId, role \}\)\)\.some\(licence => licence === 'partner' \|\| licence === 'investor'\)/,
     'the gather no longer refuses an unprivileged caller');
   const before = surface.indexOf("role !== 'admin'");
   assert.ok(before > 0 && before < surface.indexOf('scopedDecisions'),

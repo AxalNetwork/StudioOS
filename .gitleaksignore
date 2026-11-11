@@ -230,3 +230,62 @@ f9bac90fc12defb775b0759aaf8824dcdc470cac:cloudflare-worker/test/calendar_complia
 # it. Pin only the published findings, as D334's entry does.
 d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:143
 d6f46b997d07d2fbd18d64c190b29b2437dc3d71:cloudflare-worker/test/admin_deck_beta_4190.test.ts:generic-api-key:155
+# #3938 part 7 (D1478): `segment_hints_3938.test.ts` first set its in-memory test
+# JWT key to a synthetic phrase repeated three times; it signs only the test's
+# own tokens and was never a credential. The next commit replaces it with 48
+# x's (no entropy), so no later commit carries it. Pin only the published finding.
+07050caffc38bcb858fa119db6faf9276d1e04fe:cloudflare-worker/test/segment_hints_3938.test.ts:generic-api-key:30
+# D4292 (#4292): four findings, one per line, in commit 2691f4fecc. The
+# generic rule read the four milestone-bonus trigger names in the terms
+# editor's FIRING_TRIGGERS list as secrets. They are the same enum names as the
+# Worker's FIRING_RULES, not credentials, and there is nothing to rotate.
+# Scoped to the exact fingerprints so nothing else in that commit is hidden.
+# The fifth entry is this comment's first wording, in commit b3d19c7c66, which
+# quoted one of those names and was read the same way.
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:299
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:300
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:301
+2691f4fecc089d1e6766ab49b0a7eeea8364af46:frontend/src/pages/admin/programs/referralPartnersModel.js:generic-api-key:302
+b3d19c7c669f45d69fe79a4f690b1e4c5bded6a8:.gitleaksignore:generic-api-key:234
+# D4269 (#4269): line 41 of the teleprompter model named the browser localStorage
+# entry for the teleprompter's size and speed (pitch.teleprompter.v1), not a
+# credential; generic-api-key matched it on the `_KEY` name. The next commit
+# renames it `PREFS_STORE_NAME`, so no later commit carries the match. Scoped to
+# the one finding, as D334's entry is.
+a519fc5743a2b719b6f8f8f0ff709bbf25670bec:frontend/src/pages/raise/pitch/teleprompterModel.js:generic-api-key:41
+# #4046: the synthetic JWT signing seed in publish_ask_4046's first commit. It signs
+# test tokens for an in-memory database only, never a credential. The next commit uses the
+# shared 'test'.repeat(16) literal. Scoped to the one finding.
+a2a4570bbd160b4c77668945f50122dda4e8c9bc:cloudflare-worker/test/publish_ask_4046.test.ts:generic-api-key:35
+
+# D3678 (#3678) — one finding, not one commit. gitleaks' generic-api-key rule
+# flagged `RFC_KEY_B32` in cloudflare-worker/test/meet_bot_signin_3678.test.ts,
+# introduced in commit de797bc2c5. It is RFC 6238 Appendix B's own published
+# test seed ("12345678901234567890") written in base32: public, in the RFC,
+# and no account's key. Nothing to rotate. The test now writes the base32 at
+# run time, so no later commit carries the literal; this entry is scoped to
+# that exact fingerprint.
+de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_3678.test.ts:generic-api-key:28
+
+# D4681 (#4681) — two findings, not one commit. gitleaks' generic-api-key rule
+# read the test's stub assignment of its `lib/api` replacement in
+# frontend/test/expertise_workflows_4681.test.mjs (commit 2f1320f365) as a key
+# assignment. It is a variable name in a test that replaces `lib/api` with a
+# stub, not a credential; nothing to rotate. Commit 3515e5b6e2 rewrites it as
+# `const { api } = …`, so no later commit carries it. Scoped to the two
+# fingerprints, as D334's entry is.
+2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:94
+2f1320f36508c0b3676c75781bfee500a4845d62:frontend/test/expertise_workflows_4681.test.mjs:generic-api-key:127
+# The first copy of this entry, in commit 93be6c5e10, quoted that line, so its
+# comment can match the same rule (5160c63c's did, above). Listed so it cannot.
+93be6c5e10c1823bf247eda03d0c49d4106117e7:.gitleaksignore:generic-api-key:271
+# #4595 (#4720): generic-api-key reads deck-field fixtures (an object whose key
+# names a deck field, kind paragraph) in two test files as key/value secrets.
+# They are field names, never credentials; 2df5404eff reworded the fixtures, and
+# the three findings left in commit 92ce9678 are listed here, one per finding.
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_share_d902.test.ts:generic-api-key:284
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:28
+92ce9678147824a3125bcdaedd22a7e8d3d5880a:cloudflare-worker/test/deck_access_disclosure_4595.test.ts:generic-api-key:29
+# af4b56516d's first wording of this comment quoted that fixture and so matched
+# the same rule; its one finding is listed too.
+af4b56516d9a4bdbd3751b585de0c943cd275ab2:.gitleaksignore:generic-api-key:283

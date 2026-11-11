@@ -90,6 +90,8 @@ import { callList } from '../services/channels/callList';
 import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 import { assertStorageRoom } from '../services/storageRoom';
 
+import { parseOutputs, outputPreferences, preferenceStatement, quoteOutputs, outputStates, retryOutput, isCallOutput } from '../services/callOutputs';
+
 const sessions = new Hono<{ Bindings: Env }>();
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
@@ -128,6 +130,15 @@ async function scopeSession(c: any): Promise<{ user: User; session: SessionRow; 
   return { ...s, session };
 }
 
+/** D5353 — an inserted session is not usable until the atomic setup batch stamped it complete. */
+function incompleteSetup(session: SessionRow): Response | null {
+  return session.setup_complete_at ? null : json({
+    detail: 'setup_incomplete',
+    message: 'This session setup has not finished. Finish setup or delete it before recording.',
+    session_id: session.id,
+  }, 409);
+}
+
 const text = (v: unknown, max: number): string | null => {
   if (typeof v !== 'string') return null;
   const t = v.trim();
@@ -146,6 +157,30 @@ sessions.get('/sessions/models', async (c) => {
 // D685 §5.6 — the caller's own recordings in flight, for the pill and the
 // recovery on app load. Declared above `/sessions/:id` so "active" is never
 // read as an id. Filtered on the caller, not on a project scope.
+// D4412: per-member/project choices and a read-only price, before :id routes.
+sessions.get('/sessions/outputs', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const projectId = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return json({ detail: 'project_id_required' }, 400);
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?').bind(projectId).first<ProjectRef>();
+  if (!project || !canWrite(project, user)) return notFound('Project');
+  let selected;
+  try { selected = c.req.query('outputs') == null ? await outputPreferences(c.env, user.id, projectId) : parseOutputs(JSON.parse(c.req.query('outputs')!)); }
+  catch { return json({ detail: 'invalid_outputs' }, 400); }
+  if (!selected) return json({ detail: 'invalid_outputs' }, 400);
+  const minutes = Number(c.req.query('minutes') || 30);
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 180) return json({ detail: 'invalid_duration' }, 400);
+  return json({ outputs: selected, quote: await quoteOutputs(c.env, user.id, selected, minutes) });
+});
+sessions.post('/sessions/:id/outputs/:output/retry', async (c) => {
+  const s = await scopeSession(c); if (s instanceof Response) return s;
+  const output = c.req.param('output');
+  if (s.session.created_by_user_id !== s.user.id || s.session.consent_status !== 'given') return notFound('Session');
+  if (!isCallOutput(output)) return json({ detail: 'invalid_output' }, 400);
+  await retryOutput(c.env, s.session.id, output);
+  return json({ outputs: await outputStates(c.env, s.session) });
+});
+
 sessions.get('/sessions/active', async (c) => {
   const user = (await requireAuth(c)) as User;
   return json({ items: await activeSessionsOf(c.env, user.id) });
@@ -209,6 +244,7 @@ const botFailure = (e: unknown) => e instanceof BotError
 sessions.post('/sessions/:id/bot', async (c) => {
   const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
   if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  const unfinished = incompleteSetup(scoped.session); if (unfinished) return unfinished;
   const body = await c.req.json().catch(() => null);
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ code: 'invalid_body', message: 'Provide a meeting link.' }, 400);
   try { return json({ bot: await dispatchBot(c.env, scoped.user, scoped.session, body) }, 202); }
@@ -314,6 +350,7 @@ function planSession(body: any, legacy: boolean): OpenPlan | Response {
   const offered: readonly string[] = legacy ? CHANNELS : SETUP_CHANNELS;
   if (!offered.includes(channel)) return json({ detail: 'invalid_channel', accepted: offered }, 400);
   const audio = AUDIO_CHANNELS.has(channel);
+  if (body?.outputs !== undefined && (!audio || parseOutputs(body.outputs) === null)) return json({ detail: 'invalid_outputs' }, 400);
 
   if (body?.source != null && body.source !== UPLOAD_SOURCE) return json({ detail: 'invalid_source', accepted: [UPLOAD_SOURCE] }, 400);
   if (body?.source === UPLOAD_SOURCE) {
@@ -376,13 +413,27 @@ async function sessionBody(env: Env, session: SessionRow) {
 }
 
 /**
- * Insert the session for an interview, then its points and any pasted chat.
- *
- * `create` is the INSERT of a new interview (POST /sessions with no pick). It
- * runs in the same D1 batch as the session's INSERT, which takes the new
- * interview's id from `last_insert_rowid()`: one transaction, so when a second
- * Start racing past the replay check meets the client_key index, its interview
- * rolls back with it and a double click makes one interview (D685 §5.1.1).
+ * D4628 — a confirmed duplicate-key race: two Starts met the unique index on
+ * `(created_by_user_id, client_key)` (migration 452). Checked by column, not
+ * by "any exception", so a genuine failure after the insert (a later write
+ * that throws for its own reason) is never mistaken for the one case the
+ * acceptance criteria ask us to keep answering as a duplicate-start success.
+ */
+const CLIENT_KEY_RACE = /UNIQUE constraint failed:.*interview_sessions\.client_key/i;
+function isClientKeyRace(e: unknown): boolean {
+  return CLIENT_KEY_RACE.test(String((e as Error)?.message ?? e));
+}
+
+/**
+ * Insert the session for an interview. `create` is the INSERT of a new
+ * interview (POST /sessions with no pick); it runs in the same D1 batch as
+ * the session's INSERT, which takes the new interview's id from
+ * `last_insert_rowid()`: one transaction, so when a second Start racing past
+ * the replay check meets the client_key index, its interview rolls back with
+ * it (D685 §5.1.1). `setup_complete_at` is left NULL here on purpose — this
+ * is the one write every retry must find already done before it is safe to
+ * finish the rest (`finishSetup`, D4628, #4628): a row with this `client_key`
+ * now exists, but its setup is not yet the committed result.
  */
 async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
   create: D1PreparedStatement | null = null): Promise<SessionRow> {
@@ -403,33 +454,83 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
   ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, up ? 'stopped' : 'draft', plan.consent, plan.method || null, plan.consent,
     plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey,
     up ? UPLOAD_SOURCE : null, up ? up.durationMs : 0, up ? 1 : 0, up ? 1 : 0);
-  const ins = create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
-  const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
-  interview = { id: session.interview_id, project_id: interview.project_id };
+  const selection = body?.outputs === undefined ? [] : [env.DB.prepare('UPDATE interview_sessions SET outputs = ? WHERE uid = ?')
+    .bind(JSON.stringify(parseOutputs(body.outputs)), uid)];
+  const ins = selection.length ? (await env.DB.batch([...(create ? [create] : []), insert, ...selection]))[create ? 1 : 0]
+    : create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
+  return (await loadSession(env, Number(ins.meta?.last_row_id)))!;
+}
 
-  const stmts = [
-    ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
-    // The interview takes its channel from its first session (D685 §5.4).
-    env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),
-    ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
-    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
-      .bind('interview_session_created', JSON.stringify({
-        session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
-        // D872: the attestation, with its method; its time is the session's consent_at.
-        ...(up ? { source: UPLOAD_SOURCE, attested: plan.method } : {}),
-      }), `user:${user.id}`, user.id, interview.project_id),
-  ];
-  await env.DB.batch(stmts);
+/**
+ * D4628 (#4628) — the writes `openOn`'s insert does not cover: the output
+ * preference, the talking points, the interview's channel and quote consent,
+ * the audit row, and — for an upload or a pasted chat — the held-stage move
+ * and the content itself. The held-stage move and the pasted content run
+ * first, because each is already its own safe-to-repeat write
+ * (`markInterviewHeld` is best-effort and idempotent by design;
+ * `replaceWithFinal` replaces its segments in one batch, so a retry after a
+ * failed attempt lands the same content, never a second copy); everything
+ * else lands in ONE D1 batch, whose last statement stamps
+ * `setup_complete_at`. So this function either finishes a session in full or
+ * leaves it exactly as it was — a reader never sees a "finished" row that is
+ * missing a point, a preference or its submitted text, and a caller that
+ * sees this throw knows nothing from it landed, and can call it again with
+ * the same `plan`/`body` once the fault clears (that is what a resumed
+ * retry, or a losing racer's own replay, does).
+ */
+async function finishSetup(env: Env, user: User, session: SessionRow, plan: OpenPlan, body: any): Promise<SessionRow> {
+  const up = plan.upload;
   // An uploaded call has been held.
   if (up) await markInterviewHeld(env, session, user.id);
-
   if (plan.messages && plan.messages.length) {
     await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
     // A text session is held the moment its chat is in.
     await markInterviewHeld(env, session, user.id);
     // D765 (#2090), D720 §6: the chat is stored; Summarise and Structure are the founder's press.
   }
+  const interview = { id: session.interview_id, project_id: session.project_id };
+  const stmts = [
+    ...(body?.outputs === undefined ? [] : [preferenceStatement(env, user.id, interview.project_id, parseOutputs(body.outputs)!)]),
+    ...(await pointStatements(env, session.id, interview.project_id, body?.points)),
+    // The interview takes its channel from its first session (D685 §5.4).
+    env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),
+    ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
+    env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
+      .bind('interview_session_created', JSON.stringify({
+        session_uid: session.uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
+        // D872: the attestation, with its method; its time is the session's consent_at.
+        ...(up ? { source: UPLOAD_SOURCE, attested: plan.method } : {}),
+      }), `user:${user.id}`, user.id, interview.project_id),
+    // D4628 — the last statement: set only once everything above committed
+    // with it, so "exists" and "finished" are never the same question.
+    env.DB.prepare(`UPDATE interview_sessions SET setup_complete_at = datetime('now') WHERE id = ?`).bind(session.id),
+  ];
+  await env.DB.batch(stmts);
   return (await loadSession(env, session.id))!;
+}
+
+/**
+ * D4628 — a session already opened under this `client_key`. Complete, it is
+ * the replay's answer exactly as before (the committed result, not run
+ * again). Incomplete — the insert landed but `finishSetup` never committed —
+ * this request's own `plan`/`body` carries the same content a retry must,
+ * so finishing it now IS the resume the acceptance criteria ask for: never a
+ * silent "it worked" for writes that have not run. If finishing it still
+ * fails, the caller is told plainly that setup has not finished, instead of
+ * being handed a false success.
+ */
+async function resumeOrReplay(env: Env, user: User, existing: SessionRow, plan: OpenPlan, body: any): Promise<Response> {
+  if (existing.setup_complete_at) return json(await sessionBody(env, existing), 200);
+  try {
+    const finished = await finishSetup(env, user, existing, plan, body);
+    return json(await sessionBody(env, finished), 200);
+  } catch {
+    return json({
+      detail: 'setup_incomplete',
+      message: 'This session was opened but its setup has not finished. Retry the same request (the same client key) to complete it.',
+      session: existing,
+    }, 202);
+  }
 }
 
 /**
@@ -455,10 +556,24 @@ sessions.post('/interviews/:id/sessions', async (c) => {
   const plan = planSession(body, true);
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, s.user.id, plan.clientKey);
-  if (again) return json(await sessionBody(c.env, again), 200);
+  if (again) return resumeOrReplay(c.env, s.user, again, plan, body);
   const busy = await liveRefusal(c.env, s.user.id, plan);
   if (busy) return busy;
-  const session = await openOn(c.env, s.user, s.interview, plan, body);
+  let session: SessionRow;
+  try {
+    session = await openOn(c.env, s.user, s.interview, plan, body);
+  } catch (e) {
+    // D4628 — only a confirmed client_key race is swallowed as a duplicate
+    // Start; any other failure here stays visible (it throws, uncaught).
+    if (!isClientKeyRace(e)) throw e;
+    const raced = await replayed(c.env, s.user.id, plan.clientKey);
+    if (!raced) throw e;
+    return resumeOrReplay(c.env, s.user, raced, plan, body);
+  }
+  // D4628 — a failure here is NOT swallowed into a false "success": it
+  // throws, uncaught, and the row (already inserted, not yet finished) is
+  // resumed on the next request carrying this same client_key.
+  session = await finishSetup(c.env, s.user, session, plan, body);
   return json(await sessionBody(c.env, session), 201);
 });
 
@@ -479,7 +594,7 @@ sessions.post('/sessions', async (c) => {
   const plan = planSession(body, false);
   if (plan instanceof Response) return plan;
   const again = await replayed(c.env, user.id, plan.clientKey);
-  if (again) return json(await sessionBody(c.env, again), 200);
+  if (again) return resumeOrReplay(c.env, user, again, plan, body);
   // D685 §5.1.1 — one live session per member: the setup call refuses while
   // the caller is recording or paused, as Start does (audio only; see liveRefusal).
   const busy = await liveRefusal(c.env, user.id, plan);
@@ -522,12 +637,19 @@ sessions.post('/sessions', async (c) => {
   try {
     session = await openOn(c.env, user, interview, plan, body, create);
   } catch (e) {
-    // Two Start clicks racing past the replay check meet the unique index:
-    // the second answers the first's session.
+    // D4628 — two Start clicks racing past the replay check meet the unique
+    // index: the second answers the first's session. Any other failure here
+    // stays visible (it throws, uncaught) instead of being reported as a
+    // false success.
+    if (!isClientKeyRace(e)) throw e;
     const raced = await replayed(c.env, user.id, plan.clientKey);
-    if (raced) return json(await sessionBody(c.env, raced), 200);
-    throw e;
+    if (!raced) throw e;
+    return resumeOrReplay(c.env, user, raced, plan, body);
   }
+  // D4628 — a failure here is NOT swallowed into a false "success": it
+  // throws, uncaught, and the row (already inserted, not yet finished) is
+  // resumed on the next request carrying this same client_key.
+  session = await finishSetup(c.env, user, session, plan, body);
   return json(await sessionBody(c.env, session), 201);
 });
 
@@ -818,6 +940,7 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
   sessions.post(`/sessions/:id/${action}`, async (c) => {
     const s = await scopeSession(c);
     if (s instanceof Response) return s;
+    const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
     if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
     if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_control_required', message: 'Use the meeting bot controls for this session.' }, 409);
     // THE WORKER ENFORCES CONSENT. A page that hides the button is not the gate.
@@ -862,6 +985,7 @@ async function uploadChunkRefusal(env: Env, sessionId: number, seq: number, mime
 sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_upload_required', message: 'Bot audio uses its one-time upload permission.' }, 409);
@@ -995,6 +1119,7 @@ sessions.get('/sessions/:id/live', async (c) => {
 sessions.post('/sessions/:id/finish', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  const unfinished = incompleteSetup(s.session); if (unfinished) return unfinished;
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   const blocked = await consentRefusal(c.env, s.session);
   if (blocked) return blocked;

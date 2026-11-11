@@ -3,7 +3,7 @@
  * (migration 513): the licence year, issuing once per year, recording payment,
  * the PDF, who may do each, and the Administrator's read.
  *
- * On node:sqlite with the baseline's own DDL and migrations 260, 472 and 513
+ * On node:sqlite with the baseline's own DDL and migrations 260, 472, 513 and 202611090909
  * from their files. The bank account is written as the console writes it, with
  * a number drawn at run time, so no account number is in this file; the people
  * and the licensees are placeholders. The PDF renderer is stubbed. Each case
@@ -31,14 +31,17 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { NOTICE_TYPES, buildNoticeFigures, formatMoney, noticeSpecimen } from '../src/services/fundNotices.ts';
 import { AXAL_ENTITIES, AXAL_LEGAL_ADDRESS } from '../src/services/legalDocFormat.ts';
 import { DEFAULT_PAYMENT_TERMS_DAYS, addDays, licenceYear, paymentTermsDays } from '../src/services/licenceFeeInvoices.ts';
+import { licenceRevisionAlters } from './_licence_revisions.mjs';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'territory_licences', 'licence_admins']
   .map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql'].map(mig).join('\n')
+  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql', '202611090909_statement_actions.sql'].map(mig).join('\n')
   // D797's terms table; its branch-copy column is a branch table this test does not use.
-  + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '');
+  + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '')
+  // D4694 — the revision columns, read from their migration.
+  + '\n' + licenceRevisionAlters('territory_licences', 'licence_terms', 'licence_fee_invoices');
 const SECRET = ['d802', 'invoices', 'fixture', 'signing', 'secret'].join('-');
 
 const SUPER = 1, SUPER_PW = 2, ADMIN = 3, PRINCIPAL = 4, DELEGATE = 5, OTHER_PRINCIPAL = 6, MEMBER = 7;
@@ -205,22 +208,24 @@ test('HQ records the running total received, never above the amount; a full paym
   const f = await fixture();
   const inv = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.invoice;
   const path = `/admin/licences/lic_a/fee-invoices/${inv.uid}`;
-  const part = await f.call(SUPER, 'PATCH', path, { paid_cents: 400000, paid_note: 'Bank ref 1' });
+  // D4694 — every write names the revision it read.
+  const rev = () => Number(f.rows(`SELECT revision FROM licence_fee_invoices WHERE uid = '${inv.uid}'`)[0].revision);
+  const part = await f.call(SUPER, 'PATCH', path, { paid_cents: 400000, paid_note: 'Bank ref 1', expected_revision: rev() });
   assert.equal(part.status, 200, part.text);
   assert.deepEqual([part.body.invoice.status, part.body.invoice.paid_cents, part.body.invoice.outstanding_cents, part.body.invoice.paid_note],
     ['issued', 400000, 800000, 'Bank ref 1']);
   assert.ok(part.body.invoice.paid_at);
-  const over = await f.call(SUPER, 'PATCH', path, { paid_cents: 1200001 });
+  const over = await f.call(SUPER, 'PATCH', path, { paid_cents: 1200001, expected_revision: rev() });
   assert.deepEqual([over.status, over.body.error, over.body.field], [409, 'over_amount', 'paid_cents']);
-  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: -1 })).body.error, 'bad_amount');
-  assert.equal((await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'Issued in error to the wrong year' })).body.error, 'paid_not_void');
-  const full = await f.call(SUPER, 'PATCH', path, { paid_cents: 1200000 });
+  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: -1, expected_revision: rev() })).body.error, 'bad_amount');
+  assert.equal((await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'Issued in error to the wrong year', expected_revision: rev() })).body.error, 'paid_not_void');
+  const full = await f.call(SUPER, 'PATCH', path, { paid_cents: 1200000, expected_revision: rev() });
   assert.deepEqual([full.body.invoice.status, full.body.invoice.outstanding_cents], ['paid', 0]);
-  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: 0 })).body.invoice.status, 'issued', 'the status follows the total');
-  assert.equal((await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'short' })).body.error, 'void_note_required');
-  const v = await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'Issued in error to the wrong year' });
+  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: 0, expected_revision: rev() })).body.invoice.status, 'issued', 'the status follows the total');
+  assert.equal((await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'short', expected_revision: rev() })).body.error, 'void_note_required');
+  const v = await f.call(SUPER, 'PATCH', path, { status: 'void', void_note: 'Issued in error to the wrong year', expected_revision: rev() });
   assert.deepEqual([v.body.invoice.status, v.body.invoice.outstanding_cents, v.body.invoice.pdf_url], ['void', 0, null]);
-  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: 100 })).body.error, 'invoice_void');
+  assert.equal((await f.call(SUPER, 'PATCH', path, { paid_cents: 100, expected_revision: rev() })).body.error, 'invoice_void');
   assert.equal((await f.call(SUPER, 'GET', `${path}/pdf`)).status, 409, 'a void invoice is not printed');
   assert.equal((await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.error, 'invoice_exists', 'a void year still holds its period');
   const actions = f.rows("SELECT action FROM activity_logs WHERE action LIKE 'licence_fee_invoice_%' ORDER BY id").map((r) => r.action);
@@ -262,7 +267,7 @@ test('the Administrator reads only their own licence\'s invoices, without HQ\'s 
   const f = await fixture();
   const a = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.invoice;
   const b = (await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices')).body.invoice;
-  await f.call(SUPER, 'PATCH', `/admin/licences/lic_a/fee-invoices/${a.uid}`, { paid_cents: 100, paid_note: 'HQ-ONLY-NOTE' });
+  await f.call(SUPER, 'PATCH', `/admin/licences/lic_a/fee-invoices/${a.uid}`, { paid_cents: 100, paid_note: 'HQ-ONLY-NOTE', expected_revision: a.revision });
   for (const who of [PRINCIPAL, DELEGATE]) {
     const r = await f.call(who, 'GET', '/licence/mine/statements');
     assert.equal(r.status, 200, r.text);
@@ -376,4 +381,30 @@ test('an invoice is due after D797\'s payment terms, and a licence whose terms n
   const other = await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices');
   assert.deepEqual([other.status, other.body.error], [409, 'licensor_not_payee']);
   assert.equal(f.rows("SELECT uid FROM licence_fee_invoices WHERE licence_uid = 'lic_b'").length, 0);
+});
+
+// D5029 ───────────────────────────────────────────────────────────────────────
+test('D5029: the invoice paper prints the fee at the currency\'s own decimals, and a currency StudioOS cannot price in is refused at issue', async () => {
+  // Mutations checked: formatMinorMoney replaced by the two-decimal formatMoney (a yen fee printed as ¥12,000.00 and a
+  // dinar fee as KWD 1,200.000 read as 1.2 million); the currency check removed (an invoice drawn in "XYZ").
+  const f = await fixture();
+  f.db.prepare("UPDATE territory_licences SET currency = 'JPY', annual_fee_cents = 1200000 WHERE uid = 'lic_a'").run();
+  f.db.prepare("UPDATE territory_licences SET currency = 'KWD', annual_fee_cents = 12345 WHERE uid = 'lic_b'").run();
+  const yen = (await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices')).body.invoice;
+  assert.equal(yen.amount_cents, 1200000);
+  const yenFigures = JSON.parse(f.rows('SELECT figures_json FROM licence_fee_invoices WHERE uid = ?', yen.uid)[0].figures_json);
+  assert.ok(yenFigures.key_figures.some((k: any) => k.label === 'Amount due' && k.value === 'JPY 1,200,000'), JSON.stringify(yenFigures.key_figures));
+  const dinar = (await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices')).body.invoice;
+  const dinarFigures = JSON.parse(f.rows('SELECT figures_json FROM licence_fee_invoices WHERE uid = ?', dinar.uid)[0].figures_json);
+  assert.ok(dinarFigures.key_figures.some((k: any) => k.label === 'Amount due' && k.value === 'KWD 12.345'), JSON.stringify(dinarFigures.key_figures));
+
+  f.db.prepare("UPDATE territory_licences SET currency = 'XYZ' WHERE uid = 'lic_nostart'").run();
+  f.db.prepare("UPDATE territory_licences SET starts_on = '2021-01-01', currency = 'XYZ' WHERE uid = 'lic_nofee'").run();
+  f.db.prepare("UPDATE territory_licences SET annual_fee_cents = 500000 WHERE uid = 'lic_nofee'").run();
+  const before = f.rows('SELECT uid FROM licence_fee_invoices').length;
+  const refused = await f.call(SUPER, 'POST', '/admin/licences/lic_nofee/fee-invoices');
+  assert.equal(refused.status, 409, refused.text);
+  assert.equal(refused.body.error, 'currency_unknown');
+  assert.match(refused.text, /not one StudioOS can price in/);
+  assert.equal(f.rows('SELECT uid FROM licence_fee_invoices').length, before, 'no invoice was drawn in a guessed currency');
 });

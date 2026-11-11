@@ -36,6 +36,8 @@ const TC = '/api/admin/security/trust-center';
 
 const LINES = (o = {}) => ({ intro: 'Facts we can show.', groups: [{ title: 'Sign-in', lines: [{ text: 'Every admin signs in with TOTP.', recorded: true, why: null, checked_at: '2026-10-14' }, { text: 'Penetration test', recorded: false, why: 'None has been run yet.', checked_at: null }] }], ...o });
 const BLOCK = (key, label, o = {}) => ({ key, label, published: null, draft: null, ...o });
+/** D4675: the review token the Worker reads with the drafts; the dialog sends it back. */
+const REVIEW_TOKEN = 'ab'.repeat(32);
 const READ = (o = {}) => ({
   blocks: [
     BLOCK('glance', 'At a glance', { published: { body: LINES(), checked_at: '2026-10-14', published_at: '2026-10-14T09:00:00.000Z', updated_at: '2026-10-14 09:00:00' } }),
@@ -54,6 +56,7 @@ const READ = (o = {}) => ({
   reports: [],
   changes: { items: [{ uid: 'tcc_00000000000000000001', published_at: '2026-10-14T09:00:00.000Z', note: 'At a glance: the sign-in line restated.', blocks: [{ key: 'glance', label: 'At a glance' }], subprocessors: [] }], complete: true },
   subscribers: { confirmed: 3, pending: 1, unsubscribed: 0 },
+  pending_token: REVIEW_TOKEN,
   ...o,
 });
 
@@ -298,7 +301,14 @@ test('TRU14d: it names what changes; Publish is shut until the note is long enou
     assert.equal(writes(m.seen).length, 0);
     await m.type('trust-content-note', '  Security: the sign-in line restated.  ');
     await m.click('trust-content-publish-go');
-    assert.deepEqual(writes(m.seen), [{ method: 'POST', path: `${TC}/publish`, body: { note: 'Security: the sign-in line restated.' } }]);
+    const sent = writes(m.seen);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].method, 'POST');
+    assert.equal(sent[0].path, `${TC}/publish`);
+    assert.equal(sent[0].body.note, 'Security: the sign-in line restated.');
+    // D4675: what the dialog showed, and one key for this Publish.
+    assert.equal(sent[0].body.pending_token, REVIEW_TOKEN, 'Publish does not say what was reviewed');
+    assert.match(String(sent[0].body.publish_key), /^op_[0-9a-f]{32}$/, 'Publish carries no key of its own');
     assert.equal(m.has('trust-content-publish-dialog'), false);
     assert.match(m.of('trust-content-notice'), /Published\./);
   } finally { await m.unmount(); }

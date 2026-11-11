@@ -6,9 +6,11 @@
  * so a founder who switched company in the sidebar still saw every project
  * they owned — the switcher visibly did nothing on that surface.
  *
- * Only the founder branch narrows. The admin branch is an oversight view of
- * every project; the partner/investor branch is a marketplace of non-rejected
- * deals. Both are intentionally left whole.
+ * Only the founder's own ventures narrow by company. The admin branch is an
+ * oversight view of every project. D4676 (#4676) removed the third branch,
+ * which returned every project to any other account: the list is now the
+ * Pipeline read set (`services/pipelineAccess.ts`), pinned in
+ * `pipeline_access_d4676.test.ts`.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -127,7 +129,7 @@ test('founder sees only the active company\'s projects', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder', CO_A);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Gamma']); // CO_A + unassigned
 });
 
@@ -135,7 +137,7 @@ test('founder with no company selected sees all owned projects', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder');
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']);
 });
 
@@ -143,7 +145,7 @@ test('admin branch is not narrowed by company', async () => {
   const db = freshDb();
   const { status, body } = await call(db, ADMIN, 'admin', CO_A);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']);
 });
 
@@ -151,6 +153,6 @@ test('forged company id is ignored', async () => {
   const db = freshDb();
   const { status, body } = await call(db, FOUNDER.user, 'founder', 999);
   assert.equal(status, 200);
-  const names = body.map((r: any) => r.name).sort();
+  const names = body.items.map((r: any) => r.name).sort();
   assert.deepEqual(names, ['Alpha', 'Beta', 'Gamma']); // falls back to all owned
 });

@@ -27,6 +27,9 @@ import { mintDownloadToken } from '../signedDownload';
 import { customKpis, KPI_KEYS, KPI_LABEL, CUSTOM_PREFIX } from '../growKpis';
 import type { ActionResult, ModuleSpec, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row, Store } from './types';
 import { assertStorageRoom, noteStorageLanded } from '../storageRoom';
+import {
+  SYSTEM_ACTION_LABEL, SYSTEM_STATE_LABEL, SYSTEM_STATE_TONE, disconnectedReason, systemActionIntent, systemStateOf, type SystemState,
+} from '../systemsState';
 
 type Any = Record<string, any>;
 type Section = { rows: Row[]; empty?: string; action?: string };
@@ -300,10 +303,29 @@ async function setCheck(ctx: RecordContext, featureId: number, b: Body): Promise
   ]);
   return { ok: true };
 }
+/**
+ * #5067: past the picker's first `ROADMAP_DEPENDENCY_CHOICES` items, "Waits on"/"Blocks"
+ * take a typed number or exact title instead. Scoped to this project exactly
+ * as `addOkrDependency` scopes a picked id: a title from another venture, or
+ * one this project does not have, resolves to nothing and is refused there.
+ */
+async function resolveRoadmapRef(ctx: RecordContext, raw: unknown): Promise<number | null> {
+  const text = typeof raw === 'string' ? raw.trim() : raw != null ? String(raw) : '';
+  if (!text) return null;
+  if (/^[1-9][0-9]{0,9}$/.test(text)) return Number(text);
+  const match = await ctx.env.DB.prepare(
+    'SELECT id FROM roadmap_okrs WHERE project_id = ? AND lower(objective) = lower(?)',
+  ).bind(ctx.projectId, text).first<{ id: number }>();
+  return match ? Number(match.id) : null;
+}
+const filled = (v: unknown): v is string | number => v != null && v !== '';
 async function addDependency(ctx: RecordContext, itemId: number, b: Body): Promise<ActionResult> {
-  const waits = b.waits_on_id != null && b.waits_on_id !== '', blocks = b.blocks_id != null && b.blocks_id !== '';
+  const waitsRaw = filled(b.waits_on_id) ? b.waits_on_id : filled(b.waits_on_other) ? b.waits_on_other : null;
+  const blocksRaw = filled(b.blocks_id) ? b.blocks_id : filled(b.blocks_on_other) ? b.blocks_on_other : null;
+  const waits = waitsRaw != null, blocks = blocksRaw != null;
   if (waits === blocks) refuse(400, 'Choose one: Waits on or Blocks');
-  const other = idIn(waits ? b.waits_on_id : b.blocks_id, 'item')!;
+  const other = await resolveRoadmapRef(ctx, waits ? waitsRaw : blocksRaw);
+  if (other == null) refuse(400, 'That roadmap item was not found. Check the title or number and try again.');
   // Decision 4: "Waits on X" is an edge from X to this item, through the one edge write.
   const edge = await addOkrDependency(ctx.env, {
     projectId: ctx.projectId, okrId: waits ? other : itemId, blocksOkrId: waits ? itemId : other, note: null, userId: ctx.user.id,
@@ -610,6 +632,17 @@ function ledgerLabel(ref: string): string | null {
   return m ? `${m[1] === 'issue' ? 'issue' : 'pull request'} #${m[2]}` : null;
 }
 
+/**
+ * #4603 part 2b (D4603) names the roadmap record page's two list ceilings, at
+ * the values they have always had. Past either ceiling the page says how many
+ * remain (#5067): a trailing "View all feedback" row, and a typed title or
+ * number on the dependency picker.
+ */
+/** The newest feedback rows "Feedback it answers" lists. */
+export const ROADMAP_FEEDBACK_SHOWN = 20;
+/** The other roadmap items the Add a dependency picker offers, in board order. */
+export const ROADMAP_DEPENDENCY_CHOICES = 200;
+
 const prototypeMvp: ModuleSpec = {
   read: 'read', write: 'write', store: 'mvp_must_haves',
   // Decision 15: a feature and its must-have show one history.
@@ -618,9 +651,21 @@ const prototypeMvp: ModuleSpec = {
   async record(ctx, id): Promise<RecordContent> {
     const f = await featureRow(ctx, id);
     const state = known(MUST_KEY, f.delivery_status);
-    const done = await ctx.env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'",
-    ).bind(f.id, ctx.projectId).first<{ n: number }>();
+    // #5067: a measured zero (no session is done yet) stays 0, never collapsed
+    // into Not recorded; only a genuine read failure is Unreadable, and the two
+    // keep different reasons so they are never shown as the same state.
+    let testsRun: number | null;
+    let testsReason = 'No test session is done yet.';
+    try {
+      const done = await ctx.env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM mvp_test_sessions WHERE feature_id = ? AND project_id = ? AND status = 'done'",
+      ).bind(f.id, ctx.projectId).first<{ n: number }>();
+      const n = Number(done?.n);
+      testsRun = Number.isFinite(n) ? n : null;
+    } catch {
+      testsRun = null;
+      testsReason = 'Unreadable: the test session count could not be read.';
+    }
     const due = dateText(f.due_date);
     const sub = [f.hypothesis != null ? `Tests ${f.hypothesis}` : null, due ? `due ${due}` : null].filter(Boolean).join(' · ').replace(/^d/, 'D');
     return {
@@ -630,7 +675,7 @@ const prototypeMvp: ModuleSpec = {
         fact('Owner', f.owner, 'No owner recorded.'),
         fact('Due', due, 'No due date recorded.'),
         fact('Hypothesis', f.hypothesis, 'Not linked to a hypothesis.'),
-        fact('Tests run', Number(done?.n ?? 0) || null, 'No test session is done yet.'),
+        fact('Tests run', testsRun, testsReason),
       ],
       createdBy: f.created_by ?? null, createdAt: f.created_at ?? null,
     };
@@ -815,12 +860,26 @@ const productRoadmap: ModuleSpec = {
     } },
     { key: 'feedback', title: 'Feedback it answers', async read(ctx, id) {
       // The sender's name and date only: the email is never read.
-      const feedback = rowsOf(await ctx.env.DB.prepare(
-        `SELECT body, from_name, theme, created_at FROM product_feedback
-          WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
-      ).bind(ctx.projectId, String(numericId(id))).all<Any>());
-      return { rows: feedback.map(f => ({ a: `“${f.body}”`, b: [f.from_name || 'Unnamed', dateText(f.created_at)].filter(Boolean).join(' · '),
-        ...(f.theme ? { c: f.theme, tone: 'vio' } : {}) })), empty: 'No feedback answered by this item.' };
+      const ref = String(numericId(id));
+      const [feedbackRes, total] = await Promise.all([
+        ctx.env.DB.prepare(
+          `SELECT body, from_name, theme, created_at FROM product_feedback
+            WHERE project_id = ? AND roadmap_item_ref = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+        ).bind(ctx.projectId, ref, ROADMAP_FEEDBACK_SHOWN).all<Any>(),
+        ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM product_feedback WHERE project_id = ? AND roadmap_item_ref = ?')
+          .bind(ctx.projectId, ref).first<{ n: number }>(),
+      ]);
+      const feedback = rowsOf(feedbackRes);
+      const rows: Row[] = feedback.map(f => ({ a: `“${f.body}”`, b: [f.from_name || 'Unnamed', dateText(f.created_at)].filter(Boolean).join(' · '),
+        ...(f.theme ? { c: f.theme, tone: 'vio' } : {}) }));
+      // #5067: the LIMIT never drops a record silently. Past it, a trailing row
+      // says so and links to Grow's full, project-scoped feedback list.
+      const totalN = Number(total?.n ?? feedback.length);
+      if (totalN > feedback.length) {
+        rows.push({ a: 'View all feedback', b: `Showing the latest ${feedback.length} of ${totalN}`,
+          href: `/grow/product-improvement?project=${ctx.projectId}` });
+      }
+      return { rows, empty: 'No feedback answered by this item.' };
     } },
     { key: 'github', title: 'GitHub', side: true, async read(ctx, id) {
       const issue = await ctx.env.DB.prepare(
@@ -857,14 +916,24 @@ const productRoadmap: ModuleSpec = {
       'SELECT objective, kanban_status, kpi_key, feedback_theme, owner_user_id, target_date, feature_id FROM roadmap_okrs WHERE id = ? AND project_id = ?',
     ).bind(itemId, ctx.projectId).first<Any>();
     if (!o) throw new Error('Build roadmap item vanished after its ownership check');
-    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT 200')
-      .bind(ctx.projectId, itemId).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
+    const others = rowsOf(await ctx.env.DB.prepare('SELECT id, objective FROM roadmap_okrs WHERE project_id = ? AND id <> ? ORDER BY sort_order, id LIMIT ?')
+      .bind(ctx.projectId, itemId, ROADMAP_DEPENDENCY_CHOICES).all<Any>()).map(x => ({ value: String(x.id), label: x.objective }));
+    // #5067: the picker never silently drops an item past ROADMAP_DEPENDENCY_CHOICES. Past
+    // it, Waits on/Blocks each gain a typed fallback (decision 14), resolved by
+    // `addDependency` the same project-scoped way as a picked id.
+    const othersTotal = others.length < ROADMAP_DEPENDENCY_CHOICES ? others.length : Number(
+      (await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM roadmap_okrs WHERE project_id = ? AND id <> ?')
+        .bind(ctx.projectId, itemId).first<{ n: number }>())?.n ?? others.length);
+    const more = othersTotal > others.length;
     const actions: RecordAction[] = [];
     if (others.length) {
+      const note = more ? `Showing the first ${others.length} of ${othersTotal}. Not listed? Type its exact title or number below.` : undefined;
       actions.push({ key: 'add-dependency', label: 'Add', kind: 'form',
         form: { title: 'Add a dependency', cta: 'Add', sub: 'Choose one: an item this waits on, or one it blocks.', fields: [
-          { key: 'waits_on_id', label: 'Waits on', kind: 'CH', options: others },
-          { key: 'blocks_id', label: 'Blocks', kind: 'CH', options: others },
+          { key: 'waits_on_id', label: 'Waits on', kind: 'CH', options: others, note },
+          ...(more ? [{ key: 'waits_on_other', label: 'Waits on (not listed above)', kind: 'T' as const, placeholder: 'Exact title or item number' }] : []),
+          { key: 'blocks_id', label: 'Blocks', kind: 'CH', options: others, note },
+          ...(more ? [{ key: 'blocks_on_other', label: 'Blocks (not listed above)', kind: 'T' as const, placeholder: 'Exact title or item number' }] : []),
         ] },
         references: body => references(body, [['waits_on_id', 'roadmap_okrs'], ['blocks_id', 'roadmap_okrs']]),
         execute: (c, _id, body) => addDependency(c, itemId, jsonOf(body)) });
@@ -1022,7 +1091,7 @@ const foundingTeam: ModuleSpec = {
     ).bind(ctx.projectId, holderId).first<Any>();
     if (!h) throw new Error('Build founder vanished after its ownership check');
     return [
-      { key: 'edit-split', label: 'Edit split', kind: 'link', href: '/raise/cap-table' },
+      { key: 'edit-split', label: 'Edit split', kind: 'link', href: `/raise/cap-table?project_id=${ctx.projectId}` },
       { key: 'log-contribution', label: 'Log', kind: 'form',
         form: { title: 'Log a contribution', cta: 'Log', fields: [
           { key: 'text', label: 'Contribution', kind: 'T', required: true },
@@ -1127,7 +1196,15 @@ const companyCreation: ModuleSpec = {
       : due && days != null
         ? `Due ${due} · ${days < 0 ? `${plural(-days, 'day')} overdue` : days === 0 ? 'due today' : `${plural(days, 'day')} left`}`
         : 'No due date recorded';
-    const proof = typeof f.proofKey === 'string' && f.proofKey ? (proofStored(f.proofKey) ? 'Stored' : 'Key recorded') : null;
+    // D5066 (#5066): four explicit proof states, matching the list's own
+    // (cycle_build.ts's `proofText`) — never a null value with a generic
+    // reason for "not due yet" or "no proof on record" (that hid which one
+    // applied). Only a lab- row keeps null: the Lab's own order is this
+    // filing's record, not an uploadable proof, so its reason still explains
+    // that rather than claiming a state that does not apply to it.
+    const proof = f.source === 'lab' ? null
+      : typeof f.proofKey === 'string' && f.proofKey ? (proofStored(f.proofKey) ? 'Stored' : 'Unreadable')
+      : state === 'upcoming' ? 'Not expected yet' : 'Missing';
     return {
       title: f.title, sub,
       pills: [{ text: filingLabel(f, state), tone: FILING_TONE[state] }],
@@ -1135,7 +1212,7 @@ const companyCreation: ModuleSpec = {
         fact('Filing', known(FILING_KIND, f.kind) ?? f.title, 'No filing kind recorded.'),
         fact('Jurisdiction', f.jurisdiction, 'No jurisdiction recorded.'),
         fact('Due', due, 'No due date recorded.'),
-        fact('Proof', proof, f.source === 'lab' && f.done ? 'The Lab keeps this filing’s record.' : 'Not filed yet'),
+        fact('Proof', proof, 'The Lab keeps this filing’s record.'),
       ],
       createdBy: f.createdBy ?? null, createdAt: f.createdAt ?? null,
     };
@@ -1162,7 +1239,7 @@ const companyCreation: ModuleSpec = {
       const f = await filingOf(ctx, id);
       const rows: Row[] = [];
       // Decision 9: a Lab row is read-only; its link is a row, not an action.
-      if (f.source === 'lab') rows.push({ a: 'Incorporation', b: 'Open in the Legal engine', href: '/raise/legal-engine/incorporation' });
+      if (f.source === 'lab') rows.push({ a: 'Incorporation', b: 'Open in the Legal engine', href: `/raise/legal-engine/incorporation?project_id=${ctx.projectId}` });
       if (f.forHolderId != null) {
         const holder = await ctx.env.DB.prepare(
           'SELECT id, name FROM cap_table_holders WHERE id = ? AND project_id = ? AND founder_role IS NOT NULL',
@@ -1266,7 +1343,7 @@ async function systemOf(ctx: RecordContext, id: string): Promise<System> {
   if (companyId == null) return base;
   const row = await ctx.env.DB.prepare(
     `SELECT s.feeds_json, s.provider_key AS workspace_provider, s.updated_by,
-            i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.created_at, i.config_json, i.scopes_json
+            i.id, i.user_id, i.provider_key, i.display_name, i.status, i.last_synced_at, i.last_error_at, i.created_at, i.config_json, i.scopes_json
        FROM project_core_systems s
        LEFT JOIN integrations i ON i.id = s.integration_id AND EXISTS (
          SELECT 1 FROM integration_companies ic JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id
@@ -1292,12 +1369,38 @@ async function systemOf(ctx: RecordContext, id: string): Promise<System> {
   base.connection = row;
   return base;
 }
-function systemState(s: System): 'connected' | 'failing' | 'not_connected' {
-  return !s.connection ? 'not_connected' : s.connection.status === 'error' ? 'failing' : s.connection.status === 'active' ? 'connected' : 'not_connected';
+// D5065: the one derivation lives in services/systemsState.ts, so the row,
+// the tiles, this record, its subtitle and its actions cannot disagree.
+const systemState = (s: System): SystemState => systemStateOf(s.connection, s.connection?.status);
+/**
+ * D5065: a workspace connection is a personal OAuth token, not a synced
+ * connector. It records no sync time, has no sync frequency and keeps no
+ * sync log, so each says so in those words instead of "no connection row",
+ * which read as though the workspace were broken.
+ */
+const WORKSPACE_SYNC = 'Not applicable: a workspace connection records no sync time.';
+const WORKSPACE_FREQUENCY = 'Not applicable: a workspace connection has no sync frequency.';
+const WORKSPACE_LOG = 'Not applicable: a workspace connection keeps no sync log.';
+
+/**
+ * D5065: the subtitle is derived from the same state as the pill, never from
+ * the mere existence of a connection row. A system that is not connected is
+ * never described as connected, whatever its stored status.
+ */
+function systemSub(s: System, state: SystemState): string {
+  const c = s.connection;
+  if (state === 'not_connected') return 'Not connected yet';
+  const sync = dateText(c?.last_synced_at) ? `last good sync ${dateText(c?.last_synced_at)}` : 'no sync recorded';
+  if (s.workspace) return 'Connected · sync and sync log not applicable';
+  if (state === 'connected') {
+    return [dateText(c?.created_at) ? `Connected ${dateText(c?.created_at)}` : 'Connected', sync].join(' · ');
+  }
+  if (state === 'failing') {
+    const since = dateText(c?.last_error_at);
+    return [since ? `Failing since ${since}` : 'Failing', sync].join(' · ');
+  }
+  return [`Reconnect required · ${disconnectedReason(c?.status)}`, sync].join(' · ');
 }
-const STATE_LABEL = { connected: 'Connected', failing: 'Failing', not_connected: 'Not connected' } as const;
-const STATE_TONE = { connected: 'ok', failing: 'bad', not_connected: 'grey' } as const;
-const NO_ROW = 'Workspace has no connection row.';
 
 const operatingSystems: ModuleSpec = {
   read: 'read', write: 'write', store: 'build_systems',
@@ -1306,18 +1409,14 @@ const operatingSystems: ModuleSpec = {
     const s = await systemOf(ctx, id);
     const state = systemState(s);
     const c = s.connection;
-    const sub = !c ? 'Not connected yet'
-      : s.workspace ? 'Connected · sync not recorded'
-        : [dateText(c.created_at) ? `Connected ${dateText(c.created_at)}` : 'Connected',
-          dateText(c.last_synced_at) ? `last good sync ${dateText(c.last_synced_at)}` : 'no sync recorded'].join(' · ');
     return {
-      title: `${SYSTEM_LABEL[s.kind]} · ${s.provider ?? 'Not connected'}`, sub,
-      pills: [{ text: STATE_LABEL[state], tone: STATE_TONE[state] }],
+      title: `${SYSTEM_LABEL[s.kind]} · ${s.provider ?? 'Not connected'}`, sub: systemSub(s, state),
+      pills: [{ text: SYSTEM_STATE_LABEL[state], tone: SYSTEM_STATE_TONE[state] }],
       facts: [
-        fact('State', STATE_LABEL[state], ''),
-        s.workspace ? fact('Last sync', null, NO_ROW) : fact('Last sync', stampText(c?.last_synced_at), c ? 'No sync recorded.' : 'Not connected yet.'),
+        fact('State', SYSTEM_STATE_LABEL[state], ''),
+        s.workspace ? fact('Last sync', null, WORKSPACE_SYNC) : fact('Last sync', stampText(c?.last_synced_at), c ? 'No sync recorded.' : 'Not connected yet.'),
         // Decision 5: the mapped connection's sync_frequency, live when unset.
-        s.workspace ? fact('Sync', null, NO_ROW) : fact('Sync', c ? SYNC_LABEL[syncOf(c.config_json)] : null, 'Not connected yet.'),
+        s.workspace ? fact('Sync', null, WORKSPACE_FREQUENCY) : fact('Sync', c ? SYNC_LABEL[syncOf(c.config_json)] : null, 'Not connected yet.'),
         fact('Feeds', s.feeds.map(key => FEEDS_LABEL[key]).join(' · '), 'No feeds recorded.'),
       ],
     };
@@ -1325,7 +1424,7 @@ const operatingSystems: ModuleSpec = {
   sections: [
     { key: 'sync_log', title: 'Sync log', gate: 'write', async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.workspace) return notRecorded(NO_ROW);
+      if (s.workspace) return notRecorded(WORKSPACE_LOG);
       if (!s.connection) return notRecorded('Not connected yet.');
       // Decision 11: date, event type and status only; never a summary or payload.
       const logs = rowsOf(await ctx.env.DB.prepare(
@@ -1339,7 +1438,7 @@ const operatingSystems: ModuleSpec = {
     } },
     { key: 'permissions', title: 'Permissions', gate: 'write', async read(ctx, id) {
       const s = await systemOf(ctx, id);
-      if (s.workspace) return notRecorded(NO_ROW);
+      if (s.workspace) return notRecorded('Not applicable: a workspace connection grants no connector scopes.');
       if (!s.connection) return notRecorded('Not connected yet.');
       const lines = CONNECTOR_METADATA[s.providerKey!]?.permissions ?? [];
       const requested = getDescriptor(s.providerKey!)?.oauth_scopes ?? [];
@@ -1368,18 +1467,25 @@ const operatingSystems: ModuleSpec = {
     } },
   ],
   async actions(ctx, id): Promise<RecordAction[]> {
-    // Decision 10: Reconnect links to the tool's Connect a tool, else Connect a tool for the venture.
+    // Decision 10: the link goes to the tool's Connect a tool, else Connect a
+    // tool for the venture. D5065: which action is primary follows the state —
+    // a healthy system is managed, not repaired, and a kind that maps no
+    // connection chooses one rather than being told to reconnect.
     const s = await systemOf(ctx, id);
+    const state = systemState(s);
     const href = s.providerKey && /^[a-z0-9_]{1,80}$/.test(s.providerKey)
       ? connectHref(s.providerKey, ctx.projectId) : `/build/connect?project_id=${ctx.projectId}`;
-    const actions: RecordAction[] = [{ key: 'reconnect', label: 'Reconnect', kind: 'link', tone: 'primary', href }];
+    const intent = systemActionIntent(state, !!s.providerKey);
+    const actions: RecordAction[] = intent === 'choose' ? []
+      : [{ key: intent === 'manage' ? 'manage' : intent === 'connect' ? 'connect' : 'reconnect',
+        label: SYSTEM_ACTION_LABEL[intent], kind: 'link', tone: 'primary', href }];
     const stored = await storedSystem(ctx, id);
     const editable = syncEditable(id, stored, ctx.user.id);
     const project = await writeProject(ctx.env, ctx.projectId);
     const choices = project?.company_id == null ? [] : (await systemChoices(ctx.env, project, ctx.user)).find(k => k.kind === id)?.choices ?? [];
     // Decision 13: Choose connector starts empty, meaning keep the current one,
     // so an Edit sent back unchanged never re-maps or names another member's connection.
-    actions.push({ key: 'edit', label: 'Choose connector', kind: 'form',
+    actions.push({ key: 'edit', label: 'Choose connector', kind: 'form', ...(intent === 'choose' ? { tone: 'primary' as const } : {}),
       form: { title: `Choose your ${SYSTEM_LABEL[s.kind]}`, cta: 'Save', fields: [
         { key: 'connector', label: 'Connector', kind: 'CH', value: '',
           options: choices.map(ch => ch.uid ? { value: `uid:${ch.uid}`, label: ch.display_name } : { value: `provider:${ch.provider_key}`, label: ch.display_name }) },

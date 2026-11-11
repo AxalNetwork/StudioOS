@@ -32,4 +32,6 @@ export const publishApi = {
   draftFromUpdate: (updateUid, body = {}) => post(`/portfolio-updates/${enc(updateUid)}/publish-draft`, body),
   // D1322 (#3483): Use this draft — Eadwyn's `draft:publish` proposal becomes a draft; it never sends.
   draftFromProposal: (proposalUid) => post(`/publish/drafts/from-proposal/${enc(proposalUid)}`),
+  // #4046: Ask on the post text: `estimate: true` quotes; otherwise Eadwyn's text for the ticked places. It writes nothing.
+  ask: (body) => post('/publish/ask', body),
 };

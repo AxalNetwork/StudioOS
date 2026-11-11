@@ -117,7 +117,8 @@ test('an unknown key is refused; the deck keys are the ones a route reads, and o
   // Mutation checked: a deck key with no reader added to DECK_FEATURES → the guard fails.
   const f = fixture();
   try {
-    for (const key of ['deck:compare', 'deck:walkthrough', 'deck:stock_photos', 'deck:anything', 'deck:']) {
+    // D1590 (#3837): deck:walkthrough has its reader now (routes/deck_recordings.ts), so it left this list.
+    for (const key of ['deck:compare', 'deck:stock_photos', 'deck:anything', 'deck:']) {
       const r = await PUT(f, { key, scope: 'global', enabled: false, reason: REASON });
       assert.deepEqual([r.status, r.body.error], [400, 'invalid_key'], key);
     }

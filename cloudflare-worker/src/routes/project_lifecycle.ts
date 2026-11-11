@@ -1,3 +1,4 @@
+import { heldLicences } from '../services/accountLicences';
 /**
  * D1137 (#3017, part 3 of #2422) — a venture's company and its owner: the
  * "assignment UI" `services/tenancyScope.ts` waits for. Mounted at
@@ -30,6 +31,7 @@ import { afterMove, sponsorsLeft } from '../services/agents/transfer';
 import { ownerUserId, projectMoveStatements } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
 import { refuse } from '../util/refusal';
+import { archivedById, archivedRefusal, isArchived } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -67,8 +69,10 @@ r.post('/:id/move', async (c) => {
     const company = await c.env.DB.prepare('SELECT id, archived_at FROM company_profiles WHERE id = ?').bind(to).first<{ id: number; archived_at: string | null }>();
     // A company the owner does not belong to reads as not found, so the route confirms no company it does not name.
     if (!company || !(await belongs(c.env, owner, to))) return c.json({ detail: 'The venture\'s owner does not belong to that company', code: 'not_owner_company' }, 404);
-    if (company.archived_at) return c.json({ detail: 'That company is archived. Restore it before you move a venture to it.', code: 'archived' }, 409);
+    if (isArchived(company)) return archivedRefusal(c); // #4963: the shared archived rule
   }
+  // #4963: a venture leaves an archived company only once the company is restored, as every write to it waits.
+  if (from !== null && (await archivedById(c.env, from))) return archivedRefusal(c);
   // D1415: a project slug is unique within its scope. A move into a scope that
   // already holds it (current or retired) is refused, changing nothing; else
   // the old address is retired in the same batch, so it still resolves.
@@ -138,7 +142,7 @@ r.post('/:id/transfer', async (c) => {
       WHERE pm.project_id = ? AND pm.user_id = ? AND pm.status = 'accepted'`,
   ).bind(g.project.id, targetId).first<{ role: string; account_role: string; founder_id: number | null; is_active: number }>();
   if (!seat || seat.role !== 'cofounder') return c.json({ detail: 'The owner seat goes to a co-founder of this venture', code: 'not_cofounder' }, 404);
-  if (seat.account_role !== 'founder' || seat.founder_id == null || !Number(seat.is_active)) {
+  if (!(await heldLicences(c.env.DB, { id: targetId, role: seat.account_role })).includes('founder') || seat.founder_id == null || !Number(seat.is_active)) {
     return c.json({ detail: 'That co-founder has no founder account to own the venture', code: 'no_founder_account' }, 409);
   }
   if (Number(seat.founder_id) === Number(g.project.founder_id)) return c.json({ detail: 'That person already owns the venture', code: 'unchanged' }, 409);

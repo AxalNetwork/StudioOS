@@ -112,25 +112,16 @@ export const ORIGINATOR_TEMPLATES: Record<string, ReadonlyArray<OriginatorTempla
  * for them, and every entry here is one the admin wizard already offers.
  * Deduped by doc_type, since the NDAs are deliberately shared across roles.
  */
-export function templatesFor(role: string | null | undefined): OriginatorTemplate[] {
-  if (role === 'admin') {
-    const seen = new Set<string>();
-    const out: OriginatorTemplate[] = [];
-    for (const list of Object.values(ORIGINATOR_TEMPLATES)) {
-      for (const t of list) {
-        if (seen.has(t.doc_type)) continue;
-        seen.add(t.doc_type);
-        out.push(t);
-      }
-    }
-    return out;
-  }
-  return [...(ORIGINATOR_TEMPLATES[String(role || '')] ?? [])];
+export function templatesFor(role: string | null | undefined, licences: readonly string[] = []): OriginatorTemplate[] {
+  const keys = role === 'admin' ? Object.keys(ORIGINATOR_TEMPLATES) : [String(role || ''), ...licences];
+  const seen = new Set<string>();
+  return keys.flatMap(key => ORIGINATOR_TEMPLATES[key] || []).filter(template =>
+    seen.has(template.doc_type) ? false : (seen.add(template.doc_type), true));
 }
 
 /** True when `role` may originate `docType`. The send route enforces this. */
-export function mayOriginate(role: string | null | undefined, docType: string): boolean {
-  return templatesFor(role).some((t) => t.doc_type === docType);
+export function mayOriginate(role: string | null | undefined, docType: string, licences: readonly string[] = []): boolean {
+  return templatesFor(role, licences).some((t) => t.doc_type === docType);
 }
 
 /**
@@ -204,12 +195,11 @@ export const NOT_OFFERED: Record<string, ReadonlyArray<NotOfferedTemplate>> = {
 };
 
 /** Same shape as `templatesFor`: an admin sees the union, deduped by name. */
-export function notOfferedFor(role: string | null | undefined): NotOfferedTemplate[] {
-  if (role === 'admin') {
-    const seen = new Set<string>();
-    return Object.values(NOT_OFFERED).flat().filter((t) => (seen.has(t.name) ? false : (seen.add(t.name), true)));
-  }
-  return [...(NOT_OFFERED[String(role || '')] ?? [])];
+export function notOfferedFor(role: string | null | undefined, licences: readonly string[] = []): NotOfferedTemplate[] {
+  const keys = role === 'admin' ? Object.keys(NOT_OFFERED) : [String(role || ''), ...licences];
+  const seen = new Set<string>();
+  return keys.flatMap(key => NOT_OFFERED[key] || []).filter(template =>
+    seen.has(template.name) ? false : (seen.add(template.name), true));
 }
 
 /**

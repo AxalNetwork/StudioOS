@@ -44,6 +44,8 @@ export const BUILD_LINKS = [
   { label: 'Intelligence', to: '/intelligence' },
   { label: 'Methodology', to: '/methodology' },
   { label: 'Administrators', to: '/administrators' },
+  // D4297 (#4297): the Influencer program's public page.
+  { label: 'Influencers', to: '/influencers' },
 ];
 
 /**

@@ -1,0 +1,34 @@
+{
+  "skill": "privacy-data-protection-assessment",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "company.profile": {
+        "synthetic_fixture": true,
+        "skill_name": "Data Protection and Privacy Assessment",
+        "task_scope": "Maps privacy obligations and control evidence for defined processing activities, beyond a technical data inventory.",
+        "evidence": [
+          "processing purpose and lawful basis"
+        ],
+        "omitted_field": "international transfer mechanism"
+      },
+      "compliance.calendar": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for processing purpose and lawful basis."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "processing purpose and lawful basis"
+    ],
+    "must_say_not_recorded": [
+      "international transfer mechanism"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

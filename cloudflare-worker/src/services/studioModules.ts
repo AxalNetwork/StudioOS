@@ -1,3 +1,4 @@
+import { holdsLicence, isLicence } from './accountLicences';
 /**
  * D1421 (#3699): the one registry of Studio blocks, its default layouts, and
  * the plan locks derived from the existing paywalls.
@@ -141,7 +142,8 @@ export const STUDIO_MODULES: readonly StudioModule[] = [
   { key: 'usage_quota', profile: 'investor', title: 'Usage & quota', group: 'investor', purpose: 'Your plan’s limits, and what you used.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
   { key: 'deal_lifecycle', profile: 'investor', title: 'Deal lifecycle', group: 'investor', purpose: 'Deals by stage. Read-only here.', href: null, reads: ['/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   // The canvas draws this locked to Investor Pro; `/api/dashboard` is not behind a paywall, so it is not locked (D1418).
-  { key: 'scored_opportunities', profile: 'investor', title: 'AI-scored opportunities', group: 'investor', purpose: 'Ventures that match your thesis, scored.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
+  // D4623: its scores are the retired matching engine's (D378), historical and never recalculated; the title says so.
+  { key: 'scored_opportunities', profile: 'investor', title: 'Historical match scores', group: 'investor', purpose: 'Historical scores from the retired matching engine, as recorded.', href: null, reads: ['/api/dashboard'], default_size: '1/2' },
   { key: 'quick_stats', profile: 'investor', title: 'Quick stats', group: 'investor', purpose: 'Your flow, watchlist and commitments.', href: null, reads: ['/api/dashboard', '/api/dashboard/investor-lifecycle'], default_size: '1/2' },
   { key: 'portfolio_glance', profile: 'investor', title: 'Portfolio glance', group: 'investor', purpose: 'Companies, invested and returns.', href: null, reads: ['/api/positions/analytics'], default_size: '1/2' },
   { key: 'upcoming_events', profile: 'investor', title: 'Upcoming events', group: 'investor', purpose: 'Events you are going to.', href: null, reads: ['/api/calendar/events'], default_size: '1/2' },
@@ -199,13 +201,13 @@ export const STUDIO_DEFAULTS: Record<StudioProfile, ReadonlyArray<{ key: string;
 
 /**
  * This profile's catalogue for this member. A Grow module is offered only to
- * a member whose own role is founder, or an admin previewing the founder
+ * a member holding Founder, or an admin previewing the founder
  * Studio: a Spin-Out Lab member's founder Studio leaves Grow out, since
  * `/grow/:slug` does not admit them.
  */
 export function catalogueOf(profile: StudioProfile, user: Pick<User, 'role'>): StudioModule[] {
   const role = String(user.role);
-  const founderRole = role === 'founder' || role === 'admin';
+  const founderRole = holdsLicence(user, 'founder') || role === 'admin';
   return STUDIO_MODULES.filter((m) => m.profile === profile && (!m.founder_role_only || founderRole));
 }
 
@@ -243,6 +245,8 @@ export function studioProfile(user: Pick<User, 'role' | 'spinout_lab_active'>, a
       return { refusal: { status: 400, code: 'invalid_profile', message: 'Choose which Studio to arrange: founder, investor, advisor or partner.' } };
     return { profile: asked as StudioProfile };
   }
+  // A requested held licence's layout is not a session/profile switch.
+  if (asked && isLicence(asked) && holdsLicence(user, asked)) return { profile: asked as StudioProfile };
   const own: StudioProfile | null = (STUDIO_PROFILES as readonly string[]).includes(role) ? role as StudioProfile
     : user.spinout_lab_active === 1 ? 'founder' : null;
   if (!own) return { refusal: { status: 403, code: 'no_studio_profile', message: 'Your account has no Studio to arrange yet.' } };

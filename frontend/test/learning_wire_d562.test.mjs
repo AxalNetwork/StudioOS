@@ -189,7 +189,7 @@ test('the reads and writes call the routes D557 mounted, in the shapes those rou
   assert.match(lessonSelect, /i\.duration_seconds/);
   const admin = read('cloudflare-worker/src/routes/admin_learning.ts');
   // D4179 (#4179): the items reply keeps its `items` key; an uploaded item adds its `stream_copy`.
-  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "c.json({ item: await c.env.DB.prepare(ITEM_SELECT"]) {
+  for (const reply of ["return c.json({ items: items.map((i: any) => (i.video_source === 'r2' ? { ...i, stream_copy: ", "return c.json({ courses: (res.results || []).map", "c.json({ course: await courseTree(", "return item ? c.json({ item }) :"]) {
     assert.ok(admin.includes(reply), `admin_learning.ts no longer answers ${reply}`);
   }
   // A webinar lesson names an event by its slug.
@@ -282,7 +282,8 @@ test('the studio\'s writes go out with the right method, path and body', async (
     await setItemStatus('v-yt', 'unpublish');
     await setItemStatus('v-yt', 'archive');
     await saveCourse({ uid: null, form: { title: 'Seed basics', slug: 'seed-basics', summary: '', cover_url: '', level: '', estimated_minutes: ' 80 ', visibility: 'open', resources: [{ title: 'Template', url: 'https://example.com/t.pdf' }, { title: ' ', url: '' }] } });
-    await saveCourse({ uid: 'c1', form: { title: 'Seed basics', slug: 'seed-basics', summary: 'S', cover_url: '', level: 'advanced', estimated_minutes: '', visibility: 'program', resources: [] } });
+    await saveCourse({ uid: 'c1', form: { title: 'Seed basics', slug: 'seed-basics', summary: 'S', cover_url: '', level: 'advanced', estimated_minutes: '', visibility: 'program', resources: [],
+      audience: ['founder'], stage: ' Pre-seed ', outcomes: 'Read a term sheet\n\n  Price a round  ', prerequisites: '', author: 'A. Author', reviewer: ' ', reviewed_on: '2026-10-01', practical_output: 'A model cap table' } });
     await setCourseStatus('c1', 'publish');
     await addModule('c1', 'Pricing');
     await renameModule('m2', 'Pricing a round');
@@ -331,8 +332,14 @@ test('the studio\'s writes go out with the right method, path and body', async (
   assert.deepEqual(bodyOf(8), {
     title: 'Seed basics', slug: 'seed-basics', summary: '', cover_url: '', level: null, estimated_minutes: '80', visibility: 'open',
     resources: [{ title: 'Template', url: 'https://example.com/t.pdf' }],
+    // D4650: a form with no metadata sends each field as not recorded.
+    audience: [], stage: null, outcomes: [], prerequisites: [], author: null, reviewer: null, reviewed_on: null, practical_output: null,
   });
   assert.deepEqual(bodyOf(9).resources, []);
+  // D4650: lists are one entry per non-blank line, trimmed; blank text is null.
+  const meta9 = bodyOf(9);
+  assert.deepEqual([meta9.audience, meta9.stage, meta9.outcomes, meta9.prerequisites, meta9.author, meta9.reviewer, meta9.reviewed_on, meta9.practical_output],
+    [['founder'], 'Pre-seed', ['Read a term sheet', 'Price a round'], [], 'A. Author', null, '2026-10-01', 'A model cap table']);
   assert.deepEqual(bodyOf(11), { title: 'Pricing' });
   assert.deepEqual(bodyOf(12), { title: 'Pricing a round' });
   // Up and down send the complete new order, as the route requires.
@@ -426,7 +433,7 @@ test('Continue learning reads my record', () => {
   assert.match(flat(markup), /Seed basics 50%/);
   assert.match(markup, /href="\/learning\/courses\/seed-basics"/);
   assert.equal(count(markup, 'data-testid="row-continue"'), 1, 'a bare lesson with nowhere to open was listed');
-  assert.match(text(h(ContinueLearning, { state: { status: 'ready', in_progress: [], completed: [] } })), /Nothing in progress/);
+  assert.match(text(h(ContinueLearning, { state: { status: 'ready', in_progress: [], completed: [] } })), /No course in progress\./);
   assert.match(html(h(ContinueLearning, { state: { status: 'loading' } })), /learning-loading/);
   assert.match(flat(html(h(ContinueLearning, { state: { status: 'unreadable' }, onRetry: () => {} }))), /Your progress could not be read\. This is not a claim that you have started nothing\./);
 });
@@ -475,7 +482,7 @@ test('a lesson plays its item: a YouTube link embedded, its transcript, previous
   assert.match(flat(markup), /A seed round is the first priced round\. It sets the pre-money valuation\./);
   assert.doesNotMatch(markup, /No transcript is recorded/);
   assert.match(tagOf(markup, 'link-lesson-next'), /href="\/learning\/courses\/seed-basics\/l2"/);
-  assert.match(flat(markup), /Foundations · lesson 1 of 3/);
+  assert.match(flat(markup), /Lesson 1 of 3 in Foundations/);
   // l1 is completed in the course read; l2 is not, and its button is live.
   assert.match(markup, /data-testid="text-lesson-completed"/);
   const l2 = html(h(LessonView, { courseState, itemState: { status: 'ready', ...readItemShape(ITEM_READING) }, lessonUid: 'l2', onMark: () => {} }));
@@ -727,7 +734,7 @@ test('a screen never draws another read\'s reply, and the studio\'s words stay w
 
 // ── The gate ───────────────────────────────────────────────────────────────
 
-test('the gate still holds: a gated profile reads nothing from Learning and keeps Articles', () => {
+test('the gate is lifted (owner, 2026-11-04): every profile reads Learning, and the dormant gate is still the one test before a view mounts', () => {
   for (const role of ['founder', 'investor', 'partner', 'advisor']) {
     for (const [url, pattern, view] of [
       ['/learning/videos/v-yt', '/learning/videos/:uid', 'item'],
@@ -736,17 +743,15 @@ test('the gate still holds: a gated profile reads nothing from Learning and keep
       ['/learning/me', '/learning/me', 'me'],
     ]) {
       const markup = page(url, pattern, { view, user: { role }, activeRole: role });
-      assert.match(markup, /data-testid="learning-coming-soon"/, `${role} at ${url}`);
-      assert.doesNotMatch(markup, /learning-loading|lesson-player|course-outline/, `${role} at ${url} starts a Learning read`);
+      assert.doesNotMatch(markup, /learning-coming-soon/, `${role} at ${url}`);
+      assert.match(markup, /learning-loading/, `${role} at ${url} does not start its Learning read`);
     }
-    // The home: Articles open; All, Courses and Videos closed, and Continue learning not asked for.
+    // The home: All, Courses and Videos are live.
     for (const tab of ['all', 'courses', 'videos']) {
       const home = page(`/learning?tab=${tab}`, '/learning', { view: 'home', user: { role }, activeRole: role });
-      assert.match(tagOf(home, `panel-${tab}`), /data-mode="coming_soon"/);
-      assert.doesNotMatch(home, /learning-loading|section-continue|list-catalog/);
+      assert.match(tagOf(home, `panel-${tab}`), /data-mode="live"/);
+      assert.doesNotMatch(home, /learning-coming-soon/);
     }
-    const articles = page('/learning', '/learning', { view: 'home', user: { role }, activeRole: role });
-    assert.match(tagOf(articles, 'panel-articles'), /data-mode="live"/);
   }
   // The reads themselves are asked for only when the gate lets the profile see them
   // (a server render makes none, so the switches are read from the source).

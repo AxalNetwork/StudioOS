@@ -1,5 +1,6 @@
 /** D1176: each independently readable source retains its state, origin and date. */
 import type { Env } from '../../types';
+import { exponentOf, majorToMinor } from '../../../../frontend/src/lib/money.js';
 import { runwayMonths } from '../raiseCycle';
 import { base, json, obj, scenario, view, PlanError, type Scope } from './store';
 
@@ -10,7 +11,7 @@ export async function block<T>(read: () => Promise<T>) {
     return { state: 'unreadable' as const, value: null, reason: 'This block is Unreadable. Try again.' };
   }
 }
-const cents = (n: unknown): number | null => n == null || typeof n !== 'number' || !Number.isFinite(n) || n < 0 || !Number.isSafeInteger(Math.round(n * 100)) ? null : Math.round(n * 100);
+const cents = (n: unknown, currency = 'USD'): number | null => typeof n === 'number' && n >= 0 ? majorToMinor(n, currency) : null;
 const integer = (n: unknown): number | null => typeof n === 'number' && Number.isSafeInteger(n) ? n : null;
 const fact = (value: number | null, source: string, ref: string, as_of: string | null, reason: string | null = null) => ({
   value, source, ref, as_of, state: value === null ? 'not_recorded' : 'recorded', reason: value === null ? reason ?? 'Not recorded in this source.' : null,
@@ -30,7 +31,12 @@ export async function roundSources(env: Env, s: Scope, baseRow: any) {
   for (const c of calls.value ?? []) candidates.push({ ...fact(integer(c.amount_cents),'Document',`round_calls:${c.id}`,c.counsel_approved_at), kind:'round_call',name:c.name,currency:(c.currency??'USD').toLowerCase(),eligible:true });
   if (record.value) {
     const r=record.value;
-    candidates.push({ ...fact(r.target_cents==null?cents(r.target_amount):integer(r.target_cents),'Typed',`raise_rounds:${r.id}`,r.updated_at),kind:'round_record',name:r.name,currency:(r.currency??'USD').toLowerCase(),eligible:true });
+    const currency = r.currency ?? 'USD';
+    // Migration 607 mirrors the major amount at two decimals for every currency.
+    const target = exponentOf(currency.toUpperCase()) === 2 && r.target_cents != null
+      ? integer(r.target_cents)
+      : cents(r.target_amount, currency);
+    candidates.push({ ...fact(target,'Typed',`raise_rounds:${r.id}`,r.updated_at),kind:'round_record',name:r.name,currency:currency.toLowerCase(),eligible:true });
   }
   if (baseRow) candidates.push({ ...fact(baseRow.amount_to_raise_cents,baseRow.legacy_copied_at?'Recorded':'Typed',`uof_scenarios:${baseRow.id}`,baseRow.updated_at),kind:'plan',name:baseRow.name,currency:baseRow.currency,eligible:true });
   let capTable: any = cap;

@@ -329,7 +329,7 @@ test('the deployment sentence belongs to the frame, not to a page', () => {
     'the branch rail must state the wall, not perform a refusal');
 });
 
-test('all eight branch routes render through the frame', () => {
+test('every remaining branch page renders through the frame', () => {
   // A route that skipped it would have no rail at all, which is the state this
   // PR is ending — and it would be invisible, because a missing rail looks like
   // a page that simply has none.
@@ -342,7 +342,7 @@ test('all eight branch routes render through the frame', () => {
   // router declares must now be one this pattern reads, or the count differs.
   const routes = [...app.matchAll(/<Route path="(\/branch(?:\/[a-z-]+)*)" element=\{([\s\S]*?)\)\} \/>/g)];
   const declared = app.split('path="/branch').length - 1;
-  assert.ok(declared >= 9, `expected at least nine /branch routes, found ${declared}`);
+  assert.ok(routes.some(([, path]) => path === '/branch/insights/analytics'), 'the nested canonical page is scanned');
   assert.equal(routes.length, declared,
     `${declared} /branch routes are declared and ${routes.length} were read, so one is outside the frame check`);
   const bare = routes
@@ -512,6 +512,7 @@ test('every branch zone can NAME its branch, which is S12 rule 1 (D151)', () => 
     '/branch/community', '/branch/contracts', '/branch/insights', '/branch/insights/analytics',
   ]) {
     const at = app.indexOf(`path="${path}"`);
+    if (path === '/branch') { assert.equal(at, -1, 'D2319 retires the digest alias'); continue; }
     assert.ok(at > 0, `${path} is no longer a registered route`);
     const next = app.indexOf('<Route', at);
     const element = app.slice(at, next > at ? next : at + 240);

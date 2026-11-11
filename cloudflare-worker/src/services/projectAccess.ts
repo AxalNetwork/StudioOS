@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from './accountLicences';
 // Task #1 (Spin-Out Teams Collaboration) — shared project membership + access.
 //
 // A Spin-Out project was single-founder via projects.founder_id. This module
@@ -13,7 +14,7 @@
 //                         other user: an accepted project_members row is the
 //                         only way in, with that row's role (owner or
 //                         cofounder edits, advisor reads).
-//   - investor          → NO access here; their ONLY path is the fail-closed,
+//   - investor-only     → NO access here; their ONLY path is the fail-closed,
 //                         NDA-gated maskFounderForInvestor view. Never granted
 //                         membership-based read/write.
 //   - founder owner     → read + write (founder_id match).
@@ -140,8 +141,9 @@ export async function getMemberProjectIds(env: Env, userId: number): Promise<num
  * Single source-of-truth access predicate. `write=true` additionally requires
  * data-editor rights (owner or co-founder; advisors are read-only on data).
  *
- * Investors are ALWAYS denied here — their only project view is the masked,
- * NDA-gated fallback in GET /api/projects/:id.
+ * Investor-only accounts are denied here — their project view is the masked,
+ * NDA-gated fallback in GET /api/projects/:id. D4472 lets independently held
+ * licences use their existing owner/member rights, never a bare profile ID.
  */
 export async function canAccessProject(
   env: Env,
@@ -150,8 +152,8 @@ export async function canAccessProject(
   opts: { write?: boolean } = {},
 ): Promise<boolean> {
   if (user.role === 'admin') return true;
-  if (user.role === 'investor') return false;
-  if (user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id) return true;
+  if (holdsOnlyLicence(user, 'investor')) return false;
+  if (holdsLicence(user, 'founder') && !!user.founder_id && project.founder_id === user.founder_id) return true;
   const role = await getProjectMembershipRole(env, project.id, user.id);
   if (!role) return false;
   if (opts.write && role === 'advisor') return false;
@@ -164,7 +166,7 @@ export function isProjectManager(
   project: { founder_id: number | null },
 ): boolean {
   if (user.role === 'admin') return true;
-  return user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id;
+  return holdsLicence(user, 'founder') && !!user.founder_id && project.founder_id === user.founder_id;
 }
 
 /**

@@ -36,7 +36,7 @@ import { HQ_READS_MONEY, NOT_READ_YET, PAGES, routeFor } from '../src/pages/admi
 import {
   ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
   REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, CSV_DONE, CSV_PROGRAMS, NOT_RECORDED, FUNNEL_WINDOW, referFunnelChart, referrerLine, queueParams, activityText, completionRows, cohortPlace, endedInWindow,
-  episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, listingActions, listingBody, mentorsPerCohort, peopleRows,
+  episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, isFeatureAction, listingActions, listingBody, mentorsPerCohort, peopleRows,
   playbookFrom, refusalSentence, reviewPatch, sectionEdit, statusChoices, versionLine,
 } from '../src/pages/admin/programs/programPagesModel.js';
 
@@ -156,10 +156,15 @@ test('OD9: Done is a course or item completed, an exercise accepted, an exam pas
   assert.equal(hasFinished({ completion: [] }), false, 'a program with no contents has no one finished');
   const done = { completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exam', status: 'passed' }] };
   const notYet = { completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exercise', status: 'needs_work' }] };
-  const rows = completionRows([{ uid: 'l1', name: 'Founder basics' }, { uid: 'l4', name: 'Fundraising' }], { l1: ready({ learners: [done, notYet] }), l4: failed() });
-  assert.deepEqual(rows.map((r) => [r.state, r.finished ?? null, r.learners ?? null]), [['ready', 1, 2], ['unreadable', null, null]]);
+  assert.equal([done, notYet].filter(hasFinished).length, 1);
+  // D4810: Completion by program comes from one read; the Worker applies OD9 and says which programs it could not read.
+  const programs = [{ uid: 'l1', name: 'Founder basics' }, { uid: 'l4', name: 'Fundraising' }, { uid: 'l9', name: 'Past the cap' }];
+  const rows = completionRows(programs, ready({ programs: [{ uid: 'l1', learners: 2, finished: 1 }], unreadable: ['l4'], capped: true, max: 2 }));
+  assert.deepEqual(rows.map((r) => [r.state, r.finished ?? null, r.learners ?? null]), [['ready', 1, 2], ['unreadable', null, null], ['left_out', null, null]]);
   assert.equal(finishedTotal(rows).state, 'unreadable', 'a program whose learners could not be read makes no total');
+  assert.equal(finishedTotal(rows.filter((r) => r.state !== 'unreadable')).state, 'unreadable', 'nor does one left out past the cap');
   assert.deepEqual(finishedTotal(rows.slice(0, 1)), { state: 'ready', count: 1 });
+  assert.equal(completionRows(programs, failed())[0].state, 'unreadable');
 });
 
 test('Mentor: Ended is the last 30 days from 565’s history, "at least" past a full page; Founders hidden is null-honest', () => {
@@ -208,16 +213,22 @@ test('Activity: every kind is a sentence, a mentor row names its cohort and neve
   assert.equal(activityText({ kind: 'something.new', by: 'admin', concerns: {} }), 'A change was recorded by an admin');
 });
 
-test('Perks: the actions per state, Reject final with its note, Approve keeping the stored note, the feature switch an approve on live', () => {
+test('Perks: the actions per state, Reject final with its note, Approve keeping the stored note, the feature switch its own operation on live', () => {
   assert.deepEqual(listingActions(listing('a', 'in_review')), ['approve', 'reject']);
   assert.deepEqual(listingActions(listing('a', 'live')), ['pause', 'feature']);
   assert.deepEqual(listingActions(listing('a', 'live', { featured: 1 })), ['pause', 'unfeature']);
   assert.deepEqual(listingActions(listing('a', 'paused')), ['approve']);
   assert.deepEqual(listingActions(listing('a', 'rejected')), [], 'a rejection is final');
-  assert.deepEqual(listingBody('approve', listing('a', 'in_review', { review_note: 'Seeded by HQ' })), { action: 'approve', review_note: 'Seeded by HQ' });
-  assert.deepEqual(listingBody('reject', listing('a', 'in_review'), { note: ' Not a fit ' }), { action: 'reject', review_note: 'Not a fit' });
-  assert.deepEqual(listingBody('unfeature', listing('a', 'live', { featured: 1 })), { action: 'approve', featured: false });
-  assert.deepEqual(listingBody('pause', listing('a', 'live')), { action: 'pause' });
+  // D4806: every body names the revision the reviewer saw (the row's `updated_at`).
+  const expected_revision = listing('a', 'in_review').updated_at;
+  assert.deepEqual(listingBody('approve', listing('a', 'in_review', { review_note: 'Seeded by HQ' })), { action: 'approve', review_note: 'Seeded by HQ', expected_revision });
+  assert.deepEqual(listingBody('reject', listing('a', 'in_review'), { note: ' Not a fit ' }), { action: 'reject', review_note: 'Not a fit', expected_revision });
+  // Feature and Stop featuring are their own operation, never an approve that could republish a paused listing.
+  assert.deepEqual(listingBody('unfeature', listing('a', 'live', { featured: 1 })), { featured: false, expected_revision });
+  assert.deepEqual(listingBody('feature', listing('a', 'live'), { editorial: ' Our pick ' }), { featured: true, editorial_note: 'Our pick', expected_revision });
+  assert.deepEqual([isFeatureAction('feature'), isFeatureAction('unfeature'), isFeatureAction('approve')], [true, true, false]);
+  assert.deepEqual(listingBody('pause', listing('a', 'live')), { action: 'pause', expected_revision });
+  assert.equal(listingBody('pause', { uid: 'x', status: 'live' }).expected_revision, null, 'no revision read, none claimed');
 });
 
 test('refusals are one sentence keyed on the code; a codeless 400 reads the Worker’s own sentence', () => {
@@ -288,7 +299,7 @@ function worker(o = {}) {
       { uid: 'u2', name: 'Noa Notyet', enrolled_at: d1(NOW - 8 * DAY), completion: [{ subject_kind: 'course', status: 'completed' }, { subject_kind: 'exercise', status: 'submitted' }] },
     ] } },
     enrolments = { weeks: 12, by_week: [{ week: '2026-10-19', count: 3, to_date: true }], total: 3, programs: [] },
-    learner = null, writes = {},
+    learner = null, writes = {}, completion = null,
   } = o;
   // A fixture is a body, or a function of the query that answers a body or a response.
   const call = (v, ...a) => {
@@ -305,6 +316,7 @@ function worker(o = {}) {
       if (/^\/api\/refer-earn\/admin\/submissions\/[^/]+$/.test(path)) return writes.referral ? writes.referral(options) : response({ ...referral('u1', 'under_review', 80), history: [{ label: 'Updated', status: null, note: 'Thanks', created_at: d1(NOW) }] });
       if (/^\/api\/refer-earn\/admin\/strategic-access\/\d+\/decision$/.test(path)) return writes.strategic ? writes.strategic(options) : response({ status: 'granted' });
       if (/^\/api\/perks\/admin\/[^/]+\/review$/.test(path)) return writes.perk ? writes.perk(options) : response({ ok: true, status: 'live' });
+      if (/^\/api\/perks\/admin\/[^/]+\/feature$/.test(path)) return writes.feature ? writes.feature(options) : response({ ok: true, status: 'live', featured: true });
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/sections\/[^/]+$/.test(path)) return writes.section ? writes.section(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/publish$/.test(path)) return writes.publish ? writes.publish(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/export$/.test(path)) return writes.export ? writes.export(options, path) : response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
@@ -331,10 +343,12 @@ function worker(o = {}) {
     if (path === '/api/perks') return call(perks);
     if (path === '/api/learning/programs/mine') return call(learning);
     if (path === '/api/learning/programs/mine/enrolments') return call(enrolments);
+    // D4810: the overview's one completion read, OD9 applied as the Worker applies it.
+    if (path === '/api/learning/programs/mine/completion') return call(completion ?? { programs: Object.entries(learners).map(([uid, v]) => ({ uid, learners: v.learners.length, finished: v.learners.filter(hasFinished).length })), unreadable: [], capped: false, max: 50 });
     const one2 = /^\/api\/learning\/programs\/([^/]+)\/learners\/([^/]+)$/.exec(path);
     if (one2) return call(learner || { program: { name: 'Founder basics', region: 'Lisbon' }, contents: [{ subject_kind: 'item', subject_uid: 'i1', title: 'Why validate first', kind: 'video' }, { subject_kind: 'exam', subject_uid: 'x1', title: 'Validation basics' }], learner: { uid: one2[2], name: 'Lea Learner', last_activity_at: d1(NOW - 2 * DAY), completion: [{ subject_kind: 'item', subject_uid: 'i1', status: 'completed', completed_at: d1(NOW - 3 * DAY) }, { subject_kind: 'exam', subject_uid: 'x1', status: 'not_passed', attempts: 2, best_score_percent: 60, passed_at: null }] } });
     const l = /^\/api\/learning\/programs\/([^/]+)\/learners$/.exec(path);
-    if (l) return call(learners[l[1]] ?? { learners: [] });
+    if (l) return call(learners[l[1]] ?? { learners: [] }, qs);
     return never();
   };
 }
@@ -509,7 +523,8 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
     assert.ok(view.has('programs-mentor-terms-none'));
     assert.ok(!view.has('programs-mentor-how-publish'), 'an Admin cannot publish');
   } finally { await view.close(); }
-  const draft = { ...PLAYBOOK, draft: { sections: PLAYBOOK.playbook.sections, edited_at: null, differs: false } };
+  const HASH = 'ab'.repeat(32);
+  const draft = { ...PLAYBOOK, draft: { sections: PLAYBOOK.playbook.sections, edited_at: null, differs: false, hash: HASH } };
   let publish = () => refusal(409, 'nothing_to_publish', 'The draft is the same as the published playbook.');
   const sup = await mounted('/admin/programs/mentor-cohorts/how-it-runs', MentorCohortAccess,
     worker({ user: SUPER, detail: draft, writes: { section: () => response({ ...draft, draft: { ...draft.draft, differs: true, edited_at: d1(NOW) } }), publish: () => publish() } }), { user: SUPER });
@@ -523,6 +538,8 @@ test('Mentor · How it runs: part 1’s published playbook for an Admin, with th
     await sup.click('programs-mentor-how-publish');
     await sup.click('programs-playbook-publish-go');
     assert.equal(sup.textOf('programs-playbook-publish-go-refusal'), REFUSALS.nothing_to_publish);
+    // D4806: Publish names the revision of the draft that was on screen.
+    assert.deepEqual(JSON.parse(writesTo(sup, /playbook\/publish$/, 'POST')[0].body), { expected_hash: HASH });
   } finally { await sup.close(); }
 });
 
@@ -622,9 +639,15 @@ test('Perks · Queue: every state paged with its total; Reject needs its reason,
     await view.click('programs-perks-row-p1-approve');
     assert.match(view.textOf('programs-listing-stored'), /Seeded by HQ/);
     await view.click('programs-listing-go');
-    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p1\/review$/, 'POST').at(-1).body), { action: 'approve', review_note: 'Seeded by HQ' });
+    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p1\/review$/, 'POST').at(-1).body), { action: 'approve', review_note: 'Seeded by HQ', expected_revision: d1(NOW - 30 * H) });
     assert.match(view.textOf('programs-listing-go-done'), /^Approved\./);
     assert.ok(view.has('programs-perks-row-p2-pause') && view.has('programs-perks-row-p2-feature'), 'a live listing pauses and features');
+    // D4806: Feature is its own operation on the Worker, naming the revision it read; it is never sent as an approve.
+    await view.press('Close', 'programs-listing-dialog');
+    await view.click('programs-perks-row-p2-feature');
+    await view.click('programs-listing-go');
+    assert.deepEqual(JSON.parse(writesTo(view, /perks\/admin\/p2\/feature$/, 'POST').at(-1).body), { featured: true, expected_revision: d1(NOW - 30 * H) });
+    assert.equal(writesTo(view, /perks\/admin\/p2\/review$/, 'POST').length, 0, 'no review was sent for the feature switch');
   } finally { await view.close(); }
 });
 
@@ -766,4 +789,37 @@ test('D1124 · the header\'s grant badge reads D956\'s field on /:key; a failed 
     assert.equal(unread.textOf('programs-header-grant'), '!Grant unreadable');
     assert.equal(unread.textOf('programs-header-grant-reason'), 'Program grants could not be read.');
   } finally { await unread.close(); }
+});
+
+// ---------------------------------------------------------------------------
+// D4810 (#4810): request volume stays flat as records grow
+// ---------------------------------------------------------------------------
+
+test('D4810: Learning overview reads completion once for 120 programs, never once per program; the frame and the page share one detail read', async () => {
+  const many = Array.from({ length: 120 }, (_, i) => ({ uid: `p${i}`, name: `Program ${String(i).padStart(3, '0')}`, region: null, status: 'published', enrolment: 'open', learners: 3, contents: 2, admins: 1 }));
+  const completion = { programs: many.slice(0, 50).map((p) => ({ uid: p.uid, learners: 3, finished: 1 })), unreadable: [], capped: true, max: 50 };
+  const view = await mounted('/admin/programs/learning', ProgramPage, worker({ learning: { programs: many }, completion }));
+  try {
+    const gets = view.requests.filter((r) => r.method === 'GET').map((r) => r.url.split('?')[0]);
+    assert.equal(gets.filter((u) => u === '/api/learning/programs/mine/completion').length, 1, 'one completion read');
+    assert.equal(gets.filter((u) => /\/learners$/.test(u)).length, 0, 'no learners read per program');
+    assert.equal(gets.filter((u) => u === '/api/admin/programs/learning').length, 1, 'one detail read for the frame and the page');
+    assert.ok(gets.length < 12, `the overview stays a handful of reads: ${gets.length}`);
+    assert.match(view.textOf('programs-learning-completion'), /Only the first 50 published programs by name are counted/);
+    assert.ok(!view.has('programs-tile-finished-value'), 'a capped total is not drawn as complete');
+  } finally { await view.close(); }
+});
+
+test('D4810: People reads one page of learners at a time, with the total, and pages on', async () => {
+  const roster = Array.from({ length: 120 }, (_, i) => ({ uid: `u${i}`, name: `Learner ${String(i).padStart(3, '0')}`, enrolled_at: d1(NOW - DAY), completion: [] }));
+  const learners = { l1: (q) => ({ learners: roster.slice(Number(new URLSearchParams(q).get('offset')) || 0, (Number(new URLSearchParams(q).get('offset')) || 0) + 50), total: 120, limit: 50, offset: Number(new URLSearchParams(q).get('offset')) || 0 }) };
+  const view = await mounted('/admin/programs/learning/people', ProgramPage, worker({ learners }));
+  try {
+    await view.change('programs-learning-pick', { value: 'l1' });
+    assert.ok(view.requests.some((r) => r.url === '/api/learning/programs/l1/learners?limit=50&offset=0'), 'a page, not the roster');
+    assert.equal(view.textOf('programs-learning-learners-count'), '1–50 of 120 enrolled now');
+    await view.click('programs-learning-learners-next');
+    assert.ok(view.requests.some((r) => r.url === '/api/learning/programs/l1/learners?limit=50&offset=50'));
+    assert.equal(view.textOf('programs-learning-learners-count'), '51–100 of 120 enrolled now');
+  } finally { await view.close(); }
 });

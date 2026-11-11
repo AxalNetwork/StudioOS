@@ -1,0 +1,40 @@
+{
+  "skill": "community-growth-program",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "community": "Builders Circle",
+        "need": "Peer product feedback",
+        "moderators": 1,
+        "member_permission": null
+      },
+      "network.relationships": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Builders Circle",
+      "Peer product feedback",
+      "moderation"
+    ],
+    "must_say_not_recorded": [
+      "member permission"
+    ],
+    "must_not_include": [
+      "invites sent"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why member permission is missing rather than inventing it.",
+    "Do not assert: invites sent.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Builders Circle; Peer product feedback; moderation. member permission: Not recorded. Human review required."
+}

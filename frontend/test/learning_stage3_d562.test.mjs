@@ -78,11 +78,10 @@ test('every view is wired: programs, exercises, exams and webinars render their 
   }
   // The held-write button the program list drew before D558 is gone with its view.
   assert.doesNotMatch(page('/learning/studio/programs', '/learning/studio/programs', { view: 'studioPrograms', user: SUPER, activeRole: 'admin' }), /cursor-not-allowed[^>]*button-program-new|button-program-new[^>]*disabled/);
-  // The gate still comes first: an admin browsing as a founder sees the card on an admin route, and nothing reads.
+  // Gate lifted (owner, 2026-11-04): an admin browsing as a founder gets the page itself, no card.
   const viewAs = page('/learning/studio/programs/p1', '/learning/studio/programs/:program', { view: 'studioProgram', user: SUPER, activeRole: 'founder' });
-  assert.match(viewAs, /data-testid="learning-coming-soon"/);
-  assert.doesNotMatch(viewAs, /learning-loading|learning-studio-program"/);
-  assert.match(flat(viewAs), /Eadwyn AI .{0,24}?Learning studio/, 'the card keeps the tier’s rail');
+  assert.doesNotMatch(viewAs, /data-testid="learning-coming-soon"/);
+  assert.match(viewAs, /learning-studio-program"/);
   // Each wired page is keyed by the uid it reads, so another one starts from loading.
   const src = codeOnly(read('frontend/src/pages/learning/LearningPage.jsx'));
   for (const line of [
@@ -104,9 +103,9 @@ test('the home reads My programs and the upcoming webinars only for a profile th
   assert.match(src, /const programs = useMyPrograms\(!gated\);/);
   // One upcoming read feeds both the section and the tab: the drop-ins that read on their own are not mounted.
   assert.doesNotMatch(src, /<WebinarsTab[\s/>]|<UpcomingWebinars[\s/>]|<MyPrograms[\s/>]/);
-  // And a gated profile's home draws none of the three.
-  const gated = page('/learning', '/learning', { view: 'home', user: { role: 'founder' }, activeRole: 'founder' });
-  assert.doesNotMatch(gated, /section-programs|section-webinars|webinars-tab/);
+  // Gate lifted (owner, 2026-11-04): a founder's home is the admitted one, with no coming-soon card.
+  const founder = page('/learning', '/learning', { view: 'home', user: { role: 'founder' }, activeRole: 'founder' });
+  assert.doesNotMatch(founder, /learning-coming-soon/);
 });
 
 // ── The studio ────────────────────────────────────────────────────────────

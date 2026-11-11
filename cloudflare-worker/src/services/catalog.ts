@@ -470,6 +470,28 @@ export async function syncCatalog(env: Env): Promise<{ synced: number }> {
 }
 
 /**
+ * D4856 (#4856): THE ONE MODE RULE of the mirror. A row belongs to the catalogue
+ * when its Stripe `livemode` equals the stamp of the key this deployment runs
+ * on (1 live, 0 test); no key has no stamp, so no row belongs. `getCatalog`
+ * binds this stamp in SQL; `catalogRowScope` is the same rule for a row already
+ * in hand (the HQ summary), and a test holds the two to the same rows.
+ */
+export function catalogModeStamp(mode: StripeMode): 1 | 0 | null {
+  return mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+}
+
+/**
+ * Where a mirrored row sits against the current mode: `current` (the
+ * catalogue), `other` (stamped for the other mode, or there is no key), or
+ * `unknown` (null or unrecognised `livemode`, which is never folded into either).
+ */
+export function catalogRowScope(livemode: unknown, mode: StripeMode): 'current' | 'other' | 'unknown' {
+  const n = livemode === null || livemode === undefined || livemode === '' ? NaN : Number(livemode);
+  if (n !== 0 && n !== 1) return 'unknown';
+  return n === catalogModeStamp(mode) ? 'current' : 'other';
+}
+
+/**
  * Read the mirrored catalog from D1, optionally filtered by kind. Self-heals:
  * if the mirror is empty and Stripe is configured, runs a sync first.
  */
@@ -482,7 +504,7 @@ export async function getCatalog(
   await ensureCatalogSchema(env);
 
   const mode = stripeMode(env);
-  const stamp = mode === 'unconfigured' ? null : mode === 'live' ? 1 : 0;
+  const stamp = catalogModeStamp(mode);
   const countRow = opts?.sync === false ? null : await env.DB.prepare(
     'SELECT COUNT(*) AS n, SUM(CASE WHEN livemode IS NULL OR livemode <> ? THEN 1 ELSE 0 END) AS mismatched FROM stripe_products',
   ).bind(stamp).first<{ n: number; mismatched: number | null }>();
@@ -641,19 +663,102 @@ export function publishableKeyMode(pk: string | null): 'live' | 'test' | 'unknow
 // D213 — the mirror, summarised for HQ · Platform without touching Stripe.
 // ---------------------------------------------------------------------------
 
-/** Said beside the last-written time, because nothing about it is scheduled. */
+/**
+ * D4858 (#4858): WHAT THE CATALOGUE RECORDS ABOUT ITS OWN SYNCS, said once, here, beside the code that does it.
+ *
+ * HQ · Platform used to carry its own sentence about this, and it went stale: it said a failed sync leaves no
+ * record after D1011 made `POST /api/admin/catalog/sync` write `catalog_sync_failed`, which Payments' change log
+ * shows. Every screen that speaks about catalogue syncs now reads these facts, and `CATALOG_SYNC_BASIS` is built
+ * from them, so the two cannot drift apart again. `catalog_capability_4858.test.ts` holds these actions equal to
+ * what `routes/catalog.ts` writes and `paymentsChangeLog.ts` reads.
+ */
+export const CATALOG_SYNC_CAPABILITY = {
+  /** Nothing schedules a sync: it runs when an admin asks, after an edit, and when a read finds the mirror empty. */
+  sync_mode: 'on_demand' as const,
+  scheduled: false,
+  /** A manual sync is audited whichever way it goes. */
+  failed_syncs_recorded: true,
+  recorded_actions: { succeeded: 'catalog_sync', failed: 'catalog_sync_failed' } as const,
+  /** Where the outcomes are read back: the Payments change log, over `admin_audit_log`. */
+  recorded_in: 'admin_audit_log',
+  source: 'Payments catalogue: the stripe_products mirror and the Payments change log',
+} as const;
+
+/** Said beside the last-written time, because nothing about it is scheduled. Built from the facts above. */
 export const CATALOG_SYNC_BASIS =
   'Nothing schedules a sync of this mirror. It is rewritten when an admin syncs it or edits a '
-  + 'product from the Payments catalog console, and when a read finds it empty. A sync that fails '
-  + 'leaves no record, and only a manual sync that succeeded is audited.';
+  + 'product from the Payments catalog console, and when a read finds it empty. '
+  + (CATALOG_SYNC_CAPABILITY.failed_syncs_recorded
+    ? 'A manual sync is recorded in the Payments change log whether it succeeds or fails. '
+    : 'Only a manual sync that succeeded is recorded. ')
+  + 'A re-sync after an edit is recorded as that edit, and a sync started by an empty read is not recorded.';
+
+/** The last manual sync of each outcome, from the Payments change log. `history_readable: false` when it could not be read. */
+export type CatalogSyncHistory = {
+  mode: typeof CATALOG_SYNC_CAPABILITY.sync_mode;
+  failed_syncs_recorded: boolean;
+  history_readable: boolean;
+  last_succeeded_at: string | null;
+  last_failed_at: string | null;
+  source: string;
+};
+
+/**
+ * Reads the latest `catalog_sync` and `catalog_sync_failed` rows. Never creates the audit table: a database without
+ * it says the history could not be read, and both times stay null (Not recorded), never "never failed".
+ */
+export async function readCatalogSyncHistory(env: Env): Promise<CatalogSyncHistory> {
+  const { succeeded, failed } = CATALOG_SYNC_CAPABILITY.recorded_actions;
+  const base = {
+    mode: CATALOG_SYNC_CAPABILITY.sync_mode,
+    failed_syncs_recorded: CATALOG_SYNC_CAPABILITY.failed_syncs_recorded,
+    source: CATALOG_SYNC_CAPABILITY.source,
+  };
+  try {
+    const res = await env.DB.prepare(
+      `SELECT action, MAX(datetime(exported_at)) AS at FROM admin_audit_log WHERE action IN (?, ?) GROUP BY action`,
+    ).bind(succeeded, failed).all<{ action: string; at: string | null }>();
+    const at = new Map((res.results || []).map((r) => [r.action, r.at || null]));
+    return { ...base, history_readable: true, last_succeeded_at: at.get(succeeded) ?? null, last_failed_at: at.get(failed) ?? null };
+  } catch {
+    return { ...base, history_readable: false, last_succeeded_at: null, last_failed_at: null };
+  }
+}
+
+/** The latest recorded manual sync's outcome; `not_recorded` when none is, or the history could not be read. */
+export function catalogSyncStateOf(h: CatalogSyncHistory): 'succeeded' | 'failed' | 'not_recorded' {
+  if (!h.history_readable) return 'not_recorded';
+  const ok = h.last_succeeded_at;
+  const bad = h.last_failed_at;
+  if (!ok && !bad) return 'not_recorded';
+  if (!ok) return 'failed';
+  if (!bad) return 'succeeded';
+  // Both are `datetime()` stamps, one format, so they compare as strings.
+  return bad > ok ? 'failed' : 'succeeded';
+}
 
 export type CatalogMirrorSummary =
   | {
       available: true;
+      /** D4856: the key's mode, the one `getCatalog` scopes by. */
+      stripe_mode: StripeMode;
+      /** D4856: products and prices are CURRENT-MODE rows only: the catalogue anyone can buy from. */
       products: { all: number; active: number };
-      prices: { all: number; active: number };
+      prices: { all: number; active: number; active_under_inactive_products: number };
+      /** D4856: rows stamped for the other mode, and rows with no recognisable stamp; neither is in the counts above. */
+      other_mode: { mode: 'live' | 'test' | null; products: number };
+      unknown_mode: { products: number };
+      /** D4858: the latest recorded manual sync's outcome; `not_recorded` when none is or the history is unreadable. */
+      sync_state: 'succeeded' | 'failed' | 'not_recorded';
+      /** D4858: the catalogue's own sync facts and the last manual sync of each outcome. */
+      sync: CatalogSyncHistory;
+      /** D4703: true when every current-mode row's price list parsed, so the counts are the whole current catalogue. */
+      complete: boolean;
+      /** D4703: when this summary was read; `last_written_at` is when the mirror last changed. */
+      read_at: string;
       /** Rows whose price list does not parse: counted here, never as zero prices. */
       unreadable_price_rows: number;
+      /** Latest write to a current-mode row; null when there is none (read as Not recorded). */
       last_written_at: string | null;
       sync_basis: string;
     }
@@ -672,25 +777,44 @@ export type CatalogMirrorSummary =
  * default, and compared raw an ISO stamp sorts above a SQL one from later the
  * same day (`'T'` > `' '`). `datetime()` makes them one format first.
  *
+ * D4856: ONLY CURRENT-MODE ROWS ARE COUNTED as products and prices, by the same
+ * rule `getCatalog` reads with (`catalogRowScope`); other-mode and unknown-mode
+ * rows are counted apart and never folded in.
+ *
  * Counted in JS rather than with `json_each`: the table is one row per product,
  * and a table-valued function in SQL would be new to this codebase for one count.
  */
 export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorSummary> {
-  let rows: Array<{ active: number; prices_json: string | null; synced: string | null }>;
+  type Row = { active: number; prices_json: string | null; synced: string | null; livemode: unknown };
+  let rows: Row[];
+  let sync: CatalogSyncHistory;
   try {
-    const res = await env.DB.prepare(
-      `SELECT active, prices_json, datetime(synced_at) AS synced FROM stripe_products`,
-    ).all<{ active: number; prices_json: string | null; synced: string | null }>();
+    const [res, history] = await Promise.all([
+      env.DB.prepare(
+        `SELECT active, prices_json, datetime(synced_at) AS synced, livemode FROM stripe_products`,
+      ).all<Row>(),
+      readCatalogSyncHistory(env),
+    ]);
     rows = res.results || [];
+    sync = history;
   } catch {
     return { available: false, reason: 'The catalog mirror could not be read on this database.' };
   }
   let productsActive = 0;
   let pricesAll = 0;
   let pricesActive = 0;
+  let pricesActiveOrphaned = 0;
   let unreadable = 0;
   let last: string | null = null;
+  let current = 0;
+  let other = 0;
+  let unknownMode = 0;
+  const mode = stripeMode(env);
   for (const row of rows) {
+    const scope = catalogRowScope(row.livemode, mode);
+    if (scope === 'other') { other += 1; continue; }
+    if (scope === 'unknown') { unknownMode += 1; continue; }
+    current += 1;
     if (Number(row.active) === 1) productsActive += 1;
     if (row.synced && (last === null || row.synced > last)) last = row.synced;
     let prices: unknown;
@@ -704,13 +828,27 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
       continue;
     }
     pricesAll += prices.length;
-    for (const price of prices as CatalogPrice[]) if (price && price.active === true) pricesActive += 1;
+    for (const price of prices as CatalogPrice[]) {
+      if (!price || price.active !== true) continue;
+      pricesActive += 1;
+      // D4703: an active price under an archived product cannot be bought, and
+      // counting it with the rest made the active total read larger than the
+      // catalogue anyone can buy from.
+      if (Number(row.active) !== 1) pricesActiveOrphaned += 1;
+    }
   }
   return {
     available: true,
-    products: { all: rows.length, active: productsActive },
-    prices: { all: pricesAll, active: pricesActive },
+    stripe_mode: mode,
+    products: { all: current, active: productsActive },
+    other_mode: { mode: mode === 'unconfigured' ? null : mode === 'live' ? 'test' : 'live', products: other },
+    unknown_mode: { products: unknownMode },
+    sync_state: catalogSyncStateOf(sync),
+    sync,
+    prices: { all: pricesAll, active: pricesActive, active_under_inactive_products: pricesActiveOrphaned },
     unreadable_price_rows: unreadable,
+    complete: unreadable === 0,
+    read_at: new Date().toISOString(),
     last_written_at: last,
     sync_basis: CATALOG_SYNC_BASIS,
   };

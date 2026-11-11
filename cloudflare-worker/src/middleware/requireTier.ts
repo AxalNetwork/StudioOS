@@ -16,11 +16,14 @@
  *             network-effects, partner insights, watchlist + decision journal,
  *             partner office hours
  *
- * Bypass roles: admin, partner, investor, advisor — these never hit the gate.
+ * D4729 (#4729): paid features follow each licence's own plan. Admin never hits the gate.
+ * A caller who HOLDS Founder is checked against the Founder plan only, whatever
+ * their primary licence is. Bypass when the licence is not held: a caller who does
+ * not hold Founder and whose primary is partner, investor or advisor never hits it.
  * Mirrors the `requireMiPro` pattern in middleware/miAccess.ts: throws a
  * 402 Response (the global error handler returns it as-is).
  */
-import { inGrace } from './planSubscription';
+import { founderPlanTier, founderTierCovers, holds } from '../services/licencePlans';
 import type { Context } from 'hono';
 import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
@@ -29,8 +32,7 @@ import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type Tier = 'free' | 'growth' | 'studio';
 
-const TIER_RANK: Record<Tier, number> = { free: 0, growth: 1, studio: 2 };
-
+/** D4729: the bypass for a caller who does not hold Founder. Admin passes everything; a held Founder licence never bypasses. */
 const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'advisor']);
 
 /** What a member reads for each paid tier (D683). */
@@ -40,7 +42,7 @@ export const PLAN_NAME: Record<Exclude<Tier, 'free'>, string> = {
   studio: planByKey('founder:studio')!.name,
 };
 
-const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
+export const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
   growth: 'This is on the Validate + Build plan. Upgrade to validate and build without limits.',
   studio: 'This is on the Raise + Grow plan. Upgrade for the pitch deck, cap table, capital, legal, and partner tooling.',
 };
@@ -66,31 +68,18 @@ export type TierUser = User & TierUserCols;
 
 /** True when `userTier` covers `required`. */
 export function tierCovers(userTier: string | null | undefined, required: Tier): boolean {
-  const u = (userTier ?? 'free').toLowerCase() as Tier;
-  const have = TIER_RANK[u] ?? 0;
-  return have >= TIER_RANK[required];
+  return founderTierCovers(userTier, required);
 }
 
 /** True when `user` is allowed past a `required`-tier gate. */
 export function userMeetsTier(user: User | null | undefined, required: Tier): boolean {
   if (!user) return false;
-  if (BYPASS_ROLES.has(String(user.role))) return true;
+  if (String(user.role) === 'admin') return true;
   if (required === 'free') return true;
-  const status = (user as TierUser).subscription_status ?? 'active';
-  // D1100: past_due access ends 21 days after period end, even without a webhook.
-  // Cancel-at-period-end remains active at Stripe until the subscription ends.
-  if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
-    || (status === 'past_due' && !inGrace(status, (user as TierUser).subscription_renews_at))) return false;
-  // D892 §6: a subscription whose first payment never completed grants nothing.
-  if (status === 'incomplete' || status === 'incomplete_expired') return false;
-  // X-1: partner-granted/referred tiers are time-bounded. The cron sweep
-  // resets tier→'free' at expiry, but enforce on read too so a stale
-  // session can't bypass an expired grant before the cron runs.
-  if (status === 'partner_grant' || status === 'partner_referral') {
-    const renews = (user as TierUser).subscription_renews_at;
-    if (renews && new Date(renews).getTime() <= Date.now()) return false;
-  }
-  return tierCovers((user as TierUser).subscription_tier, required);
+  // D4729: a caller who holds Founder is checked on the Founder plan only. No other held licence bypasses it.
+  if (holds(user, 'founder')) return founderTierCovers(founderPlanTier(user as TierUser), required);
+  if (BYPASS_ROLES.has(String(user.role))) return true;
+  return founderTierCovers(founderPlanTier(user as TierUser), required);
 }
 
 /** Build the 402 payload the frontend renders as the upgrade modal. */
@@ -187,7 +176,11 @@ export async function interviewCapRefusal(env: Env, userId: number, projectId: n
   const user = await env.DB.prepare(
     'SELECT id, role, subscription_tier, subscription_status, subscription_renews_at FROM users WHERE id = ?',
   ).bind(userId).first<TierUser>();
-  if (!user || user.role !== 'founder' || userMeetsTier(user, 'growth')) return null;
+  if (!user) return null;
+  // D4729: the cap applies to a member who holds Founder, not only to one whose primary licence is Founder.
+  const { heldLicences } = await import('../services/accountLicences');
+  const held = await heldLicences(env.DB, user);
+  if (!held.includes('founder') || userMeetsTier({ ...user, licences: held } as TierUser, 'growth')) return null;
   const existing = await env.DB.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
     .bind(projectId).first<{ n: number }>();
   return Number(existing?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews ? tierUpsell('growth') : null;

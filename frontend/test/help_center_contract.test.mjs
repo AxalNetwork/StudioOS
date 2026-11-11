@@ -35,6 +35,7 @@
  * the file says, and a claim about rendered output would need a DOM.
  */
 import test from 'node:test';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -139,13 +140,12 @@ test('/help is the Help Center and the ticket flow sits under it', () => {
   );
 });
 
-test('every legacy address still resolves, and none of them to a 404', () => {
-  // `/tickets` and `/tickets/<id>` are in notification rows already sent;
-  // `/help/<id>` is in Slack messages already posted; `/docs` and
-  // `/docs#anchor` are bookmarked and linked from the worker. All permanent.
+test('D2319 retires unused Help indexes and keeps ticket, signed and support links', () => {
+  // D2319 keeps actual sent ticket-id/signed links and the support entry.
+  // The unused /tickets and /docs indexes retire with the other zero-open aliases.
   for (const path of ['/tickets', '/tickets/:id', '/help/:id', '/docs', '/docs/admin/*', '/support']) {
-    assert.ok(
-      APP_CODE.includes(`path="${path}"`),
+    assert.equal(
+      APP_CODE.includes(`path="${path}"`), !isRetiredRedirect(path),
       `${path} has no route — it falls through to the catch-all 404`,
     );
   }

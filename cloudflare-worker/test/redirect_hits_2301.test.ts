@@ -31,7 +31,9 @@ test('anything else is not counted: an unlisted redirect key, a visited path wit
   assert.deepEqual(rows(env), []);
   // The query and hash are dropped before the check, as for every pageview.
   await beacon(env, 'redirect:/signals?q=x#y');
-  assert.deepEqual(rows(env), [['redirect:/signals', 1]]);
+  assert.deepEqual(rows(env), [], 'D2319: retired keys are not counted');
+  await beacon(env, 'redirect:/lp-portal?q=x#y');
+  assert.deepEqual(rows(env), [['redirect:/lp-portal', 1]]);
 });
 
 test('the list is closed and well formed', () => {
@@ -46,8 +48,8 @@ test('the list is closed and well formed', () => {
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
   // D937: sent cohort notices keep the old Lab address working permanently.
   // D938: /admin forwards every old console tab, and #2375 keeps it for good.
-  // D4254: the Raise module's links (services/raiseCycle.ts href) still name /raise/pitch-deck.
-  assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/raise/pitch-deck', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  // D4254, #4853: the old Pitch addresses (/raise/pitch-deck and /raise/pitch-deck/new) stay for bookmarks and sent links.
+  assert.deepEqual(keep, ["/admin", "/admin/spinout-lab", "/dashboard", "/help/:id", "/integrations", "/lp/customer-discovery", "/lp/founder", "/lp/investor", "/lp/partner", "/notifications", "/notifications/*", "/plans-and-pricing", "/product-testing", "/raise/pitch-deck", "/raise/pitch-deck/new", "/refer", "/settings", "/settings/:section", "/support", "/tickets/:id", "/wellbeing/expert-dashboard"]);
 });
 
 

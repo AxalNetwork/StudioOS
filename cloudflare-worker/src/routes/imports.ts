@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #8 (IH) — Data Import + Migration Tools.
  *
@@ -638,7 +639,7 @@ imports.post('/portfolio/preview', async (c) => {
 
 imports.post('/portfolio/commit', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'investor' && user.role !== 'admin') {
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
   const quotaResp = await enforceQuota(c, user);
@@ -682,7 +683,7 @@ imports.post('/portfolio/commit', async (c) => {
 
 imports.get('/portfolio/holdings', async (c) => {
   const user = await requireAuth(c);
-  if (user.role !== 'investor' && user.role !== 'admin') return c.json({ holdings: [] });
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') return c.json({ holdings: [] });
   const rows = await c.env.DB.prepare(
     `SELECT id, company_name, ticker, investment_date, amount, instrument, current_valuation, source, created_at
        FROM investor_portfolio_holdings

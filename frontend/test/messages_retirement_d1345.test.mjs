@@ -72,7 +72,7 @@ test('the GP control opens the selected fund in the Email composer and gives hel
 test('the shipped shell and both starters retire the old page and client', () => {
   for (const p of ['src/pages/MessagesPage.jsx', 'src/lib/messagesView.js', '../cloudflare-worker/src/routes/messages.ts']) assert.equal(existsSync(new URL('../' + p, import.meta.url)), false, p);
   assert.doesNotMatch(raw('src/lib/api.js'), /message(?:Threads|Thread|StartThread|Send|MarkRead|Archive|Attach|AttachmentLink)\s*:/);
-  assert.match(raw('src/App.jsx'), /path="\/messages"[^\n]*<MessagesRedirect/);
+  assert.doesNotMatch(raw('src/App.jsx'), /path="\/messages"[^\n]*<MessagesRedirect/);
   const delivery = raw('src/pages/advisor/practice/DeliveryZone.jsx');
   assert.match(delivery, /<EmailAction person=\{`work_product:\$\{i.id\}`\}/);
   const walk = (url) => readdirSync(url, { withFileTypes: true }).flatMap((d) => d.isDirectory() ? walk(new URL(d.name + '/', url)) : /\.[jt]sx?$/.test(d.name) ? [new URL(d.name, url)] : []);
@@ -85,7 +85,7 @@ test('a GP question starts with an opening and cannot send until the member edit
   const sent = [];
   let drafts = 0;
   const api = {
-    estimate: async () => ({ estimate: { hold_microusd: 1000000 } }),
+    estimate: async () => ({ estimate: { hold_microusd: 1000000, quote: 'q1.synthetic.signature', expires_at: '2099-01-01T00:00:00.000Z' } }),
     draft: async () => ({ draft: { uid: `draft-${++drafts}`, subject: 'Synthetic Fund question', body: opening, sources: [] } }),
     confirmSend: async () => ({ nonce: 'synthetic-once' }),
     send: async (request) => { sent.push(request); return { sent: true }; },
@@ -130,7 +130,7 @@ test('the GP update purpose keeps ordinary draft sending and shows no question-o
   const view = await mountContracts(h(ComposeSheet, {
     pack: { person: { ref: 'fund_gp:1', kind: 'fund_gp', relationship: 'fund_gp', name: 'Synthetic GP' }, items: [] },
     refs: ['fund_gp:1'], to: 'gp@example.invalid', account: { uid: 'own-mail', address: 'lp@example.invalid' }, onClose() {},
-    api: { estimate: async () => ({ estimate: { hold_microusd: 1000000 } }),
+    api: { estimate: async () => ({ estimate: { hold_microusd: 1000000, quote: 'q1.synthetic.signature', expires_at: '2099-01-01T00:00:00.000Z' } }),
       draft: async () => ({ draft: { uid: 'update', subject: 'Fund update', body: 'Could you share an update on Synthetic Fund?', sources: [] } }) },
   }), '/email');
   try {

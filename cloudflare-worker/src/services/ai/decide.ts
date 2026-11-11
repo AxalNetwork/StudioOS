@@ -90,7 +90,8 @@ export function sentimentModelFor(lang: string | null | undefined): string {
 
 type Charge = Pick<RunOptions, 'userId' | 'surface' | 'rail' | 'guardText'>;
 
-export type Decided = { ok: true; answer: ChoiceAnswer | null; model: string } | { ok: false; result: RunResult };
+/** `usageLogId` is the run's `ai_usage_logs` row (D777), so a caller can read what it was charged (D1525). */
+export type Decided = { ok: true; answer: ChoiceAnswer | null; model: string; usageLogId?: number | null } | { ok: false; result: RunResult };
 
 /**
  * One Clef `choice` question. `options` maps each option's key to what it
@@ -112,7 +113,7 @@ export async function decide(env: Env, charge: Charge, q: { task?: RunOptions['t
     text: q.text,
   });
   if (!r.ok) return { ok: false, result: r };
-  return { ok: true, answer: readChoice(r.output, q.key, Object.keys(q.options)), model: r.usage?.model ?? model };
+  return { ok: true, answer: readChoice(r.output, q.key, Object.keys(q.options)), model: r.usage?.model ?? model, usageLogId: r.usageLogId ?? null };
 }
 
 export type Ranked = { ok: true; ranking: RankedContext[] } | { ok: false; result: RunResult };

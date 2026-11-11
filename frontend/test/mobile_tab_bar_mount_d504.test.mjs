@@ -56,12 +56,12 @@ const renderAs = (role) => renderToStaticMarkup(
 test('the shell mounts the bar once, beside the drawer backdrop, with the resolved role and no founder default', () => {
   assert.match(CODE, /import MobileTabBar from '\.\/components\/MobileTabBar';/);
   assert.equal((CODE.match(/<MobileTabBar /g) || []).length, 1, 'mounted exactly once');
-  assert.match(CODE, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/, 'the role is the shell\'s as resolved');
+  assert.match(CODE, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/, 'the role is the shell\'s as resolved');
   assert.doesNotMatch(CODE, /<MobileTabBar role=\{shellRole \|\| /, 'no `|| \'founder\'` on the bar: a viewer with no role gets no bar');
   // Beside the backdrop: the mount follows the drawer's backdrop block, inside
   // the same flex container as the aside, so the drawer (z-50) still covers it.
   const backdrop = CODE.indexOf("onClick={() => setSidebarOpen(false)} />");
-  const mount = CODE.indexOf('<MobileTabBar role={shellRole} onMore={() => setSidebarOpen(true)} />');
+  const mount = CODE.indexOf('<MobileTabBar role={shellRole} held={isLicence(shellRole) ? heldLicences : null} groups={isLicence(shellRole) ? sidebarGroups : null} onMore={() => setSidebarOpen(true)} />');
   assert.ok(backdrop > 0 && mount > backdrop && mount - backdrop < 700, 'the bar is mounted right after the drawer backdrop');
   // The sidebar keeps its own default — that one is a nav, not a bar.
   assert.match(CODE, /<SidebarNav groups=\{sidebarGroups\} role=\{shellRole \|\| 'founder'\}/);
@@ -131,12 +131,12 @@ test('the FOUNDER_FULL_BLEED comment describes the legacy routes as the redirect
   // The claim is true of App.jsx: each bare route is a Navigate for a founder.
   // (`/signals` was the third; D670 made it a redirect for everyone and it
   // left the list.)
-  assert.match(CODE, /path="\/execution" element=\{guard\(\['admin', 'founder'\], effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/);
-  assert.match(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
+  assert.match(CODE, /path="\/execution" element=\{guard\(\['admin', 'founder'\], holds\('founder'\) && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/);
+  assert.doesNotMatch(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
   // `/build/discovery` left the list with its editor (#2335): it forwards to
   // Customer research for everyone, so no page there needs the desk's width.
   const discovery = CODE.slice(CODE.indexOf('path="/build/discovery"'), CODE.indexOf('path="/build/discovery"') + 600);
-  assert.match(discovery, /<Navigate replace to=\{\{ pathname: '\/validate\/customer-research', search: location\.search, hash: location\.hash \}\} \/>/);
+  assert.equal(CODE.includes('path="/build/discovery"'), false, 'D2319 retires the alias');
   const list = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf('];', SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED')));
   assert.ok(!list.includes("'/build/discovery'"), '/build/discovery is listed as a full-bleed page again');
 });

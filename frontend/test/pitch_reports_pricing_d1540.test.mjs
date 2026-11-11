@@ -106,7 +106,8 @@ test('a result already reported reads as reported; another refusal shows the Wor
       await m.press(m.by(`pitch-area-result-${key}-report-send`));
     }
     assert.ok(m.by('pitch-area-result-b2-reported'));
-    assert.match(m.text(m.by('pitch-area-result-b3-report-error')), /That result is not one of yours\./);
+    // D5070 (#5376): `not_found` is a taxonomy code, so it reads in the taxonomy's words.
+    assert.match(m.text(m.by('pitch-area-result-b3-report-error')), /That could not be found\. It may have been removed\./);
   } finally { await m.close(); }
 });
 
@@ -121,7 +122,8 @@ test('the plan gate\'s upgrade link returns to the AIRail, never the lightbox', 
 
 test('the one-click build sends back the quote it showed, and a stale quote asks for the price again', () => {
   const src = read('frontend/src/pages/raise/pitch/OneClickBuild.jsx');
-  assert.match(src, /quote\?\.quote_uid \? \{ quote_uid: quote\.quote_uid \}/);
-  assert.match(src, /why\?\.code === 'quote_stale'\) \{ setQuote\(null\); setRequote/);
+  // D4597: the quote is a price state; the press names the exact accepted quote and a stale or missing one asks again.
+  assert.match(src, /quoteUidOf\(price\) \? \{ quote_uid: quoteUidOf\(price\) \}/);
+  assert.match(src, /why\?\.code === 'quote_stale' \|\| why\?\.code === 'quote_required'\) \{ setSlot\(\{ status: 'stale' \}\); setRequote/);
   assert.match(src, /roundRef, exKey, requote, switchedOff\]/);
 });

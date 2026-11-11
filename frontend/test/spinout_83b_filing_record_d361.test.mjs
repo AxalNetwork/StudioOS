@@ -108,6 +108,5 @@ test('the Legal Engine no longer claims "Not set up" for stores it never reads',
 
 test('/incorporate/83b lands each viewer on a route they can open', () => {
   const line = APP.split('\n').find((l) => l.includes('path="/incorporate/83b"'));
-  assert.ok(line, 'the old route is kept as a redirect, never a 404');
-  assert.match(line, /<Navigate to=\{user\?\.spinout_lab_active === 1 \|\| user\?\.role === 'admin' \? '\/spinout-lab\/83b' : '\/raise\/legal-engine\/equity'\} replace \/>/);
+  assert.equal(line, undefined);
 });

@@ -166,7 +166,7 @@ export async function ventureElement(env: Env, projectId: number, element: Ventu
       const all = await itemsOf(env, projectId, ['round_terms', 'round'], today);
       const keys = ['raise.pre_money', 'raise.post_money', 'raise.dilution_pct', 'raise.round_terms'];
       const items = recorded(all).filter((it) => keys.includes(it.source_key));
-      if (!items.length) return notRecorded(element, all.filter((it) => keys.includes(it.source_key)), { module: 'Raise › Round planner', href: `/raise/calls?project=${projectId}` });
+      if (!items.length) return notRecorded(element, all.filter((it) => keys.includes(it.source_key)), { module: 'Raise › Round planner', href: `/raise/capital-relationships/calls?project=${projectId}` });
       // `Reviewed` is counsel's approval of the terms (D1520); anything less is proposed.
       const proposed = items.some((it) => it.grade !== 'Reviewed');
       if (proposed && opts.final) return refused(element, 'subject_to_counsel', ROUND_TERMS_LABEL);

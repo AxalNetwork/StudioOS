@@ -457,6 +457,62 @@ export function backfillLine(r) {
   return `${parts.join(' · ')}.`;
 }
 
+/** Why a graduate the scheduled backfill tried still holds no certificate (issueOnGraduation's outcomes). */
+const NOT_ISSUED_WORDS = {
+  insufficient_data: 'no name on record',
+  not_graduated: 'no venture chosen or no graduation date',
+  reissue_blocked: 'a revoked certificate holds the ID',
+  error: 'the issue failed',
+  already_issued: 'another path issued it at the same moment',
+};
+/** Why a credential holder's lost bonus was not paid (creditLabGraduation's outcomes, D5360). */
+const BONUS_NOT_PAID_WORDS = {
+  'skipped:not_accepted': 'not an admitted cohort member',
+  'skipped:graduation_not_paid': 'the incorporation step was never paid',
+  'skipped:error': 'the grant failed',
+  refused: 'the credit rules refused it',
+};
+const HELD_WORDS = {
+  frozen: 'this studio is suspended, so nothing was issued',
+  not_granted: 'this studio’s licence does not hold the Spin-Out Lab, so nothing was issued',
+  grants_unreadable: 'this studio’s programs could not be read, so nothing was issued',
+};
+export const SCHEDULED_NOT_RECORDED = 'The scheduled backfill has not run here yet, so there is nothing to report. That is not the same as nothing issued.';
+
+/**
+ * D4663 (#4663) — what the every-minute backfill last did, from
+ * `scheduled_backfill` on GET /certificates. `{ state: 'unrecorded' }` when
+ * no tick is on record (never "0 issued"), `{ state: 'unreadable' }` when the
+ * read failed; null while the whole read has not answered.
+ */
+export function scheduledBackfillLine(data) {
+  if (!data) return null;
+  if (data.unavailable?.scheduled_backfill) return { state: 'unreadable', text: String(data.unavailable.scheduled_backfill) };
+  const tick = data.scheduled_backfill?.last_tick;
+  if (!tick) return { state: 'unrecorded', text: SCHEDULED_NOT_RECORDED };
+  const when = `${String(tick.ran_at).slice(0, 16)} UTC`;
+  if (HELD_WORDS[tick.status]) return { state: 'held', text: `Scheduled backfill, last tick ${when}: ${HELD_WORDS[tick.status]}.` };
+  const parts = [`Scheduled backfill, last tick ${when}: ${nf(tick.issued)} issued of ${nf(tick.scanned)} tried`];
+  if (tick.more_waiting) parts.push('more are due and the next ticks take them');
+  const stuck = Object.entries(data.scheduled_backfill.not_issued || {}).filter(([, n]) => Number(n) > 0);
+  if (stuck.length) {
+    const total = stuck.reduce((s, [, n]) => s + Number(n), 0);
+    parts.push(`${plural(total, 'graduate it tried still has', 'graduates it tried still have')} no certificate (${stuck.map(([k, n]) => `${nf(n)}: ${NOT_ISSUED_WORDS[k] || k}`).join('; ')}); each is tried again after six hours`);
+  }
+  // D5360: the same tick pays a graduation bonus a credential holder lost. A
+  // tick recorded before that step existed carries no count: nothing is said.
+  if (tick.bonus) {
+    const b = tick.bonus;
+    parts.push(`lost graduation bonuses: ${nf(b.paid)} paid of ${nf(b.scanned)} tried${b.more_waiting ? ', more are due' : ''}`);
+    const unpaid = Object.entries(data.scheduled_backfill.bonus_not_paid || {}).filter(([, n]) => Number(n) > 0);
+    if (unpaid.length) {
+      const total = unpaid.reduce((s, [, n]) => s + Number(n), 0);
+      parts.push(`${plural(total, 'certificate holder it tried is', 'certificate holders it tried are')} still owed the bonus (${unpaid.map(([k, n]) => `${nf(n)}: ${BONUS_NOT_PAID_WORDS[k] || k}`).join('; ')}); each is tried again after six hours`);
+    }
+  }
+  return { state: 'recorded', text: `${parts.join(' · ')}.` };
+}
+
 export const GRAD_SORTS = [
   { key: 'graduated', label: 'Graduated, newest first' },
   { key: 'name', label: 'Graduate A–Z' },

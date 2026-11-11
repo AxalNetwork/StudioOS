@@ -79,8 +79,7 @@ export function CompanySheet({ onClose, opener }) {
       </form>}
     <div className="mt-2 border-t border-gray-200 dark:border-gray-800">
       <SheetRow title="Company settings" description="Members, access, the public profile" to="/account/portfolio/settings" onClose={onClose} />
-      {/* D1413 (#3696 Q1): the section is Portfolio. */}
-      <SheetRow title="Portfolio" description="Your companies and projects" to="/account/portfolio" onClose={onClose} />
+      {/* D4473 (#4473): Portfolio is in the Account sheet only, as on desktop (D4416). */}
       <p className="py-3 text-[11.5px] text-gray-600 dark:text-gray-400">{SHARED_NOTICE}</p>
     </div>
   </PhoneSheet>;

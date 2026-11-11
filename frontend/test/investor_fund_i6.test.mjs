@@ -49,7 +49,7 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   // that only redirects there — and the old path still lands somewhere.
   assert.ok(!page.includes('/funds/capital-calls'), 'the landing links a retired route');
   assert.match(page, /<Link to="\/funds\/calls" data-testid="link-review-call-ledger">/);
-  assert.match(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
+  assert.doesNotMatch(app, /path="\/funds\/capital-calls" element=\{<FundCapitalCallsRedirect \/>\}/);
   assert.match(app, /function FundCapitalCallsRedirect\(\)[\s\S]{0,200}?pathname: '\/funds\/calls', search: loc\.search, hash: loc\.hash/);
   // D1160: Fund Ops is retired; an investor's Performance is the page itself.
   assert.match(app, /path="\/funds\/performance"[^\n]+investorFundWorkspace\(<FundPerformancePage embedded \/>\)/);

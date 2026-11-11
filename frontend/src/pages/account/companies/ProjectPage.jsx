@@ -8,9 +8,13 @@ import { projectSettingsPath, projectTeamPath, companyProjectTeamPath, scopeFor,
 import { MoveUnderSheet } from '../../team/ProjectSettingsPage.jsx';
 import { managedNote } from '../../team/teamModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT } from '../../team/teamUi.jsx';
+import WorkSummaryCard from '../../work/WorkSummaryCard.jsx';
+import SkillsLink from '../../team/SkillsLink.jsx';
+import { AccessPill } from '../../../ui/ReasonGate';
 import { through } from './portfolioAdapter.js';
 import {
-  BASE_PATH, companyPathFor, companyProjectsPath, day, incorporatePath, jurisdictionName, legalFormWord, seatWord, stageWord, valueFact,
+  ADMIN_LINE, BASE_PATH, READ_ONLY_LINE, accessViewer, companyPathFor, companyProjectsPath, day, hqReadOnly, incorporatePath, jurisdictionName,
+  legalFormWord, seatWord, stageWord, valueFact,
 } from './companiesModel';
 import { CompanyMark, Fact, FactList, Failed, INK, LINK, MUTED, PCard, ProjectMark, Reading, SlugChip, TypeBadge } from './portfolioUi.jsx';
 
@@ -45,7 +49,7 @@ function useBlock(load, tick) {
   return s;
 }
 
-export default function ProjectPage({ id, projects = null, summary = null, paths = null }) {
+export default function ProjectPage({ id, projects = null, summary = null, paths = null, profile = null }) {
   const { companies } = useActiveCompany();
   const [tick, setTick] = useState(0);
   const reread = useCallback(() => setTick((n) => n + 1), []);
@@ -78,6 +82,8 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
 
   const manage = members.status === 'ready' && !!members.value?.can_manage;
   const owner = members.status === 'ready' && members.value?.my_role === 'owner';
+  // D4360: an admin or HQ with no seat on this project reads it read only.
+  const locked = hqReadOnly(profile, members.status === 'ready' && !!members.value?.my_role);
   const settingsTo = company?.uid ? companyProjectsPath(company.uid, id) : projectSettingsPath(id);
   const teamTo = company?.uid ? companyProjectTeamPath(company.uid, id) : projectTeamPath(id);
   const legal = summaryRow?.legal?.available ? summaryRow.legal.value : null;
@@ -90,10 +96,14 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
         <ProjectMark name={name} size={44} />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <h2 className={`m-0 text-[22px] font-extrabold tracking-[-.02em] ${INK}`} data-testid="project-page-name">{name}</h2>
-          <span className="flex flex-wrap items-center gap-2"><TypeBadge kind="project" /><SlugChip path={paths?.get?.(`p-${id}`) || null} /></span>
+          <span className="flex flex-wrap items-center gap-2">
+            <TypeBadge kind="project" /><SlugChip path={paths?.get?.(`p-${id}`) || null} />
+            {locked && members.status === 'ready' ? <AccessPill viewer={accessViewer(profile)} testId="project-access-pill" /> : null}
+          </span>
         </div>
-        <Link to={settingsTo} className={BTN_SECONDARY} data-testid="project-page-settings">Project settings</Link>
+        {!locked ? <Link to={settingsTo} className={BTN_SECONDARY} data-testid="project-page-settings">Project settings</Link> : null}
       </header>
+      {locked && members.status === 'ready' ? <p className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 ${MUTED} dark:bg-gray-800`} data-testid="project-read-only">{`${READ_ONLY_LINE} ${ADMIN_LINE}`}</p> : null}
       {notice ? <p role="status" className={`m-0 rounded-axal-md bg-axal-ground px-3 py-2 text-[12.5px] ${INK} dark:bg-gray-800`}>{notice}</p> : null}
 
       {/* A failed project read is said once, in Project details, with Try again; this card is not left on Reading…. */}
@@ -124,13 +134,13 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
                 <p id="inc-note" className={`m-0 ${MUTED}`}>Opens Incorporate with {name} filled in. Nothing is filed until you submit there.</p>
               </>
             ) : null}
-            {manage ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => setMoving(true)} data-testid="project-move-under">Or move it under an existing company</button> : null}
+            {manage && !locked ? <button type="button" className={`w-fit ${BTN_TEXT}`} onClick={() => setMoving(true)} data-testid="project-move-under">Or move it under an existing company</button> : null}
           </div>
         </PCard>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <PCard title="Project details" testId="project-details" aside={<Link to={`/projects/${encodeURIComponent(id)}`} className={LINK}>Edit</Link>}>
+        <PCard title="Project details" testId="project-details" aside={locked ? null : <Link to={`/projects/${encodeURIComponent(id)}`} className={LINK} data-testid="project-edit">Edit</Link>}>
           {!ready ? (project.status === 'error' ? <Failed what="This project" onRetry={reread} testId="project-unread" /> : <Reading />) : (
             <FactList testId="project-facts" rows={[
               ['Name', <Fact key="n" fact={valueFact(p.name)} />],
@@ -142,7 +152,13 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
             ]} />
           )}
         </PCard>
-        <PCard title="Team" count={team ? team.length : null} testId="project-team" aside={<Link to={teamTo} className={LINK}>Open Team</Link>}>
+        <PCard title="Team" count={team ? team.length : null} testId="project-team" aside={(
+          <>
+            <Link to={teamTo} className={LINK}>Open Team</Link>
+            {/* #4363: the project's Skills tab, in the form its Team uses, once the read names that form. */}
+            <SkillsLink scope={ready ? scope : null} className={LINK} testId="project-skills-link" />
+          </>
+        )}>
           {members.status === 'loading' && !members.value ? <Reading lines={2} />
             : !team ? <Failed what="The team" onRetry={reread} testId="project-team-unread" />
               : (
@@ -157,6 +173,8 @@ export default function ProjectPage({ id, projects = null, summary = null, paths
               )}
         </PCard>
       </div>
+
+      {ready ? <WorkSummaryCard key={id} projectId={id} /> : null}
 
       {moving ? (
         <MoveUnderSheet project={{ id, name }} companies={companies} onClose={() => setMoving(false)}

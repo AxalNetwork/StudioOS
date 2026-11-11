@@ -39,9 +39,10 @@ test('Perks is in the dropdown for founders and partners, and nobody else', () =
   // its route guard, so this asymmetry is worth pinning: the point is that the
   // INVITATION narrows while the page does not.
   const menu = app.slice(app.indexOf('function UserDropdown'), app.indexOf('function PortalSwitcher'));
-  assert.match(menu, /\['founder', 'partner', 'admin'\]\.includes\(user\?\.role\)/,
+  // D4473: the invitation follows the licences held (a founder who also holds Investor still sees it); admins keep it.
+  assert.match(menu, /\(staffAccount \|\| held\.some\(\(l\) => \['founder', 'partner'\]\.includes\(l\)\)\)/,
     'the Perks entry must be gated on the role, not shown to everyone');
-  const gate = menu.indexOf("].includes(user?.role)");
+  const gate = menu.indexOf("['founder', 'partner'].includes(l)");
   const perks = menu.indexOf('to="/perks"');
   assert.ok(perks > gate && perks - gate < 400,
     'the gate must wrap the Perks link, not sit somewhere else in the menu');

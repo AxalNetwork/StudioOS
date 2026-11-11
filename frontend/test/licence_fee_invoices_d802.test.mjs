@@ -15,6 +15,8 @@ import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import LicenceFeeInvoices from '../src/pages/admin/LicenceFeeInvoices.jsx';
 import { feeLine, money, paidLine, parseAmount } from '../src/pages/admin/licenceFeeInvoicesModel.js';
+import { licencePageSource } from './_licencePage.mjs';
+import { licenceRoutesSource } from '../../cloudflare-worker/test/_licenceRoutes.mjs';
 
 const h = React.createElement;
 const LICENCE = { uid: 'lic_a' };
@@ -22,6 +24,7 @@ const INV = {
   uid: 'inv_1', period_label: '2026–27', period_start: '2026-03-15', period_end: '2027-03-14', amount_cents: 1200000, currency: 'EUR',
   paid_cents: 0, outstanding_cents: 1200000, reference: 'AXAL-LIC-LIC-A-2026-27', issued_at: '2026-10-20', due_at: '2026-11-19',
   status: 'issued', paid_at: null, paid_note: null, void_note: null, pdf_url: '/api/admin/licences/lic_a/fee-invoices/inv_1/pdf',
+  revision: 0,
 };
 const READ = { invoices: [INV], annual_fee_cents: 1200000, currency: 'EUR', starts_on: '2020-03-15' };
 
@@ -32,10 +35,10 @@ test('the words: money in the invoice\'s currency, the typed total, the fee line
   assert.equal(money(5, 'usd'), '$0.05');
   assert.equal(money(123456, 'CHF'), 'CHF 1,234.56');
   assert.equal(money(null, 'EUR'), 'Not recorded');
-  assert.equal(parseAmount('4,000.5'), 400050);
-  assert.equal(parseAmount('€12000'), 1200000);
-  assert.equal(parseAmount('0'), 0);
-  for (const bad of ['1.234', '-1', 'abc', '']) assert.equal(parseAmount(bad), null, bad);
+  assert.equal(parseAmount('4,000.5', 'EUR'), 400050);
+  assert.equal(parseAmount('€12000', 'EUR'), 1200000);
+  assert.equal(parseAmount('0', 'EUR'), 0);
+  for (const bad of ['1.234', '-1', 'abc', '']) assert.equal(parseAmount(bad, 'EUR'), null, bad);
   assert.deepEqual(feeLine(READ), { ok: true, text: 'Annual fee €12,000.00. Each licence year starts on the anniversary of 2020-03-15.' });
   assert.equal(feeLine({ ...READ, annual_fee_cents: null }).ok, false);
   assert.match(feeLine({ ...READ, starts_on: null }).text, /No start date/);
@@ -112,14 +115,14 @@ test('Record payment sends the total in cents with its note; Void needs a reason
     await m.type('fee-invoice-paid', '4,000.10');
     await m.type('fee-invoice-note', ' Bank ref 1 ');
     await m.submit('fee-invoice-pay-form');
-    assert.deepEqual(sent, [['pay', 'lic_a', 'inv_1', 400010, 'Bank ref 1']]);
+    assert.deepEqual(sent, [['pay', 'lic_a', 'inv_1', 400010, 'Bank ref 1', 0]], 'the revision the screen read rides the call (D4694)');
     await m.click('fee-invoice-void');
     await m.type('fee-invoice-void-note', 'short');
     await m.submit('fee-invoice-void-form');
     assert.equal(sent.length, 1, 'no void without a reason');
     await m.type('fee-invoice-void-note', 'Issued to the wrong licence year');
     await m.submit('fee-invoice-void-form');
-    assert.deepEqual(sent[1], ['void', 'lic_a', 'inv_1', 'Issued to the wrong licence year']);
+    assert.deepEqual(sent[1], ['void', 'lic_a', 'inv_1', 'Issued to the wrong licence year', 0]);
   } finally { await m.unmount(); }
   const paid = await mount({ list: async () => ({ ...READ, invoices: [{ ...INV, paid_cents: 100, status: 'issued' }] }) });
   try { assert.equal(paid.by('fee-invoice-void'), undefined, 'a payment is recorded: no Void'); } finally { await paid.unmount(); }
@@ -137,15 +140,18 @@ test('the calls go to the Worker\'s routes, and the licence console draws the ta
   assert.match(src, /list: \(licenceUid\) => request\(`\/admin\/licences\/\$\{enc\(licenceUid\)\}\/fee-invoices`\)/);
   assert.match(src, /issue: \(licenceUid\) => request\(`\/admin\/licences\/\$\{enc\(licenceUid\)\}\/fee-invoices`, \{ method: 'POST' \}\)/);
   assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ paid_cents: paidCents/);
-  assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ status: 'void', void_note: voidNote \}\)/);
+  assert.match(src, /expected_revision: expectedRevision \}\),\n  \}\),\n  \/\*\* Void/);
+  assert.match(src, /method: 'PATCH', body: JSON\.stringify\(\{ status: 'void', void_note: voidNote, expected_revision: expectedRevision \}\)/);
   assert.match(src, /`\/licence\/mine\/fee-invoices\/\$\{enc\(invoiceUid\)\}\/pdf`/);
-  const worker = readFileSync(new URL('../../cloudflare-worker/src/routes/admin_licences.ts', import.meta.url), 'utf8');
+  const worker = licenceRoutesSource();
   for (const route of ["r.get('/:uid/fee-invoices'", "r.post('/:uid/fee-invoices'", "r.patch('/:uid/fee-invoices/:invoiceUid'", "r.get('/:uid/fee-invoices/:invoiceUid/pdf'"]) {
     assert.ok(worker.includes(route), route);
   }
   assert.ok(readFileSync(new URL('../../cloudflare-worker/src/routes/licence.ts', import.meta.url), 'utf8').includes("r.get('/mine/fee-invoices/:uid/pdf'"));
   assert.match(readFileSync(new URL('../src/lib/apiModules.generated.js', import.meta.url), 'utf8'), /export \* from '\.\/api\/licenceFeeInvoices\.js';/);
-  const page = readFileSync(new URL('../src/pages/admin/AdminLicences.jsx', import.meta.url), 'utf8');
+  const page = licencePageSource();
   assert.match(page, /\{step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence=\{d\} \/>\}/);
-  assert.match(page, /data-testid="licence-fee-invoices-tab"/);
+  // D4707: the tab bar is drawn from licenceNavModel's list, test ids and all.
+  assert.match(readFileSync(new URL('../src/pages/admin/licenceNavModel.js', import.meta.url), 'utf8'), /testId: 'licence-fee-invoices-tab'/);
+  assert.match(page, /data-testid=\{t\.testId\}/);
 });

@@ -74,3 +74,32 @@ test('search by name or company; % and _ are literal', async () => {
     assert.equal((await get(f, 2, '/api/contacts/book?page=2')).body.total, 3);
   } finally { f.close(); }
 });
+
+test('D4464: source and open-follow-up filters constrain rows and totals, including search and pages', async () => {
+  const f = fixture();
+  try {
+    f.db.exec("INSERT INTO contact_sources(owner_user_id,contact_table,contact_id,source,created_row) VALUES (2,'network_connections',22,'typed',1)");
+    // A foreign owner's task on my row and a completed task do not qualify it.
+    f.db.exec("INSERT INTO network_contact_tasks(uid,owner_user_id,contact_id,title,done_at) VALUES ('foreign',3,23,'Other owner',NULL),('closed',2,22,'Closed','2026-10-01')");
+    for (const [query, ids] of [
+      ['source=linkedin_csv', [21,23]], ['source=csv', [23]], ['source=typed', [22]],
+      ['follow_up=open', [21]], ['source=linkedin_csv&follow_up=open', [21]],
+      ['source=csv&follow_up=open', []], ['source=typed&q=Acme', []],
+    ] as const) {
+      const r = await get(f, 2, `/api/contacts/book?${query}`);
+      assert.equal(r.status, 200);
+      assert.deepEqual(r.body.contacts.map((c: any) => c.id), ids, query);
+      assert.equal(r.body.total, ids.length, query);
+      const next = await get(f, 2, `/api/contacts/book?${query}&page=2`);
+      assert.equal(next.body.total, ids.length);
+      assert.deepEqual(next.body.contacts, []);
+    }
+    for (const query of ['source=unknown', 'source=', 'follow_up=done', 'follow_up=', 'source=csv%27%20OR%201=1--']) {
+      const r = await get(f, 2, `/api/contacts/book?${query}`);
+      assert.equal(r.status, 400, query);
+      assert.equal(r.body.error, 'invalid_filter');
+    }
+    const other = await get(f, 3, '/api/contacts/book?source=linkedin_csv&follow_up=open');
+    assert.deepEqual([other.body.total, other.body.contacts], [0, []]);
+  } finally { f.close(); }
+});

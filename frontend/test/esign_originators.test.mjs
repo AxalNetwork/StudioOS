@@ -77,14 +77,14 @@ test('the four roles are covered, and admin is not one of them', () => {
   // An admin keeps the full catalogue through the admin wizard; templatesFor
   // gives them the union so this page works for them too.
   assert.doesNotMatch(registry, /^\s{2}admin: \[/m);
-  assert.match(registry, /if \(role === 'admin'\)/);
+  assert.match(registry, /role === 'admin' \? Object\.keys\(ORIGINATOR_TEMPLATES\)/);
 });
 
 test('the picker is a convenience; the server re-checks', () => {
   assert.match(route, /esign\.get\('\/templates'/, 'no templates endpoint');
-  assert.match(route, /templatesFor\(user\.role\)/);
+  assert.match(route, /templatesFor\(user\.role, user\.licences\)/);
   // POST /send must not trust the client's choice.
-  assert.match(route, /if \(!mayOriginate\(sender\.role, documentType\)/,
+  assert.match(route, /if \(!mayOriginate\(sender\.role, documentType, sender\.licences\)/,
     'POST /send does not re-check who may originate the document type');
 });
 

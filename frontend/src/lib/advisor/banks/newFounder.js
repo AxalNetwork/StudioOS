@@ -208,7 +208,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Seeds the Problem slide of your pitch deck draft.',
     doc_anchor: 'build/pitch-deck',
-    page_target: '/build/deck',
+    page_target: '/raise/pitch',
     validate: all(required, minChars(15), maxChars(400)),
   },
   {
@@ -217,7 +217,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Seeds the Market slide. Rough estimates are fine.',
     doc_anchor: 'build/pitch-deck',
-    page_target: '/build/deck',
+    page_target: '/raise/pitch',
     validate: all(required, minChars(15), maxChars(400)),
   },
 

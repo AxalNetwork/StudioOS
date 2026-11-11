@@ -95,6 +95,8 @@ function freshDb(opts: { without?: string[]; no273?: boolean } = {}) {
   for (const t of ['users', 'super_admins', 'integrations', 'cron_run_history', ...D213_TABLES]) {
     if (!without.has(t)) db.exec(ddl(t));
   }
+  // D4856: the mirror's mode stamp (migration 691) post-dates the baseline.
+  if (!without.has('stripe_products')) db.exec('ALTER TABLE stripe_products ADD COLUMN livemode INTEGER');
   if (!without.has('tickets') && !opts.no273) db.exec(M273);
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
     .run(SUPER, 'admin', 'The Holder', 'holder@example.test');
@@ -227,7 +229,7 @@ test('no value of any key or token reaches the payload, and no name of one eithe
      VALUES (?, ?, 'failed', 'Validation Failed', ?)`,
   ).run('TITLE-VALUE-SENTINEL', 'BODY-VALUE-SENTINEL', sqlAgo(db, '-1 hours'));
   db.prepare(
-    `INSERT INTO stripe_products (id, name, prices_json) VALUES (?, ?, ?)`,
+    `INSERT INTO stripe_products (id, name, prices_json, livemode) VALUES (?, ?, ?, 1)`,
   ).run('prod_1', 'NAME-VALUE-SENTINEL', JSON.stringify([{ id: 'price_1', active: true }]));
   db.prepare(
     `INSERT INTO promo_codes (id, code, code_normalized, coupon_id) VALUES (?, ?, ?, ?)`,
@@ -275,8 +277,10 @@ test('P1: every managed key is listed, and a measured absence reads unset', asyn
   assert.equal(k.db_readable, true);
   assert.deepEqual(k.counts, { env: 0, db: 0, unset: MANAGED_PROVIDERS.length, unreadable: 0 });
   for (const item of k.items) {
-    // Four fields, and only four: no client id preview, no updated_by.
-    assert.deepEqual(Object.keys(item).sort(), ['last_set_at', 'last_set_basis', 'provider_key', 'state']);
+    // Six fields, and only six: no client id preview, no updated_by. D5304 added expiry and last use, both null here.
+    assert.deepEqual(Object.keys(item).sort(), ['expires_at', 'last_set_at', 'last_set_basis', 'last_used_at', 'provider_key', 'state']);
+    assert.equal(item.expires_at, null);
+    assert.equal(item.last_used_at, null);
     assert.equal(item.state, 'unset');
     assert.equal(item.last_set_at, null);
     assert.equal(item.last_set_basis, null);
@@ -524,26 +528,40 @@ test('P3: one mask, and a mode that says unknown rather than guessing', () => {
 
 test('P3: the catalog counts active products and active prices, and an unparsed list is not zero prices', async () => {
   const db = freshDb();
-  const ins = db.prepare(`INSERT INTO stripe_products (id, name, active, prices_json, synced_at) VALUES (?, 'p', ?, ?, ?)`);
-  ins.run('prod_a', 1, JSON.stringify([{ id: 'a1', active: true }, { id: 'a2', active: false }]), '2026-01-05T10:00:00.000Z');
-  ins.run('prod_b', 0, JSON.stringify([{ id: 'b1', active: true }]), '2026-01-04 09:00:00');
-  ins.run('prod_c', 1, 'not json', '2026-01-05 11:00:00');
-  ins.run('prod_d', 1, '{}', '2026-01-03 09:00:00');
-  const c = (await summary(db)).body.payments_catalog.catalog;
+  const ins = db.prepare(`INSERT INTO stripe_products (id, name, active, prices_json, synced_at, livemode) VALUES (?, 'p', ?, ?, ?, ?)`);
+  ins.run('prod_a', 1, JSON.stringify([{ id: 'a1', active: true }, { id: 'a2', active: false }]), '2026-01-05T10:00:00.000Z', 1);
+  ins.run('prod_b', 0, JSON.stringify([{ id: 'b1', active: true }]), '2026-01-04 09:00:00', 1);
+  ins.run('prod_c', 1, 'not json', '2026-01-05 11:00:00', 1);
+  ins.run('prod_d', 1, '{}', '2026-01-03 09:00:00', 1);
+  const c = (await summary(db, { STRIPE_SECRET_KEY: 'sk_live_x' })).body.payments_catalog.catalog;
   assert.equal(c.available, true);
   assert.deepEqual(c.products, { all: 4, active: 3 });
-  assert.deepEqual(c.prices, { all: 3, active: 2 }, 'an inactive price was counted as active');
+  // D4703: b1 is active under the archived prod_b, so it cannot be bought; it is still counted, and said apart.
+  assert.deepEqual(c.prices, { all: 3, active: 2, active_under_inactive_products: 1 }, 'an inactive price was counted as active');
+  assert.equal(c.complete, false, 'two rows did not parse, so this is not the whole mirror');
   assert.equal(c.unreadable_price_rows, 2, 'a price list that did not parse was read as zero prices');
   // Same day, ISO at 10:00 and SQL at 11:00: the SQL row is the later write.
   assert.equal(c.last_written_at, '2026-01-05 11:00:00');
   assert.match(String(c.sync_basis), /Nothing schedules a sync/);
 });
 
+test('P3 (D4856): a mixed live/test mirror reports the current mode, and other-mode and unknown-mode rows apart', async () => {
+  // Mutation checked: the route ignoring the key's mode → the test rows are counted as live.
+  const db = freshDb();
+  const ins = db.prepare(`INSERT INTO stripe_products (id, name, active, prices_json, livemode) VALUES (?, 'p', 1, ?, ?)`);
+  const one = JSON.stringify([{ id: 'x', active: true }]);
+  ins.run('live_a', one, 1); ins.run('test_a', one, 0); ins.run('test_b', one, 0); ins.run('none_a', one, null);
+  const c = (await summary(db, { STRIPE_SECRET_KEY: 'sk_live_x' })).body.payments_catalog.catalog;
+  assert.deepEqual([c.stripe_mode, c.products, c.prices.all], ['live', { all: 1, active: 1 }, 1]);
+  assert.deepEqual([c.other_mode, c.unknown_mode], [{ mode: 'test', products: 2 }, { products: 1 }]);
+  assert.equal(c.sync_state, 'not_recorded');
+});
+
 test('P3: an empty mirror is empty; a missing one is unreadable and is not created', async () => {
   const empty = (await summary(freshDb())).body.payments_catalog.catalog;
   assert.deepEqual(
     { available: empty.available, products: empty.products, prices: empty.prices, last: empty.last_written_at },
-    { available: true, products: { all: 0, active: 0 }, prices: { all: 0, active: 0 }, last: null },
+    { available: true, products: { all: 0, active: 0 }, prices: { all: 0, active: 0, active_under_inactive_products: 0 }, last: null },
   );
   const db = freshDb({ without: ['stripe_products'] });
   const gone = (await summary(db, { STRIPE_SECRET_KEY: 'sk_test_x' })).body.payments_catalog.catalog;
@@ -656,6 +674,10 @@ test('P4: the list stops at its limit, and the counts cover every code', async (
   assert.equal(p.truncated, true);
   assert.equal(p.counts.active, PROMO_LIST_LIMIT + 5, 'the counts stopped at the listed fifty');
   assert.ok(Array.isArray(p.caveats) && p.caveats.length === 4);
+  assert.ok(!p.caveats.some((x: string) => /not checked|nothing enforces/.test(x)), 'D4855: the page no longer says ceilings go unchecked');
+  assert.ok(p.caveats.some((x: string) => /refuses a discount that is more than the ceiling/.test(x)), 'D4855: it says what checkout does');
+  assert.ok(p.caveats.some((x: string) => /no ceiling set for the period allows discounts until HQ sets one/.test(x) && /Not recorded/.test(x)), 'D4855 follow-up: a branch with none set allows discounts, and reads Not recorded');
+  assert.ok(!p.caveats.some((x: string) => /refuses every discount/.test(x)), 'D4855 follow-up: it no longer says a branch with none gives no discounts');
 });
 
 test('P4: a missing promo table is unreadable and is not created', async () => {

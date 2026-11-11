@@ -13,6 +13,7 @@ import {
   MELOTTS, OPUS_REFUSAL, SPEECH_JOBS, SPEECH_JOB_STEPS, WALKTHROUGH_CAPTIONS, captionsOf, speechBlock, speechChoice, speechJob,
 } from '../src/services/ai/speechJobs.ts';
 import { modelById } from '../src/services/ai/catalogue.ts';
+import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
 import { parseAudioOutput } from '../src/services/sttFormats.ts';
 import { PRICE_USD_PER_1K_CHARACTERS, PRICE_USD_PER_AUDIO_MINUTE, estimateCostUsd, quoteRun } from '../src/services/aiRouter.ts';
 import { speakRequest, speakRefusal, speechMime } from '../src/services/ai/shapes.ts';
@@ -144,7 +145,8 @@ test('Opus in Ogg is asked of Aura only; MeloTTS makes MP3 and refuses it; Ogg b
 
 test('Record a Session lists no text model: every Listen row of the rail matrix is speech models only', () => {
   const matrix = JSON.parse(readFileSync(new URL('../src/services/ai/railMatrix.json', import.meta.url), 'utf8'));
-  const listen = [...matrix.rows, ...matrix.options].filter((r: any) => r.kind === 'speech');
+  // #4313 part 3: a page row stores no models; what a speech page lists is the row its job builds.
+  const listen = [...railRows(), ...railOptionRows(), ...matrix.options].filter((r: any) => r.kind === 'speech');
   assert.ok(listen.some((r: any) => r.pageKey === 'Founder · Validate · Customer research'));
   for (const r of listen) {
     for (const m of [...r.models, ...(r.more ?? [])]) {

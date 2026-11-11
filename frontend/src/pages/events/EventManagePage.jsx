@@ -1,3 +1,4 @@
+import EventSyndicationPanel from './EventSyndicationPanel';
 // D567 / #1173 — Ops canvas E1, E2, E4. Host authority is enforced by the Worker.
 // D1036 (#2877): the shared host header (MEV12a) over every tab, and Check-in
 // at /events/:id/manage/check-in on the event's day.
@@ -113,6 +114,7 @@ export default function EventManagePage() {
   }
   return <div className="mx-auto max-w-5xl px-4 py-6">
     {data ? <HostHeader event={data.event} screen={screen} pending={pendingCount(data.roster, data.event.approval_required)} /> : null}
+    {data?.event && <EventSyndicationPanel key={id} eventId={id} refresh={data.event} />}
     <div className="evo">
       <p className="evo-note">Save audience rules before checking the member preview. Pending paid tickets receive no check-in code until payment settles.</p>
       {actionError && <p role="alert">Could not save — {actionError}</p>}

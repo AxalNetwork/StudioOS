@@ -40,6 +40,10 @@ test('D886 dispatch: tenant/consent/link/config gates, encrypted link, one activ
   assert.equal(botLimit({role:'founder',subscription_tier:'free'} as any),30);
   assert.equal(botLimit({role:'founder',subscription_tier:'growth',subscription_status:'active'} as any),120);
   for(const p of ['zoom','google_meet','teams'])assert.equal(botPlatform(syntheticLink(p)).platform,p);
+  // A Meet link copied as /meet/<code> joins the call's own address; anything else under /meet/ is refused.
+  assert.deepEqual(botPlatform('https://meet.google.com/meet/ckn-jcaa-sai'),{platform:'google_meet',url:'https://meet.google.com/ckn-jcaa-sai'});
+  assert.deepEqual(botPlatform('https://meet.google.com/CKN-JCAA-SAI/'),{platform:'google_meet',url:'https://meet.google.com/ckn-jcaa-sai'});
+  assert.throws(()=>botPlatform('https://meet.google.com/meet/landing'),{code:'unsupported_link'});
   w.db.prepare("UPDATE users SET role='admin',founder_id=100 WHERE id=?").run(OTHER);
   await assert.rejects(()=>botSession(w.env,{user_id:OTHER,session_id:w.session,project_id:10}), {code:'session_not_found'});
   assert.equal((await call(w.env,OTHER,'POST',`/sessions/${w.session}/bot`,{meeting_url:syntheticLink()})).status,404);

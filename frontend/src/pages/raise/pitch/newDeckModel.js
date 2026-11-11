@@ -9,10 +9,11 @@
  */
 import { ADD_TOKENS_PATH } from '../../../lib/aiTokens';
 import { NOT_ON_STUDIOOS } from './sourcesModel';
+import { newDeckFailure } from './pitchSafeErrors.js';
 
 export const NEW_PATH = '/raise/pitch/new';
 export const NO_ROUND = 'No active round yet.';
-export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/calls' };
+export const ROUND_LINK = { text: 'Plan it in Raise › Round planner ›', path: '/raise/capital-relationships/calls' };
 export const PROPOSED_BY_EADWYN = 'Proposed by Eadwyn';
 export const PROPOSAL_LINE = 'Figures come from your records. Eadwyn wrote the wording.';
 export const TITLES_ONLY_LINE = 'Figures come from your records. The cards carry their titles.';
@@ -28,7 +29,65 @@ export function aiTokens(micro) {
   return `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
 }
 
-// The Worker's `numberIn` (services/decks/newDeck.ts), so the prompt is flagged as it is typed.
+// ─────────────────────────────────────────────────────────── the price, as a state
+
+/**
+ * D4597 (#4597) — what the page knows about the price of the next run, and nothing it does not.
+ *
+ *   loading      the quote is being read
+ *   unavailable  the read failed, or the Worker could not price the run, or it priced a metered run it could
+ *                not pin: retry; nothing runs, and the page never says "free"
+ *   free         the Worker said, explicitly, that the run costs nothing (AI off for this page, or the build
+ *                model off): `ai: false` with one of NO_COST_REASONS
+ *   metered      a price and its pinned `quote_uid`: the run is held to it
+ *   stale        the Worker refused the quote the page held (`quote_stale`): price it again, confirm again
+ *
+ * A slot is `{ status: 'loading' | 'ok' | 'failed' | 'stale', quote?, message? }`. A missing quote is never
+ * "free": only an explicit no-cost answer is.
+ */
+export const NO_COST_REASONS = Object.freeze(['assist_off', 'not_switched_on']);
+export const PRICE_LOADING = 'Reading the price…';
+export const PRICE_UNAVAILABLE = 'The price could not be read, so nothing will run yet. Try again.';
+export const PRICE_STALE = 'The price you were shown has changed or lapsed. Here is the price now: confirm it again to go on.';
+export const PRICE_RETRY = 'Read the price again';
+
+/** A quote the Worker answered, as a price state. `pinned`: a metered run must name a `quote_uid` to be actionable. */
+export function priceState(slot, { pinned = true } = {}) {
+  if (slot && typeof slot === 'object' && typeof slot.kind === 'string') return slot;
+  const status = slot == null ? 'loading' : slot.status;
+  if (status === 'loading') return { kind: 'loading' };
+  if (status === 'stale') return { kind: 'stale' };
+  const q = slot?.quote;
+  if (status !== 'ok' || !q || typeof q !== 'object') return { kind: 'unavailable', message: slot?.message || null };
+  if (q.ai === true) {
+    const quoteUid = typeof q.quote_uid === 'string' && q.quote_uid ? q.quote_uid : null;
+    if (pinned && !quoteUid) return { kind: 'unavailable', message: null };
+    return { kind: 'metered', hold: q.hold_microusd, quoteUid };
+  }
+  if (q.ai === false && NO_COST_REASONS.includes(q.reason)) return { kind: 'free', reason: q.reason };
+  return { kind: 'unavailable', message: q.message || null };
+}
+
+/** A raw quote (or none) as the sentences below read it; a state passes through. */
+export function asPrice(x) {
+  if (x && typeof x === 'object' && typeof x.kind === 'string') return x;
+  return priceState(x == null ? null : { status: 'ok', quote: x }, { pinned: false });
+}
+
+/** Whether the run may be confirmed: only a metered price or an explicit no-cost one. */
+export const canConfirm = (price) => ['metered', 'free'].includes(asPrice(price).kind);
+/** The exact quote the run is sent with: the metered state's, else none. */
+export const quoteUidOf = (price) => { const p = asPrice(price); return p.kind === 'metered' && p.quoteUid ? p.quoteUid : undefined; };
+/** The line for a price that is not yet actionable, or null when it is. */
+export function priceNote(price) {
+  const p = asPrice(price);
+  if (p.kind === 'loading') return PRICE_LOADING;
+  if (p.kind === 'stale') return PRICE_STALE;
+  if (p.kind === 'unavailable') return p.message ? `${p.message} ${PRICE_UNAVAILABLE}` : PRICE_UNAVAILABLE;
+  return null;
+}
+
+// The Worker's `numberIn` (services/decks/numbers.ts), so the prompt is flagged as it is typed.
 const NUMBER_WORDS = ['zero', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
   'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty',
   'sixty', 'seventy', 'eighty', 'ninety', 'hundred', 'hundreds', 'thousand', 'thousands', 'million', 'millions', 'billion',
@@ -48,7 +107,7 @@ export function refusalOf(e) {
   if (!e) return null;
   const data = e.data && typeof e.data === 'object' ? e.data : {};
   const code = e.code || data.error || null;
-  const message = e.message || data.message || 'That did not work. Nothing was changed.';
+  const message = newDeckFailure(e);
   // D1604 (PD-9 plan gate): a press the plan does not include links to the plans, never to a top-up.
   const link = code === 'figure_in_prompt' && typeof data.href === 'string' && data.href.startsWith('/')
     ? { text: data.module ? `Open ${data.module} ›` : 'Open your sources ›', href: data.href }
@@ -148,9 +207,10 @@ export function cardQuoteBody(projectId, proposal, index) {
 }
 
 export function regenerateSentence(quote, title) {
-  const price = quote?.ai ? `Eadwyn rewrites its wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.`
-    : quote?.ai === false ? (quote.reason === 'assist_off' ? 'AI is off on this page, so the card is rebuilt from your records with its title, at no cost.' : (quote.message || 'The price could not be worked out.'))
-      : 'Reading the price…';
+  const p = asPrice(quote);
+  const price = p.kind === 'metered' ? `Eadwyn rewrites its wording, holding up to ${aiTokens(p.hold)} in AI tokens and charging for what it uses.`
+    : p.kind === 'free' ? 'AI is off on this page, so the card is rebuilt from your records with its title, at no cost.'
+      : priceNote(p);
   return `StudioOS rebuilds “${title}” from your records. ${price} Every other card stays as it is, and nothing is saved until you accept.`;
 }
 
@@ -179,8 +239,10 @@ export function chipsFor(row, catalogue = [], items = [], excluded = new Set()) 
 
 /** PD5's estimate line: the quote, and the member's own average when they have runs. */
 export function estimateLine(quote, average) {
-  const est = quote?.ai ? aiTokens(quote.hold_microusd) : null;
-  if (quote && quote.ai === false) return quote.reason === 'assist_off' ? 'AI is off on this page: the cards are your figures with their titles, at no cost.' : (quote.message || 'The price could not be worked out.');
+  const p = asPrice(quote);
+  if (p.kind === 'free') return 'AI is off on this page: the cards are your figures with their titles, at no cost.';
+  if (p.kind === 'unavailable' || p.kind === 'stale') return priceNote(p);
+  const est = p.kind === 'metered' ? aiTokens(p.hold) : null;
   if (!est) return null;
   const avg = average?.runs ? ` · Your average ${aiTokens(average.average_microusd)} over ${average.runs} run${average.runs === 1 ? '' : 's'}` : '';
   return `Estimated ${est}${avg}`;
@@ -189,12 +251,18 @@ export function estimateLine(quote, average) {
 // ─────────────────────────────────────────────────────────── the dialogs
 
 export function outlineSentence(quote, regenerate) {
-  const price = quote?.ai ? `It holds up to ${aiTokens(quote.hold_microusd)} in AI tokens and is charged for what it uses.` : 'AI is off on this page, so StudioOS proposes its standard outline at no cost.';
+  const p = asPrice(quote);
+  const price = p.kind === 'metered' ? `It holds up to ${aiTokens(p.hold)} in AI tokens and is charged for what it uses.`
+    : p.kind === 'free' ? 'AI is off on this page, so StudioOS proposes its standard outline at no cost.'
+      : priceNote(p);
   return `${regenerate ? 'Eadwyn proposes a new outline in place of this one' : 'Eadwyn proposes an outline'} for the audience and length you chose. ${price} It replaces any deck proposal you have not kept; no deck version changes.`;
 }
 
 export function buildSentence(quote, cards) {
-  const price = quote?.ai ? `Eadwyn writes the wording, holding up to ${aiTokens(quote.hold_microusd)} in AI tokens and charging for what it uses.` : 'AI is off on this page, so the cards carry their titles, at no cost.';
+  const p = asPrice(quote);
+  const price = p.kind === 'metered' ? `Eadwyn writes the wording, holding up to ${aiTokens(p.hold)} in AI tokens and charging for what it uses.`
+    : p.kind === 'free' ? 'AI is off on this page, so the cards carry their titles, at no cost.'
+      : priceNote(p);
   const what = cards == null ? 'the deck' : `${cards} card${cards === 1 ? '' : 's'}`;
   return `StudioOS builds ${what} from your records. ${price} The deck is a proposal: you review it, and nothing is saved until you accept it.`;
 }
@@ -220,7 +288,8 @@ export function fastBrief(ctx) {
 
 /** The one-click's line under its title: the brief it will build, then the quote's price. Before the context read, no brief is named. */
 export function fastPathLine(quote, brief = null) {
-  const price = quote?.ai ? ` About ${aiTokens(quote.hold_microusd)} in AI tokens.` : quote?.ai === false && quote.reason === 'assist_off' ? ' AI is off on this page: figures and titles only, at no cost.' : '';
+  const p = asPrice(quote);
+  const price = p.kind === 'metered' ? ` About ${aiTokens(p.hold)} in AI tokens.` : p.kind === 'free' ? ' AI is off on this page: figures and titles only, at no cost.' : ` ${priceNote(p)}`;
   const what = brief?.cards ? `${brief.cards} cards` : 'A deck';
   const who = brief?.label ? `, for the ${brief.label} audience` : '';
   return `${what} from everything on record${who}. Review sources afterwards.${price}`;

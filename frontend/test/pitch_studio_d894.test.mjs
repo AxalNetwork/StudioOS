@@ -37,6 +37,9 @@ import { api } from '../src/lib/api.js';
 import { cyclesApi } from '../src/lib/api/cycles.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import PitchStudio, { StudioAnalytics, StudioDecks } from '../src/pages/raise/pitch/PitchStudio.jsx';
+import { ViewsPerDay, Funnel } from '../src/pages/raise/pitch/ShareBoard.jsx';
+import { deckSlideAnalyticsApi } from '../src/lib/api/deckSlideAnalytics.js';
+import { posthogApi } from '../src/lib/api/posthog.js';
 import { PitchMovedNotice } from '../src/pages/raise/pitch/PitchWorkspaceMoved.jsx';
 import {
   BUILDER_MOVED_KEY, BUILDER_MOVED_NOTICE, BUILDER_PATH, EDIT_PATH, LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, REVIEW_PATH, STUDIO_PATH, TABS, TITLE,
@@ -130,7 +133,9 @@ const between = (html, from, to) => html.slice(html.lastIndexOf('<', html.indexO
 
 /** A promise the test settles by hand. */
 const deferred = () => { let res; let rej; const p = new Promise((a, b) => { res = a; rej = b; }); return { p, resolve: res, reject: rej }; };
-const ORIGINAL = { api: { ...api }, deckReviewer: { ...api.deckReviewer }, cycles: { ...cyclesApi } };
+const ORIGINAL = { api: { ...api }, deckReviewer: { ...api.deckReviewer }, cycles: { ...cyclesApi }, daily: deckSlideAnalyticsApi.daily, posthog: posthogApi.fromPosthog };
+// D4254 P4 (#4272): the Share & analytics board's two reads, answered here so a mounted tile never reads the network.
+const DAILY = { days: [{ date: '2026-10-20', nda: 1, open: 0, first_nda: 1, first_open: 0 }], funnels: { nda: { sent: 1, opened: 1, nda_shown: 1, accepted: 1, reached_ask: null }, open: { sent: 0, opened: 0, nda_shown: null, accepted: null, reached_ask: null } }, dropoff: { current: null, previous: null }, versions: [] };
 
 /**
  * Mount the whole studio at `url` with the reads stubbed. `answers` maps a
@@ -145,6 +150,8 @@ async function mount(element, url, answers, user = null) {
     else api[name] = stub(name, fn);
   }
   api.deckReviewer = { ...api.deckReviewer, list: async () => ({ reviews: [] }) };
+  deckSlideAnalyticsApi.daily = answers.daily ? stub('daily', answers.daily) : async () => DAILY;
+  posthogApi.fromPosthog = async () => ({ link: { linked: false, active: false } });
   if (!answers.getMe) api.getMe = async () => user;
   const restore = installDocument();
   if (user) localStorage.setItem('user', JSON.stringify(user));
@@ -167,6 +174,7 @@ async function mount(element, url, answers, user = null) {
     async unmount() {
       await act(async () => rootEl.unmount()); restore();
       Object.assign(api, ORIGINAL.api); api.deckReviewer = ORIGINAL.deckReviewer; Object.assign(cyclesApi, ORIGINAL.cycles);
+      deckSlideAnalyticsApi.daily = ORIGINAL.daily; posthogApi.fromPosthog = ORIGINAL.posthog;
     },
   };
 }
@@ -222,19 +230,8 @@ test('figures from the capped view list say so: 200 views is "200+", and viewers
   const capped = { ...engagement, total_views: 200, conversions: { ...engagement.conversions, nda_signed: 250 }, views: many };
   assert.equal(readerStats(capped).capped, true);
   assert.equal(readerStats({ ...capped, total_views: 199, views: many.slice(1) }).capped, false);
-  const t = renderedText(analytics(reads({ engagement: ok(capped) })));
-  assert.match(t, /Views\s*200\+/, 'the views tile reads an exact 200');
-  assert.match(t, /Unique viewers\s*150\s*one per browser, in the latest 200 views/);
-  assert.match(t, /Median time\s*0:30\s*per view, over the latest 200/);
-  assert.match(t, /NDA signed\s*250\s*signatures/, 'the NDA count is every signature, and is not capped');
-  // D902: the funnel counts unique viewers. Without the Worker's per-version
-  // block it falls back to the capped list, and says so.
-  assert.match(t, /Opened\s*150/);
-  assert.match(t, /as a share of the unique viewers in its latest 200 views; the NDA count is every signature\./);
-  const whole = renderedText(analytics(reads({ engagement: ok({ ...capped, analytics: { available: true, viewers: 180, median_seconds_per_viewer: 30, cards: { version: 4, seconds: [] }, previous: null, reached_ask: { recorded: true, ask_index: 1, viewers: 90 } } }) })));
-  assert.match(whole, /Opened\s*180\s*Accepted the NDA\s*250\s*Reached the ask\s*90/, 'the per-version block counts every view, not the latest 200');
-  assert.match(whole, /as a share of its unique viewers; the NDA count is every signature\./);
-  assert.doesNotMatch(renderedText(analytics(reads())), /\+|latest 200/, 'under the cap nothing says "at least"');
+  // D4254 P4 (#4272): the tiles that drew these figures became the ps7 board (share_board_4272).
+  assert.match(analytics(reads({ engagement: ok(capped) })), /data-testid="share-board"/);
 });
 
 test('NDA signed is a count of signatures, never "N of" browsers, and the funnel has one denominator from the same read', () => {
@@ -251,16 +248,6 @@ test('NDA signed is a count of signatures, never "N of" browsers, and the funnel
   assert.deepEqual(funnelRows({ views: 4, ndaSigned: 9 }).map((r) => r.width), [100, 100]);
   assert.deepEqual(funnelRows(null).map((r) => [r.n, r.width]), [[null, 0], [null, 0]]);
 
-  const a = analytics(reads({ engagement: ok(twoSigners) }));
-  const t = renderedText(a);
-  assert.doesNotMatch(t, /2 of 1/, 'a signature count is divided by browsers');
-  assert.match(t, /NDA signed\s*2\s*signatures on this version's links/);
-  // D902: the funnel's denominator is unique viewers, and the ask row with no
-  // per-version block is Not recorded, never 0.
-  assert.match(t, /Opened\s*1\s*Accepted the NDA\s*2\s*Reached the ask\s*Not recorded\s*On the current version, as a share of its unique viewers;/);
-  const widths = [...a.matchAll(/width:(\d+)%/g)].map((m) => Number(m[1]));
-  assert.deepEqual(widths, [100, 100, 0]);
-  assert.match(between(a, 'pitch-studio-funnel'), /class="h-2\.5 overflow-hidden rounded-full/, 'the track clips its bar');
   const d = renderedText(decks(reads({ engagement: ok(twoSigners) })));
   assert.doesNotMatch(d, /2 of 1/);
   assert.match(d, /NDA signed\s*2\s*signatures on links to the current version/);
@@ -407,9 +394,8 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
 
 test('a views card that could not be read is drawn as a failed read on both tabs, never as "nobody opened a link"', () => {
   const failedCard = reads({ module: ok({ card: cardUnreadable, records }) });
+  // D4254 P4 (#4272): Share & analytics reads its views on its own (the board); the links still read on their own.
   const a = analytics(failedCard);
-  assert.match(a, /data-testid="pitch-studio-views-error"/);
-  assert.match(renderedText(between(a, 'pitch-studio-views-error', 'pitch-studio-links')), /Views on your links could not be read\.\s*Try again/);
   assert.ok(!renderedText(a).includes(NO_VIEWS), 'a failed read reads as no views');
   assert.match(a, /data-testid="pitch-studio-link-11"/, 'the links read on their own');
   const d = decks(failedCard);
@@ -418,8 +404,7 @@ test('a views card that could not be read is drawn as a failed read on both tabs
   const failedRead = analytics(reads({ module: { status: 'error', data: null } }));
   assert.match(renderedText(failedRead), /Your investor links and the views on them could not be read\.\s*Try again/);
   assert.ok(!renderedText(failedRead).includes(NO_VIEWS));
-  // The Worker's own empty card still says it, on both tabs; no deck does not.
-  assert.ok(renderedText(analytics(reads({ module: ok({ card: cardNoViews, records }) }))).includes(NO_VIEWS));
+  // The Worker's own empty card still says it on Decks; no deck does not.
   assert.ok(renderedText(decks(reads({ module: ok({ card: cardNoViews, records }) }))).includes(NO_VIEWS));
   assert.ok(!renderedText(analytics(reads({ module: ok({ card: cardNoDeck, records: { rows: [] } }) }))).includes(NO_VIEWS));
 });
@@ -431,28 +416,26 @@ test('views older than eight weeks are drawn as a count, and every other figure 
   assert.match(d, /Most read slide\s*Slide 3\s*1:35/);
   assert.match(d, /NDA signed\s*2/);
   assert.ok(!d.includes(NO_VIEWS));
+  // D4254 P4 (#4272): Share & analytics draws the ps7 board, read on its own (share_board_4272).
   const a = analytics(stale);
-  assert.match(a, /data-testid="pitch-studio-tiles"/);
-  assert.match(a, /data-testid="pitch-studio-seconds"/);
-  assert.match(a, /data-testid="pitch-studio-funnel"/);
+  assert.match(a, /data-testid="share-board"/);
   assert.ok(!renderedText(a).includes(NO_VIEWS));
 });
 
-test('a failed versions read says so on the tiles and the funnel, and leaves no skeleton waiting', () => {
+test('a failed versions read says so, never "No deck yet", and leaves no skeleton waiting', () => {
   const a = analytics(reads({ versions: { status: 'error', data: null }, deck: idle, engagement: idle }));
-  const tiles = between(a, 'pitch-studio-tiles', 'pitch-studio-seconds');
-  assert.doesNotMatch(tiles, /animate-pulse/, 'the tiles wait for an engagement read that is never made');
-  assert.equal((renderedText(tiles).match(/Could not be read/g) || []).length, 4);
-  assert.match(renderedText(between(a, 'pitch-studio-funnel', 'pitch-studio-links')), /Funnel\s*Could not be read\./);
+  assert.match(renderedText(between(a, 'pitch-studio-versions-error', 'pitch-studio-links')), /Your deck's versions could not be read\.\s*Try again/);
+  // Mutation checked: drop the versions-error branch → "No deck yet" is drawn and this fails.
+  assert.doesNotMatch(a, /data-testid="pitch-studio-empty"/, 'a failed read is not "no deck"');
+  assert.doesNotMatch(a, /data-testid="(share-board|pitch-studio-board-loading)"/, 'nothing waits on a read that failed');
 });
 
-test('the seconds-per-card chart scrolls inside its card at phone width instead of widening the page', () => {
-  // D902: the chart is this version's, from the engagement read's per-version block.
-  const cards = { version: 4, seconds: Array.from({ length: 20 }, (_, i) => ({ index: i, seconds: 300 + i })) };
-  const block = { available: true, viewers: 3, median_seconds_per_viewer: 60, cards, previous: null, reached_ask: { recorded: false, reason: 'none' } };
-  const a = analytics(reads({ engagement: ok({ ...engagement, analytics: block }) }));
-  assert.match(a, /<section class="[^"]*\bmin-w-0\b[^"]*" data-testid="pitch-studio-seconds"/, 'the grid item grows to the chart\'s width');
-  assert.match(a, /<div class="[^"]*\boverflow-x-auto\b[^"]*" role="img" aria-label="Card 01: 300 seconds/, 'the bars do not scroll inside the card');
+test('views per day scroll inside their card at phone width instead of widening the page', () => {
+  // D4254 P4 (#4272): the board's daily chart replaced the seconds-per-card chart.
+  const days = Array.from({ length: 90 }, (_, i) => ({ date: `2026-08-${String((i % 28) + 1).padStart(2, '0')}-${i}`, nda: i % 3, open: 1, first_nda: 0, first_open: 0 }));
+  const html = draw(h(ViewsPerDay, { days, empty: false }));
+  assert.match(html, /<section class="[^"]*\bmin-w-0\b[^"]*" data-testid="share-board-daily"/, 'the grid item grows to the chart\'s width');
+  assert.match(html, /<div class="[^"]*\boverflow-x-auto\b[^"]*" role="img"/, 'the bars do not scroll inside the card');
 });
 
 /* ------------------------------------------------------------------ *
@@ -511,7 +494,7 @@ test('a read run that has been superseded writes nothing: a late answer never pu
   try {
     assert.match(m.text(), /could not be read\. Try again/);
     await m.press(m.all().find((n) => n.tagName === 'BUTTON' && /Try again/.test((n.childNodes || []).map((c) => c.textContent || '').join(''))));
-    assert.ok(m.by('pitch-studio-tiles'));
+    assert.ok(m.by('share-board'));
     await act(async () => { late.resolve({ versions: [{ id: 40, version: 4, is_current: 1 }] }); });
     await m.settle();
     assert.deepEqual(m.calls.filter(([n]) => n === 'deckEngagement').map(([, id]) => id), [41], 'the superseded run read on');
@@ -617,15 +600,10 @@ test('the cover and the links table never draw a bare dash for a value nobody wr
   assert.match(renderedText(between(a, 'pitch-studio-link-12', 'pitch-studio-link-13')), /Revoked\s*0\s*Not opened\s*Not opened/);
   // An opened link whose time reads "0 min" was never measured, or under half a minute.
   assert.match(renderedText(between(a, 'pitch-studio-link-13', 'pitch-studio-link-14')), /Expired\s*1\s*Not recorded\s*Slide 1/);
-  // The tiles and the funnel with nothing recorded, and while the read runs.
-  const bare = analytics(reads({ engagement: ok({ ...engagement, conversions: {}, views: [{ id: 1, read_seconds: 0 }] }) }));
-  noDash(bare, 'a tile or the funnel');
-  assert.match(renderedText(between(bare, 'pitch-studio-tiles')), /Median time\s*Not recorded/);
-  assert.match(renderedText(between(bare, 'pitch-studio-tiles')), /NDA signed\s*Not recorded/);
-  assert.match(renderedText(between(bare, 'pitch-studio-funnel')), /Accepted the NDA\s*Not recorded/);
-  const running = analytics(reads({ engagement: { status: 'loading', data: null } }));
-  noDash(running, 'the funnel while it reads');
-  assert.match(renderedText(between(running, 'pitch-studio-funnel')), /Opened\s*Reading…/);
+  // D4254 P4 (#4272): the board's funnel with nothing recorded draws words, never a dash or a 0.
+  const bare = draw(h(Funnel, { title: 'NDA links', funnel: { sent: 2, opened: 1, nda_shown: 1, accepted: null, reached_ask: null }, gated: true, testId: 'f' }));
+  noDash(bare, 'the funnel');
+  assert.match(renderedText(bare), /Accepted\s*Not recorded\s*Reached the ask\s*Not recorded/);
 });
 
 test('Withdraw on a live link says it stops at once; a used-up link offers none', async () => {
@@ -678,19 +656,19 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
   for (const p of ['/raise/pitch/edit', '/raise/pitch/decks', '/raise/pitch/script', '/raise/pitch/share', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
   // D4254: the old Share & analytics address redirects, venture kept.
-  assert.ok(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/analytics" element={<KeepQueryRedirect to="/raise/pitch/share" />} />'), false);
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
   // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
-  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
+  assert.equal(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'), false);
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
-  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*<PitchStudio tab="overview" \/>/);
+  assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*studioGate\(<PitchWorkspaceMoved \/>\)\s*:\s*studioGate\(<PitchStudio tab="overview" \/>\)/);
   // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder retired (group E) and its address opens the studio.
-  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchEditor \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchEditor \/>\)\)\} \/>/);
   assert.ok(app.includes('<Route path="/raise/pitch/builder" element={<PitchBuilderMoved />} />'), 'the builder\'s address opens the studio');
   assert.doesNotMatch(app, /PitchWorkspacePage|[^b]PitchDeckPage\b/);
   for (const f of ['frontend/src/pages/PitchWorkspacePage.jsx', 'frontend/src/pages/PitchDeckPage.jsx']) assert.ok(!existsSync(resolve(root, f)), `${f} is back`);
-  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="analytics" \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <PitchStudio tab="review" \/>\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/share" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), studioGate\(<PitchStudio tab="review" \/>\)\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
   assert.doesNotMatch(app, /FounderRaisePitch/);
   const moved = read('frontend/src/pages/raise/pitch/PitchWorkspaceMoved.jsx');
@@ -827,7 +805,8 @@ test('PD15: an admin compares but has no Restore; a refused restore says so in t
     await m.press(m.by('pitch-studio-compare-39'));
     await m.press(m.by('pitch-compare-restore'));
     await m.press(m.by('pitch-compare-restore-run'));
-    assert.equal(m.text().includes('forbidden'), true);
+    // D5070 (#5376): a 403 reads as the approved forbidden sentence, never the raw word.
+    assert.equal(m.text().includes('You do not have access to do that on this venture.'), true);
     assert.ok(m.by('pitch-compare-restore-dialog'), 'the dialog stays open with the refusal');
   } finally { await m.unmount(); }
 });
@@ -843,7 +822,7 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
     assert.match(html, new RegExp(`data-testid="${id}"`), id);
   }
   assert.doesNotMatch(html, /data-testid="pitch-studio-versions"/, 'no versions table on the home');
-  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›']);
+  assert.deepEqual(START_ITEMS.map((i) => i.label), ['Standard outline', 'Build a standard deck now', 'Browse templates ›', 'Import a .pptx template ›', 'Import a document ›']);
   assert.deepEqual(DECK_CARD_MENU.map((i) => i.label), ['Versions…', 'Export…', 'Brand kit']);
   // The deck card's facts, each from a read; nothing recorded is "Not recorded".
   assert.match(renderedText(between(html, 'pitch-studio-deck-facts', 'pitch-studio-coverage')), /Audience\s*Not recorded\s*Round\s*Not recorded\s*Saved\s*20 Oct · 2 cards\s*Views\s*5/);
@@ -852,6 +831,8 @@ test('D1604 home: the deck card, Start from, Data ready and Investor links; Vers
   assert.match(start, /data-testid="pitch-studio-fast"/);
   assert.match(start, /data-testid="pitch-studio-start-pptx-open"/);
   assert.doesNotMatch(renderedText(between(start, 'pitch-studio-start-pptx')), /Coming later/);
+  // D1563 (#3810): Import a document is live beside it and opens its own sheet.
+  assert.match(start, /data-testid="pitch-studio-start-document-open"/);
   // Each item's way in: Standard outline opens New deck; Browse templates opens the gallery (D1604 step 15),
   // never a second link to the same New deck page.
   assert.match(start, /data-testid="pitch-studio-start-outline-link" href="\/raise\/pitch\/new\?project_id=7"/);
@@ -879,7 +860,7 @@ test('D1604 one-click: the brief is the context read\'s; Build waits for it, and
   let answer;
   const ctx = new Promise((r) => { answer = r; });
   newDeckApi.context = async () => ctx;
-  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000 }; };
+  newDeckApi.quote = async (b) => { sent.quote.push(b); return { ai: true, hold_microusd: 6000, quote_uid: 'dq_synthetic' }; };
   newDeckApi.build = async (b) => { sent.build.push(b); return { proposal: { id: 'p1' } }; };
   const m = await mount(h(PitchStudio, { tab: 'decks' }), '/raise/pitch?project_id=7', {
     listProjects: async () => [{ id: 7, name: 'Acme' }], deckListVersions: async () => ({ versions: [V4, V3] }),

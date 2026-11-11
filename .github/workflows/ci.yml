@@ -183,6 +183,12 @@ jobs:
         run: npm ci
       - name: Install root deps
         run: npm ci || npm install --no-audit --no-fund
+      # D4558: dr_second_copy_d4558.test.mjs encrypts and decrypts with the
+      # real `age`, the tool backup-d1.yml installs for the independent copy.
+      # node's --test-shard decides which frontend part runs that file.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
       # docs/ is not committed (D529), and part of the suite reads the built
       # SPA (check-docs-assets-closure, the tests that open docs/), so build
       # it first — the same root build the deploy runs.
@@ -217,6 +223,36 @@ jobs:
           echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
           exit 1
 
+
+  # -------------------------------------------------------------------------
+  # D5398 (#5398): when a PR's suite fails, say whether its red parts are its
+  # own or inherited from a red main, so one repair goes to main and nobody
+  # ports it, merges main or re-runs for it. Its own job, not a required check
+  # and not part of the gate: it labels the failure and never changes it. It
+  # reads this run's jobs, main's latest CI run and the red-main alert, and
+  # cannot fail (continue-on-error; the script exits 0).
+  # -------------------------------------------------------------------------
+  classify:
+    name: why CI failed (D5398)
+    needs: suite
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: scripts
+      - name: Is this failure the PR's own, or main's?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: node scripts/ci-classify.mjs
+
   # -------------------------------------------------------------------------
   # D1511 (#3762): the Pitch deck editor's visual regression and axe suites
   # (frontend/tests/visual/). The fake AI binding, the contract schemas and
@@ -237,7 +273,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
       options: --user 1001
     env:
       PW_CHROMIUM_PATH: /ms-playwright/chromium-1194/chrome-linux/chrome
@@ -312,6 +348,9 @@ jobs:
         run: node scripts/build-profile-routing.mjs --check
       - name: Build the routing docs
         run: node scripts/build-profile-routing.mjs
+      # #4570: the authorization inventory, every route's gate and ownership evidence.
+      - name: Build the authorization inventory
+        run: node scripts/build-auth-inventory.mjs
       - name: Keep the routing docs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -319,6 +358,7 @@ jobs:
           path: |
             documentation/architecture/PROFILE_ROUTING.md
             documentation/architecture/PAGE_INVENTORY.md
+            documentation/architecture/AUTH_INVENTORY.json
           if-no-files-found: error
           retention-days: 30
 
@@ -369,11 +409,18 @@ jobs:
     # Full history (fetch-depth: 0 below) so `git diff base...HEAD` has a
     # merge base. That checkout has exceeded this job's old 5-minute limit
     # before the gate ran (#3514, 2026-10-27), so the job allows 15.
+    #
+    # BLOBLESS (`filter: blob:none`, 2026-11-03). The full clone of every
+    # blob still ran past 15 minutes on a busy day, and a cancelled gate is a
+    # red check on every open PR. The gate needs the commits and trees for the
+    # merge base and the name-only diff, and the bytes of the files HEAD
+    # checks out (which the checkout fetches); it never reads an old blob.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          filter: blob:none
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -416,6 +463,12 @@ jobs:
           DATABASE_URL: sqlite:///./ci-smoke.db
         run: |
           python -c "import importlib; importlib.import_module('backend.app.main'); print('ok')"
+      - name: Company API contract tests
+        env:
+          DATABASE_URL: sqlite:///./ci-company-tests.db
+        run: |
+          python3 -m unittest backend/tests/test_company_fields_d4962.py
+          python3 -m unittest backend/tests/test_company_routes_d5367.py
 
   # -------------------------------------------------------------------------
   # Epic 11 — supply-chain audits. Both run with `|| true` semantics

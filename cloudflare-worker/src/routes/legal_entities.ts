@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D376 — the entity writes behind the Funds · Fabric canvas's F1: recording
  * what an entity is in the fund fabric, its registration number, registered
@@ -22,7 +23,7 @@
  * (D245), so nothing here takes or stores one.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
@@ -43,7 +44,7 @@ export const FUND_LINKS = { gp: 'gp_entity', vehicle: 'fund_vehicle' } as const;
 const TEXT_MAX = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const isStaff = (role: unknown) => role === 'admin' || role === 'partner';
+const isStaff = (user: User) => user.role === 'admin' || holdsLicence(user, 'partner');
 
 /**
  * A text field from a body: absent (`undefined`), cleared (`null`, or blank),
@@ -116,7 +117,7 @@ function readEditable(c: any, b: Record<string, unknown>) {
 // POST /api/legal/entities — create an entity (staff, as before; now validated).
 app.post('/entities', async (c) => {
   const user = await requireAuth(c);
-  if (!isStaff(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  if (!isStaff(user)) return c.json({ error: 'Forbidden' }, 403);
   const b = await body(c);
   const read = readEditable(c, b);
   if (read.refused) return read.refused;
@@ -185,7 +186,7 @@ app.patch('/entities/:id', async (c) => {
 // GET /api/legal/entities/:id/officers — every appointment, ceased ones too (staff).
 app.get('/entities/:id/officers', async (c) => {
   const user = await requireAuth(c);
-  if (!isStaff(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  if (!isStaff(user)) return c.json({ error: 'Forbidden' }, 403);
   const id = positiveInt(c.req.param('id'));
   if (!id || !(await entityById(c.env, id))) return notFound(c);
   const rows = await c.env.DB.prepare(
@@ -323,7 +324,7 @@ async function obligationByUid(env: Env, entityId: number, uid: string) {
 // first, soonest first; then the resolved history, newest first.
 app.get('/entities/:id/obligations', async (c) => {
   const user = await requireAuth(c);
-  if (!isStaff(user.role)) return c.json({ error: 'Forbidden' }, 403);
+  if (!isStaff(user)) return c.json({ error: 'Forbidden' }, 403);
   const id = positiveInt(c.req.param('id'));
   if (!id || !(await entityById(c.env, id))) return notFound(c);
   const rows = await c.env.DB.prepare(

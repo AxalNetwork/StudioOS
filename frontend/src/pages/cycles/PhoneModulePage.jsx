@@ -6,6 +6,8 @@ import { recordHref, recordId, rowLinks } from './recordModel.js';
 import { cardView, cellView, cycleOf, isPlainClick, recordsCount, safeHref } from './cycleModel';
 import { verdictInterviewLine } from './validatePhone.js';
 import { BuildInLovable } from './lovable/BuildInLovable.jsx';
+import { dominantAdd, fewCountLabel, listStage, progressiveFor } from './progressiveList.js';
+import { Sources } from './CycleModulePage.jsx';
 
 /**
  * D703 (#1665) — a module as a pushed page on a phone (CMM:40, CO:259-261),
@@ -73,7 +75,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null,
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null, lovable = null, more = null, aboveRecords = null, header = undefined, showRecords = true,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -85,10 +87,10 @@ export default function PhoneModulePage({
   // A refused or unreadable read sends no card, so the cycle's own list names it (never its slug).
   const name = card?.name || data?.module?.name || moduleName || slug;
   const recs = records ?? data?.records;
-  const bar = (
+  const bar = header === undefined ? (
     <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
-  );
+  ) : header;
   // A module that is also a tool draws its own tabs here (D906: Investor
   // narrative), in every state: each tab has its own read.
   const tabs = (subnav || more) ? <div className="mb-[14px] flex min-w-0 flex-col gap-2">{more && <div className="flex justify-end">{more}</div>}{subnav}</div> : null;
@@ -105,21 +107,26 @@ export default function PhoneModulePage({
     </div>;
   }
 
-  const addOne = firstAdd(add, recs);
-  const headline = card?.next?.text || addOne?.text || null;
+  const rStatus = recordsStatus || (recs ? 'ready' : status);
+  // D5076: the same stages as the desktop table (progressiveList.js).
+  const progressive = progressiveFor(meta.key, slug);
+  const stage = progressive && showRecords && status === 'ready' && rStatus === 'ready' ? listStage(recs, query) : 'many';
+  const zero = stage === 'zero';
+  const controls = stage === 'many';
+  const addOne = zero ? dominantAdd(add, recs, progressive, (a) => a.onClick || safeHref(a.href)) : firstAdd(add, recs);
+  const headline = zero ? progressive.heading : card?.next?.text || addOne?.text || null;
   const cols = Array.isArray(recs?.cols) ? recs.cols : [];
   const rows = Array.isArray(recs?.rows) ? recs.rows : [];
   const filters = Array.isArray(recs?.filters) ? recs.filters : [];
   const sorts = Array.isArray(recs?.sorts) ? recs.sorts : [];
   const count = recordsCount(recs);
   const title = data?.module?.records_title || name;
-  const rStatus = recordsStatus || (recs ? 'ready' : status);
   const set = (patch) => onQuery?.({ ...query, page: 1, ...patch });
   const searching = !!(query.q || Object.values(query.filter || {}).some(Boolean));
   const toolLinks = [tool, ...tools].filter((item) => safeHref(item?.href));
 
   const group = {
-    label: `${title} · ${count.label}`,
+    label: `${title} · ${controls ? count.label : fewCountLabel(recs, progressive)}`,
     testid: 'phone-module-records',
     rows: rows.map((r, i) => {
       const base = phoneRow(cols, r);
@@ -133,13 +140,14 @@ export default function PhoneModulePage({
   };
 
   return (
-    <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug}>
+    <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug} data-stage={progressive ? stage : undefined}>
       {bar}
       {tabs}
       {headline && (
         <section data-testid="phone-module-next" aria-labelledby="phone-module-next-title">
           <p className="m-0 flex min-h-[40px] items-center text-[10px] font-extrabold uppercase tracking-[.12em] text-violet-700 dark:text-violet-300">One next thing</p>
           <h2 id="phone-module-next-title" className="m-0 mt-2 text-[29px] font-black leading-[1.15] tracking-[-.032em] text-gray-900 [text-wrap:balance] dark:text-gray-100">{headline}</h2>
+          {zero && <p className="m-0 mt-2 text-[14px] leading-relaxed text-gray-700 dark:text-gray-300" data-testid="phone-module-outcome">{progressive.outcome}</p>}
           {addOne && <Cta add={addOne} />}
           {/* D1082 (#2947, LV7, LV8a): Build in Lovable follows the first Add on the phone. */}
           {lovable && <div className="mt-3 flex justify-center"><BuildInLovable lovable={lovable} /></div>}
@@ -150,12 +158,15 @@ export default function PhoneModulePage({
           <h2 className="m-0 text-[10px] font-extrabold uppercase tracking-[.12em] text-gray-700 dark:text-gray-300">{name} · at a glance</h2>
           {card?.range && <span className="text-[10.5px] text-gray-600 dark:text-gray-400">{card.range}</span>}
         </div>
-        <CardBody card={card} onRetry={onRetry} search={search} />
+        <CardBody card={zero && card?.next ? { ...card, next: null } : card} onRetry={onRetry} search={search} />
         {/* D757 §2.6 (#1928): Verdict's interview evidence since the last decision, writers only. */}
         {interviewLine && <p className="m-0 mt-2.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100" data-testid="verdict-interview-line">{interviewLine}</p>}
       </section>
 
-      <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
+      {showRecords && <>{!zero && <>
+      {/* #3938 (D1478 part 9): a control that acts on the records themselves, as on the desktop page. */}
+      {aboveRecords && <div className="mt-[22px]">{aboveRecords}</div>}
+      {controls && <div className="mt-[22px] flex flex-col gap-2" data-testid="phone-module-controls">
         <form role="search" onSubmit={(e) => { e.preventDefault(); set({ q: text.trim() }); }}>
           <input type="search" value={text} onChange={(e) => setText(e.target.value)} aria-label={`Search ${title}`} placeholder={`Search ${String(title || '').toLowerCase()}…`}
             className="w-full rounded-[10px] border border-gray-200 bg-white px-3 py-2.5 text-[14px] text-gray-900 placeholder:text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
@@ -176,7 +187,7 @@ export default function PhoneModulePage({
             )}
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="-mx-[22px] mt-[18px]">
         {rStatus === 'unreadable' && <div className="px-[22px]"><Unreadable what={`The ${String(title || 'records').toLowerCase()}`} claim={recordsMessage || 'This is not a claim that there are none.'} onRetry={onRetryRecords || onRetry} /></div>}
@@ -193,12 +204,13 @@ export default function PhoneModulePage({
           <button type="button" className={CONTROL} disabled={count.page >= count.pages} onClick={() => onQuery?.({ ...query, page: count.page + 1 })} aria-label="Next page">›</button>
         </nav>
       )}
+      </>}</>}
       {toolLinks.map((item) => (
         <Link key={item.href} to={item.href} className="mt-3 text-[13px] font-bold text-violet-700 hover:underline dark:text-violet-300" data-testid="phone-module-tool">
           {item.label || `Open ${name}`}
         </Link>
       ))}
-      {children && <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>}
+      {children && (zero ? <Sources phone>{children}</Sources> : <div className="mt-[18px] flex min-w-0 flex-col gap-3">{children}</div>)}
     </div>
   );
 }

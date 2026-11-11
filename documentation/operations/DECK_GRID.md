@@ -1,425 +1,351 @@
-# Deck builder v2 (the Grid): switch off a model, refund, unstick and purge
+# The Grid — deck builder v2 operations runbook (D1547, #3792)
 
-D1547 (#3792, deck v2 B16). This runbook holds the four procedures HQ runs on
-the deck builder's generation path:
+**Who this is for.** An HQ operator (Super Admin) handling one of four things
+on deck builder v2: a model that must stop, a member owed money for a run, a
+run that will not finish, or an image that must come down. Each procedure says
+what exists today, what to do, how to check it worked, and what does not exist
+yet. Where no route exists, the SQL is given and marked as such.
 
-1. Switch off a model.
-2. Refund a batch.
-3. Unstick a batch.
-4. Purge an image, including a DMCA takedown.
+**Read first.** `CLAUDE.md` (production is the Worker on `axal.vc`, D1 is
+`studioos-db`). Run D1 statements with
+`npx wrangler d1 execute studioos-db --remote --env production --command "…"`
+from `cloudflare-worker/`, and read before you write: every write below is
+preceded by the read that shows what it will touch.
 
-Each procedure first says which tool to use: an HQ screen, then a Worker
-route, then D1 SQL. It also says how to check the result and how to undo it.
+**Staging.** There is no staging Worker yet. `[env.preview]` in `wrangler.toml`
+has placeholder ids and no CI deploys it, and `branch-provision.yml` has never
+run. Until one of them is live, each step is marked with how it was verified,
+and **none is marked "tested on staging"**. Two guards read this page.
+`cloudflare-worker/test/deck_grid_runbook_3792.test.ts` checks that every
+route, table, state and limit named here is still in the code.
+`cloudflare-worker/test/deck_grid_runbook_d1547.test.ts` runs every SQL
+block below on the migrated schema, in the situation it is written for.
+The page fails the build when either drifts.
 
-**What is checked, and how.**
-- Every SQL statement in this file is run by
-  `cloudflare-worker/test/deck_grid_runbook_d1547.test.ts` against the real
-  migrated schema, in the situation it is written for (the acceptance
-  fixtures).
-- That test also pins each route, refusal code and constant this file cites
-  to the code.
-- **Not yet run on staging:** every step marked **UNVERIFIED (staging)**.
-  These steps have not been run against a live Worker. Whoever first runs
-  one on staging records the date and the outcome on #3792.
-
-**Conventions.**
-- SQL placeholders are named, like `:batch_uid`. With
-  `wrangler d1 execute studioos-db --remote --env production --command "…"`,
-  replace each placeholder with a quoted literal you have just read back from
-  a SELECT. Never paste a value from a member's message.
-- Run every read before its write. Keep the read's output in the incident or
-  takedown record, not in an issue.
-- No name, email or prompt goes in an issue, a commit or a log. Use counts,
-  uids and outcomes only.
+| # | Procedure | Route today | Verified |
+| --- | --- | --- | --- |
+| 1 | Switch off a model | yes, HQ page and `PUT` | code read; guard test. Not on staging |
+| 2 | Refund a batch | `POST /api/ai-budget/deck-batches/:uid/refund`, or a member adjustment | code read; guard test. Not on staging |
+| 3 | Unstick a batch | no repair route; SQL and the DLQ | code read; guard test. Not on staging |
+| 4 | Purge an image, incl. DMCA | HQ takedown route; SQL, R2 and the cache if the object remains | code read; guard test. Not on staging |
 
 ---
 
-## 1. Switch off a model
+## 1. Switch off a model (D4251)
 
-Use this when a model is misbehaving, unsafe, too expensive, or withdrawn by
-its provider. It takes effect on the **next call**, with no deploy (D4251).
+**What exists.** `ai_model_policy` (migration `202611030919_ai_model_policy.sql`):
+one row per model, `enabled`, `plan_min` (`free`, `growth`, `studio` or null),
+`note`, `updated_by`, `updated_at`. No row means no policy. The routes are
+`routes/admin_ai_element_models.ts`, mounted at `/api/admin/ai/element-models`,
+Super Admin on HQ's deployment only (a branch's Super Admin is 403).
 
-### The tool
+**Steps.**
+1. Open **HQ › Decks › AI models** (`/admin/platform/decks/models`), find the
+   model, switch it off and give a reason (10 to 500 characters). The note members see is optional and up to 500 characters. Or call
+   `PUT /api/admin/ai/element-models` with
+   `{ "model_id": "<id>", "enabled": false, "reason": "<why>", "note": "<what members see, optional>" }`.
+2. Check: `GET /api/admin/ai/element-models` shows it off, and a deck's
+   `GET /api/decks/:id/element-models` leaves it out of every list.
 
-**HQ › Decks › AI models**, at `/admin/platform/decks/models` (Super Admin,
-HQ only; a branch deployment is refused).
+**What happens.**
+- It takes effect on the next call: the policy is read from D1 on every run, with
+  no cache and no deploy.
+- A run that names it is refused `model_not_offered`. A member's saved pick is
+  kept, and the page says "<model> is unavailable. Using <next>.".
+- **Not checked:** what a step already running in a batch does when its model is
+  switched off mid-run. Watch the batch (procedure 3) after switching off a
+  model that is in use.
 
-1. Find the model's row and press **Change…**.
-2. Switch it **off**. Alternatively, set a **plan floor** (`free`, `growth` or
-   `studio`) to keep the model from plans below that floor.
-3. Optionally, add a note of up to 500 characters. It is shown on the row.
-4. Write the **reason**, 10 to 500 characters. It goes into the audit row,
-   not to members.
-5. Confirm.
+**Refusals.** 400 `unknown_model`, `invalid_enabled`, `invalid_plan_min`,
+`invalid_note` or `reason_required`. 409 `model_required` for `@cf/meta/llama-guard-3-8b`: the
+guard cannot be switched off.
 
-The screen calls `PUT /api/admin/ai/element-models` with
-`{ model_id, enabled, plan_min?, note?, reason }`. It answers
-`{ ok, model_id, policy }`. It refuses:
+**Turn it back on.** The same `PUT` with `"enabled": true` and a reason. There
+is no `DELETE`: the row stays, as the record.
 
-| Code | When |
-| --- | --- |
-| 400 `unknown_model` | The id is not in the catalogue (`services/ai/catalogue.ts`). |
-| 400 `invalid_enabled` | `enabled` is not a boolean. |
-| 400 `invalid_plan_min` | The plan floor is not `free`, `growth` or `studio`. |
-| 400 `invalid_note` | The note is longer than 500 characters. |
-| 400 `reason_required` | The reason is shorter than 10 characters. |
-| 409 `model_required` | The model is `@cf/meta/llama-guard-3-8b`, the safety check every run uses (`REQUIRED_MODELS`). It cannot be switched off or given a floor above `free`. |
-
-### What happens
-
-- **The run path.** `featureFlags.modelsOffFor` reads `ai_model_policy` on
-  every call, with no cache. The catalogue then refuses the model with
-  `model_not_offered`.
-- **Every reply that offers models.** The rail, the deck's element models and
-  the lightbox chips read `flagsFor`, which applies the same policy.
-- **A member's saved pick.** It is kept, not cleared.
-  `GET /api/decks/:id/element-models` shows "<Model> is unavailable. Using
-  <next>." and the run uses the next model.
-- **The audit.** One `ai_model_policy_set` audit row records who made the
-  change, the reason, and the policy before and after (`activity_logs` and
-  `admin_audit_log`).
-
-### Check it
-
-```sql
-SELECT model_id, enabled, plan_min, note, updated_by, updated_at FROM ai_model_policy WHERE model_id = :model_id;
-```
-
-```sql
-SELECT admin_user_id, action, exported_at AS logged_at FROM admin_audit_log WHERE action = 'ai_model_policy_set' ORDER BY id DESC LIMIT 5;
-```
-
-Then check the live behaviour. **UNVERIFIED (staging)**:
-- On a staging deck that picked the model, the element-models reply shows the
-  "unavailable" notice.
-- A new run of an area that used it runs on the next model, and its step row
-  names that model in `model_used`.
-
-### Undo
-
-Run the same **Change…** with the model switched **on**, and give a reason.
-The route has no delete; a row with `enabled = 1` and no floor is the same as
-no row.
-
-### The other switch, and why not to use it for this
-
-A `feature_flags` row with key `model:<id>`, set on **HQ › Decks › Feature
-flags** (`PUT /api/admin/feature-flags`, admin), also switches a model off.
-Use it only to switch a model off for one role or one person (`scope: role`
-or `user`).
-
-That route does **not** check `REQUIRED_MODELS`, so it would accept switching
-off the safety model, which stops every run. Do not use it on
-`@cf/meta/llama-guard-3-8b`. Its reads are also cached for up to 60 seconds.
+**Audit.** Each write logs `ai_model_policy_set` with the model, the reason and
+the before and after, in `admin_audit_log` and `activity_logs`.
 
 ---
 
-## 2. Refund a batch
+## 2. Refund a batch (D1502, D755)
 
-A **batch** is one generation run: a row in `deck_area_batches`, with one row
-per quoted line in `deck_area_batch_steps`. It takes one parent hold in
-`ai_budget_reservations` (`reservation_uid`). Each step charges against that
-hold (`ai_usage_logs.reservation_uid`, `record_ref = deckstep:<uid>:<seq>`).
-When the run ends, it settles the hold **once**, at the sum its steps
-charged.
+**What exists.**
+- A run is a `deck_area_batches` row (migration 716): `state` is `queued`,
+  `running`, `cancelling`, `done`, `cancelled` or `failed`. It also carries
+  `quote_microusd`, `reservation_uid`, `charged_microusd` and `settled_at`. Its
+  steps are `deck_area_batch_steps` (`waiting`, `running`, `done`, `failed`,
+  `stopped`).
+- Each run holds once: an `ai_budget_reservations` row keyed
+  `deck-batch:<key>`, `operation = 'deck.generate'`, `execution_id` the batch
+  uid, status `pending`, `review`, `settled` or `refunded`.
+- When the run finishes, the hold settles once, at the sum of the steps'
+  charges. A run that charged nothing releases the hold in full. The ledger is
+  `ai_credit_ledger` (append only: `hold`, `release`, `spend`, `adjustment`);
+  each step's charge is in `ai_usage_logs` with the hold's `reservation_uid`.
+- **HQ refunds a whole run in one press** (D4373):
+  `POST /api/ai-budget/deck-batches/:uid/refund` with
+  `{ "reason": "<10 to 400 characters>" }`. HQ Admin or Super Admin.
 
-### What is already refunded on its own
-
-You do not need to act in these cases:
-- **A step that never started.** It is `stopped` and charges nothing.
-- **A run that charged nothing.** It settles at zero as a refund.
-- **Stop.** Stop (`POST /api/decks/areas/batches/:uid/cancel`, the starter
-  only) charges only the steps that started.
-- **A run that stalled.** Its hold expires 5 minutes after it was last
-  extended (`HOLD_TTL_MS`). The member's next budget read releases it at zero
-  (`releaseExpired`).
-
-### Read the run first
-
+**Find the run and what it charged.**
 ```sql
-SELECT uid, deck_id, state, runtime, quote_microusd, charged_microusd, reservation_uid, created_by, created_at, started_at, settled_at FROM deck_area_batches WHERE uid = :batch_uid;
+SELECT b.uid, b.deck_id, b.state, b.quote_microusd, b.charged_microusd, b.settled_at,
+       r.status AS hold_status, r.user_id
+  FROM deck_area_batches b
+  LEFT JOIN ai_budget_reservations r ON r.uid = b.reservation_uid
+ WHERE b.uid = :batch_uid;
 ```
 
 ```sql
-SELECT seq, element, kind, state, quote_microusd, charged_microusd, error_code, started_at, ended_at FROM deck_area_batch_steps WHERE batch_uid = :batch_uid ORDER BY seq;
+SELECT id, model, charged_microusd, created_at FROM ai_usage_logs WHERE reservation_uid = :reservation_uid;
 ```
 
-```sql
-SELECT uid, status, included_microusd, topup_microusd, actual_included_microusd, actual_topup_microusd, expires_at FROM ai_budget_reservations WHERE uid = :reservation_uid;
-```
+**Steps, by what the hold says.**
+- **`review`** (the run went over its hold): HQ's review queue decides it.
+  `GET /api/ai-budget/reviews`, then `POST /api/ai-budget/reviews/:uid/refund`
+  with `{ "reason": "<at least 10 characters>" }`. Super Admin.
+- **`settled`** (the run charged, and the member is owed it): refund the batch.
+  `POST /api/ai-budget/deck-batches/<batch uid>/refund` with
+  `{ "reason": "<why, 10 to 400 characters>" }`. Every step that charged goes
+  back to the founder's AI tokens as its own `adjustment` row
+  (`source_ref = 'adj:deck-refund:<batch uid>:<seq>'`), each with one
+  `admin_audit_log` row (`deck_batch_refund`), never more in all than the hold
+  settled. The answer lists each charge (`refunded`, `already_refunded`).
+  A second press refunds nothing again. It sits behind the recovery cool-off,
+  like every adjustment, and the member gets one notice with the amount.
+  To give back only part of a run, use an adjustment instead:
+  `POST /api/ai-budget/members/:userId/adjustments` with
+  `{ "amount_usd": <positive, at most 100>, "reason": "Deck batch <uid>: <why>", "idempotency_key": "deck-batch-<uid>" }`.
+- **Not settled** (`pending`, `review`, `refunded`, or no hold): the refund
+  route refunds 0 and says why (`nothing_settled: true`). Then:
+  - **`pending`** past its `expires_at`: nothing to do. The member's next
+    budget read refunds it (`releaseExpired`).
+  - **`review`**: decide it in the review queue, as above.
+  - **`refunded`**: nothing is owed. Check the ledger's `release` row.
 
-The deck has no batch-level refund route. Which tool you use depends on the
-hold's `status`:
+**Check.** The member's `GET /api/ai-budget/me` balance moved by the amount,
+and `ai_credit_ledger` has the `adjustment` row with your reason.
 
-| Hold status | What to do |
-| --- | --- |
-| `pending` | The run has not ended. Unstick it first (§3); it settles when it ends. |
-| `review` | The recorded cost was above the hold. On **HQ › AI allowances › Reviews** (`/admin/platform/allowances`), choose **Refund** (`POST /api/ai-budget/reviews/:uid/refund`, Super Admin, reason of 10 or more characters). |
-| `settled` | Give the money back as an **adjustment**: **HQ › AI allowances**, the member's page, **Adjust** (`POST /api/ai-budget/members/:userId/adjustments` with `{ amount_usd, reason, idempotency_key }`, Super Admin). See below. |
-| `refunded` | Already refunded. Do nothing. |
-
-### An adjustment for a settled run
-
-1. Compute the amount from the run's own rows: the batch's
-   `charged_microusd`, or only the steps you are refunding.
-2. Divide microdollars by 1,000,000 to get dollars.
-3. Make the reason name the batch uid and the cause, for example "deck run
-   <uid>: steps 3–5 failed on a provider outage". Use no person's name.
-4. Use a fresh `idempotency_key` of 8 to 64 characters per refund. A retry
-   with the same key does not pay twice.
-
-The route caps one adjustment at **$100** and an operator at **$250 added per
-30 days** (`AI_TOKEN_PACKS.md`, "Adjust a member's balance"). A larger refund
-is the owner's decision.
-
-`ai_credit_ledger` is append-only, and its triggers refuse UPDATE and DELETE.
-**Never edit a hold or a ledger row by hand.** The routes above are the only
-writes.
-
-### Check it
-
-The member's **History** (`/api/ai-budget/history`) shows the adjustment or
-the refund. The reservation reads `refunded` (a review refund), or the ledger
-shows an `adjustment` row. **UNVERIFIED (staging).**
+**Token packs** bought through Stripe are refunded as `AI_TOKEN_PACKS.md` says,
+not here.
 
 ---
 
-## 3. Unstick a batch
+## 3. Unstick a batch (D1536, D1502)
 
-A deck has at most one active run (`deck_area_batches_one_active`: `queued`,
-`running` or `cancelling`). A stuck run therefore answers `409 deck_busy` to
-every new run on that deck.
+**What drives a run.** `deck_area_batches.runtime`:
+- **`do`**: the `DeckGenRoom` Durable Object's alarm runs each active run in
+  10-minute slices and re-arms after a second. Its list of runs is the storage
+  key `active`.
+- **`queue`**: a `deck_gen_slice` message on `studioos-job-queue` runs a
+  5-minute slice and sends the next, up to `MAX_SLICES` (500) slices, and up to 500 slices in all. At the cap it logs
+  `[deck-gen-queue] slice cap reached` and sends nothing more. A message that
+  fails three times goes to `studioos-job-queue-dlq`, mirrored to
+  `cf_dlq_mirror`.
 
-**Who drives a run.**
-- **The `do` runtime (the default, `DECK_GEN_RUNTIME = "do"`).** The deck's
-  `DeckGenRoom` alarm drives it and rebuilds it after a crash.
-- **The `queue` runtime** (`JOB_QUEUE`, used for runs of more than 18 variant
-  steps). Slices of 5 minutes drive it, up to `MAX_SLICES` (500). At that cap
-  the run is left active and nothing drives it.
+**What "stuck" means.** A run in `queued`, `running` or `cancelling` that
+nothing drives any more: the DO lost it from `active`, its slice went to the
+DLQ, or it reached the slice cap. One active run per deck is enforced by an
+index, so **a stuck run also blocks its deck** from a new one (`409 deck_busy`). There is no lease
+or heartbeat on a run (D1536 lists one as not built); the hold expires 5 minutes after it was last extended (the five-minute TTL,
+`HOLD_TTL_MS`, renewed at each step) and that is the nearest thing.
 
-No sweeper, cron or HQ route cancels a run, so this procedure is the tool.
+**The sweep (D4374).** The daily cleanup (`runCleanupJobs` in
+`models/jobs.ts`) runs `sweepStuckBatches` (`services/decks/batchSweep.ts`).
+A run is stuck when it is still active and no step has started or ended for
+`STUCK_AFTER_MS` (30 minutes, a constant whose comment gives the reason). For
+each one it:
+- ends its steps by rebuild's rule: a `running` step whose usage row exists
+  under the hold is `done` at what that row charged (clamped to its quote);
+  any other `running` or `waiting` step is `stopped` with `error_code =
+  'timed_out'`;
+- closes the run `cancelled` with `stop_reason = 'timed_out'`, in one
+  compare-and-set on its state, so of two sweeps (or a sweep and a late driver)
+  only one closes it;
+- settles the hold once, through `settleAiReservation`, at what the steps
+  charged, releasing the rest. A hold no longer pending is counted as
+  `already_released` and not touched.
 
-### Find stuck runs
+It writes one `activity_logs` row per sweep (`action = 'deck.batch_sweep'`,
+actor `system`) with its counts. The batch read shows the run as
+"Stopped · timed out" (`state_line`), and the deck is free for a new run.
 
+**Find stuck runs** between sweeps. This lists the runs with no step started
+in the window; the sweep (`stuckRuns`) also leaves a run whose last step ended
+inside it, so treat a row here as a candidate, not a verdict:
+```sql
+SELECT b.uid, b.deck_id, b.state, b.runtime, b.created_at, b.started_at, r.status AS hold_status, r.expires_at
+  FROM deck_area_batches b
+  LEFT JOIN ai_budget_reservations r ON r.uid = b.reservation_uid
+ WHERE b.state IN ('queued', 'running', 'cancelling')
+   AND datetime(COALESCE(b.started_at, b.created_at)) < datetime('now', '-30 minutes')
+   AND NOT EXISTS (SELECT 1 FROM deck_area_batch_steps s WHERE s.batch_uid = b.uid
+         AND datetime(s.started_at) >= datetime('now', '-30 minutes'));
+```
+
+A run that is still active and was created more than 30 minutes ago is the
+row the acceptance fixture settles. It is a candidate, not the sweep's verdict:
 ```sql
 SELECT uid, deck_id, state, runtime, created_by, created_at, started_at FROM deck_area_batches WHERE state IN ('queued', 'running', 'cancelling') AND created_at < datetime('now', '-30 minutes') ORDER BY created_at;
 ```
 
-For each stuck run, read its steps (§2) and look for a step left `running`
-with no answer:
-
+A step left `running` with an answer, and one with none:
 ```sql
 SELECT s.seq, s.state, s.started_at, (SELECT COUNT(*) FROM ai_usage_logs u WHERE u.reservation_uid = b.reservation_uid AND u.record_ref = 'deckstep:' || s.batch_uid || ':' || s.seq AND u.refusal IS NULL) AS answered FROM deck_area_batch_steps s JOIN deck_area_batches b ON b.uid = s.batch_uid WHERE s.batch_uid = :batch_uid AND s.state = 'running';
 ```
 
-### Step 1: ask the starter to press Stop
+**Steps.**
+1. **The owner can Stop it**: `POST /api/decks/areas/batches/:uid/cancel`. Only
+   the run's owner may (another account is 403 `not_your_run`). Ask them first:
+   it settles the hold at once; otherwise the daily sweep does.
+   A run with a step still `running` stays `cancelling`, because finish waits
+   for that step. Settle the orphan the way `rebuild` does after a crash, then
+   ask for Stop again. A step whose model answered becomes `done`, at what it
+   charged and capped at its quote. A step with no answer goes back to `waiting`.
+   Nothing is charged twice, and this SQL does not settle the hold:
+   ```sql
+   UPDATE deck_area_batch_steps SET state = 'done', charged_microusd = MIN(quote_microusd, (SELECT COALESCE(SUM(u.charged_microusd), 0) FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq)), ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state = 'running' AND EXISTS (SELECT 1 FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq AND u.refusal IS NULL);
+   ```
+   ```sql
+   UPDATE deck_area_batch_steps SET state = 'waiting', started_at = NULL WHERE batch_uid = :batch_uid AND state = 'running';
+   ```
+2. **A queue run in the DLQ**: `GET /api/infra/dlq` lists it, and
+   `POST /api/infra/dlq/:id/retry?source=cf|d1` sends it again (admin). Retry
+   once; a second failure is a bug to file, not to retry.
+3. **Neither works**: wait for the next daily sweep, which does this right.
+   There is no repair route to run it by hand. Do **not** settle the hold by
+   hand in SQL: settling is a compare-and-set over two tables plus the ledger
+   trigger, and only `settleAiReservation` does it right.
+   - If the hold is already `refunded` (it expired), marking the run `failed`
+     is bookkeeping only, and frees the deck:
+     Run the answered-step statement above first, so finished steps keep
+     their charge on the run's own record, then stop the rest and close the run.
+     The hold is left to expire: within 5 minutes of its last extension the
+     member's next budget read releases it at zero.
+     ```sql
+     UPDATE deck_area_batch_steps SET state = 'stopped', ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state IN ('waiting', 'running');
+     ```
+     ```sql
+     UPDATE deck_area_batches SET state = 'failed', charged_microusd = (SELECT COALESCE(SUM(charged_microusd), 0) FROM deck_area_batch_steps WHERE batch_uid = :batch_uid), settled_at = datetime('now') WHERE uid = :batch_uid AND state IN ('queued', 'running', 'cancelling');
+     ```
+     Then check the steps that ran: they may have charged while the hold says
+     refunded. Any charge in `ai_usage_logs` for this hold is a charge the
+     member did not pay; record it on the issue, and do not bill it back.
+   - If the hold is still `pending` and not expired, wait out its TTL, then do
+     the above.
+4. File an issue with the batch uid, its runtime and which of the three causes
+   it was, and whether the sweep closed it (its `deck.batch_sweep` row).
 
-**Stop** (`POST /api/decks/areas/batches/:uid/cancel`) can be pressed only by
-the member who started the run; anyone else gets `403 not_your_run`.
-
-- **A run with no step in flight** ends at once. It settles what started
-  (`finish`). This covers the queue run at its slice cap.
-- **A run with a step left `running`** stays `cancelling`, because `finish`
-  waits for the step to land. Go to step 2.
-
-### Step 2: settle an orphaned step the way the code does after a crash
-
-This applies `rebuild`'s rule to a step that is `running` with no driver:
-- a step whose model answered becomes `done`, at what it charged (capped at
-  its quote);
-- a step with no answer goes back to `waiting`.
-
-Nothing is charged twice.
-
-```sql
-UPDATE deck_area_batch_steps SET state = 'done', charged_microusd = MIN(quote_microusd, (SELECT COALESCE(SUM(u.charged_microusd), 0) FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq)), ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state = 'running' AND EXISTS (SELECT 1 FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq AND u.refusal IS NULL);
-```
-
-```sql
-UPDATE deck_area_batch_steps SET state = 'waiting', started_at = NULL WHERE batch_uid = :batch_uid AND state = 'running';
-```
-
-Then ask the starter to press **Stop** again. The run is already
-`cancelling`, so Stop goes straight to `finish`. That stops the waiting
-steps, closes the run as `cancelled` and settles the hold at what the steps
-charged. **UNVERIFIED (staging).**
-
-### Step 3: only when the starter cannot press Stop — close it by hand
-
-This ends the run without the code's settlement:
-- the run is marked `failed`;
-- every step not `done` is `stopped`.
-
-The hold is left to expire. Within 5 minutes of its last extension, the
-member's next budget read releases it **at zero**, so the member is not
-charged for this run. That includes the steps that did finish. Record that
-on the incident.
-
-Run step 2's first statement first, so the finished steps keep their charge
-on the run's own record.
-
-```sql
-UPDATE deck_area_batch_steps SET state = 'stopped', ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state IN ('waiting', 'running');
-```
-
-```sql
-UPDATE deck_area_batches SET state = 'failed', charged_microusd = (SELECT COALESCE(SUM(charged_microusd), 0) FROM deck_area_batch_steps WHERE batch_uid = :batch_uid), settled_at = datetime('now') WHERE uid = :batch_uid AND state IN ('queued', 'running', 'cancelling');
-```
-
-### Check it
-
-- The batch row reads `cancelled` or `failed`, with `settled_at` set.
-- The "Find stuck runs" query no longer lists it.
-- A new run on the deck is admitted instead of answering `409 deck_busy`.
-  **UNVERIFIED (staging).**
-
-### Undo
-
-There is none, and none is needed. The member starts a new run, or uses
-**Retry failed** (`POST /api/decks/areas/batches/:uid/retry-failed`, the
-starter only), which quotes only the failed areas.
+**Check.** The query above no longer returns the run, and the deck starts a
+new one.
 
 ---
 
-## 4. Purge an image, including a DMCA takedown
+## 4. Purge an image, including a DMCA takedown (D1508, D1543)
 
-**Where an image lives.**
-- **The row:** `deck_images` (state `proposed`, `kept` or `discarded`).
-- **The file:** R2 bucket `studioos-files` (binding `FILES`), key
-  `deck-images/<project>/<uid>.<ext>`, in the row's `r2_key`.
-- **How it is served:** `GET /api/decks/images/:uid/file`.
-  - The route answers **404** once the row is `discarded`, before it reads R2.
-  - A **kept** image is public to anyone with the URL, with
-    `cache-control: public, max-age=31536000, immutable`.
+**What exists.**
+- An image is a `deck_images` row and one R2 object on the `FILES` binding,
+  bucket `studioos-files`, key `deck-images/<project>/<uid>.<ext>`
+  (`studioos-files/<r2_key>`).
+- `GET /api/decks/images/:uid/file` serves a **kept** image publicly with
+  `cache-control: public, max-age=31536000, immutable`, and any other state
+  `private, no-store` (a discarded one is 404). The URL never changes and is not
+  signed, so **a browser or edge copy of a kept image outlives a purge** until
+  the cache is purged too.
+- A member can discard an image that is not kept
+  (`POST /api/decks/images/:uid/discard`; a kept one is 409 `image_kept`). The
+  daily 03:00 sweep (`sweepDeckImages`) deletes discarded images after 24 hours,
+  and proposals nobody kept after 14 days, writing `deck_r2_tombstones`. **It
+  never deletes a kept or named image.**
+- Logos: `DELETE /api/decks/:id/logos/:key`, or `PATCH` with
+  `{ "permitted": false }`, removes or withdraws the `deck_logos` row only; the
+  image object stays.
+- **HQ takedown (#4375, D4375).** `POST /api/admin/deck-images/:uid/takedown`
+  `{ reason }`, HQ admins only, does in one audited press what used to be
+  steps 2 to 5:
+  - deletes the R2 object;
+  - marks the row `taken_down_at` with the admin and the reason;
+  - from then on, the file URL answers a neutral placeholder ("Image removed
+    by Axal HQ") instead of the bytes, so every version, draft, proposal and
+    export that names the image shows the placeholder (nothing is rewritten);
+  - tells the venture's founders, with the reason;
+  - writes the admin audit row.
 
-**Why the normal paths do not purge.**
-- The member's **Discard** refuses a kept image (`409 image_kept`).
-- The daily sweep (03:00 UTC) never removes a kept image, nor one any saved
-  version, draft, proposal or derivative still names (the view
-  `deck_images_named`).
-- No HQ purge route exists.
+  HQ › Decks › Reports offers it on each image a report names. The daily
+  sweep never removes a taken-down row, because the row is the record.
+- The DMCA policy (`cloudflare-worker/src/templates/legal/dmca_policy_v1.md`)
+  is a draft that nothing serves, and no designated agent is registered
+  (D706). Until counsel finishes it, a takedown notice goes to the owner first;
+  this page does not decide whether a notice is valid.
 
-So a purge is the three steps below.
-
-### Find the image and every deck that names it
-
-The uid is the 36-character id in the reported URL
-(`/api/decks/images/<uid>/file`).
-
+**Find the image, the decks that name it, and a copy of the same bytes.**
+The uid is the 36-character id in `/api/decks/images/<uid>/file`.
 ```sql
 SELECT uid, project_id, card_uid, source, model, state, r2_key, mime, sha256, created_at FROM deck_images WHERE uid = :image_uid;
 ```
-
 ```sql
 SELECT d.id AS deck_id, d.project_id FROM pitch_decks d JOIN deck_images i ON i.project_id = d.project_id WHERE i.uid = :image_uid AND (instr(COALESCE(d.slides, ''), i.uid) > 0 OR instr(COALESCE(d.theme_json, ''), i.uid) > 0);
 ```
-
 ```sql
 SELECT 'proposal' AS store, COUNT(*) AS n FROM pitch_deck_proposals p JOIN deck_images i ON i.project_id = p.project_id WHERE i.uid = :image_uid AND instr(COALESCE(p.slides, ''), i.uid) > 0 UNION ALL SELECT 'derivative', COUNT(*) FROM deck_derivatives v JOIN deck_images i ON i.project_id = v.project_id WHERE i.uid = :image_uid AND instr(COALESCE(v.slides, ''), i.uid) > 0 UNION ALL SELECT 'card draft', COUNT(*) FROM pitch_deck_cards c JOIN pitch_decks d ON d.id = c.deck_id JOIN deck_images i ON i.project_id = d.project_id WHERE i.uid = :image_uid AND instr(c.json, i.uid) > 0;
 ```
-
-The same picture can sit under a second uid. Another venture may have
-uploaded the same bytes, or the edit tools may have made a copy. Look these
-up by `sha256` and `parent_uid`, and purge each match the notice covers:
-
 ```sql
 SELECT uid, project_id, state, parent_uid FROM deck_images WHERE (sha256 = :sha256 AND uid <> :image_uid) OR parent_uid = :image_uid;
 ```
-
-### Step 1: stop serving it (the row)
-
+Setting the row `discarded` makes `GET /api/decks/images/:uid/file` answer 404
+before it reads R2. That is the file route's rule. The HQ takedown below is
+the procedure to use: it also deletes the object, marks the row and tells the
+venture. The discard write is what the acceptance fixture runs, and what you
+use only if the takedown route cannot be reached:
 ```sql
 UPDATE deck_images SET state = 'discarded', discarded_at = datetime('now') WHERE uid = :image_uid;
 ```
-
-From the next request, the file route answers 404, and the editor, Present,
-share links and published links show the card without the picture. Exports
-fetch each image when they are made, so a new export leaves it out and says
-so on that card.
-
-A discarded row also gives up its `sha256`, so a re-upload of the same bytes
-is stored as a new image and does not reuse this one. Watch the venture for
-that after a DMCA takedown.
-
-### Step 2: delete the file (R2)
-
-```sh
-npx wrangler r2 object delete "studioos-files/<r2_key>" --remote
-```
-
-Run this from `cloudflare-worker/`, with the `r2_key` from the first SELECT.
-It is needed because the sweep keeps a file that a deck still names.
-**UNVERIFIED (staging):** the command's flags on the pinned wrangler.
-
-### Step 3: tell the venture
-
-The venture's decks still name the uid, and now show a missing picture. Tell
-the venture's owner which card and why, through the takedown record's contact
-channel, not an issue. Ask them to remove the picture from the card.
-
-### What a purge cannot reach
-
-- **Copies already downloaded.** A PDF, PowerPoint, .odp or HTML export
-  embeds the picture, and the HTML embeds it as a data URI. Exports are not
-  stored by us (`DATA_RETENTION.md`).
-- **Browser caches.** A kept image was served `immutable` for a year. The
-  Worker does not put these responses in Cloudflare's edge cache (the repo
-  has no `caches.default` use for them), so there is no CDN purge to run. A
-  browser or proxy that already holds the file keeps it.
-
-Say both plainly in the takedown reply.
-
-### A DMCA notice
-
-The policy that names the designated agent
-(`cloudflare-worker/src/templates/legal/dmca_policy_v1.md`, legal@axal.vc)
-is still a **draft** (`LEGAL_REVIEW.md`). The agent has not been registered
-with the Copyright Office, and nothing sends the policy (D706). Until counsel
-finishes it, every notice goes to counsel first. This runbook covers only the
-operator's part.
-
-1. **Log it.** Record the notice in the takedown record (not an issue): the
-   date received, the reported URL or URLs, and whether the notice has the
-   statutory elements (17 U.S.C. §512(c)(3)): identification of the work, of
-   the material, contact details, a good-faith statement, an accuracy
-   statement under penalty of perjury, and a signature. Counsel decides
-   whether an incomplete notice is acted on.
-2. **Purge.** On counsel's go-ahead, purge each image the notice identifies:
-   steps 1 to 3 above, including the `sha256` and `parent_uid` matches.
-   Record the uids and the time of step 1.
-3. **Notify.** Tell the venture's owner that the material was removed and
-   that they may send a counter-notice. Counsel supplies the wording.
-4. **Counter-notice.** If one arrives, counsel decides on reinstatement. A
-   purged file is gone from R2 and cannot be restored by us. The venture
-   re-uploads it.
-5. **Repeat infringers.** Count takedowns per venture in the takedown record.
-   The repeat-infringer policy is counsel's to set.
-
-An image the Grid **drew** (`source = 'generated'`) is purged the same way.
-Its row's `model` names the model that drew it, which counsel may need.
-
-### Undo
-
-- **Step 1** can be undone while the R2 file still exists, with the
-  statement below. Do this only on counsel's word.
-- **Step 2** cannot be undone.
-
+While the R2 object still exists, counsel can undo that one write:
 ```sql
 UPDATE deck_images SET state = 'kept', discarded_at = NULL WHERE uid = :image_uid AND state = 'discarded';
 ```
 
+**Steps (owner-approved takedown, or an image that must go).**
+1. Record the notice on a private issue, never in a public comment: it names
+   a person and a work. Note the image uid, the deck, the venture and who
+   approved the takedown.
+2. Take it down: from the report in HQ › Decks › Reports (Take down image),
+   or by calling the route with the reason the founder will read. The reason
+   is 10 to 1,000 characters. A second takedown is 409 `already_taken_down`.
+   If the answer says `r2_deleted: false`, delete the object by hand:
+   `npx wrangler r2 object delete <FILES bucket>/deck-images/<project>/<uid>.<ext> --remote`,
+   then record the key, as the sweep would:
+   ```sql
+   INSERT INTO deck_r2_tombstones (key, project_id, bytes, reason)
+   VALUES ('deck-images/1/00000000-0000-4000-8000-000000000001.png', 1, NULL, 'discarded');
+   ```
+   The table only takes `discarded` or `unkept_proposal` as a reason; the
+   takedown's own reason is on the row (`taken_down_reason`) and the private
+   issue. The file route never serves the bytes either way, because it reads
+   the mark before R2.
+3. Purge the edge cache for `https://axal.vc/api/decks/images/<uid>/file` and
+   the same path on `app.axal.vc` (Cloudflare dashboard › Caching › Purge by
+   URL). A kept image was served `public, max-age=31536000, immutable`, so a
+   copy cached before the takedown can outlive it until it is purged. A
+   browser that already cached it keeps it until its own cache clears, and
+   that cannot be reached from here. Files a founder exported before the
+   takedown are their own and are not reached either.
+
+**Check.** The file URL answers the placeholder (`x-axal-image-state:
+taken-down`) on both hosts, the row has `taken_down_at`, and the admin audit
+log has a `deck_image_taken_down` row.
+
+**Retention.** The rules for these stores are in `DATA_RETENTION.md` (D1508),
+which `scripts/check-deck-retention.mjs` checks.
+
 ---
 
-## Known gaps
+## What is not built (for whoever builds it next)
 
-These are listed on #3792 rather than built under this docs task.
-
-- **No HQ route to stop someone else's run.** Unsticking a run whose starter
-  is away means the SQL in §3, step 3, which settles at zero.
-- **No HQ purge route.** A purge is SQL plus wrangler, and writes no
-  `deck_r2_tombstones` row: its `reason` CHECK allows only `discarded` and
-  `unkept_proposal`.
-- **`PUT /api/admin/feature-flags` accepts `model:@cf/meta/llama-guard-3-8b`.**
-  The model policy route refuses it (`409 model_required`); the flag route
-  does not.
-- **The DMCA policy is a draft.** The designated agent is not registered.
+- A button in HQ for the batch refund (the route is built, D4373).
+- An HQ list of stuck runs, and a lease on a queue slice (D1536). The sweep is
+  built (D4374).
+- Purging the edge cache from the image takedown itself (D4375): it needs a
+  Cloudflare API token with cache purge, which the Worker does not hold.
+- A live staging Worker, so each procedure can be run end to end before a
+  release.

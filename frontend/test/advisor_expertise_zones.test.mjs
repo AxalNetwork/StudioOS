@@ -148,8 +148,7 @@ test('/office-hours is retired, and its one unique capability moved rather than 
   // rendered its own component. Task #124's freeze is lifted, so it pins the
   // retirement instead. UNRESOLVED_ITEMS U4 is resolved with it.
   const line = app.split('\n').find((l) => l.includes('path="/office-hours"'));
-  assert.ok(line, 'the path must still resolve — a retired page is not a 404');
-  assert.match(line, /<Navigate to="\/practice\/opportunities" replace \/>/);
+  assert.equal(line, undefined);
 
   // RETIRING IS NOT THE SAME AS DROPPING. Of everything that page rendered,
   // exactly one thing lived nowhere else: the advisor's own review of a
@@ -195,7 +194,18 @@ test('a failed read is not rendered as an empty store', () => {
   for (const page of ['ServicesZone.jsx', 'ProofZone.jsx', 'ProfileZone.jsx']) {
     const src = codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`));
     assert.match(src, /<ZoneBody/, `${page} must use the shared four-state body`);
+    // #4689: Services and Proof read a page at a time through `usePagedList`,
+    // which catches the failure and hands it to ZoneBody as `error`.
+    if (/usePagedList\(/.test(src)) continue;
     assert.match(src, /catch \(e\) \{/, `${page} must catch its own read failure`);
+  }
+  const pages = codeOnly(read('frontend/src/pages/advisor/expertise/pages.js'));
+  // D4711: a newer read may supersede this one (`seq`), and then this one writes nothing.
+  assert.match(pages, /catch \(e\) \{\s*reportError\('expertise:list', e\);\s*(?:if \(mine !== seq\.current\) return;\s*)?latest\.current = null;\s*setState\(\{ loading: false, error: (?:errorText|zoneError\(e, errorText, surface\)), rows: \[\]/,
+    'a failed first page is an error with no rows, never an empty list');
+  assert.doesNotMatch(pages, /e\?\.message/, '#4697: the helper never prints a thrown error\'s text');
+  for (const page of ['ServicesZone.jsx', 'ProofZone.jsx']) {
+    assert.match(codeOnly(read(`frontend/src/pages/advisor/expertise/${page}`)), /error: list\.error/, `${page} passes the paged read's error to ZoneBody`);
   }
 });
 
@@ -208,7 +218,7 @@ test('no zone holds `loading` true past its own error', () => {
   assertLoadingNeverOutlivesError('frontend/src/pages/advisor', 10);
 });
 
-test('confirmation is the attester’s to give, and the token is shown once', () => {
+test('confirmation is the attester’s to give, and the link survives a refresh (D4670)', () => {
   const proof = codeOnly(read('frontend/src/pages/advisor/expertise/ProofZone.jsx'));
   // `attested` comes off the worker's row; nothing here computes it from the
   // advisor's own input, and nothing lets them set it.
@@ -217,11 +227,13 @@ test('confirmation is the attester’s to give, and the token is shown once', ()
     'the page must never assert attestation itself');
   assert.match(proof, /Self-stated/, 'an unconfirmed claim says so');
 
-  // The link is state on the response, not something re-read later — the
-  // worker returns request_token once and never again.
-  assert.match(proof, /res\?\.request_token/);
-  assert.doesNotMatch(proof, /row\.consents\[0\]\.request_token/);
-  assert.match(proof, /shown once/i);
+  // D4670: the link is drawn from each pending consent on the list, so a
+  // refresh never loses it; it can be, because the link no longer answers
+  // anything (a code mailed to the named address does). The old one-shot
+  // `request_token` on the response is gone, and so is "shown once".
+  assert.match(proof, /c\.invite_token/);
+  assert.doesNotMatch(proof, /request_token/);
+  assert.doesNotMatch(proof, /shown once/i);
 });
 
 test('the attester can answer without an account', () => {

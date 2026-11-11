@@ -56,9 +56,9 @@ test('the section root and the market tab still redirect to the live surface', (
     const start = at + head.length;
     return app.slice(start, app.indexOf('"', start));
   };
-  assert.equal(target('/advisor/research'), '/research');
-  assert.equal(target('/advisor/research/market'), '/research/markets');
-  for (const to of [target('/advisor/research'), target('/advisor/research/market')]) {
+  assert.equal(target('/advisor/research'), undefined);
+  assert.equal(target('/advisor/research/market'), undefined);
+  for (const to of ['/research', '/research/markets']) {
     const guardLines = app.split('\n').filter((l) => l.includes(`path="${to}"`) || (to === '/research' && l.includes("guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace")));
     assert.ok(guardLines.some((l) => l.includes("'advisor'")), `${to} must admit an advisor`);
   }
@@ -138,7 +138,7 @@ test('the Advisory tabs are deliberately still here', () => {
   // mechanism changed because "still here" no longer requires a fixture.
   assert.equal(existsSync(resolve(root, 'frontend/src/data/advisor/advisory.js')), false,
     'the Advisory fixture is deleted — the tabs read advisors.ts now (documentation/architecture/DECISIONS.md D31)');
-  assert.match(read('frontend/src/App.jsx'), /path="\/advisor\/advisory\/opportunities"/);
+  assert.doesNotMatch(read('frontend/src/App.jsx'), /path="\/advisor\/advisory\/opportunities"/);
   for (const p of [
     'frontend/src/pages/advisor/advisory/OpportunitiesPage.jsx',
     'frontend/src/pages/advisor/advisory/ClientsPage.jsx',

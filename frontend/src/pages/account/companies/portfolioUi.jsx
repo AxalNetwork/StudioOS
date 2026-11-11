@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Pill from '../../../ui/Pill.jsx';
 import { Unrecorded } from '../../../ui/Honesty.jsx';
 import { EYEBROW, INK, MUTED, BTN_SECONDARY } from '../../team/teamUi.jsx';
+import { BASE_PATH } from './companiesModel';
 
 /**
  * D1413 (#3696) — the small pieces every Portfolio screen draws: the company
@@ -27,6 +28,8 @@ export function logoSrcOf(logoUrl) {
   if (typeof logoUrl !== 'string') return null;
   const u = logoUrl.trim();
   if (/^\/api\/company\/[^/?#]+\/logo(?:\?v=[0-9a-f]{32}\.(?:png|svg))?$/.test(u)) return u;
+  // #4201: a picked file's preview before Save (URL.createObjectURL), drawn only on this device.
+  if (/^blob:[^\s]+$/.test(u)) return u;
   return /^https?:\/\/[^\s]+$/i.test(u) ? u : null;
 }
 
@@ -38,7 +41,7 @@ export function CompanyMark({ name, size = 40, logoUrl = null }) {
     return (
       <img src={src} alt="" aria-hidden="true" width={size} height={size} style={{ width: size, height: size }}
         className="inline-block shrink-0 rounded-[24%] border border-axal-hairline bg-white object-contain dark:border-gray-700 dark:bg-gray-100"
-        data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : 'outside'}
+        data-mark="company" data-logo={src.startsWith('/api/') ? 'stored' : src.startsWith('blob:') ? 'pending' : 'outside'}
         onError={() => setFailed(src)} />
     );
   }
@@ -127,6 +130,16 @@ export function Reading({ testId, lines = 3 }) {
     <div aria-busy="true" className="flex flex-col gap-2" data-testid={testId}>
       <span className={MUTED}>Reading…</span>
       {Array.from({ length: lines }, (_, i) => <span key={i} className="h-2.5 rounded-full bg-axal-ground dark:bg-gray-800" style={{ width: `${80 - i * 12}%` }} />)}
+    </div>
+  );
+}
+
+/** A company the member cannot open (the Worker answers 404 for an unknown company and for a non-member alike): the refusal, no Try again (#4736). */
+export function NotYours({ testId = 'company-settings-not-yours' }) {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col gap-3 p-6" data-testid={testId}>
+      <p className={`m-0 text-[14px] font-bold ${INK}`}>This company is not yours to open.</p>
+      <Link to={BASE_PATH} className={BTN_SECONDARY}>Back to Portfolio</Link>
     </div>
   );
 }

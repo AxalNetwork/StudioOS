@@ -34,6 +34,7 @@
  * keeps them only when the caller holds the elevation.
  */
 import type { Env } from '../types';
+import { branchOf } from '../util/branch';
 import { APPROVAL_SOURCES, approvalBoard, type ApprovalSource } from './approvalSources';
 import { HQ_APPROVAL_SOURCES } from './hqApprovalSources';
 import { medianOfHours, sqlStamp, utcMs } from './approvalAge';
@@ -53,6 +54,11 @@ type Recorded = {
   /** For a lane outside the inbox's board: its waiting rows' arrival times, `?` the window's start. */
   waitingSql?: string;
   scope?: 'hq';
+  /**
+   * D5302: values the lane's own `sql` binds, before the filter's, as an inbox
+   * source's `bindings` do (KYB's studio scope). Absent: the lane binds none.
+   */
+  bindings?: (env: Env) => unknown[];
   sql: string;
 };
 type Unrecorded = { key: string; recorded: false; since: null; reason: string; scope?: 'hq' };
@@ -181,34 +187,100 @@ export const DECISION_LANES: readonly DecisionLane[] = [
       + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id WHERE e.approved_at IS NOT NULL',
   },
   {
-    key: 'best_fit', recorded: false, since: null,
-    reason: 'A Best-Fit booking keeps no time for its confirmation or cancellation, and nothing else records it.',
+    // #5301: confirming and cancelling are the review outcomes. Completion is
+    // operational; it stays in the full transition history without becoming a
+    // second approval. A later cancellation is preserved beside confirmation.
+    key: 'best_fit', recorded: true, since: '2026-11-10',
+    caveat: 'Best-Fit decisions before 10 November 2026 were not recorded.',
+    sql:
+      'SELECT b.id AS item_id, ' + WHO('u', 'b.user_id') + ' AS who, '
+      + "CASE e.to_status WHEN 'confirmed' THEN 'approved' ELSE 'declined' END AS outcome, "
+      + "CASE e.to_status WHEN 'confirmed' THEN 'Confirmed' ELSE 'Cancelled' END AS outcome_word, "
+      + 'datetime(e.created_at) AS decided_at, e.actor_user_id AS decided_by_id, NULL AS decided_by_label, '
+      + 'datetime(b.requested_at) AS arrived_at, NULL AS note, 0 AS note_shown '
+      + 'FROM admin_consultation_booking_events e JOIN admin_consultation_bookings b ON b.id = e.booking_id '
+      + 'LEFT JOIN users u ON u.id = b.user_id '
+      + "WHERE e.to_status IN ('confirmed', 'cancelled')",
   },
   {
-    key: 'due_diligence', recorded: false, since: null,
-    reason: 'Nothing decides a due-diligence case yet: no route completes or archives one.',
+    // D5302: migration 620's decision and archive columns, written by
+    // `POST /api/dd/cases/:uid/decision` and the archive. A case decided
+    // before 620 has no decision (620: "NO OTHER BACKFILL").
+    key: 'due_diligence', recorded: true, since: null,
+    caveat: 'A due-diligence case decided again keeps only its latest decision, and its reason is kept encrypted with the case, so the log shows no note.',
+    sql:
+      'SELECT d.id AS item_id, ' + WHO('u', 'd.owner_user_id') + ' AS who, '
+      + "CASE d.decision WHEN 'proceed' THEN 'approved' WHEN 'proceed_with_conditions' THEN 'approved' "
+      + "WHEN 'do_not_proceed' THEN 'declined' ELSE 'other' END AS outcome, "
+      + "CASE d.decision WHEN 'proceed' THEN 'Proceed' WHEN 'proceed_with_conditions' THEN 'Proceed with conditions' "
+      + "WHEN 'do_not_proceed' THEN 'Do not proceed' ELSE 'Withdrawn' END AS outcome_word, "
+      + 'datetime(d.decided_at) AS decided_at, d.decided_by AS decided_by_id, NULL AS decided_by_label, '
+      + 'datetime(d.created_at) AS arrived_at, NULL AS note, 0 AS note_shown '
+      + 'FROM dd_cases d LEFT JOIN users u ON u.id = d.owner_user_id '
+      + 'WHERE d.decision IS NOT NULL AND d.decided_at IS NOT NULL '
+      + 'UNION ALL '
+      + 'SELECT d.id, ' + WHO('u', 'd.owner_user_id') + ", 'other', 'Archived', "
+      + 'datetime(d.archived_at), d.archived_by, NULL, datetime(d.created_at), NULL, 0 '
+      + 'FROM dd_cases d LEFT JOIN users u ON u.id = d.owner_user_id WHERE d.archived_at IS NOT NULL',
   },
   {
-    key: 'kyb', recorded: false, since: null,
-    reason: 'No admin route decides a business verification yet, so no KYB decision is recorded.',
+    // D5302: D1231's append-only `kyb_case_events`, one row per staff act that
+    // committed (`kyb_admin.ts`'s `commit`). Item ids are the inbox's
+    // (`kyb_businesses.id`), and the same scope as the inbox's lane: this
+    // studio's cases, no licensed studio, no case linked to an admin (those
+    // are the Super Admin's business queue).
+    key: 'kyb', recorded: true, since: null,
+    caveat: 'A business keeps the reason for its latest decision only, so the log shows no note.',
+    bindings: (env) => [branchOf(env) || 'hq'],
+    sql:
+      "SELECT b.id AS item_id, COALESCE(NULLIF(b.display_name, ''), NULLIF(b.entity_name, ''), 'business ' || b.uid) AS who, "
+      + "CASE ev.action WHEN 'kyb_approved' THEN 'approved' WHEN 'kyb_rejected' THEN 'declined' ELSE 'other' END AS outcome, "
+      + "CASE ev.action WHEN 'kyb_approved' THEN 'Approved' WHEN 'kyb_rejected' THEN 'Rejected' "
+      + "WHEN 'kyb_documents_requested' THEN 'Documents requested' ELSE 'Dismissed' END AS outcome_word, "
+      + 'datetime(ev.created_at) AS decided_at, ev.actor_id AS decided_by_id, NULL AS decided_by_label, '
+      + 'datetime(COALESCE(b.submitted_at, b.created_at)) AS arrived_at, NULL AS note, 0 AS note_shown '
+      + 'FROM kyb_case_events ev JOIN kyb_cases kc ON kc.uid = ev.case_uid JOIN kyb_businesses b ON b.uid = ev.case_uid '
+      + "WHERE ev.action IN ('kyb_approved', 'kyb_rejected', 'kyb_documents_requested', 'kyb_import_dismissed') "
+      + "AND kc.studio_code = ? AND b.kind != 'licensed_studio' "
+      + "AND NOT EXISTS (SELECT 1 FROM users guard WHERE guard.role = 'admin' AND (guard.id = b.linked_user_id OR guard.id IN "
+      + "(SELECT json_extract(o.value, '$.user_id') FROM json_each(CASE WHEN json_valid(b.case_owners_json) THEN b.case_owners_json ELSE '[]' END) o)))",
   },
   {
-    // Publishing rewrites `reviewed_at`, so a published pitch has lost its approval time.
+    // D5302: publishing writes its own `published_by_user_id` and `published_at`
+    // (migration 202611100935), so the approval keeps its reviewer and time
+    // when the pitch goes out, and when the partner withdraws it (only an
+    // approved pitch can be withdrawn with a review on it). A pitch published
+    // before that has the publisher in the review columns, so it is left out.
     key: 'comarketing', recorded: true, since: null,
-    caveat: 'Publishing a pitch replaces its approval time, so published pitches are not listed.',
+    caveat: 'A pitch published before 10 Nov 2026 lost its approval time to the publish, so it is not listed.',
     sql:
       "SELECT c.id AS item_id, COALESCE(NULLIF(pt.name, ''), NULLIF(u.name, ''), u.email, 'account ' || c.submitter_user_id) AS who, "
-      + "CASE c.status WHEN 'approved' THEN 'approved' ELSE 'declined' END AS outcome, "
-      + "CASE c.status WHEN 'approved' THEN 'Approved' ELSE 'Declined' END AS outcome_word, "
+      + "CASE c.status WHEN 'rejected' THEN 'declined' ELSE 'approved' END AS outcome, "
+      + "CASE c.status WHEN 'rejected' THEN 'Declined' ELSE 'Approved' END AS outcome_word, "
       + 'datetime(c.reviewed_at) AS decided_at, c.reviewed_by_user_id AS decided_by_id, NULL AS decided_by_label, '
       + "datetime(c.created_at) AS arrived_at, NULLIF(c.review_notes, '') AS note, 1 AS note_shown "
       + 'FROM comarketing_pitches c LEFT JOIN partners pt ON pt.id = c.partner_id '
       + 'LEFT JOIN users u ON u.id = c.submitter_user_id '
-      + "WHERE c.status IN ('approved', 'rejected') AND c.reviewed_at IS NOT NULL",
+      + "WHERE c.reviewed_at IS NOT NULL AND (c.status IN ('approved', 'rejected', 'withdrawn') "
+      + "OR (c.status = 'published' AND c.published_by_user_id IS NOT NULL))",
   },
   {
-    key: 'wellbeing_experts', recorded: false, since: null,
-    reason: 'Verifying an expert sets a flag with no time or decider; only the admin audit log records it.',
+    // D5302: D1043's append-only `expert_review_decisions` (migration 577), one
+    // row per decision, written in the same batch as the expert's current
+    // fields, which a credential change clears; the history keeps them. A hide
+    // or restore is the directory's visibility, not a decision on the
+    // verification, so it is not listed; nor is a sample expert (the board's).
+    key: 'wellbeing_experts', recorded: true, since: '2026-10-26',
+    caveat: 'An expert verified before 26 Oct 2026 has no record of who verified them or when, so they are not listed.',
+    sql:
+      "SELECT d.expert_id AS item_id, COALESCE(NULLIF(e.name, ''), NULLIF(u.name, ''), u.email, 'expert ' || e.id) AS who, "
+      + "CASE d.decision WHEN 'verified' THEN 'approved' WHEN 'declined' THEN 'declined' ELSE 'other' END AS outcome, "
+      + "CASE d.decision WHEN 'verified' THEN 'Verified' WHEN 'declined' THEN 'Declined' ELSE 'Verification removed' END AS outcome_word, "
+      + 'datetime(d.decided_at) AS decided_at, d.decided_by AS decided_by_id, NULL AS decided_by_label, '
+      + "datetime(e.created_at) AS arrived_at, NULLIF(d.reason, '') AS note, "
+      + "CASE d.decision WHEN 'declined' THEN 1 ELSE 0 END AS note_shown "
+      + 'FROM expert_review_decisions d JOIN experts e ON e.id = d.expert_id LEFT JOIN users u ON u.id = e.user_id '
+      + "WHERE d.decision IN ('verified', 'declined', 'unverified') AND substr(e.uid, 1, 5) <> 'seed_'",
   },
   {
     // A perk's `updated_at` moves with its review, so its arrival is not kept once decided.
@@ -451,6 +523,8 @@ export type DecidedRow = {
 export type Filters = { from: string | null; to: string | null; outcome: Outcome | null; decidedBy: number | null };
 const NO_FILTERS: Filters = { from: null, to: null, outcome: null, decidedBy: null };
 const binds = (f: Filters) => [f.from, f.from, f.to, f.to, f.outcome, f.outcome, f.decidedBy, f.decidedBy];
+/** D5302: the lane's own values, which its `sql` binds ahead of the filter's. */
+export const laneBinds = (env: Env, l: Recorded): unknown[] => (l.bindings ? l.bindings(env) : []);
 
 function waitHours(arrived: unknown, decided: unknown): number | null {
   const h = (utcMs(decided) - utcMs(arrived)) / 3_600_000;
@@ -485,6 +559,27 @@ export const DECIDED_PAGE_SIZE = 25;
 export const DECIDED_MAX_PAGE = 40;
 
 /** GET /api/admin/approvals/decided: the log, newest first, 25 a page, with an exact total or null. */
+/**
+ * D4814 (#4814, part 6, AP-07): a co-marketing row's `item_uid`, so Decided
+ * can open that pitch on its board (`/admin/approvals/co-marketing/<uid>`),
+ * which is addressed by uid where the log keeps the numeric id. One bound
+ * read for the page's pitches; a read that fails leaves the field out, and
+ * the row still opens the lane's page.
+ */
+async function withItemUids(env: Env, page: DecidedRow[]): Promise<Array<DecidedRow & { item_uid?: string }>> {
+  const ids = page.filter((r) => r.lane === 'comarketing').map((r) => r.item_id);
+  if (!ids.length) return page;
+  try {
+    const got = await env.DB.prepare('SELECT id, uid FROM comarketing_pitches WHERE id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(ids)).all<{ id: number; uid: string }>();
+    const uid = new Map((got.results || []).map((r) => [Number(r.id), String(r.uid)]));
+    return page.map((r) => (r.lane === 'comarketing' && uid.has(r.item_id) ? { ...r, item_uid: uid.get(r.item_id)! } : r));
+  } catch (e) {
+    console.error('[approvals] decided item uids', (e as Error)?.message);
+    return page;
+  }
+}
+
 export async function decidedLog(env: Env, a: { lanes: readonly DecisionLane[]; filters?: Filters; page: number }) {
   const filters = a.filters ?? NO_FILTERS;
   const want = a.page * DECIDED_PAGE_SIZE;
@@ -495,9 +590,10 @@ export async function decidedLog(env: Env, a: { lanes: readonly DecisionLane[]; 
   for (const l of a.lanes) {
     if (!l.recorded) { lanes.push(laneMeta(l)); continue; }
     try {
+      const own = laneBinds(env, l);
       const [list, count] = await Promise.all([
-        env.DB.prepare(listSql(l)).bind(...binds(filters), want).all<any>(),
-        env.DB.prepare(countSql(l)).bind(...binds(filters)).first<{ n: number }>(),
+        env.DB.prepare(listSql(l)).bind(...own, ...binds(filters), want).all<any>(),
+        env.DB.prepare(countSql(l)).bind(...own, ...binds(filters)).first<{ n: number }>(),
       ]);
       const n = Number(count?.n ?? 0);
       for (const r of list.results || []) rows.push(shape(l, r));
@@ -513,12 +609,13 @@ export async function decidedLog(env: Env, a: { lanes: readonly DecisionLane[]; 
   rows.sort((x, y) => (x.decided_at < y.decided_at ? 1 : x.decided_at > y.decided_at ? -1
     : x.lane === y.lane ? y.item_id - x.item_id : x.lane < y.lane ? -1 : 1));
   const start = (a.page - 1) * DECIDED_PAGE_SIZE;
+  const page = await withItemUids(env, rows.slice(start, start + DECIDED_PAGE_SIZE));
   const notRecorded = lanes.filter((l) => !l.recorded).map((l) => l.label);
   // Only lanes that keep no decisions: there is no total to give, and an empty list would read as none decided.
   const noneRecorded = a.lanes.length > 0 && a.lanes.every((l) => !l.recorded);
   if (noneRecorded) total = null;
   return {
-    items: rows.slice(start, start + DECIDED_PAGE_SIZE),
+    items: page,
     total,
     ...(total == null ? {
       total_reason: noneRecorded
@@ -548,7 +645,7 @@ export function weekStart(ms: number): number {
 
 type LaneSeries = {
   key: string; label: string; available: boolean; reason?: string;
-  arrived: number[] | null; decided: number[] | null; scope?: 'hq';
+  arrived: Array<number | null> | null; decided: Array<number | null> | null; scope?: 'hq';
 };
 
 /**
@@ -582,6 +679,7 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
 
   const series: LaneSeries[] = [];
   const unreadable: string[] = [];
+  const notRecordedPeriods: string[] = [];
   const thisWeekWaits: number[] = [];
   let thisWeekDecided: number | null = 0;
   for (const l of a.lanes) {
@@ -591,7 +689,11 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       continue;
     }
     try {
-      const q = await env.DB.prepare(listSql(l)).bind(...binds({ ...NO_FILTERS, from }), SERIES_LANE_CAP + 1).all<any>();
+      const recordingSince = l.since ? utcMs(`${l.since} 00:00:00`) : Number.NEGATIVE_INFINITY;
+      const notRecorded = weeks.map((w) => utcMs(`${w.week_start} 00:00:00`) < recordingSince);
+      const currentWeekNotRecorded = notRecorded[SERIES_WEEKS - 1];
+      if (notRecorded.some(Boolean)) notRecordedPeriods.push(base.label);
+      const q = await env.DB.prepare(listSql(l)).bind(...laneBinds(env, l), ...binds({ ...NO_FILTERS, from }), SERIES_LANE_CAP + 1).all<any>();
       const rows = q.results || [];
       if (rows.length > SERIES_LANE_CAP) {
         unreadable.push(base.label);
@@ -604,7 +706,7 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       for (const r of rows) {
         const w = index(r.decided_at);
         if (w >= 0) decided[w] += 1;
-        if (w === SERIES_WEEKS - 1) {
+        if (w === SERIES_WEEKS - 1 && !currentWeekNotRecorded) {
           if (thisWeekDecided != null) thisWeekDecided += 1;
           const h = waitHours(r.arrived_at, r.decided_at);
           if (h != null) thisWeekWaits.push(h);
@@ -613,8 +715,11 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
         if (prev == null || utcMs(r.arrived_at) < utcMs(prev)) firstArrival.set(Number(r.item_id), r.arrived_at);
       }
 
-      let arrived: number[] | null = null;
-      let reason: string | undefined;
+      const decidedWithHistory = decided.map((n, i) => (notRecorded[i] ? null : n));
+      let arrived: Array<number | null> | null = null;
+      let reason: string | undefined = notRecorded.some(Boolean) && l.since
+        ? `${base.label} was not recorded before ${l.since}; those periods are Not recorded.`
+        : undefined;
       if (l.arrivals === false) {
         reason = `${base.label} keeps no arrival time once an item is decided, so its arrivals are not counted.`;
       } else {
@@ -634,11 +739,13 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
           arrived = new Array(SERIES_WEEKS).fill(0);
           for (const at of [...firstArrival.values(), ...waiting]) {
             const w = index(at);
-            if (w >= 0) arrived[w] += 1;
+            if (w >= 0) arrived[w] = Number(arrived[w] ?? 0) + 1;
           }
+          arrived = arrived.map((n, i) => (notRecorded[i] ? null : n));
         }
       }
-      series.push({ ...base, available: true, ...(reason ? { reason } : {}), arrived, decided });
+      if (currentWeekNotRecorded) thisWeekDecided = null;
+      series.push({ ...base, available: true, ...(reason ? { reason } : {}), arrived, decided: decidedWithHistory });
     } catch (e) {
       console.error('[approvals] weekly lane', l.key, (e as Error)?.message);
       unreadable.push(base.label);
@@ -647,9 +754,11 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
     }
   }
 
-  const sum = (pick: (s: LaneSeries) => number[] | null) => {
+  const sum = (pick: (s: LaneSeries) => Array<number | null> | null) => {
     const counted = series.filter((s) => s.available && pick(s));
-    return counted.length ? weeks.map((_, i) => counted.reduce((t, s) => t + (pick(s) as number[])[i], 0)) : null;
+    return counted.length ? weeks.map((_, i) => counted.some((s) => (pick(s) as Array<number | null>)[i] == null)
+      ? null
+      : counted.reduce((t, s) => t + Number((pick(s) as Array<number | null>)[i]), 0)) : null;
   };
   const notRecorded = series.filter((s) => !s.available && !unreadable.includes(s.label)).map((s) => s.label);
   return {
@@ -663,12 +772,15 @@ export async function decidedWeekly(env: Env, a: { lanes: readonly DecisionLane[
       decided_leaves_out: series.filter((s) => !s.decided).map((s) => s.label),
     },
     tile: thisWeekDecided == null
-      ? { decided_this_week: null, median_wait_hours: null, reason: `${unreadable.join(', ')} could not be read, so this week's decisions are not known.` }
+      ? { decided_this_week: null, median_wait_hours: null, reason: unreadable.length
+        ? `${unreadable.join(', ')} could not be read, so this week's decisions are not known.`
+        : `${notRecordedPeriods.join(', ')} was not recorded for all of this week, so this week's decisions are Not recorded.` }
       : {
         decided_this_week: thisWeekDecided,
         median_wait_hours: medianOfHours(thisWeekWaits),
         ...(notRecorded.length ? { leaves_out: notRecorded } : {}),
       },
     unreadable,
+    ...(notRecordedPeriods.length ? { not_recorded_periods: notRecordedPeriods } : {}),
   };
 }

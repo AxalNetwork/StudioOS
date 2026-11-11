@@ -162,8 +162,12 @@ test('a data-room grant that expired today no longer lists files', () => onOneUt
 }));
 
 test('an NDA whose term ended today stops reading as active', () => onOneUtcDay((expired) => {
-  const d = db('pairwise_ndas');
-  const sql = sqlAround(src('routes/data_room.ts'), 'SELECT 1 FROM pairwise_ndas\n', 'data_room.ts');
+  // D4631 part 2: the data room's pair check is the shared NDA rule in services/dealAccess.ts, which also needs
+  // party A to be an active account, so the parties are real users here.
+  const d = db('pairwise_ndas', 'users');
+  for (const id of [1, 2, 3]) d.prepare(`INSERT INTO users (id, email, name, is_active) VALUES (?, ?, ?, 1)`).run(id, `p${id}@example.test`, `Party ${id}`);
+  const sql = sqlAround(src('services/dealAccess.ts'),
+    'SELECT 1 AS ok FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id\n      WHERE n.party_a_user_id', 'dealAccess.ts');
   const ins = d.prepare(
     `INSERT INTO pairwise_ndas (party_a_user_id, party_b_user_id, status, valid_until) VALUES (?, ?, 'active', ?)`,
   );
@@ -216,8 +220,11 @@ test('no access-control gate compares a bare timestamp column', () => {
   // across every file that gates on these two columns.
   const FILES = [
     'routes/auth.ts', 'routes/auth_passkey.ts', 'routes/advisor_grants.ts',
-    'routes/advisors.ts', 'routes/data_room.ts', 'routes/research.ts',
+    // #4715: the advisor gate moved to routes/advisors_engagements.ts.
+    'routes/advisors_engagements.ts', 'routes/data_room.ts', 'routes/research.ts',
     'routes/market_intel.ts', 'services/trust.ts',
+    // D4631 part 2: the data room's two NDA reads moved into the shared rule.
+    'services/dealAccess.ts',
   ];
   // A bare column on either side of a comparison against the clock. The
   // negative lookbehind lets `datetime(expires_at)` through and nothing else.
@@ -232,6 +239,8 @@ test('no access-control gate compares a bare timestamp column', () => {
   // D891 adds research's current room-grant expiry check to #2461's
   // project-founder NDA gates. D1102 adds the active/expired grant summary,
   // and D1104 the founder's NDA route's live-grant check in data_room.ts:
-  // eighteen normalised comparisons, all required.
-  assert.equal(wrapped, 18, `expected 18 normalised comparisons across the gated files, found ${wrapped}`);
+  // eighteen normalised comparisons, all required. D4631 part 2 moves data_room.ts's two NDA reads into
+  // services/dealAccess.ts's shared rule, keyed three ways (founder id, project id, one pair): nineteen.
+  // D4672 adds research.ts's open proof-consent request (`datetime(k.expires_at) > datetime('now')`): twenty.
+  assert.equal(wrapped, 20, `expected 20 normalised comparisons across the gated files, found ${wrapped}`);
 });

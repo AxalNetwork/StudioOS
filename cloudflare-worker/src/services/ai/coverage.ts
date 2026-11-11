@@ -5,8 +5,10 @@
  *
  *   - which models exist, and which are offered: `CATALOGUE`, `isOffered` (D760);
  *   - what each model is for: `MODEL_CONNECTIONS` (#3626, D1369);
- *   - which models a page runs and lists: `railMatrix.json` (D764) and
- *     `moduleConnections` (#3626);
+ *   - which models a page runs and lists: its kind's job (`RAIL_KIND_JOBS`,
+ *     the rows `railRows()` builds; #4313 part 3 dropped the page lists
+ *     `railMatrix.json` stored), each option's row in `railMatrix.json`
+ *     (D764) and `moduleConnections` (#3626);
  *   - which models a fixed job runs: `ROUTE` (the router), reached from the
  *     call sites in `FIXED_JOBS`, each one cited by the file that calls it;
  *   - Record a Session's speech-to-text picker: `STT_MODELS` (D657).
@@ -23,6 +25,8 @@
 import matrix from './railMatrix.json';
 import { CATALOGUE, CATALOGUE_READ, PROVIDER_MODELS, isOffered, isPriced, partnerGated, type CatalogueModel } from './catalogue';
 import { MODEL_CONNECTIONS, moduleConnections, type ModuleOperation } from './moduleConnections';
+import { RAIL_KIND_JOBS } from './modelUseCases';
+import { railRows } from './railMatrix';
 import { AI_MARKUP, billedMicro, type RunUnits } from './pricing';
 import { ROUTE } from '../aiRouter';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, STT_MODELS, isChoosable } from '../sttModels';
@@ -222,7 +226,8 @@ export function notOfferedReason(m: CatalogueModel): string | null {
 /** #3745: `models` are the (at most 3) suggested cards; `more` are the rest, pickable under All models. */
 type RowLike = { pageKey: string; kind: string; models: Array<{ id: string; role: string }>; more?: Array<{ id: string }>; optionKey?: string };
 const choicesOf = (r: RowLike): string[] => [...r.models, ...(r.more ?? [])].map((m) => m.id);
-const ROWS = matrix.rows as RowLike[];
+// #4313 part 3: a page row stores no models; what it lists is its kind's job, as the rail draws it.
+const ROWS: readonly RowLike[] = railRows();
 const OPTIONS = matrix.options as RowLike[];
 
 function routeModels(task: keyof typeof ROUTE): { primary: string[]; picks: string[] } {
@@ -244,7 +249,7 @@ function buildCells(): Map<string, Map<ModuleKey, Cell>> {
   };
   for (const row of ROWS) {
     const mod = moduleOfPage(row.pageKey);
-    const ref = `railMatrix.json "${row.pageKey}"`;
+    const ref = `${RAIL_KIND_JOBS[row.kind]?.id ?? row.kind} on "${row.pageKey}"`;
     choicesOf(row).forEach((id, i) => note(i === 0 ? wired : offered, id, mod, ref));
     for (const c of moduleConnections(row as never, SWITCHES_ALL_ON)) note(offered, c.id, mod, `/api/ai/modules on "${row.pageKey}"`);
   }

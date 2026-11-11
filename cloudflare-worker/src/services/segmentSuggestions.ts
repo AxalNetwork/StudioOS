@@ -239,15 +239,15 @@ export async function recordFromBranch(env: Env, code: string, raw: Record<strin
  * GET /suggestions. HQ's Super Admin reads every suggestion HQ holds; any
  * other Admin reads their own. Newest first, at most LIST_MAX.
  */
-export async function listSuggestions(env: Env, viewer: { id: number; superAdmin: boolean }, status: string | null) {
+export async function listSuggestions(env: Env, viewer: { id: number; superAdmin: boolean }, status: string | null, originCode: string | null = null) {
   const s = status && (SUGGESTION_STATUSES as readonly string[]).includes(status) ? status : null;
   const all = viewer.superAdmin && !branchOf(env);
   const rows = (await env.DB.prepare(
     `SELECT uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
   hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at FROM segment_suggestions
-      WHERE (? IS NULL OR status = ?) AND (? = 1 OR suggested_by = ?)
+      WHERE (? IS NULL OR status = ?) AND (? = 1 OR suggested_by = ?) AND (? IS NULL OR origin_code = ?)
       ORDER BY created_at DESC, id DESC LIMIT ?`,
-  ).bind(s, s, all ? 1 : 0, viewer.id, LIST_MAX).all<Row>()).results || [];
+  ).bind(s, s, all ? 1 : 0, viewer.id, originCode, originCode, LIST_MAX).all<Row>()).results || [];
   return { suggestions: rows.map(viewOf), scope: all ? 'all' : 'mine' };
 }
 

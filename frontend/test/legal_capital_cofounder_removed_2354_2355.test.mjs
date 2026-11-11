@@ -25,6 +25,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { PERSONAS } from '../src/lib/personas.js';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -52,9 +53,9 @@ test('both pages are gone, and each old address is a redirect counted with #2301
     assert.equal(existsSync(resolve(ROOT, `frontend/src/pages/${page}.jsx`)), false, `${page}.jsx is back`);
     // Plain substring checks: the addresses are literals, so no pattern is built from them.
     assert.ok(!app.includes(page), `App.jsx still names ${page}`);
-    assert.ok(app.includes(`<Route path="${path}" element={<Navigate to="${to}" replace />} />`), path);
-    assert.ok(app.includes(`<Route path="${to}" `), `${to} is not a route`);
-    assert.equal(REDIRECT_ROUTES.filter((r) => r.path === path && !r.keep).length, 1, `${path} is not counted once with #2301`);
+    assert.equal(app.includes(`<Route path="${path}" element={<Navigate to="${to}" replace />} />`), !isRetiredRedirect(`${path}`), path);
+    assert.equal(app.includes(`<Route path="${to}" `), !isRetiredRedirect(`${to}`), `${to} is not a route`);
+    assert.equal(REDIRECT_ROUTES.some((r) => r.path === path), false, `${path} retired by D2319`);
   }
   const doc = read('documentation/operations/REDIRECT_RETIREMENT.md').replace(/\s+/g, ' ');
   assert.match(doc, /`\/legal-capital` \(#2354\) lands on `\/raise\/legal`/);

@@ -49,15 +49,11 @@ const RETIRED = [
   ['/pipeline/transactions', '/deals/closing'],
 ];
 
-test('each retired path redirects to its canonical zone', () => {
+test('D2319 retires the old Pipeline paths; canonical zones remain', () => {
   for (const [from, to] of RETIRED) {
     const at = APP.indexOf(`path="${from}"`);
-    assert.ok(at > 0, `${from} is no longer registered — an old inbound link now 404s`);
-    // Bounded to this route's own element so a NEIGHBOURING route's Navigate
-    // cannot satisfy it — the three sit on consecutive lines.
-    const element = APP.slice(at, at + 160);
-    assert.match(element, new RegExp(`<Navigate to="${to}" replace`),
-      `${from} does not redirect to ${to}`);
+    assert.equal(at, -1, `${from} retired by D2319`);
+    assert.ok(APP.includes(`path="${to}"`), `${to} stays mounted`);
   }
 });
 
@@ -75,10 +71,10 @@ test('TRAP 1 — /pipeline keeps its role fork; only an investor forwards (D1243
   const element = APP.slice(at, APP.indexOf('\n', at));
   assert.doesNotMatch(element, /<Navigate/, 'the /pipeline ROOT was turned into a redirect for every role');
   // The fork itself, which is the reason it may not redirect wholesale.
-  assert.match(element, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/>/,
+  assert.match(element, /holds\('partner'\) \? <PartnerBucketRoutes \/>/,
     'the partner arm of /pipeline is gone');
   // D1243 (#3256): the investor's arm is a counted forward to Deal flow's table.
-  assert.match(element, /effectiveRole === 'investor' \? <DealsPipelineRedirect countAs="\/pipeline" \/>/,
+  assert.match(element, /holds\('investor'\) \? <DealsPipelineRedirect countAs="\/pipeline" \/>/,
     'the investor arm of /pipeline no longer forwards to Deal flow');
   assert.match(element, /: investorWorkspace\('deals', <PipelineWorkspace \/>\)/, 'the founder and admin arm of /pipeline is gone');
   assert.match(element, /'founder'/, 'founder lost /pipeline, and that access is deliberate');

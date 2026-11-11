@@ -7,6 +7,9 @@
 //   4. Reassignment through W1's PATCH keeps E1's agent checks (works_in, live).
 //   5. The calendar's Work items source shows only the projects the member can read.
 //   6. Projects only; the read gate.
+//   7. Agents' scheduled sessions (#3957, PR #4238): an active session's slots in their weeks, counted as
+//      unestimated (a session records no points); paused, done and removed sessions, duties, another project's
+//      agents and a team the viewer cannot read never count. Every case passes `now`; none reads the clock.
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/work_workload_d1614_w4.test.ts
@@ -15,16 +18,18 @@ import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { removeMigratedDatabases } from './_storage_schema.ts';
-import { AGENT, MEMBER, PROJECT, SPONSOR, STRANGER, hex, world, type World } from './_agent_engine_fixture.ts';
+import { AGENT, COMPANY, MEMBER, PROJECT, SPONSOR, STRANGER, hex, world, type World } from './_agent_engine_fixture.ts';
 import engineRoutes, { __setEngineRouteDeps } from '../src/routes/agent_engine.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
-import { WORKLOAD_DEPS, weekStart } from '../src/services/agents/workWorkload.ts';
+import { WORKLOAD_DEPS, projectAgentSessions, projectWorkload, weekStart } from '../src/services/agents/workWorkload.ts';
 import { workItemEvents } from '../src/services/calendar/workItems.ts';
 
 after(() => removeMigratedDatabases());
 
+/** The route's clock, when a case pins it (`EngineRouteDeps.now`). */
+let clock: Date | null = null;
 function app(w: World) {
-  __setEngineRouteDeps({ runtime: async () => w.runtime });
+  __setEngineRouteDeps({ runtime: async () => w.runtime, ...(clock ? { now: () => clock! } : {}) });
   const a = new Hono();
   a.onError((e: any, c) => {
     const status = AUTH_ERROR_STATUSES[e?.message];
@@ -194,4 +199,113 @@ test('W4: the calendar\'s Work items show only the projects the member can read'
     member(w, MEMBER);
     assert.equal((await workItemEvents(w.env, MEMBER, from, to)).length, 2, 'an accepted member reads them');
   } finally { __setEngineRouteDeps(null); w.close(); }
+});
+
+// ── 7. Agents' scheduled sessions (#3957) ─────────────────────────────────────────
+
+const NOW = new Date('2027-03-10T12:00:00Z'); // a Wednesday; week 0 is 2027-03-08, week 1 2027-03-15, the range ends 2027-03-22
+const OTHER_PROJECT = 8, OTHER_AGENT = 52, COMPANY_AGENT = 53;
+const viewerOf = (w: World, id: number) => w.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any;
+/** A session row as #3957's routes write it: UTC, the assigned skill 1 at v1. */
+function session(w: World, uid: string, agentId: number, o: { cadence: 'once' | 'weekly'; next: string; weekday?: number; status?: string; deck?: number }) {
+  w.db.prepare(`INSERT INTO agent_duties (uid, agent_id, kind, title, cadence, weekday, hour_utc, minute_utc, zone, local_time, run_at,
+      skill_id, skill_version, target_kind, target_id, next_due_at, status, created_by)
+    VALUES (?, ?, 'session', ?, ?, ?, ?, 0, 'UTC', ?, ?, 1, 1, ?, ?, ?, ?, ?)`)
+    .run(uid, agentId, `Session ${uid}`, o.cadence, o.cadence === 'weekly' ? o.weekday ?? 4 : null, Number(o.next.slice(11, 13)),
+      o.cadence === 'once' ? null : o.next.slice(11, 16), o.cadence === 'once' ? o.next : null,
+      o.deck == null ? null : 'deck', o.deck == null ? null : String(o.deck), o.next, o.status ?? 'active', SPONSOR);
+}
+function sessionsWorld() {
+  const w = world();
+  w.agent(AGENT);
+  w.agent(COMPANY_AGENT, 'cfo', { scope: 'company' });
+  w.db.exec(`
+    INSERT INTO projects (id, uid, name, founder_id, company_id, description) VALUES (${OTHER_PROJECT}, 'p8', 'Osprey', 100, ${COMPANY}, 'Another project.');
+    INSERT INTO pitch_decks (id, project_id, slides) VALUES (90, ${PROJECT}, '[]');
+    INSERT INTO agent_skills (id, uid, scope, slug, name, purpose, output_kind, status, current_version, created_by)
+      VALUES (1, 'sk-brief', 'hq', 'brief', 'Brief', 'Write the brief.', 'draft', 'published', 1, ${SPONSOR});
+  `);
+  w.agent(OTHER_AGENT, 'cto');
+  w.db.prepare('UPDATE team_agents SET project_id = ? WHERE id = ?').run(OTHER_PROJECT, OTHER_AGENT);
+  // The project's agent: a weekly session on Thursdays (week 0 and week 1), a once session in week 1, and one task of 2 points in week 0.
+  session(w, 's-weekly', AGENT, { cadence: 'weekly', next: '2027-03-11 09:00:00' });
+  session(w, 's-once', AGENT, { cadence: 'once', next: '2027-03-16 14:00:00' });
+  // Never counted: paused, done (a once session after its claim), removed (cancelled), after the range.
+  session(w, 's-paused', AGENT, { cadence: 'weekly', next: '2027-03-11 10:00:00', status: 'paused' });
+  session(w, 's-done', AGENT, { cadence: 'once', next: '2027-03-09 09:00:00', status: 'done' });
+  session(w, 's-removed', AGENT, { cadence: 'once', next: '2027-03-12 09:00:00', status: 'removed' });
+  session(w, 's-later', AGENT, { cadence: 'once', next: '2027-03-25 09:00:00' });
+  // E5's duty (kind 'duty') is not a session.
+  w.db.prepare(`INSERT INTO agent_duties (uid, agent_id, kind, template_key, title, cadence, hour_utc, next_due_at, created_by)
+    VALUES ('d-duty', ?, 'duty', 'weekly-review', 'Weekly review', 'daily', 6, '2027-03-11 06:00:00', ?)`).run(AGENT, SPONSOR);
+  // Another project's agent, and the company's agent: one session on this project's deck, one on nothing.
+  session(w, 's-other-project', OTHER_AGENT, { cadence: 'once', next: '2027-03-11 09:00:00' });
+  session(w, 's-company-deck', COMPANY_AGENT, { cadence: 'once', next: '2027-03-12 09:00:00', deck: 90 });
+  session(w, 's-company-none', COMPANY_AGENT, { cadence: 'once', next: '2027-03-12 11:00:00' });
+  w.task(320, AGENT, { title: 'Agent work' });
+  w.db.prepare("UPDATE scope_tasks SET estimate_points = 2, due_at = '2027-03-11 00:00:00' WHERE id = 320").run();
+  return w;
+}
+const weeksOf = (row: any) => row.weeks.map((x: any) => [x.week_start, x.items.map((i: any) => i.session ? `${i.uid}@${i.when.at}` : i.uid), x.estimate_points, x.unestimated]);
+
+test('W4 sessions: an agent\'s active sessions sit in their weeks and add to the sums, as unestimated, never as 0 points', async () => {
+  const w = sessionsWorld();
+  clock = NOW;
+  try {
+    const r = await call(w, SPONSOR, 'GET', `/project/${PROJECT}/work/workload?weeks=2`);
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(r.body.weeks, ['2027-03-08', '2027-03-15'], 'the route reads the pinned clock');
+    const agent = r.body.agents.find((a: any) => a.agent.uid === hex(AGENT, 'b'));
+    // Mutations checked: `d.status = 'active'` widened to not-removed → s-paused and s-done count; `d.kind = 'session'` dropped →
+    // the duty counts; `estimate_points: null` made 0 → the unestimated counts are 0; each fails this.
+    assert.deepEqual(weeksOf(agent), [
+      ['2027-03-08', [hex(320, 'c'), 's-weekly@2027-03-11 09:00:00'], 2, 1],
+      ['2027-03-15', ['s-weekly@2027-03-18 09:00:00', 's-once@2027-03-16 14:00:00'], 0, 2],
+    ]);
+    const slot = agent.weeks[1].items[1];
+    assert.deepEqual(slot, { uid: 's-once', title: 'Session s-once', estimate_points: null, when: { kind: 'scheduled', at: '2027-03-16 14:00:00' }, session: { uid: 's-once', cadence: 'once' } });
+    // Mutation checked: `a.project_id = ?` dropped → the other project's agent gets a row here and this fails.
+    assert.deepEqual(r.body.agents.map((a: any) => a.agent.uid), [hex(AGENT, 'b')], 'no other project\'s agent, and no company team the viewer cannot read');
+    assert.ok(!/"(agent_id|skill_id|created_by)"/.test(r.text), 'no numeric id key');
+    assert.ok(!/instruction/.test(r.text), 'never the instruction');
+  } finally { clock = null; __setEngineRouteDeps(null); w.close(); }
+});
+
+test('W4 sessions: a company agent\'s session counts only on this project\'s deck, and only for a viewer who reads the company team', async () => {
+  const w = sessionsWorld();
+  try {
+    const sponsor = viewerOf(w, SPONSOR);
+    const from = '2027-03-08', to = '2027-03-22';
+    const uids = async () => (await projectAgentSessions(w.env, PROJECT, from, to, sponsor)).map((s) => s.item.uid).sort();
+    // Mutation checked: the `canRead` on the agent's team dropped → s-company-deck reaches a viewer with no seat on the company and this fails.
+    assert.deepEqual(await uids(), ['s-once', 's-weekly', 's-weekly'], 'the founder has no seat on the company team');
+    w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id) VALUES ('ucl-1', ?, ?)").run(SPONSOR, COMPANY);
+    // Mutation checked: the deck condition dropped → s-company-none counts too and this fails.
+    assert.deepEqual(await uids(), ['s-company-deck', 's-once', 's-weekly', 's-weekly']);
+    const wl = await projectWorkload(w.env, PROJECT, 2, NOW, sponsor);
+    const company = wl.agents.find((a: any) => a.agent.uid === hex(COMPANY_AGENT, 'b'))!;
+    assert.deepEqual(weeksOf(company), [['2027-03-08', ['s-company-deck@2027-03-12 09:00:00'], 0, 1], ['2027-03-15', [], 0, 0]]);
+    // The other project reads its own agent's session, and none of this project's.
+    assert.deepEqual((await projectAgentSessions(w.env, OTHER_PROJECT, from, to, sponsor)).map((s) => s.item.uid), ['s-other-project']);
+    // A stranger reads none (the route's gate refuses them first; the service holds the rule too).
+    assert.deepEqual(await projectAgentSessions(w.env, PROJECT, from, to, viewerOf(w, STRANGER)), []);
+  } finally { w.close(); }
+});
+
+test('W4 sessions: slots stay inside the range; a paused agent\'s sessions still count, a removed agent\'s never', async () => {
+  const w = sessionsWorld();
+  try {
+    const sponsor = viewerOf(w, SPONSOR);
+    // An overdue weekly session (its Thursday slot before the range, not yet claimed) counts from the range's first slot on.
+    session(w, 's-overdue', AGENT, { cadence: 'weekly', next: '2027-03-04 08:00:00' });
+    const got = await projectAgentSessions(w.env, PROJECT, '2027-03-08', '2027-03-22', sponsor);
+    // Mutation checked: the `at >= lo` bound dropped → the 2027-03-04 slot is listed and this fails.
+    assert.deepEqual(got.filter((s) => s.item.uid === 's-overdue').map((s) => s.item.when!.at), ['2027-03-11 08:00:00', '2027-03-18 08:00:00']);
+    assert.ok(got.every((s) => s.item.when!.at >= '2027-03-08' && s.item.when!.at < '2027-03-22'), 'every slot in [from, to)');
+    w.db.prepare("UPDATE team_agents SET status = 'paused' WHERE id = ?").run(AGENT);
+    assert.equal((await projectAgentSessions(w.env, PROJECT, '2027-03-08', '2027-03-22', sponsor)).length, got.length, 'paused: still scheduled, as the calendar shows it');
+    // Mutation checked: `a.status <> 'removed'` dropped → the removed agent's sessions still count and this fails.
+    w.db.prepare("UPDATE team_agents SET status = 'removed' WHERE id = ?").run(AGENT);
+    assert.deepEqual(await projectAgentSessions(w.env, PROJECT, '2027-03-08', '2027-03-22', sponsor), []);
+  } finally { w.close(); }
 });

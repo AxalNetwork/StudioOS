@@ -5,21 +5,21 @@
       {
         "persona": "founder",
         "id": "founder.project.name",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.pitch",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.sector",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD",
         "mi_section": "sector_heat"
@@ -27,7 +27,7 @@
       {
         "persona": "founder",
         "id": "founder.project.stage",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD",
         "mi_section": "capital_velocity"
@@ -112,70 +112,70 @@
       {
         "persona": "founder",
         "id": "founder.deck.problem",
-        "page_target": "/build/deck",
+        "page_target": "/raise/pitch",
         "doc_anchor": "build/pitch-deck",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.deck.market",
-        "page_target": "/build/deck",
+        "page_target": "/raise/pitch",
         "doc_anchor": "build/pitch-deck",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.tagline",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.vision",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.contact_email",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.logo_url",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.som_usd",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.cac_usd",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.gross_margin_pct",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.project.traction_summary",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "section": "BUILD"
       },
@@ -488,21 +488,21 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.name"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.pitch"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.sector",
         "mi_section": "sector_heat"
@@ -510,7 +510,7 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.stage",
         "mi_section": "capital_velocity"
@@ -518,7 +518,7 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.traction",
         "mi_section": "demand_supply"
@@ -526,63 +526,63 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.tagline"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.logo_url"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.som_usd"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.cac_usd"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.gross_margin_pct"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.contact_email"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.vision"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.project.traction_summary"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.what_works",
         "mi_section": "sentiment"
@@ -590,7 +590,7 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.what_breaks",
         "mi_section": "sentiment"
@@ -598,35 +598,35 @@
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.next_big_bet"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.dev_velocity"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.tech_debt_score"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.qa_coverage"
       },
       {
         "persona": "founder",
         "section": "BUILD",
-        "page_target": "/projects",
+        "page_target": "/build",
         "doc_anchor": "build/projects",
         "id": "founder.product.platform_choice"
       },
@@ -726,14 +726,14 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.runway_months"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.monthly_burn_usd",
         "mi_section": "capital_velocity"
@@ -741,7 +741,7 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.mrr_usd",
         "mi_section": "demand_supply"
@@ -749,63 +749,63 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.arr_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_margin_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.cac_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.ltv_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.payback_months"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.net_revenue_retention_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_revenue_retention_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.magic_number"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.bookings_qtr_usd",
         "mi_section": "demand_supply"
@@ -813,7 +813,7 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.budget_vs_actual",
         "mi_section": "capital_velocity"
@@ -821,7 +821,7 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/raise/capital/model",
+        "page_target": "/raise/use-of-funds/runway/forecast",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.financial_model_link"
       },

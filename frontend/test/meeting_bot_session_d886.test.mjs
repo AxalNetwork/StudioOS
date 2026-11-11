@@ -86,7 +86,7 @@ const scenarios = {
       assert.equal(m.botRefusal({ code, message: link }), 'Eadwyn AI could not complete that request. Check the status before trying again.');
     }
     assert.equal(m.botRefusal({ code: 'consent_required' }), 'Record the interviewee’s agreement before sending Eadwyn AI.');
-    assert.equal(m.botRefusal({ code: 'unsupported_link' }), 'Use a Zoom, Google Meet or Microsoft Teams meeting link.');
+    assert.equal(m.botRefusal({ code: 'unsupported_link' }), 'Use a Zoom, Google Meet or Microsoft Teams meeting link. A Google Meet link looks like https://meet.google.com/abc-defg-hij.');
     assert.equal(m.botRefusal({ code: 'bot_already_running' }), 'Eadwyn AI is already assigned to this session. Check its status before trying again.');
     assert.match(m.botRefusal({ status: 402, message: link }), /not enough AI tokens/);
   },

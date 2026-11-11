@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import AskProposal from './AskProposal.jsx';
 import { X } from 'lucide-react';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { askPanelAdapter } from './askPanelAdapter.js';
 import { setAskSlot, useAskPanel } from './eadwynPanel.js';
 import {
   ASK_FOOT, ASK_RUNNING, ASK_SUGGESTED, ASK_PLACEHOLDER, acceptAllLabel, canSend, chargeLine, costLine,
-  panelChips, proposalCard, refusalState, stateBlock,
+  optionCard, panelChips, promptOptions, refusalState, stateBlock,
 } from './askPanelModel.js';
+import { blockHref, needsBlockPage } from './sessionsBlockHandoff.js';
 import { FOUNDER_ASK_CHIPS } from '../lib/railOptions/founder.js';
 import { ADVISOR_ASK_CHIPS } from '../lib/railOptions/advisor.js';
 import './askPanel.css';
@@ -19,11 +21,12 @@ import './askPanel.css';
  * holds nothing the rail holds: the AIRail keeps model choice, consumption and
  * the AI switch (the owner, 2026-10-31); asking happens here.
  *
- * WHERE IT SITS is `WorkerRail`'s call (the `layout` prop, `askLayout`): docked
- * to the rail's left edge inside the rail's own column from 1024px, so it can
- * never pass the header above or the footer below; over the content from 640px;
- * a bottom sheet below that. Docked it is `complementary` and not modal, so the
- * page stays usable; as a sheet it is a modal dialog.
+ * WHERE IT SITS is `WorkerRail`'s call (the `layout` prop, `askLayout`): from
+ * 1024px a portalled, fixed dock (`.ead-ask-dock`, #4260) that `WorkerRail`
+ * places from the rail's measured box (`askDock`), between the header above and
+ * the footer below; over the content from 640px; a bottom sheet below that.
+ * Docked it is `complementary` and not modal, so the page stays usable; as a
+ * sheet it is a modal dialog.
  *
  * WHAT IT DRAWS, top to bottom (AK2 to AK15): the head, the page's suggested
  * chips, the conversation with proposal cards, and the composer with the cost
@@ -35,8 +38,9 @@ import './askPanel.css';
 export const QUOTE_PAUSE_MS = 400;
 const CHIP_ROUTES = Object.fromEntries([...FOUNDER_ASK_CHIPS, ...ADVISOR_ASK_CHIPS].map((c) => [c.key, c.route]));
 
-export default function AskPanel({ page, label, crumb, options = [], aiOn = true, layout = 'dock', onClose }) {
+export default function AskPanel({ page, label, crumb, options = [], prompts = null, aiOn = true, layout = 'dock', onClose, onNavigate }) {
   const intent = useAskPanel().intent;
+  const exclusive = !!intent?.exclusive;
   const [convUid, setConvUid] = useState(null);
   const [messages, setMessages] = useState([]);
   const [cards, setCards] = useState([]);
@@ -46,7 +50,8 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   const [text, setText] = useState('');
   const [hold, setHold] = useState(null);
   const inputRef = useRef(null);
-  const chips = panelChips(options);
+  // D5034 part 4: a page's own prompts come first and fill the composer; its run options follow.
+  const chips = panelChips([...promptOptions(prompts), ...(options || [])]);
   const modal = layout === 'sheet';
   const name = label || page || 'this page';
 
@@ -59,26 +64,31 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   useEffect(() => {
     let live = true;
     setConvUid(null); setMessages([]); setCards([]); setRun(null);
-    if (!page) return undefined;
+    if (!page || exclusive) return undefined;
     (async () => {
       try {
         const list = await askPanelAdapter.conversations(page);
         const uid = list.data?.conversations?.[0]?.uid ?? null;
-        if (!live || !uid) return;
-        setConvUid(uid);
-        const one = await askPanelAdapter.conversation(uid);
-        if (live) setMessages(Array.isArray(one.data?.messages) ? one.data.messages : []);
+        if (live && uid) {
+          setConvUid(uid);
+          const one = await askPanelAdapter.conversation(uid);
+          if (live) setMessages(Array.isArray(one.data?.messages) ? one.data.messages : []);
+        }
       } catch { /* an unread thread starts empty; asking starts a new one */ }
+      // #4737: the open cards load whether or not the page has a conversation yet. They
+      // used to be skipped for a page with none, so "N waiting" counted cards the opened
+      // panel did not show (an advisor who ran a chip, left, and came back to Ask).
+      if (!live) return;
       for (const c of chips.filter((x) => x.run)) {
         try {
           const got = await askPanelAdapter.proposals(c.key);
-          if (live) setCards((prev) => [...prev, ...(got.data?.proposals || []).map((r) => ({ ...proposalCard(r), option: c.key }))]);
+          if (live) setCards((prev) => [...prev, ...(got.data?.proposals || []).map((r) => optionCard(r, c.key))]);
         } catch { /* the chip still runs; its old cards are not shown */ }
       }
     })();
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, exclusive]);
 
   // D1442's quote, once typing pauses (it reads the switched-on connectors, as
   // the run will). Off, refused or unreadable, the line says the hold is not
@@ -86,11 +96,12 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
   useEffect(() => {
     let live = true;
     setHold(null);
+    if (exclusive) return undefined;
     const t = setTimeout(() => {
       askPanelAdapter.quote(convUid, text, page).then((q) => { if (live) setHold(q.available ? q.data?.hold_microusd ?? null : null); });
     }, QUOTE_PAUSE_MS);
     return () => { live = false; clearTimeout(t); };
-  }, [convUid, text, page]);
+  }, [convUid, text, page, exclusive]);
 
   const send = useCallback(async (question) => {
     const q = String(question ?? text).trim();
@@ -123,7 +134,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       const events = (await askPanelAdapter.run(page, key)).data || [];
       const done = events.find((e) => e.event === 'done')?.data || {};
       const got = await askPanelAdapter.proposals(key);
-      const fresh = (got.data?.proposals || []).map((r) => ({ ...proposalCard(r), option: key }));
+      const fresh = (got.data?.proposals || []).map((r) => optionCard(r, key));
       setCards((prev) => [...prev.filter((c) => c.option !== key), ...fresh]);
       setRun({ key, charged: done.charged_microusd ?? null, hold: done.hold_microusd ?? null });
       if (!fresh.length) setState('none');
@@ -135,17 +146,30 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
     }
   }, [busy, page, state]);
 
+  // #4737 (D1596 §4): a Block card is accepted on the Sessions page. The panel
+  // sends the advisor there with the card's uid and dates and closes; the
+  // page decides the card only once Block has written. Nothing here decides it.
+  const openBlockPage = useCallback((card) => {
+    const href = blockHref(card.uid, card.block);
+    if (onNavigate) onNavigate(href);
+    else if (typeof window !== 'undefined') window.location.assign(href);
+    onClose?.('route');
+  }, [onClose, onNavigate]);
+
   const decide = useCallback(async (card, decision) => {
+    if (decision === 'accept' && needsBlockPage(card)) { openBlockPage(card); return; }
     try {
       await askPanelAdapter.decide(card.uid, decision);
       setCards((prev) => prev.map((c) => (c.uid === card.uid ? { ...c, status: decision === 'discard' ? 'discarded' : 'accepted' } : c)));
     } catch (err) {
       setState(refusalState(err));
     }
-  }, []);
+  }, [openBlockPage]);
 
   const block = stateBlock(state);
   const open = cards.filter((c) => c.status === 'proposed');
+  // "Accept all" decides in the panel, so it never holds a card that is accepted on its page.
+  const bulk = open.filter((c) => !needsBlockPage(c));
   const all = acceptAllLabel(cards);
   const sendOk = canSend({ text, state, busy });
 
@@ -173,7 +197,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
       <div className="ead-ask-body">
         {/* D1443 part 4 (#3992): a page's own task (a form's Sources and Preview, a module's row proposals) is drawn here, by its host's AskIntent. */}
         {intent ? <div ref={setAskSlot} className="ead-ask-intent" data-testid="ask-panel-intent" /> : null}
-        {chips.length > 0 && (
+        {!exclusive && chips.length > 0 && (
           <div className="ead-ask-chips" data-testid="ask-panel-chips">
             <span className="ead-ask-eyebrow">{ASK_SUGGESTED}</span>
             <div className="ead-ask-chip-row">
@@ -194,7 +218,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           </div>
         )}
 
-        <div className="ead-ask-log" role="log" aria-label="Conversation" data-testid="ask-panel-log">
+        {!exclusive && <div className="ead-ask-log" role="log" aria-label="Conversation" data-testid="ask-panel-log">
           {messages.map((m) => (m.role === 'user'
             ? <p key={m.id} className="ead-ask-you">{m.content}</p>
             : (
@@ -207,26 +231,12 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           {open.length > 0 && (
             <div className="ead-ask-cards" data-testid="ask-panel-cards">
               {cards.map((c) => (
-                <div key={c.uid} className="ead-ask-card" data-status={c.status} data-testid={`ask-card-${c.uid}`}>
-                  <span className="ead-ask-card-head">
-                    <span className="ead-ask-eyebrow is-violet">{c.eyebrow}</span>
-                    {c.source && <span className="ead-ask-source">{c.source}</span>}
-                  </span>
-                  <span className="ead-ask-card-text">{c.text}</span>
-                  {c.status === 'proposed' ? (
-                    <span className="ead-ask-card-acts">
-                      <button type="button" className="ead-ask-btn is-primary" onClick={() => decide(c, 'accept')}>Accept</button>
-                      {CHIP_ROUTES[c.option] ? <a className="ead-ask-btn" href={CHIP_ROUTES[c.option]}>Edit</a> : null}
-                      <button type="button" className="ead-ask-btn is-ghost" onClick={() => decide(c, 'discard')}>Discard</button>
-                    </span>
-                  ) : (
-                    <span className="ead-ask-decided">{c.status === 'accepted' ? 'Accepted' : 'Discarded'}</span>
-                  )}
-                </div>
+                <AskProposal key={c.uid} proposal={c} onAccept={() => decide(c, 'accept')}
+                  onDiscard={() => decide(c, 'discard')} editHref={needsBlockPage(c) ? blockHref(c.uid, c.block) : CHIP_ROUTES[c.option]} />
               ))}
               <span className="ead-ask-all">
                 {all && (
-                  <button type="button" className="ead-ask-btn is-primary" onClick={() => open.slice(0, 50).forEach((c) => decide(c, 'accept'))} data-testid="ask-accept-all">{all}</button>
+                  <button type="button" className="ead-ask-btn is-primary" onClick={() => bulk.slice(0, 50).forEach((c) => decide(c, 'accept'))} data-testid="ask-accept-all">{all}</button>
                 )}
                 {run && <span className="ead-ask-mono" data-testid="ask-charge">{chargeLine(run.charged, run.hold)}</span>}
               </span>
@@ -247,10 +257,10 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
               {block.action?.retry && <button type="button" className="ead-ask-btn" onClick={() => setState('ok')}>{block.action.label}</button>}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
-      <form className="ead-ask-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
+      {!exclusive && <form className="ead-ask-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
         <textarea
           ref={inputRef}
           className="ead-ask-input"
@@ -268,7 +278,7 @@ export default function AskPanel({ page, label, crumb, options = [], aiOn = true
           <button type="submit" className="ead-ask-btn is-primary" disabled={!sendOk} data-testid="ask-panel-send">Send</button>
         </span>
         <span className="ead-ask-foot">{ASK_FOOT}</span>
-      </form>
+      </form>}
     </section>
   );
 }

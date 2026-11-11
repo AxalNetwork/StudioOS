@@ -36,6 +36,8 @@
  */
 
 import { LATER, NOT_ON } from './deckV2Model.js';
+import { isSentence, userFacingRaiseError } from '../../../lib/raiseErrors.js';
+import { newDeckFailure } from './pitchSafeErrors.js';
 // One line per client, in file-name order (pitch_v2_adapter_d1604 holds it), so two swaps add lines at different places.
 import { dataRoomApi } from '../../../lib/api/dataRoom.js';
 import { deckActionsApi } from '../../../lib/api/deckActions.js';
@@ -47,6 +49,7 @@ import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { deckCoeditApi } from '../../../lib/api/deckCoedit.js';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckCritiqueApi } from '../../../lib/api/deckCritique.js';
+import { deckDiagramsApi } from '../../../lib/api/deckDiagrams.js';
 import { deckDraftApi } from '../../../lib/api/deckDraft.js';
 import { deckElementModelsApi } from '../../../lib/api/deckElementModels.js';
 import { deckElementsApi } from '../../../lib/api/deckElements.js';
@@ -54,10 +57,14 @@ import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckGridApi } from '../../../lib/api/deckGrid.js';
 import { deckImageEditsApi } from '../../../lib/api/deckImageEdits.js';
 import { deckImagesApi } from '../../../lib/api/deckImages.js';
+import { deckImportsApi } from '../../../lib/api/deckImports.js';
+import { deckInstructApi } from '../../../lib/api/deckInstruct.js';
 import { deckInvestorLinksApi } from '../../../lib/api/deckInvestorLinks.js';
+import { deckJudgeApi } from '../../../lib/api/deckJudge.js';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts.js';
 import { deckMediaApi } from '../../../lib/api/deckMedia.js';
 import { deckModelPresetsApi } from '../../../lib/api/deckModelPresets.js';
+import { deckNarrativeApi } from '../../../lib/api/deckNarrative.js';
 import { deckRehearsalsApi } from '../../../lib/api/deckRehearsals.js';
 import { deckRemixApi } from '../../../lib/api/deckRemix.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
@@ -83,6 +90,7 @@ export const unavailable = (issue, reason = NOT_ON) => Object.freeze({ available
 export const SURFACES = Object.freeze({
   grid: { issue: 3749, what: 'The 17 structures, divider drag and the 4:3 slide size' },
   saveCard: { issue: 3751, what: 'Autosave, one card at a time' },
+  saveDoc: { issue: 4596, what: 'Autosave of the cards kept, their order, the theme and the audience' },
   discardDraft: { issue: 3751, what: 'Discard the unsaved draft' },
   draft: { issue: 3751, what: 'Restore unsaved changes' },
   batch: { issue: 3753, what: 'Live build progress, per area' },
@@ -90,6 +98,7 @@ export const SURFACES = Object.freeze({
   elementModels: { issue: 3754, what: 'A model per element in the AIRail' },
   areasQuote: { issue: 3764, what: 'One quote and one hold for several areas' },
   areasGenerate: { issue: 3764, what: 'Generate into several areas, with variants' },
+  judge: { issue: 3783, what: 'Rank the variants' },
   history: { issue: 3767, what: 'Undo and redo' },
   narrativeOutline: { issue: 3768, what: 'An outline from the investor narrative' },
   instruct: { issue: 3773, what: 'An instruction on several areas' },
@@ -98,7 +107,8 @@ export const SURFACES = Object.freeze({
   deckUsage: { issue: 3776, what: 'Estimated and spent on this deck' },
   arrange: { issue: 3777, what: 'Align, distribute, group, lock and layers' },
   imageEdit: { issue: 3778, what: 'Crop, focus and filters' },
-  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B), off until the owner's steps; upscale has no model yet.
+  // D1534 (#3778 phase 2): background removal through AI Gateway (Bria, M = B); D4316 (#4316): upscale (Pruna).
+  // Each behind its own provider switch, off until the owner's steps on #1008.
   imageEditAi: { issue: 3778, what: 'Upscale and background removal' },
   imageVary: { issue: 3784, what: 'Erase, expand, vary and reference images' },
   elementsLibrary: { issue: 3779, what: 'Icons, shapes, dividers and textures' },
@@ -121,6 +131,7 @@ export const SURFACES = Object.freeze({
   outlineReorder: { issue: 3808, what: 'Reorder the New deck outline for a stage' },
   brandLocks: { issue: 3819, what: 'Brand kit locks' },
   pptxImport: { issue: 3819, what: 'Start from a .pptx template' },
+  importDocument: { issue: 3810, what: 'Start from a document: paste, DOCX, PDF or a .pptx deck' },
   investorLinks: { issue: 3812, what: 'One link per investor, consent and watermark preview' },
   withdrawInvestorLink: { issue: 3812, what: 'Withdraw one investor\'s link, keeping its analytics' },
   comments: { issue: 3817, what: 'Comments with mentions' },
@@ -157,8 +168,8 @@ export async function through(call, issue) {
     if (status === 404) return unavailable(issue);
     // D1577 (#3824): a route that is on main but switched off (503 `*_off`, e.g. `presence_off` on a
     // Worker without its binding) is still "Coming later", with the Worker's own sentence.
-    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, e.message || NOT_ON);
-    const message = typeof e?.message === 'string' && e.message ? e.message : 'could not be read';
+    if (status === 503 && typeof e?.code === 'string' && e.code.endsWith('_off')) return unavailable(issue, isSentence(e?.message) ? e.message.trim() : NOT_ON);
+    const message = status === 402 ? newDeckFailure(e) : userFacingRaiseError(e, { fallback: 'could not be read', scope: 'raise:pitch:adapter' });
     // D1543: a Worker refusal's code (a gate such as `no_consent`) rides along, so a surface can draw its line.
     const code = typeof e?.code === 'string' && e.code ? e.code : null;
     return Object.freeze({ available: false, unreadable: true, reason: message, issue, status, data: e?.data ?? null, ...(code ? { code } : {}) });
@@ -182,6 +193,7 @@ export const grid = (deckId) => through(() => deckGridApi.grid(deckId), SURFACES
 // D1501 (#3751): wired. A card's working copy (`If-Match: <rev>`, 0 for its first), the draft read for
 // "Restore unsaved changes from …", and Discard.
 export const saveCard = (deckId, uid, card, rev, opts) => through(() => deckDraftApi.saveCard(deckId, uid, card, rev, opts), SURFACES.saveCard.issue);
+export const saveDoc = (deckId, body, rev) => through(() => deckDraftApi.saveDoc(deckId, body, rev), SURFACES.saveDoc.issue);
 export const discardDraft = (deckId) => through(() => deckDraftApi.discard(deckId), SURFACES.discardDraft.issue);
 export const draft = (deckId) => through(() => deckDraftApi.draft(deckId), SURFACES.draft.issue);
 // D1502 part 2 (#3753): a run, read to resume it (pd2b, pd2c), and Stop. Follow it live with
@@ -198,8 +210,28 @@ export const areasGenerate = ({ deckId, card, areas, variants, cls, quoteUid, on
  * `gridOps.js` (its reducers and the 100-step history) and is not a client call: it has no contract.
  */
 export const history = async () => Object.freeze({ available: true, value: gridOps });
-export const narrativeOutline = off('narrativeOutline');
-export const instruct = off('instruct');
+// D1525 (#3783): one area's variants, ranked blind by a judge of another family than the writers'. Without `run`,
+// its quote (runs nothing); with it, the ranking. It never accepts: Accept stays the founder's.
+export const judge = (proposalUid, { run = false } = {}) => through(() => (run ? deckJudgeApi.rank(proposalUid) : deckJudgeApi.quote(proposalUid)), SURFACES.judge.issue);
+/**
+ * D1516 (#3768): New deck from the narrative. Without `run`, the outline: the stage's cards with their grid plan, what
+ * was left out and why ("Problem not evidenced"), the theme and template picked, and the quote. With `run` (and the
+ * outline's `quoteUid`), the one build: a version that is not current, under one deck_build run and one hold.
+ */
+const narrativeBody = ({ projectId, audience, stage, sector, run, quoteUid } = {}) => ({
+  project_id: projectId, ...(audience ? { audience } : {}), ...(stage ? { stage } : {}), ...(sector ? { sector } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const narrativeOutline = (o = {}) => through(() => (o.run ? deckNarrativeApi.build(narrativeBody(o), o.idempotencyKey) : deckNarrativeApi.outline(narrativeBody(o))), SURFACES.narrativeOutline.issue);
+/**
+ * D1521 (#3773): an instruction on the selected areas of one card. Without `run`, the quote (#3764's areas quote);
+ * with `run` (and the quote's `quoteUid`), the one run under one hold, answered as one proposal per area. `areas`
+ * are the selection's area ids; the Worker refuses one that is not words, and a figure in the words, before any quote.
+ */
+const instructBody = ({ card, areas = [], instruction, action, variants, run, quoteUid } = {}) => ({
+  card, selection: areas.map((id) => ({ area_id: String(id) })), ...(instruction ? { instruction } : {}), ...(action ? { action } : {}),
+  ...(variants ? { variants } : {}), ...(run && quoteUid ? { quote_uid: quoteUid } : {}),
+});
+export const instruct = (o = {}) => through(() => (o.run ? deckInstructApi.run(o.deckId, instructBody(o), o.idempotencyKey) : deckInstructApi.quote(o.deckId, instructBody(o))), SURFACES.instruct.issue);
 /** D1522 (#3774): the deck's stage plan — the order for its stage, a why line per card, and missing-proof warnings. */
 export const stagePlan = (deckId, opts) => through(() => deckStageApi.stagePlan(deckId, opts), SURFACES.stagePlan.issue);
 /** D1523 (#3775): every figure on the version, Linked, Stated, Uncited or Not recorded, and the counts Check claims shows. Editor-only. */
@@ -234,8 +266,16 @@ export const imageVary = (uid, ask) => through(() => deckImageEditsApi.quote(uid
  * panel, in one answer: `{ licence, decor_max, shapes, dividers, textures,
  * generate, icons: { total, offset, items } }`.
  */
-export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null } })), SURFACES.elementsLibrary.issue);
-export const diagrams = off('diagrams');
+// D4574 H3 (#4574): the icon nodes are a static asset the Worker reads, so a
+// page of icons can come back `unreadable`. It is passed on, never flattened
+// to an empty list: the panel says the set could not be read.
+export const elementsLibrary = (opts = {}) => through(() => Promise.all([deckElementsApi.library(), deckElementsApi.icons(opts)]).then(([lib, page]) => ({ ...lib, icons: { total: page?.total ?? 0, offset: page?.offset ?? 0, items: page?.icons ?? [], licence: page?.licence ?? null, unreadable: page?.unreadable === true, reason: page?.reason ?? null } })), SURFACES.elementsLibrary.issue);
+/**
+ * D1542 (#3780): an edited diagram checked in code (`POST /api/decks/:id/diagrams/check`): as it would be saved,
+ * whether it fits its area, the numbers its labels name. Generating one is the `grid_diagram` job, run through
+ * `areasGenerate` and proposed until Accept.
+ */
+export const diagrams = (deckId, { diagram, grid, card } = {}) => through(() => deckDiagramsApi.check(deckId, { diagram, grid, card }), SURFACES.diagrams.issue);
 /**
  * D1543 (#3781): the venture-record elements, from records with their Source and grade, no model.
  * `ventureElements(deckId, element, opts)` reads one (`GET /api/decks/:id/venture-elements/:element`), refused by its gate;
@@ -284,6 +324,8 @@ export const outlineReorder = off('outlineReorder');
 // The lock switches and Save as your layouts write through `deckBrandLocksApi` and `deckLayoutsApi`.
 export const brandLocks = (projectId) => through(() => deckBrandLocksApi.locks(projectId), SURFACES.brandLocks.issue);
 export const pptxImport = (projectId, file) => through(() => deckLayoutsApi.importTemplate(projectId, file), SURFACES.pptxImport.issue);
+// D1563 (#3810): Start from › Import a document — paste, DOCX and PDF to an outline, a .pptx to editable cards.
+export const importDocument = (projectId, input) => through(() => deckImportsApi.importDocument(projectId, input), SURFACES.importDocument.issue);
 // D1565 (#3812): wired. Each body is `through(() => <client>(…), issue)`.
 export const investorLinks = (deckId) => through(() => deckInvestorLinksApi.investorLinks(deckId), SURFACES.investorLinks.issue);
 export const withdrawInvestorLink = (deckId, shareId) => through(() => deckInvestorLinksApi.withdrawInvestorLink(deckId, shareId), SURFACES.withdrawInvestorLink.issue);

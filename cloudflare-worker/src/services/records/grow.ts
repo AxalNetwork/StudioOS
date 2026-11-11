@@ -40,6 +40,7 @@ import {
   updateFeedback, updateMarket, updateObligation, updatePartner, updateRole,
 } from '../growWriters';
 import { dayList, reminderLabel } from '../growDaily';
+import { plainAmount, suffixAmount } from '../../../../frontend/src/lib/money.js';
 import type {
   ActionResult, Gate, ModuleSpec, OldRowsMatcher, RecordAction, RecordContent, RecordContext, RecordFact, RecordField, Row,
   SectionSpec, Store,
@@ -85,7 +86,9 @@ const SYMBOL: Record<string, string> = { usd: '$', eur: '€', gbp: '£' };
 function money(cents: unknown, currency: unknown = 'usd'): string | null {
   if (cents == null || cents === '' || !Number.isFinite(Number(cents))) return null;
   const c = String(currency || 'usd').toLowerCase();
-  return `${SYMBOL[c] ?? `${c.toUpperCase()} `}${(Number(cents) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  // D5373: at the currency's own decimals; an unlisted code names the stored count.
+  const plain = plainAmount(Number(cents), c.toUpperCase(), { trimWhole: true });
+  return plain === null ? String(suffixAmount(Number(cents), c.toUpperCase())) : `${SYMBOL[c] ?? `${c.toUpperCase()} `}${plain}`;
 }
 
 /** A writer's refusal, as the status and sentence the route answers with (as Validate's records do). */
@@ -120,6 +123,7 @@ const growCtx = (rc: RecordContext): GrowCtx => ({ env: rc.env, projectId: rc.pr
 const LABEL: Record<string, string> = {
   customer: 'Customer', investor: 'Investor', team: 'Team', open: 'Open', planned: 'Planned', shipped: 'Shipped',
   active: 'Active', testing: 'Testing', paused: 'Paused',
+  organic: 'Organic', ads: 'Ads', newsletter: 'Newsletter', outreach: 'Outreach', signups: 'Sign-ups',
   content: 'Content', paid_search: 'Paid search', paid_social: 'Paid social', outbound: 'Outbound', partner: 'Partner', events: 'Events',
   draft: 'Draft', pending_review: 'Pending review', published: 'Live', rejected: 'Rejected', closed: 'Closed',
   full_time: 'Full-time', part_time: 'Part-time', contract: 'Contract', fractional: 'Fractional',

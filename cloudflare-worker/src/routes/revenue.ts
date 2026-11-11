@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * /api/revenue — the Spin-Out Lab revenue ledger (D363, migration 311).
  *
@@ -103,7 +104,7 @@ function canView(project: Project, user: User): boolean {
 
 function canEdit(project: Project, user: User): boolean {
   if (user.role === 'admin') return true;
-  if (user.role === 'founder') return canAccessFounderResource(user, project.founder_id);
+  if (holdsLicence(user, 'founder')) return canAccessFounderResource(user, project.founder_id);
   // Active Lab members write their own startup's deliverables whatever their
   // account role — an explicit ownership comparison, never a partner widening.
   return Number(user.spinout_lab_active ?? 0) === 1

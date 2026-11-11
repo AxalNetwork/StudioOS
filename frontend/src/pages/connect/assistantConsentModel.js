@@ -23,9 +23,12 @@ export const ASSISTANT_SCOPES = {
   'validate:write': 'Submit interviews for your review',
   'build:read': 'Read your Build progress, from the records your connected tools fed',
   'raise:read': 'Read your Raise context',
+  'raise:write': 'Propose deck changes and keep follow-up drafts for you to accept. Nothing is saved to your deck or sent without your press.',
   'connectors:read': 'See which tools you have connected, their status and last sync. Never their tokens.',
   'mail:read': 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.',
   'mail:write': 'Draft emails with Eadwyn, charged to your AI tokens. Drafts are kept in Axal VC; nothing is sent.',
+  'team:read': 'Read only what your chosen team role allows, in the company and projects you select.',
+  'team:propose': 'Propose changes as the team role you choose. A person decides; nothing is changed or sent automatically.',
 };
 export const scopesOf = (request) => {
   const sent = new Map((Array.isArray(request?.scope_labels) ? request.scope_labels : []).map((l) => [l?.scope, l?.label]));

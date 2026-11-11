@@ -56,6 +56,10 @@ export const AI_SURFACE = {
   mailDraft: '/email',
   /** D1241: Deal flow · Compare — Eadwyn's comparison note from SCORING's bands, saved only on press (`POST /api/deals/flow/compare-note`). */
   dealsCompare: '/deals/compare',
+  /** Grow · Publish to… — Eadwyn's post text for the ticked places (`POST /api/publish/ask`), #4046. It writes nothing. */
+  growPublish: '/grow',
+  /** D4488: Distribution draft proposals. */
+  growDistribution: '/grow/distribution',
   /** Build · Plan the build — Eadwyn's wording of the plan (`POST /api/cycles/build/plan/word`), D1071. */
   buildPlan: '/build/plan',
   /** Raise · Cap table — Eadwyn's read of a signed document (`POST /api/captable/record/:projectId/document-read`), D1021. */
@@ -72,6 +76,8 @@ export const AI_SURFACE = {
   cofounderMatch: '/spinout-lab/cofounder-match',
   /** Build · Team › Advisors — the founder's press ranks the matched advisors against a need (`POST /api/advisors/match/rank`), #3938 NE1. */
   advisorMatch: '/build/team',
+  /** Network · Introductions — the member's press ranks the people a who-knows read answers against a need (`POST /api/relationships/who-knows/rank`), #3938 NE1. */
+  networkIntroductions: '/network/introductions',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */

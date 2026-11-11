@@ -33,12 +33,16 @@ import { escalationSlaBand } from './hqOps';
 // ONE COMPARISON FOR BOTH DIRECTIONS (D120). See `secret.ts`'s header for why
 // the digest and the refusals are shared rather than written twice.
 import { sha256Hex, verifySecret } from './secret';
-import { createJWT, loadSuperAdminFlag } from '../auth';
+import { createJWT, loadSuperAdminFlag, jwtMinIatFloor } from '../auth';
+import { revokeAllGrants } from '../mcp/grants';
 import { likeNeedle } from '../util/likeSearch';
 import { activeAccountsInWeek, weekAxis } from '../services/activeAccounts';
 import { rollUpFundRow, ratioOrNull } from '../services/fundRollup';
 import { DECISION_WINDOW_DAYS, referralAges, type ReferralAges } from '../services/approvalAge';
 import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supportQueues';
+import {
+  readSlaPolicyVersion, parseSlaPolicyCopy, applySlaPolicyCopy, type SlaPolicyVersionRead,
+} from '../services/supportSlaPolicy';
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
@@ -332,6 +336,29 @@ export async function branchSearchAccounts(
   };
 }
 
+export type LicenceCopyAnswer = BranchAnswer<{
+  applied: boolean;
+  /** #4686 — the HQ revision this branch holds after the call (absent on an unnumbered push). */
+  hq_revision?: number | null;
+  /** #4686 — the push carried a revision older than the one held; the copy was kept. */
+  stale?: boolean;
+  /** #4686 — `false` only when a required section of the copy was not written. */
+  ok?: boolean;
+  partial?: boolean;
+  failed_sections?: string[];
+  reason?: string;
+}>;
+
+/** The optional sections of the copy, each in its own write (migrations 512, 554, 555). */
+const COPY_SECTIONS = [
+  { key: 'terms_json', name: 'terms' },
+  { key: 'program_grants_json', name: 'program_grants' },
+  { key: 'partner_deal_types_json', name: 'partner_deal_types' },
+  // D5032 (#5032) — HQ's ticket SLA policy, written to this branch's own
+  // `hq_support_sla_tiers` with its version, ordered by that version.
+  { key: 'support_sla_json', name: 'support_sla' },
+] as const;
+
 /**
  * HQ pushes this branch its licence; the branch writes the copy (migration
  * 256/257).
@@ -343,7 +370,7 @@ export async function branchSearchAccounts(
  */
 export async function applyLicenceCopy(
   env: Env, record: Record<string, unknown>,
-): Promise<BranchAnswer<{ applied: true }>> {
+): Promise<LicenceCopyAnswer> {
   const branch = requireBranch(env);
   const s = (k: string) => {
     const v = record[k];
@@ -354,7 +381,77 @@ export async function applyLicenceCopy(
     return Number.isFinite(v) ? v : null;
   };
   const pushedAt = s('pushed_at') || nowIso();
-  await env.DB.prepare(
+  // #4686 — HQ's licence revision, a monotonic integer. When the push carries
+  // one the copy is ordered by it ALONE: `pushed_at` is a timestamp that SQLite
+  // compares to the second, so two pushes inside one second were "equal" and the
+  // older could overwrite the newer. A push without one (an HQ build that
+  // predates this) keeps the `pushed_at` rule below.
+  const revRaw = record.hq_revision;
+  const revision = revRaw === undefined || revRaw === null ? null : Number(revRaw);
+  if (revision !== null && (!Number.isInteger(revision) || revision < 1)) {
+    throw new Error('rpc: hq_revision must be a positive integer');
+  }
+  const keysSent = COPY_SECTIONS.filter((x) => Object.prototype.hasOwnProperty.call(record, x.key));
+  let wrote: number;
+  if (revision !== null) {
+    const res = await env.DB.prepare(
+    // D137 — the five columns migration 265 adds ride here, because a column
+    // the push does not bind is a column that stays NULL however many times HQ
+    // pushes. `registered_address`, `signatory_name`, `signatory_title`,
+    // `term_years` and `terminated_at` are the five `MyLicencePage` reads and
+    // the copy never carried.
+    //
+    // D206 — and `kind` (migration 284), for the same reason: the branch's
+    // escalation drawer and route read it to know which kinds exist for this
+    // licence. Stored as HQ sent it, with no default and no check — a value
+    // this build does not recognise reads as unknown, not as a refusal.
+    `INSERT INTO branch_licence
+       (id, licence_uid, licence_ref, legal_entity, brand_name, territory, status, seats_json,
+        revenue_share_bps, token_split_bps, annual_fee_cents, currency, term_start, term_end,
+        renewal_at, template_version, suspended_at, suspended_note,
+        registered_address, signatory_name, signatory_title, term_years, terminated_at,
+        kind, pushed_at, hq_revision, copy_state, copy_failed_sections, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'partial', NULL, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       licence_uid = excluded.licence_uid, licence_ref = excluded.licence_ref,
+       legal_entity = excluded.legal_entity, brand_name = excluded.brand_name,
+       territory = excluded.territory, status = excluded.status, seats_json = excluded.seats_json,
+       revenue_share_bps = excluded.revenue_share_bps, token_split_bps = excluded.token_split_bps,
+       annual_fee_cents = excluded.annual_fee_cents, currency = excluded.currency,
+       term_start = excluded.term_start, term_end = excluded.term_end,
+       renewal_at = excluded.renewal_at, template_version = excluded.template_version,
+       suspended_at = excluded.suspended_at, suspended_note = excluded.suspended_note,
+       registered_address = excluded.registered_address,
+       signatory_name = excluded.signatory_name, signatory_title = excluded.signatory_title,
+       term_years = excluded.term_years, terminated_at = excluded.terminated_at,
+       kind = excluded.kind,
+       pushed_at = excluded.pushed_at, hq_revision = excluded.hq_revision,
+       copy_state = 'partial', copy_failed_sections = NULL, updated_at = datetime('now')
+     -- #4686 — ordered by HQ's revision ALONE. A push numbered below the one this
+     -- branch holds changes nothing, however close its timestamp: datetime()
+     -- truncates to the second, so the old rule let an older copy written in the
+     -- same second as a newer one overwrite it. An EQUAL revision is a re-send
+     -- of the same assertion and is applied again (idempotent).
+     WHERE branch_licence.hq_revision IS NULL
+        OR excluded.hq_revision >= branch_licence.hq_revision`,
+    ).bind(
+    s('licence_uid') ?? '', s('licence_ref'), s('legal_entity'), s('brand_name'),
+    s('territory') ?? '', s('status') ?? 'active', s('seats_json'),
+    n('revenue_share_bps'), n('token_split_bps'), n('annual_fee_cents'), s('currency'),
+    s('term_start'), s('term_end'), s('renewal_at'), s('template_version'),
+    s('suspended_at'), s('suspended_note'),
+    s('registered_address'), s('signatory_name'), s('signatory_title'),
+    n('term_years'), s('terminated_at'), s('kind'), pushedAt, revision,
+    ).run();
+    wrote = Number(res?.meta?.changes ?? 0);
+    if (wrote === 0) {
+      // The branch holds a LATER revision: keep it, and say so.
+      const held = await env.DB.prepare('SELECT hq_revision FROM branch_licence WHERE id = 1')
+        .first<{ hq_revision: number | null }>();
+      return { applied: false, stale: true, hq_revision: held?.hq_revision ?? null, branch, as_of: pushedAt };
+    }
+  } else {
+    await env.DB.prepare(
     // D137 — the five columns migration 265 adds ride here, because a column
     // the push does not bind is a column that stays NULL however many times HQ
     // pushes. `registered_address`, `signatory_name`, `signatory_title`,
@@ -400,38 +497,81 @@ export async function applyLicenceCopy(
     s('registered_address'), s('signatory_name'), s('signatory_title'),
     n('term_years'), s('terminated_at'), s('kind'), pushedAt,
   ).run();
-  // D797 — the terms schedule (migration 512) rides in its own write, so a
-  // branch that has not applied 512 still takes the rest of its copy. Written
-  // only when HQ sent the key, and only onto the copy this push wrote (its
-  // `pushed_at`), so an older push arriving late never overwrites newer terms.
-  if (Object.prototype.hasOwnProperty.call(record, 'terms_json')) {
+  }
+  // D797 / D984 / D986 — the terms schedule (migration 512), the program grants
+  // (554) and the partner deal types (555) each ride in their own write, so a
+  // branch that has not applied one still takes the rest of its copy. Each is
+  // written only when HQ sent the key, and only onto the copy THIS push wrote
+  // (its revision, or its `pushed_at` on an unnumbered push), so an older push
+  // arriving late never overwrites newer sections.
+  //
+  // #4686 — A SECTION THAT FAILED TO WRITE IS NO LONGER A WARNING. The old code
+  // logged and answered `{applied: true}`, so HQ cleared the retry and the
+  // branch kept the previous section for ever. The failure is collected, the
+  // copy is marked `partial` on the branch itself (visible to anything that
+  // reads it, and it survives a crash), and the answer is `ok: false` so HQ keeps
+  // the push pending.
+  const failed: string[] = [];
+  for (const sec of keysSent) {
     try {
-      await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('terms_json'), pushedAt).run();
+      // One literal statement per section — the column name never reaches SQL text.
+      let res: { meta?: { changes?: number } } | undefined;
+      if (sec.key === 'support_sla_json') {
+        // Ordered by the policy's own version, not the copy's revision: an
+        // older policy never replaces a newer one, and a stale copy is not a
+        // failure (the branch already holds a later policy).
+        const parsed = parseSlaPolicyCopy(record[sec.key]);
+        if (!parsed.ok) throw new Error(parsed.error);
+        await applySlaPolicyCopy(env, parsed.value);
+        continue;
+      }
+      if (sec.key === 'terms_json') {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      } else if (sec.key === 'program_grants_json') {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      } else {
+        res = revision !== null
+          ? await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND hq_revision = ?').bind(s(sec.key), revision).run()
+          : await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?').bind(s(sec.key), pushedAt).run();
+      }
+      // Zero rows on a numbered push: a newer revision took the row between the
+      // two writes. That copy is the newer one's to complete, not a failure here.
+      void res;
     } catch (e) {
-      console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
+      failed.push(sec.name);
+      console.warn(`[branchOps] branch_licence.${sec.key} not written`, (e as Error).message);
     }
   }
-  // D984 — the program grants (migration 554) ride the same way, on the same rule.
-  if (Object.prototype.hasOwnProperty.call(record, 'program_grants_json')) {
+  if (revision !== null) {
     try {
-      await env.DB.prepare('UPDATE branch_licence SET program_grants_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('program_grants_json'), pushedAt).run();
+      if (failed.length === 0) {
+        await env.DB.prepare(
+          "UPDATE branch_licence SET copy_state = 'complete', copy_failed_sections = NULL WHERE id = 1 AND hq_revision = ?",
+        ).bind(revision).run();
+      } else {
+        await env.DB.prepare(
+          "UPDATE branch_licence SET copy_state = 'partial', copy_failed_sections = ? WHERE id = 1 AND hq_revision = ?",
+        ).bind(failed.join(','), revision).run();
+      }
     } catch (e) {
-      console.warn('[branchOps] branch_licence.program_grants_json not written', (e as Error).message);
+      // The marker could not be written. Without it the copy still reads as
+      // `partial` (it was written that way), which is the safe side.
+      if (failed.length === 0) failed.push('copy_state');
+      console.warn('[branchOps] branch_licence.copy_state not written', (e as Error).message);
     }
   }
-  // D986 — the partner deal types (migration 555), by the same rule: only when
-  // HQ sent the key, and only onto the copy this push wrote.
-  if (Object.prototype.hasOwnProperty.call(record, 'partner_deal_types_json')) {
-    try {
-      await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?')
-        .bind(s('partner_deal_types_json'), pushedAt).run();
-    } catch (e) {
-      console.warn('[branchOps] branch_licence.partner_deal_types_json not written', (e as Error).message);
-    }
+  if (failed.length) {
+    return {
+      ok: false, applied: false, partial: true, failed_sections: failed,
+      reason: `The branch wrote the licence but not ${failed.join(', ')}; it is not a full copy.`,
+      hq_revision: revision, branch, as_of: pushedAt,
+    };
   }
-  return { applied: true, branch, as_of: pushedAt };
+  return { applied: true, ...(revision !== null ? { hq_revision: revision } : {}), branch, as_of: pushedAt };
 }
 
 /**
@@ -1294,9 +1434,15 @@ export async function branchGameHoldings(env: Env): Promise<BranchAnswer<{ holdi
  * A read, so no secret, on `rpc/index.ts`'s rule: HQ's Super Admin page is
  * the reader, and the class's accepted exposure is a read of branch data.
  */
-export async function branchOpenTickets(env: Env): Promise<BranchAnswer<{ tickets: BranchTicketsRead }>> {
+export async function branchOpenTickets(
+  env: Env,
+): Promise<BranchAnswer<{ tickets: BranchTicketsRead; sla_policy: SlaPolicyVersionRead }>> {
   const branch = requireBranch(env);
-  return { branch, as_of: nowIso(), tickets: await readBranchAdminTickets(env) };
+  // D5032 (#5032) — and which version of HQ's SLA policy this branch bands its
+  // tickets with, so HQ · Support can say which branches are current. A
+  // branch on an older deploy omits the key, and HQ reads that as unreported.
+  const [tickets, slaPolicy] = await Promise.all([readBranchAdminTickets(env), readSlaPolicyVersion(env)]);
+  return { branch, as_of: nowIso(), tickets, sla_policy: slaPolicy };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1624,25 +1770,17 @@ export async function redeemSupportCode(
     throw new Error('support: that account is no longer active on this branch.');
   }
 
-  const jti = crypto.randomUUID();
-  const token = await createJWT(
-    env, target.id, String(target.email ?? ''), target.role, undefined, jti,
-    `${SUPPORT_SESSION_MINUTES}m`,
-  );
-  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MINUTES * 60_000).toISOString();
-
-  try {
-    await env.DB.prepare(
-      `INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'hq_support', 'hq_support')`,
-    ).bind(target.id, jti).run();
-  } catch (e) {
-    console.warn('[rpc:redeemSupportCode] session row failed', (e as Error).message);
-  }
-
+  // D4669 — THE RECORD AND THE SESSION ROW FIRST, THEN THE TOKEN. The token
+  // names both (`sid` and `jti`) and every request re-reads them, so ending
+  // the support session or revoking its row ends the access. Either write
+  // failing refuses the redeem: a support token nobody could end, or one the
+  // branch's own audit does not show, is not issued. The code is already
+  // spent by then, which is the safe side: HQ starts a new session.
+  let supportSessionId: number | null = null;
   try {
     const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
     await ensureCohortTimingSchema(env);
-    await env.DB.prepare(
+    const ins = await env.DB.prepare(
       `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
     ).bind(
       // ZERO, DELIBERATELY. The column is NOT NULL with no foreign key, and no
@@ -1653,9 +1791,34 @@ export async function redeemSupportCode(
       0, target.id,
       `hq_support:${claimed.hq_actor_name}|${claimed.reason}`.slice(0, 500),
     ).run();
+    supportSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
   } catch (e) {
     console.warn('[rpc:redeemSupportCode] impersonation row failed', (e as Error).message);
   }
+  if (supportSessionId === null) {
+    throw new Error('support-unavailable: the support session could not be recorded on this branch, so it was not opened. Ask HQ to start a new support session.');
+  }
+
+  const jti = crypto.randomUUID();
+  try {
+    await env.DB.prepare(
+      `INSERT INTO user_sessions (user_id, jti, factor, assurance_level) VALUES (?, ?, 'hq_support', 'hq_support')`,
+    ).bind(target.id, jti).run();
+  } catch (e) {
+    console.warn('[rpc:redeemSupportCode] session row failed', (e as Error).message);
+    try {
+      await env.DB.prepare(
+        "UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND ended_at IS NULL",
+      ).bind(supportSessionId).run();
+    } catch { /* the record stays open; no token was minted for it */ }
+    throw new Error('support-unavailable: the support session could not be recorded on this branch, so it was not opened. Ask HQ to start a new support session.');
+  }
+
+  const token = await createJWT(
+    env, target.id, String(target.email ?? ''), target.role, undefined, jti,
+    `${SUPPORT_SESSION_MINUTES}m`, supportSessionId,
+  );
+  const expiresAt = new Date(Date.now() + SUPPORT_SESSION_MINUTES * 60_000).toISOString();
 
   try {
     await env.DB.prepare(
@@ -1939,30 +2102,194 @@ export async function unbindAdmin(
       skipped.push({ id: t.id, reason: 'Carries a super_admins row, which a branch should not have (D106); left for investigation.' });
       continue;
     }
-    const res = await env.DB.prepare(
-      "UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ? AND role = 'admin' AND is_active = 1",
-    ).bind(t.id).run();
-    if (Number(res?.meta?.changes ?? 0) === 0) {
+    // #4686 — THE ROLE CHANGE AND ITS TWO AUDIT ROWS ARE ONE BATCH. They used to
+    // be three writes with the audit in a try/catch that only warned, so a
+    // failure after the UPDATE left a deactivated administrator with no record
+    // of who removed them — and, because a repeat finds no active admin, nothing
+    // would ever write it. The audit rows are inserted only `WHERE changes() > 0`
+    // (the rows the previous statement in this batch changed), so a repeat, or a
+    // row another request already unbound, writes no second pair.
+    const actorTag = `hq:${actor}`.slice(0, 200);
+    const out = await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE users SET role = 'exploring', is_active = 0 WHERE id = ? AND role = 'admin' AND is_active = 1",
+      ).bind(t.id),
+      env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, ?, ?, ? WHERE changes() > 0',
+      ).bind('hq_admin_unbound', `Unbound as administrator of ${branch} by ${actor}: ${reason}`, actorTag, t.id),
+      env.DB.prepare(
+        'INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, ?, ?, ? WHERE changes() > 0',
+      ).bind('your_role_changed',
+        `Your administrator role on this branch was removed by HQ and your account deactivated. Reason: ${reason}`,
+        actorTag, t.id),
+    ]);
+    if (Number(out?.[0]?.meta?.changes ?? 0) === 0) {
       skipped.push({ id: t.id, reason: 'Changed while this ran: no longer an active administrator, so left as it is.' });
       continue;
     }
     unbound.push({ id: t.id, name: t.name, email: t.email });
-    try {
-      await env.DB.prepare(
-        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
-      ).bind('hq_admin_unbound', `Unbound as administrator of ${branch} by ${actor}: ${reason}`,
-        `hq:${actor}`.slice(0, 200), t.id).run();
-      await env.DB.prepare(
-        'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
-      ).bind('your_role_changed',
-        `Your administrator role on this branch was removed by HQ and your account deactivated. Reason: ${reason}`,
-        `hq:${actor}`.slice(0, 200), t.id).run();
-    } catch (e) {
-      console.warn('[rpc:unbindAdmin] audit rows failed', (e as Error).message);
-    }
   }
 
   return { unbound, skipped, branch, as_of: nowIso() };
+}
+
+/**
+ * D4669 part 2 (#4669, the owner's option B, 2026-11-10) — HQ signs accounts
+ * out ON THIS BRANCH, on request.
+ *
+ * WHY THIS EXISTS. HQ's emergency sign-outs write HQ's own database. A branch
+ * is its own Worker over its own D1, with its own accounts and sessions, so
+ * until this every HQ answer listed each bound branch as `not_reached`. Option
+ * B: HQ may reach a branch when the operator asks it to, and each branch says
+ * what it did.
+ *
+ * THE SAME PRIMITIVE THE BRANCH'S OWN ADMIN USES. A sign-out raises the
+ * account's `jwt_min_iat`, which every request re-reads, so every token issued
+ * before it is refused from its next request — including any support session
+ * opened as that account, which is held to the same floor (D4669 part 1).
+ * Nothing here mints, reads or forwards a token.
+ *
+ * ONE BATCH: the write and its audit row. The audit row is inserted only
+ * `WHERE changes() > 0` for one account, and always for the whole branch (an
+ * act that found no active account is still an act HQ took), and it carries
+ * the count the UPDATE changed. A batch is all-or-nothing on D1, so a sign-out
+ * without its record, or a record of a sign-out that did not happen, cannot
+ * exist.
+ *
+ * A RETRY IS THE SAME ACT. HQ sends one `op_key` per operator request and
+ * resends it when a branch did not answer in time. A key already on record is
+ * answered with that record (`replayed: true`) and writes nothing: the first
+ * attempt may well have landed, and HQ could not tell.
+ *
+ * WHAT THE BRANCH CHECKS, as `unbindAdmin` does: the caller is HQ
+ * (`authenticateHq`, first), the reason is at least ten characters, the
+ * operator is named, the key is well formed, and the target is an account
+ * here. TOTP, step-up and elevation are HQ's to check before the binding is
+ * touched, and nothing here pretends otherwise.
+ *
+ * Every refusal is thrown BEFORE the batch, so a thrown `rpc:` error always
+ * means nothing changed on this branch. HQ relies on that to report `failed`
+ * rather than `unreachable`.
+ */
+export const EMERGENCY_REASON_MIN = SUPPORT_REASON_MIN;
+export const EMERGENCY_OP_KEY_RE = /^op_[0-9a-f]{32}$/;
+export const EMERGENCY_SIGN_OUT_ACTION = 'hq_emergency_sign_out';
+
+export type EmergencySignOutTarget =
+  | { kind: 'all' }
+  | { kind: 'account'; user_id?: number | null; email?: string | null };
+
+export type EmergencySignOutRequest = {
+  hq_actor_name: string;
+  reason: string;
+  op_key: string;
+  target: EmergencySignOutTarget;
+};
+
+export type EmergencySignOutResult = BranchAnswer<{
+  /** Accounts whose sessions this act ended. 0 when no matching active account was found. */
+  affected: number;
+  /** True when the key was already on record: the answer is that record, and nothing was written now. */
+  replayed: boolean;
+  /** Why `affected` is 0, when it is: `no_account` (no account holds the target here). */
+  note: 'no_account' | null;
+  /** The floor written, in seconds; null on a replay or when nothing was written. */
+  revoked_at: number | null;
+}>;
+
+const opTag = (key: string) => `[op:${key}]`;
+
+export async function emergencySignOut(
+  env: Env, secret: string, req: EmergencySignOutRequest,
+): Promise<EmergencySignOutResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const reason = String(req?.reason ?? '').trim().slice(0, 300);
+  if (reason.length < EMERGENCY_REASON_MIN) {
+    throw new Error(`rpc: a sign-out from HQ needs a reason of at least ${EMERGENCY_REASON_MIN} characters, recorded here.`);
+  }
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: a sign-out from HQ needs the name of the HQ operator doing it');
+  const key = String(req?.op_key ?? '');
+  if (!EMERGENCY_OP_KEY_RE.test(key)) throw new Error('rpc: a sign-out from HQ needs its operation key, so a retry is recognised');
+  const target = req?.target;
+  if (!target || (target.kind !== 'all' && target.kind !== 'account')) {
+    throw new Error('rpc: a sign-out from HQ names its target: every account, or one account');
+  }
+
+  // A key already on record: answer it, write nothing. The count is read back
+  // from the row the first attempt wrote, so a replay reports what happened.
+  const prior = await env.DB.prepare(
+    'SELECT details, user_id FROM activity_logs WHERE action = ? AND instr(details, ?) > 0 ORDER BY id LIMIT 1',
+  ).bind(EMERGENCY_SIGN_OUT_ACTION, opTag(key)).first<{ details: string; user_id: number | null }>();
+  if (prior) {
+    const m = /affected=(\d+)/.exec(String(prior.details));
+    const affected = m ? Number(m[1]) : 0;
+    return {
+      affected, replayed: true, note: affected === 0 && target.kind === 'account' ? 'no_account' : null,
+      revoked_at: null, branch, as_of: nowIso(),
+    };
+  }
+
+  const floor = jwtMinIatFloor();
+  const actorTag = `hq:${actor}`.slice(0, 200);
+  const tail = ` by ${actor}: ${reason} ${opTag(key)}`;
+
+  if (target.kind === 'all') {
+    const out = await env.DB.batch([
+      env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE is_active = 1').bind(floor),
+      env.DB.prepare(
+        "INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, 'Every account on ' || ? || ' signed out from HQ, affected=' || changes() || ?, ?, NULL",
+      ).bind(EMERGENCY_SIGN_OUT_ACTION, branch, tail, actorTag),
+    ]);
+    const affected = Number(out?.[0]?.meta?.changes ?? 0);
+    return { affected, replayed: false, note: null, revoked_at: floor, branch, as_of: nowIso() };
+  }
+
+  // One account, named by this branch's own id or by email. HQ's ids mean
+  // nothing here: a person's account on a branch is a different row in a
+  // different database, so an email is how HQ names the same person across
+  // branches, and an id is how it names an account it found on this one.
+  type Row = { id: number; email: string | null };
+  let row: Row | null = null;
+  if (target.user_id !== undefined && target.user_id !== null) {
+    const id = Number(target.user_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('rpc: a sign-out from HQ names an account by a positive id');
+    row = await env.DB.prepare('SELECT id, email FROM users WHERE id = ?').bind(id).first<Row>();
+    if (!row) throw new Error(`rpc: ${branch} holds no account with id ${id}`);
+  } else {
+    const email = String(target.email ?? '').trim().toLowerCase().slice(0, 320);
+    if (!email || !email.includes('@')) throw new Error('rpc: a sign-out from HQ names an account by its id here or its email');
+    row = await env.DB.prepare('SELECT id, email FROM users WHERE lower(email) = ?').bind(email).first<Row>();
+  }
+
+  if (!row) {
+    // No account holds that email here: nothing to sign out, and the branch
+    // says so as a fact rather than an error. The act is still recorded, so a
+    // retry of it is recognised and HQ's record and the branch's agree.
+    await env.DB.prepare(
+      'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, NULL)',
+    ).bind(EMERGENCY_SIGN_OUT_ACTION, `No account on ${branch} matched the sign-out from HQ, affected=0${tail}`, actorTag).run();
+    return { affected: 0, replayed: false, note: 'no_account', revoked_at: null, branch, as_of: nowIso() };
+  }
+
+  const out = await env.DB.batch([
+    env.DB.prepare('UPDATE users SET jwt_min_iat = ? WHERE id = ?').bind(floor, row.id),
+    env.DB.prepare(
+      "INSERT INTO activity_logs (action, details, actor, user_id) SELECT ?, 'Signed out of every session on ' || ? || ' from HQ, affected=' || changes() || ?, ?, ?",
+    ).bind(EMERGENCY_SIGN_OUT_ACTION, branch, tail, actorTag, row.id),
+    // Addressed to the person, as `unbindAdmin`'s second row is. The account
+    // was read a moment ago and the UPDATE is by id, so it always lands.
+    env.DB.prepare(
+      'INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)',
+    ).bind('your_sessions_ended', `HQ signed you out of every session on this branch. Reason: ${reason}`, actorTag, row.id),
+  ]);
+  const affected = Number(out?.[0]?.meta?.changes ?? 0);
+  // D666: an AI assistant's grant ends with the account's sessions. Each tool
+  // call also refuses a grant older than the floor, so this is belt and braces
+  // and its failure leaves no working connection behind.
+  try { await revokeAllGrants(env, row.id); } catch (e) { console.warn('[rpc:emergencySignOut] grant revoke failed; the floor still refuses them', (e as Error).message); }
+  return { affected, replayed: false, note: null, revoked_at: floor, branch, as_of: nowIso() };
 }
 
 export type InviteRequest = {
@@ -1973,6 +2300,12 @@ export type InviteRequest = {
   /** Where they are arriving from, so the destination sees a move, not an application. */
   moved_from_code?: string | null;
   reason?: string | null;
+  /**
+   * D5043 — HQ's move operation uid (`mvop_…`). When it names an invitation
+   * this branch already stored for the same move, that invitation is answered
+   * again (`reused: true`) instead of a second row being written.
+   */
+  move_ref?: string | null;
 };
 
 export type InviteResult = BranchAnswer<{
@@ -1993,66 +2326,26 @@ export type InviteResult = BranchAnswer<{
    * because then it is in the one place it belongs, which is their inbox.
    */
   invite_link?: string;
+  /** D5043 — true when this answers an invitation stored earlier for the same `move_ref`. */
+  reused?: boolean;
+  /** D5043 — the reused invitation has already been accepted: the person is here. */
+  accepted?: boolean;
 }>;
 
+/** D5043 — HQ's move operation uid, as `services/accountMoves.ts` mints it. */
+export const MOVE_REF_RE = /^mvop_[0-9a-f]{20}$/;
+
+/** A fresh invitation token. Prefixed so it cannot be mistaken for its own digest (below). */
+const newInvitationToken = () => `invt_${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
+
 /**
- * Invite an email onto this branch (migration 263).
- *
- * `email_sent` IS REPORTED, NEVER ASSUMED. Every sender in `services/email.ts`
- * returns `false` when the Gmail credentials are unset rather than throwing, and
- * a branch that has not had its mail configured is a real and likely state
- * during provisioning. An invitation nobody was told about is a different thing
- * from one that is merely unanswered — migration 236 says exactly that, and HQ
- * needs to see which so it can pass the link on by hand.
+ * Send the invitation message and record what the mailer did. Never throws:
+ * a send failure leaves the invitation stored, and says so.
  */
-export async function inviteAccount(
-  env: Env, secret: string, req: InviteRequest,
-): Promise<InviteResult> {
-  const branch = await authenticateHq(env, secret);
-
-  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
-  if (!actor) throw new Error('rpc: an invitation needs the name of the HQ operator sending it');
-
-  // Normalised HERE as well as at the caller, because this is the side that
-  // writes the row the unique index and the accept-time match both read.
-  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
-  if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
-    throw new Error('rpc: an invitation needs a valid email address');
-  }
-
-  const existing = await env.DB.prepare(
-    'SELECT id FROM users WHERE email = ? AND is_active = 1',
-  ).bind(email).first<{ id: number }>();
-  if (existing) {
-    throw new Error(`rpc: ${email} already has an active account on ${branch}`);
-  }
-
-  // PREFIXED SO IT CANNOT BE MISTAKEN FOR ITS OWN DIGEST. Two UUIDs with the
-  // dashes stripped are exactly 64 hex characters — the same shape a SHA-256
-  // hex digest has — so a bug that stored the raw token instead of the hash
-  // would look completely correct in the table AND pass any assertion that
-  // checked the column's shape. That is not hypothetical: the first version
-  // of this code was mutated to store the raw token and the test could not
-  // tell. The prefix makes the two distinguishable at a glance and in an
-  // assertion, and costs nothing.
-  const rawToken = `invt_${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
-  const uid = newInvitationUid();
-  const row = await env.DB.prepare(
-    `INSERT INTO branch_invitations
-       (uid, email, name, role, token_hash, moved_from_code, reason, invited_by_name, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?))
-     RETURNING expires_at`,
-  ).bind(
-    uid, email,
-    req?.name == null ? null : String(req.name).slice(0, 200),
-    String(req?.role ?? 'exploring').slice(0, 40),
-    await sha256Hex(rawToken),
-    req?.moved_from_code == null ? null : String(req.moved_from_code).trim().toLowerCase().slice(0, 32),
-    req?.reason == null ? null : String(req.reason).slice(0, 300),
-    actor,
-    `+${INVITATION_TTL_DAYS} days`,
-  ).first<{ expires_at: string }>();
-
+async function sendInvitation(
+  env: Env, branch: string, actor: string, uid: string, email: string, rawToken: string,
+  movedFrom: string | null, reused: boolean,
+): Promise<{ sent: boolean; emailReason?: string; link: string }> {
   const base = String(env.APP_URL || '').replace(/\/+$/, '');
   // /join/:token, NOT /invite/:token. The second path is the events RSVP
   // page (App.jsx), and the Worker's only /invite/:token handler is the
@@ -2083,20 +2376,131 @@ export async function inviteAccount(
       `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, NULL)`,
     ).bind(
       'hq_account_invited',
-      JSON.stringify({ uid, branch, moved_from: req?.moved_from_code ?? null, email_sent: sent }),
+      JSON.stringify({ uid, branch, moved_from: movedFrom, email_sent: sent, ...(reused ? { reused: true } : {}) }),
       `hq:${actor}`.slice(0, 200),
     ).run();
   } catch (e) {
     console.warn('[rpc:inviteAccount] post-send write failed', (e as Error).message);
   }
+  return { sent, emailReason, link };
+}
+
+/**
+ * Invite an email onto this branch (migration 263).
+ *
+ * `email_sent` IS REPORTED, NEVER ASSUMED. Every sender in `services/email.ts`
+ * returns `false` when the Gmail credentials are unset rather than throwing, and
+ * a branch that has not had its mail configured is a real and likely state
+ * during provisioning. An invitation nobody was told about is a different thing
+ * from one that is merely unanswered — migration 236 says exactly that, and HQ
+ * needs to see which so it can pass the link on by hand.
+ *
+ * D5043 — ONE INVITATION PER MOVE. With a `move_ref`, an invitation this
+ * branch already stored for that move is answered again rather than a second
+ * one written, and that lookup runs BEFORE the active-account refusal: a
+ * person who accepted our own invitation is active here because of it, which
+ * is the move finished, not a conflict. A pending one whose message left is
+ * returned as it is (its link is in their inbox, and a new token would break
+ * it). A pending one whose message did not leave gets a new token and a new
+ * send: its only link went out in an answer HQ did not keep, or never heard.
+ */
+export async function inviteAccount(
+  env: Env, secret: string, req: InviteRequest,
+): Promise<InviteResult> {
+  const branch = await authenticateHq(env, secret);
+
+  const actor = String(req?.hq_actor_name ?? '').trim().slice(0, 200);
+  if (!actor) throw new Error('rpc: an invitation needs the name of the HQ operator sending it');
+
+  // Normalised HERE as well as at the caller, because this is the side that
+  // writes the row the unique index and the accept-time match both read.
+  const email = String(req?.email ?? '').trim().toLowerCase().slice(0, 320);
+  if (!email || !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
+    throw new Error('rpc: an invitation needs a valid email address');
+  }
+
+  const movedFrom = req?.moved_from_code == null ? null : String(req.moved_from_code).trim().toLowerCase().slice(0, 32);
+  const moveRef = MOVE_REF_RE.test(String(req?.move_ref ?? '')) ? String(req.move_ref) : null;
+
+  if (moveRef) {
+    const prior = await env.DB.prepare(
+      `SELECT uid, email, status, email_sent, expires_at, datetime(expires_at) > datetime('now') AS live
+         FROM branch_invitations WHERE move_ref = ? ORDER BY id DESC LIMIT 1`,
+    ).bind(moveRef).first<{ uid: string; email: string; status: string; email_sent: number; expires_at: string; live: number }>();
+    if (prior && prior.email === email && prior.status === 'accepted') {
+      return {
+        uid: prior.uid, email, expires_at: prior.expires_at, email_sent: Number(prior.email_sent) === 1,
+        reused: true, accepted: true, branch, as_of: nowIso(),
+      };
+    }
+    if (prior && prior.email === email && prior.status === 'pending' && Number(prior.live) === 1) {
+      if (Number(prior.email_sent) === 1) {
+        return {
+          uid: prior.uid, email, expires_at: prior.expires_at, email_sent: true,
+          reused: true, branch, as_of: nowIso(),
+        };
+      }
+      // The active-account refusal still holds before a new token is issued.
+      const activeNow = await env.DB.prepare(
+        'SELECT id FROM users WHERE email = ? AND is_active = 1',
+      ).bind(email).first<{ id: number }>();
+      if (activeNow) throw new Error(`rpc: ${email} already has an active account on ${branch}`);
+      const rawToken = newInvitationToken();
+      await env.DB.prepare('UPDATE branch_invitations SET token_hash = ?, updated_at = ? WHERE uid = ?')
+        .bind(await sha256Hex(rawToken), nowIso(), prior.uid).run();
+      const out = await sendInvitation(env, branch, actor, prior.uid, email, rawToken, movedFrom, true);
+      return {
+        uid: prior.uid, email, expires_at: prior.expires_at, email_sent: out.sent,
+        ...(out.emailReason ? { email_reason: out.emailReason } : {}),
+        ...(out.sent ? {} : { invite_link: out.link }),
+        reused: true, branch, as_of: nowIso(),
+      };
+    }
+  }
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM users WHERE email = ? AND is_active = 1',
+  ).bind(email).first<{ id: number }>();
+  if (existing) {
+    throw new Error(`rpc: ${email} already has an active account on ${branch}`);
+  }
+
+  // PREFIXED SO IT CANNOT BE MISTAKEN FOR ITS OWN DIGEST. Two UUIDs with the
+  // dashes stripped are exactly 64 hex characters — the same shape a SHA-256
+  // hex digest has — so a bug that stored the raw token instead of the hash
+  // would look completely correct in the table AND pass any assertion that
+  // checked the column's shape. That is not hypothetical: the first version
+  // of this code was mutated to store the raw token and the test could not
+  // tell. The prefix makes the two distinguishable at a glance and in an
+  // assertion, and costs nothing.
+  const rawToken = newInvitationToken();
+  const uid = newInvitationUid();
+  const row = await env.DB.prepare(
+    `INSERT INTO branch_invitations
+       (uid, email, name, role, token_hash, moved_from_code, reason, invited_by_name, expires_at, move_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?), ?)
+     RETURNING expires_at`,
+  ).bind(
+    uid, email,
+    req?.name == null ? null : String(req.name).slice(0, 200),
+    String(req?.role ?? 'exploring').slice(0, 40),
+    await sha256Hex(rawToken),
+    movedFrom,
+    req?.reason == null ? null : String(req.reason).slice(0, 300),
+    actor,
+    `+${INVITATION_TTL_DAYS} days`,
+    moveRef,
+  ).first<{ expires_at: string }>();
+
+  const out = await sendInvitation(env, branch, actor, uid, email, rawToken, movedFrom, false);
 
   return {
     uid,
     email,
     expires_at: row?.expires_at ?? '',
-    email_sent: sent,
-    ...(emailReason ? { email_reason: emailReason } : {}),
-    ...(sent ? {} : { invite_link: link }),
+    email_sent: out.sent,
+    ...(out.emailReason ? { email_reason: out.emailReason } : {}),
+    ...(out.sent ? {} : { invite_link: out.link }),
     branch,
     as_of: nowIso(),
   };

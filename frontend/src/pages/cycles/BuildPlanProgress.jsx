@@ -38,6 +38,7 @@ const FILL = {
   sent: 'bg-sky-500',
   progress: 'bg-amber-500',
   built: 'bg-emerald-500',
+  tested: 'bg-teal-600',
   notstarted: 'bg-[#6b6577]',
   unrecorded: 'border border-dashed border-axal-muted bg-transparent dark:border-gray-400',
 };
@@ -146,38 +147,69 @@ function Cell({ stage, cell }) {
   );
 }
 
-/** VB10's table: search, Module, Stage and Tool, the sort, and pages of 25. */
-function ItemsTable({ rows, onOpen }) {
+/**
+ * D4602 (#4602, Build audit 3/4) — ONE FILTER MODEL, BOTH WIDTHS.
+ *
+ * The search, Module, Stage, Tool and Sort controls used to live inside
+ * `ItemsTable` with their own `useState`, and the phone branch called
+ * `filterRows(rows)` with the defaults — so a founder on a phone had Show
+ * more and nothing else, and had to page through every card to find an item.
+ *
+ * The state is the page's now (`useProgressFilter`), and both branches read
+ * `filterRows(rows, f, sort)` from it, so the same inputs select the same
+ * items at either width — that is the audit's finding 7, and it is the model
+ * rather than the layout: these are the DESKTOP controls, reused as they are
+ * and wrapping at a phone's width. The compact arrangement belongs to the
+ * approved Build V2 boards (#4846), whose export is not on `main` yet; when it
+ * lands it restyles this row and changes nothing underneath.
+ */
+export function useProgressFilter() {
   const [f, setF] = useState(PROGRESS_FILTERS);
   const [sort, setSort] = useState('last');
   const [page, setPage] = useState(1);
-  const shown = useMemo(() => filterRows(rows, f, sort), [rows, f, sort]);
-  const view = pageRows(shown, page, PER_PAGE);
-  const set = (k, v) => { setF((x) => ({ ...x, [k]: v })); setPage(1); };
+  const set = useCallback((k, v) => { setF((x) => ({ ...x, [k]: v })); setPage(1); }, []);
+  const onSort = useCallback((v) => { setSort(v); setPage(1); }, []);
+  return { f, sort, page, set, onSort, setPage };
+}
+
+/** The controls themselves, drawn above the table and above the phone's cards. */
+function ProgressControls({ state, phone = false }) {
+  const { f, sort, set, onSort } = state;
   const pick = (k, label, options) => (
     <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
       <span className="sr-only">{label}</span>
-      <select value={f[k]} onChange={(e) => set(k, e.target.value)} className={FIELD} data-testid={`plan-progress-filter-${k}`}>
+      <select value={f[k]} onChange={(e) => set(k, e.target.value)} className={`${FIELD} ${phone ? 'min-h-[44px]' : ''}`} data-testid={`plan-progress-filter-${k}`}>
         <option value="">{label}</option>
         {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
     </label>
   );
   return (
+    <div className="flex flex-wrap items-center gap-2" data-testid={phone ? 'plan-progress-controls-phone' : 'plan-progress-controls'}>
+      <input type="search" value={f.q} onChange={(e) => set('q', e.target.value)} placeholder="Search items" aria-label="Search items"
+        className={`${FIELD} w-full max-w-[240px] ${phone ? 'min-h-[44px]' : ''}`} data-testid="plan-progress-search" />
+      {pick('module', 'Module', MODULE_FILTERS)}
+      {pick('stage', 'Stage', STAGE_FILTERS)}
+      {pick('tool', 'Tool', TOOL_FILTERS)}
+      <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
+        Sort
+        <select value={sort} onChange={(e) => onSort(e.target.value)} className={`${FIELD} ${phone ? 'min-h-[44px]' : ''}`} data-testid="plan-progress-sort">
+          {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+      </label>
+    </div>
+  );
+}
+
+/** VB10's table: search, Module, Stage and Tool, the sort, and pages of 25. */
+function ItemsTable({ rows, onOpen, state }) {
+  const { f, sort, page, setPage } = state;
+  const shown = useMemo(() => filterRows(rows, f, sort), [rows, f, sort]);
+  const view = pageRows(shown, page, PER_PAGE);
+  return (
     <section className={CARD} aria-labelledby="plan-progress-items" data-testid="plan-progress-table">
       <h2 id="plan-progress-items" className={H2}>Accepted items</h2>
-      <div className="flex flex-wrap items-center gap-2">
-        <input type="search" value={f.q} onChange={(e) => set('q', e.target.value)} placeholder="Search items" aria-label="Search items" className={`${FIELD} w-full max-w-[240px]`} data-testid="plan-progress-search" />
-        {pick('module', 'Module', MODULE_FILTERS)}
-        {pick('stage', 'Stage', STAGE_FILTERS)}
-        {pick('tool', 'Tool', TOOL_FILTERS)}
-        <label className="flex items-center gap-1.5 text-[12px] text-axal-muted dark:text-gray-400">
-          Sort
-          <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} className={FIELD} data-testid="plan-progress-sort">
-            {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </label>
-      </div>
+      <ProgressControls state={state} />
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1060px] border-collapse text-left text-[12.5px]">
           <thead>
@@ -249,11 +281,27 @@ function BuiltPerWeek({ series }) {
   );
 }
 
-/** VB22a: one card per item with its six stages as dots, five at a time. */
-function PhoneItems({ rows, onOpen }) {
+/**
+ * VB22a: one card per item with its six stages as dots, five at a time.
+ *
+ * D4602 (#4602): the same controls as the table, above the cards, so a long
+ * accepted list can be searched and filtered instead of paged through five at
+ * a time. The window goes back to five whenever the filters change, so Show
+ * more never leaves a founder reading the eleventh card of a four-card result.
+ */
+function PhoneItems({ rows, onOpen, state }) {
   const [n, setN] = useState(5);
+  const { f, sort } = state;
+  useEffect(() => { setN(5); }, [f, sort]);
   return (
     <div className="flex flex-col gap-2.5" data-testid="plan-progress-phone">
+      <section className={CARD} aria-labelledby="plan-progress-phone-items">
+        <h2 id="plan-progress-phone-items" className={H2}>Accepted items</h2>
+        <ProgressControls state={state} phone />
+      </section>
+      {rows.length === 0
+        ? <p className={MUTED} data-testid="plan-progress-phone-none">No accepted item matches these filters.</p>
+        : null}
       {rows.slice(0, n).map((r) => (
         <button key={r.uid} type="button" onClick={() => onOpen(r)} className={`${CARD} min-h-[44px] !gap-1.5 text-left hover:bg-axal-ground dark:hover:bg-gray-800`} data-testid="plan-progress-card">
           <span className={EYE}>{r.moduleWord}</span>
@@ -361,6 +409,8 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
   const p = useProgress(projectId, scope);
   const [open, setOpen] = useState(null);
   const [backIn, setBackIn] = useState(false);
+  // D4602 (#4602): one filter model for both widths.
+  const filter = useProgressFilter();
   const rows = useMemo(() => (p.status === 'ready' ? progressRows(p.plan, p.handoffs, p.links, p.states) : []), [p.status, p.plan, p.handoffs, p.links, p.states]);
   const weeks = useMemo(() => builtPerWeek(rows, nowIso), [rows, nowIso]);
   const chart = useMemo(() => stageChart(rows), [rows]);
@@ -395,7 +445,9 @@ export default function PlanProgress({ projectId, scope = 'venture', search = ''
         </section>
         {!phone ? <BuiltPerWeek series={weeks} /> : null}
       </div>
-      {phone ? <PhoneItems rows={filterRows(rows)} onOpen={setOpen} /> : <ItemsTable rows={rows} onOpen={setOpen} />}
+      {phone
+        ? <PhoneItems rows={filterRows(rows, filter.f, filter.sort)} onOpen={setOpen} state={filter} />
+        : <ItemsTable rows={rows} onOpen={setOpen} state={filter} />}
       {open ? <ItemTrail projectId={projectId} row={open} handoffs={p.handoffs} links={p.links} search={search} onClose={() => setOpen(null)} /> : null}
       {backIn ? <BackIn projectId={projectId} scope={scope} rows={waiting} onClose={() => setBackIn(false)} onDone={p.reload} /> : null}
     </div>

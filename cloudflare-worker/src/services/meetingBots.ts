@@ -12,6 +12,7 @@ import { userMeetsTier } from '../middleware/requireTier';
 import { AUDIO_CHANNELS, type SessionRow } from './interviewSessions';
 import { writableSession } from './interviewIntake';
 import { runtimeOrigin } from './meetingBotRuntime';
+import { botFailureCategory } from './meetingBotStartup';
 
 export const BOT_COMMISSION_MULTIPLIER = AI_MARKUP;
 export const BOT_SCHEDULE_MAX_MS = 7 * 86400_000;
@@ -30,7 +31,8 @@ export interface BotRun {
 }
 /** B2/B8 provide an idempotent runtime: start/stop use uid as their idempotency key. Never log the input. */
 export interface BotRuntime {
-  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void>;
+  /** D5153: a current host answers with the stage it reached and its version; a fixture may answer nothing. */
+  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void | { stage: string; runtime_version: string | null }>;
   stop(run: { uid: string }): Promise<void>;
   heartbeat?(run: {uid:string;deadline_at:number;budget_deadline_at:number}): Promise<void>;
 }
@@ -44,6 +46,8 @@ export function botRate(cost: number, multiplier = BOT_COMMISSION_MULTIPLIER): n
   return Math.ceil(cost * multiplier);
 }
 export function botLimit(user: User): number { return userMeetsTier(user, 'growth') ? 120 : 30; }
+/** A Meet call's path: `/abc-defg-hij`, also accepted as `/meet/abc-defg-hij`. */
+export const MEET_PATH = /^\/(?:meet\/)?([a-z]{3,4}-[a-z]{4}-[a-z]{3,4})\/?$/i;
 export function botPlatform(value: unknown): { platform: BotPlatform; url: string } {
   try {
     if (typeof value !== 'string' || value.length > 2048) throw 0;
@@ -52,12 +56,16 @@ export function botPlatform(value: unknown): { platform: BotPlatform; url: strin
     const h = u.hostname.toLowerCase();
     let platform: BotPlatform;
     if ((h === 'zoom.us' || h.endsWith('.zoom.us')) && /^\/(?:j\/|wc\/join\/)\d{6,20}\/?$/.test(u.pathname)) platform = 'zoom';
-    else if (h === 'meet.google.com' && /^\/[a-z]{3,4}-[a-z]{4}-[a-z]{3,4}\/?$/i.test(u.pathname)) platform = 'google_meet';
+    else if (h === 'meet.google.com' && MEET_PATH.test(u.pathname)) {
+      // A Meet link copied with an extra "/meet/" segment opens nothing in a
+      // browser either; the bot joins the call's own address.
+      return { platform: 'google_meet', url: `https://meet.google.com/${MEET_PATH.exec(u.pathname)![1].toLowerCase()}` };
+    }
     else if ((h === 'teams.microsoft.com' || h === 'teams.cloud.microsoft') && /^\/(?:l\/meetup-join\/|meet\/)[^\s]+$/.test(u.pathname)) platform = 'teams';
     else if (h === 'teams.live.com' && /^\/meet\/[^\s]+$/.test(u.pathname)) platform = 'teams';
     else throw 0;
     return { platform, url: u.href };
-  } catch { throw new BotError(400, 'unsupported_link', 'Use a Zoom, Google Meet or Microsoft Teams meeting link.'); }
+  } catch { throw new BotError(400, 'unsupported_link', 'Use a Zoom, Google Meet or Microsoft Teams meeting link. A Google Meet link looks like https://meet.google.com/abc-defg-hij.'); }
 }
 export async function botRow(env: Env, uid: string): Promise<BotRun | null> {
   return env.DB.prepare('SELECT * FROM meeting_bots WHERE uid = ?').bind(uid).first<BotRun>();
@@ -69,11 +77,15 @@ export function botView(run: BotRun) {
   return { uid: run.uid, platform: run.platform, status: run.status, failure_code: run.failure_code,
     scheduled_at: run.scheduled_at, started_at: run.started_at, ended_at: run.ended_at,
     minutes: run.minutes, participant_count: run.participant_count, limit_minutes: run.limit_minutes,
-    rate_per_minute_microusd: run.rate_per_minute_microusd };
+    rate_per_minute_microusd: run.rate_per_minute_microusd,
+    // D5153: `infrastructure` when the runtime never reported, so no provider cause applies. No operator code.
+    failure_category: botFailureCategory(run as unknown as BotRun & Record<string, unknown>) };
 }
 export function botEnabled(env: Env) { return env.MEETING_BOT === 'on' || env.MEETING_BOT === 'canary'; }
 export function botConfigured(env: Env, platform?: BotPlatform) {
   if (!botEnabled(env) || !env.MEETING_BOT_RUN || (env.MEETING_BOT_SECRET?.length ?? 0)<32) return false;
+  // D1451 (#5297): Teams has its own switch, off unless exactly 'on', until the bot's Teams page driver is measured.
+  if (platform === 'teams' && env.MEETING_BOT_TEAMS !== 'on') return false;
   if (env.MEETING_BOT_RUNTIME) return true;
   if (!env.MEETING_BOT_CONTAINER) return false;
   try { runtimeOrigin(env); } catch { return false; }

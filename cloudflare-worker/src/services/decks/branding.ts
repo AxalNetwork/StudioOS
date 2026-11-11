@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * Task #16 (DE) — Deck branding + paywall helpers.
  *
@@ -9,6 +10,7 @@
 import type { Env, User } from '../../types';
 import { tierCovers } from '../../middleware/requireTier';
 import { bindingKey } from '../../util/schemaBootstrap';
+import { publicHostRefusal } from '../webFetch';
 
 export type DeckBrand = {
   /** Render a footer? (false on Growth+ unless studio uploaded one). */
@@ -78,6 +80,9 @@ export async function setStudioWatermark(
   // RFC1918 hostnames are refused.
   const safe = sanitizeWatermarkUrl(url);
   if (!safe) throw new Error('INVALID_WATERMARK_URL');
+  // #4572 follow-up: Browser Rendering fetches it at export, outside our fetcher, so the host is resolved now:
+  // a public name pointing at a private, loopback or metadata address is refused at save.
+  if (await publicHostRefusal(safe)) throw new Error('WATERMARK_HOST_NOT_PUBLIC');
   await env.DB.prepare(
     `INSERT INTO deck_brand_watermarks (user_id, watermark_url, updated_at)
      VALUES (?, ?, datetime('now'))
@@ -207,7 +212,7 @@ export function ensureMethodAllowed(user: User | null, methodId: string, premium
   const tier = String((user as any)?.subscription_tier || 'free').toLowerCase();
   if (tierCovers(tier, 'studio')) return; // D683: premium decks are Raise + Grow
   // Bypass roles (admin, partner, investor, advisor) — these never hit a paywall.
-  if (user && ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role))) return;
+  if (user && (user.role === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor') || holdsLicence(user, 'advisor'))) return;
   const err: any = new Error('PAYWALL_PREMIUM_METHOD');
   err.method_id = methodId;
   err.required_tier = 'studio';

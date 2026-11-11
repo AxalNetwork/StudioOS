@@ -45,17 +45,20 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `raise/` | Round-manager panels. |
 | `closing/` | D1213 (#2424): the closing room (founder, investor, staff) and Contracts › Closings, from terms agreed to money in the account. |
 | `referrals/` | The Refer & Earn canvas stylesheet for `ReferralsPage.jsx`. |
+| `relationships/` | D1357 (#3572): relationship intelligence: the sharing setting, "Who knows them" on a record, the ask, and Network › Introductions (inbox, follow-ups, log). |
 | `pipeline/` | Pipeline helpers shared by the pipeline screens. |
 | `events/` | Public and host-side event screens. |
 | `jobs/` | Public and host-side job screens. |
 | `legal/` | Non-admin document origination (Send for signature). |
 | `studio/` | D1419 (#3698): the Studio modularity canvas — the module grid all four `/studio` homes draw below their fixed blocks, Customise with Done as the one save, the module map, the notices, and the tile builders (`studio/tiles/`). Layouts come from the Worker's `/api/studio` through `studioLayoutApi`; Eadwyn's layout proposals wait behind `studio/studioProposalsAdapter.js` (#3864). Start at `studio/README.md`. |
+| `spinout/` | D4474 (#4474, part 3 of #3704): `MultiLicenceSpinoutLab.jsx`, `/spinout-lab` for a member who holds two or more licences: the Lab block (`SpinoutLabPage`) and the Investor block (`SpinoutLabInvestorPage`), in licence order. Start at `spinout/README.md`. |
 | `testing/` | Product testing's owner side (D815): the programme form, the applicants panel with Pick and Decline, and the pure model they share. A partner's zone (`partner/offers/TestingZone.jsx`) and HQ's console (`admin/consoles/ProductTestingConsole.jsx`) both mount them. |
 | `wellbeing/` | Wellbeing's booking flow, the expert's practice zones and the admin resource library, with the pure model they share (D570). The member home is `WellbeingPage.jsx` and the practice page is `ExpertEditorPage.jsx`, both here. |
 | `subsidiary/` | A territory licence holder's read of their own licence. |
 | `hq/` | The Super Admin's HQ-only surfaces: the holder console, the HQ framings of Accounts and Contracts, and the notice a plain admin sees instead. |
 | `branch/` | The subsidiary shell's own pages, S1–S11, all eight rows built (D107 for why every row shipped with a route rather than only the built ones; D155 for the last of them). Start at `branch/README.md`. |
 | `insights/` | Insight reader and its public variant. |
+| `influencer/` | The Influencer program's pages (D4289): the `axal.vc/@handle` stub (P2, #4291), which P8 draws as IN7, and `section/`, the member's Influencer section at `/influencer` (P7, #4296; its own README). |
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
 | `templates/` | `SpinoutDemoDayPage.jsx`, the public `/lp/spinout-demo-day` page. The four older persona landing pages were removed by #2321; their addresses forward to the door pages. |

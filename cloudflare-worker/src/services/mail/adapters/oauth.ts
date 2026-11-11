@@ -18,8 +18,8 @@
  * any other failure is `unreachable`. Nothing a provider says is passed on.
  */
 import type { Env } from '../../../types';
-import { buildMime, b64url } from './mime';
-import { AdapterError, type Creds, type MailAdapter, type OAuthCreds, type Outgoing } from './types';
+import { buildMime, b64url, bytesB64 } from './mime';
+import { AdapterError, type Creds, type MailAdapter, type OAuthCreds, type Outgoing, type ThreadMessage } from './types';
 
 export type OAuthProvider = 'outlook' | 'gmail';
 
@@ -36,6 +36,8 @@ export const GMAIL_SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth
 
 const NAME: Record<OAuthProvider, string> = { outlook: 'Outlook', gmail: 'Gmail' };
 const expired = (p: OAuthProvider) => new AdapterError('expired', `${NAME[p]} asked for the mailbox to be connected again. Reconnect it to send.`);
+const consent = (p: OAuthProvider) => new AdapterError('consent', `${NAME[p]} did not allow sending with the access you granted. Reconnect the mailbox and allow sending.`);
+const uncertain = (p: OAuthProvider) => new AdapterError('uncertain', `${NAME[p]} may or may not have taken the email. Check your Sent folder before sending it again.`);
 const unreachable = (p: OAuthProvider) => new AdapterError('unreachable', `${NAME[p]} could not be reached. Try again.`);
 
 export const gmailEnabled = (env: Env) => String(env.MAIL_GMAIL_ENABLED ?? '').toLowerCase() === 'true';
@@ -104,10 +106,10 @@ export async function exchangeCode(env: Env, p: OAuthProvider, code: string, red
   return { creds: { kind: 'oauth', refresh_token: t.refresh_token } as OAuthCreds, address: String(address).toLowerCase(), name, scopes: t.scope ?? '' };
 }
 
-async function refreshed(env: Env, p: OAuthProvider, creds: Creds): Promise<{ access: string; creds: OAuthCreds }> {
+async function refreshed(env: Env, p: OAuthProvider, creds: Creds, read = false): Promise<{ access: string; creds: OAuthCreds }> {
   if (creds.kind !== 'oauth') throw new AdapterError('refused', 'These are not OAuth credentials.');
   const body: Record<string, string> = { grant_type: 'refresh_token', refresh_token: creds.refresh_token };
-  if (p === 'outlook') body.scope = OUTLOOK_SCOPES.join(' ');
+  if (p === 'outlook') body.scope = [...OUTLOOK_SCOPES, ...(read ? [OUTLOOK_READ_SCOPE] : [])].join(' ');
   const t = await token(env, p, body);
   return { access: t.access_token, creds: { kind: 'oauth', refresh_token: t.refresh_token || creds.refresh_token } };
 }
@@ -115,6 +117,7 @@ async function refreshed(env: Env, p: OAuthProvider, creds: Creds): Promise<{ ac
 async function graph(access: string, path: string, init: RequestInit = {}): Promise<any> {
   const res = await fetch(`${GRAPH}${path}`, { ...init, headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json', ...(init.headers || {}) } });
   if (res.status === 401) throw expired('outlook');
+  if (res.status === 403) throw consent('outlook');
   if (!res.ok) throw unreachable('outlook');
   return res.status === 202 || res.status === 204 ? null : res.json();
 }
@@ -122,12 +125,25 @@ async function graph(access: string, path: string, init: RequestInit = {}): Prom
 export const outlookAdapter: MailAdapter = {
   async send(env, creds, msg: Outgoing) {
     const t = await refreshed(env, 'outlook', creds);
-    // A draft first, then its send: `sendMail` alone returns no message id.
-    const draft = await graph(t.access, '/me/messages', { method: 'POST', body: JSON.stringify({
-      subject: msg.subject, body: { contentType: 'Text', content: msg.body }, toRecipients: [{ emailAddress: { address: msg.to } }],
-    }) });
-    await graph(t.access, `/me/messages/${encodeURIComponent(String(draft?.id))}/send`, { method: 'POST' });
-    return { messageId: draft?.internetMessageId || draft?.id || null, creds: t.creds };
+    // D4665: `sendMail` needs `Mail.Send`, the only mail permission the member consents to. The draft-then-send
+    // route needed `Mail.ReadWrite` (Create message), which a send-only grant is refused. `sendMail` returns no
+    // message id, so none is recorded: reading the thread back is a `Mail.Read` grant's work and says so itself.
+    let res: Response;
+    try {
+      res = await fetch(`${GRAPH}/me/sendMail`, { method: 'POST', headers: { authorization: `Bearer ${t.access}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            subject: msg.subject, body: { contentType: 'Text', content: msg.body }, toRecipients: [{ emailAddress: { address: msg.to } }],
+            ...(msg.attachments?.length ? { attachments: msg.attachments.map((a) => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.filename, contentType: a.mime, contentBytes: bytesB64(a.bytes) })) } : {}),
+          },
+          saveToSentItems: true,
+        }) });
+    } catch { throw uncertain('outlook'); } // the request left; whether Graph took it is unknown
+    if (res.status === 401) throw expired('outlook');
+    if (res.status === 403) throw consent('outlook');
+    if (res.status === 408 || res.status >= 500) throw uncertain('outlook');
+    if (!res.ok) throw unreachable('outlook');
+    return { messageId: null, creds: t.creds };
   },
   async verify(env, creds) {
     const t = await refreshed(env, 'outlook', creds);
@@ -135,11 +151,40 @@ export const outlookAdapter: MailAdapter = {
     return { creds: t.creds };
   },
   async revoke() { /* Microsoft has no per-app refresh-token revoke: the credentials are forgotten here. */ },
-  async listThread(env, creds, threadId) {
-    const t = await refreshed(env, 'outlook', creds);
-    const filter = encodeURIComponent(`conversationId eq '${threadId.replace(/'/g, "''")}'`);
-    const out = await graph(t.access, `/me/messages?$filter=${filter}&$select=from,subject,receivedDateTime,bodyPreview&$top=25`);
-    return (out?.value || []).map((m: any) => ({ from: m.from?.emailAddress?.address ?? null, subject: m.subject ?? null, received_at: m.receivedDateTime ?? null, preview: m.bodyPreview ?? null }));
+  async listThread(env, creds, sentMessageId) {
+    const t = await refreshed(env, 'outlook', creds, true);
+    // D4494: mail_sent stores internetMessageId (or the Graph message id),
+    // never conversationId. Resolve only that sent message in /me first.
+    if (!sentMessageId || sentMessageId.length > 2048 || /[\r\n]/.test(sentMessageId)) throw unreachable('outlook');
+    const lookup = sentMessageId.includes('@')
+      ? '/me/messages?$filter=' + encodeURIComponent("internetMessageId eq '" + sentMessageId.replace(/'/g, "''") + "'") + '&$select=id,conversationId&$top=2'
+      : '/me/messages/' + encodeURIComponent(sentMessageId) + '?$select=id,conversationId';
+    const found = await graph(t.access, lookup, { signal: AbortSignal.timeout(8000) });
+    const message = sentMessageId.includes('@') ? (Array.isArray(found?.value) && found.value.length === 1 ? found.value[0] : null) : found;
+    if (typeof message?.conversationId !== 'string' || !message.conversationId) throw unreachable('outlook');
+    const predicate = "conversationId eq '" + message.conversationId.replace(/'/g, "''") + "'";
+    const fields = 'id,internetMessageId,from,subject,receivedDateTime,bodyPreview';
+    const base = '/me/messages?$filter=' + encodeURIComponent(predicate) + '&$select=' + fields + '&$top=100';
+    const messages: ThreadMessage[] = [];
+    let path: string | null = base;
+    for (let page = 0; path && page < 10; page++) {
+      const out = await graph(t.access, path, { signal: AbortSignal.timeout(8000) });
+      if (!Array.isArray(out?.value)) throw unreachable('outlook');
+      for (const m of out.value) {
+        if (typeof m?.id !== 'string' || !m.id || typeof m.from?.emailAddress?.address !== 'string' || typeof m.receivedDateTime !== 'string' || !Number.isFinite(Date.parse(m.receivedDateTime)) || (m.subject != null && typeof m.subject !== 'string') || (m.bodyPreview != null && typeof m.bodyPreview !== 'string')) throw unreachable('outlook');
+        messages.push({ id: typeof m.internetMessageId === 'string' && m.internetMessageId ? m.internetMessageId : m.id, from: m.from?.emailAddress?.address ?? null, subject: m.subject ?? null, received_at: m.receivedDateTime ?? null, preview: m.bodyPreview ?? null });
+      }
+      path = null;
+      if (out['@odata.nextLink']) {
+        // Keep Graph's complete paging URL (including its opaque skip value),
+        // but refuse a changed host, mailbox path or conversation predicate.
+        const next = new URL(out['@odata.nextLink']);
+        if (next.origin !== 'https://graph.microsoft.com' || next.pathname !== '/v1.0/me/messages' || next.username || next.password || next.hash || next.searchParams.get('$filter') !== predicate || next.searchParams.get('$select') !== fields || next.searchParams.get('$top') !== '100') throw unreachable('outlook');
+        path = next.pathname.slice('/v1.0'.length) + next.search;
+      }
+    }
+    if (path) throw unreachable('outlook');
+    return { messages, creds: t.creds };
   },
 };
 
@@ -151,8 +196,10 @@ export const gmailAdapter: MailAdapter = {
     try {
       res = await fetch(GMAIL_SEND, { method: 'POST', headers: { authorization: `Bearer ${t.access}`, 'content-type': 'application/json' },
         body: JSON.stringify({ raw: b64url(buildMime(msg, messageId)) }) });
-    } catch { throw unreachable('gmail'); }
+    } catch { throw uncertain('gmail'); }
     if (res.status === 401) throw expired('gmail');
+    if (res.status === 403) throw consent('gmail');
+    if (res.status === 408 || res.status >= 500) throw uncertain('gmail');
     if (!res.ok) throw unreachable('gmail');
     const out: any = await res.json().catch(() => null);
     return { messageId: out?.id ?? messageId, creds: t.creds };

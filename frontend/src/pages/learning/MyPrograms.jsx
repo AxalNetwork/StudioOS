@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Unrecorded } from '../../ui';
+import { Pill, Unrecorded } from '../../ui';
 import { byPosition } from './learningModel';
 import { LearningEmpty, LearningLoading, LearningUnreadable, RouteUnreadable, SectionCard } from './LearningStates';
-import { ErrorLine, PRIMARY } from './studioParts';
+import { ErrorLine } from './studioParts';
 import {
   UNAVAILABLE_LINE, completionCell, entryFor, memberProgramHref, programProgress, progressLine, subjectKindLabel,
 } from './programModel';
 import { enrolSelf, readMyPrograms, readOpenPrograms } from './programReads';
 import useLearningRead from './useLearningRead';
+import { HOME_SECONDARY, homeRefusal } from './LearningHomeActions';
 
 const isLoading = (state) => !state || state.status === 'loading' || state.status === 'idle';
 
@@ -17,7 +18,7 @@ const STATUS_TONE = { ok: 'text-emerald-700 dark:text-emerald-300', warn: 'text-
 /** One content row of a program, as its member sees it: where it opens, and where they stand on it. */
 function ContentRow({ content, completion }) {
   const unavailable = content.status !== 'published' ? (UNAVAILABLE_LINE[content.status] || 'Not available') : null;
-  const cell = completionCell(entryFor(completion, content));
+  const cell = completionCell(entryFor(completion, content), content.kind);
   const title = content.title || (content.status === 'missing' ? 'No longer exists' : 'Untitled');
   return (
     <li className="flex items-baseline justify-between gap-2 text-[12.5px]" data-testid={`my-program-content-${content.subject_uid}`}>
@@ -64,6 +65,7 @@ function EnrolledProgram({ row, onRetry }) {
           <Unrecorded reason="The program route sent no completion for you.">Your progress is not recorded.</Unrecorded>
         </p>
       )}
+      <Link to={memberProgramHref(program.uid)} className="inline-flex min-h-[44px] items-center text-[12px] font-semibold text-axal-violet-deep dark:text-violet-300 sm:min-h-[32px]">Open ›</Link>
       {detail.status === 'ready' && contents.length > 0 && (
         <details className="text-[12px]">
           <summary className="cursor-pointer font-semibold text-axal-violet-deep hover:text-axal-violet dark:text-violet-300" data-testid="my-program-contents-toggle">
@@ -87,8 +89,9 @@ function OpenProgram({ program, onEnrol, enrolling, error }) {
           <span className="block truncate text-[13px] font-semibold text-axal-ink dark:text-gray-100">{program.name || 'Untitled program'}</span>
           <span className="block text-[11.5px] text-axal-faint dark:text-gray-500">{program.region || <Unrecorded>Region not recorded</Unrecorded>}</span>
         </span>
+        <Pill tone="info">Open to join</Pill>
         <button
-          type="button" className={PRIMARY} onClick={() => onEnrol(program.uid)} disabled={!onEnrol || Boolean(enrolling)}
+          type="button" className={HOME_SECONDARY} onClick={() => onEnrol(program.uid)} disabled={!onEnrol || Boolean(enrolling)}
           data-testid={`button-join-${program.uid}`}
         >
           {enrolling === program.uid ? 'Joining…' : 'Join'}
@@ -124,7 +127,7 @@ export function MyProgramsSection({ enrolled, open, onEnrol, enrolling = null, s
   let body;
   if (isLoading(enrolled)) body = <LearningLoading rows={2} what="your programs" />;
   else if (enrolled.status !== 'ready') body = <LearningUnreadable what="Your programs" claim="This is not a claim that you are in none." onRetry={onRetry.enrolled} />;
-  else if (!rows.length) body = <LearningEmpty title="You are in no program yet" body="A program gathers courses, videos, readings, exercises and exams for a region or a cohort." />;
+  else if (!rows.length) body = <LearningEmpty title="You are not in a program yet." body="A program gathers courses, videos, readings, exercises and exams for a region or a cohort." />;
   else {
     body = (
       <ul className="divide-y divide-axal-hairline dark:divide-gray-800" data-testid="list-my-programs">
@@ -133,7 +136,7 @@ export function MyProgramsSection({ enrolled, open, onEnrol, enrolling = null, s
     );
   }
   return (
-    <SectionCard title="My programs" meta={rows.length ? `${rows.length}` : null} testid="section-programs">
+    <SectionCard title="Your programs" meta={rows.length ? `${rows.length}` : null} testid="section-programs">
       {body}
       <OpenPrograms enrolled={enrolled} open={open} onEnrol={onEnrol} enrolling={enrolling} said={said} onRetry={onRetry} />
       <p className="mt-3 text-[11.5px] text-axal-faint dark:text-gray-500">Most programs are by invitation: a Super Admin enrols their members.</p>
@@ -146,8 +149,11 @@ export function useMyPrograms(enabled = true) {
   const [enrolled, retryEnrolled] = useLearningRead(readMyPrograms, [], { enabled, scope: 'my-programs' });
   const [open, retryOpen] = useLearningRead(readOpenPrograms, [], { enabled, scope: 'open-programs' });
   const [enrolling, setEnrolling] = useState(null);
+  const pending = useRef(false);
   const [said, setSaid] = useState(null);
   const onEnrol = async (uid) => {
+    if (pending.current) return;
+    pending.current = true;
     setEnrolling(uid);
     setSaid(null);
     try {
@@ -156,8 +162,9 @@ export function useMyPrograms(enabled = true) {
       retryEnrolled();
       retryOpen();
     } catch (err) {
-      setSaid({ uid, message: err?.message || 'You could not be enrolled.' });
+      setSaid({ uid, message: homeRefusal(err, 'Your enrolment could not be confirmed. Try again.') });
     } finally {
+      pending.current = false;
       setEnrolling(null);
     }
   };

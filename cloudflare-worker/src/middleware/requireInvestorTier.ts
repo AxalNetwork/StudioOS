@@ -12,14 +12,17 @@
  *                   LP reporting, peer benchmarks, 100 intros / quarter,
  *                   up to 4 seat colleagues
  *
- * Bypass roles: admin, partner, advisor — never hit the gate. Founders
- * never see investor surfaces so they're not in the bypass list (they'll
+ * D4729 (#4729): paid features follow each licence's own plan. Admin never hits
+ * the gate. A caller who HOLDS Investor is checked against the Investor plan only,
+ * whatever their primary licence is. Bypass when the licence is not held: a caller
+ * who does not hold Investor and whose primary is partner or advisor never hits it.
+ * Founders never see investor surfaces so they're not in the bypass list (they'll
  * just 401 on /api/introductions etc).
  *
  * Mirrors the requireTier (founder) and requireMiPro (MI) shapes so the
  * frontend can re-use the upsell modal pattern.
  */
-import { inGrace } from './planSubscription';
+import { holds, investorPlanTier } from '../services/licencePlans';
 import type { Context } from 'hono';
 import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
@@ -46,7 +49,8 @@ const TIER_COPY: Record<Exclude<InvestorTier, 'free'>, string> = {
   professional:
     'This is an Investor Professional feature. Upgrade for full deal flow, intros, and exports.',
   institutional:
-    'This is an Investor Institutional feature. Upgrade for unlimited dealrooms, co-invest, and LP reporting.',
+    // #4376 (owner, 2026-11-04): Institutional is custom-priced; it is never bought, so the gate names sales, not an upgrade.
+    'This is an Investor Institutional feature: unlimited dealrooms, co-invest, and LP reporting. Institutional is priced by Axal VC for each firm: Contact Axal VC.',
 };
 
 /**
@@ -102,39 +106,27 @@ export function investorTierCovers(userTier: string | null | undefined, required
 }
 
 /**
- * Returns the *effective* tier for a user, honoring active trial windows.
- * A row with status='trialing' and a future trial_ends_at keeps its tier;
- * unpaid and cancelled downgrade to 'free'. D1052 (#2903): past_due — a renewal
- * Stripe is still retrying — keeps the tier (#2451's owner question 4).
+ * Returns the *effective* tier for a user, honoring trial windows (D4729: an expired
+ * `trialing` reads Free). Unpaid and cancelled downgrade to 'free'. D1052 (#2903):
+ * past_due — a renewal Stripe is still retrying — keeps the tier (#2451's owner
+ * question 4). The rule is `services/licencePlans.ts`'s.
  */
 export function effectiveInvestorTier(user: InvestorUser | null | undefined): InvestorTier {
-  if (!user) return 'free';
-  const status = (user.investor_subscription_status ?? 'free').toLowerCase();
-  if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
-    || (status === 'past_due' && !inGrace(status, user.investor_subscription_renews_at))) return 'free';
-  // D892 §6: a subscription whose first payment never completed grants nothing.
-  if (status === 'incomplete' || status === 'incomplete_expired') return 'free';
-  // X-1: partner-granted/referred investor tiers expire at renews_at.
-  // Cron flips them to 'free'; this read-side check prevents stale
-  // sessions from sneaking past expiry between sweeps.
-  if (status === 'partner_grant' || status === 'partner_referral') {
-    const renews = user.investor_subscription_renews_at;
-    if (renews && new Date(renews).getTime() <= Date.now()) return 'free';
-  }
-  const tier = (user.investor_tier ?? 'free').toLowerCase() as InvestorTier;
-  return (TIER_RANK[tier] !== undefined ? tier : 'free');
+  return investorPlanTier(user);
 }
 
 export function userMeetsInvestorTier(user: User | null | undefined, required: InvestorTier): boolean {
   if (!user) return false;
-  if (BYPASS_ROLES.has(String(user.role))) return true;
+  if (String(user.role) === 'admin') return true;
   if (required === 'free') return true;
-  // Tier gate is investor-specific: only enforce when caller IS an investor.
+  // D4729: a caller who holds Investor is checked on the Investor plan only. No other held licence bypasses it.
+  if (holds(user, 'investor')) return investorTierCovers(effectiveInvestorTier(user as InvestorUser), required);
+  if (BYPASS_ROLES.has(String(user.role))) return true;
+  // Tier gate is investor-specific: only enforce when the caller holds Investor.
   // Other roles (founder, etc.) are passed through so shared surfaces like
   // /api/deals (founder writes own deals) keep working. Investor-only routes
   // such as /api/introductions still gate with their own role check.
-  if (user.role !== 'investor') return true;
-  return investorTierCovers(effectiveInvestorTier(user as InvestorUser), required);
+  return true;
 }
 
 export function investorUpsell(required: Exclude<InvestorTier, 'free'>) {

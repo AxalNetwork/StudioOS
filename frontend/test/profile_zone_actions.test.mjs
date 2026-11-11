@@ -438,8 +438,11 @@ const PROFILES = {
     // zone opens the partner panel's own log over its rows. Was 0, then 4,
     // then 5, then 7, then 9. ELEVEN NOW: D1424 (#3700) turned Services' `New
     // service` from a note pointing at the form into the handler that focuses
-    // it (`focusAddForm`), the zone's emerald primary.
-    handlers: 11,
+    // it (`focusAddForm`), the zone's emerald primary. THIRTEEN NOW: D4681
+    // (#4681) — Profile's `Preview as founder` and Proof's `Public preview`
+    // said no public profile page existed, and `/advisors/:uid` does; both
+    // are the page's `openPublicPreview`. Two gaps became two handlers.
+    handlers: 13,
     embeddedGuards: 0,
     // Both remaining exclusions are cards whose whole page IS the gap
     // statement, so there is nothing for a row to sit over. `expertise/
@@ -1489,7 +1492,8 @@ test('the shared zone body actually renders the row it is handed', () => {
   for (const state of ['loading', 'error', 'isEmpty']) {
     assert.ok(body.includes(state), `ZoneBody no longer handles ${state}`);
   }
-  assert.equal((body.match(/wrap\(/g) || []).length, 4,
+  // Five return paths: loading, the licence refusal (#5363), error, empty, rows.
+  assert.equal((body.match(/wrap\(/g) || []).length, 5,
     'a ZoneBody return path stopped carrying the actions row');
 });
 

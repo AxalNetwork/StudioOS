@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1026 (#2863) — the in-page dialog every Cap table change opens (never a
@@ -17,7 +18,7 @@ export function useWrite(onDone) {
       onDone?.(out);
       return out;
     } catch (e) {
-      setRefusal(e?.message || 'That could not be saved. Nothing was changed.');
+      setRefusal(userFacingRaiseError(e, { fallback: 'That could not be saved. Nothing was changed.' }));
       return null;
     } finally { setBusy(false); }
   };

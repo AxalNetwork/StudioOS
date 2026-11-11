@@ -28,6 +28,9 @@
  */
 import { titleCase } from '../../lib/absence';
 
+// D4478: share the footer's rules with routed headers and model callers.
+export { lessonPositionLine, markCompleteReason } from './lessonFooterModel';
+
 /** The one line the home's not-live tabs and sections carry (the brief's words). */
 export const NOT_LIVE_LINE = 'The course catalogue is not live yet.';
 
@@ -256,6 +259,8 @@ export function itemHref(item) {
  * for an item is `/learning/items/:uid`, which it also serves). A row whose
  * status is not `published` is the Super Admin's draft, and says so.
  */
+export { VIDEO_LENGTH_OPTIONS, videoCountLabel, transcriptHit, itemHrefAt, parseVideoTime } from './videoLibraryModel';
+
 export function catalogRow(r) {
   const id = clean(r?.id);
   const enc = encodeURIComponent;
@@ -273,7 +278,7 @@ export function catalogRow(r) {
       return { ...base, href: id ? `/learning/courses/${enc(id)}` : null, level, minutes: r.estimated_minutes ?? null };
     case 'video':
     case 'reading':
-      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match) };
+      return { ...base, uid: id || null, href: itemHref({ kind: r.kind, uid: id }), level, topic: clean(r.topic) || null, seconds: r.duration_seconds ?? null, found: transcriptLine(r.match), match: r.match || null, poster: clean(r.thumbnail_url) || null };
     case 'article': {
       const minutes = Number(r.read_minutes);
       return {
@@ -603,8 +608,20 @@ export function newThisWeek(rows, now = Date.now(), max = 4) {
     .map(({ r }) => r);
 }
 
-/** LR1 "Recommended for you": a marked future block, never rows. */
-export const RECOMMENDED_FUTURE = 'Waits on recommendations (#3724). Nothing is drawn here until then.';
+/** LR1 "Recommended for you" (#4650, D4650): the next learning action and why, from `GET /api/learning/plan/next`. */
+export const RECOMMENDED_TITLE = 'Recommended for you';
+export const NEXT_UNREADABLE_CLAIM = 'This is not a claim that nothing is waiting.';
+/** What a next action's rule says beside its reason, in the member's words. */
+export const NEXT_RULE_LABEL = Object.freeze({ continue_course: 'Continue', program: 'From your program', plan: 'Planned' });
+/** The answer as the card draws it: the action, or the server's own empty state; null while there is nothing to draw. */
+export function nextView(answer) {
+  if (!answer || answer.status !== 'ready') return null;
+  if (answer.next) {
+    const n = answer.next;
+    return { kind: 'action', title: n.title, href: n.href, reason: n.reason, label: NEXT_RULE_LABEL[n.rule] || null, plan: n.plan || null };
+  }
+  return { kind: 'empty', text: answer.empty || 'Nothing is waiting.' };
+}
 
 /** LR4 chapters: the item has none recorded. */
 export const NO_CHAPTERS = 'No chapters';
@@ -861,6 +878,18 @@ export function myAttemptRows(attempts) {
   return [...by.values()];
 }
 
+/**
+ * #4648: what each "Your progress" figure is: where it comes from, what it counts and over what time. Every tile carries
+ * its entry, and a test holds the two lists equal. There is no "watch time": the player saves where a video stopped (a
+ * resume position, which moves back on a rewind), not how long it was watched, so no duration is claimed (D4648).
+ */
+export const STAT_DEFINITIONS = Object.freeze({
+  courses: { source: 'your course progress records', definition: 'Courses you have started and not completed.', window: 'Right now' },
+  lessons: { source: 'your lesson progress records', definition: 'Lessons whose completion was recorded this month.', window: 'This calendar month (UTC)' },
+  videos: { source: 'where the video player saved your position', definition: 'Videos you played: each video whose position was saved this month, counted once. This is not time watched.', window: 'This calendar month (UTC)' },
+  exams: { source: 'your submitted exam attempts', definition: 'Exams you passed, of the exams you have submitted an attempt for.', window: 'All time' },
+});
+
 /** lr1: the "Your progress" strip's four figures; a figure not recorded reads "Not recorded", never 0. */
 export function statsTiles(stats) {
   const nr = 'Not recorded';
@@ -869,7 +898,37 @@ export function statsTiles(stats) {
   return [
     { key: 'courses', label: 'Courses in progress', value: n(stats?.courses_in_progress) },
     { key: 'lessons', label: 'Lessons completed this month', value: n(stats?.lessons_completed_this_month) },
-    { key: 'watch', label: 'Watch time this month', value: durationLabel(stats?.watch_seconds_this_month) || nr },
+    { key: 'videos', label: 'Videos played this month', value: n(stats?.videos_played_this_month) },
     { key: 'exams', label: 'Exams passed', value: exams && Number.isFinite(Number(exams.sat)) && Number.isFinite(Number(exams.passed)) ? `${Number(exams.passed)} of ${Number(exams.sat)}` : nr },
-  ];
+  ].map((t) => ({ ...t, ...STAT_DEFINITIONS[t.key] }));
+}
+
+// ---------------------------------------------------------------------------
+// D4650 (#4650, part 2): a course's metadata, as the course page shows it
+// ---------------------------------------------------------------------------
+
+export const COURSE_AUDIENCE_LABEL = Object.freeze({ founder: 'Founders', investor: 'Investors', advisor: 'Advisors', partner: 'Partners' });
+export const ABOUT_NOT_RECORDED = 'Who this course is for, what it teaches and what it assumes are not recorded yet.';
+
+/**
+ * The course page's "About this course": one row per field the author
+ * recorded, in a fixed order, and `missing` naming each field that is not.
+ * Nothing is inferred from the summary: a field not filled is listed as not
+ * recorded, and a course with none recorded says so in one sentence.
+ */
+export function courseAbout(meta) {
+  const m = meta || {};
+  const rows = [];
+  const missing = [];
+  const audience = (Array.isArray(m.audience) ? m.audience : []).map((a) => COURSE_AUDIENCE_LABEL[a]).filter(Boolean);
+  if (audience.length) rows.push({ key: 'audience', label: 'For', value: audience.join(', ') }); else missing.push('who it is for');
+  if (m.stage) rows.push({ key: 'stage', label: 'Stage', value: m.stage }); else missing.push('stage');
+  const outcomes = Array.isArray(m.outcomes) ? m.outcomes : [];
+  if (outcomes.length) rows.push({ key: 'outcomes', label: "You'll be able to", list: outcomes }); else missing.push('outcomes');
+  const prerequisites = Array.isArray(m.prerequisites) ? m.prerequisites : [];
+  if (prerequisites.length) rows.push({ key: 'prerequisites', label: 'Before you start', list: prerequisites }); else missing.push('prerequisites');
+  if (m.practical_output) rows.push({ key: 'practical_output', label: "You'll leave with", value: m.practical_output }); else missing.push('what you leave with');
+  const people = [m.author ? `Written by ${m.author}` : null, m.reviewer ? `reviewed by ${m.reviewer}${m.reviewed_on ? ` on ${m.reviewed_on}` : ''}` : null].filter(Boolean);
+  if (people.length) rows.push({ key: 'people', label: 'Responsibility', value: people.join(', ') }); else missing.push('author and reviewer');
+  return { rows, missing, empty: rows.length === 0 };
 }

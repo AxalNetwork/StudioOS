@@ -21,6 +21,12 @@
           "status": { "enum": ["reported", "failed"] },
           "time_line": { "description": "\"1:30 of 2:00\", or null when no report was written; no type, so null holds" },
           "figures": { "description": "how many figures said disagree with a linked one, or null; no type, so null holds" },
+          "wpm": { "description": "D4270 (ps4c): the report's words a minute, or null; no type, so null holds" },
+          "fillers": { "description": "D4270: filler words in the report, or null" },
+          "cards_over": { "description": "D4270: cards over their budget, or null" },
+          "cards": { "description": "D4270: cards in the report, or null" },
+          "notes_covered": { "description": "D4270: note items said, or null" },
+          "notes_total": { "description": "D4270: note items in all, or null" },
           "audio": { "enum": ["kept", "held", "deleted"] },
           "created_at": { "type": "string" }
         }

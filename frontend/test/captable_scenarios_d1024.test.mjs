@@ -5,6 +5,7 @@
 // (routes/captable.ts, services/captable.ts, services/capTableToday.ts) and
 // are worked out by hand: 12,000,000 shares after the Seed, so each payout is
 // a whole fraction of the exit.
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -111,12 +112,12 @@ const CANONICAL = {
   result: { founding: [{ holder: 'Ada Founder', type: 'founder', shares: 6000000, pct: 90 }], rounds: [{ ...SEED, name: 'Seed', ledger: [{ holder: 'Ada Founder', type: 'founder', shares: 6000000, pct: 70 }] }] },
 };
 const S_TODAY = {
-  uid: 's-today', name: 'Seed · base case', is_variant: 1, project_id: 3, updated_at: '2026-10-22T08:00:00Z',
+  uid: 's-today', name: 'Seed · base case', is_variant: 1, project_id: 3, updated_at: '2026-10-22T08:00:00Z', revision: '2026-10-22T08:00:00Z',
   inputs: { ...TODAY_INPUTS, rounds: [{ name: 'Seed', pre_money: 12000000, investment: 3000000, post_round_pool_pct: 12, top_up_payer: 'pre_money' }], exit_values: [5000000, 100000000] },
   result: RESULT,
 };
 const S_MODEL = {
-  uid: 's-model', name: 'Typed bridge', is_variant: 1, project_id: 3, updated_at: '2026-10-20T08:00:00Z',
+  uid: 's-model', name: 'Typed bridge', is_variant: 1, project_id: 3, updated_at: '2026-10-20T08:00:00Z', revision: '2026-10-20T08:00:00Z',
   inputs: { founders: [{ name: 'Ada Founder', shares: 4000000 }, { name: 'Grace', shares: 4000000 }], option_pool_pct: 10, safes: [], rounds: [{ name: 'Bridge', pre_money: 6000000, investment: 1000000 }], exit_value: 30000000 },
   result: { founding: [{ holder: 'Ada Founder', type: 'founder', shares: 4000000, pct: 45 }, { holder: 'Grace', type: 'founder', shares: 4000000, pct: 45 }], rounds: [] },
 };
@@ -455,6 +456,7 @@ test('a scenario from Today: its inputs re-run from the record, results Modelled
     assert.equal(method, 'PUT');
     assert.ok(url.endsWith('/captable/scenarios/s-today'));
     assert.equal(body.name, 'Seed · base case');
+    assert.equal(body.expected_revision, '2026-10-22T08:00:00Z', 'a save names the revision it read');
     assert.deepEqual(body.inputs.start, START, 'the run’s inputs, from the record');
     assert.equal(body.inputs.rounds[0].post_round_pool_pct, 15);
     assert.ok(v.text(v.by('captable-scenario-saved')).includes(SAVED));
@@ -506,7 +508,7 @@ test('Duplicate, Rename and Delete each open a dialog; a refusal stays in it', a
     await r.press(r.by('captable-scenario-delete'));
     await r.press(r.by('captable-scenario-delete-dialog-go'));
     assert.ok(r.ids().includes('captable-scenario-delete-dialog'), 'the dialog stays');
-    assert.match(r.text(r.by('captable-scenario-delete-dialog-refusal')), /not change it/);
+    assert.match(r.text(r.by('captable-scenario-delete-dialog-refusal')), /do not have access to do that/);
     assert.equal(r.where.path, '/raise/cap-table/scenarios/s-today?project_id=3');
   } finally { await r.close(); }
 });
@@ -550,6 +552,25 @@ test('a scenario from the model edits in place with the variants page’s form, 
     assert.equal(body.name, 'Typed bridge');
     assert.equal(body.inputs.founders[1].shares, 5000000);
     assert.ok(v.ids().includes('variant-saved'));
+  } finally { await v.close(); }
+});
+
+test('a save refused because the scenario changed keeps the local inputs on screen and offers Review latest and Copy', async () => {
+  const conflict = () => response({ error: 'changed_since_open', message: 'x', current_revision: '2026-10-23T08:00:00Z' }, 409);
+  const v = await mounted('/raise/cap-table/scenarios/s-model?project_id=3', { write: conflict });
+  try {
+    await v.change(v.labelled('Founder 2 shares'), '5000000');
+    await act(async () => { v.props(v.by('variant-editor')).onSubmit({ preventDefault() {} }); });
+    await v.flush();
+    assert.match(v.text(v.by('variant-errors')), /changed somewhere else after you opened it\. Nothing of yours was saved/);
+    assert.ok(v.ids().includes('captable-scenario-conflict'));
+    assert.ok(!v.ids().includes('variant-saved'));
+    assert.equal(v.all('captable-scenario-conflict').length, 1);
+    const reads = () => v.sent(/\/captable\/scenarios\/s-model$/, 'GET').length;
+    const before = reads();
+    await v.press(v.by('captable-scenario-review-latest'));
+    assert.equal(reads(), before + 1, 'Review latest reads the scenario again');
+    assert.ok(!v.ids().includes('captable-scenario-conflict'));
   } finally { await v.close(); }
 });
 

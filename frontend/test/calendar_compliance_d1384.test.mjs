@@ -215,8 +215,8 @@ test('a plan refusal on create is said in words; unreadable ventures say so inst
 
 test('/compliance only redirects, and nothing in the app still sends people there', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/compliance" element=\{<Navigate to="\/calendar\?layer=compliance" replace \/>\} \/>/);
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/compliance' \}/);
+  assert.doesNotMatch(app, /<Route path="\/compliance" element=\{<Navigate to="\/calendar\?layer=compliance" replace \/>\} \/>/);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/compliance' \}/);
   // The embedded Legal Engine card is a different address and stays.
   assert.match(app, /path="\/raise\/legal-engine\/compliance"/);
   for (const file of [

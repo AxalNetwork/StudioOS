@@ -12,6 +12,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/narrative_objections_d913.test.mjs
  */
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -264,24 +265,28 @@ test('mounted option A: an accepted Answer it draft is recorded when Save versio
     assert.match(m.textOf('story-save'), /Records that Market answers “Too small a market”\./);
     const reads = m.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/objections')).length;
     await m.click('story-save-confirm');
-    const section = m.requests.findIndex((r) => r.method === 'PUT' && r.url.includes('/sections/market'));
-    const answer = m.requests.findIndex((r) => r.url.includes(`/narrative/objections/${K_MARKET}/answer?`));
-    assert.ok(section >= 0 && answer > section, 'the answer is recorded after its section is saved');
-    assert.deepEqual([m.requests[answer].method, m.requests[answer].body], ['PUT', { version: '2', section: 'market', how: 'eadwyn' }]);
+    // D5069: the section and its answer are ONE request, so they succeed or fail together.
+    const saves = m.requests.filter((r) => r.method === 'PUT' && /\/narrative\/2\?/.test(r.url));
+    assert.equal(saves.length, 1);
+    assert.deepEqual(saves[0].body.sections.map((x) => x.section), ['market']);
+    assert.deepEqual(saves[0].body.answers, [{ objection: K_MARKET, section: 'market', how: 'eadwyn' }]);
+    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0, 'no second write for the answer');
     assert.ok(m.requests.filter((r) => r.method === 'GET' && r.url.includes('/narrative/objections')).length > reads, 'the panel reads again');
     assert.ok(!m.has('story-answer-not-recorded'));
   } finally { await m.close(); }
 });
 
-test('mounted option A: a section saved but its answer refused says so; a draft not accepted records nothing', async () => {
-  let m = await mounted(STORY, { handle: handler({ answerWrite: () => response({ detail: 'Version not found' }, 404) }) });
+test('mounted option A: a save its answer makes refused saves nothing and says so; a draft not accepted records nothing', async () => {
+  let m = await mounted(STORY, { handle: (url, options = {}) => (options.method === 'PUT' && /\/narrative\/2\?/.test(url) ? response({ detail: 'Objection not found' }, 404) : handler()(url, options)) });
   try {
     await m.click('story-rail-market');
     await m.click(`story-objection-answer-${K_MARKET}`);
     await m.click('story-proposal-accept');
     await m.click('story-save-open');
     await m.click('story-save-confirm');
-    assert.match(m.textOf('story-answer-not-recorded'), /^Saved, but which section answers “Too small a market” \(Version not found\) was not recorded\. Mark it answered from Objections heard\.$/);
+    assert.match(m.textOf('story-save-failed'), /That could not be found\. It may have been removed\.$/);
+    assert.ok(!m.has('story-answer-not-recorded'), 'nothing was half saved, so there is no half-saved notice');
+    assert.equal(m.props('story-save-confirm').disabled, false, 'the dialog stays; the accepted draft is still pending');
   } finally { await m.close(); }
   m = await mounted(STORY);
   try {
@@ -303,8 +308,9 @@ test('mounted option A: a section saved but its answer refused says so; a draft 
     await m.click('story-save-open');
     assert.doesNotMatch(m.textOf('story-save'), /Records that/);
     await m.click('story-save-confirm');
-    assert.ok(m.requests.some((r) => r.method === 'PUT' && r.url.includes('/sections/solution')));
-    assert.equal(m.requests.filter((r) => r.url.includes('/answer?')).length, 0, 'Market was not saved, so nothing is recorded');
+    const save = m.requests.find((r) => r.method === 'PUT' && /\/narrative\/2\?/.test(r.url));
+    assert.deepEqual(save.body.sections.map((x) => x.section), ['solution']);
+    assert.deepEqual(save.body.answers, [], 'Market was not saved, so no answer travels with it');
   } finally { await m.close(); }
 });
 
@@ -347,7 +353,7 @@ test('mounted option A: Mark answered and Clear answer each open a dialog first,
   try {
     await refused.click(`story-objection-mark-${K_MARKET}`);
     await refused.click('story-objection-mark-dialog-confirm');
-    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed: Version not found.');
+    assert.equal(refused.textOf('story-objection-mark-dialog-failed'), 'Nothing was changed. That could not be found. It may have been removed.');
   } finally { await refused.close(); }
 });
 

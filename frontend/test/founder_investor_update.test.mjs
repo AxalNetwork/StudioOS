@@ -38,10 +38,7 @@ const DEALS = codeOnly(read('frontend/src/pages/investor/dealflow/StudioLens.jsx
 test('the Metrics page and its Investor update card are retired (#2336)', () => {
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/MetricsPage.jsx')), 'MetricsPage is back');
   const at = APP.indexOf('<Route path="/build/metrics"');
-  assert.ok(at > 0, '/build/metrics is no longer routed: a retired address forwards, never 404s');
-  assert.match(APP.slice(at, APP.indexOf('\n', at)),
-    /element=\{<Navigate replace to=\{\{ pathname: '\/build\/kpi', search: location\.search, hash: location\.hash \}\} \/>\}/,
-    '/build/metrics no longer forwards to KPI entry with its query');
+  assert.equal(at, -1, 'D2319 retires /build/metrics');
 });
 
 test('the founder still composes an investor update: Grow · Share an update', () => {

@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * D1242 (#3255, part 6 of #2423) — the Studio lens on Deal flow: every round
  * on the platform for studio staff, with who leads it, how many investors are
@@ -48,7 +49,7 @@ export const LEAD_ADMIN_ONLY = {
 export function canMoveRound(user: { id?: unknown; role?: unknown } | null | undefined, leadPartnerId: unknown): boolean {
   const role = String(user?.role ?? '');
   if (role === 'admin') return true;
-  if (role !== 'partner') return false;
+  if (!user || !holdsLicence(user as any, 'partner')) return false;
   const me = Number(user?.id);
   return Number.isInteger(me) && me > 0 && leadPartnerId != null && Number(leadPartnerId) === me;
 }

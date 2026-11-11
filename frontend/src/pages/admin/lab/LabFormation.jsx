@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminIncorporationsApi } from '../../../lib/api/adminIncorporations.js';
 import { section83bReviewApi } from '../../../lib/api/section83bReview.js';
 import { Unrecorded } from '../../../ui';
@@ -256,7 +257,11 @@ function OrdersDesk({ now, scope }) {
                   <tbody>
                     {shown.rows.map((r) => (
                       <tr key={r.id} className="border-b border-axal-hairline last:border-b-0 dark:border-gray-700" data-testid={`lab-order-row-${r.id}`}>
-                        <td className={TD}><span className="block font-bold">{r.company}</span>{r.project ? <span className={SUB}>{r.project}</span> : null}</td>
+                        <td className={TD}>
+                          <span className="block font-bold">{r.company}</span>{r.project ? <span className={SUB}>{r.project}</span> : null}
+                          {/* D4360 (#4360, INC5g): the order on Incorporate, read only. */}
+                          <Link to={`/incorporate?order=${encodeURIComponent(r.id)}`} className="block text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid={`lab-order-open-${r.id}`}>Open in Incorporate</Link>
+                        </td>
                         <td className={TD}>{r.jurisdiction}</td>
                         <td className={TD}><Pill tone={r.status.tone}>{r.status.word}</Pill></td>
                         <td className={`${TD} ${MONO}`}>{r.paid}</td>
@@ -273,6 +278,7 @@ function OrdersDesk({ now, scope }) {
                   <li key={r.id} className="flex flex-col gap-1.5 rounded-[10px] border border-axal-hairline px-3.5 py-3 text-[13px] text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`lab-order-card-${r.id}`}>
                     <span className="flex flex-wrap items-baseline justify-between gap-2"><span className="font-bold">{r.company}</span><Pill tone={r.status.tone}>{r.status.word}</Pill></span>
                     <span className={SUB}>{`${r.jurisdiction} · paid ${r.paid}`}</span>
+                    <Link to={`/incorporate?order=${encodeURIComponent(r.id)}`} className="text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300">Open in Incorporate</Link>
                     <span>Packet: {packet(r)}</span>
                     <span>Filed on: {filed(r)}</span>
                     {step(r)}

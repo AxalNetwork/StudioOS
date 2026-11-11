@@ -59,19 +59,10 @@ test('/onboarding mounts the licence picker', () => {
   assert.match(block, /<ChooseLicencePage \/>/, '/onboarding must mount ChooseLicencePage');
 });
 
-test('/onboarding/licence redirects rather than mounting a second copy', () => {
+test('D2319 retires /onboarding/licence; the canonical picker remains', () => {
   const block = routeBlock(app, '/onboarding/licence');
-  assert.ok(block, 'the old path must stay mounted as a redirect, not be deleted');
-  assert.match(
-    block,
-    /<Navigate to="\/onboarding" replace \/>/,
-    'a welcome email or bookmark on the old path must land on /onboarding, not 404',
-  );
-  assert.doesNotMatch(
-    block,
-    /ChooseLicencePage/,
-    'two live mounts of the picker let the gate and the links disagree on which is canonical',
-  );
+  assert.equal(block, null, 'D2319 retires the old alias');
+  assert.match(routeBlock(app, '/onboarding'), /<ChooseLicencePage \/>/);
 });
 
 // ---------- 2. BOTH gates follow the page ----------

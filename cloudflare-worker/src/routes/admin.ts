@@ -1228,8 +1228,7 @@ admin.get('/spinout-participants', async (c) => {
        LEFT JOIN projects p ON p.founder_id = u.founder_id
        WHERE usf.spinout_lab_admitted = 1
           OR u.spinout_lab_active = 1
-          OR u.id IN (SELECT user_id FROM spinout_lab_milestones
-                      WHERE milestone_key = 'incorporation_completed')
+          OR u.id IN (SELECT user_id FROM spinout_lab_graduates)
        ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
        LIMIT ?`,
     ).bind(PARTICIPANT_ROWS).all();
@@ -1502,30 +1501,40 @@ admin.post('/impersonate/:userId', async (c) => {
       code: 'super_admin_required',
     }, 403);
   }
+  // D4669 — THE RECORD FIRST, THEN THE TOKEN. The token names this row (`sid`)
+  // and every request re-reads it (auth.ts `sessionStanding`), so ending the
+  // record ends the access. A session whose record could not be written is
+  // therefore not opened at all: a token with no record would be one nobody
+  // could end, and one the audit could not show.
+  // Cohort Timing task — `context` records WHY the session was opened; the
+  // session id is returned so the client can close it via
+  // POST /impersonate-sessions/:id/end when exiting the founder view.
+  let impersonationSessionId: number | null = null;
+  try {
+    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
+    await ensureCohortTimingSchema(c.env);
+    const ins = await c.env.DB.prepare(
+      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
+    ).bind(adminUser.id, target.id, reason).run();
+    impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
+  } catch (e) { console.warn('[admin/impersonate] session record failed', e); }
+  if (impersonationSessionId === null) {
+    await sql.end();
+    return c.json({
+      error: 'The support session could not be recorded, so it was not opened. Nothing was granted; try again.',
+      code: 'support_session_unrecorded',
+    }, 503);
+  }
   // Thirty minutes, not the ordinary 24 hours. See IMPERSONATION_EXPIRY_MINUTES.
   const token = await createJWT(
     c.env, target.id, target.email, target.role, adminUser.id, undefined,
-    `${IMPERSONATION_EXPIRY_MINUTES}m`,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`, impersonationSessionId,
   );
   const expiresAt = new Date(Date.now() + IMPERSONATION_EXPIRY_MINUTES * 60_000).toISOString();
   // Epic 11 — actor is email_hash, details references user_id only.
   const impAdminHash = await hashEmail(adminUser.email);
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('admin_impersonate', ${`Admin ${adminUser.name} impersonated user ${target.name} (user_id=${target.id})`}, ${impAdminHash}, ${adminUser.id})`;
   await sql.end();
-  // Cohort Timing task — full session audit trail. `context` (optional
-  // query param, e.g. 'cohort_review:week=2') records WHY the session was
-  // opened; the session id is returned so the client can close it via
-  // POST /impersonate-sessions/:id/end when exiting the founder view.
-  let impersonationSessionId: number | null = null;
-  try {
-    const { ensureCohortTimingSchema } = await import('../services/cohortTiming');
-    await ensureCohortTimingSchema(c.env);
-    const ctx = reason;
-    const ins = await c.env.DB.prepare(
-      `INSERT INTO impersonation_sessions (admin_user_id, target_user_id, context) VALUES (?, ?, ?)`,
-    ).bind(adminUser.id, target.id, ctx).run();
-    impersonationSessionId = Number(ins.meta?.last_row_id ?? 0) || null;
-  } catch (e) { console.warn('[admin/impersonate] session audit failed', e); }
   // D248 — only here, after every refusal above has had its chance, so a
   // refused open tells nobody.
   const targetNotified = await tellOfSupportSession(
@@ -1636,9 +1645,11 @@ admin.post('/impersonate-sessions/:id/extend', async (c) => {
       ceiling_minutes: IMPERSONATION_CEILING_MINUTES,
     }, 409);
   }
+  // D4669 — the extension carries the same record id, so ending the session
+  // ends this token too.
   const token = await createJWT(
     c.env, target.id, target.email, target.role, adminUser.id, undefined,
-    `${IMPERSONATION_EXPIRY_MINUTES}m`,
+    `${IMPERSONATION_EXPIRY_MINUTES}m`, id,
   );
   await sql.end();
   // Imported here, not at the top: services/adminAudit.ts imports from this
@@ -1664,18 +1675,30 @@ function sqlTimestampMs(v: unknown): number {
   return Date.parse(v.includes('T') ? v : `${v.replace(' ', 'T')}Z`);
 }
 
-// Close an impersonation session (audit end timestamp). Fired best-effort
-// by the client when the admin exits the founder view; sessions left open
-// simply show ended_at=null in the audit list.
+// Close an impersonation session. Fired by the client when the admin exits the
+// founder view. D4669 — the token names this record, so closing it ends the
+// support token on its next request; the answer says whether that happened
+// rather than `ok: true` whatever the database did.
 admin.post('/impersonate-sessions/:id/end', async (c) => {
   const adminUser = await requireAdmin(c);
   const id = parseInt(c.req.param('id')) || 0;
+  let changes = 0;
   try {
-    await c.env.DB.prepare(
+    const res = await c.env.DB.prepare(
       `UPDATE impersonation_sessions SET ended_at = datetime('now') WHERE id = ? AND admin_user_id = ? AND ended_at IS NULL`,
     ).bind(id, adminUser.id).run();
-  } catch (e) { console.warn('[admin/impersonate-sessions] end failed', e); }
-  return c.json({ ok: true });
+    changes = Number(res.meta?.changes ?? 0);
+  } catch (e) {
+    console.warn('[admin/impersonate-sessions] end failed', e);
+    return c.json({
+      error: 'The support session could not be closed. It stays open until its token expires; try again, or sign the account out.',
+      code: 'support_session_end_failed',
+    }, 503);
+  }
+  if (changes === 0) {
+    return c.json({ ok: true, ended: false, message: 'No open support session of yours holds that id; nothing was changed.' });
+  }
+  return c.json({ ok: true, ended: true, message: 'Support session ended. Its token is refused from its next request.' });
 });
 
 /**

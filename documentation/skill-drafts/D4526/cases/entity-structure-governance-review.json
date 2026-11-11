@@ -1,0 +1,42 @@
+{
+  "skill": "entity-structure-governance-review",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "data_room.index": {
+        "entity": "Cedar Holdings",
+        "register_directors": [
+          "Alex"
+        ],
+        "board_minutes_signer": "Blair",
+        "jurisdiction": null
+      },
+      "company.profile": {
+        "available": false,
+        "reason": "No additional fixture evidence supplied"
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "Cedar Holdings",
+      "Alex",
+      "Blair"
+    ],
+    "must_say_not_recorded": [
+      "jurisdiction"
+    ],
+    "must_not_include": [
+      "entity is compliant"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why jurisdiction is missing rather than inventing it.",
+    "Do not assert: entity is compliant.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "Cedar Holdings; Alex; Blair. jurisdiction: Not recorded. Human review required."
+}

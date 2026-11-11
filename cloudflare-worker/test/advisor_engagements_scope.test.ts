@@ -137,6 +137,10 @@ function freshDb() {
   `);
   // Verbatim from the migration. If it stops parsing, these tests stop running.
   db.exec(migration('238_advisor_engagements'));
+  // D4695: the renewal history the lane verbs write beside the row.
+  db.exec(migration('202611071547_advisor_engagement_events'));
+  // #4715: a correction to signed terms is recorded beside the events.
+  db.exec(migration('202611082054_advisor_engagement_corrections'));
 
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADVISOR_USER, 'advisor', 1, 'Ada', 'ada@example.com');
@@ -205,6 +209,15 @@ async function call(
     waitUntil() {}, passThroughOnException() {},
   } as any);
   return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+/**
+ * D4695: a renewal decision names the term it decides (`expected_cycles`). These older cases decide the term the
+ * row is in now; the new suite (advisor_lifecycle_4695) is where a stale or repeated decision is tested.
+ */
+async function decide(e: any, id: number, who: { user: number; role: string }, body: any) {
+  const row: any = await e.DB.prepare('SELECT cycles FROM advisor_engagements WHERE id = ?').bind(id).first();
+  return call(e, 'POST', `/me/engagements/${id}/renewal`, who, { expected_cycles: Math.max(1, Number(row?.cycles ?? 0)), ...body });
 }
 
 const ada = { user: ADVISOR_USER, role: 'advisor' };
@@ -330,8 +343,7 @@ test('an abandoned draft ends with no outcome, and stays out of the rate', async
 test('a renewal adds a cycle; ending one records the loss and closes the lane', async () => {
   const e = env(freshDb());
   const row = await sign(e);
-  const renewed = await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada,
-    { decision: 'renewed', note: 'Fifth cycle. Longest-running.', term_ends_at: '2027-02-04' });
+  const renewed = await decide(e, row.id, ada, { decision: 'renewed', note: 'Fifth cycle. Longest-running.', term_ends_at: '2027-02-04' });
   assert.equal(renewed.status, 200);
   assert.equal(renewed.body.cycles, 2, 'a renewal starts a term');
   assert.equal(renewed.body.outcome, 'renewed');
@@ -339,8 +351,7 @@ test('a renewal adds a cycle; ending one records the loss and closes the lane', 
   assert.equal(renewed.body.renewal_note, 'Fifth cycle. Longest-running.');
   assert.equal(renewed.body.term_ends_at, '2027-02-04');
 
-  const ended = await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada,
-    { decision: 'ended', note: 'Two cycles, then they hired in-house. Good outcome.' });
+  const ended = await decide(e, row.id, ada, { decision: 'ended', note: 'Two cycles, then they hired in-house. Good outcome.' });
   assert.equal(ended.status, 200);
   assert.equal(ended.body.lane, 'ended');
   assert.equal(ended.body.outcome, 'ended');
@@ -354,7 +365,7 @@ test('an unsigned engagement has no renewal to decide', async () => {
   const e = env(freshDb());
   const draft = await create(e);
   for (const decision of ['renewed', 'ended']) {
-    const r = await call(e, 'POST', `/me/engagements/${draft.id}/renewal`, ada, { decision });
+    const r = await decide(e, draft.id, ada, { decision });
     assert.equal(r.status, 409, decision);
     assert.match(String(r.body.detail), /only a signed engagement/);
   }
@@ -365,10 +376,10 @@ test('an unsigned engagement has no renewal to decide', async () => {
 test('an engagement that has ended is terminal on both verbs', async () => {
   const e = env(freshDb());
   const row = await sign(e);
-  await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada, { decision: 'ended' });
+  await decide(e, row.id, ada, { decision: 'ended' });
   const lane = await call(e, 'POST', `/me/engagements/${row.id}/advance`, ada, { lane: 'signed' });
   assert.equal(lane.status, 409, 'a recorded outcome cannot be quietly un-recorded');
-  const again = await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada, { decision: 'renewed' });
+  const again = await decide(e, row.id, ada, { decision: 'renewed' });
   assert.equal(again.status, 409);
   assert.match(String(again.body.detail), /already ended/);
 });
@@ -378,11 +389,11 @@ test('the renewal rate counts its failures, and reports nothing before the first
   // Three that renewed, two that ended — the canvas's own 3-of-5.
   for (const name of ['Meridian Labs', 'Halverton', 'Verwood']) {
     const row = await sign(e, ada, { client_name: name });
-    await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada, { decision: 'renewed' });
+    await decide(e, row.id, ada, { decision: 'renewed' });
   }
   for (const name of ['Solano Health', 'Brackish']) {
     const row = await sign(e, ada, { client_name: name });
-    await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada, { decision: 'ended' });
+    await decide(e, row.id, ada, { decision: 'ended' });
   }
   // Plus a draft and a signed-but-undecided row, neither of which is a decision.
   await create(e, ada, { client_name: 'Kelp Bio' });
@@ -416,10 +427,10 @@ test('Active counts lanes, not outcomes', async () => {
   // 'renewed' — in the canvas's own data three of the five active clients are
   // exactly this, so an outcome filter would report 2 where the tile says 5.
   const renewed = await sign(e, ada, { client_name: 'Halverton', shape: 'retainer' });
-  await call(e, 'POST', `/me/engagements/${renewed.id}/renewal`, ada, { decision: 'renewed' });
+  await decide(e, renewed.id, ada, { decision: 'renewed' });
   // ...and one that ended, which is in neither count.
   const gone = await sign(e, ada, { client_name: 'Solano Health', shape: 'retainer' });
-  await call(e, 'POST', `/me/engagements/${gone.id}/renewal`, ada, { decision: 'ended' });
+  await decide(e, gone.id, ada, { decision: 'ended' });
 
   const t = (await call(e, 'GET', '/me/engagements', ada)).body.totals;
   // The canvas comment, enforced: "A draft that was never sent and a proposal
@@ -448,6 +459,8 @@ test('PATCH edits the description and cannot touch the three columns the rate re
     // The three the verbs own. A merge-PATCH that accepted them would let a
     // caller assert a renewal that never happened.
     lane: 'ended', cycles: 99, outcome: 'renewed',
+    // #4715: the row is signed, so a change to its terms is a recorded correction.
+    correction_reason: 'Synthetic: the signed scope was typed wrong',
   });
   assert.equal(r.status, 200);
   assert.equal(r.body.client_name, 'Meridian Labs Inc');
@@ -500,7 +513,7 @@ test('a client name is required and every enumerated value is validated at the r
   const row = await create(e);
   const badLane = await call(e, 'POST', `/me/engagements/${row.id}/advance`, ada, { lane: 'parked' });
   assert.equal(badLane.status, 400);
-  const badDecision = await call(e, 'POST', `/me/engagements/${row.id}/renewal`, ada, { decision: 'maybe' });
+  const badDecision = await decide(e, row.id, ada, { decision: 'maybe' });
   assert.equal(badDecision.status, 400);
 });
 
@@ -631,7 +644,8 @@ test('an account with no advisor profile cannot reach the store at all', async (
     ['POST', '/me/engagements', { client_name: 'X' }],
   ] as const) {
     const r = await call(e, method, path, fran, body);
-    assert.equal(r.status, 400, `${method} ${path}`);
-    assert.match(String(r.body.detail), /No advisor profile/);
+    // #5363: a founder holds no Advisor licence, so the coded licence refusal.
+    assert.equal(r.status, 403, `${method} ${path}`);
+    assert.equal(r.body.error, 'advisor_licence_required');
   }
 });

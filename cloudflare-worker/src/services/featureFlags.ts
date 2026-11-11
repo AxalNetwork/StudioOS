@@ -57,14 +57,16 @@ export const modelKey = (id: string): string => `model:${id}`;
  * #4189 (K2 of #4155, D4155): the deck features HQ switches, each with the words
  * HQ › Decks shows. A key is listed only once its feature's route reads it
  * (`flagsFor(...).on(key)`): a flag that switches nothing is never offered.
- * The canvas also names `deck:compare`, `deck:walkthrough` and
- * `deck:stock_photos`; none has a route on main yet, so each joins this list
- * in the PR that builds it.
+ * The canvas also names `deck:compare` and `deck:stock_photos`; neither has a
+ * route on main yet, so each joins this list in the PR that builds it.
+ * `deck:walkthrough` joined with D1590 (#3837).
  */
 export const DECK_FEATURES = Object.freeze([
   { key: 'deck:rehearsal', label: 'Rehearsal', description: 'Founders record a run-through of their deck and get timing and delivery notes.' },
   { key: 'deck:pptx_import', label: 'PowerPoint import', description: 'Founders start a deck from a .pptx file they upload.' },
   { key: 'deck:logo_wall', label: 'Logo wall', description: 'Founders add customer logos, each with its permission recorded, to a logo wall card.' },
+  // D1590 (#3837): read by every route of `routes/deck_recordings.ts`.
+  { key: 'deck:walkthrough', label: 'Recorded walkthrough', description: 'Founders record a take per card, captioned, and attach the walkthrough to an investor link.' },
 ] as const);
 export type DeckFeatureKey = (typeof DECK_FEATURES)[number]['key'];
 export const elementKey = (id: string): string => `element:${id}`;

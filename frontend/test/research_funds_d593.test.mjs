@@ -228,10 +228,11 @@ test('F0: the row the POST returns is kept, so the dossier opens before the list
   assert.equal(map.get('zetadeeptech'), 'rf_9', 'a row the POST created is a dossier before the reload answers');
   assert.equal(zone.dossierMap(undefined).size, 0);
   const add = ZONE.slice(ZONE.indexOf('const addDirectoryFund'), ZONE.indexOf('const choose'));
-  assert.match(add, /const row = await api\.research\.fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null \}\);/);
+  assert.match(add, /const row = await api\.research\.fundCreate\(\{ name: fund\.name, source_url: fund\.website \|\| null, catalogue_uid: fund\.uid \}\);/);
   assert.match(add, /if \(row\?\.uid\) setCreated\(\(rows\) => \(\{ \.\.\.rows, \[normalizeFundName\(fund\.name\)\]: row\.uid \}\)\);/);
   assert.match(add, /if \(!fund \|\| listState !== 'ok' \|\|/);
-  assert.match(add, /text: `\$\{fund\.name\} added to My funds\.`/);
+  // D4613: an add an earlier request already made says so.
+  assert.match(add, /text: row\?\.existing \? `\$\{fund\.name\} is already on My funds\.` : `\$\{fund\.name\} added to My funds\.`/);
   assert.match(ZONE, /const dossiers = useMemo\(\(\) => dossierMap\(items, created\), \[items, created\]\);/);
   assert.match(ZONE, /<FundDirectory researchedNames=\{researchedNames\} onAdd=\{addDirectoryFund\} busy=\{directoryBusy\}\s+dossierOf=\{dossierOf\} listState=\{listState\} notice=\{directoryNote\} onTotal=\{setDirectoryTotal\}/);
 });
@@ -243,7 +244,9 @@ test('F0: the catalog profile says "Add to my funds", and its way back is the Di
   assert.match(out, /<a[^>]*href="\/research\/funds\?view=directory"[^>]*>[\s\S]*?Fund directory<\/a>/);
   // The company page's "See all N in Funds" counts directory funds, so it lands on the directory too.
   const company = read('frontend/src/pages/research/CompanyProfile.jsx');
-  assert.equal((company.match(/more="\/research\/funds\?view=directory"/g) || []).length, 2);
+  // D4612: and it keeps the list's own filter, so the total it names is the total it opens.
+  assert.match(company, /more=\{directoryHref\(\{ focus: tracked\.slug \}\)\}/);
+  assert.match(company, /more=\{directoryHref\(\{ hq_country: tracked\.country_code \}\)\}/);
   assert.doesNotMatch(company, /more="\/research\/funds"/);
 });
 

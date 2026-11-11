@@ -236,7 +236,7 @@ test('the three action routes are literal routes with their guard and `lightbox`
     assert.ok(at < app.indexOf(`<Route path="${slug}"`), `${path} is declared before ${slug}`);
   }
   for (const [path, to, hash] of [['/build/tools', '/build/operating-systems', '#tools'], ['/raise/calls', '/raise/capital-relationships/calls', ''], ['/grow/updates', '/grow/reporting', '']]) {
-    assert.match(app, new RegExp(`<Route path="${path}" element=\\{guard\\([^\\n]*<HistoryRedirect to="${to}" hash="${hash}" />\\)\\} />`), path);
+    assert.equal(app.includes(`<Route path="${path}"`), false);
   }
   assert.match(app, /export function HistoryRedirect\(\{ to, hash \}\) \{\s*const location = useLocation\(\);\s*return <Navigate replace to=\{\{ pathname: to, search: location\.search, hash \}\} \/>;/);
 });
@@ -399,6 +399,6 @@ test('the docs say what the code does: useEscapeClose names the mount-order haza
   assert.match(hook, /the first Escape\s+\* closes the lightbox, nested dialog and all/);
   const row = readRouteMap().split('\n').find((l) => l.startsWith('| Grow · Share an update |'));
   assert.match(row, /\| `\/grow\/update` \(D686 S02-A, #1596\): the Grow page with the sheet open over it/);
-  assert.match(row, /`\/grow\/updates` redirects to `\/grow\/reporting` \(D1056\)/);
+  assert.match(row, /`\/grow\/updates` \(retired D2319\) previously redirected to `\/grow\/reporting` \(D1056\)/);
   assert.doesNotMatch(row, /`\/grow` \(the cycle overview's primary action\) → the sheet/);
 });

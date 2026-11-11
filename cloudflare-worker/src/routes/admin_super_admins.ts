@@ -21,6 +21,8 @@
  * is how one of them comes to check only two.
  *
  *   GET    /            every holder
+ *   GET    /candidates  D5044: who the elevation may be handed to — active
+ *                       admins who do not hold it, id, name and email only
  *   POST   /:userId     grant — the target must already be an admin, because
  *                       the Super Admin is an elevation on admin, not a role;
  *                       with `?transfer=1` the holder hands the platform on,
@@ -168,14 +170,44 @@ async function tellOfTransfer(
   }
 }
 
-function parseUserId(raw: string): number | null {
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
+// D5040 — A USER ID IS A DECIMAL POSITIVE WHOLE NUMBER, AND NOTHING ELSE. `parseInt` read
+// the leading digits and ignored the rest, so `123abc` (and `1e2` as 1, `12.5` as 12) named
+// a real account: a path the operator never typed resolved to someone else's id, on the
+// route that moves the platform's one elevation. Only digits with no leading zero, within
+// the safe-integer range, are an id.
+export function parseUserId(raw: string): number | null {
+  if (typeof raw !== 'string' || !/^[1-9][0-9]*$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
 }
 
 r.get('/', async (c) => {
   await requireSuperAdmin(c);
   return c.json({ holders: await holders(c.env) });
+});
+
+/**
+ * D5044 (#5044) — THE TRANSFER PICKER'S OWN READ. The holder console used to
+ * fill its `<select>` from `GET /api/admin/hq/admins`, HQ Team's supervision
+ * read (licence bindings, the compliance ladder, holder state, the deployment
+ * registry, branch state), and filtered it in the browser — so the page made
+ * that read twice on load, and a failure of the picker's half discarded the
+ * holder list beside it. This answers exactly what the picker draws, filtered
+ * HERE by the rules the transfer route enforces: role admin, active (the
+ * route refuses `not_active`), and not already a holder. No LIMIT, for the
+ * reason D138 gave: the query has a predicate, and administrators are one per
+ * licence plus HQ, not a directory.
+ */
+r.get('/candidates', async (c) => {
+  await requireSuperAdmin(c);
+  const res = await c.env.DB.prepare(
+    `SELECT u.id, u.name, u.email
+       FROM users u
+       LEFT JOIN super_admins s ON s.user_id = u.id
+      WHERE LOWER(u.role) = 'admin' AND u.is_active = 1 AND s.user_id IS NULL
+      ORDER BY COALESCE(u.name, u.email), u.id`,
+  ).all<{ id: number; name: string | null; email: string }>();
+  return c.json({ candidates: res.results ?? [] });
 });
 
 r.post('/:userId', async (c) => {
@@ -293,6 +325,10 @@ r.post('/:userId', async (c) => {
   const reason = await readReason(c);
   if (reason.length < HOLDER_REASON_MIN) return reasonRefusal(c);
   // D240 — BOTH WRITES ARE CONDITIONED ON THE SET AS IT IS AT THE WRITE.
+  // D5040 — THAT INCLUDES THE SUCCESSOR BEING ACTIVE. The preflight above refuses a
+  // deactivated successor, but it is a read; the grant re-asks `is_active = 1` at the
+  // write, so an account deactivated between the read and the batch cannot receive the
+  // elevation. The set moves from one ACTIVE holder to one ACTIVE holder, or not at all.
   //
   //   1. The grant happens only while the caller still holds the elevation.
   //      A second transfer that passed the reads before a first one landed
@@ -311,7 +347,7 @@ r.post('/:userId', async (c) => {
     c.env.DB.prepare(
       `INSERT OR IGNORE INTO super_admins (user_id, granted_by_user_id, note)
        SELECT id, ?, ? FROM users
-        WHERE id = ? AND LOWER(role) = 'admin'
+        WHERE id = ? AND LOWER(role) = 'admin' AND is_active = 1
           AND EXISTS (SELECT 1 FROM super_admins WHERE user_id = ?)`,
     ).bind(actor.id, `Transferred from user ${actor.id} through /api/admin/super-admins.`, id, actor.id),
     c.env.DB.prepare(
@@ -345,7 +381,7 @@ r.post('/:userId', async (c) => {
     // be untrue.
     if (granted === 0 && released === 0 && callerHolds) {
       return c.json({
-        error: 'The administrator you named stopped being eligible while this request was in flight, so nothing was moved. You still hold the elevation.',
+        error: 'The administrator you named stopped being an active administrator while this request was in flight, so nothing was moved. You still hold the elevation.',
         code: 'successor_changed',
         holders: now.map((h) => h.id),
       }, 409);

@@ -1,0 +1,34 @@
+{
+  "skill": "icp-buyer-persona-definition",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "synthetic_fixture": true,
+        "skill_name": "ICP and Buyer Persona Definition",
+        "task_scope": "Defines buying-committee personas and decision roles from evidence, distinct from quantitative ICP segment scoring.",
+        "evidence": [
+          "economic buyer champion and evaluator roles"
+        ],
+        "omitted_field": "procurement authority"
+      },
+      "validate.records": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for economic buyer champion and evaluator roles."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "economic buyer champion and evaluator roles"
+    ],
+    "must_say_not_recorded": [
+      "procurement authority"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

@@ -13,7 +13,7 @@ export const FOUNDER_TOOLS = [
   { path: '/build/marketplace', cycle: 'validate', module: 'customer-research' },
   { path: '/execution', cycle: 'build', module: 'product-roadmap' },
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
-  { path: '/comarketing', cycle: 'grow', module: 'distribution' },
+  { path: '/grow/partner-network/co-marketing', aliases: ['/comarketing'], cycle: 'grow', module: 'partner-network', label: 'Open co-marketing', door: true, roles: ['admin', 'founder'] },
   // D1180 (#3107) and D1194 (#3128): the capital workspace is gone. The model
   // forwards to Use of funds › Forecast, and the pipeline to Capital relationships.
   { path: '/raise/legal-engine', cycle: 'build', module: 'company-creation' },

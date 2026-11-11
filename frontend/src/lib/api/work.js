@@ -24,8 +24,34 @@
 //   PUT /api/teams/project/:id/work/capacity/:personUid   { weekly_capacity_points: number | null } → { person, capacity }  (W4)
 //       one's own, or a project editor's; 400 invalid_capacity; 403 not_manager; 404 not on the project.
 //   A task's time block is the board's PATCH /api/teams/tasks/:uid { scheduled_start, scheduled_end } (W4).
+//   GET /api/teams/project/:id/assignable                    (W8, #3994; routes/agent_engine.ts)
+//       → { team: [{ kind: 'person', uid, name, team_role, licence, open_tasks, capacity } | { kind: 'agent', uid, name, role, status, open_tasks }] }
+//       this project's Team only; never an email. 403 not_member; 404 not_found.
+//   GET /api/teams/me/tasks?state=open|closed|all&project=&due=overdue|today|week|none   (W8, #3994)
+//       → { projects: [{ project: { id, name }, tasks: [{ uid, task_number, title, type, column, state, due_at, blocked, needs_reassignment, link }] }],
+//           compliance: [{ company: { uid, name }, tasks: [{ uid, title, type, state, due_at, needs_reassignment, project_id, link }] }], has_more }
+//       only tasks the caller can read; 400 invalid_filter.
 // Projects only: a company has no Kanban. Days are the member's time zone; a
 // day before the first item is `{ day, available: false }`, never zeros.
+// W7 (#3993, #4418), routes/work_items.ts, under /api/teams:
+//   GET /teams/project/:id/tasks/:number/timeline — timeline
+//   POST /teams/project/:id/tasks/:number/comments — comment
+//   PATCH /teams/project/:id/comments/:uid — editComment
+//   DELETE /teams/project/:id/comments/:uid — deleteComment
+//   POST /teams/project/:id/tasks/:number/review — review
+//   PUT /teams/project/:id/tasks/:number/labels — setLabels
+//   PUT /teams/project/:id/tasks/:number/milestone — setMilestone
+//   GET /teams/project/:id/work/drafts — drafts
+//   POST /teams/project/:id/work/drafts/:uid/accept — acceptDraft
+//   POST /teams/project/:id/work/drafts/:uid/discard — discardDraft
+//   GET /teams/project/:id/work/labels — labels
+//   POST /teams/project/:id/work/labels — createLabel
+//   PATCH /teams/project/:id/work/labels/:uid — updateLabel
+//   DELETE /teams/project/:id/work/labels/:uid — deleteLabel
+//   GET /teams/project/:id/work/milestones — milestones
+//   POST /teams/project/:id/work/milestones — createMilestone
+//   PATCH /teams/project/:id/work/milestones/:uid — updateMilestone
+//   DELETE /teams/project/:id/work/milestones/:uid — deleteMilestone
 import { request } from '../api.js';
 
 const enc = encodeURIComponent;
@@ -33,6 +59,28 @@ const enc = encodeURIComponent;
 const SCOPE = 'project';
 
 export const workApi = {
+  // #4420: project-only counts, behind the board's flags and read gate.
+  summary: (projectId) => request(`/teams/${SCOPE}/${enc(projectId)}/work/summary`),
+  timeline: (projectId, number) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/timeline`),
+  comment: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/comments`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  editComment: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/comments/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteComment: (projectId, uid) => request(`/teams/project/${enc(projectId)}/comments/${enc(uid)}`, { method: 'DELETE' }),
+  review: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/review`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  setLabels: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/labels`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  setMilestone: (projectId, number, body) => request(`/teams/project/${enc(projectId)}/tasks/${enc(number)}/milestone`, { method: 'PUT', body: JSON.stringify(body || {}) }),
+  drafts: (projectId) => request(`/teams/project/${enc(projectId)}/work/drafts`),
+  // #4419: optional reviewed title/body/type/module; original proposal is retained.
+  acceptDraft: (projectId, uid, edit) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/accept`, { method: 'POST', ...(edit ? { body: JSON.stringify(edit) } : {}) }),
+  discardDraft: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/drafts/${enc(uid)}/discard`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  labels: (projectId) => request(`/teams/project/${enc(projectId)}/work/labels`),
+  createLabel: (projectId, body) => request(`/teams/project/${enc(projectId)}/work/labels`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  updateLabel: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/labels/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteLabel: (projectId, uid) => request(`/teams/project/${enc(projectId)}/work/labels/${enc(uid)}`, { method: 'DELETE' }),
+  milestones: (projectId) => request(`/teams/project/${enc(projectId)}/work/milestones`),
+  createMilestone: (projectId, body) => request(`/teams/project/${enc(projectId)}/work/milestones`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  updateMilestone: (projectId, uid, body) => request(`/teams/project/${enc(projectId)}/work/milestones/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(body || {}) }),
+  deleteMilestone: (projectId, uid) => request(`/teams/project/${enc(projectId)}/work/milestones/${enc(uid)}`, { method: 'DELETE' }),
+
   board: (projectId, { filter, sort } = {}) => {
     const q = new URLSearchParams();
     if (filter) q.set('filter', filter);
@@ -56,6 +104,16 @@ export const workApi = {
     return request(`/teams/project/${enc(projectId)}/work/burnup${qs ? `?${qs}` : ''}`);
   },
   workload: (projectId, { weeks } = {}) => request(`/teams/project/${enc(projectId)}/work/workload${weeks ? `?weeks=${enc(weeks)}` : ''}`),
+  // D1614 W8 (#3994): who may be given a task here (this Team's people and agents), and every task given to me.
+  assignable: (projectId) => request(`/teams/project/${enc(projectId)}/assignable`),
+  myTasks: ({ state, project, due } = {}) => {
+    const q = new URLSearchParams();
+    if (state) q.set('state', state);
+    if (project != null && project !== '') q.set('project', String(project));
+    if (due) q.set('due', due);
+    const qs = q.toString();
+    return request(`/teams/me/tasks${qs ? `?${qs}` : ''}`);
+  },
   setCapacity: (projectId, personUid, points) => request(`/teams/project/${enc(projectId)}/work/capacity/${enc(personUid)}`, {
     method: 'PUT', body: JSON.stringify({ weekly_capacity_points: points }),
   }),

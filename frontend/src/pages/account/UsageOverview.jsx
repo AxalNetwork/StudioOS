@@ -10,9 +10,11 @@ import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import { overviewScopeFor } from './BillingCards';
 import { allowanceView, balanceText } from './billingModel';
 import { limitView, packOrdersCard } from './limitsModel';
+import { gateLine } from './autoReloadModel';
 import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
 import { allowanceView as storageAllowance } from './storagePageModel';
+import { formatMinor } from '../../lib/money';
 
 const OPEN = 'text-xs font-semibold text-axal-violet hover:underline dark:text-violet-300';
 const VALUE = 'font-mono text-[28px] font-medium tracking-tight';
@@ -61,11 +63,15 @@ export function BalanceOverview({ me, overview, autoReload }) {
       <p className="mt-2 text-xs"><Link to={OVERVIEW_LINKS.aiTokens} className={OPEN} data-testid="overview-ai-tokens">Holds and prices ›</Link></p>
     </UsageCardState>
     <div className="mt-2 flex flex-wrap gap-2">
-      <UsageCardState read={autoReload} what="Auto-reload">
+      {gateLine(autoReload) ? (
+        <span className="inline-flex items-center gap-1.5 text-xs" data-testid="overview-auto-reload-gate">
+          {gateLine(autoReload)} <button type="button" className="underline" onClick={autoReload.reload}>Confirm</button>
+        </span>
+      ) : <UsageCardState read={autoReload} what="Auto-reload">
         {typeof autoReload.data?.enabled === 'boolean'
           ? <Pill tone={autoReload.data.enabled ? 'info' : 'neutral'}>{autoReload.data.enabled ? 'Auto-reload on' : 'Auto-reload off'}</Pill>
           : <Unrecorded reason="The auto-reload state was not returned.">Not recorded</Unrecorded>}
-      </UsageCardState>
+      </UsageCardState>}
       <UsageCardState read={overview} what="Payment methods">
         {methods == null || overview.data?.degraded?.includes('payment_methods')
           ? <Unreadable what="Payment methods" claim="No absence of a card is assumed." onRetry={overview.reload} />
@@ -117,7 +123,8 @@ export function RecentInvoices({ invoices }) {
           : <>{invoices.data.degraded?.includes('stripe') && <Unreadable what="Plan invoices" claim="The order invoices below still load." onRetry={invoices.reload} />}
             {!rows.length ? <EmptyState size="sm" title={invoices.data.degraded?.includes('stripe') ? 'No order invoices yet.' : 'No invoices yet.'} /> : rows.map((row) => {
               let amount = null;
-              try { if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: row.currency }).format(row.amount_cents / 100); } catch { /* invalid currency remains missing */ }
+              // D5373: at the currency's own decimals; a missing or unlisted currency leaves the amount unrecorded.
+              if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = formatMinor(row.amount_cents, String(row.currency).toUpperCase(), { locale: 'en-US' });
               const date = new Date(toUtcInstant(row.date) || NaN);
               return <div key={`${row.kind}:${row.id}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline py-3 text-xs last:border-0 dark:border-gray-800">
                 <div className="min-w-0"><time>{Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</time><p className="break-words font-semibold">{row.description || 'Not recorded'}</p></div>

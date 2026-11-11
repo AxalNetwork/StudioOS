@@ -8,7 +8,8 @@
  *   GET  /programs/mine/enrolments?weeks=4|12|52   enrolments per program and per week, in the same scope (D954 §6)
  *   POST /programs/:uid/enrol            self-enrol, into a published open program only
  *   GET  /programs/:uid                  a program and its contents, with the caller's own completion when enrolled
- *   GET  /programs/:uid/learners         read-only: each enrolled learner's completion of each content item
+ *   GET  /programs/mine/completion       D4810: per published program in that scope, learners and finished (one read, capped)
+ *   GET  /programs/:uid/learners?limit=&offset=  read-only: each enrolled learner's completion of each content item, a page at a time
  *   GET  /programs/:uid/learners/:userUid
  *
  * THE LEARNER VIEW IS READ-ONLY AND ASSIGNED. Only an admin assigned to the
@@ -28,7 +29,8 @@ import { isAssignedAdmin } from '../services/learningAccess';
 import { weekAxis } from '../services/activeAccounts';
 import { learningEnrolmentWeeks, parseProgramWeeks } from '../services/programCatalogue';
 import {
-  PROGRAM_COLS, P_COLS, programView, programContents, describeContents, programLearners, completionFor, enrolledContents, type ProgramRow,
+  PROGRAM_COLS, P_COLS, programView, programContents, describeContents, programLearners, programLearnerCount, completionFor, enrolledContents,
+  hasFinishedCells, type ProgramRow,
 } from '../services/learningPrograms';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -43,7 +45,17 @@ const byUid = (env: Env, uid: string) =>
 
 const enrolmentOf = (env: Env, programId: number, userId: number) =>
   env.DB.prepare('SELECT status, enrolled_at FROM learning_enrollments WHERE program_id = ? AND user_id = ?')
-    .bind(programId, userId).first<{ status: string; enrolled_at: string }>();
+    .bind(programId, userId).first<{ status: string; enrolled_at: string | null }>();
+
+/** D4480: recorded UTC/ISO instants only; a missing stamp is never today's date. */
+function enrolmentIso(value: string | null): string | null {
+  if (!value?.trim()) return null;
+  let stamp = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(stamp)) return null;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(stamp)) stamp = `${stamp.replace(' ', 'T')}Z`;
+  const time = Date.parse(stamp);
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+}
 
 r.get('/programs', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
@@ -135,6 +147,39 @@ r.get('/programs/mine', async (c) => {
 });
 
 /**
+ * D4810 — Completion by program for the Programs overview, in one read. It
+ * replaces one learners read per published program. Each program in the
+ * caller's `/programs/mine` scope that is published, first COMPLETION_MAX by
+ * name, gives its active learners and how many finished (OD9, `hasFinishedCells`).
+ * A program whose completion could not be read is listed in `unreadable`, never
+ * counted as 0. `capped` says programs past the cap were left out.
+ */
+export const COMPLETION_MAX = 50;
+r.get('/programs/mine/completion', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const g = mineGate(c, user); if (g instanceof Response) return g;
+  const res = await c.env.DB.prepare(
+    'SELECT ' + P_COLS + ` FROM learning_programs p
+      WHERE p.status = 'published' AND (? = 1 OR p.id IN (SELECT program_id FROM learning_program_admins WHERE user_id = ?))
+      ORDER BY p.name COLLATE NOCASE, p.id LIMIT ?`,
+  ).bind(g.sa ? 1 : 0, user.id, COMPLETION_MAX + 1).all<any>();
+  const rows = res.results || [];
+  const programs: Array<{ uid: string; learners: number; finished: number }> = [];
+  const unreadable: string[] = [];
+  for (const p of rows.slice(0, COMPLETION_MAX)) {
+    try {
+      const contents = await programContents(c.env, p.id);
+      const done = await completionFor(c.env, contents, await programLearners(c.env, p.id));
+      programs.push({ uid: p.uid, learners: done.length, finished: done.filter((l) => hasFinishedCells(l.completion)).length });
+    } catch (e) {
+      console.warn('[learning-programs] completion unreadable', (e as Error)?.name);
+      unreadable.push(p.uid);
+    }
+  }
+  return c.json({ programs, unreadable, capped: rows.length > COMPLETION_MAX, max: COMPLETION_MAX });
+});
+
+/**
  * D954 §6 — enrolments per week, from the enrolment events (migration 560), in
  * `/programs/mine`'s scope. Every `enrolled` event counts in the Monday week
  * (UTC) it happened: a learner removed later still counts in the week they
@@ -199,10 +244,9 @@ r.post('/programs/:uid/enrol', async (c) => {
 
 /** What the caller is to this program: the Super Admin, an assigned admin, an enrolled member, or none. */
 async function standing(c: C, user: any, p: ProgramRow) {
-  if (isSuperAdmin(user)) return { reader: true, enrolled: false };
-  const reader = await isAssignedAdmin(c.env, user, p.id);
+  const reader = isSuperAdmin(user) || await isAssignedAdmin(c.env, user, p.id);
   const e = await enrolmentOf(c.env, p.id, user.id);
-  return { reader, enrolled: e?.status === 'active' };
+  return { reader, enrolled: e?.status === 'active', enrolled_at: e?.status === 'active' ? enrolmentIso(e.enrolled_at) : null };
 }
 
 r.get('/programs/:uid', async (c) => {
@@ -216,10 +260,11 @@ r.get('/programs/:uid', async (c) => {
   const described = await describeContents(c.env, contents);
   let mine = null;
   if (s.enrolled) {
-    const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: '' };
+    const self = { user_id: user.id, uid: String(user.uid ?? ''), name: null, enrolled_at: s.enrolled_at || '' };
     mine = (await completionFor(c.env, contents, [self]))[0].completion;
   }
-  return c.json({ program: programView(p), contents: described, enrolled: s.enrolled, my_completion: mine });
+  return c.json({ program: programView(p), contents: described, enrolled: s.enrolled,
+    ...(s.enrolled ? { enrolled_at: s.enrolled_at } : {}), my_completion: mine });
 });
 
 async function readerOf(c: C, user: any): Promise<ProgramRow | Response> {
@@ -231,15 +276,29 @@ async function readerOf(c: C, user: any): Promise<ProgramRow | Response> {
   return p;
 }
 
+/**
+ * D4810: with `limit`, a page of at most LEARNERS_PAGE_MAX learners, and
+ * `total` says how many there are. With no `limit`, every learner, as before:
+ * the learning studio's program page reads the whole table (it says so).
+ */
+export const LEARNERS_PAGE_MAX = 200;
 r.get('/programs/:uid/learners', async (c) => {
   const user = await auth(c); if (user instanceof Response) return user;
+  const rawLimit = c.req.query('limit'); const rawOffset = c.req.query('offset');
+  const paged = rawLimit !== undefined && rawLimit !== '';
+  const limit = paged ? Number(rawLimit) : -1;
+  const offset = rawOffset === undefined || rawOffset === '' ? 0 : Number(rawOffset);
+  if ((paged && (!Number.isInteger(limit) || limit < 1 || limit > LEARNERS_PAGE_MAX)) || !Number.isInteger(offset) || offset < 0) {
+    return refuse(c, 400, { code: 'bad_page', message: `limit is a whole number from 1 to ${LEARNERS_PAGE_MAX}, and offset a whole number from 0.` });
+  }
   const p = await readerOf(c, user); if (p instanceof Response) return p;
   const contents = await programContents(c.env, p.id);
-  const learners = await programLearners(c.env, p.id);
+  const [learners, total] = await Promise.all([programLearners(c.env, p.id, undefined, { limit, offset }), programLearnerCount(c.env, p.id)]);
   return c.json({
     program: programView(p),
     contents: await describeContents(c.env, contents),
     learners: await completionFor(c.env, contents, learners),
+    total, limit: paged ? limit : null, offset,
   });
 });
 

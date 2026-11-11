@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Lightbox, Unrecorded, Unreadable } from '../../../ui';
+import { Lightbox, Pill, Unrecorded, Unreadable } from '../../../ui';
 import { PairBars, QuarterLines, ChartTable } from '../../../ui/Charts';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
 import { reportError } from '../../../lib/log';
-import { refusalText } from './fundAdminModel';
-import { Note, NUM, Panel, Section, TH, Table, Tiles } from './parts';
+import { money, refusalText } from './fundAdminModel';
+import { ActFlow } from './MoneyFlow';
+import { actButton, markEffects } from './moneyFlowModel';
+import { Note, NUM, TAP_LINK, Panel, Section, TH, Table, Tiles } from './parts';
 import { useRead } from './useRead';
 import {
   MARK_INFO, MOVE_INFO, NAV_LINE, NOT_RECORDED, PICK_FUND, SOURCE_MAX,
@@ -38,7 +40,7 @@ function ChartPanel({ title, note, legend, foot, alt, table, testId, children })
   const [asTable, setAsTable] = useState(false);
   return (
     <Panel label={title} testId={testId}
-      aside={<button type="button" className={BTN.link} onClick={() => setAsTable((v) => !v)} data-testid={`${testId}-toggle`}>{asTable ? 'View as chart' : 'View as table'}</button>}>
+      aside={<button type="button" className={TAP_LINK} onClick={() => setAsTable((v) => !v)} data-testid={`${testId}-toggle`}>{asTable ? 'View as chart' : 'View as table'}</button>}>
       <div className="flex flex-col gap-2 px-4 py-3 sm:px-5">
         {note && <p className="m-0 text-[12.5px] text-zinc-700 dark:text-gray-200">{note}</p>}
         {legend && !asTable && <div className="flex flex-wrap gap-3 text-[11px] text-axal-muted dark:text-gray-400">{legend}</div>}
@@ -72,7 +74,7 @@ export function PerformanceTab({ apis, access, funds, fundId, onChanged }) {
         {!one && <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="fund-performance-pick">{PICK_FUND}</p>}
         <SideBySide list={list} />
       </Section>
-      {dialog?.kind === 'mark' && <MarkDialog apis={apis} position={dialog.position} fund={fund} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reloadAll(); }} />}
+      {dialog?.kind === 'mark' && <MarkDialog apis={apis} access={access} position={dialog.position} fund={fund} onClose={() => setDialog(null)} onDone={() => reloadAll()} />}
       {dialog?.kind === 'move' && <MoveDialog apis={apis} position={dialog.position} funds={funds} fundId={fundId} onClose={() => setDialog(null)} onDone={() => { setDialog(null); reloadAll(); }} />}
     </div>
   );
@@ -82,7 +84,8 @@ function FundBlocks({ list, perf, history, positions, access, onMark, onMove }) 
   const tiles = useMemo(() => navTiles(perf, {
     positions: positions.status === 'ready' ? positions.data : null,
     history: history.status === 'ready' ? history.data : null,
-  }), [perf, positions, history]);
+    asOf: list.status === 'ready' ? list.data?.as_of : null,
+  }), [perf, positions, history, list]);
   const charts = useMemo(() => (history.status === 'ready' ? quarterCharts(history.data) : null), [history]);
   const posChart = useMemo(() => (positions.status === 'ready' ? positionsChart(positions.data) : null), [positions]);
   return (
@@ -138,13 +141,15 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     { key: 'cost', label: 'Cost', align: 'right', mono: true, cell: (r) => r.cost },
     { key: 'mark', label: 'Latest mark', align: 'right', mono: true, cell: (r) => (r.mark == null ? <Unrecorded reason={r.markReason}>No mark</Unrecorded> : r.mark) },
     { key: 'date', label: 'Mark date', mono: true, cell: (r) => r.date ?? '—' },
+    // D4812 part 6 (FA-05): a mark older than a quarter is Stale, said in words beside the date.
+    { key: 'state', label: 'State', cell: (r) => (r.state == null ? '—' : <Pill tone={r.state === 'Stale' ? 'warn' : 'ok'} data-testid={`fund-position-state-${r.id}`}>{r.state === 'Stale' ? 'Stale · older than 1 quarter' : 'Current'}</Pill>) },
     { key: 'source', label: 'Source', cell: (r) => r.source ?? '—' },
     { key: 'by', label: 'Recorded by', cell: (r) => r.recordedBy ?? '—' },
     { key: 'acts', label: '', align: 'right', cell: (r) => (
       <FundActControl access={access} act="fund.valuation" testId={`fund-position-refused-${r.id}`} className="text-[11px] text-axal-muted dark:text-gray-400">
         <span className="inline-flex flex-wrap justify-end gap-2">
-          <button type="button" className={BTN.link} onClick={() => onMark(r.raw)} data-testid={`fund-position-mark-${r.id}`}>Record a mark</button>
-          <button type="button" className={BTN.link} onClick={() => onMove(r.raw)} data-testid={`fund-position-move-${r.id}`}>Move to another fund</button>
+          <button type="button" className={TAP_LINK} onClick={() => onMark(r.raw)} data-testid={`fund-position-mark-${r.id}`}>Record a mark</button>
+          <button type="button" className={TAP_LINK} onClick={() => onMove(r.raw)} data-testid={`fund-position-move-${r.id}`}>Move to another fund</button>
         </span>
       </FundActControl>
     ) },
@@ -153,7 +158,7 @@ function PositionsTable({ positions, access, onMark, onMove }) {
     <Panel label="Positions" sub={`${rows.length} of ${positions?.items?.length ?? 0}`} testId="fund-positions"
       aside={<input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search companies" aria-label="Search companies" className={`${INPUT} max-w-[220px]`} data-testid="fund-positions-search" />}>
       {rows.length === 0 ? <Note>No position matches. Clear the search.</Note>
-        : <Table cols={cols} rows={rows} rowKey={(r) => r.id} template="1fr .8fr .9fr .95fr .85fr 1.5fr 1fr 1.3fr" wide rowTestId={(r) => `fund-position-${r.id}`} />}
+        : <Table cols={cols} rows={rows} rowKey={(r) => r.id} template="1fr .8fr .9fr .95fr .85fr 1fr 1.4fr 1fr 1.3fr" wide rowTestId={(r) => `fund-position-${r.id}`} />}
       <Note>Cost is the amount invested. A position with no mark has only its cost, and cost is never shown as its value.</Note>
     </Panel>
   );
@@ -179,27 +184,34 @@ function SideBySide({ list }) {
 const LABEL = `block ${TH}`;
 
 /** FND12: Record a mark — a dated value for one position, checked before the call. */
-function MarkDialog({ apis, position, fund, onClose, onDone }) {
+function MarkDialog({ apis, access, position, fund, onClose, onDone }) {
   const [form, setForm] = useState({ date: today(), value: '', source: '' });
   const [errors, setErrors] = useState({});
-  const [failed, setFailed] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const save = async (e) => {
+  const [body, setBody] = useState(null);
+  // D4812 part 5: a checked mark opens the money flow; the act runs only from its Confirm step.
+  const save = (e) => {
     e?.preventDefault?.();
     const c = checkMark(form, today());
     setErrors(c.ok ? {} : c.errors);
-    if (!c.ok) return;
-    setBusy(true); setFailed(null);
-    try { await apis.performance.recordValuation(position.id, c.body); onDone(); } catch (err) {
-      reportError('fund-admin:record-mark', err);
-      setFailed(refusalText(err, 'The mark could not be recorded. Nothing was saved.'));
-    } finally { setBusy(false); }
+    if (c.ok) setBody(c.body);
   };
   const name = position.company_name || position.round_name || `Position ${position.id}`;
+  if (body) {
+    return (
+      <ActFlow apis={apis} access={access} act="fund.valuation" testId="fund-mark-flow" title="Record a mark"
+        sub={`${name}${fund ? ` · ${fund.name}` : ''}`} effects={markEffects(position, body)} label={actButton('Record', body.value_cents, 'mark')}
+        consequences={[`${name}'s latest mark becomes ${money(body.value_cents) ?? 'this value'} as of ${body.valuation_date}.`, 'NAV counts it from that date; earlier marks stay on record.']}
+        run={async () => {
+          try { return await apis.performance.recordValuation(position.id, body); } catch (err) { reportError('fund-admin:record-mark', err); throw err; }
+        }}
+        receipt={() => [['Position', name], ['Mark', `${money(body.value_cents) ?? 'Not recorded'} as of ${body.valuation_date}`], ['Audit', 'Recorded as fund.valuation']]}
+        onClose={onClose} onBack={() => setBody(null)} onDone={() => onDone()} />
+    );
+  }
   return (
     <Lightbox label="Record a mark" title="Record a mark" sub="A dated value for one position." width={520} onClose={onClose} testId="fund-mark-dialog"
       footer={<div className="flex justify-end gap-2"><button type="button" className={BTN.ghost} onClick={onClose}>Cancel</button>
-        <button type="button" className={BTN.primary} onClick={save} disabled={busy} data-testid="fund-mark-save">Record mark</button></div>}>
+        <button type="button" className={BTN.primary} onClick={save} data-testid="fund-mark-save">Review the mark</button></div>}>
       <form onSubmit={save} className="flex flex-col gap-3 px-5 py-4" noValidate>
         <p className="m-0 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{name} · {position.round_name || NOT_RECORDED}{fund ? ` · ${fund.name}` : ''}</p>
         <label className="flex flex-col gap-1"><span className={LABEL}>Valuation date · not in the future</span>
@@ -215,7 +227,6 @@ function MarkDialog({ apis, position, fund, onClose, onDone }) {
           {errors.source && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300" data-testid="fund-mark-error-source">{errors.source}</span>}
         </label>
         <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400">{MARK_INFO}</p>
-        {failed && <p role="alert" className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="fund-mark-failed">{failed}</p>}
       </form>
     </Lightbox>
   );

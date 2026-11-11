@@ -108,7 +108,7 @@ test('the routes, both sidebars, the crumbs and the transfer notice name the new
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/admin/accounts" element={guard(['admin'], <AccountsAddress superAdmin={isSuperAdminUser(user)} />)} />`));
   assert.ok(app.includes(`<Route path="/admin/hq-team" element={guard(['admin'], hqOnly(<HqAccountsPage onImpersonate={handleImpersonate} />))} />`));
-  assert.ok(app.includes(`<Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccountsRedirect />)} />`));
+  assert.equal(app.includes(`<Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccountsRedirect />)} />`), false);
   const row = (group, label) => SIDEBAR_GROUPS[group].flatMap((g) => g.items).find((i) => i.label === label);
   assert.equal(row('admin', 'Accounts').to, '/admin/accounts');
   assert.equal(row('super_admin', 'Team').to, '/admin/hq-team');

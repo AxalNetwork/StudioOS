@@ -39,7 +39,7 @@ test('Delivery and Offers roots are routes, not redirects', () => {
 test('the partner /pipeline root renders the partner bucket, not the investor page', () => {
   const line = app.split('\n').find((l) => l.includes('path="/pipeline"'));
   assert.ok(line, '/pipeline has no route');
-  assert.match(line, /effectiveRole === 'partner' \? <PartnerBucketRoutes \/>/,
+  assert.match(line, /holds\('partner'\) \? <PartnerBucketRoutes \/>/,
     'partners must branch to PartnerBucketRoutes');
   assert.match(line, /investorWorkspace\('deals', <PipelineWorkspace \/>\)/,
     'investors keep the deal pipeline');
@@ -78,15 +78,21 @@ test('PartnerBucketRoutes renders an overview grid at each bucket root', () => {
     'the root must render the shared overview with the partner accent');
   assert.match(bucketRoutes, /unbuilt=\{gapsFor\(prefix, bucket\)\}/,
     'every partner zone without a live page must carry its own gap line');
-  assert.match(bucketRoutes, /activeSlug=\{isRoot \? null : undefined\}/,
-    'the root must light no zone pill');
+  // D4822 (#4822): every root lights no zone pill, except Delivery's, whose root IS its Board (the v2 canvas's
+  // first decision) and so lights Board.
+  assert.match(bucketRoutes, /activeSlug=\{landsOnBoard \? 'board' : isRoot \? null : undefined\}/,
+    'the root must light no zone pill (Delivery’s lights Board)');
+  assert.match(bucketRoutes, /const landsOnBoard = bucket\?\.prefix === '\/delivery' && location\.pathname === bucket\.prefix;/,
+    'only Delivery’s root lands on a zone');
   // Was `/title=\{isRoot \? bucket\?\.label : undefined\}/`, which pinned one
   // expression rather than the rule its own message states. The rule is that a
   // root titles itself from the BUCKET and never from a zone or a literal — and
   // the title is now the bucket's tagline, because that is what every canvas
   // draws as the h1 (P3 "Win the work" over `/pipeline`). The label survives in
   // the crumb, so the root no longer says "Pipeline" twice.
-  assert.match(bucketRoutes, /title=\{isRoot \? bucketTitle\(bucket\) : undefined\}/,
+  // D4838 (#4838): the one exception is Pipeline's first run, which the v2 canvas (PP01) titles by what to do,
+  // "Set up your pipeline"; every other root, and a populated Pipeline, still titles itself from the bucket.
+  assert.match(bucketRoutes, /title=\{firstRun \? 'Set up your pipeline' : \(isRoot \? bucketTitle\(bucket\) : undefined\)\}/,
     'the root must title itself from the bucket, not the first zone');
   assert.doesNotMatch(bucketRoutes, /title=\{isRoot \? ['"`]/,
     'a root title must be derived from the bucket, never a hardcoded string');

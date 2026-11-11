@@ -25,6 +25,8 @@ export const PROGRAMS: Array<{ key: string; name: string; group: string; readine
   { key: 'investor-cohorts', name: 'Investor cohort access', group: 'Access', readiness: 'notready' },
   { key: 'referral-partners', name: 'Referral partners', group: 'Network and referrals', readiness: 'yes' },
   { key: 'refer-and-earn', name: 'Refer & Earn', group: 'Network and referrals', readiness: 'yes' },
+  // D4289 P1 (#4290): HQ runs it; a branch's members apply at HQ. Beside its group, so the grid's span stays whole.
+  { key: 'influencer', name: 'Influencers', group: 'Network and referrals', readiness: 'hq' },
   { key: 'perks', name: 'Perks', group: 'Rewards', readiness: 'yes' },
   { key: 'learning', name: 'Learning', group: 'Learning', readiness: 'yes' },
   { key: 'product-testing', name: 'Product testing', group: 'Product', readiness: 'hq' },
@@ -162,13 +164,32 @@ export function termsDiff(before: Terms, after: Terms) {
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-export type ScheduleStatus = 'not_sent' | 'sent' | 'signed';
+export type ScheduleStatus = 'not_sent' | 'sent' | 'signed' | 'amendment_needed';
 
-/** D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named. */
-export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown }): ScheduleStatus {
+/**
+ * D1120 — where a grant's schedule stands: signed once its time is set, sent once an envelope is named.
+ * D4805 (#4805): a signature belongs to one terms revision. When the terms moved on after a signature
+ * (`signed_revision` is set and `schedule_signed_at` is not), the grant waits on an amendment:
+ * `amendment_needed` until the new revision's schedule is sent, `sent` after.
+ */
+export function scheduleStatus(row: { schedule_contract_uid?: unknown; schedule_signed_at?: unknown; signed_revision?: unknown }): ScheduleStatus {
   if (row.schedule_signed_at) return 'signed';
   if (row.schedule_contract_uid) return 'sent';
+  if (row.signed_revision != null) return 'amendment_needed';
   return 'not_sent';
+}
+
+/**
+ * D4805 (#4805) — the fingerprint of the terms a schedule is built from: SHA-256 over the program, every
+ * term in catalogue order and the note (the two things the schedule prints). The schedule prints it, a
+ * schedule row stores it when the envelope is sent, and a completion marks the grant signed only if it
+ * still matches, so a signature can never vouch for terms it did not show.
+ */
+export async function termsHashOf(row: Record<string, unknown>): Promise<string> {
+  const key = String(row.program_key);
+  const note = typeof row.note === 'string' && row.note.trim() ? row.note.trim() : null;
+  const bytes = new TextEncoder().encode(JSON.stringify({ program_key: key, terms: termsOf(row, key), note }));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export type LicenceLite = { id: number; uid: string; licence_ref: string | null; brand_name: string | null; kind: string | null; status: string; renews_on: string | null };
@@ -190,6 +211,9 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
     // `Number(null)` is 0, so the rule is read as off only when it was recorded as 0.
     const ruleOff = row.requires_signed_schedule != null && Number(row.requires_signed_schedule) === 0;
     if (!ruleOff && !row.schedule_signed_at) waiting.push('schedule_signed');
+    // D5052: the licence's frozen agreement policy holds the program until its required agreement is
+    // executed. HQ computes it (`legalWaitingByProgram`) and sends it on the branch copy as `legal_waiting`.
+    if (row.legal_waiting != null && Number(row.legal_waiting) === 1) waiting.push('agreement_executed');
     if (row.starts_on && String(row.starts_on) > today) waiting.push('start_date');
     if (end && end < today) waiting.push('ended_by_date');
   }
@@ -207,6 +231,9 @@ export function presentGrant(row: Record<string, any>, licence: LicenceLite, tod
       status: scheduleStatus(row),
       contract_uid: (row.schedule_contract_uid ?? null) as string | null,
       signed_at: (row.schedule_signed_at ?? null) as string | null,
+      // D4805: the revision of the terms now in force, and the newest the studio signed (null: none yet).
+      revision: Number(row.terms_revision ?? 1),
+      signed_revision: row.signed_revision == null ? null : Number(row.signed_revision),
     },
     note: row.note ?? null,
     paused_at: row.paused_at ?? null,
@@ -290,7 +317,12 @@ async function readRequestFigures(env: Env, today: string) {
  * grants by program, the tiles and the two series. A draft or terminated
  * licence is left out, as the page leaves it out (D981 §2).
  */
-export async function readGrid(env: Env, today: string) {
+/**
+ * `legalWaiting` (D5052) answers, per licence and program, whether the licence's frozen agreement policy still
+ * holds the grant out of force; the route computes it (`legalWaitingByProgram`) so a required unsigned agreement
+ * never counts as in force on the grid. Absent: no gate is applied (the grid as before D5052).
+ */
+export async function readGrid(env: Env, today: string, legalWaiting?: Map<number, Map<string, number>>) {
   const licences = ((await env.DB.prepare(
     `SELECT id, uid, licence_ref, brand_name, kind, status, renews_on FROM territory_licences
       WHERE status NOT IN ('draft', 'terminated') ORDER BY licence_ref, id`,
@@ -302,7 +334,8 @@ export async function readGrid(env: Env, today: string) {
     const l = lic.get(Number(g.licence_id));
     if (!l) continue;
     const list = byLicence.get(l.id) || [];
-    list.push(presentGrant(g, l, today));
+    const waiting = legalWaiting?.get(l.id)?.get(String(g.program_key));
+    list.push(presentGrant(waiting == null ? g : { ...g, legal_waiting: waiting }, l, today));
     byLicence.set(l.id, list);
   }
   const all = [...byLicence.values()].flat();
@@ -384,6 +417,34 @@ export function openDraftStatements(env: Env, d: { licenceId: number; programKey
       `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
        VALUES (?, 'program_changed', ?, ?, ?, ?)`,
     ).bind(d.licenceId, JSON.stringify(detail), DRAFT_NOTE, d.actorId, d.at),
+  ];
+}
+
+/**
+ * D4806 (#4806): `openDraftStatements` for an approval whose decision may lose. Both writes carry the same gate
+ * as the registry row (`insertProgramStatementsOnApproval`): the proposal is `approved`, by this actor, at this
+ * instant. A losing decision opens no draft and leaves no history line.
+ */
+export function openDraftStatementsOnApproval(
+  env: Env,
+  d: { licenceId: number; programKey: string; proposalUid: string; proposalId: number; actorId: number; at: string },
+) {
+  const uid = crypto.randomUUID().replace(/-/g, '');
+  const detail = {
+    action: 'draft_opened', program_key: d.programKey, proposal_uid: d.proposalUid,
+    changed: [{ key: 'state', before: null, after: 'draft' }],
+  };
+  return [
+    env.DB.prepare(
+      `INSERT INTO program_grants (uid, licence_id, program_key, state, proposal_uid, set_by_user_id, set_at)
+       SELECT ?, ?, ?, 'draft', ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(uid, d.licenceId, d.programKey, d.proposalUid, d.actorId, d.at, d.proposalId, d.at, d.actorId),
+    env.DB.prepare(
+      `INSERT INTO licence_events (licence_id, event, detail_json, note, actor_user_id, created_at)
+       SELECT ?, 'program_changed', ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM program_proposals WHERE id = ? AND status = 'approved' AND decided_at = ? AND decided_by_user_id = ?)`,
+    ).bind(d.licenceId, JSON.stringify(detail), DRAFT_NOTE, d.actorId, d.at, d.proposalId, d.at, d.actorId),
   ];
 }
 

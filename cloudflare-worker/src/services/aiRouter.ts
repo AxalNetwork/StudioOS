@@ -42,10 +42,12 @@ import { costMicro, unitPrice } from './ai/pricing';
 import * as guard from './ai/guard';
 import { resolveRail, resolveRailChain, resolveRailOption, rowOffers } from './ai/railMatrix';
 import { MODEL_CONNECTIONS, MODULE_ROUTES, type ModuleTask } from './ai/moduleConnections';
-import { specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
+import { SPECIALIST_OUTPUT_MAX, specialistRefusal, specialistRequest, specialistOutput, pcmBytes, pcmMinutes, type SpecialistInput } from './ai/moduleShapes';
 import { drawChoice, memberPlanTier, type DrawSkip, type DrawSource, type PlanTier } from './ai/drawJobs';
 import { speechChoice, type SpeechSkip, type SpeechSource } from './ai/speechJobs';
-import { TASK_TEXT_JOBS, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { TASK_TEXT_JOBS, TEXT_KINDS as TEXT_JOB_KINDS, isTextJob, namedModelCheck, railOptionTextJob, textChoice, type TextSkip, type TextSource } from './ai/textJobs';
+import { RAIL_KIND_JOBS, jobStep } from './ai/modelUseCases';
+import { runSchemaBootstrap } from '../util/schemaBootstrap';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,6 +114,7 @@ export type TaskClass =
   | 'course_cover'
   // D1341 (#3549): Eadwyn's email draft from the member's ticked records.
   | 'mail_draft'
+  | 'distribution_draft'
   // D1420 (#3864): Eadwyn's layout proposals for /studio (`studio:layout`).
   | 'studio_layout'
   // D1583 (#3830): a memo written from a deck's own words, around its figures' placeholders.
@@ -820,6 +823,13 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
   },
+  // D4488: Distribution text proposals, metered separately, never cached.
+  distribution_draft: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, SMALL_LLAMA, '@cf/meta/llama-3.2-3b-instruct'],
+  },
   // D1583 (#3830, deck v2 F4): the memo from a deck. Its option kind `memo` reads the IC
   // memo job (IN1, `ai/modelUseCases.ts` RAIL_KIND_JOBS): gpt-oss-120b by default, DeepSeek V4
   // Pro and Nemotron 3 120B the member's other picks in the AIRail (`derive:memo`). No cache: the version is read at the press.
@@ -1318,11 +1328,15 @@ async function cacheKeyFor(opts: RunOptions, model: string): Promise<string | nu
 // ---------------------------------------------------------------------------
 let LOG_SCHEMA_READY = new WeakMap<object, boolean>();
 const LOG_PAGE_INDEX_493 = 'CREATE INDEX IF NOT EXISTS idx_ai_usage_user_page_created ON ai_usage_logs(user_id, rail_page, created_at)';
-/** Migration 493's columns (D762), in its order. */
-const LOG_COLUMNS_493: ReadonlyArray<readonly [string, string]> = [
-  ['charged_microusd', 'INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0)'],
-  ['reservation_uid', 'TEXT'], ['rail_page', 'TEXT'], ['rail_option', 'TEXT'], ['record_ref', 'TEXT'],
-  ['guard_for', 'INTEGER'], ['units_json', 'TEXT'],
+/** Migration 493's columns (D762), in its order; literal, so the schema guards read each one. */
+const LOG_COLUMNS_493: readonly string[] = [
+  'ALTER TABLE ai_usage_logs ADD COLUMN charged_microusd INTEGER CHECK (charged_microusd IS NULL OR charged_microusd >= 0)',
+  'ALTER TABLE ai_usage_logs ADD COLUMN reservation_uid TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN rail_page TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN rail_option TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN record_ref TEXT',
+  'ALTER TABLE ai_usage_logs ADD COLUMN guard_for INTEGER',
+  'ALTER TABLE ai_usage_logs ADD COLUMN units_json TEXT',
 ];
 async function ensureLogSchema(env: Env): Promise<void> {
   if (LOG_SCHEMA_READY.get(env.DB as unknown as object)) return;
@@ -1346,17 +1360,16 @@ async function ensureLogSchema(env: Env): Promise<void> {
  * column the table lacks; production has 493 before this Worker deploys.
  */
 async function addLogColumns493(env: Env): Promise<void> {
-  const cols = await env.DB.prepare('PRAGMA table_info(ai_usage_logs)').all<{ name: string }>();
-  const have = new Set((cols.results ?? []).map((c) => c.name));
-  for (const [name, type] of LOG_COLUMNS_493) {
-    if (!have.has(name)) await env.DB.exec(`ALTER TABLE ai_usage_logs ADD COLUMN ${name} ${type}`);
-  }
-  // Migration 712's column (D1496 part 2): the agent a run was for.
-  if (!have.has('agent_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER');
-  // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
-  if (!have.has('skill_id')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER');
-  if (!have.has('skill_version')) await env.DB.exec('ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER');
-  await env.DB.exec(LOG_PAGE_INDEX_493);
+  // #5343: through `runSchemaBootstrap`, which reads the table's columns and skips those it has.
+  await runSchemaBootstrap(env, [
+    ...LOG_COLUMNS_493,
+    // Migration 712's column (D1496 part 2): the agent a run was for.
+    'ALTER TABLE ai_usage_logs ADD COLUMN agent_id INTEGER',
+    // D1612 part D (#3954), migration 202611022313: the skill and pinned version an agent's run used (`skillEval.tagUsage`).
+    'ALTER TABLE ai_usage_logs ADD COLUMN skill_id INTEGER',
+    'ALTER TABLE ai_usage_logs ADD COLUMN skill_version INTEGER',
+    LOG_PAGE_INDEX_493,
+  ]);
 }
 
 export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef' | 'agentId'>;
@@ -1503,12 +1516,12 @@ function gatewayOptionFor(env: Env, task: TaskClass, userId?: number | null): Ga
 }
 
 /** D1528: an agent run's own gateway, with the same metadata keys (D261). */
-function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
+export function agentGatewayOption(env: Env, opts: RunOptions): GatewayOption {
   const branch = branchOf(env) ?? 'hq';
   const metadata: Record<string, string> = { branch };
   if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
   metadata.task = opts.task;
-  return { gateway: { id: String(opts.gatewayId), metadata } };
+  return { gateway: { id: String(opts.gatewayId), metadata, collectLog: false, skipCache: true } };
 }
 
 /**
@@ -1544,6 +1557,26 @@ export function deckGatewayOptionFor(env: Env, opts: Pick<RunOptions, 'task' | '
   metadata.task = opts.task;
   if (typeof opts.rail?.option === 'string') metadata.option = opts.rail.option.slice(0, 64);
   return { gateway: { id: slug, metadata, skipCache: true, collectLog: false } };
+}
+
+/**
+ * D4556 (#4556): the option for a third-party model through AI Gateway
+ * (`aiProviders.ts` `runGatewayTextModel`), built here as every gateway option
+ * is. Its own gateway (`CF_AI_GATEWAY_SLUG_PROVIDERS`, checked by the caller),
+ * with:
+ *   - `collectLog: false` — no prompt or answer in the gateway's logs;
+ *   - `skipCache: true` — every answer is the model's, never a cached one;
+ *   - `retries: { maxAttempts: 1 }` — the caller counts and bounds every attempt;
+ *   - metadata, at most five entries: branch, account, task, execution.
+ */
+export type ProviderGatewayOption = { gateway: { id: string; metadata: Record<string, string>; skipCache: true; collectLog: false; retries: { maxAttempts: 1 }; requestTimeoutMs: number } };
+export function providerGatewayOptionFor(slug: string, env: Env, opts: { task: TaskClass; userId: number; executionId: string }, requestTimeoutMs: number): ProviderGatewayOption {
+  const branch = branchOf(env) ?? 'hq';
+  const metadata: Record<string, string> = { branch };
+  if (Number.isInteger(opts.userId) && opts.userId > 0) metadata.account = `${branch}:${opts.userId}`;
+  metadata.task = opts.task;
+  metadata.execution = String(opts.executionId).slice(0, 64);
+  return { gateway: { id: slug, metadata, skipCache: true, collectLog: false, retries: { maxAttempts: 1 }, requestTimeoutMs } };
 }
 
 // True when this task would normally route through the advisor AI Gateway
@@ -1786,7 +1819,7 @@ const GUARD_MAX_TOKENS = 16;
 // for a Super Admin's review, like any other overrun (D640).
 const GUARD_TEMPLATE_TOKENS = 1_024;
 const GUARD_QUOTE_OUT_TOKENS = 4 * GUARD_MAX_TOKENS;
-const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
+export const GUARD_CHARS_PER_OUTPUT_TOKEN = 8;
 // A transcript's length bound, for the quote of a transcription's output check.
 export const TRANSCRIPT_CHARS_PER_MINUTE = 2_000;
 // How many slices are checked at once.
@@ -1900,13 +1933,15 @@ async function recordGuardCalls(env: Env, opts: RunOptions, calls: GuardCall[], 
  * writes the guard rows once the stream's own row exists, each naming it in
  * `guard_for`, charged under `reservationUid` at `multiplier`.
  */
-export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1): Promise<{
+export async function guardFinalText(env: Env, who: { userId: number; surface?: string | null }, text: string, multiplier = 1,
+  // D4556 (#4556): 'input' checks a member's text before a model outside `run()` reads it (`aiProviders.ts`).
+  side: 'input' | 'output' = 'output'): Promise<{
   decision: guard.GuardDecision; calls: number; micro: number; usd: number;
   record: (runRowId: number | null, reservationUid: string | null) => Promise<void>;
 }> {
   const opts = { task: 'transcribe', userId: who.userId, surface: who.surface ?? undefined } as RunOptions;
   const calls: GuardCall[] = [];
-  const decision = text.trim() ? await guardCheck(env, opts, text, 'output', calls) : ({ action: 'pass' } as guard.GuardDecision);
+  const decision = text.trim() ? await guardCheck(env, opts, text, side, calls) : ({ action: 'pass' } as guard.GuardDecision);
   const charge = (c: GuardCall) => (c.micro > 0 ? aiBudget.billedUsdToMicro(c.usage.est_cost_usd, multiplier) : 0);
   return {
     decision, calls: calls.length,
@@ -1973,6 +2008,21 @@ function pinnedChoice(choice: ModelChoice, opts: RunOptions): ModelChoice {
   return { ...choice, chain: [] };
 }
 
+/**
+ * #4313 (D4313): the text job a rail press runs, and the option row whose pick applies.
+ * A registered option runs its own job (or none, when its job writes no text); anything
+ * else on a listed page runs the page's kind's job. Null when the page is not listed.
+ */
+export function railTextJob(page: string, option: string | null): { job: string | null; optionRow: ReturnType<typeof resolveRailOption> } | null {
+  const optionRow = option ? resolveRailOption(page, option) : null;
+  if (optionRow) return { job: railOptionTextJob(page, option), optionRow };
+  const row = resolveRail(page);
+  if (!row) return null;
+  const ref = RAIL_KIND_JOBS[row.kind];
+  const step = ref ? jobStep(ref.id, ref.step) : null;
+  return { job: ref && step && TEXT_JOB_KINDS.has(step.kind) && isTextJob(ref.id) ? ref.id : null, optionRow: null };
+}
+
 async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Promise<ModelChoice> {
   // D1509 (#3760): the models HQ switched off for this member are not offered, here as in every reply.
   const switches = catalogueSwitchesFor(env as catalogue.CatalogueSwitches, { modelsOff: await modelsOffFor(env, opts.userId) });
@@ -2015,15 +2065,27 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // does not list is refused. Too long for every model: refused, naming the
   // longest-window one, before anything is held.
   const textShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && !(opts.images?.length);
-  // #3937 part 3: a task's own job (`TASK_TEXT_JOBS`) yields to a rail run's page row: a press on a page
-  // the matrix lists runs that page's models (D764), as before. A job the caller names always applies.
-  const pageRowed = !!opts.rail && !!(resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page));
-  const textJobId = opts.textJob ?? (!opts.model && !pageRowed ? TASK_TEXT_JOBS[opts.task] : undefined);
+  // #4313 (D4313): every rail text press runs a job through `textChoice`, never its page's row.
+  //   * a registered option the table maps runs that option's job (part 1);
+  //   * a press with no option, or an option the page does not register, runs the page's job:
+  //     its kind's job (`RAIL_KIND_JOBS`), the same job the page's model list is built from (part 2);
+  //   * a registered option whose job writes no text (a recording, an image, an upload) keeps its own path.
+  // A caller that names a model is checked against the job, as a pick is (part 2). A job the caller
+  // names (`textJob`) always applies. A run with no rail context runs its task's job (#3937 part 3).
+  const railText = opts.rail ? railTextJob(opts.rail.page, opts.rail.option ?? null) : null;
+  // A caller that names a model (an All models choice, a persona module's connection, #3626) is
+  // checked against the option's or page's list below. That list is the job's own selector
+  // (`withModuleModels` builds it from the same job's step and kind), so the check is the job's;
+  // the list never chooses a model by itself.
+  const railJob = railText?.job && !opts.model ? railText.job : undefined;
+  // A page the matrix does not list (`railText` null) is no rail page: the task's own job applies, as with no rail context.
+  const textJobId = opts.textJob ?? (railText ? railJob : (!opts.model ? TASK_TEXT_JOBS[opts.task] : undefined));
   if (textJobId && textShaped) {
     let pick: string | null = null;
     let tier: PlanTier;
     try {
-      const optionRow = opts.rail?.option ? resolveRailOption(opts.rail.page, opts.rail.option) : null;
+      // Only an option carries a member's pick; the page-level pick is gone with the page rows (part 2).
+      const optionRow = railText?.optionRow ?? null;
       if (optionRow && !opts.model) pick = (await railPicks(env, opts.userId, optionRow.pageKey, optionRow.optionKey)).option;
       tier = await memberPlanTier(env, opts.userId);
     } catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan or your model picks could not be read. Nothing was run.', record: false }; }
@@ -2036,6 +2098,23 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
     return { ok: true, primary: c.model, chain: c.chain, text: { job: c.job, source: c.source, skipped: c.skipped } };
   }
 
+  // ---- #4351 (D4351): a model the caller names keeps its job's plan-lock and input-fit ----
+  // Since #4313 part 2 a named model on a page whose job writes text is checked only against
+  // the page's list below. It now meets the two checks `textChoice` applies to its own picks,
+  // before anything is held, and a refusal never falls back to another model.
+  if (opts.model && textShaped && !textJobId && railText?.job) {
+    let tier: PlanTier;
+    try { tier = await memberPlanTier(env, opts.userId); }
+    catch { return { ok: false, refusal: 'misconfigured', error: 'Unreadable: your plan could not be read. Nothing was run.', record: false }; }
+    const inputTokens = estTokens(chatMessagesFor(opts).map((m) => m.content).join('\n'));
+    const blocked = namedModelCheck(railText.job, opts.model, { switches, tier, caller: opts.model, inputTokens, outputTokens: opts.maxTokens ?? 512 });
+    if (blocked) {
+      return blocked.code === 'plan_locked'
+        ? { ok: false, refusal: 'plan_locked', error: blocked.message, record: true }
+        : { ok: false, refusal: 'invalid_input', error: blocked.message, record: false };
+    }
+  }
+
   // ---- D764 PR 3: a rail run's models come from its page's row ------------
   // A text run (or a vision run) with rail context whose page, or option, has
   // a matrix row: the caller's model when it can do the work, else the
@@ -2046,8 +2125,13 @@ async function chooseModels(env: Env, opts: RunOptions, route: RouteEntry): Prom
   // run leaves the route in charge too.
   let railed: { primary: string; chain: string[] } | null = null;
   const railShaped = !route.isAudio && !route.isEmbed && !opts.rerank && !opts.translate && !opts.speak && !opts.draw && !opts.specialist && opts.task !== 'module_vision';
+  // #4313 part 2: a registered option's row (a vision press, or an option whose job writes no text);
+  // the page's list to check a model the caller named; and the page's list on a page whose own job
+  // writes no text (a vision or speech page, `railText.job` null). That list is the page job's own
+  // selector (`withModuleModels`), so no model is read from the matrix's page row.
+  const pageJobless = !!railText && !railText.optionRow && !railText.job;
   const railRow = opts.rail && railShaped
-    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? resolveRail(opts.rail.page)
+    ? resolveRailOption(opts.rail.page, opts.rail.option ?? null) ?? (opts.model || pageJobless ? resolveRail(opts.rail.page) : null)
     : null;
   if (opts.rail && railRow) {
     let picks: { page: string | null; option: string | null };
@@ -2134,12 +2218,18 @@ function holdQuoteMicro(opts: RunOptions, route: RouteEntry, models: string[], g
     return req ? shapes.imageUnits(model, req.sent.width, req.sent.height, req.sent.steps, req.sent.references) : {};
   };
   const surfaceKey = normaliseSurface(opts.surface);
+  // D1525 (#3783): a decision answers bounded JSON (`specialistOutput`), and
+  // Clef is priced on input tokens only (`prices: { tokens_in }`, so its
+  // output rate is 0 here): the guard's output slice is held for that answer,
+  // never for an output allowance, so the hold moves with the input alone.
+  const decision = opts.specialist?.operation === 'decision';
   const quote = Math.max(...models.map((model) => estimateCostUsd(model, promptBound, outputBound, quoteMinutes, 0, quoteChars, quoteImage(model), mipPriceFactor(model, surfaceKey))));
   // D763: the guard is held inside this hold, never in one of its own: every
   // input slice, and every output slice the run's maximum output allows.
   const outputChars = !guardOn || route.isEmbed || opts.speak || opts.draw ? 0
     : route.isAudio ? Math.ceil((opts.audioMinutes || 0) * TRANSCRIPT_CHARS_PER_MINUTE)
-      : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
+      : decision ? SPECIALIST_OUTPUT_MAX
+        : outputBound * GUARD_CHARS_PER_OUTPUT_TOKEN;
   const guardQuote = guardOn ? guardQuoteMicro(guardInput, outputChars, multiplier) : 0;
   return aiBudget.billedUsdToMicro(quote, multiplier) + guardQuote;
 }
@@ -3039,7 +3129,7 @@ export type GuardrailCounters = {
    * shape and changing what its tiles mean is not this function's business.)
    */
   verdicts:
-    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; safe_rate: number | null }
+    | { available: true; evaluated: number; safe_count: number; unsafe_count: number; no_verdict_count: number; safe_rate: number | null }
     | { available: false; reason: string };
   /**
    * What the guard CAUSED, over `advisor_turn_audit`.
@@ -3059,15 +3149,21 @@ export type GuardrailCounters = {
    *     `safe` would be a verdict nothing reached.
    *   · The whole block still fails as one with the rest of `enforcement`: an
    *     unreadable `advisor_turn_audit` is not a turn that fired no rules.
+   *   · D4691 — the breakdown is its OWN read, so it carries its own state: when
+   *     the totals were read and the breakdown was not, `breakdown_available`
+   *     is false and `rules`, `states` and `unclassified` are null, never an
+   *     empty list and a zero that would read as "no rule fired".
    */
   enforcement:
     | {
       available: true;
       blocked: number;
       flagged: number;
-      rules: Array<{ category: string; turns: number }>;
-      states: Array<{ category: string; turns: number }>;
-      unclassified: number;
+      breakdown_available: boolean;
+      breakdown_reason?: string;
+      rules: Array<{ category: string; turns: number }> | null;
+      states: Array<{ category: string; turns: number }> | null;
+      unclassified: number | null;
     }
     | { available: false; reason: string };
   /**
@@ -3095,6 +3191,60 @@ export interface GuardCounts {
   unavailable: number;
 }
 
+/**
+ * D4803 (Security v2 AI Safety, SE08) — the newest guard verdicts, for the
+ * "Recent guard verdicts" table. Each guard row (`guard_for` names its run) is
+ * read with its run's refusal, so the table can say whether the run was
+ * delivered, blocked before the model or withheld after it. Only the time, the
+ * rail page, the score and the refusal are read: never a prompt, an output or
+ * an account.
+ *
+ * `available: false` when the store could not be read, never an empty list.
+ */
+export type RecentGuardVerdict = {
+  at: string | null;
+  page: string | null;
+  verdict: 'safe' | 'unsafe' | 'no_verdict';
+  delivery: 'delivered' | 'blocked_input' | 'withheld_output' | 'guard_unavailable' | 'unknown';
+};
+export const RECENT_GUARD_LIMIT = 10;
+export async function loadRecentGuardVerdicts(env: Env, days = 7):
+  Promise<{ available: true; window_days: number; rows: RecentGuardVerdict[] } | { available: false; reason: string }> {
+  const win = Math.max(1, Math.min(90, Math.round(days)));
+  const since = new Date(Date.now() - win * 86400_000).toISOString().slice(0, 19).replace('T', ' ');
+  try {
+    await ensureLogSchema(env);
+    const res = await env.DB.prepare(
+      `SELECT g.created_at AS at, g.rail_page AS page, g.safety_score AS score, run.id AS run_id, run.refusal AS run_refusal
+         FROM ai_usage_logs g
+         LEFT JOIN ai_usage_logs run ON run.id = g.guard_for
+        WHERE g.guard_for IS NOT NULL AND datetime(g.created_at) >= datetime(?)
+        ORDER BY datetime(g.created_at) DESC, g.id DESC LIMIT ?`,
+    ).bind(since, RECENT_GUARD_LIMIT).all<Record<string, unknown>>();
+    const rows = (res.results || []).map((r): RecentGuardVerdict => {
+      const score = r.score === null || r.score === undefined ? null : Number(r.score);
+      // The run's own refusal says what reached the person. A run row that is
+      // gone (or never written) cannot say, so the row reads unknown.
+      const refusal = r.run_refusal === null || r.run_refusal === undefined ? null : String(r.run_refusal);
+      const delivery: RecentGuardVerdict['delivery'] = r.run_id === null || r.run_id === undefined ? 'unknown'
+        : refusal === null ? 'delivered'
+          : refusal === 'guard_blocked_output' ? 'withheld_output'
+            : refusal === 'guard_blocked' ? 'blocked_input'
+              : refusal === 'guard_unavailable' ? 'guard_unavailable'
+                : 'unknown';
+      return {
+        at: r.at ? String(r.at) : null,
+        page: r.page ? String(r.page) : null,
+        verdict: score === null || Number.isNaN(score) ? 'no_verdict' : score >= 0.5 ? 'safe' : 'unsafe',
+        delivery,
+      };
+    });
+    return { available: true, window_days: win, rows };
+  } catch {
+    return { available: false, reason: 'The guard verdicts could not be read on this database. That is not a claim that none ran.' };
+  }
+}
+
 export async function loadGuardrailCounters(env: Env, days = 7): Promise<GuardrailCounters> {
   await ensureLogSchema(env);
   const win = Math.max(1, Math.min(90, Math.round(days)));
@@ -3102,11 +3252,12 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
 
   const safety = await env.DB.prepare(
     `SELECT
+        SUM(CASE WHEN safety_score IS NULL THEN 1 ELSE 0 END) AS no_verdict_count,
         SUM(CASE WHEN safety_score IS NOT NULL THEN 1 ELSE 0 END) AS evaluated,
         SUM(CASE WHEN safety_score >= 0.5 THEN 1 ELSE 0 END) AS safe_count,
         SUM(CASE WHEN safety_score IS NOT NULL AND safety_score < 0.5 THEN 1 ELSE 0 END) AS unsafe_count
        FROM ai_usage_logs WHERE created_at >= ? AND task = 'safety'`,
-  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number }>()
+  ).bind(since).first<{ evaluated: number; safe_count: number; unsafe_count: number; no_verdict_count: number }>()
     .catch(() => undefined);
 
   // `blocked` keys on the documented refusal value, not on `safety_score < 0.5`:
@@ -3183,6 +3334,7 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
       : {
         available: true,
         evaluated,
+        no_verdict_count: Number(safety?.no_verdict_count || 0),
         safe_count: Number(safety?.safe_count || 0),
         unsafe_count: Number(safety?.unsafe_count || 0),
         safe_rate: evaluated > 0 ? Number(safety?.safe_count || 0) / evaluated : null,
@@ -3193,14 +3345,27 @@ export async function loadGuardrailCounters(env: Env, days = 7): Promise<Guardra
         reason: '`advisor_turn_audit` could not be read on this database (migration 043). That is '
           + 'not the same as no turn having been blocked or flagged.',
       }
-      : {
-        available: true,
-        blocked: Number(enforcement?.blocked || 0),
-        flagged: Number(enforcement?.flagged || 0),
-        rules: catRows.filter((r) => isRule(r.category)),
-        states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
-        unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
-      },
+      : byCategory === undefined
+        ? {
+          available: true,
+          blocked: Number(enforcement?.blocked || 0),
+          flagged: Number(enforcement?.flagged || 0),
+          breakdown_available: false,
+          breakdown_reason: 'The breakdown by guardrail rule over `advisor_turn_audit` did not complete, which is '
+            + 'not the same as no rule having fired.',
+          rules: null,
+          states: null,
+          unclassified: null,
+        }
+        : {
+          available: true,
+          blocked: Number(enforcement?.blocked || 0),
+          flagged: Number(enforcement?.flagged || 0),
+          breakdown_available: true,
+          rules: catRows.filter((r) => isRule(r.category)),
+          states: catRows.filter((r) => r.category !== '' && !isRule(r.category)),
+          unclassified: catRows.find((r) => r.category === '')?.turns ?? 0,
+        },
     guard: guardRows === undefined
       ? {
         available: false,

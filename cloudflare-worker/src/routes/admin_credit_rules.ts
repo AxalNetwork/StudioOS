@@ -19,7 +19,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireSuperAdmin } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { CAP_RULE_KEY, MANUAL_RULE_KEY, isBountyRule, revokeGrant } from '../services/creditGrants';
 import { backfillLabCredits } from '../services/labMilestoneCredits';
@@ -113,7 +113,7 @@ r.get('/grants', async (c) => {
 
 r.post('/grants/:id/revoke', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    const admin = await requireSuperAdminWriteBar(c);
     const id = Number.parseInt(c.req.param('id'), 10);
     if (!Number.isInteger(id) || id <= 0) return refuse(c, 400, { code: 'invalid_id', message: 'That is not a grant id.' });
     const body = await c.req.json().catch(() => ({}));
@@ -134,7 +134,7 @@ r.post('/grants/:id/revoke', async (c) => {
 // carries `next_after` until every accepted member has been walked.
 r.post('/lab-backfill', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    const admin = await requireSuperAdminWriteBar(c);
     const body = await c.req.json().catch(() => ({}));
     const reason = await readReason(c, body);
     if (reason instanceof Response) return reason;
@@ -151,7 +151,7 @@ r.post('/lab-backfill', async (c) => {
 
 r.put('/:key', async (c) => {
   try {
-    const admin = await requireSuperAdmin(c);
+    const admin = await requireSuperAdminWriteBar(c);
     const key = c.req.param('key');
     const body = await c.req.json().catch(() => ({}));
     const reason = await readReason(c, body);

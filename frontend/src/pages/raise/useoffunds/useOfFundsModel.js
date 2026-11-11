@@ -18,8 +18,9 @@
  * the venture kept, and the old addresses land there.
  */
 
-export const SLUG = 'use-of-funds';
-export const HOME_PATH = `/raise/${SLUG}`;
+// #4574 (H4): the addresses live in their own small file so a redirect can import them without this model.
+import { SLUG, HOME_PATH } from './useOfFundsPaths.js';
+export { SLUG, HOME_PATH };
 export const TITLE = 'Use of funds';
 export const LINE = 'What the raise pays for, by section, and how long it lasts.';
 
@@ -71,18 +72,14 @@ export const SECTIONS = [
 export const sectionOf = (key) => SECTIONS.find((s) => s.key === key) || null;
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { formatMinorOrCount, parseMinor } from '../../../lib/money.js';
 
 export { NOT_RECORDED };
 
 /** "$1,500,000" from whole cents; null when the value is missing (never $0 for missing). */
 export function money(cents, currency = 'usd') {
-  if (typeof cents !== 'number' || !Number.isFinite(cents)) return null;
-  const code = String(currency || 'usd').toUpperCase();
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 0 }).format(cents / 100);
-  } catch {
-    return `${code} ${Math.round(cents / 100).toLocaleString('en-US')}`;
-  }
+  const code = typeof currency === 'string' ? currency.toUpperCase() : currency;
+  return formatMinorOrCount(cents, code, { locale: 'en-US', trimWhole: true });
 }
 
 /** "9.4 months"; "at least 18 months" when the model never ran out inside its horizon. */
@@ -157,7 +154,7 @@ export function raiseView(plan) {
   const chosen = round?.chosen;
   const KIND = { round_call: 'round call', round_record: 'round record', plan: 'base scenario' };
   if (!chosen) return { value: null, sub: round?.reason || 'Set your raise in Edit split.' };
-  return { value: money(chosen.value, chosen.currency), sub: sourceText(chosen.source, `${KIND[chosen.kind] || chosen.kind}${chosen.name ? ` ${chosen.name}` : ''}`), cents: chosen.value, currency: chosen.currency };
+  return { value: money(chosen.value, chosen.currency ?? null), sub: sourceText(chosen.source, `${KIND[chosen.kind] || chosen.kind}${chosen.name ? ` ${chosen.name}` : ''}`), cents: chosen.value, currency: chosen.currency };
 }
 
 /** Runway after the raise: the model's runway, labelled Modelled, against the target (UF1, UF7). */
@@ -223,7 +220,8 @@ export function splitCheck(shares) {
 export function centsFromTyped(text) {
   const t = String(text ?? '').replace(/[$,\s]/g, '');
   if (!/^\d{1,13}(\.\d{1,2})?$/.test(t)) return null;
-  return Math.round(Number(t) * 100);
+  const parsed = parseMinor(t, 'USD');
+  return parsed.ok ? parsed.minor : null;
 }
 
 /** Needs you (UF1): D1176's codes in words, each with where it is fixed. */
@@ -274,9 +272,9 @@ export function roundSourceRows(plan) {
   const KIND = { round_call: 'Round call', round_record: 'Round record', plan: 'This plan', cap_table: 'Cap-table scenario' };
   return (plan?.round?.candidates || []).map((c) => ({
     key: c.ref, label: `${KIND[c.kind] || c.kind}${c.name ? ` ${c.name}` : ''}`,
-    raise: c.value == null ? null : money(c.value, c.currency), reason: c.value == null ? c.reason : null,
+    raise: c.value == null ? null : money(c.value, c.currency ?? null), reason: c.value == null ? c.reason : null,
     source: sourceText(c.source, dayText(c.as_of) ? dayText(c.as_of) : ''),
-    chosen: plan.round.chosen?.ref === c.ref, eligible: c.eligible !== false, cents: c.value,
+    chosen: plan.round.chosen?.ref === c.ref, eligible: c.eligible !== false, cents: c.value, currency: c.currency,
   }));
 }
 
@@ -290,8 +288,9 @@ export function planVsActual(base, mercury, months = 3) {
   return {
     rows: rows.map((r) => {
       const a = sections?.find((s) => s.key === r.key)?.actual_cents?.[months];
+      const actual = sections && spent > 0 && typeof a === 'number' ? Math.round((a / spent) * 100) : null;
       return { key: r.key, short: r.short, label: r.label, planned: r.share,
-        actual: sections && spent > 0 && typeof a === 'number' ? Math.round((a / spent) * 100) : null, actualCents: typeof a === 'number' ? a : null };
+        actual, actualCents: typeof a === 'number' ? a : null };
     }),
     spentCents: spent, unmappedCents: unmapped, asOf: mercury?.as_of || null, months,
   };

@@ -1,9 +1,10 @@
+import { holdsLicence, holdsOnlyLicence, heldLicences } from './accountLicences';
 import type { Env, User } from '../types';
 import { positiveCents, validClose, counselApproved, termsHash, deckContentHash, readiness, ventureReadiness, matchReasons, founderRecipient, writableCall, roundCallsEnabled, verifiedInvestor } from './roundCallPolicy';
 import type { RoundCallTerms, InvestorThesis } from './roundCallPolicy';
 import { notify } from './notify';
 import { hashEmail } from '../util/hashEmail';
-import { activeGrant, ndaActive } from '../routes/data_room';
+import { activeGrant, projectNdaActive } from '../routes/data_room';
 import { roundCallPipelineStatements } from '../routes/contacts';
 import { roundCallRequestStatement } from './dataRoomRequests';
 import { investorEvidence, RaiseEvidenceError } from './raiseEvidence';
@@ -41,11 +42,12 @@ function enabled(env: Env) {
 async function verifiedReader(env: Env, actor: User) {
   enabled(env);
   const current=await env.DB.prepare('SELECT role,is_active,kyc_status FROM users WHERE id=?').bind(actor.id).first<User>();
+  if (current) current.licences = await heldLicences(env.DB, { id: actor.id, role: current.role });
   if(!current||!verifiedInvestor(current)) throw new RoundCallError('verified_investor_required',403);
 }
 /** The venture's owner: a founder (or a Spin-Out Lab explorer) whose founder record owns the project. */
 function ownsProject(current: Pick<User,'role'|'founder_id'|'spinout_lab_active'|'is_active'>, project: { founder_id: number | null }) {
-  return Number(current.is_active)===1 && (current.role==='founder'||(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
+  return Number(current.is_active)===1 && (holdsLicence(current, 'founder')||(current.role==='exploring'&&Number(current.spinout_lab_active)===1))
     && current.founder_id!=null && current.founder_id===project.founder_id;
 }
 /**
@@ -54,7 +56,7 @@ function ownsProject(current: Pick<User,'role'|'founder_id'|'spinout_lab_active'
  * no membership, never an error.
  */
 export async function ventureMember(env: Env, projectId: number, user: Pick<User,'id'|'role'|'is_active'>): Promise<boolean> {
-  if(Number(user.is_active)!==1||user.role==='investor'||user.role==='admin') return false;
+  if(Number(user.is_active)!==1||holdsOnlyLicence(user, 'investor')||user.role==='admin') return false;
   try {
     const row=await env.DB.prepare("SELECT 1 AS ok FROM project_members WHERE project_id=? AND user_id=? AND status='accepted' AND role IN ('owner','cofounder') LIMIT 1").bind(projectId,user.id).first();
     return !!row;
@@ -70,6 +72,7 @@ async function founderActor(env: Env, actor: User, projectId: number, members = 
   enabled(env);
   const project=await projectFacts(env,projectId);
   const current=await env.DB.prepare('SELECT id,role,founder_id,spinout_lab_active,is_active FROM users WHERE id=?').bind(actor.id).first<User>();
+  if (current) current.licences = await heldLicences(env.DB, current);
   if(current&&ownsProject(current,project)) return 'owner';
   if(members&&current&&await ventureMember(env,projectId,current)) return 'member';
   throw new RoundCallError('project_not_found',404);
@@ -352,7 +355,8 @@ export async function investorPage(env: Env, call: CallRow, investor: User) {
   let deck: Awaited<ReturnType<typeof currentDeck>> | {unreadable:true};
   try { deck=await currentDeck(env,call); } catch(e) { if(!(e instanceof RoundCallError)||e.code!=='approved_deck_changed')throw e; deck={unreadable:true}; }
   const active=call.data_room_project_uid!=null?await activeGrant(env,call.project_id,investor.id):null;
-  const nda=call.data_room_project_uid!=null && await ndaActive(env,active?.granted_by_user_id ?? call.created_by,investor.id);
+  // D4631 part 2: the venture's NDA by the shared rule (services/dealAccess.ts), whoever granted the room.
+  const nda=call.data_room_project_uid!=null && await projectNdaActive(env,call.project_id,investor.id);
   const grant=nda?active:null;
   const questions=await env.DB.prepare('SELECT uid,question,answer,asked_at,answered_at FROM round_call_questions WHERE call_id=? AND investor_user_id=? ORDER BY asked_at,id').bind(call.id,investor.id).all();
   // D1226: the company whose call this is, for CLS13's header. Its name only, never the founder's.
@@ -384,8 +388,7 @@ export async function respond(env: Env, call: CallRow, investor: User, input: Re
   if(action==='question') question=text(input.question,2000);
   if(action==='data_room') {
     if(!call.data_room_project_uid) throw new RoundCallError('data_room_not_recorded',409);
-    const grant=await activeGrant(env,call.project_id,investor.id);
-    if(!await ndaActive(env,grant?.granted_by_user_id ?? call.created_by,investor.id)) throw new RoundCallError('nda_required',409);
+    if(!await projectNdaActive(env,call.project_id,investor.id)) throw new RoundCallError('nda_required',409);
   }
   const at=now(),claim=crypto.randomUUID();
   const statements=[

@@ -7,8 +7,10 @@ import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import { resolveReferralCode } from '../services/referrals/resolveCode';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
+import { isInfluencer, payoutGate, payoutReadiness } from '../services/influencer/payoutReadiness';
 import { logAdminAction } from '../services/adminAudit';
 import { FIRING_RULES, termsPayment } from '../services/referralPartnerTerms';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const network = new Hono<{ Bindings: Env }>();
 
@@ -99,6 +101,8 @@ async function ensureSchema(env: Env) {
     `ALTER TABLE commissions ADD COLUMN terms_id INTEGER REFERENCES referral_partner_terms(id)`,
     `ALTER TABLE commissions ADD COLUMN reversed_amount_cents INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE commissions ADD COLUMN reversed_at TIMESTAMP`,
+    // D4292 (migration 202611031345): when a held subscription commission becomes payable.
+    `ALTER TABLE commissions ADD COLUMN payable_at TEXT`,
   ];
   for (const s of stmts) { try { await db.prepare(s).run(); } catch {} }
 
@@ -558,6 +562,8 @@ function currencyTotals(rows: any[]) {
     currency: r.currency || 'USD',
     balance_cents: Number(r.balance_cents) || 0,
     claimed_cents: Number(r.claimed_cents) || 0,
+    // D4292: held 30 days before it is payable; never in the balance a payout claims.
+    held_cents: Number(r.held_cents) || 0,
     lifetime_cents: Number(r.lifetime_cents) || 0,
   }));
   const single = by_currency.length <= 1;
@@ -585,6 +591,7 @@ network.get('/commissions/me', async (c) => {
       SELECT currency,
              SUM(CASE WHEN status = 'accrued' THEN amount_cents ELSE 0 END) AS balance_cents,
              SUM(CASE WHEN status = 'paid' THEN amount_cents ELSE 0 END) AS claimed_cents,
+             SUM(CASE WHEN status = 'pending' THEN amount_cents ELSE 0 END) AS held_cents,
              SUM(amount_cents) AS lifetime_cents
       FROM commissions WHERE user_id = ${user.id} GROUP BY currency ORDER BY currency`;
     return c.json({ ...currencyTotals(totals as any[]), commissions: rows });
@@ -820,6 +827,13 @@ network.post('/payout/request', async (c) => {
     } else {
       cur = held[0] || 'USD';
     }
+    // D4294 (#4294, D4289 P5) — an influencer's payout waits on identity, the
+    // tax form, the current terms, the $50 minimum and one request a month.
+    // Each refusal names its reason; anyone else's request is unchanged.
+    if (await isInfluencer(c.env, user.id)) {
+      const gate = payoutGate(await payoutReadiness(c.env, user.id), amt, cur);
+      if (gate) return refuse(c, gate.status, { code: gate.code, message: gate.message, extra: gate.extra });
+    }
     const pool = accrued.filter((r) => (r.currency || 'USD') === cur);
     const balance = pool.reduce((s, r) => s + (Number(r.amount_cents) || 0), 0);
     if (amt > balance) return c.json({ error: `Insufficient balance. Available: ${(balance / 100).toFixed(2)} ${cur}` }, 400);
@@ -831,7 +845,7 @@ network.post('/payout/request', async (c) => {
       if (remaining <= 0) break;
       if (row.amount_cents > remaining) {
         // For simplicity we don't split commissions — payouts must equal sum of full commission rows.
-        return c.json({ error: 'Amount must match sum of available commissions. Try amount=' + (balance / 100).toFixed(2) + ` ${cur} (full balance) or a smaller value matching commission row(s).` }, 400);
+        return c.json({ error: 'Amount must match sum of available commissions. Try amount=' + suffixAmount(balance, cur) + ` (full balance) or a smaller value matching commission row(s).` }, 400);
       }
       remaining -= row.amount_cents;
       usedIds.push(row.id);
@@ -875,7 +889,7 @@ network.post('/payout/request', async (c) => {
     }
     const payout = { ...insertedRows[0], commission_ids: [...usedIds].sort((a, b) => a - b) };
 
-    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: ${(amt / 100).toFixed(2)} ${cur} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
+    await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('payout_requested', ${`Payout requested: ${suffixAmount(amt, cur)} via ${payout_method}`}, ${await hashEmail(user.email)}, ${user.id})`;
     return c.json(payout);
   } finally { await sql.end(); }
 });
@@ -892,7 +906,7 @@ network.patch('/admin/payouts/:id/process', async (c) => {
     const rows = await sql`SELECT p.*, u.email, u.name FROM payouts p JOIN users u ON u.id = p.user_id WHERE p.id = ${id}`;
     if (!rows.length) return c.json({ error: 'Payout not found' }, 404);
     const p: any = rows[0];
-    const money = `${(p.amount_cents / 100).toFixed(2)} ${p.currency || 'USD'}`;
+    const money = suffixAmount(p.amount_cents, p.currency || 'USD');
     // D572 — each step moves only a payout still open for it. A completed or
     // failed payout is final: completing a failed one would pay commissions
     // that were given back, and failing a completed one would give back

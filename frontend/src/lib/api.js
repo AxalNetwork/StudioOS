@@ -3,6 +3,8 @@ import { csrfCookieNameFor } from './branchHost';
 import { storeReason } from './impersonationBar';
 import { railPageHeaders } from './railPage.js';
 import { railBody } from './railPages.js';
+import { rememberLabVenture } from './labVenture.js';
+import { readAllPages } from './pagedRead.js';
 
 // D527 — API domain modules. A new API domain goes in its own file,
 // lib/api/<domain>.js, so unrelated features stop colliding in this file.
@@ -130,6 +132,8 @@ export function isPublicPath(pathname) {
     || currentPath.startsWith('/authors/')
     || /^\/advisors\/[^/]+$/.test(currentPath)
     || currentPath === '/spinout-lab'
+    // D1581 (#3828, PR2d): a signed-out phone on the remote page is told to sign in, its code kept.
+    || currentPath === '/remote'
     // D1072 (#2425): the public trust center and its tabs; /trust/me is the member's own and stays auth-only.
     || ['/trust', '/trust/security', '/trust/data', '/trust/subprocessors', '/trust/documents', '/trust/disclosure'].includes(currentPath)
     // Printable Program Brief — public brochure page; /spinout-lab/apply
@@ -165,6 +169,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/methodology'
     || currentPath === '/intelligence'
     || currentPath === '/resources'
+    // D4297 (#4297) — the Influencer program's public page.
+    || currentPath === '/influencers'
     || currentPath === '/contact'
     // D813 (#2259) — the newsletter's signup, and the confirm and preferences
     // pages a link in an email opens; none of them takes a sign-in.
@@ -174,6 +180,9 @@ export function isPublicPath(pathname) {
     // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
     || currentPath === '/privacy'
     || currentPath === '/privacy/interviews'
+    // #4565: the proposed v2 legal texts, for counsel's review (frontend/src/routes/legalDrafts.jsx).
+    || currentPath === '/terms/v2-draft'
+    || currentPath === '/privacy/v2-draft'
     // Task #5 — /articles is the public Articles hub (Browse tab is the
     // default, anonymous-visible surface). Keep it reachable for signed-
     // out visitors when a background fetch (settings/me) 401s. The
@@ -531,6 +540,30 @@ export function rawRequestHeaders(method = 'GET') {
   return { ...getAuthHeaders(), ...getCsrfHeader(method), ...getActiveCompanyHeader(), ...railPageHeaders() };
 }
 
+/**
+ * #4622: ONE IN-FLIGHT READ PER IDENTITY AND CONTEXT.
+ *
+ * Several parts of one Studio page ask for the same advisor progress and queue
+ * (the founder home, its interview wrapper, the profile card, the chat). Each
+ * made its own request. Callers that ask while an identical read is still in
+ * flight now share it; once it settles nothing is kept, so a later call reads
+ * again (a retry, or a read after the member answered a question, is never
+ * served a stale copy), and a failure is never remembered. The key carries the
+ * identity the request is sent with (token, impersonation header, company), so
+ * a different member, or the same one in another company, never shares a read.
+ */
+const _sharedReads = new Map();
+export function sharedRead(name, run) {
+  let identity = '';
+  try { identity = JSON.stringify([getAuthHeaders(), getActiveCompanyHeader()]); } catch { identity = ''; }
+  const key = `${name}|${identity}`;
+  const pending = _sharedReads.get(key);
+  if (pending) return pending;
+  const read = run().finally(() => { if (_sharedReads.get(key) === read) _sharedReads.delete(key); });
+  _sharedReads.set(key, read);
+  return read;
+}
+
 export async function request(path, options = {}) {
   // Armed per attempt, never per call: the step-up retry below re-enters
   // `request()` after a modal the user may sit on for a minute, and that wait
@@ -772,6 +805,16 @@ async function _analyticsRead(path) {
 /** D1300 — the filters, sort and scope `adminListUsers` passes through to `GET /api/admin/users`. */
 const ADMIN_USER_FILTERS = ['profile', 'sub', 'status', 'email', 'identity', 'limited', 'plan', 'country', 'persona', 'program', 'trust', 'joined', 'joined_from', 'joined_to', 'active', 'sort', 'scope'];
 
+/** #4689 — `?offset=&limit=` for an Expertise list page, after any other query it carries. */
+function expertisePage(page, extra = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== null && v !== '') q.set(k, String(v));
+  if (page?.offset) q.set('offset', String(page.offset));
+  if (page?.limit) q.set('limit', String(page.limit));
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
 export const api = {
   // Task #19 — Best-Fit consultations + admin report.
   bookConsultation: (data) =>
@@ -863,7 +906,8 @@ export const api = {
   // BLOCK-AUTH-01 — passwordless magic-link sign-in. /start always returns the
   // same 202 (no account-existence leak); the link in the email hits the
   // worker's GET /magic/verify which sets cookies and 302s into the SPA.
-  magicStart: (email) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify({ email }) }),
+  // #4578: `purpose: 'signup'` asks for the new-account wording of the same link; anything else is a sign-in link.
+  magicStart: (email, { purpose } = {}) => request('/auth/magic/start', { method: 'POST', body: JSON.stringify(purpose === 'signup' ? { email, purpose } : { email }) }),
   // BLOCK-AUTH-03 — step-up: re-assert a RECENT TOTP for the current session.
   stepUp: (totp_code) => request('/auth/step-up', { method: 'POST', body: JSON.stringify({ totp_code }) }),
   // NICE-AUTH-04 — sign out every active session (alias of revokeAllSessions).
@@ -1290,7 +1334,7 @@ export const api = {
       }),
     skip: (conversation_id, question_id) =>
       request('/advisor/skip', { method: 'POST', body: JSON.stringify({ conversation_id, question_id }) }),
-    progress: () => request('/advisor/progress'),
+    progress: () => sharedRead('advisor:progress', () => request('/advisor/progress')),
     // Task #2 (AR) — pinned next-question fetch + canonical manifest.
     // D765: a press ("drill in"), so a POST: only a press may let the model rank.
     nextQuestion: (focus) =>
@@ -1299,7 +1343,7 @@ export const api = {
     // progress widget. Mirrors /turn output but never registers an
     // "asked" timestamp so the widget can re-poll freely.
     queue: (focus) =>
-      request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`),
+      sharedRead(`advisor:queue:${focus || ''}`, () => request(`/advisor/queue${focus ? `?focus=${encodeURIComponent(focus)}` : ''}`)),
     manifest: () => request('/advisor/manifest'),
     // Task #5 (AV) — Find & deep-link tool registry.
     tools: () => request('/advisor/tools'),
@@ -1386,7 +1430,8 @@ export const api = {
   // it — the same split RevenuePage made for disputes.
   dealScreening: () => request('/deals/screening'),
   draftDeal: (data) => request('/deals/draft', { method: 'POST', body: JSON.stringify(data) }),
-  advanceDeal: (id) => request(`/deals/${id}/advance`, { method: 'POST' }),
+  // D4632: `from` is the stage the page shows; a retry of a landed advance moves nothing.
+  advanceDeal: (id, from) => request(`/deals/${id}/advance`, { method: 'POST', body: JSON.stringify(from ? { from } : {}) }),
   // Task #127 — the only write path to the terminal stage. `reason` must be a
   // key from lib/dealFlow.js PASS_TAXONOMY; the worker 400s anything else.
   passDeal: (id, { reason, note } = {}) =>
@@ -1419,7 +1464,6 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
-  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -2321,18 +2365,19 @@ export const api = {
   superAdminRevoke: (userId) => request(`/admin/super-admins/${userId}`, { method: 'DELETE' }),
   // Task #7 — admin-managed OAuth client credentials per provider.
   adminListIntegrationKeys: () => request('/admin/integration-keys'),
-  adminSetIntegrationKeys: (provider, client_id, client_secret) =>
+  // D5304: `expires_at` is the date the provider's console shows for the key, if it shows one (omitted when blank).
+  adminSetIntegrationKeys: (provider, client_id, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, {
       method: 'PUT',
-      body: JSON.stringify({ client_id, client_secret }),
+      body: JSON.stringify({ client_id, client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   adminDeleteIntegrationKeys: (provider) =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}`, { method: 'DELETE' }),
   // Task #3 — Rotate the secret in place (client_id stays the same).
-  adminRotateIntegrationKeys: (provider, client_secret) =>
+  adminRotateIntegrationKeys: (provider, client_secret, expires_at = '') =>
     request(`/admin/integration-keys/${encodeURIComponent(provider)}/rotate`, {
       method: 'POST',
-      body: JSON.stringify({ client_secret }),
+      body: JSON.stringify({ client_secret, ...(expires_at ? { expires_at } : {}) }),
     }),
   // Task #3 — Dry-run a provider auth call to verify configured credentials.
   adminTestIntegrationKeys: (provider) =>
@@ -2887,7 +2932,14 @@ export const api = {
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
-  pipelineActive: () => request('/pipeline/active'),
+  // #4701 — one page of the Build desk list: `{ items, next_cursor, has_more, total }`.
+  // A list capped at its first page and silent about the rest read as "all of
+  // them", so `pipelineActive` follows `next_cursor` to the end and answers one envelope
+  // `{ items, total, complete, remainder_error }`.
+  pipelineActivePage: (cursor) => request(
+    cursor ? `/pipeline/active?cursor=${encodeURIComponent(cursor)}` : '/pipeline/active',
+  ),
+  pipelineActive: () => readAllPages((cursor) => api.pipelineActivePage(cursor)),
   pipelineCreateProject: (data) => request('/pipeline/projects', { method: 'POST', body: JSON.stringify(data) }),
   pipelineAdvance: (id, stage) => request(`/pipeline/projects/${id}/advance`, { method: 'POST', body: JSON.stringify({ stage }) }),
   pipelineDealDetail: (id) => request(`/pipeline/projects/${id}/detail`),
@@ -3309,6 +3361,8 @@ export const api = {
   updateProfileSettings: (data) => request('/settings/profile', { method: 'PUT', body: JSON.stringify(data) }),
   getPrivacySettings: () => request('/settings/privacy'),
   updatePrivacySettings: (data) => request('/settings/privacy', { method: 'PUT', body: JSON.stringify(data) }),
+  // D4615 — public-profile switches, field by field, with the revision read: { fields: { name: true }, expected_revision }.
+  updatePublicProfileSwitches: (data) => request('/settings/privacy/public-profile', { method: 'PUT', body: JSON.stringify(data) }),
   getAppearanceSettings: () => request('/settings/appearance'),
   updateAppearanceSettings: (data) => request('/settings/appearance', { method: 'PUT', body: JSON.stringify(data) }),
   getNotificationSettings: () => request('/settings/notifications'),
@@ -3419,17 +3473,17 @@ export const api = {
   // on the catalogue response is load-bearing: it lets the page say "no credit
   // allowance is set up" instead of "not enough credits", which are very
   // different things to tell someone with a zero balance.
-  perksCatalog: () => request('/perks'),
+  perksCatalog: (page = 1) => request(page === 1 ? '/perks' : `/perks?page=${encodeURIComponent(page)}`),
   perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
   perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
-  perksMine: () => request('/perks/mine'),
-  perkSubmissions: () => request('/perks/partner'),
+  perksMine: (page = 1, ledgerPage = 1) => request(page === 1 && ledgerPage === 1 ? '/perks/mine' : `/perks/mine?page=${encodeURIComponent(page)}&ledger_page=${encodeURIComponent(ledgerPage)}`),
+  perkSubmissions: (page = 1) => request(page === 1 ? '/perks/partner' : `/perks/partner?page=${encodeURIComponent(page)}`),
   perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
   perkUpdate: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
   perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
   // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
-  perkClaimsForListing: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/claims`),
+  perkClaimsForListing: (uid, page = 1) => request(`/perks/partner/${encodeURIComponent(uid)}/claims${page === 1 ? '' : `?page=${encodeURIComponent(page)}`}`),
   perkRedeem: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
@@ -3439,9 +3493,12 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
   },
-  perkReviewQueue: () => request('/perks/admin/queue'),
+  perkReviewQueue: (page = 1) => request(page === 1 ? '/perks/admin/queue' : `/perks/admin/queue?page=${encodeURIComponent(page)}`),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
+  // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
+  perkFeature: (uid, data) =>
+    request(`/perks/admin/${encodeURIComponent(uid)}/feature`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkGrantCredits: (data) =>
     request('/perks/admin/credits', { method: 'POST', body: JSON.stringify(data || {}) }),
 
@@ -3494,8 +3551,9 @@ export const api = {
   hqFunds: () => request('/admin/hq/funds'),
   // HQ · Revenue (canvas H5). D1 only — open disputes come from Stripe
   // through adminBillingListDisputes, read separately so an outage there
-  // costs one zone rather than the page.
-  hqRevenue: () => request('/admin/revenue/summary'),
+  // costs one zone rather than the page. D5039: `period` is a quarter key
+  // (`2026-Q4`); without it the Worker answers for today's quarter.
+  hqRevenue: (period) => request(`/admin/revenue/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`),
   // HQ · Content and Platform (canvas H6). Two reads, two pages: the
   // content pipeline over `articles` + `admin_publications`, and the
   // platform view over `integrations` + `cron_run_history`.
@@ -3520,10 +3578,12 @@ export const api = {
   // D1170 — HQ › Platform › Storage: every member's stored bytes as totals by
   // kind, plan and state; no name, email, id or file name. Super admin.
   hqPlatformStorage: () => request('/admin/platform/storage'),
-  hqSetPlatformSwitch: (key, action, reason) =>
+  // D4703: a release names the throw it ends (`revision`, from the switch's
+  // stored half), so an old tab cannot release a newer throw.
+  hqSetPlatformSwitch: (key, action, reason, revision) =>
     request(`/admin/platform/switches/${encodeURIComponent(key)}`, {
       method: 'POST',
-      body: JSON.stringify({ action, reason }),
+      body: JSON.stringify(action === 'release' ? { action, reason, revision } : { action, reason }),
     }),
   // HQ · Security. The overview is read-only; force re-auth signs every
   // active account out everywhere (the caller included) and needs a TOTP
@@ -3534,13 +3594,19 @@ export const api = {
   // the GitHub mirror strip, in one read. Each part answers for itself: an
   // unreadable escalation board costs its own queue, never the tickets beside it.
   hqSupport: () => request('/admin/hq-support'),
+  // D5031 (#5031) — the HQ-local half alone (escalations, HQ's ticket queues,
+  // the mirror strip, the SLA policy): it never waits on a branch, so the page
+  // draws HQ's desk while the branch hosts are still answering `hqSupport`.
+  hqSupportLocal: () => request('/admin/hq-support/local'),
   hqSupportSetSlaTiers: (tiers) => request('/admin/hq-support/sla-tiers', { method: 'PUT', body: JSON.stringify({ tiers }) }),
   // Canvas H7's privileged-action feed, unioned across the four stores that
   // record one. Filtered SERVER-side: the feed is a merged page of 60, so a
   // client-side filter would quietly show a handful of rows and read as
-  // "that is all there is".
-  hqGovernance: (filter) =>
-    request(`/admin/security/governance?filter=${encodeURIComponent(filter || 'all')}`),
+  // "that is all there is". D4803 — the Events workspace's search, date,
+  // actor, outcome and source filters and the Load older cursor (`before`)
+  // go the same way: as query values, never applied to the page in the browser.
+  hqGovernance: (filter, params = {}) =>
+    request(`/admin/security/governance?${new URLSearchParams({ filter: filter || 'all', ...params })}`),
   hqSecurityForceReauth: (reason) =>
     request('/admin/security/force-reauth', { method: 'POST', body: JSON.stringify({ reason }) }),
   // D165 — ONE account, not every account. Same bar as the bulk revoke above
@@ -3554,10 +3620,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
+  // D4669 part 2 — the owner's option B: sign accounts out ON BRANCH
+  // deployments, on request, with each branch's own outcome. A separate act
+  // from the two above, which still write this deployment only. `op_key` is
+  // made once per dialog and resent on Try again, so each branch recognises a
+  // retry and never signs anyone out twice.
+  hqBranchSignOut: ({ branches = 'all', target, reason, op_key }) =>
+    request('/admin/security/branch-sign-out', {
+      method: 'POST',
+      body: JSON.stringify({ branches, target, reason, op_key }),
+    }),
   // D481 — the Sessions zone's list and its three acts. Every write takes a
   // typed reason (stored with the act) and the same bar as force re-auth; a
   // bulk revoke is one request and one audit row per session.
-  hqSecuritySessions: () => request('/admin/security/sessions'),
+  // D4699 — `beforeId` continues the list below that session id (the answer's `cursor.before_id`).
+  hqSecuritySessions: (beforeId = null) =>
+    request(`/admin/security/sessions${beforeId ? `?before_id=${encodeURIComponent(beforeId)}` : ''}`),
   hqRevokeSession: (sessionId, reason) =>
     request(`/admin/security/sessions/${encodeURIComponent(sessionId)}/revoke`, {
       method: 'POST',
@@ -3578,10 +3656,21 @@ export const api = {
   // subject's own act, recorded when they cancel. `fulfilled` records that the
   // MANUAL erasure was carried out — this platform performs none, and the
   // server's own message says so rather than letting the word imply otherwise.
-  hqCloseDsrRequest: (userId, outcome, reason) =>
+  //
+  // D4675 — `review` names the exact request the operator reviewed
+  // (`requested_at`, `request_id` from the list) and the `close_key` the page
+  // made once for this close and reuses on every retry, so a retry is recorded
+  // once and a close never lands on a request nobody reviewed.
+  hqCloseDsrRequest: (userId, outcome, reason, review) =>
     request(`/admin/security/dsr/${encodeURIComponent(userId)}/close`, {
       method: 'POST',
-      body: JSON.stringify({ outcome, reason }),
+      body: JSON.stringify({
+        outcome,
+        reason,
+        requested_at: review?.requested_at,
+        request_id: review?.request_id ?? null,
+        close_key: review?.close_key,
+      }),
     }),
   licence: (uid) => request(`/admin/licences/${encodeURIComponent(uid)}`),
   licenceTerritories: () => request('/admin/licences/territories'),
@@ -3608,6 +3697,12 @@ export const api = {
       `/admin/licences/${encodeURIComponent(uid)}/contract/${encodeURIComponent(contractUid)}/send`,
       { method: 'POST' },
     ),
+  // D4671 — complete the entity and signatory a contract names.
+  licenceEntityComplete: (uid, fields) =>
+    request(`/admin/licences/${encodeURIComponent(uid)}/entity`, {
+      method: 'PATCH',
+      body: JSON.stringify(fields),
+    }),
   // D111 — H5's statements ledger. `draw` computes owed from what the branch
   // reported; `update` is the HQ-entered half (paid, disputed, status), which
   // nothing reconciles against Stripe (D.8).
@@ -4173,8 +4268,9 @@ export const api = {
     method: 'PUT', body: JSON.stringify({ body }),
   }),
   deleteAdvisorClientNote: (clientId) => request(`/advisors/me/client-notes/${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
-  listMyAdvisorBookings: (status) =>
-    request(`/advisors/me/bookings${status ? `?status=${status}` : ''}`),
+  // #4714: `page` ({ limit, offset }) reads one page; `page.next_offset` names the next.
+  listMyAdvisorBookings: (status, page) =>
+    request(`/advisors/me/bookings${expertisePage(page, { status })}`),
   listMyMenteeBookings: (status) =>
     request(`/advisors/bookings/me${status ? `?status=${status}` : ''}`),
   confirmAdvisorBooking: (id) => request(`/advisors/bookings/${id}/confirm`, { method: 'POST' }),
@@ -4186,11 +4282,17 @@ export const api = {
   fileAdvisorReview: (bookingId, data) =>
     request(`/advisors/bookings/${bookingId}/review`, { method: 'POST', body: JSON.stringify(data) }),
   listBookingReviews: (bookingId) => request(`/advisors/bookings/${bookingId}/reviews`),
+  // #4702 (D4702): review coverage over EVERY completed session in one read:
+  // { held, reviewed, awaiting, ratings: { count, sum }, items: [{ booking_id,
+  // reviews, advisor_filed }], items_complete }. A failed read is unknown, never "no review".
+  getMyAdvisorReviewCoverage: () => request('/advisors/me/review-coverage'),
 
   // ---------- The advisor's own stores (migrations 203-206) ----------
   // Every one of these is scoped server-side on the signed-in user; none takes
   // an advisor id, because there is nowhere to put someone else's.
-  listMyAdvisorServices: () => request('/advisors/me/services'),
+  // #4689: the Expertise lists page. `page` is `{ offset, limit }`; each answer
+  // carries `page.next_offset` and counts over the whole list.
+  listMyAdvisorServices: (page) => request(`/advisors/me/services${expertisePage(page)}`),
   createMyAdvisorService: (data) =>
     request('/advisors/me/services', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorService: (id, data) =>
@@ -4198,13 +4300,14 @@ export const api = {
   deleteMyAdvisorService: (id) =>
     request(`/advisors/me/services/${id}`, { method: 'DELETE' }),
 
-  listMyAdvisorProof: () => request('/advisors/me/proof'),
+  listMyAdvisorProof: (page) => request(`/advisors/me/proof${expertisePage(page)}`),
   createMyAdvisorProof: (data) =>
     request('/advisors/me/proof', { method: 'POST', body: JSON.stringify(data) }),
   deleteMyAdvisorProof: (id) => request(`/advisors/me/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the advisor hands the link over by whatever channel they
-  // already have with the person, and no later read returns it.
+  // Records the ask; it does not send it. D4670: the response and every later
+  // list carry `invite_token` while the ask is pending, so a refresh never loses
+  // the link. The link only shows the claim; answering needs a code mailed to
+  // the address named here (`attester_email`, required, not the advisor's own).
   requestAdvisorProofConsent: (id, data) =>
     request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4266,15 +4369,22 @@ export const api = {
   // renewal rate, so a merge-PATCH over them would let a caller assert a
   // renewal with no cycle behind it. `updateMyAdvisorEngagement` carries the
   // descriptive columns; the two POSTs carry a lane move and a decision. D71.
-  listMyAdvisorEngagements: () => request('/advisors/me/engagements'),
+  listMyAdvisorEngagements: (page) => request(`/advisors/me/engagements${expertisePage(page)}`),
   createMyAdvisorEngagement: (data) =>
     request('/advisors/me/engagements', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorEngagement: (id, data) =>
     request(`/advisors/me/engagements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  advanceMyAdvisorEngagement: (id, lane) =>
-    request(`/advisors/me/engagements/${id}/advance`, { method: 'POST', body: JSON.stringify({ lane }) }),
+  // #4715 (D4715): signing, renewals, endings and corrections to signed terms, oldest first.
+  listMyAdvisorEngagementEvents: (id) => request(`/advisors/me/engagements/${id}/events`),
+  // D4695: `expectedLane` is the lane the board showed; a row that has moved since is a 409 `lane_changed`.
+  advanceMyAdvisorEngagement: (id, lane, expectedLane) =>
+    request(`/advisors/me/engagements/${id}/advance`, {
+      method: 'POST', body: JSON.stringify({ lane, ...(expectedLane ? { expected_lane: expectedLane } : {}) }),
+    }),
   // `decision` is 'renewed' or 'ended'. Ending a SIGNED engagement goes through
   // here rather than through `advance`, so the loss lands in the denominator.
+  // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
+  // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4283,7 +4393,7 @@ export const api = {
   // THERE IS NO METHOD HERE THAT MARKS SOMETHING OPENED, and that is the point
   // rather than an omission. `opened_at` is the client's to set; the founder
   // side writes it through `/advisor-grants`. D72.
-  listMyAdvisorDeliverables: () => request('/advisors/me/deliverables'),
+  listMyAdvisorDeliverables: (page) => request(`/advisors/me/deliverables${expertisePage(page)}`),
   createMyAdvisorDeliverable: (data) =>
     request('/advisors/me/deliverables', { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorDeliverable: (id, data) =>
@@ -4329,7 +4439,7 @@ export const api = {
     request(`/advisors/me/session-types/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorBookingLinks: () => request('/advisors/me/booking-links'),
   // D1597 (#3870): Advisor › Expertise › Visibility — requests per booking link, opens of your writing; views and engagements are not recorded.
-  getMyAdvisorVisibility: (days) => request(`/advisors/me/visibility${days ? `?days=${encodeURIComponent(days)}` : ''}`),
+  getMyAdvisorVisibility: (days, page) => request(`/advisors/me/visibility${expertisePage(page, days ? { days } : {})}`),
   // 409 on a slug another advisor already holds — the slug resolves from the
   // URL alone, so it is unique across the table rather than per advisor.
   createMyAdvisorBookingLink: (data) =>
@@ -4346,8 +4456,12 @@ export const api = {
   acceptReceivedDeliverableVersion: (uid) =>
     request(`/advisors/received/deliverables/${encodeURIComponent(uid)}/accept`, { method: 'POST' }),
 
-  // The attester's own answer. Unauthenticated on purpose — the token is the
-  // credential, and an attester is usually not a user of this product.
+  // D4670 — the attester's side, unauthenticated on purpose (an attester is
+  // usually not a user of this product). The link reads the claim; a code
+  // emailed to the named address, on the attester's own request, answers it.
+  getAdvisorProofConsentClaim: (token) => request(`/advisors/proof-consents/${token}/claim`),
+  requestAdvisorProofConsentCode: (token) =>
+    request(`/advisors/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToAdvisorProofConsent: (token, data) =>
     request(`/advisors/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4359,7 +4473,12 @@ export const api = {
   // The three sets the Leads zone keeps disjoint: open leads (never bid, never
   // passed), the passes with their reasons, and — by their absence — the needs
   // this firm already quoted on, which are proposals.
-  listPartnerLeads: () => request('/partner/pipeline/leads'),
+  // `cursor` pages the open leads and `passedCursor` the passes (#4701): each list
+  // answers `next_cursor` / `passed_next_cursor`, and the totals describe all of them.
+  listPartnerLeads: (cursor, passedCursor) => {
+    const q = [cursor ? `cursor=${encodeURIComponent(cursor)}` : '', passedCursor ? `passed_cursor=${encodeURIComponent(passedCursor)}` : ''].filter(Boolean).join('&');
+    return request(`/partner/pipeline/leads${q ? `?${q}` : ''}`);
+  },
   // #3938 IN10, the firm's press: open leads ranked by fit with its own audience fit
   // (bge-m3, then the reranker). Rows `{ need_id, position, line: null }`; 409 when
   // the firm wrote no fit, no service and typed nothing.
@@ -4375,7 +4494,9 @@ export const api = {
   // Every bid this firm has made, with its version trail and the loss taxonomy.
   // `read_receipts: 'none'` comes back with it: nothing records that a client
   // opened a proposal, so a quiet one cannot be told from an unread one.
-  listPartnerProposals: () => request('/partner/pipeline/proposals'),
+  listPartnerProposals: (cursor) => request(
+    cursor ? `/partner/pipeline/proposals?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/proposals',
+  ),
   // Append-only and self-numbering — the caller does not choose the version, so
   // two edits cannot both claim to be v3.
   addPartnerProposalVersion: (quoteId, data) =>
@@ -4388,7 +4509,9 @@ export const api = {
     request(`/partner/pipeline/proposals/${quoteId}/outcome`, {
       method: 'PUT', body: JSON.stringify(data),
     }),
-  listPartnerNegotiations: () => request('/partner/pipeline/negotiations'),
+  listPartnerNegotiations: (cursor) => request(
+    cursor ? `/partner/pipeline/negotiations?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/negotiations',
+  ),
   // PUT, not POST: one negotiation per quote is a UNIQUE index, so this is an
   // upsert. `{touch: true}` advances the stalled clock without changing stage.
   savePartnerNegotiation: (quoteId, data) =>
@@ -4403,7 +4526,9 @@ export const api = {
   // Returns `items`, plus `mrr_cents` and the `mrr_basis` sentence saying what
   // that total counted. `mrr_cents` is null when no retainer carries an amount:
   // a total of zero would claim the clients pay nothing.
-  listPartnerRetainers: () => request('/partner/pipeline/retainers'),
+  listPartnerRetainers: (cursor) => request(
+    cursor ? `/partner/pipeline/retainers?cursor=${encodeURIComponent(cursor)}` : '/partner/pipeline/retainers',
+  ),
   savePartnerRetainer: (engagementId, data) =>
     request(`/partner/pipeline/retainers/${engagementId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePartnerRetainer: (engagementId) =>
@@ -4434,7 +4559,7 @@ export const api = {
   // Every engagement with the surface it names, for the attribution form. An
   // engagement naming none is listed rather than hidden — it is what the
   // unattributed count is counting.
-  listPartnerAttribution: () => request('/partner/offers/attribution'),
+  listPartnerAttribution: (page = 1) => request(page === 1 ? '/partner/offers/attribution' : `/partner/offers/attribution?page=${encodeURIComponent(page)}`),
   setPartnerEngagementSource: (engagementId, data) =>
     request(`/partner/offers/engagements/${engagementId}/source`, {
       method: 'PUT', body: JSON.stringify(data),
@@ -4444,24 +4569,29 @@ export const api = {
 
   // `is_published` on each item is DERIVED from its consent rows, never stored.
   // There is no method to set it, and that absence is the feature.
-  listPartnerProof: () => request('/partner/offers/proof'),
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
   createPartnerProof: (data) =>
     request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
   updatePartnerProof: (id, data) =>
     request(`/partner/offers/proof/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deletePartnerProof: (id) =>
     request(`/partner/offers/proof/${id}`, { method: 'DELETE' }),
-  // Records the ask; it does not send it. The response carries `request_token`
-  // exactly once — the firm hands the link over by whatever channel it already
-  // has with the client, and no later read returns it.
+  // Records the ask; it does not send it. D4672: the response carries
+  // `invite_token`, the link the firm hands over (readable again while the
+  // request is open). The link shows the claim; answering needs a code emailed
+  // to the client, so holding it is not being able to answer.
   requestPartnerProofConsent: (id, data) =>
     request(`/partner/offers/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
   // The firm can only ever RECORD a withdrawal, never grant a consent. Granting
   // is the token holder's alone, which is what makes the record worth anything.
   withdrawPartnerProofConsent: (id, consentId) =>
     request(`/partner/offers/proof/${id}/consents/${consentId}/withdraw`, { method: 'POST' }),
-  // The client's own answer. Unauthenticated on purpose — the token is the
-  // credential, and the counterparty on an engagement is often not a user here.
+  // D4672: the client's side. Unauthenticated on purpose — the counterparty on
+  // an engagement is often not a user here. The link reads the pinned claim;
+  // a code mailed to the named address answers it, once.
+  getPartnerProofConsentClaim: (token) => request(`/partner/offers/proof-consents/${token}/claim`),
+  requestPartnerProofConsentCode: (token) =>
+    request(`/partner/offers/proof-consents/${token}/code`, { method: 'POST', body: JSON.stringify({}) }),
   respondToPartnerProofConsent: (token, data) =>
     request(`/partner/offers/proof-consents/${token}/respond`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4603,7 +4733,7 @@ export const api = {
   postMyAdvisorCohortGuidance: (cycleId, data) => request(`/advisors/me/cohort/${cycleId}/guidance`, { method: 'POST', body: JSON.stringify(data) }),
   updateMyAdvisorGuidance: (uid, data) => request(`/advisors/me/guidance/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
   listMyAdvisorCohortCalendar: (cycleId) => request(`/advisors/me/cohort/${cycleId}/calendar`),
-  listMyAdvisorThinking: () => request('/advisors/me/thinking'),
+  listMyAdvisorThinking: (page) => request(`/advisors/me/thinking${expertisePage(page)}`),
 
   // ---------- Unified calendar (Task #56) ----------
   listCalendarEvents: (opts = {}) => {
@@ -4875,6 +5005,12 @@ export const api = {
   // freeze at 'promised' exactly as `investor_introductions`'s does.
   portfolioSupportUpdate: (uid, data) =>
     request(`/portfolio-support/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // D4642 (#4642): the entry's amendment history — one row per accepted
+  // amendment, with the revision it produced and who made it. The desk needs
+  // it because `recorded_by` only says who created the entry: an amendment by
+  // a second member was otherwise unattributable from the page.
+  portfolioSupportHistory: (uid) =>
+    request(`/portfolio-support/${encodeURIComponent(uid)}/history`),
   positionMarkCreate: (projectUid, data) =>
     request(`/positions/${projectUid}/marks`, { method: 'POST', body: JSON.stringify(data) }),
   positionDistributionCreate: (projectUid, data) =>
@@ -4887,11 +5023,19 @@ export const api = {
     request('/portfolio/chase', { method: 'POST', body: JSON.stringify({ project_ids: projectIds }) }),
 
   // ---------- Contacts (inbound relationship hub) ----------
+  // #4611 finding 8: `project_id` is a SERVER filter now, applied inside the
+  // authorized scope and before the page, and the read is paginated. The
+  // response carries `total`, `counts`, `has_more` and `next_cursor`, whose
+  // scopes the Worker documents; a caller that passes none of these behaves as
+  // it did, on a page rather than on a 500-row cap.
   contactsList: (opts = {}) => {
     const qs = new URLSearchParams();
     if (opts.audience) qs.set('audience', opts.audience);
     if (opts.status) qs.set('status', opts.status);
     if (opts.routed_to) qs.set('routed_to', opts.routed_to);
+    if (opts.project_id != null && opts.project_id !== '') qs.set('project_id', String(opts.project_id));
+    if (opts.limit != null) qs.set('limit', String(opts.limit));
+    if (opts.cursor) qs.set('cursor', String(opts.cursor));
     const s = qs.toString();
     return request(`/contacts${s ? `?${s}` : ''}`);
   },
@@ -5130,8 +5274,17 @@ export const api = {
     // `Saved answers`. `Cited` and `Unanswered` narrow whichever slice came
     // back, in the page, because both are predicates over `reason` and
     // `citations` rather than a different read.
-    askSessions: (scope = 'session', sessionUid) => {
-      const q = new URLSearchParams({ scope, ...(sessionUid ? { session: sessionUid } : {}) }).toString();
+    // #4610: `cursor` and `limit`. The history is paginated, with `totals`
+    // covering the whole selected scope and `next_cursor`/`has_more` saying
+    // whether more of it exists — a caller passing neither gets the first page,
+    // which for every scope is the NEWEST rows.
+    askSessions: (scope = 'session', sessionUid, opts = {}) => {
+      const q = new URLSearchParams({
+        scope,
+        ...(sessionUid ? { session: sessionUid } : {}),
+        ...(opts.cursor ? { cursor: String(opts.cursor) } : {}),
+        ...(opts.limit != null ? { limit: String(opts.limit) } : {}),
+      }).toString();
       return request(`/research/ask/sessions?${q}`);
     },
     askNewSession: () => request('/research/ask/sessions', { method: 'POST', body: JSON.stringify({}) }),
@@ -5682,8 +5835,11 @@ export const adminArticles = {
 // Namespaced separately from `api` to keep the surface small and obvious
 // for the call sites that wire milestone completion in feature pages.
 export const spinoutLab = {
-  state: () => request('/spinout-lab/state'),
+  state: () => request('/spinout-lab/state').then(rememberLabVenture),
   start: () => request('/spinout-lab/start', { method: 'POST' }),
+  // D4659: name which of your own projects is the Lab venture.
+  chooseVenture: (project_id) =>
+    request('/spinout-lab/venture', { method: 'POST', body: JSON.stringify({ project_id }) }),
   complete: (milestone_key) =>
     request('/spinout-lab/milestone', {
       method: 'POST',

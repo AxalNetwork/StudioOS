@@ -31,6 +31,9 @@
  *     from the payload. Each is null when not recorded, never "".
  *   · `counts` reads the whole queue, not the filters: open now, and resolved
  *     since Monday 00:00 UTC. Each count is null when its read fails, never 0.
+ * #4375 adds `images`: the deck images the result and its card name, each
+ *   `{ uid, url, taken_down }`, at most REPORT_IMAGES_MAX, which HQ can take down
+ *   (`POST /api/admin/deck-images/:uid/takedown`, `admin_deck_images.ts`).
  * The resolution note is required (at least NOTE_MIN characters, trimmed):
  * the founder reads it on their report. The audit row keeps it and names the
  * admin.
@@ -192,6 +195,29 @@ export function cardOf(payload: Record<string, any> | null, slides: unknown[] | 
   return { index, label: title ? `Card ${index + 1} · ${title}` : `Card ${index + 1}` };
 }
 
+const IMAGE_REF = /\/api\/decks\/images\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/file/g;
+/** #4375: at most this many images are listed on one report. */
+export const REPORT_IMAGES_MAX = 6;
+
+/**
+ * #4375: the deck images a report's result and its card name, by uid, for HQ's
+ * Take down: the file URLs and `image_id`s in the proposal's payload, then in
+ * the card on the version. Order kept, no repeats.
+ */
+export function reportImageUids(payload: Record<string, any> | null, slides: unknown[] | null, card: { index: number } | null): string[] {
+  const out: string[] = [];
+  const add = (u: unknown) => { if (typeof u === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(u) && !out.includes(u)) out.push(u); };
+  const scan = (v: unknown) => {
+    if (v == null) return;
+    const json = typeof v === 'string' ? v : JSON.stringify(v);
+    for (const m of json.matchAll(IMAGE_REF)) add(m[1]);
+    for (const m of json.matchAll(/"image_id"\s*:\s*"([a-f0-9-]{36})"/g)) add(m[1]);
+  };
+  scan(payload);
+  if (card && slides) scan(slides[card.index]);
+  return out.slice(0, REPORT_IMAGES_MAX);
+}
+
 /** One count of the queue, or null when it cannot be read: never 0 for a failed read. */
 async function countOf(stmt: () => D1PreparedStatement): Promise<number | null> {
   try {
@@ -253,6 +279,24 @@ hqDeckReports.get('/', async (c) => {
     }
   }
 
+  // #4375: the images each report names, with whether HQ already took them down; read once for the page.
+  const imagesByRow = rows.map(({ r, payload }) => {
+    const deck = decksById.get(deckIdOf(r.record_ref, payload) ?? -1) ?? null;
+    return reportImageUids(payload, deck?.slides ?? null, cardOf(payload, deck?.slides ?? null));
+  });
+  const takenDown = new Map<string, boolean>();
+  const allImages = [...new Set(imagesByRow.flat())];
+  if (allImages.length) {
+    try {
+      const { results: found } = await c.env.DB.prepare(
+        'SELECT uid, taken_down_at FROM deck_images WHERE uid IN (SELECT value FROM json_each(?))',
+      ).bind(JSON.stringify(allImages)).all<any>();
+      for (const im of found ?? []) takenDown.set(String(im.uid), im.taken_down_at != null);
+    } catch (e) {
+      console.warn('[deck_reports] report images unreadable', (e as Error)?.message);
+    }
+  }
+
   const counts = {
     open: await countOf(() => c.env.DB.prepare("SELECT COUNT(*) AS n FROM deck_proposal_reports WHERE status = 'open'")),
     resolved_this_week: await countOf(() => c.env.DB.prepare(
@@ -261,7 +305,7 @@ hqDeckReports.get('/', async (c) => {
   };
   await logAdminAction(c.env, Number(actor.id), (actor as any).email ?? '', 'deck_reports_read', { status, model, reason, count: rows.length });
   return c.json({
-    reports: rows.map(({ r, payload }) => {
+    reports: rows.map(({ r, payload }, i) => {
       const deckId = deckIdOf(r.record_ref, payload);
       const deck = deckId != null ? decksById.get(deckId) ?? null : null;
       return {
@@ -275,6 +319,8 @@ hqDeckReports.get('/', async (c) => {
         card: cardOf(payload, deck?.slides ?? null),
         asked: askedOf(payload, r.rail_option),
         ...wordsOf(payload),
+        // #4375: the images this result and its card name, each one HQ can take down; `taken_down` is null when unread.
+        images: imagesByRow[i].map((uid) => ({ uid, url: `/api/decks/images/${uid}/file`, taken_down: takenDown.has(uid) ? takenDown.get(uid)! : null })),
       };
     }),
     counts,

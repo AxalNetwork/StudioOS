@@ -46,6 +46,8 @@ const P = '/founder/validate';
 const ACTIONS = new Set(['start', 'pause', 'resume', 'stop']);
 
 export const interviewSessionsApi = {
+  outputs: (projectId, minutes = 30, outputs) => request(`${P}/sessions/outputs?project_id=${enc(projectId)}&minutes=${enc(minutes)}${outputs === undefined ? '' : `&outputs=${enc(JSON.stringify(outputs))}`}`),
+  retryOutput: (id, output) => request(`${P}/sessions/${enc(id)}/outputs/${enc(output)}/retry`, { method: 'POST' }),
   models: () => request(`${P}/sessions/models`),
   /** The caller's recordings in flight (D685 §5.6.1): restored on app load. */
   active: () => request(`${P}/sessions/active`),

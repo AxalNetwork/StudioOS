@@ -19,7 +19,10 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { hashInviteToken } from '../services/projectAccess';
 import { refuse } from '../util/refusal';
 // D1592 (#3860): the two company gates live in one place; company_documents.ts imports them too.
-import { canEdit, viewerIsMember } from '../services/companyAccess';
+import { GENERAL_FIELDS, validateCompanyFields } from '../services/companyProfileFields';
+import {
+  archivedRefusal, canEdit, capabilityFromLink, companyWriteDenial, denialBody, isArchived, isSupportSession, viewerIsMember,
+} from '../services/companyAccess';
 import {
   validatePerson, validateCoverage, validatePlan, personDto,
 } from '../services/companyTeam';
@@ -28,6 +31,7 @@ import { seatEndedStatements } from '../services/compliance/companyTasks';
 import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { legalPatch, MESSAGES as LEGAL_MESSAGES } from './company_legal';
 import { currencyCode, CURRENCY_INVALID_MESSAGE } from '../services/currencies';
+import { VOCAB_MESSAGES, checkRegionCodes, regionsOf } from '../services/companyProfileVocab';
 import {
   MAX_LOGO_BYTES, LOGO_CONTENT_TYPE, LOGO_MESSAGES, checkLogo, logoHeaders, logoKeyFor, logoUrlFor, newLogoToken, storedLogoOf,
 } from '../services/companyLogo';
@@ -46,6 +50,10 @@ type Company = {
   archived_at?: string | null;
   /** #3932 (migration 757): an ISO 4217 code; null is not recorded, never USD. */
   default_currency?: string | null;
+  /** #4963 (migration 202611072255): the General profile's revision, the compare-and-swap token. */
+  profile_version?: number;
+  /** #4964 (migration 202611072325): the regions as canonical codes, a JSON array; null derives them from the text. */
+  region_codes?: string | null;
   created_at: string; updated_at: string;
 };
 type Link = {
@@ -71,7 +79,7 @@ async function summaryDto(env: Env, c: Company): Promise<any> {
   return out;
 }
 
-async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
+async function detailDto(env: Env, c: Company, viewer: User, support = false): Promise<any> {
   const out: any = {};
   for (const f of PUBLIC_FIELDS) out[f] = (c as any)[f];
   for (const f of PRIVATE_FIELDS) out[f] = (c as any)[f];
@@ -80,18 +88,33 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.archived_at = c.archived_at ?? null;
   // #3932: null is "Not recorded"; no currency is assumed.
   out.default_currency = c.default_currency ?? null;
-  const isMember = await viewerIsMember(env, c.id, viewer);
+  // #4963: the token a General edit sends back as `expected_version`.
+  out.profile_version = Number.isSafeInteger(c.profile_version) ? c.profile_version : 1;
+  // #4964: regions as codes for matching; `source` says stored or derived from the legacy text, `unmapped` what no
+  // code covers, so a legacy entry is shown to the editor rather than dropped.
+  const regions = regionsOf(c);
+  out.region_codes = regions.codes;
+  out.regions = { source: regions.source, unmapped: regions.unmapped };
+  // #4964: ONE bounded read for the roster, joined to the accounts it names, in place of a user lookup per member.
+  // Membership and the edit rule are decided from the same rows (`linkCanEdit` is `canEdit`'s rule on a link in
+  // hand), so a company with fifty members costs one query here, not fifty-three.
+  const roster = await env.DB.prepare(
+    `SELECT l.*, u.id AS member_id, u.name AS member_name, u.email AS member_email
+       FROM user_company_links l JOIN users u ON u.id = l.user_id
+      WHERE l.company_id = ?
+      ORDER BY l.id ASC`
+  ).bind(c.id).all<Link & { member_id: number; member_name: string; member_email: string }>();
+  const rows = roster.results || [];
+  const own = rows.find((r) => Number(r.user_id) === Number(viewer.id)) ?? null;
+  const isMember = isAdmin(viewer) || !!own;
   // D431 — economics are the member's and the editors'. `canEdit` is the rule
   // that already decides who may WRITE carry; the same rule decides who may
   // read it, so a reader who could not change a figure is never shown it.
-  const editor = await canEdit(env, c, viewer);
-  const links = await env.DB.prepare('SELECT * FROM user_company_links WHERE company_id = ?')
-    .bind(c.id).all<Link>();
+  // #4964: given the viewer's link from the roster above, it makes no query of its own.
+  const editor = await canEdit(env, c, viewer, { link: own });
   const members: any[] = [];
-  for (const lnk of links.results || []) {
-    const u = await env.DB.prepare('SELECT id, name, email FROM users WHERE id = ?')
-      .bind(lnk.user_id).first<{ id: number; name: string; email: string }>();
-    if (!u) continue;
+  for (const lnk of rows) {
+    const u = { id: lnk.member_id, name: lnk.member_name, email: lnk.member_email };
     members.push({
       user_id: u.id, name: u.name,
       // #3841: a member's email goes to that member only (the canvas: "Never show another member's email").
@@ -118,11 +141,29 @@ async function detailDto(env: Env, c: Company, viewer: User): Promise<any> {
   out.members = members;
   out.member_count = members.length;
   out.viewer_is_member = isMember;
+  // #4964: the seat rule, from this roster, so the header, the form and the preview read one answer.
+  out.viewer_can_edit = editor;
+  // D4960: what a write will accept. Computed from the same roster, so this read stays one joined query.
+  out.viewer = capabilityFromLink(viewer, support, own);
   return out;
 }
 
 async function getCompanyOr404(env: Env, uid: string): Promise<Company | null> {
   return env.DB.prepare('SELECT * FROM company_profiles WHERE uid = ?').bind(uid).first<Company>();
+}
+
+/**
+ * D4960 — the one write gate for this file. A support session and an HQ admin
+ * without a seat are refused with their own code and reason; anyone else who
+ * is not an editor gets the route's own answer, unchanged.
+ */
+async function writeGate(c: any, company: Company, user: User, notEditor: () => Response): Promise<Response | null> {
+  const denial = await companyWriteDenial(c.env, company, user, await isSupportSession(c));
+  if (denial) return denial.reason === 'not_an_editor' ? notEditor() : c.json(denialBody(denial), 403);
+  // #4963: an editor of an archived company is refused with the one archived sentence. A non-editor already
+  // returned above, so a stranger is never told the company is archived.
+  if (isArchived(company)) return archivedRefusal(c);
+  return null;
 }
 
 async function getLink(env: Env, companyId: number, userId: number): Promise<Link | null> {
@@ -144,7 +185,7 @@ r.get('/company/me', async (c) => {
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?')
       .bind(link.company_id).first<Company>();
     if (!company) return c.json(null);
-    const detail = await detailDto(c.env, company, user);
+    const detail = await detailDto(c.env, company, user, await isSupportSession(c));
     return c.json({ ...detail, my_role: link.role_in_company, is_primary_admin: !!link.is_primary_admin });
   } catch (e) { return mapError(c, e); }
 });
@@ -203,7 +244,7 @@ r.get('/company/memberships', async (c) => {
       if (!company) continue;
       if (company.archived_at && !withArchived) continue;
       out.push({
-        ...(await detailDto(c.env, company, user)),
+        ...(await detailDto(c.env, company, user, await isSupportSession(c))),
         my_role: link.role_in_company,
         is_primary_admin: !!link.is_primary_admin,
         cycles_active: await cyclesActive(c.env, user, company.id),
@@ -240,9 +281,18 @@ r.post('/company/create', async (c) => {
     const user = await requireAuth(c);
     if (user.role === 'exploring') return c.json({ code: 'explorer_company_create_refused', detail: 'Choose a working profile before creating a company.' }, 403);
     const body = await c.req.json().catch(() => ({} as any));
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ code: 'body_invalid', detail: 'Send the fields as a JSON object.' }, 400);
     const name = String(body.company_name || '').trim();
     if (!name) return c.json({ detail: 'company_name required' }, 400);
     if (name.length > 200) return c.json({ detail: 'Company names must be at most 200 characters.' }, 400);
+    // D4962: the same contract as PATCH for the General fields it carries. Create also takes a slug and
+    // the legal fields, so only the General keys are checked here and the rest are the legal check's.
+    const general: Record<string, unknown> = {};
+    for (const f of GENERAL_FIELDS) if (f !== 'company_name' && f !== 'default_currency' && f in body) general[f] = body[f];
+    if ('logo_url' in body) general.logo_url = body.logo_url;
+    const checkedGeneral = validateCompanyFields(general);
+    if (!checkedGeneral.ok) return c.json({ code: checkedGeneral.code, field: checkedGeneral.field, detail: checkedGeneral.detail }, 400);
+    const g = checkedGeneral.values;
     const stored = name;
     // Refuse a name this caller already holds.
     //
@@ -298,12 +348,13 @@ r.post('/company/create', async (c) => {
           created_at, updated_at, slug, legal_name, legal_form, jurisdiction, registration_number, incorporation_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, stored,
-           body.stage || null, body.revenue_range || null,
-           body.employee_count != null ? Number(body.employee_count) : null,
-           body.current_products || null, body.international_presence || null,
-           body.expansion_goals || null,
-           body.logo_url || null, body.website || null, body.linkedin_url || null,
-           body.description || null, nowIso(), nowIso(),
+           g.stage ?? null, g.revenue_range ?? null,
+           g.employee_count ?? null,
+           g.current_products ?? null, g.international_presence ?? null,
+           g.expansion_goals ?? null,
+           // A new company starts with no logo; it is uploaded through POST /company/:uid/logo.
+           null, g.website ?? null, g.linkedin_url ?? null,
+           g.description ?? null, nowIso(), nowIso(),
            slug, l.legal_name ?? null, l.legal_form ?? null, l.jurisdiction ?? null,
            l.registration_number ?? null, l.incorporation_date ?? null).run();
     const newId = (ins as any).meta?.last_row_id as number;
@@ -315,9 +366,138 @@ r.post('/company/create', async (c) => {
       membershipEvent(c.env, { kind: 'join', companyId: newId, actorUserId: user.id, targetUserId: user.id, after: { role_in_company: 'Admin', is_primary_admin: true } }),
     ]);
     const company = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(newId).first<Company>();
-    return c.json(await detailDto(c.env, company!, user));
+    return c.json(await detailDto(c.env, company!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
+
+// ---------------------------------------------------------------------------
+// General settings: one plan, two doors (D4962, D4961, D4963)
+//
+// `PATCH /company/:uid` (the fields) and `POST /company/:uid/settings` (the
+// fields and a pending logo together, below) check and build the same update
+// with `planGeneralUpdate`, so the contract cannot differ between them.
+//
+// #4963: every write is compare-and-swap on `profile_version`. `expected_version`
+// (optional) refuses a stale editor with 409 `version_conflict` and the current
+// company. A field the client sends unchanged is not re-checked and not rewritten,
+// so a value stored before the contract survives a save that leaves it alone (#4964).
+// ---------------------------------------------------------------------------
+
+type GeneralPlan = { values: Record<string, any>; current: number };
+
+export const VERSION_CONFLICT_MESSAGE = 'Someone else saved changes to this company after you opened it, so yours were not saved. The current values are shown; review them and save again.';
+
+/** 409 with the current company, for an editor to reconcile against. */
+async function versionConflict(c: any, companyId: number, user: User) {
+  const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(companyId).first() as Company | null;
+  const company = fresh ? await detailDto(c.env, fresh, user, await isSupportSession(c)) : null;
+  return refuse(c, 409, {
+    code: 'version_conflict', message: VERSION_CONFLICT_MESSAGE,
+    extra: { code: 'version_conflict', current_version: company?.profile_version ?? null, company },
+  });
+}
+
+/** `expected_version` from a body or form: a positive whole number, absent (undefined), or invalid (NaN). */
+export function expectedVersionOf(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const n = typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw.trim()) : raw;
+  return typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 ? n : NaN;
+}
+
+const sameValue = (a: unknown, b: unknown) => (a ?? null) === (b ?? null)
+  || (a != null && b != null && String(a) === String(b));
+
+/**
+ * The checked values to store, or the refusal to return.
+ * D4962: the General fields are checked against one contract (`services/companyProfileFields.ts`) before
+ * any write. #4964: `region_codes` is checked beside that list, and a value equal to what is stored is left
+ * out so a legacy row is not rewritten by a save that did not change it.
+ */
+async function planGeneralUpdate(c: any, company: Company, user: User, input: unknown): Promise<Response | GeneralPlan> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return c.json({ code: 'body_invalid', field: '', detail: 'Send the fields as a JSON object.' }, 400);
+  }
+  const raw: Record<string, any> = { ...(input as Record<string, any>) };
+  const expected = expectedVersionOf(raw.expected_version);
+  if (Number.isNaN(expected)) return refuse(c, 400, { code: 'invalid_expected_version', message: 'expected_version must be the profile_version you loaded.' });
+  const current = Number.isSafeInteger(company.profile_version) ? company.profile_version! : 1;
+  if (expected !== undefined && expected !== current) return versionConflict(c, company.id, user);
+  delete raw.expected_version;
+
+  let regionCodes: string | null | undefined;
+  if ('region_codes' in raw) {
+    const region = checkRegionCodes(raw.region_codes);
+    if (!region.ok) return refuse(c, 422, { code: 'region_codes_invalid', message: VOCAB_MESSAGES.region_codes_invalid });
+    if (!sameValue(region.value, company.region_codes ?? null)) regionCodes = region.value;
+    delete raw.region_codes;
+  }
+  for (const f of GENERAL_FIELDS) {
+    if (!(f in raw)) continue;
+    if (f === 'company_name') {
+      if (typeof raw.company_name === 'string' && raw.company_name.trim() === company.company_name) delete raw.company_name;
+      continue;
+    }
+    if (sameValue(raw[f], (company as any)[f])) delete raw[f];
+  }
+
+  const checked = validateCompanyFields(raw);
+  if (!checked.ok) return c.json({ code: checked.code, field: checked.field, detail: checked.detail }, 400);
+  const body: Record<string, any> = { ...raw, ...checked.values };
+  if (body.company_name !== undefined) {
+    const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
+    if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
+    const clash = await c.env.DB.prepare(
+      `SELECT cp.id FROM company_profiles cp JOIN user_company_links ucl ON ucl.company_id = cp.id
+       WHERE ucl.user_id = ? AND cp.id != ? AND lower(trim(cp.company_name)) = lower(trim(?)) LIMIT 1`
+    ).bind(user.id, company.id, name).first();
+    if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
+    body.company_name = name;
+  }
+  // #3932 (#3696 Q4): a currency on the ISO 4217 list, or null to clear it. Anything else is refused before any write.
+  if (body.default_currency !== undefined && body.default_currency !== null) {
+    const code = currencyCode(body.default_currency);
+    if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
+    body.default_currency = code;
+  }
+  const values: Record<string, any> = {};
+  for (const f of GENERAL_FIELDS) if (body[f] !== undefined) values[f] = body[f];
+  if (regionCodes !== undefined) values.region_codes = regionCodes;
+  // #4964, the lazy migration: a row that has never stored codes stores the ones its text derives on its first
+  // committed General save. Never on a save that changes nothing.
+  if (Object.keys(values).length && company.region_codes == null && values.region_codes === undefined) {
+    const text = values.international_presence !== undefined ? values.international_presence : company.international_presence;
+    const derived = regionsOf({ region_codes: null, international_presence: text }).codes;
+    if (derived.length) values.region_codes = JSON.stringify(derived);
+  }
+  return { values, current };
+}
+
+/** The one UPDATE for a plan's values (and, from the settings save, the server-built logo). Conditioned on the version this request read. */
+function generalUpdate(env: Env, company: Company, values: Record<string, any>, current: number, stamp: string) {
+  const sets: string[] = []; const params: any[] = [];
+  for (const f of [...GENERAL_FIELDS, 'logo_url', 'region_codes'] as const) {
+    if (values[f] !== undefined) { sets.push(`${f} = ?`); params.push(values[f]); }
+  }
+  sets.push('updated_at = ?', 'profile_version = profile_version + 1');
+  params.push(stamp, company.id, current);
+  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ? AND profile_version = ?`).bind(...params);
+}
+
+/** The update plus the events conditioned on THIS update having matched (the new version and this stamp). */
+function generalCommit(env: Env, company: Company, user: User, values: Record<string, any>, current: number) {
+  const stamp = nowIso();
+  const next = current + 1;
+  const when = { companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: next, updatedAt: stamp } };
+  const fields = Object.keys(values).filter((f) => f !== 'logo_url');
+  const events = [
+    ...(fields.length ? [membershipEvent(env, { kind: 'profile_update', ...when, before: { profile_version: current }, after: { profile_version: next, fields } })] : []),
+    ...(values.company_name !== undefined && values.company_name !== company.company_name
+      ? [membershipEvent(env, { kind: 'rename', ...when, before: { company_name: company.company_name }, after: { company_name: values.company_name } })] : []),
+    ...(values.default_currency !== undefined && values.default_currency !== (company.default_currency ?? null)
+      ? [membershipEvent(env, { kind: 'currency_change', ...when, before: { default_currency: company.default_currency ?? null }, after: { default_currency: values.default_currency } })] : []),
+  ];
+  return { stamp, when, update: generalUpdate(env, company, values, current, stamp), events };
+}
 
 // /company/:uid (PATCH update / GET detail-or-summary)
 r.patch('/company/:uid', async (c) => {
@@ -325,48 +505,18 @@ r.patch('/company/:uid', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) {
-      return c.json({ detail: 'Not authorized to edit this company' }, 403);
-    }
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+    if (denied) return denied;
     const body = await c.req.json().catch(() => ({} as any));
-    if (body.company_name !== undefined) {
-      const name = typeof body.company_name === 'string' ? body.company_name.trim() : '';
-      if (!name || name.length > 200) return c.json({ code: 'invalid_company_name', detail: 'Enter a company name between 1 and 200 characters.' }, 400);
-      const clash = await c.env.DB.prepare(
-        `SELECT cp.id FROM company_profiles cp JOIN user_company_links ucl ON ucl.company_id = cp.id
-         WHERE ucl.user_id = ? AND cp.id != ? AND lower(trim(cp.company_name)) = lower(trim(?)) LIMIT 1`
-      ).bind(user.id, company.id, name).first();
-      if (clash) return c.json({ code: 'company_name_clash', detail: 'You already belong to a company with that name.' }, 409);
-      body.company_name = name;
-    }
-    // #3932 (#3696 Q4): a currency on the ISO 4217 list, or null to clear it. Anything else is refused before any write.
-    if (body.default_currency !== undefined && body.default_currency !== null) {
-      const code = currencyCode(body.default_currency);
-      if (!code) return c.json({ code: 'currency_invalid', detail: CURRENCY_INVALID_MESSAGE }, 422);
-      body.default_currency = code;
-    }
-    const updatable = ['company_name', 'stage', 'revenue_range', 'employee_count',
-      'current_products', 'international_presence', 'expansion_goals',
-      'logo_url', 'website', 'linkedin_url', 'description', 'default_currency'] as const;
-    const sets: string[] = []; const params: any[] = [];
-    for (const f of updatable) {
-      if (body[f] !== undefined) { sets.push(`${f} = ?`); params.push(body[f]); }
-    }
-    if (sets.length) {
-      sets.push('updated_at = ?'); params.push(nowIso()); params.push(company.id);
-      const update = c.env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
-      // D1137: a rename is a membership event, recorded with the update.
-      const renamed = body.company_name !== undefined && body.company_name !== company.company_name;
-      // #3932: a currency change is a company event too, in the same batch.
-      const currencyChanged = body.default_currency !== undefined && body.default_currency !== (company.default_currency ?? null);
-      await c.env.DB.batch([
-        update,
-        ...(renamed ? [membershipEvent(c.env, { kind: 'rename', companyId: company.id, actorUserId: user.id, before: { company_name: company.company_name }, after: { company_name: body.company_name } })] : []),
-        ...(currencyChanged ? [membershipEvent(c.env, { kind: 'currency_change', companyId: company.id, actorUserId: user.id, before: { default_currency: company.default_currency ?? null }, after: { default_currency: body.default_currency } })] : []),
-      ]);
+    const plan = await planGeneralUpdate(c, company, user, body);
+    if (plan instanceof Response) return plan;
+    if (Object.keys(plan.values).length) {
+      const commit = generalCommit(c.env, company, user, plan.values, plan.current);
+      const results = await c.env.DB.batch([commit.update, ...commit.events]);
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) return versionConflict(c, company.id, user);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -381,7 +531,7 @@ r.get('/company/:uid', async (c) => {
     if (!(await viewerIsMember(c.env, company.id, user))) {
       return c.json({ detail: 'Company not found' }, 404);
     }
-    return c.json(await detailDto(c.env, company, user));
+    return c.json(await detailDto(c.env, company, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -444,24 +594,35 @@ r.get('/companies', async (c) => {
 // GET (it is not ours to serve, so GET answers 404 `no_stored_logo` and the
 // client keeps rendering the URL itself); POST replaces it and DELETE clears it.
 //
-// No membership event yet: logo_change waits on a migration that widens
-// company_membership_events.kind; #4201. Its CHECK (migration 757) admits only
-// the kinds in services/companyMembershipEvents.ts, and the owner chose to
-// ship without one.
+// Each upload, replace and remove writes one `logo_change` membership event
+// (migration 202611031619) in the same batch as the update. It records what
+// kind of logo the company had before and after ('stored', 'outside' or null),
+// never a URL or a key. Removing a company with no logo writes nothing.
 
 const logoStore = (env: Env) => env.COMPANY_LOGOS ?? null;
 const storageUnconfigured = (c: any) => refuse(c, 503, { code: 'storage_unconfigured', message: 'Logo storage is not configured on this deployment.' });
 
-/** The company and the edit gate exactly as PATCH /company/:uid applies it; a Response when refused. */
-async function logoEditGate(c: any): Promise<{ user: User; company: Company } | Response> {
+/**
+ * The company and the edit gate exactly as PATCH /company/:uid applies it; a Response when refused.
+ * #4963: an archived company refuses; `?expected_version=` is checked as PATCH checks it, and `current` is the
+ * version the logo write is conditioned on (a logo is part of the General profile and bumps its revision).
+ */
+async function logoEditGate(c: any): Promise<{ user: User; company: Company; current: number } | Response> {
   const user = await requireAuth(c);
   const company = await getCompanyOr404(c.env, c.req.param('uid'));
   if (!company) return c.json({ detail: 'Company not found' }, 404);
-  if (!(await canEdit(c.env, company, user))) {
-    return c.json({ detail: 'Not authorized to edit this company' }, 403);
-  }
-  return { user, company };
+  const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+  if (denied) return denied;
+  const current = Number.isSafeInteger(company.profile_version) ? company.profile_version! : 1;
+  const expected = expectedVersionOf(c.req.query('expected_version'));
+  if (Number.isNaN(expected)) return refuse(c, 400, { code: 'invalid_expected_version', message: 'expected_version must be the profile_version you loaded.' });
+  if (expected !== undefined && expected !== current) return versionConflict(c, company.id, user);
+  return { user, company, current };
 }
+
+/** What kind of logo a row holds, for the event: never the URL itself. */
+const logoKind = (uid: string, url: string | null | undefined): 'stored' | 'outside' | null =>
+  url == null || url === '' ? null : storedLogoOf(uid, url) ? 'stored' : 'outside';
 
 /** Best effort: a stored object left behind is an orphan, never a wrong logo. */
 async function dropStoredLogo(store: R2Bucket, key: string) {
@@ -472,7 +633,7 @@ r.post('/company/:uid/logo', async (c) => {
   try {
     const gate = await logoEditGate(c);
     if (gate instanceof Response) return gate;
-    const { user, company } = gate;
+    const { user, company, current } = gate;
     const store = logoStore(c.env);
     if (!store) return storageUnconfigured(c);
 
@@ -501,17 +662,26 @@ r.post('/company/:uid/logo', async (c) => {
       return refuse(c, 502, { code: 'storage_failed', message: 'The logo could not be stored. Try again.', raw: e });
     }
     const previous = storedLogoOf(company.uid, company.logo_url);
+    let results: D1Result[];
+    const stamp = nowIso();
     try {
-      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
-      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ? WHERE id = ?')
-        .bind(logoUrlFor(company.uid, token, check.kind), nowIso(), company.id).run();
+      results = await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?')
+          .bind(logoUrlFor(company.uid, token, check.kind), stamp, company.id, current),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }),
+      ]);
     } catch (e) {
       await dropStoredLogo(store, key);
       throw e;
     }
+    // #4963: another General write landed first; the stored object is dropped and the editor is told.
+    if (!(Number((results[0] as any)?.meta?.changes) > 0)) {
+      await dropStoredLogo(store, key);
+      return versionConflict(c, company.id, user);
+    }
     if (previous && previous.key !== key) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -519,18 +689,131 @@ r.delete('/company/:uid/logo', async (c) => {
   try {
     const gate = await logoEditGate(c);
     if (gate instanceof Response) return gate;
-    const { user, company } = gate;
+    const { user, company, current } = gate;
     const previous = storedLogoOf(company.uid, company.logo_url);
     const store = logoStore(c.env);
     if (previous && !store) return storageUnconfigured(c);
     if (company.logo_url != null) {
-      // logo_change membership event: waits on a migration that widens company_membership_events.kind; #4201.
-      await c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ? WHERE id = ?')
-        .bind(nowIso(), company.id).run();
+      const stamp = nowIso();
+      const results = await c.env.DB.batch([
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?').bind(stamp, company.id, current),
+        membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }),
+      ]);
+      // #4963: another General write landed first; nothing was removed (the object stays with the row that names it).
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) return versionConflict(c, company.id, user);
     }
     if (previous && store) await dropStoredLogo(store, previous.key);
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
-    return c.json(await detailDto(c.env, fresh!, user));
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// POST /company/:uid/settings — one Save, one operation (D4961)
+//
+// The General form has one "Save changes". It used to make up to two requests,
+// the logo and then the fields, so a failure in the second left the first
+// committed and the page said nothing was saved. This takes both together, as
+// multipart/form-data:
+//
+//   fields       a JSON object of General fields, exactly what PATCH takes (optional)
+//   logo         a PNG or SVG file (optional)
+//   logo_action  "remove" (optional; not with a file)
+//
+// EVERYTHING IS CHECKED BEFORE ANYTHING IS WRITTEN: the fields against the
+// contract, the file against `checkLogo`, the name against the company's other
+// names. Then the new object is put in R2 and ONE D1 batch writes the fields,
+// the logo URL and every membership event together, so either all of it
+// committed or none did. A failed batch deletes the new object; a committed
+// one deletes the previous stored logo, best effort. The answer is the company
+// as it now is, so the page, the preview, the active company and the switcher
+// all take one state.
+//
+// A retry is safe: the same fields write the same values, and a logo upload
+// replaces the stored logo (it never adds a second). The client re-reads the
+// company after any failure and does not resend what already committed.
+// ---------------------------------------------------------------------------
+r.post('/company/:uid/settings', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const company = await getCompanyOr404(c.env, c.req.param('uid'));
+    if (!company) return c.json({ detail: 'Company not found' }, 404);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to edit this company' }, 403));
+    if (denied) return denied;
+
+    const bad = (code: string, detail: string) => c.json({ code, detail, error: detail }, 400);
+    if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) return bad('multipart_required', 'Send the fields and the logo as multipart form data.');
+    let form: FormData;
+    try { form = await c.req.formData(); } catch { return bad('multipart_required', 'Send the fields and the logo as multipart form data.'); }
+    for (const key of form.keys()) {
+      if (!['fields', 'logo', 'logo_action'].includes(key)) return c.json({ code: 'unknown_field', field: key, detail: `Not a settings part: ${key}.` }, 400);
+    }
+
+    let input: unknown = {};
+    const rawFields = form.get('fields');
+    if (rawFields != null) {
+      if (typeof rawFields !== 'string') return bad('body_invalid', 'fields must be a JSON object.');
+      try { input = JSON.parse(rawFields); } catch { return bad('body_invalid', 'fields must be a JSON object.'); }
+    }
+    const action = form.get('logo_action');
+    if (action != null && action !== 'remove') return bad('logo_action_invalid', 'logo_action is "remove" or absent.');
+    const file = form.get('logo') as unknown as { type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+    if (file != null && (typeof file !== 'object' || typeof file.arrayBuffer !== 'function')) return bad('file_required', 'Choose a PNG or SVG file to upload.');
+    if (file && action === 'remove') return bad('logo_conflict', 'Send a logo or remove the logo, not both.');
+
+    // 1. Everything is checked first.
+    const plan = await planGeneralUpdate(c, company, user, input);
+    if (plan instanceof Response) return plan;
+    let upload: { key: string; bytes: Uint8Array; kind: 'png' | 'svg'; token: string } | null = null;
+    if (file) {
+      const tooLarge = () => refuse(c, 413, { code: 'file_too_large', message: LOGO_MESSAGES.file_too_large });
+      if (typeof file.size === 'number' && file.size > MAX_LOGO_BYTES) return tooLarge();
+      const bytes = new Uint8Array(await file.arrayBuffer!());
+      const check = checkLogo(bytes, file.type);
+      if (!check.ok) return check.code === 'file_too_large' ? tooLarge() : refuse(c, 400, { code: check.code, message: LOGO_MESSAGES[check.code] });
+      const token = newLogoToken();
+      upload = { key: logoKeyFor(company.uid, token, check.kind), bytes, kind: check.kind, token };
+    }
+    const store = logoStore(c.env);
+    const previous = storedLogoOf(company.uid, company.logo_url);
+    if ((upload || (action === 'remove' && previous)) && !store) return storageUnconfigured(c);
+
+    // 2. The object, then one batch for everything the database holds.
+    if (upload && store) {
+      try {
+        await store.put(upload.key, upload.bytes, {
+          httpMetadata: { contentType: LOGO_CONTENT_TYPE[upload.kind] },
+          customMetadata: { companyId: String(company.id), userId: String(user.id) },
+        });
+      } catch (e) {
+        return refuse(c, 502, { code: 'storage_failed', message: 'The logo could not be stored. Try again.', raw: e });
+      }
+    }
+    const values = { ...plan.values };
+    if (upload) values.logo_url = logoUrlFor(company.uid, upload.token, upload.kind);
+    else if (action === 'remove' && company.logo_url != null) values.logo_url = null;
+    if (Object.keys(values).length) {
+      const commit = generalCommit(c.env, company, user, values, plan.current);
+      const events = [...commit.events];
+      if (upload) events.push(membershipEvent(c.env, { kind: 'logo_change', ...commit.when, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }));
+      else if (action === 'remove' && company.logo_url != null) events.push(membershipEvent(c.env, { kind: 'logo_change', ...commit.when, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }));
+      let results;
+      try {
+        results = await c.env.DB.batch([commit.update, ...events]);
+      } catch (e) {
+        if (upload && store) await dropStoredLogo(store, upload.key);
+        throw e;
+      }
+      if (!(Number((results[0] as any)?.meta?.changes) > 0)) {
+        if (upload && store) await dropStoredLogo(store, upload.key);
+        return versionConflict(c, company.id, user);
+      }
+    }
+    // 3. Committed. The previous object is an orphan now; failing to delete it never makes the save fail.
+    if (store && previous && (upload || (action === 'remove')) && (!upload || previous.key !== upload.key)) await dropStoredLogo(store, previous.key);
+
+    const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
+    return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -576,7 +859,8 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const userId = Number(c.req.param('userId'));
     const link = await getLink(c.env, company.id, userId);
     if (!link) return c.json({ detail: 'Member not found on this company' }, 404);
@@ -654,7 +938,7 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     await c.env.DB.batch(Object.keys(after).length
       ? [update, membershipEvent(c.env, { kind: 'role_change', companyId: company.id, actorUserId: user.id, targetUserId: userId, before, after })]
       : [update]);
-    return c.json(await detailDto(c.env, company, user));
+    return c.json(await detailDto(c.env, company, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -666,6 +950,8 @@ r.post('/company/:uid/leave', async (c) => {
     if (!company) return c.json({ detail: 'Company not found' }, 404);
     const link = await getLink(c.env, company.id, user.id);
     if (!link) return c.json({ detail: 'Company not found' }, 404);
+    // #4963: an archived company is read-only, leaving included; restore it first.
+    if (isArchived(company)) return archivedRefusal(c);
     // One statement makes the last-admin check hold even for simultaneous leaves.
     // D1614 (#3976): the member's open compliance tasks are flagged in the same batch, only if the seat went.
     const [result] = await c.env.DB.batch([c.env.DB.prepare(
@@ -684,7 +970,8 @@ r.delete('/company/:uid/members/:userId', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const userId = Number(c.req.param('userId'));
     const link = await getLink(c.env, company.id, userId);
     if (!link) return c.json({ detail: 'Member not found on this company' }, 404);
@@ -837,7 +1124,8 @@ r.post('/company/:uid/invitations', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
 
     const body = await c.req.json().catch(() => ({} as any));
     const email = normEmail(body.email);
@@ -889,7 +1177,7 @@ r.post('/company/:uid/invitations', async (c) => {
       // than reporting a success nobody can act on.
       accept_path: `/company/invitations/accept?token=${encodeURIComponent(token)}`,
       invitations: await listInvitations(c.env, company.id),
-      company: await detailDto(c.env, company, user),
+      company: await detailDto(c.env, company, user, await isSupportSession(c)),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -902,6 +1190,7 @@ r.get('/company/:uid/invitations', async (c) => {
     if (!company) return c.json({ detail: 'Company not found' }, 404);
     // An invitation names a person's email address, so reading the list is
     // gated on the same right as managing one — not on mere membership.
+    // A read: HQ may list them (D4960 changes who WRITES, not who reads).
     if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
     return c.json({ invitations: await listInvitations(c.env, company.id) });
   } catch (e) { return mapError(c, e); }
@@ -915,7 +1204,8 @@ r.post('/company/:uid/invitations/:inviteUid/resend', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const inv = await c.env.DB.prepare(
       `SELECT * FROM company_invitations WHERE uid = ? AND company_id = ?`,
     ).bind(c.req.param('inviteUid'), company.id).first<any>();
@@ -957,7 +1247,8 @@ r.delete('/company/:uid/invitations/:inviteUid', async (c) => {
     const user = await requireAuth(c);
     const company = await getCompanyOr404(c.env, c.req.param('uid'));
     if (!company) return c.json({ detail: 'Company not found' }, 404);
-    if (!(await canEdit(c.env, company, user))) return c.json({ detail: 'Not authorized to manage members' }, 403);
+    const denied = await writeGate(c, company, user, () => c.json({ detail: 'Not authorized to manage members' }, 403));
+    if (denied) return denied;
     const res = await c.env.DB.prepare(
       `UPDATE company_invitations
           SET status = 'revoked', revoked_at = datetime('now'), updated_at = datetime('now')
@@ -1074,13 +1365,13 @@ async function teamCompanyOr404(c: any): Promise<{ user: User; company: Company;
   return { user, company, editor: await canEdit(c.env, company, user) };
 }
 
-function teamWriteGate(c: any, ctx: { editor: boolean }): Response | null {
-  if (ctx.editor) return null;
-  return refuse(c, 403, {
+// D4960: the team record's writes use the same gate as the rest of settings (including #4963's archived refusal); its reads keep `editor`.
+async function teamWriteGate(c: any, ctx: { user: User; company: Company }): Promise<Response | null> {
+  return writeGate(c, ctx.company, ctx.user, () => refuse(c, 403, {
     code: 'not_an_editor',
     message: 'Only an Owner, Admin, Founder or the primary admin can change the team record.',
     raw: null,
-  });
+  }));
 }
 
 r.get('/company/:uid/team', async (c) => {
@@ -1201,7 +1492,7 @@ r.post('/company/:uid/team/people', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));
@@ -1241,7 +1532,7 @@ r.patch('/company/:uid/team/people/:pid', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const existing = await c.env.DB.prepare(
@@ -1278,7 +1569,7 @@ r.put('/company/:uid/team/coverage', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));
@@ -1304,7 +1595,7 @@ r.put('/company/:uid/team/plan', async (c) => {
   try {
     const ctx = await teamCompanyOr404(c);
     if (ctx instanceof Response) return ctx;
-    const gate = teamWriteGate(c, ctx);
+    const gate = await teamWriteGate(c, ctx);
     if (gate) return gate;
     const { user, company } = ctx;
     const body = await c.req.json().catch(() => ({}));

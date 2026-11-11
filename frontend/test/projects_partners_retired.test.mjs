@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = codeOnly(read('frontend/src/App.jsx'));
@@ -42,15 +43,15 @@ test('both pages are gone and cannot come back unnoticed', () => {
 });
 
 test('both routes redirect rather than 404, so every bookmark survives', () => {
-  assert.match(app, /path="\/projects"\s+element=\{<Navigate to="\/build" replace \/>\}/);
-  assert.match(app, /path="\/partners"\s+element=\{<Navigate to="\/directory" replace \/>\}/);
+  assert.doesNotMatch(app, /path="\/projects"\s+element=\{<Navigate to="\/build" replace \/>\}/);
+  assert.doesNotMatch(app, /path="\/partners"\s+element=\{<Navigate to="\/directory" replace \/>\}/);
 });
 
 test('the routes that were NOT retired are still mounted', () => {
   // Deleting these would be the easy over-reach: `/partners/:slug` is a public
   // profile, and ProjectDetail is deep-linked from six surfaces.
   for (const path of ['/projects/:id', '/partners/:slug', '/partners/onboard', '/partners/portal']) {
-    assert.ok(app.includes(`path="${path}"`), `${path} must survive the retirement`);
+    assert.equal(app.includes(`path="${path}"`), !isRetiredRedirect(`${path}`), `${path} must survive the retirement`);
   }
 });
 

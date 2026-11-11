@@ -20,6 +20,9 @@
  *   · A write is never executed. It becomes an `ai_rail_proposals` row
  *     (`kind: 'proposal'`, D780), and the member's press decides it. A write
  *     whose arguments name a field Eadwyn never fills (D777) is refused.
+ *     D1588: a tool marked `proposes` writes nothing but its own proposal
+ *     (a card edit on the deck's Ask, a deck proposal, an Email draft), so it
+ *     runs through `callTool` like a read and answers with that proposal's id.
  *
  * TOOL OUTPUT IS DATA. `toolResultsForModel` wraps each result as untrusted
  * data, escaped so it cannot close its own wrapper, under a sentence telling
@@ -152,7 +155,8 @@ export async function runEadwynToolCalls(env: Env, ctx: EadwynContext, calls: re
     if (!parsed.success) { out.push(refused(name, 'Those arguments do not fit this tool.')); continue; }
     const args = parsed.data as Record<string, unknown>;
 
-    if (tool.readOnly === false) {
+    // D1588: a tool that only proposes runs as itself (below): its proposal lands where the member decides it.
+    if (tool.readOnly === false && !tool.proposes) {
       const blocked = Object.keys(args).find((k) => neverFillReason(k));
       if (blocked) { out.push(refused(name, 'Eadwyn never fills that field; it is yours to enter.')); continue; }
       try {
@@ -171,6 +175,10 @@ export async function runEadwynToolCalls(env: Env, ctx: EadwynContext, calls: re
     if (!r.ok) {
       const err = r.value && typeof r.value === 'object' && typeof (r.value as any).error === 'string' ? (r.value as any).error : 'StudioOS could not complete that call.';
       out.push(refused(name, err));
+    } else if (tool.proposes) {
+      const p = (r.value as { proposal?: { uid?: unknown; id?: unknown } } | null)?.proposal;
+      const uid = p?.uid ?? p?.id;
+      out.push(uid != null ? { name, outcome: 'proposal', proposal_uid: String(uid) } : refused(name, 'The proposal could not be stored.'));
     } else {
       out.push({ name, outcome: 'data', data: r.value });
     }

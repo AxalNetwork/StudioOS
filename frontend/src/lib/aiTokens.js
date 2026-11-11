@@ -136,6 +136,13 @@ export function sellableCustom(c) {
   return whole(c.min_cents) && whole(c.max_cents) && c.min_cents <= c.max_cents;
 }
 
+/** D1434: the key that opens the Add tokens sheet on the custom amount (`openAddTokens({ pack_uid: CUSTOM_PACK })`). */
+export const CUSTOM_PACK = 'custom';
+/** D1434: "Any amount from $5 to $500" for a sellable custom offer, else null. */
+export function customRangeLine(c) {
+  return sellableCustom(c) ? `Any amount from $${c.min_cents / 100} to $${c.max_cents / 100}` : null;
+}
+
 export function aiTokenState(reading) {
   const { loading = false, error = false, data } = reading || {};
   if (loading) return 'loading';

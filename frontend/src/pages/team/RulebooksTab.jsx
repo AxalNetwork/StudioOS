@@ -4,9 +4,11 @@ import { Lock } from 'lucide-react';
 import { Pill, Sheet, Unrecorded } from '../../ui';
 import { AgentIdentity, AgentTile } from './AgentMark.jsx';
 import * as agents from './agentsAdapter.js';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MONO, MUTED, PendingOwner } from './teamUi.jsx';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { day } from '../account/companies/companiesModel.js';
 import { AUTO_NOTE, FLOOR, FLOOR_EDIT_NOTE, FLOOR_NOTE, FLOOR_TIP, RULEBOOK_SECTIONS, agentName, refusalWords } from './teamModel.js';
+import AgentDisclaimer from './AgentDisclaimer.jsx';
+import { agentDisclaimerText, disclaimerKeyForRole } from '../../../../cloudflare-worker/src/services/agents/disclaimers.ts';
 import { workLabel } from './personaModel.js';
 
 /**
@@ -29,8 +31,8 @@ import { workLabel } from './personaModel.js';
  * legal advice. Always escalates.", whose wording is pending from counsel.
  */
 
-/** TM4b2: the General counsel (assistant) role, by key or name. */
-export const isCounsel = (role) => /counsel/i.test(`${role?.key || ''} ${role?.name || ''}`);
+/** TM4b2: explicit disclaimer metadata or the exact role key, never a display name. */
+export const isCounsel = (role) => Boolean(agentDisclaimerText(role?.disclaimer_key ?? disclaimerKeyForRole(role?.key)));
 
 export function FloorList({ highlight, note = FLOOR_NOTE }) {
   return (
@@ -53,7 +55,6 @@ export function AutoLock() {
     <div className="flex items-center gap-2 rounded-axal-md border border-dashed border-axal-hairline px-3 py-2 dark:border-gray-700">
       <Lock size={12} aria-hidden="true" className="text-axal-muted dark:text-gray-400" />
       <span className="text-[13px] text-axal-ink dark:text-gray-100">{AUTO_NOTE}</span>
-      <PendingOwner />
     </div>
   );
 }
@@ -141,11 +142,7 @@ export function RulebookView({ book, role, onBack, onEdit, onRestore, canManage,
         {canManage ? <button type="button" className={BTN_SECONDARY} onClick={onRestore}>Restore default</button> : null}
         {canManage ? <button type="button" className={BTN_PRIMARY} onClick={onEdit} data-testid="rulebook-edit">Edit rule book</button> : null}
       </header>
-      {isCounsel(role) || isCounsel({ key: book.role_key }) ? (
-        <p role="note" className="m-0 flex flex-wrap items-center gap-2 rounded-axal-md bg-axal-lavender px-3 py-2.5 text-[13px] text-axal-ink dark:bg-violet-900/20 dark:text-gray-100" data-testid="rulebook-counsel">
-          <b>Not legal advice. Always escalates.</b><PendingOwner label="pending owner: wording from counsel" />
-        </p>
-      ) : null}
+      <AgentDisclaimer disclaimerKey={role?.disclaimer_key ?? disclaimerKeyForRole(role?.key || book.role_key)} wordingPending testId="rulebook-counsel" />
       {refusal ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{refusal}</p> : null}
       <div className="rounded-axal-lg border border-axal-hairline bg-white px-[18px] py-1 dark:border-gray-700 dark:bg-gray-900">
         {RULEBOOK_SECTIONS.map(([id, label]) => (

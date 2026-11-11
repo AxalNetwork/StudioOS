@@ -43,6 +43,13 @@
  *          because this page has no handler of its own and a test holds it to
  *          that. Flags and Overrides count what that store holds, and an
  *          unreadable store reads as unreadable, never as none thrown.
+ *   v2     (D4860) The canvas's overview leads the page: version context,
+ *          one Platform health state over every signal (not cron alone), the
+ *          Needs attention queue, active controls, capability coverage, core
+ *          systems, operational activity and the consoles grouped by domain.
+ *          It is PlatformOverview.jsx over the same reads, plus one more —
+ *          the build route — and it draws no handler either. The zones below
+ *          stay as the detail every block summarises.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import DeployVersion from '../../components/DeployVersion';
@@ -56,6 +63,11 @@ import { SWITCH_TONE, setByLabel, operatorLine } from '../../lib/platformSwitche
 import { liveChip, residencyLine } from '../../lib/deployTimeline';
 import { ConsoleLinkBody, CONSOLE_LINK, CONSOLE_TILE } from './ConsoleLink';
 import HeaderAsk from '../../ui/HeaderAsk.jsx';
+import PlatformOverview, { VersionContext } from './PlatformOverview';
+import { channelState, keyLevel, webhookHealth, KEY_LEVEL, keyExpiry, keyExpiryText, keyLastUsedText, KEY_EXPIRY_WARN_DAYS } from './platformOverviewModel';
+import { platformBuildApi } from '../../lib/api/platformBuild.js';
+import { GUIDE_PREFIX } from '../../lib/integrationKeys';
+import { plainStripeAmount } from '../../lib/money';
 
 // Re-exported, not redeclared: Platform → Switches draws the same tones, and
 // the list lives once in lib/platformSwitches.js (D203).
@@ -106,7 +118,19 @@ function jobsLine(jobs) {
     + `of ${num(jobs.triggers.length)} declared triggers`;
 }
 
-function Zone({ title, sub, children }) {
+/** D4858: each read's state in one sentence, from the summary's `reads` (one shape for every panel). */
+const READ_WORDS = { ready: 'Read in full', partial: 'Partly read', unavailable: 'Not read' };
+export function readLine(meta) {
+  if (!meta || typeof meta !== 'object' || !READ_WORDS[meta.status]) return null;
+  const parts = [`${READ_WORDS[meta.status]}${meta.read_at ? ` at ${day(meta.read_at)} UTC` : ''}`];
+  if (meta.source_updated_at) parts.push(`source last changed ${day(meta.source_updated_at)} UTC`);
+  if (meta.source) parts.push(`from ${meta.source}`);
+  const line = parts.join(' · ');
+  return meta.status !== 'ready' && meta.completeness_reason ? `${line}. ${meta.completeness_reason}` : `${line}.`;
+}
+
+function Zone({ title, sub, reads, children }) {
+  const lines = (reads || []).map(readLine).filter(Boolean);
   return (
     <Card>
       <div className="mb-2 flex items-baseline justify-between gap-3">
@@ -114,6 +138,11 @@ function Zone({ title, sub, children }) {
         {sub && <span className="text-[11.5px] text-axal-faint">{sub}</span>}
       </div>
       {children}
+      {lines.length > 0 && (
+        <div className="mt-2 space-y-0.5 border-t border-axal-hairline pt-1.5" data-testid="hq-read-lines">
+          {lines.map((line) => <p key={line} className="text-[10.5px] leading-relaxed text-axal-faint">{line}</p>)}
+        </div>
+      )}
     </Card>
   );
 }
@@ -198,6 +227,110 @@ export function dlqStat(data, dlq) {
   };
 }
 
+/**
+ * D4854 — the platform's one health state and the incidents it detects for itself, from `health` on the summary.
+ * Published status-page incidents are shown apart, as manual. Missing telemetry is an incident, never a blank.
+ */
+export const HEALTH_WORDS = {
+  critical: { label: 'Critical', tone: 'text-red-700 dark:text-red-300', mark: '■' },
+  degraded: { label: 'Degraded', tone: 'text-amber-700 dark:text-amber-300', mark: '▲' },
+  unknown: { label: 'Unknown', tone: 'text-axal-muted', mark: '?' },
+  healthy: { label: 'Healthy', tone: 'text-emerald-700 dark:text-emerald-300', mark: '●' },
+};
+export const SEVERITY_WORDS = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+const TELEMETRY_WORDS = {
+  healthy: 'Readable, current',
+  stale: 'Readable, but stale',
+  unavailable: 'Not answering',
+  not_configured: 'Read not configured',
+};
+/** A runbook's repo-relative path, as a link to where the repository is read. */
+export const runbookHref = (doc) => (typeof doc === 'string' && doc ? `${GUIDE_PREFIX}${doc.replace(/^documentation\//, '')}` : null);
+
+export function telemetryLine(t) {
+  if (!t || typeof t !== 'object' || !TELEMETRY_WORDS[t.status]) return 'Telemetry health was not reported.';
+  const parts = [TELEMETRY_WORDS[t.status]];
+  parts.push(`last event ${t.last_event_at ? day(t.last_event_at) : 'not recorded'}`);
+  if (Number.isSafeInteger(t.events_in_window)) parts.push(`${num(t.events_in_window)} requests in ${num(t.window_hours)}h`);
+  parts.push(`last good read ${t.last_successful_read_at ? day(t.last_successful_read_at) : 'not recorded'}`);
+  parts.push(t.binding_present ? 'write binding present' : 'write binding missing');
+  return parts.join(' · ');
+}
+
+export function HealthPanel({ loading, unreadable, health, onRetry }) {
+  if (loading) return <p className="text-[12.5px] text-axal-muted">Reading the platform&apos;s health…</p>;
+  if (unreadable || !health || !HEALTH_WORDS[health.state]) {
+    return <Absent reason="The platform summary could not be read, so its health is unknown, not healthy." />;
+  }
+  const w = HEALTH_WORDS[health.state];
+  const detected = Array.isArray(health.detected) ? health.detected : [];
+  const unknown = Array.isArray(health.unknown) ? health.unknown : [];
+  const published = health.published;
+  return (
+    <div data-testid="hq-health">
+      <p className={`text-[15px] font-extrabold tracking-tight ${w.tone}`} data-testid="hq-health-state">
+        <span aria-hidden="true">{w.mark}</span> {w.label}
+        <span className="ml-2 text-[11px] font-normal text-axal-faint">
+          {detected.length === 0 ? 'nothing detected' : `${num(detected.length)} detected`}
+          {unknown.length > 0 ? ` · ${num(unknown.length)} could not be judged` : ''}
+        </span>
+      </p>
+      {detected.length > 0 && (
+        <ul className="mt-2 space-y-1.5" data-testid="hq-health-detected">
+          {detected.map((i) => {
+            const doc = runbookHref(i.remediation?.runbook?.doc);
+            return (
+              <li key={i.key} className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[11.5px]" data-testid={`hq-incident-${i.key}`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-semibold">{i.title}</span>
+                  <span className={`shrink-0 text-[10px] font-bold uppercase ${i.severity === 'critical' || i.severity === 'high' ? RED_INK : 'text-axal-faint'}`}>
+                    {SEVERITY_WORDS[i.severity] || i.severity}
+                  </span>
+                </div>
+                {i.detail && <p className="mt-0.5 text-axal-muted">{i.detail}</p>}
+                <p className="mt-0.5 text-[10.5px] text-axal-faint">
+                  Detected · since {i.since ? day(i.since) : 'not recorded'} · observed {day(i.observed_at)}
+                </p>
+                <p className="mt-1 flex flex-wrap gap-3 text-[11px]">
+                  {i.remediation?.surface && <Link to={i.remediation.surface.href} className="underline">{i.remediation.surface.label}</Link>}
+                  {doc && <a href={doc} target="_blank" rel="noreferrer" className="underline">{i.remediation.runbook.label}</a>}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {unknown.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-axal-muted" data-testid="hq-health-unknown">
+          {unknown.map((u) => <li key={u.signal}><Unrecorded /> {u.signal}: {u.reason}</li>)}
+        </ul>
+      )}
+      <FieldRow label="Telemetry" testid="hq-health-telemetry">
+        <span className={health.telemetry?.status === 'healthy' ? '' : RED_INK}>{telemetryLine(health.telemetry)}</span>
+        {health.telemetry?.coverage && <span className="block text-[10.5px] text-axal-faint">{health.telemetry.coverage}</span>}
+        {(!health.telemetry || health.telemetry.status === 'unavailable' || health.telemetry.status === 'not_configured') && (
+          <span className="mt-1 block" data-testid="hq-health-retry">
+            <Unreadable what="Telemetry" claim="Traffic, latency and errors are unknown, not zero." onRetry={onRetry} />
+          </span>
+        )}
+      </FieldRow>
+      <FieldRow label="Published incidents" testid="hq-health-published">
+        <span className="tabular-nums">
+          {published?.available
+            ? `${num(published.count)} in ${num(published.window_days)} days, entered by hand`
+            : (published?.reason || 'Not reported')}
+        </span>
+        <span className="block text-[10.5px] text-axal-faint">{published?.note}</span>
+      </FieldRow>
+      {Array.isArray(health.not_detected) && health.not_detected.length > 0 && (
+        <p className="mt-2 text-[10.5px] leading-relaxed text-axal-faint" data-testid="hq-health-not-detected">
+          Not detected here: {health.not_detected.map((n) => `${n.signal} (${n.reason})`).join(' ')}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** H17 P5 — incidents in the window, with what the count can and cannot mean. */
 export function incidentsStat(data, incidents) {
   if (data === null) return LOADING;
@@ -205,7 +338,7 @@ export function incidentsStat(data, incidents) {
   if (!incidents?.available) return unreadable(incidents?.reason || 'The incident count was not reported.');
   return {
     value: num(incidents.count),
-    note: 'entered for the status page',
+    note: 'published by hand; detected ones are under Health',
     tone: incidents.count > 0 ? RED_INK : undefined,
   };
 }
@@ -337,6 +470,12 @@ export function BroadcastConsole({ loading, unreadable, telegram, xStatus }) {
                     : 'nothing sent yet'}
                   {ch.last_test_at ? ` · tested ${day(ch.last_test_at)}` : ''}
                 </div>
+                {ch.state === 'ready' && (
+                  <div className="mt-0.5 text-[10.5px] text-axal-muted" data-testid={`hq-channel-verified-${ch.id}`}>
+                    {/* D4860: configured is not verified. */}
+                    Verification: {channelState(ch, new Date())}
+                  </div>
+                )}
                 {ch.last_error && (
                   <div className="mt-1 text-[11px] text-red-700 dark:text-red-300">{ch.last_error}</div>
                 )}
@@ -500,8 +639,35 @@ export function keyDateLine(item) {
   }
 }
 
+/** A key's expiry tone: past is red, inside the warning window amber, otherwise quiet. */
+const EXPIRY_TONE = {
+  Expired: 'text-red-700 dark:text-red-300 font-bold',
+  Expiring: 'text-amber-800 dark:text-amber-300 font-bold',
+  Valid: 'text-axal-faint',
+  'Not recorded': 'text-axal-faint',
+};
+
+/**
+ * D5304 — a held key's expiry and last use. A value the platform has not
+ * recorded reads "Not recorded", never a date and never 0 days; columns that
+ * could not be read read Unreadable.
+ */
+function KeyStamps({ k, now, stampsAvailable }) {
+  if (!stampsAvailable) {
+    return <div className="mt-0.5 text-[10px] text-axal-faint" data-testid={`hq-key-stamps-${k.provider_key}`}>Expiry Unreadable · Last used Unreadable</div>;
+  }
+  const exp = keyExpiry(k, now);
+  return (
+    <div className="mt-0.5 font-mono text-[10px] text-axal-faint" data-testid={`hq-key-stamps-${k.provider_key}`}>
+      <span data-testid={`hq-key-expiry-${k.provider_key}`} data-state={exp.state} className={EXPIRY_TONE[exp.state]}>Expiry {keyExpiryText(k, now)}</span>
+      {' · '}
+      <span data-testid={`hq-key-last-used-${k.provider_key}`}>Last used {keyLastUsedText(k)}</span>
+    </div>
+  );
+}
+
 /** H16 P1 — where each managed key lives, and when it was last set. No key material. */
-export function IntegrationKeysPanel({ loading, unreadable, keys }) {
+export function IntegrationKeysPanel({ loading, unreadable, keys, now = new Date() }) {
   let body;
   if (loading) body = <p className="text-[12.5px] text-axal-muted">Reading the keys…</p>;
   else if (unreadable) body = <Absent reason="The platform summary could not be read." />;
@@ -530,14 +696,24 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold ${tone}`}>{label}</span>
                 </div>
                 {date && <div className="mt-0.5 font-mono text-[10px] text-axal-faint">{date}</div>}
+                {(k.state === 'env' || k.state === 'db') && <KeyStamps k={k} now={now} stampsAvailable={keys.stamps_available !== false} />}
+                <div className="mt-0.5 text-[10px] font-semibold text-axal-faint" data-testid={`hq-key-level-${k.provider_key}`}>{keyLevel(k.provider_key)}</div>
               </li>
             );
           })}
         </ul>
-        <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
-        {keys.notes.map((n) => (
-          <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
-        ))}
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[11px] font-bold text-emerald-800 dark:text-emerald-300">How this is measured</summary>
+          <p className="mt-1 text-[11px] leading-relaxed text-axal-faint">{keys.last_set_reason}</p>
+          {keys.stamps_reason && <p className="mt-1 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-keys-stamps-basis">{keys.stamps_reason} A key within {KEY_EXPIRY_WARN_DAYS} days of its expiry joins Needs attention.</p>}
+          {keys.notes.map((n) => (
+            <p key={n} className="mt-1 text-[11px] leading-relaxed text-axal-faint">{n}</p>
+          ))}
+          <p className="mt-1 text-[11px] leading-relaxed text-axal-faint" data-testid="hq-keys-levels-basis">
+            Required, Recommended and Optional are D4860&apos;s levels for the {Object.keys(KEY_LEVEL).length} managed keys. An Optional
+            key that is not set is not configured, which is not a problem.
+          </p>
+        </details>
       </>
     );
   }
@@ -546,7 +722,8 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
       {body}
       <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-keys-no-reveal">
         No screen reveals a saved key: once saved it is write-only, so no masked secret is drawn and nothing here
-        re-hides after thirty seconds. Nothing stores when a key expires, so none is drawn as expired.
+        re-hides after thirty seconds. An expiry is drawn only where the provider reported one; a key without one is
+        Not recorded, never drawn as expired.
       </p>
       <Link to="/admin/integration-keys" className={CONSOLE_LINK} data-testid="hq-h16-link-keys">
         <ConsoleLinkBody
@@ -564,6 +741,17 @@ export const SYNC_STATE = {
   failed: ['Failed', 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'],
   not_configured: ['Mirror off', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'],
 };
+
+/**
+ * D4860 — the newest of the latest attempts in one state, with its ticket. A
+ * ticket keeps only its latest attempt, so this is the newest such attempt
+ * still standing, never a log of every one.
+ */
+function lastAttempt(items, status) {
+  const hit = (items || []).filter((t) => t.status === status)
+    .sort((a, b) => String(b.attempted_at).localeCompare(String(a.attempted_at)))[0];
+  return hit ? `${day(hit.attempted_at)} · ticket #${hit.ticket_id}` : null;
+}
 
 /** H16 P2 — the ticket mirror: where it writes, its day, and its latest attempts. */
 export function GithubSyncPanel({ loading, unreadable, sync }) {
@@ -601,7 +789,15 @@ export function GithubSyncPanel({ loading, unreadable, sync }) {
         {day24?.available && (
           <p className="mt-1.5 text-[11px] leading-relaxed text-axal-faint">{day24.lag?.reason}</p>
         )}
-        <h3 className="mt-3 text-[12px] font-bold text-axal-ink dark:text-white">Latest attempts</h3>
+        {recent?.available && (
+          <div className="mt-2" data-testid="hq-sync-last">
+            <FieldRow label="Last successful sync">{lastAttempt(recent.items, 'synced') || 'none among the latest attempts'}</FieldRow>
+            <FieldRow label="Last failed sync">{lastAttempt(recent.items, 'failed') || 'none among the latest attempts'}</FieldRow>
+          </div>
+        )}
+        <details className="mt-3" data-testid="hq-sync-history">
+        <summary className="cursor-pointer text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300">View sync history →</summary>
+        <h3 className="mt-2 text-[12px] font-bold text-axal-ink dark:text-white">Latest attempts</h3>
         {!recent?.available ? (
           <Absent reason={recent?.reason || 'The latest attempts were not reported.'} />
         ) : recent.items.length === 0 ? (
@@ -631,6 +827,7 @@ export function GithubSyncPanel({ loading, unreadable, sync }) {
           </ul>
         )}
         <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{sync.recent_note}</p>
+        </details>
       </>
     );
   }
@@ -652,6 +849,34 @@ function FieldRow({ label, children, testid }) {
       <span className="min-w-0 text-right">{children}</span>
     </div>
   );
+}
+
+/** D4856: the mirror's mode in words; a missing mode is not guessed. */
+const mirrorModeText = (mode) => (mode === 'live' ? 'Live' : mode === 'test' ? 'Test' : mode === 'unconfigured' ? 'No Stripe key: nothing is in the catalogue' : 'Not recorded');
+/** D4856: rows stamped for the other mode, said with that mode's name. */
+function otherModeText(catalog) {
+  const n = catalog.other_mode?.products;
+  if (!Number.isSafeInteger(n)) return 'Not recorded';
+  const mode = catalog.other_mode.mode;
+  return `${num(n)} ${mode ? `${mode}-mode ` : ''}${n === 1 ? 'product' : 'products'}, not counted`;
+}
+
+/**
+ * D4858: the last manual sync, from the catalogue's own record (`catalog.sync`), never from a sentence of this
+ * page's. A failed sync is recorded (D1011), so it is said here as it is on Payments' change log.
+ */
+export function syncStateText(catalog) {
+  const h = catalog?.sync;
+  if (catalog?.sync_state === 'failed') return `Failed${h?.last_failed_at ? ` · ${day(h.last_failed_at)}` : ''}`;
+  if (catalog?.sync_state === 'succeeded') return `Succeeded${h?.last_succeeded_at ? ` · ${day(h.last_succeeded_at)}` : ''}`;
+  return 'Not recorded';
+}
+export function syncHistoryText(h) {
+  if (!h || typeof h !== 'object') return 'The sync history was not reported.';
+  if (h.history_readable === false) return 'The Payments change log could not be read, so the last sync is unknown.';
+  const ok = h.last_succeeded_at ? day(h.last_succeeded_at) : 'none recorded';
+  const bad = h.last_failed_at ? day(h.last_failed_at) : 'none recorded';
+  return `Last success ${ok} · last failure ${bad}${h.failed_syncs_recorded ? '' : ' (failures are not recorded)'}`;
 }
 
 /** H16 P3 — the money rail: the key checkout is served, the mirror, the webhook. */
@@ -678,6 +903,10 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
         </FieldRow>
         {catalog?.available ? (
           <>
+            <FieldRow label="Mirror mode" testid="hq-pay-mode">
+              <span>{mirrorModeText(catalog.stripe_mode)}</span>
+              <span className="block text-[10.5px] text-axal-faint">Counts below are this mode&apos;s rows only, the catalogue checkout reads.</span>
+            </FieldRow>
             <FieldRow label="Products" testid="hq-pay-products">
               <span className="tabular-nums">{num(catalog.products.active)} active of {num(catalog.products.all)}</span>
             </FieldRow>
@@ -690,8 +919,21 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
                 </span>
               )}
             </FieldRow>
+            <FieldRow label="Other mode" testid="hq-pay-other-mode">
+              <span className="tabular-nums">{otherModeText(catalog)}</span>
+            </FieldRow>
+            <FieldRow label="Unknown mode" testid="hq-pay-unknown-mode">
+              <span className="tabular-nums">
+                {Number.isSafeInteger(catalog.unknown_mode?.products) ? `${num(catalog.unknown_mode.products)} ${catalog.unknown_mode.products === 1 ? 'product' : 'products'} with no recognised mode, not counted` : 'Not recorded'}
+              </span>
+            </FieldRow>
             <FieldRow label="Mirror last written" testid="hq-pay-written">
-              <span className="font-mono">{catalog.last_written_at ? day(catalog.last_written_at) : 'never written'}</span>
+              <span className="font-mono">{catalog.last_written_at ? day(catalog.last_written_at) : 'Not recorded'}</span>
+              <span className="block text-[10.5px] text-axal-faint">Latest write to a {catalog.stripe_mode === 'unconfigured' ? '' : `${catalog.stripe_mode}-mode `}row</span>
+            </FieldRow>
+            <FieldRow label="Last manual sync" testid="hq-pay-sync">
+              <span className={catalog.sync_state === 'failed' ? RED_INK : ''}>{syncStateText(catalog)}</span>
+              <span className="block text-[10.5px] text-axal-faint">{syncHistoryText(catalog.sync)}</span>
             </FieldRow>
           </>
         ) : (
@@ -717,6 +959,10 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
               {num(w.deliveries)} in {num(w.window_hours)}h · {num(w.not_2xx)} not 2xx
             </span>
           )}
+          {/* D4860: whether that proves health. Silence is not. */}
+          <span className="block text-[10.5px] font-bold" data-testid="hq-pay-webhook-health">
+            Health: {webhookHealth(payments, new Date()).state}
+          </span>
         </FieldRow>
         {catalog?.available && (
           <p className="mt-2 text-[11px] leading-relaxed text-axal-faint">{catalog.sync_basis}</p>
@@ -753,7 +999,7 @@ export function promoTerms(p) {
   const off = p.percent_off != null
     ? `${p.percent_off}% off`
     : p.amount_off != null
-      ? `${(p.amount_off / 100).toFixed(2)} ${String(p.currency || '').toUpperCase()} off`
+      ? `${plainStripeAmount(p.amount_off, String(p.currency || '').toUpperCase())} ${String(p.currency || '').toUpperCase()} off`
       : 'no discount recorded';
   const how = p.duration === 'forever' ? 'every payment'
     : p.duration === 'repeating' ? 'repeating, for months Stripe keeps'
@@ -831,11 +1077,15 @@ export function PromoCodesPanel({ loading, unreadable, promos }) {
 }
 
 export default function PlatformPage() {
+  // D4860 — when each read answered, so every block can say when it was
+  // observed. The page makes the reads, so that is when it saw them.
+  const [observed, setObserved] = useState({});
+  const seen = useCallback((k) => setObserved((o) => ({ ...o, [k]: new Date() })), []);
   const [data, setData] = useState(null);
   const load = useCallback(() => {
     setData(null);
-    api.hqPlatform().then(setData, (e) => { reportError('hq-platform', e); setData(UNAVAILABLE); });
-  }, []);
+    api.hqPlatform().then((v) => { seen('summary'); setData(v); }, (e) => { reportError('hq-platform', e); setData(UNAVAILABLE); });
+  }, [seen]);
   useEffect(() => { load(); }, [load]);
 
   // D110 — Deployments is its own request: it fans out to every branch Worker
@@ -845,8 +1095,8 @@ export default function PlatformPage() {
   const [deps, setDeps] = useState(null);
   const loadDeps = useCallback(() => {
     setDeps(null);
-    api.deployments().then(setDeps, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
-  }, []);
+    api.deployments().then((v) => { seen('deps'); setDeps(v); }, (e) => { reportError('hq-deployments', e); setDeps(UNAVAILABLE); });
+  }, [seen]);
   useEffect(() => { loadDeps(); }, [loadDeps]);
 
   // D161 — traffic by branch, its own read for the same reason `deps` is: it
@@ -857,12 +1107,19 @@ export default function PlatformPage() {
   const [traffic, setTraffic] = useState(null);
   const loadTraffic = useCallback(() => {
     setTraffic(null);
-    api.analyticsTrafficByBranch('', '').then(setTraffic, (e) => {
+    api.analyticsTrafficByBranch('', '').then((v) => { seen('traffic'); setTraffic(v); }, (e) => {
       reportError('hq-platform:trafficByBranch', e);
       setTraffic(UNAVAILABLE);
     });
-  }, []);
+  }, [seen]);
   useEffect(() => { loadTraffic(); }, [loadTraffic]);
+
+  // D4860 — the commit and environment for the header. Its own read: a build
+  // route that does not answer empties only the version context.
+  const [build, setBuild] = useState(null);
+  useEffect(() => {
+    platformBuildApi.read().then(setBuild, (e) => { reportError('hq-platform:build', e); setBuild('unavailable'); });
+  }, []);
 
   const ready = data && data !== UNAVAILABLE;
   const integrations = ready ? data.integrations : null;
@@ -878,6 +1135,8 @@ export default function PlatformPage() {
   const githubSync = ready ? data.github_sync : null;
   const paymentsCatalog = ready ? data.payments_catalog : null;
   const promoCodes = ready ? data.promo_codes : null;
+  // D4858 — each panel's read state, one shape for all.
+  const reads = ready && data.reads && typeof data.reads === 'object' ? data.reads : {};
 
   // One line per read that answered (D126). `canRun = coverage.length > 0` in
   // WorkerRail, so a mount passing none disables its own button and prints
@@ -903,7 +1162,7 @@ export default function PlatformPage() {
     githubSync?.window?.available
       ? `Ticket mirror: ${num(githubSync.window.synced)} synced and ${num(githubSync.window.failed)} failed in ${num(githubSync.window.window_hours)}h` : null,
     paymentsCatalog?.catalog?.available
-      ? `Catalog mirror: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
+      ? `Catalog mirror${paymentsCatalog.catalog.stripe_mode === 'live' || paymentsCatalog.catalog.stripe_mode === 'test' ? `, ${paymentsCatalog.catalog.stripe_mode} mode` : ''}: ${num(paymentsCatalog.catalog.products.active)} active products, ${num(paymentsCatalog.catalog.prices.active)} active prices` : null,
     promoCodes?.available
       ? `${num(promoCodes.total)} promo codes, ${num(promoCodes.counts.active)} active` : null,
   ].filter(Boolean);
@@ -912,6 +1171,7 @@ export default function PlatformPage() {
     <WorkerRail
       workspace="Platform"
       role="super_admin"
+      operations
       stance="Read-only summary"
       note="This rail summarises connection counts, where each platform key lives, the ticket mirror, the payments catalog, the promo codes, scheduled-job health, the dead-letter backlog, the broadcast channels, the platform switches and the branch deployment registry. It reads no key material, throws no switch and rolls nothing back."
       coverage={coverage}
@@ -926,7 +1186,7 @@ export default function PlatformPage() {
         ['Secret reveal', 'No screen reveals a saved key, so no masked secret is drawn here or anywhere.'],
         ['Key expiry', 'Nothing stores when a key expires, so none is drawn as expired or as active.'],
         ['Mirror lag', 'A ticket keeps only its latest mirror attempt, so no delay between a change and its mirror is stored.'],
-        ['Catalog schedule', 'Nothing schedules a catalog sync, and a sync that fails leaves no record.'],
+        ['Catalog schedule', 'Nothing schedules a catalog sync; a manual one is recorded whether it succeeds or fails, but a sync started by an empty read is not.'],
         ['Code attribution', 'A promo code names no licence and no cohort, so none is drawn as a branch code.'],
         ['Channel member counts', 'Never asked of Telegram, so not recorded.'],
         ['Dead letters per branch', 'No branch reports its backlog to HQ; the figure here is HQ\'s own.'],
@@ -939,27 +1199,32 @@ export default function PlatformPage() {
   return (
     <RailFrame rail={rail} data-testid="hq-platform-page">
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#3730a3] px-4 py-2.5 text-white">
-          <span className="text-[12.5px] font-bold">All subsidiaries</span>
-          <span className="text-[11px] opacity-80 tabular-nums">
-            {jobs?.available ? jobsLine(jobs) : '…'}
-          </span>
-        </div>
-
-        <header className="mt-4 flex flex-wrap items-start justify-between gap-3">
+        {/* D4860 — the cron line no longer leads the page: read alone it
+            looked like a platform verdict. Scheduled jobs are one signal of
+            the health state below. */}
+        <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
           <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
             <SlidersHorizontal size={13} /> HQ · Platform
           </div>
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-white">Platform</h1>
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
-            Keys, the ticket mirror, the payments catalog, promo codes, jobs, deployments, monitoring,
-            broadcast and switches, each read from its own store. Each console is one link from its panel,
-            and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
-            no chat id reaches this page, and nothing on it changes a setting.
+            Control plane for runtime, payments, AI, integrations and emergency controls.
           </p>
+          <details className="mt-1 max-w-2xl">
+            <summary className="cursor-pointer text-[11.5px] font-bold text-emerald-800 dark:text-emerald-300">How this page reads</summary>
+            <p className="mt-1 text-[12px] leading-relaxed text-axal-muted">
+              Keys, the ticket mirror, the payments catalog, promo codes, jobs, deployments, monitoring,
+              broadcast and switches, each read from its own store. Each console is one link from its panel,
+              and changes are made there; the switches HQ can throw are thrown on Switches. No key material and
+              no chat id reaches this page, and nothing on it changes a setting.
+            </p>
+          </details>
           </div>
-          <HeaderAsk />
+          <div className="flex flex-col items-end gap-2">
+            <HeaderAsk />
+            <VersionContext build={build} observedAt={observed.summary} />
+          </div>
         </header>
 
         {data === UNAVAILABLE && (
@@ -972,8 +1237,25 @@ export default function PlatformPage() {
           </div>
         )}
 
-        <div className="mt-4 space-y-4">
-          <Zone title="Keys and connections" sub="counted and stated, never revealed">
+        <div className="mt-4">
+          <PlatformOverview
+            data={data}
+            deps={deps}
+            traffic={traffic}
+            build={build}
+            observed={observed}
+            now={observed.summary || null}
+            UNAVAILABLE={UNAVAILABLE}
+          />
+        </div>
+
+        <h2 className="mt-8 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint" data-testid="hq-platform-detail-h">System detail</h2>
+        <div className="mt-2 space-y-4">
+          <Zone title="Health" sub="one state, from what the platform detects; published incidents apart" reads={[reads.telemetry, reads.cron_streaks, reads.webhook_health]}>
+            <HealthPanel loading={data === null} unreadable={data === UNAVAILABLE} health={ready ? data.health : null} onRetry={load} />
+          </Zone>
+
+          <Zone title="Keys and connections" sub="counted and stated, never revealed" reads={[reads.integrations]}>
             {integrations?.available ? (
               <>
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
@@ -1018,16 +1300,16 @@ export default function PlatformPage() {
               Broadcast zones, and a zone placed between those would fall
               inside what they count. */}
           <div className="grid gap-4 md:grid-cols-2" data-testid="hq-platform-h16">
-            <Zone title="Integration keys" sub="where each managed key lives, never its value">
+            <Zone title="Integration keys" sub="where each managed key lives, never its value" reads={[reads.integration_keys]}>
               <IntegrationKeysPanel loading={data === null} unreadable={data === UNAVAILABLE} keys={integrationKeys} />
             </Zone>
-            <Zone title="GitHub Sync" sub="ticket to issue mirroring, HQ only">
+            <Zone title="GitHub Sync" sub="ticket to issue mirroring, HQ only" reads={[reads.github_sync]}>
               <GithubSyncPanel loading={data === null} unreadable={data === UNAVAILABLE} sync={githubSync} />
             </Zone>
-            <Zone title="Payments catalog" sub="the money rail, not a subsidiary billing clerk">
+            <Zone title="Payments catalog" sub="the money rail, not a subsidiary billing clerk" reads={[reads.payments_catalog]}>
               <PaymentsCatalogPanel loading={data === null} unreadable={data === UNAVAILABLE} payments={paymentsCatalog} />
             </Zone>
-            <Zone title="Promo codes" sub="one Stripe coupon each, not the ceilings on Revenue">
+            <Zone title="Promo codes" sub="one Stripe coupon each, not the ceilings on Revenue" reads={[reads.promo_codes]}>
               <PromoCodesPanel loading={data === null} unreadable={data === UNAVAILABLE} promos={promoCodes} />
             </Zone>
           </div>
@@ -1226,7 +1508,7 @@ export default function PlatformPage() {
                 plain admin is a branch admin and attributing traffic to a named
                 branch there would show every branch admin every other branch's
                 figures. */}
-            <Zone title="Monitoring" sub="infra, cron, dead letters and traffic, across every branch">
+            <Zone title="Monitoring" sub="infra, cron, dead letters and traffic, across every branch" reads={[reads.jobs, reads.dlq, reads.incidents]}>
               <div className="grid grid-cols-2 gap-2" data-testid="hq-monitoring-stats">
                 <Stat label="Branch Workers healthy" {...workersStat(deps)} />
                 <Stat label="Cron triggers firing" {...triggersStat(data, jobs)} />
@@ -1305,7 +1587,7 @@ export default function PlatformPage() {
                 its own row, reduced to what an operator needs to know about
                 it; the chat id is turned into a yes/no in the query and never
                 reaches this page. */}
-            <Zone title="Broadcast" sub="platform channels, not a branch megaphone">
+            <Zone title="Broadcast" sub="platform channels, not a branch megaphone" reads={[reads.telegram, reads.x]}>
               <BroadcastConsole
                 loading={data === null}
                 unreadable={data === UNAVAILABLE}
@@ -1339,7 +1621,7 @@ export default function PlatformPage() {
               </ul>
             </Zone>
 
-            <Zone title="Feature flags" sub="every switch, read-only — HQ throws its own on Switches">
+            <Zone title="Feature flags" sub="every switch, read-only — HQ throws its own on Switches" reads={[reads.switches]}>
               {/* Loading is its own state. This zone used to say the summary
                   "could not be read" for as long as it was still being read. */}
               {data === null

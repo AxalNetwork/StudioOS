@@ -6,6 +6,8 @@
  * Pure: no React, no I/O.
  */
 
+import { formatStripeAmount } from '../../lib/money';
+
 export const COMMENT_DELETE_CONFIRM = {
   title: 'Delete this comment?',
   body: 'The author loses it too. This cannot be undone. To keep it on record, resolve it instead.',
@@ -43,20 +45,17 @@ export const DISPUTE_STATUS = {
   lost: 'Lost',
 };
 
-/** Minor units as money, to the cent, with the ISO code beside it: "€1,200.00 EUR". */
+/** Stripe's amount as money at the currency's own decimals, with the ISO code beside it: "€1,200.00 EUR". */
 export function disputeMoney(amount, currency) {
   // A missing amount is not zero.
   if (amount === null || amount === undefined || amount === '') return null;
   const n = Number(amount);
   if (!Number.isFinite(n)) return null;
   const code = String(currency || '').toUpperCase();
-  try {
-    const f = new Intl.NumberFormat('en-GB', { style: 'currency', currency: code, minimumFractionDigits: 2 }).format(n / 100);
-    // A code Intl has no symbol for comes back printed as the code: say it once.
-    return f.includes(code) ? f : `${f} ${code}`;
-  } catch {
-    return `${(n / 100).toFixed(2)} ${code}`;
-  }
+  // D5373: Stripe's amount at its currency's own decimals (a yen dispute of 2,500 is ¥2,500, not ¥25).
+  const f = formatStripeAmount(n, code, { locale: 'en-GB' }) ?? '';
+  // A code Intl has no symbol for comes back printed as the code: say it once.
+  return f.includes(code) ? f : `${f} ${code}`;
 }
 
 /** A Stripe epoch (seconds) as "19 Oct 2026", in UTC; null when absent. */

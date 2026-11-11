@@ -18,6 +18,8 @@
  *   POST   /conversations/:uid/ask     one run
  *   POST   /actions/:uid/confirm       the member's Send: the only write
  *   POST   /actions/:uid/cancel        the member's Cancel
+ *   GET    /deck-tools?project=        D1588 (#3835): the deck and raise tools this member may use there
+ *   POST   /deck-tools/:name           { project, args }: one call, in the member's own access → { result }
  *
  * Everything is the caller's own: every read is `WHERE user_id = ?`, and a
  * uid that is someone else's answers 404, the same as one that does not exist.
@@ -54,6 +56,9 @@ import {
 } from '../integrations/registry';
 import { ensureRole, logEvent, pushScopeRefusal } from './integrations';
 import { CONNECTOR_READERS } from '../services/eadwynReaders';
+import { eadwynToolInfo, runEadwynToolCalls, type EadwynContext } from '../services/eadwynTools';
+import { DECK_PAGE } from '../services/decks/eadwynDeckTools';
+import { DECK_TOOLS } from '../mcp/tools/decks';
 import { pageFromPath, railFor, refuseAssistOff, runRefusalView } from '../util/railContext';
 import {
   SEND_TARGETS,
@@ -845,6 +850,49 @@ eadwyn.post('/actions/:uid/cancel', async (c) => {
   });
   const done = await loadAction(c.env, action.uid, user.id);
   return c.json({ ok: true, action: done ? publicAction(done) : null });
+});
+
+// ---------------------------------------------------------------------------
+// D1588 (#3835, deck v2 F9): the deck and raise tools, in the member's own
+// access. They are the MCP registry's (`mcp/tools/decks.ts`), run through
+// Eadwyn's one gate (`runEadwynToolCalls`): the member, only this venture, the
+// tool's own schema, and every call re-checked on the server. A write tool
+// leaves a proposal (the deck's Ask, the deck proposal, an Email draft) and
+// answers its id; nothing is saved. There is no chat or thread here.
+// ---------------------------------------------------------------------------
+
+export const DECK_TOOL_NAMES: ReadonlySet<string> = new Set(DECK_TOOLS.map((t) => t.name));
+
+/** The venture the call is about: one the member may reach under their active company, or null. */
+async function deckToolContext(c: Context<{ Bindings: Env }>, user: User, raw: unknown): Promise<EadwynContext | null> {
+  const id = Number(raw);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(id).first<{ id: number; founder_id: number | null; company_id: number | null }>();
+  if (!project || !projectInActiveCompany(await activeCompanyFor(c, user), project)) return null;
+  return { userId: Number(user.id), page: DECK_PAGE, option: 'deck:tools', record: `project:${id}`, companyId: id };
+}
+
+eadwyn.get('/deck-tools', async (c) => {
+  const user = await requireAuth(c);
+  const no = await askRefusal(c, user);
+  if (no) return no;
+  const ctx = await deckToolContext(c, user, c.req.query('project'));
+  if (!ctx) return c.json({ error: 'not_found' }, 404);
+  return c.json({ tools: eadwynToolInfo(ctx).filter((t) => DECK_TOOL_NAMES.has(t.name)) });
+});
+
+eadwyn.post('/deck-tools/:name', async (c) => {
+  const user = await requireAuth(c);
+  const no = await askRefusal(c, user);
+  if (no) return no;
+  const name = c.req.param('name');
+  if (!DECK_TOOL_NAMES.has(name)) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json<{ project?: unknown; args?: unknown }>().catch(() => null);
+  const ctx = await deckToolContext(c, user, body?.project);
+  if (!ctx) return c.json({ error: 'not_found' }, 404);
+  const [result] = await runEadwynToolCalls(c.env, ctx, [{ name, args: body?.args }]);
+  return c.json({ result });
 });
 
 export default eadwyn;

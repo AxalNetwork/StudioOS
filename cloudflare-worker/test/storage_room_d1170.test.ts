@@ -213,7 +213,11 @@ const SITES: Array<[string, string, string]> = [
   ['routes/dd.ts', "dd.post('/cases/:uid/sections/:sectionId/nda'", 'await c.env.FILES.put(storageKey, buf'],
   ['routes/dd.ts', "dd.post('/cases/:uid/items/:itemId/evidence'", 'await c.env.FILES.put(key, buf'],
   ['routes/research.ts', "research.post('/documents', async", 'await c.env.FILES.put(r2Key'],
+  // D1590 (#3837): a walkthrough take is kept until its maker deletes it, so the upload is guarded.
+  ['routes/deck_recordings.ts', "deckRecordings.post('/:id{[0-9]+}/recordings', async", 'await c.env.FILES.put(key, mediaBytes'],
   ['routes/founder_validate.ts', "founderValidate.post('/interviews/:id/recording'", 'await c.env.FILES.put(key, await file.arrayBuffer()'],
+  // D1569 (#3816): every per-card clip (an AI voice-over today) lands through the one writer, weighed first.
+  ['services/decks/cardAudio.ts', 'export async function putCardAudio', 'await env.FILES.put(key, a.bytes'],
   ['routes/deck_reviewer.ts', "deckReviewer.post('/upload'", 'await c.env.FILES.put(r2Key, bytes'],
   ['routes/imports.ts', 'async function maybeStoreRaw', "await env.FILES.put(key, csv"],
   ['routes/brand.ts', "brand.post('/logo/upload'", 'await files.put(key, logoBytes'],
@@ -223,6 +227,8 @@ const SITES: Array<[string, string, string]> = [
   ['services/records/build.ts', 'async function uploadProof', 'await files.put(key, bytes'],
   ['services/growWriters.ts', 'export async function markHeld', 'await env.FILES.put(key, await file.arrayBuffer()'],
   ['services/mercury/raiseFeeds.ts', 'async function acceptStatement', 'await env.FILES.put(key, pdf.bytes'],
+  // D4493 (#4493): a sequence's voice note is the founder's own recording, weighed before it lands.
+  ['routes/grow_sequences.ts', "router.put('/:uid/steps/:position/recording'", 'await c.env.FILES.put(key, await file!.arrayBuffer()'],
   // D1094: a Drive file copied into the data room is the member's, weighed before it lands.
   ['services/google/raise.ts', 'async function copyFile', 'await env.FILES.put(key, bytes'],
   // D903: a deck image is the member's file. Room is checked before either write; the bytes are not in the usage total yet.
@@ -276,7 +282,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'routes/admin_telegram.ts': 'HQ broadcast media',
   'routes/legal_83b.ts': 'an 83(b) receipt, never counted',
   'routes/company_documents.ts': 'company legal records in documents, not a measured D1169 store',
-  'routes/admin_licences.ts': 'licence documents',
+  'routes/admin_licences_brand.ts': 'a white-label licence\'s brand mark (#4707 moved it out of admin_licences.ts)',
   'routes/news.ts': 'HQ news',
   'routes/admin_programs.ts': 'an HQ export',
   'routes/kyb_admin.ts': 'identity documents, never counted',
@@ -295,6 +301,7 @@ const NOT_MEMBER_UPLOADS: Record<string, string> = {
   'services/mercury/investorFeeds.ts': 'a GP\'s Mercury statements: fund documents, never counted',
   'services/coverDraws.ts': 'a drawn event or course cover (#3935): generated, not uploaded, and not a measured D1169 store',
   'services/meetingBotDiagnose.ts': 'an HQ owner\'s bot diagnostic record and screenshot (#3708), never counted',
+  'routes/admin_governance.ts': 'the Axal entities\' governance documents (D4563): HQ records, never counted',
   'routes/deck_rehearsals.ts': 'a deck rehearsal\'s recording (D1580): held an hour for transcription, then deleted unless the founder keeps it; kept audio is not yet a measured D1169 store',
 };
 
@@ -367,7 +374,8 @@ test('HQ\'s read: Super Admin only, totals by kind, plan and state, and no name,
   const { owners } = await readStorageByOwner(f.env);
   const sum = [...owners.values()].reduce((n, t) => n + t.measured_bytes, 0);
   assert.equal(body.totals.measured_bytes, sum);
-  assert.equal(body.totals.members, 6);
+  const pops = body.populations;
+  assert.equal(pops.members.accounts + pops.staff.accounts, 6, 'D4856: members and staff are the six accounts');
   assert.deepEqual(body.by_kind.map((k: any) => k.key), [...STORAGE_KINDS]);
   assert.equal(body.by_kind.reduce((n: number, k: any) => n + k.measured_bytes, 0), sum);
   const founderFree = body.by_plan.find((p: any) => p.plan_key === 'founder:free');
@@ -394,6 +402,17 @@ test('HQ\'s read says what it could not read, and never states a guessed figure'
   assert.match(body.by_state_reason, /no member’s total is complete/);
   f.fail(/account_subscriptions/);
   const plans = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
-  assert.deepEqual([plans.by_plan, plans.by_state, plans.totals.members], [null, null, null]);
+  assert.deepEqual([plans.by_plan, plans.by_state, plans.populations], [null, null, null]);
   assert.equal(plans.by_plan_reason, 'The plans could not be read.');
+});
+
+test('D4703: HQ\'s read says when it was read, and that its byte totals are a floor when anything is unread', async () => {
+  // Mutation checked: measured_is_floor fixed to false → the unreadable read claims exact totals.
+  const f = fixture();
+  const whole = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
+  assert.match(String(whole.read_at), /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(whole.measured_is_floor, whole.totals.unknown_size_files > 0, 'exact when every area and size was read');
+  f.fail(/FROM research_documents/);
+  const part = (await f.call(66, 'GET', '/api/admin/platform/storage')).body;
+  assert.equal(part.measured_is_floor, true, 'an unread area makes the totals a floor');
 });

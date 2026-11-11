@@ -50,8 +50,32 @@ export type InsertedHypothesis = { id: number; code: string; claim: string };
  */
 export async function insertHypothesis(
   env: Env, projectId: number, claim: string, userId: number | null = null,
+  // D4627 (#4627): the proposal whose accept is creating this row, when there
+  // is one. It is what makes a RETRY of a failed accept land on the same row
+  // instead of allocating a second `Hn`.
+  sourceProposalId: number | null = null,
 ): Promise<InsertedHypothesis> {
-  const row = await insertHypothesisStatement(env, { projectId, claim, userId })
+  const proposalId = Number.isSafeInteger(sourceProposalId) && Number(sourceProposalId)! > 0 ? Number(sourceProposalId) : null;
+  if (proposalId != null) {
+    // CHECKED BEFORE INSERTING, not an `ON CONFLICT` upsert (D4627, #4627).
+    // `ON CONFLICT` needs a real unique index to target, and this file's own
+    // test fixture, and others that build `hypotheses` from the baseline plus
+    // migrations' `ADD COLUMN` lines only, never replay the `CREATE UNIQUE
+    // INDEX` migration 202611071547 added — so an upsert that targeted it
+    // would throw there while working in production. A plain SELECT is
+    // enough: the accept route has ALREADY claimed the proposal atomically
+    // (`WHERE status = 'pending'`, checked by its affected-row count) before
+    // calling this, so two callers can never race this check for the same
+    // `sourceProposalId` — the index stays as the defensive invariant, not
+    // the mechanism.
+    const existing = await env.DB.prepare('SELECT id, code FROM hypotheses WHERE project_id = ? AND source_proposal_id = ?')
+      .bind(projectId, proposalId).first<{ id: number; code: string }>();
+    if (existing) {
+      await env.DB.prepare("UPDATE hypotheses SET claim = ?, updated_at = datetime('now') WHERE id = ?").bind(claim, existing.id).run();
+      return { id: Number(existing.id), code: String(existing.code), claim };
+    }
+  }
+  const row = await insertHypothesisStatement(env, { projectId, claim, userId, sourceProposalId: proposalId })
     .first<{ id: number; code: string }>();
   return { id: Number(row?.id || 0), code: String(row?.code || ''), claim };
 }
@@ -64,6 +88,14 @@ export type NewHypothesis = {
   disproof?: string | null;
   deadline?: string | null;
   ownerUserId?: number | null;
+  /**
+   * D4627 (#4627): the `validate_proposals` row whose accept is creating this
+   * hypothesis, or null for every other caller (the manual `POST /hypotheses`
+   * form, Pivot, …). `insertHypothesis` checks this column before inserting,
+   * so a retry for the SAME proposal finds and updates the row it already
+   * made instead of allocating a second `Hn`.
+   */
+  sourceProposalId?: number | null;
 };
 
 /**
@@ -71,10 +103,16 @@ export type NewHypothesis = {
  * `RETURNING id, code`. A claim with none of migration 460's fields writes
  * only the columns every caller has always written, so the fill accept and the
  * proposals keep working on a store 460 has not reached.
+ *
+ * `insertHypothesis` is the one caller that passes `sourceProposalId`
+ * (D4627, #4627), and only after checking no row for it exists yet — this
+ * stays a plain INSERT either way, never an upsert; see that function for why.
  */
 export function insertHypothesisStatement(env: Env, h: NewHypothesis) {
   const plain = h.successBar == null && h.disproof == null && h.deadline == null && h.ownerUserId == null;
-  if (plain) {
+  const sourceProposalId = Number.isSafeInteger(h.sourceProposalId) && Number(h.sourceProposalId)! > 0
+    ? Number(h.sourceProposalId) : null;
+  if (plain && sourceProposalId == null) {
     return env.DB.prepare(
       `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by)
        SELECT ?, 'H' || (COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) + 1), ?,
@@ -82,6 +120,15 @@ export function insertHypothesisStatement(env: Env, h: NewHypothesis) {
          FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'
        RETURNING id, code`,
     ).bind(h.projectId, h.claim, h.projectId, h.userId, h.projectId);
+  }
+  if (plain) {
+    return env.DB.prepare(
+      `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by, source_proposal_id)
+       SELECT ?, 'H' || (COALESCE(MAX(CAST(substr(code, 2) AS INTEGER)), 0) + 1), ?,
+              (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM hypotheses WHERE project_id = ?), ?, ?
+         FROM hypotheses WHERE project_id = ? AND code GLOB 'H*'
+       RETURNING id, code`,
+    ).bind(h.projectId, h.claim, h.projectId, h.userId, sourceProposalId, h.projectId);
   }
   return env.DB.prepare(
     `INSERT INTO hypotheses (project_id, code, claim, sort_order, created_by, success_bar, disproof, deadline, owner_user_id)

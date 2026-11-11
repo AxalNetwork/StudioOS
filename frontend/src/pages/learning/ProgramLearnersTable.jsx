@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { InfoStrip, Pill, Unrecorded } from '../../ui';
+import { Lock } from 'lucide-react';
+import { Pill, Unrecorded } from '../../ui';
 import { SectionCard, stateBlock } from './LearningStates';
 import { NOT_LIVE, byPosition, formatDay } from './learningModel';
 import { completionCell, entryFor, subjectKindLabel } from './programModel';
@@ -17,13 +18,12 @@ const CELL_TONE = {
 /** A content row's title, or what became of it when its own row is gone. */
 const titleOf = (c) => c?.title || (c?.status === 'missing' ? 'No longer exists' : 'Untitled');
 
-/** "Read-only": the assigned admin's boundary, said once above the table. */
-export function ReadOnlyStrip() {
-  return (
-    <InfoStrip dismissible={false} title="Read-only">
-      Assigned to you by a Super Admin. Content and enrolment are managed at HQ.
-    </InfoStrip>
-  );
+/** D4481: the assigned admin's read-only boundary, with its actual program name. */
+export function ReadOnlyStrip({ programName }) {
+  return <div role="status" data-testid="program-readonly" className="flex items-center gap-2 rounded-axal-sm bg-axal-amber px-3 py-2 text-[12.5px] text-axal-amber-deep dark:bg-amber-900/30 dark:text-amber-200">
+    <Lock size={14} aria-hidden="true" className="flex-none" />
+    <span>Read only · Assigned admin · {programName || <Unrecorded>Program not recorded</Unrecorded>}</span>
+  </div>;
 }
 
 /**
@@ -66,7 +66,7 @@ export default function ProgramLearnersTable({
       {block || (
         <>
           <div className="-mx-4 overflow-x-auto px-4">
-            <table className="w-full min-w-[36rem] border-separate border-spacing-y-1 text-[12px]" data-testid="program-learners-table">
+            <table className="relative w-full min-w-[36rem] border-separate border-spacing-y-1 text-[12px]" data-testid="program-learners-table">
               <caption className="sr-only">{program?.name || 'Program'}: each member’s completion of each item</caption>
               <thead>
                 <tr className="text-left text-[10px] font-extrabold uppercase tracking-axal-label text-axal-faint dark:text-gray-500">
@@ -100,7 +100,7 @@ export default function ProgramLearnersTable({
                           : name}
                       </th>
                       {columns.map((c) => {
-                        const cell = completionCell(entryFor(learner.completion, c));
+                        const cell = completionCell(entryFor(learner.completion, c), c.kind);
                         return (
                           <td key={`${c.subject_kind}:${c.subject_uid}`} className="px-1 text-center">
                             <span className={`inline-block min-w-[3rem] rounded-axal-xs px-1.5 py-1 tabular-nums ${CELL_TONE[cell.tone]}`} title={cell.label}>
@@ -118,7 +118,7 @@ export default function ProgramLearnersTable({
           </div>
           <p className="mt-3 text-[11.5px] leading-relaxed text-axal-faint dark:text-gray-500" data-testid="program-learners-legend">
             ✓ completed · a percent for something started · the best score for an exam · the review for an exercise · — not started.
-            A member who never opened an item shows a dash, not 0.
+            A course never opened shows a dash, not 0.
           </p>
         </>
       )}
@@ -162,7 +162,7 @@ export function LearnerRecord({ status, learner, contents, notFound = '', reason
           ) : (
             <ul className="space-y-1.5" data-testid="learner-record-rows">
               {rows.map((c) => {
-                const cell = completionCell(entryFor(learner.completion, c));
+                const cell = completionCell(entryFor(learner.completion, c), c.kind);
                 return (
                   <li key={`${c.subject_kind}:${c.subject_uid}`} className="flex items-center justify-between gap-2 text-[12px]">
                     <span className="flex min-w-0 items-center gap-1.5">

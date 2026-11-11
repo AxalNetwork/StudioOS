@@ -178,7 +178,7 @@ test('GET /api/decks/:id/qa?prospect=: that investor\'s objections first, then t
       { id: 14, name: 'Synthetic Partner Quiet', firm: null, objections: 0 },
     ]);
     assert.doesNotMatch(JSON.stringify(east.body), /@example\.test|Elsewhere/);
-    assert.deepEqual(east.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok', prospects: 'ok' });
+    assert.deepEqual(east.body.reads, { objections: 'ok', objections_capped: false, sources: 'ok', claims: 'ok', kept: 'ok', prospects: 'ok', written: 'ok' });
 
     // A prospect who raised nothing leaves the order as it is.
     const quiet = await call(f, FOUNDER, '/api/decks/7/qa?prospect=14');
@@ -188,7 +188,7 @@ test('GET /api/decks/:id/qa?prospect=: that investor\'s objections first, then t
 
 test('GET /api/decks/:id/qa?prospect=: another venture\'s prospect and an unknown one get the same 404; a bad id is 400; founder only', async () => {
   // Mutation checked: the lookup without `AND project_id = ?` → prospect 21 answers 200 and the first assert fails;
-  // the prospect check moved above the founder gate → the admin's 403 becomes 404.
+  // the prospect check moved above the founder gate → the support session's 403 becomes 404.
   const f = await fixture();
   try {
     const foreign = await call(f, FOUNDER, '/api/decks/7/qa?prospect=21');
@@ -202,12 +202,11 @@ test('GET /api/decks/:id/qa?prospect=: another venture\'s prospect and an unknow
       const r = await call(f, FOUNDER, `/api/decks/7/qa?prospect=${encodeURIComponent(bad)}`);
       assert.deepEqual([r.status, r.body.error], [400, 'invalid_prospect'], bad);
     }
-    // Founder only, as D1559: the prospect is never checked for anyone else.
+    // D4270: an HQ admin reads, as the founder does; the prospect is still read with the venture's id.
     const admin = await call(f, ADMIN, '/api/decks/7/qa?prospect=11');
-    assert.deepEqual([admin.status, admin.body.error], [403, 'founder_only']);
-    assert.equal(admin.body.prospects, undefined);
-    const adminUnknown = await call(f, ADMIN, '/api/decks/7/qa?prospect=999');
-    assert.deepEqual([adminUnknown.status, adminUnknown.body.error], [403, 'founder_only'], 'the gate answers first, so a non-founder cannot probe prospect ids');
+    assert.equal(admin.status, 200, JSON.stringify(admin.body));
+    const adminForeign = await call(f, ADMIN, '/api/decks/7/qa?prospect=21');
+    assert.deepEqual([adminForeign.status, adminForeign.body.error], [404, 'prospect_not_found'], 'another venture\'s prospect is not this deck\'s, for HQ too');
     const support = await call(f, FOUNDER, '/api/decks/7/qa?prospect=11', { impersonated_by: ADMIN });
     assert.deepEqual([support.status, support.body?.error], [403, 'founder_only'], 'a support session reads no prospect\'s questions');
     // The other venture's founder, on this deck with their own prospect: refused, never their prospect's questions here.

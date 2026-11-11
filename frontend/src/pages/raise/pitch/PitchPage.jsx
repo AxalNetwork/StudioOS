@@ -31,8 +31,7 @@ export function PitchCrumb({ trail = null, query, ask = null, heading = null, to
       <div className="min-w-0">
         <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-wrap items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="pitch-crumb">
           <Link to={raise} className={link}>Raise</Link><span aria-hidden="true">›</span>
-          {/* D4254: the pages read "Pitch". The editor's crumb (a trail) keeps "Pitch deck" until P1's deck bar
-              replaces it, so its pinned screenshots are redrawn once, with the bar (#4274). */}
+          {/* D4254: the pages read "Pitch". The editor draws the deck bar (`DeckBar.jsx`) instead of this crumb. */}
           {trail ? <><Link to={studio} className={link}>Pitch deck</Link><span aria-hidden="true">›</span><span className="min-w-0 break-words" aria-current="page">{trail}</span></> : <span aria-current="page">Pitch</span>}
         </nav>
         <Link to={trail ? studio : raise} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet dark:text-violet-300 sm:hidden" data-testid="pitch-back">‹ {trail ? 'Pitch deck' : 'Raise'}</Link>
@@ -48,13 +47,17 @@ export function PitchCrumb({ trail = null, query, ask = null, heading = null, to
   );
 }
 
-/** The cycle frame, with its rail at the page edge and one breadcrumb. */
-export default function PitchPage({ rail, crumb, ask = null, testId, children }) {
+/**
+ * The cycle frame, with its rail at the page edge and one breadcrumb, or, on
+ * a page with a deck open, the deck bar (`bar`, D4254 P1 slice 2: `DeckBar.jsx`)
+ * in its place.
+ */
+export default function PitchPage({ rail, crumb, ask = null, bar = null, testId, children }) {
   return (
     <RailFrame rail={rail} className="pitch-page-frame" data-testid={testId}>
       <div className="@container/cycle min-w-0">
         <div className={`${CYCLE_GUTTER} flex flex-col gap-3`}>
-          <PitchCrumb {...crumb} ask={ask} />
+          {bar || <PitchCrumb {...crumb} ask={ask} />}
           {children}
         </div>
       </div>

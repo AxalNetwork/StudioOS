@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { isSuperAdminUser } from '../../../lib/shellRole';
+import { branchOfUser, isSuperAdminUser } from '../../../lib/shellRole';
 import { adminApprovalsApi } from '../../../lib/api/adminApprovals';
 import { licenceRequestsApi } from '../../../lib/api/licenceRequests';
 import {
@@ -10,17 +10,20 @@ import {
 import AdminBoardFrame from '../AdminBoardFrame';
 import { useHeldGlance } from '../heldFigures';
 import {
-  DECIDED_LINE, GROUPS, HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANES_LINE, LANE_FAILED, LINE, MOVED_KEY, MOVED_NOTICE,
+  HQ_LANES, HQ_ONLY_LINE, HQ_ONLY_TITLE, LANES, LANE_FAILED, LINE, MOVED_KEY, MOVED_NOTICE,
   NOT_A_QUEUE, NOT_YET, RAIL_NOTE, TITLE,
-  isHqLane, laneViews, oldestLine, tabOf,
+  isHqLane, laneViews, tabOf,
 } from './approvalsModel';
 import {
-  AGE_FILTERS, BAND_PARTS, OUTCOME_FILTERS, SEARCH_MIN, SORTS,
-  assignChoices, assignItems, assignTitle, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
-  hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, inboxTiles, itemOfPath,
-  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, waitingOnHq, weekChart, cardAge, filterCount, sortLabel,
+  AGE_FILTERS, ASSIGN_NOTE, ATTENTION_LINE, BAND_PARTS, OUTCOME_FILTERS, OVERDUE_UNOWNED, SEARCH_MIN, SORTS, WORK_VIEWS,
+  assignButton, assignChoices, assignItems, assignNames, assignNoteRest, assignTitle, collectOverdue, continueLine, overdueAssignLine, overdueAssignTitle,
+  ownershipCallout, queueStep, bandedRows, decidedNotes, decidedPageLine, decidedQueryOf, decidedRows, errorRef,
+  filterChips, hasNextPage, hqBandLine, hqLaneViews, inboxGroupCounts, inboxGroups, inboxQueryOf, inboxRows, itemOfPath,
+  itemView, laneAgeChart, notifiesOf, pageLine, refusalToast, reviewDestination, summaryStrip, urgencyPill, viewPatch,
+  waitingFigure, waitingOnHq, weekChart, weeklyTile, workViewCounts, workViewOf, cardAge, filterCount,
 } from './inboxModel';
-import { FOOT, PhoneBack } from './boardParts';
+import { FOOT, PhoneBack, usePopoverPlace } from './boardParts';
+import { aboutHistory, decidedFilterCount, decidedHq, decidedItemPath, laneGroups, lanesBanner, matchReviewers, noteKind } from './lanesDecidedModel';
 import Sheet from '../../../ui/Sheet.jsx';
 
 /**
@@ -55,6 +58,7 @@ const CHIP = 'inline-flex min-h-[44px] items-center gap-1.5 sm:min-h-[36px] roun
 const CHIP_ON = 'border-axal-violet bg-axal-lavender text-axal-ink dark:bg-violet-950/40 dark:text-gray-100';
 const CHIP_OFF = 'border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400';
 const BTN = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800';
+const BTN_SM = 'inline-flex min-h-[44px] items-center justify-center rounded-[7px] border border-axal-hairline bg-white px-2.5 text-[12px] font-bold text-axal-ink hover:bg-gray-50 sm:min-h-[30px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const BTN_PRIMARY = 'inline-flex min-h-[44px] items-center justify-center rounded-[8px] sm:min-h-[36px] bg-axal-violet px-3 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep disabled:opacity-50';
 const SELECT = 'min-h-[44px] rounded-[7px] sm:min-h-[36px] border border-axal-hairline bg-white px-2 text-[12.5px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 
@@ -71,13 +75,20 @@ export function BandPill({ band }) {
   return <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[band.tone]}`}>{band.label}</span>;
 }
 
+/** D4814: the Waiting column's pill, in words (never colour alone): "! Overdue", "◷ Due soon". */
+export function UrgencyPill({ sla }) {
+  const p = urgencyPill(sla);
+  if (!p) return null;
+  return <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[p.tone]}`}>{p.text}</span>;
+}
+
 /** The page that decides a lane, as a literal link (see the header comment). */
 export function LaneDoor({ k }) {
   switch (k) {
     case 'kyc': case 'kyb': return <Link to="/admin/kyc" className={LINK}>KYC & KYB</Link>;
     case 'partner_profiles': return <Link to="/admin/partner-profiles" className={LINK}>Partner profiles</Link>;
     case 'exploring': return <Link to="/admin/exploring" className={LINK}>Exploring board</Link>;
-    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={LINK}>Here</Link>;
+    case 'product_testers': return <Link to="/admin/approvals/product-testers" className={LINK}>Product testers</Link>;
     case 'lp': return <Link to="/admin/lp-applications" className={LINK}>LP applications</Link>;
     case 'cohort': return <Link to="/admin/programs/spinout-lab/applications" className={LINK}>Spin-Out Lab</Link>;
     case 'lab_hosts': return <Link to="/admin/programs/spinout-lab/hosts" className={LINK}>Spin-Out Lab › Hosts</Link>;
@@ -85,11 +96,11 @@ export function LaneDoor({ k }) {
     case 'referrals': return <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Refer & Earn › Queue</Link>;
     case 'strategic_access': return <Link to="/admin/programs/refer-and-earn" className={LINK}>Refer & Earn</Link>;
     case 'perk_listings': return <Link to="/admin/programs/perks" className={LINK}>Perks</Link>;
-    case 'best_fit': return <span className={SUB}>Here</span>;
+    case 'best_fit': return <span className={SUB}>Best-Fit · no review page yet</span>;
     case 'events': return <Link to="/admin/events/review" className={LINK}>Events › Review</Link>;
     case 'jobs': return <Link to="/admin/jobs" className={LINK}>Jobs</Link>;
-    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Here</Link>;
-    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={LINK}>Here</Link>;
+    case 'wellbeing_experts': return <Link to="/admin/approvals/wellbeing-experts" className={LINK}>Wellbeing experts</Link>;
+    case 'comarketing': return <Link to="/admin/approvals/co-marketing" className={LINK}>Co-marketing</Link>;
     case 'articles': return <Link to="/admin/articles" className={LINK}>Content queue</Link>;
     case 'due_diligence': return <Link to="/admin/due-diligence" className={LINK}>Due diligence</Link>;
     case 'score_flags': return <Link to="/monitoring" className={LINK}>Monitoring</Link>;
@@ -107,7 +118,8 @@ export function HqDoor({ lane }) {
     case 'ai_runs': return <Link to="/admin/platform/allowances" className={LINK}>Platform › AI allowances</Link>;
     case 'notices': return <Link to="/admin/licences" className={LINK}>Licences</Link>;
     case 'support': return <Link to="/admin/hq-support" className={LINK}>Support</Link>;
-    case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program grants › Requests</Link>;
+    case 'proposals': return <Link to="/admin/programs/proposals" className={LINK}>Programs › Proposals</Link>;
+    case 'grants': return <Link to="/admin/licences/programs/requests" className={LINK}>Licences › Program access by licence › Requests</Link>;
     default: return <span className={SUB}>{lane.waits}</span>;
   }
 }
@@ -116,6 +128,31 @@ export function HqDoor({ lane }) {
 function DoorFor({ lane }) {
   const hq = HQ_LANES.find((l) => l.key === lane);
   return hq ? <HqDoor lane={hq} /> : <LaneDoor k={lane} />;
+}
+
+/**
+ * D4814: a lane's door dressed as a button or a list action — "Continue
+ * review in KYC & KYB →", "Open in Due diligence ↗". The door itself stays the
+ * literal link above (the reachability walk and the lane tests read those
+ * lines); the words go around it and the link is stretched over the whole
+ * control, so all of it is the target. A lane with no page to open (Best-Fit,
+ * an HQ page not built yet) is plain words, never a control that goes nowhere.
+ */
+function DressedDoor({ lane, before, after, className, plain, testId }) {
+  const dest = reviewDestination(lane);
+  const box = useRef(null);
+  // The link's own text is the lane alone; its name is the whole control ("Open in KYC & KYB").
+  useEffect(() => {
+    const a = box.current?.querySelector?.('a');
+    if (a && before) a.setAttribute('aria-label', `${before}${a.textContent}`);
+  }, [before, lane]);
+  if (/no review page yet|not built yet|^its own page$/.test(dest)) return <span className={plain} data-testid={testId}>{dest}</span>;
+  return (
+    <span ref={box} data-testid={testId}
+      className={`relative ${className} [&_a]:font-[inherit] [&_a]:text-inherit [&_a]:after:absolute [&_a]:after:inset-0 [&_a]:after:content-[''] [&_a]:focus-visible:outline-none focus-within:ring-2 focus-within:ring-axal-violet`}>
+      <span>{before}<DoorFor lane={lane} />{after}</span>
+    </span>
+  );
 }
 
 /**
@@ -153,21 +190,6 @@ function WaitingCell({ v, onRetry }) {
   }
   if (v.state === 'unrecorded') return <span title={v.reason} className={`cursor-help ${SUB}`} data-testid={`approvals-lane-unrecorded-${v.key}`}>{NOT_YET}</span>;
   return <span className={MONO} data-testid={`approvals-lane-count-${v.key}`}>{v.count.toLocaleString('en-US')}</span>;
-}
-
-/** A tile: its number, "Could not be read" with why, or a skeleton while it reads (APR12). */
-function Tile({ label, testId, t, sub }) {
-  return (
-    <div className={`${CARD} flex min-w-0 flex-col gap-1 px-4 py-3`} data-testid={testId}>
-      <span className={EYE}>{label}</span>
-      <div className="text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">
-        {t.state === 'loading' ? <Skeleton h={22} w="40%" />
-          : t.state === 'unreadable' ? <span title={t.reason} className="cursor-help text-[13px] text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
-            : <span className={MONO}>{t.value}</span>}
-      </div>
-      {t.state === 'unreadable' ? <span className={SUB}>{t.reason}</span> : (sub ?? t.sub) ? <span className={SUB}>{sub ?? t.sub}</span> : null}
-    </div>
-  );
 }
 
 /** A chart with its one-sentence summary for a screen reader and "View as table" (D915 §6). */
@@ -209,80 +231,143 @@ function FailedCard({ title, line, error, onRetry, testId }) {
   );
 }
 
-/** The ⋯ menu on a row: Open, Assign…, Copy link (APR1). */
-function RowMenu({ row, search, onAssign, onCopy }) {
+/**
+ * D4814 (AP-17): a row's ⋯ as a disclosure popover, not an ARIA menu — the
+ * trigger says whether it is open, Tab moves through Assign…, Copy link and
+ * Open in [destination] ↗, Esc or a click outside closes it and focus goes
+ * back to ⋯. Review is never only in here: the row's Review button stays.
+ */
+function RowActions({ row, onAssign, onCopy }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const trigger = useRef(null);
+  const popId = `approvals-pop-${row.lane}-${row.id}`;
+  const close = (refocus) => { setOpen(false); if (refocus) trigger.current?.focus?.(); };
+  const place = usePopoverPlace(trigger, open, 140);
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open]);
+  const ITEM = 'flex min-h-[36px] items-center px-3 py-1.5 text-left text-[12.5px] text-axal-ink hover:bg-gray-50 focus-visible:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800 dark:focus-visible:bg-gray-800';
   return (
-    <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); } }}>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`More for ${row.who}`} onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
+    <div ref={wrap} className="relative" data-testid={`approvals-actions-${row.key}`}
+      onKeyDown={(e) => { if (e.key === 'Escape' && open) { e.stopPropagation(); close(true); } }}
+      onBlur={(e) => { if (open && e.relatedTarget && wrap.current && !wrap.current.contains(e.relatedTarget)) setOpen(false); }}>
+      <button ref={trigger} type="button" aria-expanded={open} aria-controls={popId} aria-label={`More actions for ${row.who}`} onClick={() => setOpen((o) => !o)}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-axal-muted hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800" data-testid={`approvals-menu-${row.key}`}>⋯</button>
       {open ? (
-        <div role="menu" className={`${CARD} absolute right-0 z-10 mt-1 flex min-w-[150px] flex-col py-1 shadow-lg`}>
-          <Link role="menuitem" to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} data-testid={`approvals-menu-${row.key}-open`} className="px-3 py-1.5 text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => setOpen(false)}>Open</Link>
-          <button role="menuitem" type="button" data-testid={`approvals-menu-${row.key}-assign`} className="px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => { setOpen(false); onAssign([row]); }}>Assign…</button>
-          <button role="menuitem" type="button" data-testid={`approvals-menu-${row.key}-copy`} className="px-3 py-1.5 text-left text-[12.5px] hover:bg-gray-50 dark:hover:bg-gray-800" onClick={() => { setOpen(false); onCopy(row); }}>Copy link</button>
+        <div id={popId} aria-label={`Actions for ${row.who}`} role="group" style={place || undefined} className={`${CARD} ${place ? '' : 'absolute right-0 mt-1'} z-30 flex min-w-[200px] flex-col py-1 shadow-lg`} data-testid={`approvals-pop-${row.key}`}>
+          <button type="button" data-testid={`approvals-menu-${row.key}-assign`} className={ITEM} onClick={() => { close(true); onAssign([row]); }}>Assign…</button>
+          <button type="button" data-testid={`approvals-menu-${row.key}-copy`} className={ITEM} onClick={() => { close(true); onCopy(row); }}>Copy link</button>
+          <span onClickCapture={() => close(false)}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={ITEM} plain={`${ITEM} text-axal-muted dark:text-gray-400`} testId={`approvals-menu-${row.key}-open-in`} /></span>
         </div>
       ) : null}
     </div>
   );
 }
 
-/** The Assign dialog (APR3a): one admin, and it decides nothing. */
-function AssignDialog({ items, inbox, callerId, onClose, onDone }) {
+/**
+ * The Assign dialog. D4814 (AP-05): it says first that assigning changes
+ * ownership only, names who it is about, and lists the reviewers as a radio
+ * group — you, then lowest workload, then alphabetical, each with the items
+ * they own now. The button names the person. `line` is what a caller adds
+ * (Assign overdue…'s cap).
+ */
+export function AssignDialog({ items, title, line, inbox, callerId, onClose, onDone }) {
   const choices = assignChoices(inbox?.reply, callerId);
   const [pick, setPick] = useState(null);
   const [busy, setBusy] = useState(false);
+  // D4814 part 6 (AP-05): "Search reviewers", on names; the chosen one stays chosen while it is filtered out.
+  const [find, setFind] = useState('');
+  const list = choices.state === 'ready' ? choices.choices : [];
+  const shown = matchReviewers(list, find);
   const send = async () => {
     if (!pick || busy) return;
     setBusy(true);
     try {
       await adminApprovalsApi.assign(pick, assignItems(items));
-      const who = inbox?.reply?.reviewers?.find((r) => r.id === pick)?.name;
-      onDone(`Assigned to ${who || 'that admin'}.`);
+      const who = list.find((c) => c.id === pick);
+      onDone(`${items.length === 1 ? `${items[0].who} is` : `${items.length.toLocaleString('en-US')} items are`} now assigned to ${who ? (who.you ? 'you' : who.name) : 'that admin'}.`);
     } catch (e) {
       onDone(refusalToast(e));
     }
   };
+  const heading = title || assignTitle(items);
   return (
-    <Lightbox label={assignTitle(items)} title={assignTitle(items)} sub="They see it under Assigned to me. Assigning decides nothing." onClose={onClose} testId="approvals-assign" width={460}
+    <Lightbox label={heading} eyebrow="Assign" title={heading} onClose={onClose} testId="approvals-assign" width={480}
       footer={(
         <div className={FOOT}>
           <button type="button" className={BTN} onClick={onClose}>Cancel</button>
-          <button type="button" className={BTN_PRIMARY} disabled={!pick || busy} onClick={send} data-testid="approvals-assign-send">{busy ? 'Assigning…' : 'Assign'}</button>
+          <button type="button" className={BTN_PRIMARY} disabled={!pick || busy} onClick={send} data-testid="approvals-assign-send">{busy ? 'Assigning…' : assignButton(list, pick)}</button>
         </div>
       )}>
-      <div className="flex flex-col gap-1.5 px-5 py-4">
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <p className="m-0 flex gap-2 rounded-[8px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="approvals-assign-note">
+          <span aria-hidden="true">i</span><span><b>{ASSIGN_NOTE}</b> {assignNoteRest(items.length)}</span>
+        </p>
+        {items.length > 1 ? <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-100" data-testid="approvals-assign-names">{assignNames(items)}</p> : null}
+        {line ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-line">{line}</p> : null}
         {choices.state !== 'ready' ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-unread">{choices.text}</p> : (
-          <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-            <legend className="sr-only">Assign to</legend>
-            {choices.choices.map((c) => (
-              <label key={c.id} className="flex min-h-[40px] items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100" data-testid={`approvals-assign-${c.id}`}>
-                <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
-                {c.label}
-              </label>
-            ))}
-          </fieldset>
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="sr-only">Search reviewers</span>
+              <input type="search" value={find} placeholder="Search reviewers" onChange={(e) => setFind(e.target.value)}
+                className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-assign-search" />
+            </label>
+            {!shown.length ? <p className={`m-0 ${SUB}`} data-testid="approvals-assign-none">{`No reviewer is called “${find.trim()}”.`}</p> : null}
+            <fieldset className="m-0 flex flex-col gap-1 border-0 p-0" data-testid="approvals-assign-list">
+              <legend className="sr-only">Reviewer</legend>
+              {shown.map((c) => (
+                <label key={c.id} className={`flex min-h-[44px] items-center gap-2.5 rounded-[8px] border px-3 text-[13px] text-axal-ink dark:text-gray-100 ${pick === c.id ? 'border-axal-violet bg-axal-lavender dark:bg-violet-950/40' : 'border-axal-hairline dark:border-gray-700'}`} data-testid={`approvals-assign-${c.id}`}>
+                  <input type="radio" name="assignee" checked={pick === c.id} onChange={() => setPick(c.id)} data-testid={`approvals-assign-pick-${c.id}`} />
+                  <b className="flex-1">{c.name}</b>
+                  {c.load ? <small className={`${SUB} ${MONO}`}>{c.load}</small> : null}
+                </label>
+              ))}
+            </fieldset>
+            <p className={`m-0 ${SUB}`} data-testid="approvals-assign-order">{choices.note}</p>
+          </>
         )}
       </div>
     </Lightbox>
   );
 }
 
-/** The item at its own address (APR3): the facts, who holds it, its history, and the page that decides it. */
-function ItemDrawer({ at, onClose, onAssign }) {
+/**
+ * The item at its own address (APR3). D4814 (AP-04, AP-15): the owner first,
+ * with Assign to me and Change…, then the facts, then History; its place in
+ * the queue with the rows before and after it; and the action names where
+ * review continues ("Continue review in KYC & KYB →") with why it is there.
+ */
+function ItemDrawer({ at, step, search, canTake, onClose, onAssign, onTake }) {
   const read = useRead(() => adminApprovalsApi.item(at.lane, at.id), `${at.lane}-${at.id}`);
   const v = itemView(read);
   const ready = v.state === 'ready';
+  const row = ready ? [{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }] : null;
+  const mine = ready && v.assignee.kind === 'person' && canTake && Number(v.assignee.id) === Number(canTake);
+  const STEP_BOX = 'inline-flex h-11 w-11 items-center justify-center rounded-[7px] border border-axal-hairline bg-white text-[13px] font-bold text-axal-ink hover:bg-gray-50 sm:h-8 sm:w-8 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
+  const stepper = step ? (
+    <div className="flex items-center gap-1.5" data-testid="approvals-item-step">
+      <span className={`${SUB} ${MONO}`} data-testid="approvals-item-pos">{step.pos}</span>
+      {step.prev ? <Link to={`/admin/approvals/items/${step.prev.lane}-${step.prev.id}${search}`} aria-label="Previous item" className={STEP_BOX} data-testid="approvals-item-prev">‹</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>‹</span>}
+      {step.next ? <Link to={`/admin/approvals/items/${step.next.lane}-${step.next.id}${search}`} aria-label="Next item" className={STEP_BOX} data-testid="approvals-item-next">›</Link>
+        : <span aria-hidden="true" className={`${STEP_BOX} opacity-40`}>›</span>}
+    </div>
+  ) : null;
   return (
-    <Sheet label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow="Item" title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
-      sub={ready ? 'Esc to close' : null}
+    <Sheet label={ready ? `${v.who}, ${v.laneLabel}` : 'Item'} eyebrow={ready ? `Item · ${v.laneLabel}` : 'Item'} title={ready ? v.who : 'Item'} onClose={onClose} testId="approvals-item" width={600}
+      headerActions={stepper}
+      sub={ready ? <span>Waiting <span className={MONO}>{v.age}</span><UrgencyPill sla={v.sla} /></span> : null}
       footer={ready ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-3 max-sm:flex-col-reverse max-sm:items-stretch">
+        <div className="flex flex-col gap-2" data-testid="approvals-item-continue">
+          <div className="flex flex-wrap items-center gap-2 max-sm:flex-col-reverse max-sm:items-stretch">
+            <DressedDoor lane={v.lane} before="Continue review in " after=" →" className={`${BTN_PRIMARY} flex-1`} plain={`flex-1 ${SUB}`} testId="approvals-item-continue-link" />
             <button type="button" className={BTN} onClick={onClose}>Close</button>
-            <span className="text-[12.5px]">Open in <DoorFor lane={v.lane} /></span>
           </div>
-          <p className={`m-0 ${SUB}`}>This lane is decided on its own page, where its rules and messages live.</p>
+          <p className={`m-0 ${SUB}`} data-testid="approvals-item-why">{continueLine(v.lane)}</p>
         </div>
       ) : null}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="approvals-item-body">
@@ -299,25 +384,35 @@ function ItemDrawer({ at, onClose, onAssign }) {
         ) : null}
         {ready ? (
           <>
-            <div className="flex flex-wrap gap-1.5">
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.plain}`}>{v.laneLabel}</span>
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[v.band.tone] || PILL.plain}`}>Waiting {v.age}</span>
-            </div>
-            <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13px]" data-testid="approvals-item-facts">
-              <dt className={EYE}>Submitted</dt><dd className="m-0">{v.submitted}</dd>
-              <dt className={EYE}>Profile</dt><dd className="m-0">{v.what}</dd>
-              <dt className={EYE}>Item ID</dt><dd className={`m-0 ${MONO}`}>{v.id}</dd>
-              <dt className={EYE}>Lane</dt><dd className="m-0">{v.laneLabel}{v.group ? ` · ${v.group}` : ''}</dd>
-            </dl>
-            <section className="flex flex-wrap items-center justify-between gap-2" data-testid="approvals-item-assigned">
-              <div>
-                <div className={EYE}>Assigned</div>
-                <div className="text-[13px]">{v.assignee.text}{v.assigneeReason ? <span className={SUB}> · {v.assigneeReason}</span> : null}</div>
+            <section className="flex flex-col gap-1.5" data-testid="approvals-item-assigned">
+              <h3 className={`m-0 ${EYE}`}>Owner</h3>
+              <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-axal-hairline px-3 py-2.5 dark:border-gray-700">
+                <div className="min-w-0 flex-1">
+                  {v.assignee.kind === 'none' ? <span className="text-[13px] font-bold text-axal-amber-deep dark:text-amber-200" data-testid="approvals-item-owner">Unassigned</span>
+                    : v.assignee.kind === 'unread' ? <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="approvals-item-owner">Not read</span>
+                      : <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100" data-testid="approvals-item-owner">{v.assignee.text}{mine ? <span className={SUB}> · you</span> : null}</span>}
+                  {v.assignee.kind === 'unread' ? <span className={`block ${SUB}`}>{v.assigneeReason || 'The assignment record could not be read for this item.'}</span>
+                    : v.ownerLine ? <span className={`block ${SUB}`} data-testid="approvals-item-owner-line">{v.ownerLine}</span> : null}
+                </div>
+                {v.assignee.kind !== 'unread' ? (
+                  <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                    {canTake && !mine ? <button type="button" className={BTN_SM} onClick={() => onTake(row, read.reload)} data-testid="approvals-item-take">Assign to me</button> : null}
+                    <button type="button" className={BTN_SM} onClick={() => onAssign(row, read.reload)} data-testid="approvals-item-assign">Change…</button>
+                  </div>
+                ) : null}
               </div>
-              <button type="button" className={BTN} onClick={() => onAssign([{ lane: v.lane, id: v.id, who: v.who, laneLabel: v.laneLabel }], read.reload)} data-testid="approvals-item-assign">Assign…</button>
+            </section>
+            <section className="flex flex-col gap-1.5">
+              <h3 className={`m-0 ${EYE}`}>Facts</h3>
+              <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-[13px]" data-testid="approvals-item-facts">
+                <dt className={EYE}>Submitted</dt><dd className="m-0">{v.submitted}</dd>
+                <dt className={EYE}>Profile / request</dt><dd className="m-0">{v.what}</dd>
+                <dt className={EYE}>Item ID</dt><dd className={`m-0 ${MONO}`}>{v.id}</dd>
+                <dt className={EYE}>Lane</dt><dd className="m-0">{v.laneLabel}{v.group ? ` · ${v.group}` : ''}</dd>
+              </dl>
             </section>
             <section className="flex flex-col gap-1" data-testid="approvals-item-history">
-              <div className={EYE}>History</div>
+              <h3 className={`m-0 ${EYE}`}>History</h3>
               {v.history.state !== 'ready' ? <p className={`m-0 ${SUB}`}>{v.history.text}</p>
                 : v.history.lines.length ? (
                   <ul className="m-0 flex list-none flex-col gap-1 p-0">
@@ -352,62 +447,76 @@ function WaitingOnHq({ read }) {
   );
 }
 
-/** D1047 (APR15): one item as a phone card — lane, who, what, its age and where it is decided, and ⋯. */
-function RowCard({ row, search, onMore }) {
+/**
+ * D1047 (APR15), D4814 (AP-14): one item as a phone card — name, request and
+ * lane, its age with the band in words, who owns it (Unassigned in amber),
+ * then Open, Assign when nobody owns it, and ⋯. Every target is 44px.
+ */
+function RowCard({ row, search, onMore, onAssign }) {
   const age = cardAge(row);
+  const a = row.assignee;
   return (
-    <li className="flex items-start gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={EYE}>{row.laneLabel}</span>
-        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[28px] items-center text-[13.5px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
-        <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what}</span>
+    <li className="flex flex-col gap-2 border-b border-axal-hairline px-3 py-3 last:border-0 dark:border-gray-700" data-testid={`approvals-card-${row.key}`}>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className="inline-flex min-h-[44px] items-center text-[14px] font-bold text-axal-ink dark:text-gray-100" data-testid={`approvals-card-open-${row.key}`}>{row.who}</Link>
+        <span className="text-[12.5px] text-axal-ink dark:text-gray-100">{row.what} · {row.laneLabel}</span>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[age.tone] || PILL.plain}`} data-testid={`approvals-card-age-${row.key}`}>{age.text}</span>
-          <span className="text-[12px] text-axal-ink dark:text-gray-100">Decided on <DoorFor lane={row.lane} /> ›</span>
+          <span className="text-[12px]" data-testid={`approvals-card-owner-${row.key}`}>
+            {a.kind === 'none' ? <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
+              : a.kind === 'unread' ? <span className={SUB}>Owner not read</span>
+                : <span className="text-axal-ink dark:text-gray-100">Assigned to {a.text}</span>}
+          </span>
         </div>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">Review in {reviewDestination(row.lane)}</span>
       </div>
-      <button type="button" aria-label={`More for ${row.who}`} onClick={() => onMore(row)}
-        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
+      <div className="flex gap-2">
+        <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={`${BTN_PRIMARY} flex-1`} data-testid={`approvals-card-review-${row.key}`}>Open</Link>
+        {a.kind === 'none' ? <button type="button" className={`${BTN} flex-1`} onClick={() => onAssign([row])} data-testid={`approvals-card-assign-${row.key}`}>Assign</button> : null}
+        <button type="button" aria-label={`More actions for ${row.who}`} onClick={() => onMore(row)}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid={`approvals-card-more-${row.key}`}>⋯</button>
+      </div>
     </li>
   );
 }
 
 const SHEET_ITEM = 'flex min-h-[44px] items-center rounded-[8px] px-3 text-left text-[14px] font-semibold text-axal-ink hover:bg-gray-50 dark:text-gray-100 dark:hover:bg-gray-800';
 
-/** D1047 (APR15): a card's ⋯ as a bottom sheet: Open, Assign…, Copy link. */
-function RowSheet({ row, search, onAssign, onCopy, onClose }) {
+/** D1047 (APR15), D4814: a card's ⋯ as a bottom sheet: Assign…, Copy link, Open in [destination] — a list of actions, not a menu. */
+function RowSheet({ row, onAssign, onCopy, onClose }) {
   return (
-    <Lightbox label={`More for ${row.who}`} title={row.who} sub={row.laneLabel} phone="sheet" onClose={onClose} testId="approvals-row-sheet" width={420}>
-      <div className="flex flex-col gap-1 px-3 py-3" role="menu">
-        <Link role="menuitem" to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={SHEET_ITEM} onClick={onClose} data-testid="approvals-row-sheet-open">Open</Link>
-        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
-        <button role="menuitem" type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
+    <Lightbox label={`More actions for ${row.who}`} title={row.who} sub={row.laneLabel} phone="sheet" onClose={onClose} testId="approvals-row-sheet" width={420}>
+      <div className="flex flex-col gap-1 px-3 py-3">
+        <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onAssign([row]); }} data-testid="approvals-row-sheet-assign">Assign…</button>
+        <button type="button" className={SHEET_ITEM} onClick={() => { onClose(); onCopy(row); }} data-testid="approvals-row-sheet-copy">Copy link</button>
+        <span onClickCapture={onClose}><DressedDoor lane={row.lane} before="Open in " after=" ↗" className={SHEET_ITEM} plain={`${SHEET_ITEM} text-axal-muted dark:text-gray-400`} testId="approvals-row-sheet-open-in" /></span>
       </div>
     </Lightbox>
   );
 }
 
-/** D1047 (APR15): the phone's filters and order as one bottom sheet, each choice applied as it is made. */
-function FiltersSheet({ q, superAdmin, reviewers, n, typed, onType, setParams, total, onClose, onClear }) {
+/**
+ * D4814: the one Filters control, as a panel (a bottom sheet on a phone). Each
+ * choice lands in the address as it is made, so the view can be shared. The
+ * order is the toolbar's one Sort, and the work views are their own control,
+ * so neither is here.
+ */
+function FiltersPanel({ q, superAdmin, reviewers, n, setParams, total, onClose, onClear }) {
   const lanes = superAdmin ? [...LANES, ...HQ_LANES] : LANES;
+  const owner = /^[1-9]\d*$/.test(q.filters.assigned || '') ? q.filters.assigned : '';
   return (
-    <Lightbox label="Filters and sort" title="Filters and sort" phone="sheet" onClose={onClose} testId="approvals-filters-sheet" width={460}
+    <Lightbox label="Filters" title="Filters" sub="Saved in the address, so this view can be shared." phone="sheet" onClose={onClose} testId="approvals-filters-sheet" width={460}
       footer={(
         <div className={FOOT}>
-          <button type="button" className={BTN} onClick={onClear} data-testid="approvals-filters-clear">Clear</button>
+          <button type="button" className={BTN} onClick={onClear} data-testid="approvals-filters-clear">Clear all</button>
           <button type="button" className={`${BTN_PRIMARY} flex-[1.4]`} onClick={onClose} data-testid="approvals-filters-done">{total == null ? 'Done' : `Show ${Number(total).toLocaleString('en-US')}`}</button>
         </div>
       )}>
       <div className="flex flex-col gap-4 px-5 py-4">
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Search</span>
-          <input type="search" value={typed} placeholder="Search who and what" onChange={(e) => onType(e.target.value)}
-            className="min-h-[44px] rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-sheet-search" />
-        </label>
         <div className="flex flex-col gap-1.5">
           <span className={EYE}>Group</span>
           <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
-            <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
+            <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })} data-testid="approvals-sheet-group-any">Any group</button>
             {inboxGroups(superAdmin).map((g) => (
               <button key={g.key} type="button" aria-pressed={q.filters.group === g.key} className={`${CHIP} ${q.filters.group === g.key ? CHIP_ON : CHIP_OFF}`}
                 onClick={() => setParams({ group: g.key })} data-testid={`approvals-sheet-group-${g.key}`}>{g.label} <span className={MONO}>{n(g.key)}</span></button>
@@ -431,33 +540,73 @@ function FiltersSheet({ q, superAdmin, reviewers, n, typed, onType, setParams, t
           </div>
         </div>
         <label className="flex flex-col gap-1">
-          <span className={EYE}>Assigned</span>
-          <select className={SELECT} value={q.filters.assigned || ''} onChange={(e) => setParams({ assigned: e.target.value || null })} data-testid="approvals-sheet-assigned">
+          <span className={EYE}>Owner</span>
+          <select className={SELECT} value={owner} onChange={(e) => setParams({ assigned: e.target.value || null, view: e.target.value ? 'all' : null })} data-testid="approvals-sheet-owner">
             <option value="">Anyone</option>
-            <option value="me">Me</option>
-            <option value="none">Unassigned</option>
             {reviewers.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
           </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Sort</span>
-          <select className={SELECT} value={q.filters.sort || 'oldest'} onChange={(e) => setParams({ sort: e.target.value === 'oldest' ? null : e.target.value })} data-testid="approvals-sheet-sort">
-            {SORTS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
-          </select>
+          <span className={SUB}>Assigned to me and Unassigned are views above the queue.</span>
         </label>
       </div>
     </Lightbox>
   );
 }
 
-/** The Inbox (APR1, APR11–APR14). */
-function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, toast }) {
+/** D4814 (AP-01): one cell of the urgency strip — its figure, "Could not be read" with why, or a skeleton. */
+function StripCell({ label, testId, t, tone, children }) {
+  const value = tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : tone === 'warn' ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-ink dark:text-gray-100';
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 border-axal-hairline px-4 py-3 dark:border-gray-700 max-lg:[&:nth-child(-n+2)]:border-b max-lg:odd:border-r lg:[&:not(:last-child)]:border-r" data-testid={testId}>
+      <span className={EYE}>{label}</span>
+      {t.state === 'loading' ? <Skeleton h={22} w="40%" />
+        : t.state === 'unreadable' ? <span title={t.reason} className="cursor-help text-[13px] font-bold text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
+          : <span className={`text-[22px] font-extrabold tracking-[-.02em] ${MONO} ${value}`} data-testid={`${testId}-value`}>{t.value}</span>}
+      {t.state === 'unreadable' ? <span className={SUB}>{t.reason}</span> : t.sub ? <span className={SUB}>{t.sub}{children}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * D4814: who holds a row. Unassigned is amber with Assign beside it; an unread
+ * record is "Not read", never "Unassigned". Part 3: the native boards draw it
+ * too, under their own `prefix`.
+ */
+export function OwnerCell({ row, callerId, onAssign, prefix = 'approvals' }) {
+  const a = row.assignee;
+  const id = `${prefix}-owner-${row.key}`;
+  if (a.kind === 'loading') return <span aria-label="Reading the owner" className={SUB} data-testid={id}>…</span>;
+  if (a.kind === 'unread') return <span title="The assignment record could not be read for this item." className={`cursor-help ${SUB}`} data-testid={id}>Not read</span>;
+  if (a.kind === 'none') {
+    return (
+      <span className="flex flex-wrap items-center gap-2" data-testid={id}>
+        <span className="font-bold text-axal-amber-deep dark:text-amber-200">Unassigned</span>
+        <button type="button" className={BTN_SM} onClick={() => onAssign([row])} data-testid={`${prefix}-owner-assign-${row.key}`}>Assign</button>
+      </span>
+    );
+  }
+  const you = callerId != null && Number(a.id) === Number(callerId);
+  return <span data-testid={id}>{a.text}{you ? <span className={SUB}> · you</span> : null}</span>;
+}
+
+/** D4814: Review opens the item here; the line under it says where review continues. */
+function ReviewCell({ row, search }) {
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <Link to={`/admin/approvals/items/${row.lane}-${row.id}${search}`} className={BTN_SM} data-testid={`approvals-review-${row.key}`}>Review</Link>
+      <span className="text-[11px] text-axal-muted dark:text-gray-400" data-testid={`approvals-review-in-${row.key}`}>in {reviewDestination(row.lane)}</span>
+    </div>
+  );
+}
+
+/** The Inbox (D4814, AP-01 to AP-05): the strip, the work views, the queue, then Workload. */
+function Inbox({ inbox, weekly, requests, superAdmin, studio, callerId, onAssign, toast }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const q = inboxQueryOf(loc.search, superAdmin);
+  const view = workViewOf(loc.search);
   const [selected, setSelected] = useState(() => new Set());
   const [typed, setTyped] = useState(q.typed);
-  // D1047 (APR15): the phone's bottom sheets — the filters, or one card's ⋯.
+  // D1047 (APR15): the bottom sheets — the filters, or one card's ⋯.
   const [sheet, setSheet] = useState(null);
   const setParams = (patch) => {
     const p = new URLSearchParams(loc.search);
@@ -465,6 +614,10 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
     if (!('page' in patch)) p.delete('page');
     const s = p.toString();
     navigate({ pathname: '/admin/approvals', search: s ? `?${s}` : '' }, { replace: true });
+  };
+  const clearFilters = () => {
+    setTyped('');
+    setParams({ q: null, group: null, lane: null, age: null, ...(/^[1-9]\d*$/.test(q.filters.assigned || '') ? { assigned: null } : {}) });
   };
   useEffect(() => { setSelected(new Set()); }, [loc.search]);
 
@@ -480,226 +633,327 @@ function Inbox({ inbox, weekly, requests, views, glance, superAdmin, onAssign, t
 
   const ready = inbox.status === 'ready';
   const reply = ready ? inbox.reply : null;
-  const tiles = inboxTiles(inbox, weekly);
+  const strip = summaryStrip(inbox);
+  const viewCounts = workViewCounts(inbox);
   const rows = inboxRows(reply);
+  const lines = bandedRows(rows, q.filters.sort);
   const counts = inboxGroupCounts(reply, superAdmin);
   const n = (k) => (counts[k] === null || counts[k] === undefined ? '—' : counts[k].toLocaleString('en-US'));
   const lanesChart = ready ? laneAgeChart(reply) : null;
   const weeks = weekly.status === 'ready' ? weekChart(weekly.reply) : null;
+  const decidedWeek = weeklyTile(weekly);
   const unread = reply?.unreadable || [];
   const lanesRead = (reply?.lanes || []).length - unread.length;
-  const filtered = Object.keys(q.filters).some((k) => k !== 'sort');
+  const nFilters = filterCount(q.filters);
+  const reviewers = Array.isArray(reply?.reviewers) ? reply.reviewers : [];
+  const chips = filterChips(q.filters, { superAdmin, reviewers });
   const picked = rows.filter((r) => selected.has(r.key));
+  const allPicked = rows.length > 0 && picked.length === rows.length;
   const toggle = (key) => setSelected((s) => { const next = new Set(s); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const copy = (row) => {
     const url = `${globalThis.location?.origin || ''}${row.href}`;
     Promise.resolve(globalThis.navigator?.clipboard?.writeText(url)).then(() => toast('Link copied.'), () => toast('The link could not be copied.'));
   };
-  const hqDecides = glance.hq?.approvals?.hqDecides ?? null;
-  const reviewers = Array.isArray(reply?.reviewers) ? reply.reviewers : [];
+  const chooseView = (key) => setParams(viewPatch(key));
+  const onViewKey = (e) => {
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const i = WORK_VIEWS.findIndex((v) => v.key === view);
+    chooseView(WORK_VIEWS[(i + step + WORK_VIEWS.length) % WORK_VIEWS.length].key);
+  };
+  const onType = (v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); };
+  const callout = ownershipCallout(inbox);
+  // D4814 (AP-01): Assign overdue… reads the overdue items nobody holds from
+  // every lane (not this page), oldest first, up to what one Assign takes.
+  const [gathering, setGathering] = useState(false);
+  const assignOverdue = async () => {
+    if (gathering) return;
+    setGathering(true);
+    try {
+      const { rows: due, total } = await collectOverdue((page) => adminApprovalsApi.inbox(page, OVERDUE_UNOWNED));
+      if (!due.length) toast('Every overdue item has an owner now. The list is up to date.');
+      else onAssign(due, null, { title: overdueAssignTitle(due), line: overdueAssignLine(due, total) });
+      if (!due.length) inbox.reload();
+    } catch (e) {
+      toast(`The overdue items could not be read, so nothing was assigned. ${refusalToast(e)}`);
+    } finally {
+      setGathering(false);
+    }
+  };
+  const somePicked = picked.length > 0 && !allPicked;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 lg:grid-cols-4" data-testid="approvals-tiles">
-        <Tile label="Waiting" testId="approvals-tile-waiting" t={tiles.waiting} />
-        <Tile label="Over 72 hours" testId="approvals-tile-over72" t={tiles.over72} sub={tiles.over72.state === 'ready' ? (oldestLine(views) || tiles.over72.sub) : undefined} />
-        <Tile label="Assigned to you" testId="approvals-tile-assigned" t={tiles.mine} />
-        <Tile label="Decided this week" testId="approvals-tile-decided" t={tiles.decided} />
-      </div>
+    <div className="flex flex-col gap-4">
+      <section aria-label="Urgency summary" className={`${CARD} grid grid-cols-2 lg:grid-cols-4`} data-testid="approvals-strip">
+        <StripCell label="Waiting" testId="approvals-strip-waiting" t={strip.waiting} />
+        <StripCell label="Overdue" testId="approvals-strip-overdue" t={strip.overdue} tone={strip.overdue.n > 0 ? 'bad' : null} />
+        <StripCell label="Unassigned" testId="approvals-strip-unassigned" t={strip.unassigned} tone={strip.unassigned.n > 0 ? 'warn' : null}>
+          {strip.unassigned.show && view !== 'unassigned' ? <> · <button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] font-bold text-axal-violet underline dark:text-violet-300" onClick={() => chooseView('unassigned')} data-testid="approvals-strip-show-unassigned">Show</button></> : null}
+        </StripCell>
+        <StripCell label="Oldest" testId="approvals-strip-oldest" t={strip.oldest} />
+      </section>
 
-      {superAdmin && hqDecides ? (
-        <p className={`m-0 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[12.5px] font-bold text-axal-violet-deep dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`} data-testid="approvals-hq-band">
-          {hqBandLine(hqDecides)}
-        </p>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div role="radiogroup" aria-label="Work view" className="flex flex-wrap gap-[7px]" onKeyDown={onViewKey} data-testid="approvals-views">
+          {WORK_VIEWS.map((v) => {
+            const on = v.key === view;
+            const c = viewCounts[v.key];
+            return (
+              <button key={v.key} type="button" role="radio" aria-checked={on} tabIndex={on ? 0 : -1} className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+                onClick={() => chooseView(v.key)} data-testid={`approvals-view-${v.key}`}>
+                {v.label}{c != null ? <span className={`${MONO} ${v.key === 'attention' ? 'text-axal-destructive dark:text-red-300' : ''}`}>{c}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+        {view === 'attention' ? <span className={SUB} data-testid="approvals-attention-line">{ATTENTION_LINE}</span> : null}
+      </div>
 
       {inbox.status === 'error' ? (
         <FailedCard title="We could not load Approvals." line="The rest of the admin still works. Try again in a moment." error={inbox.error} onRetry={inbox.reload} testId="approvals-failed" />
       ) : (
         <>
-          <div className="grid gap-3.5 lg:grid-cols-2">
-            {lanesChart ? (
-              <ChartCard title="Waiting by lane" testId="approvals-chart-lanes" chart={lanesChart.rows.length ? lanesChart : null} alt={lanesChart.sum}
-                legend={<Legend items={BAND_PARTS.map((p) => (p.key === 'unknown' ? { label: p.label, tone: 'dash' } : { label: p.label, tone: p.tone }))} />}>
-                {lanesChart.rows.length ? <Chart chart={{ ...lanesChart, testIdPrefix: 'approvals-bar' }} /> : <p className={`m-0 ${SUB}`}>{lanesChart.sum}</p>}
-              </ChartCard>
-            ) : (
-              <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-lanes"><h2 className={H2}>Waiting by lane</h2><Skeleton h={140} /></section>
-            )}
-            {weeks?.drawable ? (
-              <ChartCard title="Arrived and decided, last 8 weeks" testId="approvals-chart-weeks" chart={weeks.chart} alt={weeks.sum} foot={weeks.foot}
-                legend={<Legend items={[{ label: 'Arrived', tone: 'violet', mark: 'line' }, { label: 'Decided', tone: 'sky', mark: 'line' }, { label: 'This week, to date', tone: 'hollow' }]} />}>
-                <Chart chart={weeks.chart} />
-              </ChartCard>
-            ) : (
-              <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-weeks">
-                <h2 className={H2}>Arrived and decided, last 8 weeks</h2>
-                {weekly.status === 'loading' ? <Skeleton h={140} />
-                  : weekly.status === 'error' ? <p className={`m-0 text-[13px] text-axal-destructive dark:text-red-300`}>{LANE_FAILED}: the weekly series did not answer. <button type="button" className="underline" onClick={weekly.reload}>Try again</button></p>
-                    : <p className={`m-0 ${SUB}`}>{weeks?.reason}</p>}
-              </section>
-            )}
-          </div>
-
-          {/* D1047 (APR15): on a phone, Filters with its count and Sort open one bottom sheet. */}
-          <div className="flex gap-2 sm:hidden" data-testid="approvals-phone-filters">
-            <button type="button" className={`${BTN} flex-1`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
-              Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{filterCount(q.filters)}</span>
-            </button>
-            <button type="button" className={`${BTN} flex-[1.2]`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-sort-open">{`Sort: ${sortLabel(q.filters.sort)} ▾`}</button>
-          </div>
-
-          <div className="hidden flex-col gap-2.5 sm:flex" data-testid="approvals-filters">
-            <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Group">
-              <button type="button" aria-pressed={!q.filters.group} className={`${CHIP} ${!q.filters.group ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ group: null })}>All <span className={MONO}>{n('all')}</span></button>
-              {inboxGroups(superAdmin).map((g) => (
-                <button key={g.key} type="button" aria-pressed={q.filters.group === g.key} data-testid={`approvals-group-${g.key}`}
-                  className={`${CHIP} ${q.filters.group === g.key ? CHIP_ON : CHIP_OFF}`}
-                  onClick={() => setParams({ group: g.key })}>{g.label} <span className={MONO}>{n(g.key)}</span></button>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex min-w-[220px] flex-1 flex-col gap-1 sm:max-w-[320px]">
-                <span className="sr-only">Search who and what</span>
-                <input type="search" value={typed} placeholder="Search who and what"
-                  onChange={(e) => { setTyped(e.target.value); const t = e.target.value.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); }}
-                  className="min-h-[40px] rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] dark:border-gray-700 dark:bg-gray-900" data-testid="approvals-search" />
+          <section className={`${CARD} min-w-0`} aria-labelledby="approvals-queue-h" data-testid="approvals-inbox">
+            <h2 id="approvals-queue-h" className="sr-only">Approval queue</h2>
+            <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="approvals-toolbar">
+              <label className="flex min-w-0 flex-1 basis-[220px] sm:max-w-[360px]">
+                <span className="sr-only">Search person, company or item</span>
+                <input type="search" value={typed} placeholder="Search person, company or item" onChange={(e) => onType(e.target.value)}
+                  className="min-h-[44px] w-full rounded-[7px] border border-axal-hairline bg-white px-3 text-[13px] sm:min-h-[36px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="approvals-search" />
               </label>
-              <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Age" data-testid="approvals-age">
-                {AGE_FILTERS.map((a) => (
-                  <button key={a.label} type="button" aria-pressed={(q.filters.age || null) === a.key} className={`${CHIP} ${(q.filters.age || null) === a.key ? CHIP_ON : CHIP_OFF}`}
-                    onClick={() => setParams({ age: a.key })}>{a.label}</button>
-                ))}
+              <div className="ml-auto flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                <button type="button" aria-expanded={sheet?.kind === 'filters'} className={`${BTN} ${nFilters ? CHIP_ON : ''}`} onClick={() => setSheet({ kind: 'filters' })} data-testid="approvals-filters-open">
+                  {nFilters ? <>Filters · <span className={`ml-1 ${MONO}`} data-testid="approvals-filters-count">{nFilters}</span></> : 'Filters'}
+                </button>
+                <label className="flex">
+                  <span className="sr-only">Sort</span>
+                  <select className={SELECT} value={q.filters.sort || 'oldest'} data-testid="approvals-sort"
+                    onChange={(e) => { const s = e.target.value === 'oldest' ? null : e.target.value; setParams(view === 'attention' && s ? { sort: s, view: 'all' } : { sort: s }); }}>
+                    {SORTS.map((s) => <option key={s.key} value={s.key}>{`Sort: ${s.label}`}</option>)}
+                  </select>
+                </label>
               </div>
-              <label className="flex flex-col gap-1">
-                <span className={EYE}>Assigned</span>
-                <select className={SELECT} value={q.filters.assigned || ''} onChange={(e) => setParams({ assigned: e.target.value || null })} data-testid="approvals-assigned">
-                  <option value="">Anyone</option>
-                  <option value="me">Me</option>
-                  <option value="none">Unassigned</option>
-                  {reviewers.map((r) => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className={EYE}>Sort</span>
-                <select className={SELECT} value={q.filters.sort || 'oldest'} onChange={(e) => setParams({ sort: e.target.value === 'oldest' ? null : e.target.value })} data-testid="approvals-sort">
-                  {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              </label>
             </div>
-          </div>
-
-          <div className="grid gap-3.5 lg:grid-cols-[1fr_280px]">
-            <section className={`${CARD} min-w-0 overflow-x-auto`} data-testid="approvals-inbox">
-              {unread.length ? (
-                <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
-                  {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
-                  {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
-                  {' '}<button type="button" className="underline" onClick={inbox.reload}>Try again</button>
-                </p>
-              ) : null}
-              {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
-              {picked.length ? (
-                <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline bg-axal-lavender px-3 py-2 dark:border-gray-700 dark:bg-violet-950/40" data-testid="approvals-bulk">
-                  <span className="text-[12.5px] font-bold">{picked.length.toLocaleString('en-US')} selected</span>
-                  <button type="button" className={BTN} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
-                  <button type="button" className={BTN} onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
+            {chips.length ? (
+              <div className="flex flex-wrap items-center gap-2 border-b border-axal-hairline px-3 py-2 dark:border-gray-700" aria-label="Active filters" role="group" data-testid="approvals-chips">
+                {chips.map((c) => (
+                  <span key={c.key} className="inline-flex items-center gap-1 rounded-full border border-axal-violet bg-axal-lavender py-0.5 pl-2.5 pr-1 text-[12px] font-bold text-axal-ink dark:bg-violet-950/40 dark:text-gray-100" data-testid={`approvals-chip-${c.key}`}>
+                    {c.text}
+                    <button type="button" aria-label={`Remove ${c.text}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-gray-800"
+                      onClick={() => { if (c.key === 'q') setTyped(''); setParams(c.key === 'assigned' ? { assigned: null } : { [c.key]: null }); }} data-testid={`approvals-chip-remove-${c.key}`}>✕</button>
+                  </span>
+                ))}
+                <button type="button" className={LINK} onClick={clearFilters} data-testid="approvals-chips-clear">Clear all</button>
+                {reply?.total != null ? <span className={`ml-auto ${SUB} ${MONO}`}>{`${Number(reply.total).toLocaleString('en-US')} ${reply.total === 1 ? 'result' : 'results'}`}</span> : null}
+              </div>
+            ) : null}
+            {unread.length ? (
+              <p className="m-0 border-b border-axal-hairline px-3 py-2 text-[12.5px] text-axal-destructive dark:border-gray-700 dark:text-red-300" data-testid="approvals-partial">
+                {unread.join(', ')} could not be read, so {unread.length === 1 ? 'its items are' : 'their items are'} missing below.
+                {' '}The other {lanesRead.toLocaleString('en-US')} lanes are complete.
+                {' '}<button type="button" className="relative before:absolute before:-inset-x-2 before:-inset-y-3.5 before:content-[''] underline" onClick={inbox.reload}>Try again</button>
+              </p>
+            ) : null}
+            {reply?.capped ? <p className={`m-0 border-b border-axal-hairline px-3 py-2 dark:border-gray-700 ${SUB}`}>A lane holds more than the inbox reads at once; its oldest items are listed.</p> : null}
+            {callout ? (
+              <div role="note" className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2.5 text-[12.5px] text-axal-ink dark:border-amber-900 dark:bg-amber-950/30 dark:text-gray-100" data-testid="approvals-own-callout">
+                <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-200 text-[11px] font-bold text-axal-amber-deep dark:bg-amber-900 dark:text-amber-200">!</span>
+                <span className="min-w-0 flex-1 basis-[260px]">{callout.text}{callout.cause ? ` ${callout.cause}` : ''}</span>
+                <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                  {view !== 'unassigned' ? <button type="button" className={BTN_SM} onClick={() => chooseView('unassigned')} data-testid="approvals-own-show">Show unassigned</button> : null}
+                  {callout.assignOverdue > 0 ? (
+                    <button type="button" className={`${BTN_PRIMARY} sm:min-h-[30px]`} disabled={gathering} onClick={assignOverdue} data-testid="approvals-own-assign-overdue">{gathering ? 'Reading overdue items…' : 'Assign overdue…'}</button>
+                  ) : null}
                 </div>
-              ) : null}
-              {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={6} /></div>
-                : rows.length ? (
-                  <>
+              </div>
+            ) : null}
+            {inbox.status === 'loading' ? <div className="px-3 py-3" data-testid="approvals-skeleton"><Skeleton.Table rows={6} cols={5} /></div>
+              : rows.length ? (
+                <>
                   <ul className="m-0 list-none p-0 md:hidden" data-testid="approvals-cards">
-                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onMore={(row) => setSheet({ kind: 'row', row })} />)}
+                    {rows.map((r) => <RowCard key={r.key} row={r} search={loc.search} onAssign={onAssign} onMore={(row) => setSheet({ kind: 'row', row })} />)}
                   </ul>
-                  <table className="hidden w-full min-w-[820px] md:table">
-                    <thead>
-                      <tr className="border-b border-axal-hairline dark:border-gray-700">
-                        <th className={TH}><span className="sr-only">Select</span></th>
-                        <th className={TH}>Waiting</th><th className={TH}>Lane</th><th className={TH}>Who</th><th className={TH}>What</th><th className={TH}>Assigned</th><th className={TH}>Decided on</th>
-                        <th className={TH}><span className="sr-only">More</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r) => (
-                        <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-row-${r.key}`}>
-                          <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
-                          <td className={TD}><span className={MONO}>{r.age}</span><BandPill band={r.band} /></td>
-                          <td className={TD}>{r.laneLabel}{r.group ? <div className={SUB}>{r.group}</div> : null}</td>
-                          <td className={TD}><Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link></td>
-                          <td className={TD}>{r.what}</td>
-                          <td className={TD}><span className={r.assignee.kind === 'person' ? '' : SUB}>{r.assignee.text}</span></td>
-                          <td className={TD}><DoorFor lane={r.lane} /></td>
-                          <td className={TD}><RowMenu row={r} search={loc.search} onAssign={onAssign} onCopy={copy} /></td>
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="w-full min-w-[760px]" data-testid="approvals-table">
+                      <thead>
+                        <tr className="border-b border-axal-hairline dark:border-gray-700">
+                          <th scope="col" className={`${TH} w-10`}>
+                            <input type="checkbox" aria-label="Select all on this page" checked={allPicked} aria-checked={somePicked ? 'mixed' : allPicked}
+                              ref={(el) => { if (el) el.indeterminate = somePicked; }}
+                              onChange={() => setSelected(allPicked ? new Set() : new Set(rows.map((r) => r.key)))} data-testid="approvals-pick-all" />
+                          </th>
+                          <th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Owner</th><th scope="col" className={TH}>Review</th>
+                          <th scope="col" className={`${TH} w-12`}><span className="sr-only">More</span></th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-start gap-1.5 px-4 py-5" data-testid="approvals-empty">
-                    {filtered ? (
-                      <>
-                        <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing matches these filters.</span>
-                        <button type="button" className={LINK} onClick={() => { setTyped(''); navigate('/admin/approvals', { replace: true }); }}>Clear filters</button>
-                      </>
-                    ) : unread.length ? (
-                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing else is waiting in the lanes that answered.</span>
-                    ) : (
-                      <>
-                        <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing is waiting on you.</span>
-                        <span className={SUB}>New items arrive here as members apply, submit and ask.</span>
-                        <Link to="/admin/approvals/decided" className={LINK}>See what was decided</Link>
-                      </>
-                    )}
+                      </thead>
+                      <tbody>
+                        {lines.map((l) => {
+                          if (l.kind === 'band') return (
+                            <tr key={`band-${l.band.key}`} className="border-b border-axal-hairline bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60" data-testid={`approvals-band-${l.band.key}`}>
+                              <th colSpan={6} scope="rowgroup" className={`px-3 py-1.5 text-left text-[11px] font-bold uppercase tracking-[.06em] ${l.band.tone === 'bad' ? 'text-axal-destructive dark:text-red-300' : l.band.tone === 'warn' ? 'text-axal-amber-deep dark:text-amber-200' : 'text-axal-muted dark:text-gray-400'}`}>{l.band.text}</th>
+                            </tr>
+                          );
+                          const r = l.row;
+                          return (
+                            <tr key={r.key} aria-selected={selected.has(r.key)} className={`border-b border-axal-hairline last:border-0 dark:border-gray-700 ${selected.has(r.key) ? 'bg-axal-lavender dark:bg-violet-950/30' : ''}`} data-testid={`approvals-row-${r.key}`}>
+                              <td className={TD}><input type="checkbox" aria-label={`Select ${r.who}`} checked={selected.has(r.key)} onChange={() => toggle(r.key)} data-testid={`approvals-pick-${r.key}`} /></td>
+                              <td className={TD}>
+                                <Link to={`/admin/approvals/items/${r.lane}-${r.id}${loc.search}`} className="font-bold text-axal-ink hover:underline dark:text-gray-100" data-testid={`approvals-open-${r.key}`}>{r.who}</Link>
+                                <div className="text-[12.5px] text-axal-ink dark:text-gray-100">{r.what}</div>
+                                <div className={SUB}>{r.laneLabel}{r.group ? ` · ${r.group}` : ''}</div>
+                              </td>
+                              <td className={TD}><span className={MONO}>{r.age}</span><UrgencyPill sla={r.sla} /></td>
+                              <td className={TD}><OwnerCell row={r} callerId={callerId} onAssign={onAssign} /></td>
+                              <td className={TD}><ReviewCell row={r} search={loc.search} /></td>
+                              <td className={TD}><RowActions row={r} onAssign={onAssign} onCopy={copy} /></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              {rows.length ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
-                  <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
-                  <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
-                    <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
-                    <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
-                  </div>
+                </>
+              ) : (
+                <div role="status" className="flex flex-col items-start gap-1.5 px-4 py-5" data-testid="approvals-empty">
+                  {nFilters ? (
+                    <>
+                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing matches these filters.</span>
+                      <button type="button" className={LINK} onClick={clearFilters}>Clear filters</button>
+                    </>
+                  ) : view === 'mine' ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing waiting is assigned to you.</span>
+                  ) : view === 'unassigned' ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Every waiting item has an owner.</span>
+                  ) : unread.length ? (
+                    <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing else is waiting in the lanes that answered.</span>
+                  ) : (
+                    <>
+                      <span className="text-[14px] font-bold text-axal-ink dark:text-gray-100">Nothing needs approval.</span>
+                      <span className={SUB}>All approval queues currently read as clear. New items arrive here as members apply, submit and ask.</span>
+                      <Link to="/admin/approvals/decided" className={LINK}>See what was decided</Link>
+                    </>
+                  )}
                 </div>
-              ) : null}
-            </section>
-            <WaitingOnHq read={requests} />
-          </div>
+              )}
+            {rows.length ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
+                <span className={`${SUB} ${MONO}`} data-testid="approvals-count">{pageLine(reply)}</span>
+                <div className="flex gap-2 max-sm:w-full max-sm:*:flex-1">
+                  <button type="button" className={BTN} disabled={q.page <= 1} onClick={() => setParams({ page: q.page > 2 ? String(q.page - 1) : null })}>Previous</button>
+                  <button type="button" className={BTN} disabled={!hasNextPage(reply)} onClick={() => setParams({ page: String(q.page + 1) })} data-testid="approvals-next">Next</button>
+                </div>
+              </div>
+            ) : null}
+            {/* D4814 (AP-03): the bulk bar floats over the bottom of the queue; its
+                holder has no height, so selecting a row moves nothing below it. */}
+            {picked.length ? (
+              <div className="pointer-events-none sticky bottom-4 z-20 h-0" data-testid="approvals-bulk-holder">
+                <div role="region" aria-label="Bulk actions" className="pointer-events-auto mx-auto flex w-max max-w-[calc(100%-24px)] -translate-y-[calc(100%+12px)] flex-wrap items-center gap-2 rounded-[12px] bg-axal-ink px-3 py-2 text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" data-testid="approvals-bulk">
+                  <span className="text-[12.5px]"><b className={MONO}>{picked.length.toLocaleString('en-US')}</b> selected</span>
+                  <button type="button" className={BTN_PRIMARY} onClick={() => onAssign(picked)} data-testid="approvals-bulk-assign">Assign…</button>
+                  <button type="button" className="inline-flex min-h-[44px] items-center rounded-[8px] px-3 text-[12.5px] font-bold hover:bg-white/10 sm:min-h-[36px] dark:hover:bg-gray-900/10" onClick={() => setSelected(new Set())} data-testid="approvals-bulk-clear">Clear</button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section aria-labelledby="approvals-workload-h" className="flex flex-col gap-2.5" data-testid="approvals-workload">
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <h2 id="approvals-workload-h" className={H2}>Workload</h2>
+              <span className={SUB}>Secondary. The queue above is the work.</span>
+            </div>
+            <div className="grid gap-3.5 lg:grid-cols-2">
+              {lanesChart ? (
+                <ChartCard title="Waiting by lane" testId="approvals-chart-lanes" chart={lanesChart.rows.length ? lanesChart : null} alt={lanesChart.sum}
+                  legend={<Legend items={BAND_PARTS.map((p) => (p.key === 'unknown' ? { label: p.label, tone: 'dash' } : { label: p.label, tone: p.tone }))} />}>
+                  {lanesChart.rows.length ? <Chart chart={{ ...lanesChart, testIdPrefix: 'approvals-bar' }} /> : <p className={`m-0 ${SUB}`}>{lanesChart.sum}</p>}
+                </ChartCard>
+              ) : (
+                <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-lanes"><h2 className={H2}>Waiting by lane</h2><Skeleton h={140} /></section>
+              )}
+              {weeks?.drawable ? (
+                <ChartCard title="Arrived and decided, last 8 weeks" testId="approvals-chart-weeks" chart={weeks.chart} alt={weeks.sum} foot={weeks.foot}
+                  legend={<><DecidedWeek t={decidedWeek} /><Legend items={[{ label: 'Arrived', tone: 'violet', mark: 'line' }, { label: 'Decided', tone: 'sky', mark: 'line' }, { label: 'This week, to date', tone: 'hollow' }]} /></>}>
+                  <Chart chart={weeks.chart} />
+                </ChartCard>
+              ) : (
+                <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-chart-weeks">
+                  <h2 className={H2}>Arrived and decided, last 8 weeks</h2>
+                  <DecidedWeek t={decidedWeek} />
+                  {weekly.status === 'loading' ? <Skeleton h={140} />
+                    : weekly.status === 'error' ? <p className={`m-0 text-[13px] text-axal-destructive dark:text-red-300`}>{LANE_FAILED}: the weekly series did not answer. <button type="button" className="underline" onClick={weekly.reload}>Try again</button></p>
+                      : <p className={`m-0 ${SUB}`}>{weeks?.reason}</p>}
+                </section>
+              )}
+            </div>
+            {/* D4814: Waiting on HQ is outbound tracking, so only a studio shell, which can wait on HQ, draws it. */}
+            {studio ? <WaitingOnHq read={requests} /> : null}
+          </section>
         </>
       )}
       {sheet?.kind === 'filters' ? (
-        <FiltersSheet q={q} superAdmin={superAdmin} reviewers={reviewers} n={n} typed={typed}
-          onType={(v) => { setTyped(v); const t = v.trim(); if (t.length >= SEARCH_MIN || !t) setParams({ q: t || null }); }}
-          setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)}
-          onClear={() => { setTyped(''); navigate('/admin/approvals', { replace: true }); }} />
+        <FiltersPanel q={q} superAdmin={superAdmin} reviewers={reviewers} n={n}
+          setParams={setParams} total={reply?.total ?? null} onClose={() => setSheet(null)} onClear={clearFilters} />
       ) : null}
-      {sheet?.kind === 'row' ? <RowSheet row={sheet.row} search={loc.search} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
+      {sheet?.kind === 'row' ? <RowSheet row={sheet.row} onAssign={onAssign} onCopy={copy} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }
 
-function LaneTable({ group, views, glanceLanes, onRetry }) {
-  const rows = views.filter((v) => v.group === group.key);
+/** The weekly decisions line in Workload: "Decided this week · 12 · median wait 1 d 9 h". */
+function DecidedWeek({ t }) {
+  if (t.state === 'loading') return null;
   return (
-    <section className={`${CARD} overflow-x-auto`} data-testid={`approvals-lanes-${group.key}`}>
-      <h2 className={`${H2} px-3 pt-3`}>{group.label}</h2>
+    <p className={`m-0 ${SUB}`} data-testid="approvals-decided-week">
+      {t.state === 'ready' ? <>Decided this week · <span className={MONO}>{t.value}</span> · {t.sub}</> : <>Decided this week: {t.reason}</>}
+    </p>
+  );
+}
+
+/**
+ * D4814 (AP-06): one group of the operations map — Lane · Waiting · Oldest ·
+ * Notifies / owner · Reviewed in. A native board is tagged "Approvals board";
+ * an unread lane says so with Try again, a lane not counted says why.
+ */
+function LaneTable({ group, glanceLanes, onRetry }) {
+  return (
+    <section className={`${CARD} overflow-x-auto`} aria-labelledby={`approvals-lanes-${group.key}-h`} data-testid={`approvals-lanes-${group.key}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-3.5 py-3 dark:border-gray-700">
+        <h2 id={`approvals-lanes-${group.key}-h`} className={H2}>{group.label}</h2>
+        <span className={`${SUB} ${MONO}`} data-testid={`approvals-lanes-${group.key}-count`}>{group.waiting == null ? '…' : `${group.waiting} · ${group.lanes}`}</span>
+      </div>
       <table className="w-full min-w-[760px]">
-        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Decided on</th><th className={TH}>Who decides</th><th className={TH}>Notifies</th></tr></thead>
+        <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th scope="col" className={TH}>Lane</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Oldest</th><th scope="col" className={TH}>Notifies / owner</th><th scope="col" className={TH}>Reviewed in</th></tr></thead>
         <tbody>
-          {rows.map((v) => {
+          {group.rows.map((v) => {
             const notifies = notifiesOf(glanceLanes.find((l) => l.key === v.glance));
             return (
-              <tr key={v.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-lane-${v.key}`}>
-                <td className={TD}>{v.label}{v.isNew ? <span className={NEW_PILL}>New</span> : null}{v.note ? <div className={SUB}>{v.note}</div> : null}</td>
-                <td className={TD}><WaitingCell v={v} onRetry={onRetry} /></td>
-                <td className={TD}>{v.state === 'ready' && v.count > 0 ? <><span className={MONO}>{v.age || 'Age not recorded'}</span><BandPill band={v.band} /></> : <span className={SUB}>—</span>}</td>
-                <td className={TD}><LaneDoor k={v.key} /></td>
-                <td className={TD}>Admin and Super Admin</td>
+              <tr key={v.key} className={`border-b border-axal-hairline last:border-0 dark:border-gray-700 ${v.state === 'unreadable' ? 'bg-axal-destructive-tint/40 dark:bg-red-950/20' : ''}`} data-testid={`approvals-lane-${v.key}`}>
+                <td className={TD}>
+                  <b>{v.label}</b>
+                  {v.native ? <span className={NEW_PILL} data-testid={`approvals-lane-native-${v.key}`}>Approvals board</span> : null}
+                  {v.isNew ? <span className={NEW_PILL}>New</span> : null}
+                  {v.note ? <div className={SUB}>{v.note}</div> : null}
+                </td>
+                <td className={TD}>
+                  {v.state === 'ready' ? (
+                    <>
+                      <span className={MONO} data-testid={`approvals-lane-count-${v.key}`}>{v.count.toLocaleString('en-US')}</span> waiting
+                      {v.overdue ? <span className={`ml-1.5 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.bad}`} data-testid={`approvals-lane-overdue-${v.key}`}>{`${v.overdue.toLocaleString('en-US')} overdue`}</span> : null}
+                    </>
+                  ) : <WaitingCell v={v} onRetry={onRetry} />}
+                </td>
+                <td className={TD}>
+                  {v.state === 'unreadable' ? <span className={SUB}>— not read</span>
+                    : v.state === 'ready' && v.count > 0 ? (v.age ? <span className={MONO}>{`oldest ${v.age}`}</span> : <><span className={SUB}>Not recorded</span><div className={SUB}>arrival time not kept</div></>)
+                      : <span className={SUB}>—</span>}
+                </td>
                 <td className={TD} data-testid={`approvals-notifies-${v.key}`}>
                   {notifies.warn ? <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.warn}`}>{notifies.text}</span>
                     : <span className={notifies.state === 'ready' ? '' : SUB}>{notifies.text}</span>}
                 </td>
+                <td className={TD}><DressedDoor lane={v.key} after=" →" className={LINK} plain={SUB} testId={`approvals-lane-door-${v.key}`} /></td>
               </tr>
             );
           })}
@@ -709,55 +963,91 @@ function LaneTable({ group, views, glanceLanes, onRetry }) {
   );
 }
 
-/** Lanes (APR2), plus HQ decides with its counts for a Super Admin (APR9) and the Not-a-queue card. */
-function Lanes({ views, glance, superAdmin }) {
+/**
+ * Lanes (APR2). D4814 (AP-06): an operations map — the banner when a lane
+ * could not be read, the groups with their totals, HQ decides (a Super
+ * Admin's table, a locked line for an Admin), and the five places that are
+ * not approval queues, collapsed at the bottom.
+ */
+function Lanes({ views, glance, inbox, superAdmin }) {
   const ap = glance.hq?.approvals;
   const glanceLanes = ap?.kind === 'ready' ? ap.lanes : [];
   const hq = hqLaneViews(ap?.hqDecides ?? null);
+  const groups = laneGroups(views, inbox.status === 'ready' ? inbox.reply : null);
+  const banner = lanesBanner(views);
   return (
-    <div className="flex flex-col gap-3.5">
-      <p className={`m-0 ${SUB}`}>{LANES_LINE}</p>
-      {GROUPS.map((g) => <LaneTable key={g.key} group={g} views={views} glanceLanes={glanceLanes} onRetry={glance.reload} />)}
+    <div className="flex flex-col gap-3.5" data-testid="approvals-lanes">
+      <div className="flex flex-col gap-0.5">
+        <h2 className={H2}>Approval lanes</h2>
+        <p className={`m-0 ${SUB}`}>Where admin decisions enter the platform and where each one is reviewed.</p>
+      </div>
+      {banner ? (
+        <div role="alert" className={`${CARD} flex flex-wrap items-center gap-2.5 border-axal-destructive-edge px-4 py-3 text-[13px] text-axal-destructive dark:border-red-900 dark:text-red-300`} data-testid="approvals-lanes-banner">
+          <span><b>{banner.text}</b> {banner.names}</span>
+          <button type="button" className="font-bold underline" onClick={glance.reload}>Try again</button>
+        </div>
+      ) : null}
+      {groups.map((g) => <LaneTable key={g.key} group={g} glanceLanes={glanceLanes} onRetry={glance.reload} />)}
       {superAdmin ? (
         <section className={`${CARD} overflow-x-auto`} data-testid="approvals-hq-lanes">
-          <h2 className={`${H2} px-3 pt-3`}>HQ decides</h2>
-          <p className={`m-0 px-3 ${SUB}`}>{hqBandLine(ap?.hqDecides ?? null) || 'Only Super Admins see this group.'}</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-axal-hairline px-3.5 py-3 dark:border-gray-700">
+            <h2 className={H2}>HQ decides — Super Admin only</h2>
+            <span className={SUB}>{hqBandLine(ap?.hqDecides ?? null) || 'Only Super Admins see this group.'}</span>
+          </div>
           <table className="w-full min-w-[640px]">
-            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Lane</th><th className={TH}>Waiting</th><th className={TH}>Oldest</th><th className={TH}>Decided on</th><th className={TH}>Who decides</th></tr></thead>
+            <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th scope="col" className={TH}>Lane</th><th scope="col" className={TH}>Waiting</th><th scope="col" className={TH}>Oldest</th><th scope="col" className={TH}>Notifies / owner</th><th scope="col" className={TH}>Reviewed in</th></tr></thead>
             <tbody>
               {hq.map((l) => (
                 <tr key={l.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-hq-${l.key}`}>
-                  <td className={TD}>{l.label}</td>
+                  <td className={TD}><b>{l.label}</b></td>
                   <td className={TD} data-testid={`approvals-hq-count-${l.key}`}>
-                    {l.state === 'ready' ? <span className={MONO}>{l.count.toLocaleString('en-US')}</span>
+                    {l.state === 'ready' ? <><span className={MONO}>{l.count.toLocaleString('en-US')}</span> waiting</>
                       : l.state === 'unreadable' ? <span title={l.reason} className="cursor-help text-axal-destructive dark:text-red-300">{LANE_FAILED}</span>
                         : <span title={l.reason} className={`cursor-help ${SUB}`}>{NOT_YET}</span>}
                   </td>
-                  <td className={TD}>{l.state === 'ready' && l.count > 0 ? <span className={MONO}>{l.age || 'Age not recorded'}</span> : <span className={SUB}>—</span>}</td>
+                  <td className={TD}>{l.state === 'ready' && l.count > 0 ? <span className={MONO}>{l.age ? `oldest ${l.age}` : 'Not recorded'}</span> : <span className={SUB}>—</span>}</td>
+                  <td className={TD}>{l.notifies?.text || <span className={SUB}>Super Admin</span>}</td>
                   <td className={TD}><HqDoor lane={l} /></td>
-                  <td className={TD}>Super Admin</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
-      ) : null}
-      <section className={`${CARD} flex flex-col gap-2 px-4 py-3`} data-testid="approvals-not-a-queue">
-        <h2 className={H2}>Not a queue</h2>
-        <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+      ) : (
+        <section className={`${CARD} flex flex-wrap items-center justify-between gap-2 px-4 py-3`} data-testid="approvals-hq-locked">
+          <span className="flex flex-wrap items-center gap-2.5">
+            <span className={`${EYE} text-axal-ink dark:text-gray-100`}>HQ decides — Super Admin only</span>
+            <span className={SUB}>{`${HQ_LANES.length} HQ lanes are visible to Super Admins. You are signed in as Admin.`}</span>
+          </span>
+          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL.plain}`}>🔒 Super Admin</span>
+        </section>
+      )}
+      <details className={`${CARD} px-4 py-3`} data-testid="approvals-not-a-queue">
+        <summary className="flex min-h-[44px] cursor-pointer flex-wrap items-center gap-2 sm:min-h-0">
+          <b className="text-[13px] text-axal-ink dark:text-gray-100">{`Not approval queues · ${NOT_A_QUEUE.length}`}</b>
+          <span className={SUB}>Nothing in them waits on an admin.</span>
+        </summary>
+        <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
           <li className={SUB}><Link to="/admin/directory" className={LINK}>Directory</Link>: {NOT_A_QUEUE[0].reason}</li>
           <li className={SUB}><Link to="/admin/circles" className={LINK}>Circles</Link>: {NOT_A_QUEUE[1].reason}</li>
           <li className={SUB}><Link to="/admin/partner-invitations" className={LINK}>Partner invitations</Link>: {NOT_A_QUEUE[2].reason}</li>
           <li className={SUB}><Link to="/admin/programs/mentor-cohorts/people" className={LINK}>Mentor cohort access</Link>: {NOT_A_QUEUE[3].reason}</li>
           <li className={SUB}><Link to="/admin/programs/spinout-lab/formation" className={LINK}>83(b) follow-ups and formation packets</Link>: {NOT_A_QUEUE[4].reason}</li>
         </ul>
-      </section>
+      </details>
     </div>
   );
 }
 
-/** Decided (APR10): the log, newest first, with what it cannot say. */
-function Decided({ decided }) {
+/**
+ * Decided (APR10). D4814 (AP-07): an audit trail — filters for lane, outcome,
+ * decided by and a date range, and Include HQ lanes (a Super Admin's; shown
+ * but off for an Admin); each row when, the request, the outcome, who
+ * decided, the wait (a dash when not recorded), whether the person saw the
+ * note, and Open ↗ to the page that decides that lane; About this history
+ * after the log.
+ */
+function Decided({ decided, superAdmin }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const f = decidedQueryOf(loc.search);
@@ -768,64 +1058,96 @@ function Decided({ decided }) {
     const s = p.toString();
     navigate({ pathname: '/admin/approvals/decided', search: s ? `?${s}` : '' }, { replace: true });
   };
+  const clear = () => setParams({ lane: null, outcome: null, decided_by: null, from: null, to: null, hq: null });
   if (decided.status === 'error') {
     return <FailedCard title="We could not load what was decided." line="The Inbox and each lane’s own page still work." error={decided.error} onRetry={decided.reload} testId="approvals-decided-failed" />;
   }
   const reply = decided.status === 'ready' ? decided.reply : null;
   const rows = decidedRows(reply);
   const notes = decidedNotes(reply);
+  const deciders = Array.isArray(reply?.deciders) ? reply.deciders : null;
   const size = Number(reply?.page_size) || 25;
   const more = reply && (reply.total === null || reply.total === undefined ? rows.length === size : f.page * size < reply.total) && f.page < 40;
+  const lanes = superAdmin && f.hq !== '0' ? [...LANES, ...HQ_LANES] : LANES;
+  const nFilters = decidedFilterCount(f);
   return (
     <div className="flex flex-col gap-3.5" data-testid="approvals-decided">
-      <p className={`m-0 ${SUB}`}>{DECIDED_LINE}</p>
-      {notes.since.length || notes.notRecorded.length || notes.caveats.length || notes.unreadable.length ? (
-        <div className={`${CARD} flex flex-col gap-1 px-4 py-3`} data-testid="approvals-decided-notes">
-          {notes.since.map((t) => <p key={t} className={`m-0 ${SUB}`}>{t}</p>)}
-          {notes.notRecorded.map((n) => <p key={n.label} className={`m-0 ${SUB}`}>{n.label}: {n.reason}</p>)}
-          {notes.caveats.map((c) => <p key={c.label} className={`m-0 ${SUB}`}>{c.label}: {c.text}</p>)}
-          {notes.unreadable.length ? <p className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300">{notes.unreadable.join(', ')} could not be read, so {notes.unreadable.length === 1 ? 'its decisions are' : 'their decisions are'} missing below.</p> : null}
-        </div>
-      ) : null}
-      <div className="flex flex-wrap items-end gap-3" data-testid="approvals-decided-filters">
-        <label className="flex flex-col gap-1">
-          <span className={EYE}>Lane</span>
-          <select className={SELECT} value={f.lane || ''} onChange={(e) => setParams({ lane: e.target.value || null })}>
-            <option value="">Every lane</option>
-            {LANES.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-          </select>
-        </label>
-        <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Outcome">
-          {OUTCOME_FILTERS.map((o) => (
-            <button key={o.label} type="button" aria-pressed={(f.outcome || null) === o.key} className={`${CHIP} ${(f.outcome || null) === o.key ? CHIP_ON : CHIP_OFF}`} onClick={() => setParams({ outcome: o.key })}>{o.label}</button>
-          ))}
-        </div>
-        <label className="flex flex-col gap-1"><span className={EYE}>From</span><input type="date" className={SELECT} value={f.from || ''} onChange={(e) => setParams({ from: e.target.value || null })} /></label>
-        <label className="flex flex-col gap-1"><span className={EYE}>To</span><input type="date" className={SELECT} value={f.to || ''} onChange={(e) => setParams({ to: e.target.value || null })} /></label>
+      <div className="flex flex-col gap-0.5">
+        <h2 className={H2}>Decided</h2>
+        <p className={`m-0 ${SUB}`}>Recorded admin decisions across approval lanes.</p>
       </div>
-      <section className={`${CARD} overflow-x-auto`}>
+      {notes.unreadable.length ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-300" data-testid="approvals-decided-unread">{notes.unreadable.join(', ')} could not be read, so {notes.unreadable.length === 1 ? 'its decisions are' : 'their decisions are'} missing below.</p> : null}
+      <section className={`${CARD} min-w-0`} aria-label="Decision log">
+        <div className="flex flex-wrap items-end gap-3 border-b border-axal-hairline px-3 py-2.5 dark:border-gray-700" data-testid="approvals-decided-filters">
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Lane</span>
+            <select className={SELECT} value={f.lane || ''} onChange={(e) => setParams({ lane: e.target.value || null })} data-testid="approvals-decided-lane">
+              <option value="">All</option>
+              {lanes.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Outcome</span>
+            <select className={SELECT} value={f.outcome || ''} onChange={(e) => setParams({ outcome: e.target.value || null })} data-testid="approvals-decided-outcome">
+              {OUTCOME_FILTERS.map((o) => <option key={o.label} value={o.key || ''}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={EYE}>Decided by</span>
+            <select className={SELECT} value={f.decided_by || ''} disabled={!deciders} title={deciders ? undefined : reply?.deciders_reason} onChange={(e) => setParams({ decided_by: e.target.value || null })} data-testid="approvals-decided-by">
+              <option value="">Anyone</option>
+              {(deciders || []).map((d) => <option key={d.id} value={String(d.id)}>{d.name}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1"><span className={EYE}>From</span><input type="date" className={SELECT} value={f.from || ''} onChange={(e) => setParams({ from: e.target.value || null })} data-testid="approvals-decided-from" /></label>
+          <label className="flex flex-col gap-1"><span className={EYE}>To</span><input type="date" className={SELECT} value={f.to || ''} onChange={(e) => setParams({ to: e.target.value || null })} data-testid="approvals-decided-to" /></label>
+          <label className={`ml-auto flex min-h-[44px] items-center gap-2 text-[12.5px] sm:min-h-0 ${superAdmin ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
+            <input type="checkbox" disabled={!superAdmin} checked={superAdmin && f.hq !== '0'} onChange={(e) => setParams({ hq: e.target.checked ? null : '0', ...(f.lane && HQ_LANES.some((l) => l.key === f.lane) ? { lane: null } : {}) })} data-testid="approvals-decided-hq" />
+            Include HQ lanes <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${PILL.plain}`}>Super Admin</span>
+          </label>
+        </div>
         {!reply ? <div className="px-3 py-3"><Skeleton.Table rows={6} cols={6} /></div>
           : rows.length ? (
-            <table className="w-full min-w-[820px]">
-              <thead><tr className="border-b border-axal-hairline dark:border-gray-700"><th className={TH}>Decided</th><th className={TH}>Lane</th><th className={TH}>Who</th><th className={TH}>Outcome</th><th className={TH}>Decided by</th><th className={TH}>Wait</th><th className={TH}>Note</th></tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-decided-${r.key}`}>
-                    <td className={TD}><span className={MONO}>{r.when}</span></td>
-                    <td className={TD}>{r.lane}</td>
-                    <td className={TD}>{r.who}</td>
-                    <td className={TD}><span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[r.outcome.tone] || PILL.plain}`}>{r.outcome.word}</span></td>
-                    <td className={TD}>{r.by}</td>
-                    <td className={TD}><span className={MONO}>{r.wait}</span></td>
-                    <td className={TD}>{r.note ? <>{r.note}{r.shown ? <div className={SUB}>◉ They see this</div> : null}</> : <span className={SUB}>—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : <p className={`m-0 px-4 py-5 ${SUB}`} data-testid="approvals-decided-empty">Nothing recorded as decided matches.</p>}
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead><tr className="border-b border-axal-hairline dark:border-gray-700">
+                  <th scope="col" className={TH}>Decided ↓</th><th scope="col" className={TH}>Request</th><th scope="col" className={TH}>Outcome</th><th scope="col" className={TH}>Decided by</th><th scope="col" className={`${TH} text-right`}>Wait</th><th scope="col" className={TH}>Note</th><th scope="col" className={TH}><span className="sr-only">Open</span></th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((r) => {
+                    const kind = noteKind(r);
+                    return (
+                      <tr key={r.key} className="border-b border-axal-hairline last:border-0 dark:border-gray-700" data-testid={`approvals-decided-${r.key}`}>
+                        <td className={`${TD} whitespace-nowrap`}><span className={MONO}>{r.when}</span></td>
+                        <td className={TD}><b>{r.who}</b><div className={SUB}>{r.lane}</div></td>
+                        <td className={TD}><span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${PILL[r.outcome.tone] || PILL.plain}`}>{r.outcome.word}</span></td>
+                        <td className={TD}>{r.by}</td>
+                        <td className={`${TD} text-right`}>{r.waitKnown ? <span className={MONO}>{r.wait}</span> : <span className={SUB} title="This lane does not record when the item arrived, so the wait is not known." data-testid={`approvals-decided-wait-${r.key}`}>—</span>}</td>
+                        <td className={TD} data-testid={`approvals-decided-note-${r.key}`}>
+                          {kind === 'none' ? <span className={SUB}>No note</span>
+                            : kind === 'shown' ? <>{r.note}<div className={SUB}>👁 Shown to them</div></>
+                              : <>{r.note}<div className={SUB}>🔒 Internal note</div></>}
+                        </td>
+                        <td className={`${TD} text-right`}>
+                          {/* D4814 part 6: a native board's row opens the item itself; any other lane opens its own page. */}
+                          {decidedItemPath(r) ? <Link to={decidedItemPath(r)} className={BTN_SM} data-testid={`approvals-decided-open-${r.key}`}>Open ↗</Link>
+                            : <DressedDoor lane={r.laneKey} before="Open in " after=" ↗" className={BTN_SM} plain={SUB} testId={`approvals-decided-open-${r.key}`} />}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div role="status" className="flex flex-col items-center gap-2 px-4 py-10 text-center" data-testid="approvals-decided-empty">
+              <b className="text-[14px] text-axal-ink dark:text-gray-100">No recorded decisions match these filters.</b>
+              {nFilters ? <button type="button" className={BTN} onClick={clear} data-testid="approvals-decided-clear">Clear filters</button> : null}
+            </div>
+          )}
         {rows.length ? (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-3 py-2 dark:border-gray-700">
-            <span className={`${SUB} ${MONO}`} data-testid="approvals-decided-count">{decidedPageLine(reply)}</span>
+            <span className={`${SUB} ${MONO}`} data-testid="approvals-decided-count">{`${decidedPageLine(reply)} · newest first`}</span>
             <div className="flex gap-2">
               <button type="button" className={BTN} disabled={f.page <= 1} onClick={() => setParams({ page: f.page > 2 ? String(f.page - 1) : null })}>Previous</button>
               <button type="button" className={BTN} disabled={!more} onClick={() => setParams({ page: String(f.page + 1) })}>Next</button>
@@ -833,6 +1155,14 @@ function Decided({ decided }) {
           </div>
         ) : null}
       </section>
+      {reply && rows.length ? (
+        <section className="flex flex-col gap-1.5 rounded-[12px] border border-dashed border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="approvals-decided-about">
+          <h2 className="m-0 text-[13px] font-extrabold text-axal-ink dark:text-gray-100">About this history</h2>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {aboutHistory(notes).map((t) => <li key={t} className={SUB}>{`· ${t}`}</li>)}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -851,10 +1181,16 @@ export function ApprovalsPage({ viewer = null }) {
   const notice = useMovedNotice({ [MOVED_KEY]: MOVED_NOTICE });
   const onInbox = tab === 'inbox';
   const iq = inboxQueryOf(loc.search, superAdmin);
-  const inbox = useRead(() => adminApprovalsApi.inbox(iq.page, iq.filters), JSON.stringify(iq.filters) + iq.page, onInbox);
+  // D4814 (AP-06): Lanes reads the inbox too, unfiltered, for each lane's overdue count.
+  const inboxKey = tab === 'lanes' ? 'lanes' : JSON.stringify(iq.filters) + iq.page;
+  const inbox = useRead(() => (tab === 'lanes' ? adminApprovalsApi.inbox(1, {}) : adminApprovalsApi.inbox(iq.page, iq.filters)), inboxKey, onInbox || tab === 'lanes');
   const weekly = useRead(() => adminApprovalsApi.weekly(), 'weekly', onInbox);
-  const requests = useRead(() => licenceRequestsApi.list(), 'requests', onInbox);
+  // D4814: Waiting on HQ is a studio's outbound list; the HQ-held shell neither draws nor reads it.
+  const studio = Boolean(branchOfUser(user));
+  const requests = useRead(() => licenceRequestsApi.list(), 'requests', onInbox && studio);
   const dq = decidedQueryOf(loc.search);
+  // D4814: "Include HQ lanes" off is a Super Admin's; a plain Admin never sends hq.
+  if (!decidedHq(loc.search, superAdmin)) delete dq.hq;
   const { page: dPage, ...dFilters } = dq;
   const decided = useRead(() => adminApprovalsApi.decided(dPage, dFilters), JSON.stringify(dq), tab === 'decided');
 
@@ -865,7 +1201,22 @@ export function ApprovalsPage({ viewer = null }) {
     const t = setTimeout(() => setToastText(null), 8000);
     return () => clearTimeout(t);
   }, [toastText]);
-  const openAssign = (rows, after) => setAssignFor({ rows, after });
+  const openAssign = (rows, after, opts = {}) => setAssignFor({ rows, after, ...opts });
+  // D4814 (AP-04): Assign to me takes the item at once — it changes the owner
+  // only, as Assign does — and is offered only to an admin the Worker lists as
+  // a reviewer (a Super Admin who is not one cannot be assigned).
+  const reviewers = inbox.status === 'ready' && Array.isArray(inbox.reply?.reviewers) ? inbox.reply.reviewers : [];
+  const canTake = user?.id != null && reviewers.some((r) => Number(r.id) === Number(user.id)) ? user.id : null;
+  const take = async (rows, after) => {
+    try {
+      await adminApprovalsApi.assign(canTake, assignItems(rows));
+      setToastText(`${rows[0].who} is now assigned to you.`);
+    } catch (e) {
+      setToastText(refusalToast(e));
+    }
+    inbox.reload();
+    after?.();
+  };
   const doneAssign = (text) => {
     const after = assignFor?.after;
     setAssignFor(null);
@@ -875,11 +1226,22 @@ export function ApprovalsPage({ viewer = null }) {
   };
   const closeItem = () => navigate({ pathname: '/admin/approvals', search: loc.search });
 
+  // D4814 (P0): on the Inbox the tab reads `waitingFigure`, the same number as
+  // Waiting and All. It used to read `unfiltered_total`, which the Worker sends
+  // only for a filtered read, so an unfiltered Inbox fell back to the glance's
+  // studio lanes and left HQ's own lanes out (Inbox 31 beside Waiting 32,
+  // "1 for HQ"). Off the Inbox the glance stands in, HQ's lanes included for a
+  // Super Admin.
+  const waiting = waitingFigure(inbox);
   const counted = views.filter((v) => v.glance);
-  const inboxCount = onInbox && inbox.status === 'ready' && inbox.reply.unfiltered_total != null
-    ? { kind: 'num', value: `${Number(inbox.reply.unfiltered_total).toLocaleString('en-US')}${inbox.reply.unreadable?.length ? ' +' : ''}` }
+  const hqPending = glance.hq?.approvals?.hqDecides?.pending_total;
+  const hqShare = superAdmin ? hqPending : 0;
+  const inboxCount = onInbox
+    ? (waiting.state === 'ready' ? { kind: 'num', value: waiting.value }
+      : waiting.state === 'loading' ? { kind: 'load' }
+        : { kind: 'dash', tip: waiting.reason })
     : counted.some((v) => v.state === 'loading') ? { kind: 'load' }
-      : counted.every((v) => v.state === 'ready') ? { kind: 'num', value: counted.reduce((t, v) => t + v.count, 0).toLocaleString('en-US') }
+      : counted.every((v) => v.state === 'ready') && hqShare != null ? { kind: 'num', value: (counted.reduce((t, v) => t + v.count, 0) + hqShare).toLocaleString('en-US') }
         : { kind: 'dash', tip: 'A lane could not be read, so there is no total.' };
   const decidedCount = tab === 'decided' && decided.status === 'ready' && decided.reply.total != null
     ? { kind: 'num', value: Number(decided.reply.total).toLocaleString('en-US') }
@@ -894,11 +1256,14 @@ export function ApprovalsPage({ viewer = null }) {
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-approvals">
       <AdminPageHeader title={TITLE} line={LINE} scope notice={{ text: notice.text, onDismiss: notice.dismiss }} tabs={tabs} data-testid="approvals-header" />
-      {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} views={views} glance={glance} superAdmin={superAdmin} onAssign={openAssign} toast={setToastText} /> : null}
-      {tab === 'lanes' ? <Lanes views={views} glance={glance} superAdmin={superAdmin} /> : null}
-      {tab === 'decided' ? <Decided decided={decided} /> : null}
-      {item ? <ItemDrawer key={`${item.lane}-${item.id}`} at={item} onClose={closeItem} onAssign={openAssign} /> : null}
-      {assignFor ? <AssignDialog items={assignFor.rows} inbox={inbox} callerId={user?.id} onClose={() => setAssignFor(null)} onDone={doneAssign} /> : null}
+      {onInbox ? <Inbox inbox={inbox} weekly={weekly} requests={requests} superAdmin={superAdmin} studio={studio} callerId={user?.id ?? null} onAssign={openAssign} toast={setToastText} /> : null}
+      {tab === 'lanes' ? <Lanes views={views} glance={glance} inbox={inbox} superAdmin={superAdmin} /> : null}
+      {tab === 'decided' ? <Decided decided={decided} superAdmin={superAdmin} /> : null}
+      {item ? (
+        <ItemDrawer key={`${item.lane}-${item.id}`} at={item} step={onInbox && inbox.status === 'ready' ? queueStep(inbox.reply, item) : null} search={loc.search}
+          canTake={canTake} onClose={closeItem} onAssign={openAssign} onTake={take} />
+      ) : null}
+      {assignFor ? <AssignDialog items={assignFor.rows} title={assignFor.title} line={assignFor.line} inbox={inbox} callerId={user?.id} onClose={() => setAssignFor(null)} onDone={doneAssign} /> : null}
       {toastText ? (
         <div role="status" className="fixed bottom-6 left-1/2 z-50 flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-[10px] bg-axal-ink px-4 py-2.5 text-[13px] text-white shadow-lg dark:bg-gray-100 dark:text-gray-900" data-testid="approvals-toast">
           {toastText}
@@ -912,7 +1277,7 @@ export function ApprovalsPage({ viewer = null }) {
 /** The page inside its rail frame (D774), the frame the page's outermost element. */
 export default function AdminApprovals() {
   return (
-    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} data-testid="admin-board-approvals">
+    <AdminBoardFrame workspace="Approvals" note={RAIL_NOTE} operations data-testid="admin-board-approvals">
       <ApprovalsPage />
     </AdminBoardFrame>
   );

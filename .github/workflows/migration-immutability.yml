@@ -18,6 +18,14 @@ name: Migration immutability
 # made; the script fails rather than passes when that happens, but a gate that
 # can only fail is no more use than one that can only pass.
 #
+# WHY BLOBLESS (`filter: blob:none`, 2026-11-03). A full clone of every blob
+# in the history ran past this job's 10 minutes while busy (#4306, run
+# 41716929617: cancelled inside "Fetching the repository"), and a cancelled
+# gate is a red required check on a PR that touched nothing. The gate needs
+# commits and trees only: `ls-tree --name-only` and a `diff --name-status`
+# under the migrations folder; git fetches the few blobs rename detection
+# reads on demand. The same fix the lfs size gate in ci.yml carries.
+#
 # THE TWO MODES, and the event chooses between them:
 #   · pull_request — the base is the PR's base branch (GITHUB_BASE_REF).
 #   · push to main — the base is the commit main pointed at before the push
@@ -56,6 +64,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          filter: blob:none
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'

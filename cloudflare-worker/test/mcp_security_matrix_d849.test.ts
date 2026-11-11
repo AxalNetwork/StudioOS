@@ -60,7 +60,8 @@ const errorOf = (r: any) => JSON.parse(r.content[0].text).error as string | unde
 /** Each tool as registered, with its run recorded and the plan and connection gates opened, so the tenant gate is what answers. */
 function recorded() {
   const ran: Array<{ tool: string; company: number | null; companies: number[] }> = [];
-  const tools = registeredTools().map((t) => ({
+  // This matrix is the ordinary member/API-key principal. Bound-Team identity has its own D4424 matrix.
+  const tools = registeredTools().filter(t => !t.outsideOnly).map((t) => ({
     ...t, entitlement: undefined, requiresConnection: false,
     run: async (r: any) => { ran.push({ tool: t.name, company: r.company?.id ?? null, companies: r.companies.map((c: any) => c.id) }); return { ok: true }; },
   }));

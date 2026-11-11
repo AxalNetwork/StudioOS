@@ -43,7 +43,7 @@ export function cutoverView(data) {
 export const CONFIRM_WORD = 'live';
 /** The dialog sends only with a reason and the word typed exactly. */
 export function canMove(view, reason, typed) {
-  return view?.state === 'ready' && String(reason ?? '').trim().length > 0 && String(typed ?? '').trim() === CONFIRM_WORD;
+  return view?.state === 'ready' && String(reason ?? '').trim().length > 0 && String(typed ?? '').trim().toLowerCase() === CONFIRM_WORD;
 }
 
 /** The sentence after a move, from the POST's answer. */

@@ -14,6 +14,7 @@
 import type { Env } from '../types';
 import { resolveReferralCode, normaliseReferralCode } from './referrals/resolveCode';
 import { bindingKey } from '../util/schemaBootstrap';
+import { attachHandleReferral, parseHandleRef } from './referrals/handleAttribution';
 
 // Mirrors the payouts approval window so a purchase attributed today is still
 // inside the refund/clawback window when its commission is evaluated.
@@ -32,10 +33,22 @@ export async function ensureAttributionSchema(env: Env): Promise<void> {
       expires_at                  TIMESTAMP NOT NULL,
       converted_payment_intent_id TEXT,
       converted_at                TIMESTAMP,
-      created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      created_at                  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      -- D4289 P2 (#4291): migration 202611031659 adds these five; a new table carries them from the start.
+      source                      TEXT NOT NULL DEFAULT 'code' CHECK (source IN ('code', 'handle')),
+      handle                      TEXT,
+      channel                     TEXT,
+      status                      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'flagged', 'refused')),
+      refused_reason              TEXT
     )`,
     `CREATE INDEX IF NOT EXISTS idx_referral_attributions_referrer
        ON referral_attributions(referrer_user_id)`,
+    // D4289 P2 (#4291): a dev D1 whose table predates migration 202611031659 gains the five here.
+    `ALTER TABLE referral_attributions ADD COLUMN source TEXT NOT NULL DEFAULT 'code'`,
+    `ALTER TABLE referral_attributions ADD COLUMN handle TEXT`,
+    `ALTER TABLE referral_attributions ADD COLUMN channel TEXT`,
+    `ALTER TABLE referral_attributions ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`,
+    `ALTER TABLE referral_attributions ADD COLUMN refused_reason TEXT`,
   ];
   for (const s of stmts) { try { await env.DB.prepare(s).run(); } catch { /* idempotent */ } }
   SCHEMA_READY.set(bindingKey(env), true);
@@ -63,7 +76,10 @@ export async function captureAndResolveAttribution(
     // First-touch capture: only when a code is present, resolves to a real
     // referrer, and that referrer isn't the buyer themselves. INSERT OR IGNORE
     // keeps the earliest attribution (user_id UNIQUE) so first-touch wins.
-    const normalized = normaliseReferralCode(cookieCode);
+    // D4289 P2 (#4291): a handle reference (`h:jane[:yt]`) is the handle path's, with its 90-day window and checks.
+    const handleRef = parseHandleRef(cookieCode);
+    const normalized = handleRef ? '' : normaliseReferralCode(cookieCode);
+    if (handleRef) await attachHandleReferral(env, buyerUserId, handleRef, { signup: false });
     if (normalized) {
       const referrerUserId = await resolveReferralCode(env, cookieCode);
       if (referrerUserId && referrerUserId !== buyerUserId) {
@@ -83,6 +99,7 @@ export async function captureAndResolveAttribution(
         WHERE user_id = ?
           AND referrer_user_id != ?
           AND datetime(expires_at) > datetime('now')
+          AND status = 'active'
         LIMIT 1`,
     ).bind(buyerUserId, buyerUserId).first<{ referral_code: string; referrer_user_id: number }>();
     if (!row) return null;

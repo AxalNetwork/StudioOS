@@ -176,6 +176,9 @@ function stub(routes) {
 }
 const OK = {
   '/api/personas/admin/segments': () => json(SEG),
+  '/api/admin/persona-segment-scopes': () => json({ scopes: [{ code: 'hq', label: 'HQ-held accounts' }], registry: { readable: true } }),
+  '/api/admin/persona-segment-scopes/overview': () => json({ summary: SEG, profiles: PROFILES, coverage: COVERAGE }),
+  '/api/admin/persona-segment-scopes/suggestions': () => json({ suggestions: [] }),
   '/api/personas/segments': () => json(PROFILES),
   '/api/personas/segments/coverage': () => json(COVERAGE),
 };
@@ -286,9 +289,9 @@ test('no member has a segment yet (SEG10), and HQ\'s scope select and suggestion
   v = await render(h(PersonaSegmentsPage, { superAdmin: true }));
   try {
     assert.match(v.of('seg-header'), /Content.*Persona segments/s);
-    assert.match(v.of('seg-filters'), /Scope.*HQ-held accounts/s);
+    assert.match(v.of('seg-scope-controls'), /Scope.*HQ-held accounts/s);
     assert.match(v.of('seg-scope-line'), /Today only HQ-held accounts exist\. Subsidiaries appear once they are deployed\./);
-    assert.match(v.of('seg-suggestions-inset'), /Waiting for HQ.*D997 part 6/s);
+    assert.match(v.of('seg-suggestions-inset'), /Waiting for HQ.*No suggestions waiting for HQ/s);
     assert.match(v.of('seg-card-advisors-none'), /No segment for Advisors yet\.3 advisors have none\./s, 'HQ is not told HQ is defining them');
   } finally { await v.unmount(); s.restore(); }
 });

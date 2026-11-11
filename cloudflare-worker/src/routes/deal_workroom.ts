@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * D1153 (#3058, part 5 of the deal page #2421) — what the investor's working
  * tabs need that no read or write answered yet. Mounted at `/api/deals`
@@ -32,7 +33,7 @@ type Ctx = { user: User; dealId: number; projectId: number; currency: string };
 
 async function investorDeal(c: Context<{ Bindings: Env }>): Promise<Ctx | { error: Response }> {
   const user = await requireAuth(c) as User;
-  if (user.role !== 'investor') return { error: c.json({ error: 'investor_only', detail: 'This is an investor’s own view of the deal.' }, 403) };
+  if (!holdsLicence(user, 'investor')) return { error: c.json({ error: 'investor_only', detail: 'This is an investor’s own view of the deal.' }, 403) };
   const raw = String(c.req.param('id') || '');
   if (!/^[1-9][0-9]{0,14}$/.test(raw)) return { error: c.json({ error: 'deal_not_found' }, 404) };
   const dealId = Number(raw);

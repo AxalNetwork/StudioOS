@@ -118,7 +118,7 @@ export function pageLabel(path) {
     '/validate/customer-research': 'Customer research',
     '/build/roadmap': 'Roadmap',
     '/build/brand': 'Brand',
-    '/build/deck': 'Pitch Deck',
+    '/raise/pitch': 'Pitch Deck',
     '/onboarding/persona': 'Persona',
     '/portfolio': 'Portfolio',
     '/advisorship': 'Advisorship',

@@ -10,6 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import InvestorLinksTable from '../src/pages/raise/pitch/InvestorLinksTable.jsx';
 import ViewerAnalyticsSheet from '../src/pages/raise/pitch/ViewerAnalyticsSheet.jsx';
@@ -60,7 +61,8 @@ async function mount(element, handle) {
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   const settle = async () => { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
-  await act(async () => root.render(element));
+  // #4272 (ps7s): the sheet links into Capital relationships, so it is mounted inside a router, as in the app.
+  await act(async () => root.render(React.createElement(MemoryRouter, null, element)));
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
   const textOf = (n) => (n.nodeType === 3 ? n.textContent || '' : n.childNodes?.length ? n.childNodes.map(textOf).join('') : n.textContent || '');

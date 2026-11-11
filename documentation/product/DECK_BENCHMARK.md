@@ -12,17 +12,17 @@ The owner's bar: one press of "Generate from my data" gives a deck presentable w
 
 #3768's zero-edit acceptance is measured here. Gamma and Dokie are compared on the same brief once the owner's decision F allows those arms.
 
-Baseline, 2026-11-01 (refresh with `scripts/eval-elements.mjs --benchmark --write`; `cloudflare-worker/test/deck_eval_d1518.test.ts` fails when this table and the arm disagree):
+Baseline, 2026-11-03 (refresh with `scripts/eval-elements.mjs --benchmark --write`; `cloudflare-worker/test/deck_eval_d1518.test.ts` fails when this table and the arm disagree):
 
 <!-- zero-edit:start -->
 | Venture | Rubric v0 | "Not recorded" | Overflow | Verdict | Gamma | Dokie |
 | --- | --- | --- | --- | --- | --- | --- |
 | full | 100 | 0 | 0 | pass | not run (F) | not run (F) |
-| sparse | 86 | 7 | 0 | fail: 7 "Not recorded" placeholder(s) | not run (F) | not run (F) |
+| sparse | 100 | 0 | 0 | pass | not run (F) | not run (F) |
 | conflicting | 100 | 0 | 0 | pass | not run (F) | not run (F) |
 <!-- zero-edit:end -->
 
-**Reading today's baseline.** The full and conflicting ventures pass. The sparse venture does not: with its unrecorded records unticked it still draws "Not recorded" lines on cards whose every record is missing. That is the gap #3768 closes, and this row turning to "pass" is its acceptance.
+**Reading today's baseline.** All three ventures pass (2026-11-03, D1516, #3768). On 2026-11-01 the sparse venture did not: with its unrecorded records unticked it still drew 7 "Not recorded" lines on cards whose records were missing. The build now cuts the stage arc to the cards with recorded proof (each card left out says "<Title> not evidenced"), and a slot the venture has no row for counts as not recorded, as the live build reads every slot.
 
 ## The competitor arms
 

@@ -136,14 +136,14 @@ export function overviewTiles(seg, profile = 'all') {
   const one = profile !== 'all';
   const group = one && !failed(byP) ? (byP.profiles || []).find((g) => g.profile === profile) : null;
   const tagged = one
-    ? (failed(byP) ? { failed: true } : { value: (group?.members || 0) - (group?.no_segment || 0), sub: `of ${nf(group?.members || 0)} ${profileLabel(profile).toLowerCase()}` })
+    ? (failed(byP) ? { failed: true } : { value: group?.members == null || group?.no_segment == null ? null : group.members - group.no_segment, sub: group?.members == null ? 'Total not recorded' : `of ${nf(group.members)} ${profileLabel(profile).toLowerCase()}` })
     : (failed(m) ? { failed: true } : {
       value: m.in_segment,
-      sub: m.total ? `of ${nf(m.total)} members · ${Math.round((m.in_segment / m.total) * 100)}%` : 'No members yet',
+      sub: m.total == null ? 'Total not recorded' : m.total === 0 ? 'No members yet' : m.in_segment == null ? `of ${nf(m.total)} members` : `of ${nf(m.total)} members · ${Math.round((m.in_segment / m.total) * 100)}%`,
       delta: m.new_30d ? `+${nf(m.new_30d)} in 30 days` : null,
     });
   const untagged = one
-    ? (failed(byP) ? { failed: true } : { value: group?.no_segment || 0 })
+    ? (failed(byP) ? { failed: true } : { value: group?.no_segment ?? null })
     : (failed(m) ? { failed: true } : { value: m.no_segment });
   const differ = one ? { notPerProfile: true } : (failed(m) ? { failed: true } : { value: m.profile_differs, sub: 'Members whose account profile is not their segment’s.' });
   const moved = one ? { notPerProfile: true } : (failed(moves) ? { failed: true } : { value: moves.count });
@@ -155,7 +155,7 @@ export function subAccountChips(seg) {
   const s = seg?.sub_accounts;
   if (failed(s)) return { failed: true };
   return {
-    lp: { total: s.lp?.total ?? 0, noSegment: s.lp?.no_segment ?? 0, bySegment: s.lp?.by_segment || {}, definition: s.lp?.definition || '' },
+    lp: { total: s.lp?.total ?? null, noSegment: s.lp?.no_segment ?? null, bySegment: s.lp?.by_segment || {}, definition: s.lp?.definition || '' },
     productTester: s.product_tester?.recorded === false ? { recorded: false, reason: s.product_tester.reason } : { recorded: true },
   };
 }
@@ -166,7 +166,7 @@ export function segmentsByProfileRead(seg, profile = 'all') {
   if (failed(b)) return { failed: true, groups: [] };
   const toGroup = (g, p) => {
     const bars = (g.segments || []).map((s) => ({ id: s.id, label: segmentLabel(s.id), count: s.count }));
-    return { role: p.role, label: p.label, tone: p.tone, bars, none: g.no_segment || 0, total: g.members || 0 };
+    return { role: p.role, label: p.label, tone: p.tone, bars, none: g.no_segment ?? null, total: g.members ?? null };
   };
   const groups = PROFILES.map((p) => toGroup((b.profiles || []).find((g) => g.profile === p.role) || {}, p));
   if (b.other?.members) groups.push(toGroup(b.other, { role: null, label: 'Other', tone: 'muted' }));
@@ -178,7 +178,7 @@ export function howSetRead(seg) {
   const b = seg?.how_set;
   if (failed(b)) return { failed: true };
   const c = b.counts || {};
-  return { failed: false, rows: Object.entries(SOURCE_WORD).map(([key, label]) => ({ key, label, count: c[key] || 0 })), other: c.not_recorded || 0 };
+  return { failed: false, rows: Object.entries(SOURCE_WORD).map(([key, label]) => ({ key, label, count: c[key] ?? null })), other: c.not_recorded ?? null };
 }
 
 const BAND_KEYS = ['under_50', '50_69', '70_89', '90_up'];
@@ -187,7 +187,7 @@ export function confidenceRead(seg) {
   const b = seg?.confidence;
   if (failed(b)) return { failed: true };
   const byKey = Object.fromEntries((b.bands || []).map((x) => [x.key, x.count]));
-  return { failed: false, counts: BANDS.map((band, i) => ({ label: band.label, count: byKey[BAND_KEYS[i]] || 0 })), total: b.over || 0, unrecorded: b.not_recorded || 0 };
+  return { failed: false, counts: BANDS.map((band, i) => ({ label: band.label, count: byKey[BAND_KEYS[i]] ?? null })), total: b.over ?? null, unrecorded: b.not_recorded ?? null };
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -236,7 +236,7 @@ export function segmentCardsRead({ seg, profiles, coverage }, profile = 'all') {
       key: p.key, name: p.name, profile: p.profile, status: p.status, who: p.who || null,
       members: rows ? (r ? r.members : 0) : null,
       new30: rows && r ? r.new_30d : null,
-      lp: lp.failed ? null : (lp.lp.bySegment[p.key] || 0),
+      lp: lp.failed || lp.lp.total === null ? null : Object.prototype.hasOwnProperty.call(lp.lp.bySegment, p.key) ? lp.lp.bySegment[p.key] : 0,
       needs,
     };
   });
@@ -275,6 +275,7 @@ export function needsTable(coverage, { profile = 'all', q = '' } = {}) {
     const cells = OFFER_KINDS.map((k) => {
       const o = x.offers?.[k.key];
       if (failed(o)) return { kind: k.key, unreadable: true, text: 'Could not be read' };
+      if (o.count === null || o.count === undefined) return { kind: k.key, text: 'Not recorded', count: null };
       const n = Number(o.count) || 0;
       if (gapKinds.has(k.gap)) return { kind: k.key, gap: true, text: n ? `${n} · Gap` : 'Gap' };
       return { kind: k.key, text: n ? nf(n) : '—', count: n };

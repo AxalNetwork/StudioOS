@@ -5,6 +5,7 @@
 //
 // Run with:
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/use_of_funds_d1173.test.mjs
+import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -44,7 +45,8 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   const restore = installDocument();
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const requests = [];
-  globalThis.fetch = async (u, options = {}) => { requests.push(String(u)); return handle(String(u), options); };
+  let pending = 0;
+  globalThis.fetch = async (u, options = {}) => { requests.push(String(u)); pending += 1; try { return await handle(String(u), options); } finally { pending -= 1; } };
   globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
   const create = document.createElement.bind(document);
   document.createElement = (tag) => { const node = create(tag); node.querySelector = () => null; node.querySelectorAll = () => []; node.focus = () => {}; node.children = []; return node; };
@@ -55,12 +57,20 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
     h(Route, { path: '/raise/:slug', element: h(CycleRoute, { cycle: 'raise' }) }),
     h(Route, { path: '/raise/:slug/:id', element: h(CycleRoute, { cycle: 'raise', record: true }) }),
   ))));
-  const flush = () => act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-  await flush();
   const nodes = () => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; return walk(container); };
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const ids = () => nodes().map((n) => props(n)['data-testid']).filter(Boolean);
+  // At least six ticks, then until no read is in flight for three ticks running (bounded): six fixed ticks were
+  // enough on an idle machine and not under a loaded runner, where the reads behind the page had not landed (D5398).
+  const flush = () => act(async () => {
+    let idle = 0;
+    for (let i = 0, end = Date.now() + 5000; (i < 6 || idle < 3) && Date.now() < end; i += 1) {
+      await new Promise((r) => setTimeout(r, pending ? 1 : 0));
+      idle = pending ? 0 : idle + 1;
+    }
+  });
+  await flush();
   return {
     requests, flush, text: () => text(container), testIds: ids,
     count: (id) => ids().filter((x) => x === id).length,

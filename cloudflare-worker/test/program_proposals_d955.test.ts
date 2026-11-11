@@ -42,6 +42,15 @@ function built(): DatabaseSync {
   db.exec(readFileSync(resolve(MIGRATIONS, '561_program_proposals.sql'), 'utf8'));
   // D956: an approval for one studio opens a draft grant, which 562's store holds.
   db.exec(readFileSync(resolve(MIGRATIONS, '562_program_grants_draft.sql'), 'utf8'));
+  // D4289 P1 (#4290): the deploy applies the Influencers row after these (it rebuilds 563's tables, so 563 first).
+  db.exec(readFileSync(resolve(MIGRATIONS, '563_referral_partner_terms.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611031502_influencer_program.sql'), 'utf8'));
+  // D4808: the frozen record of what an approval was made from.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611072010_program_approved_specs.sql'), 'utf8'));
+  // D4873: a new program's row names member_access, which this migration adds.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611082300_programs_member_access_modules_4873.sql'), 'utf8'));
+  // D4873 part 3: a send is a revision, and a decision names it.
+  db.exec(readFileSync(resolve(MIGRATIONS, '202611090830_program_proposal_revisions_4873.sql'), 'utf8'));
   return db;
 }
 const BUILT = built();
@@ -109,6 +118,12 @@ function seed(db: DatabaseSync, uid: string, licence: string | null, by: number,
   db.prepare(`INSERT INTO program_proposals (uid, created_by_user_id, licence_uid, status, name, purpose, who_json, grp, join_method, cycle, cohort_weeks, seats,
       rewards_json, template_keys, tools_json, sent_at) VALUES (?, ?, ?, ?, ?, 'A purpose.', '["Founders","Operating partners"]', 'Access', 'By invitation', 'rolling', NULL, 20,
       '["None"]', '[]', '{"events":true}', ?)`).run(uid, by, licence, status, name, sentAt);
+  // D4873: a proposal that was sent is revision 1, with that send's row, as a send (or the backfill) leaves it.
+  if (status !== 'draft' && sentAt) {
+    db.prepare('UPDATE program_proposals SET revision = 1 WHERE uid = ?').run(uid);
+    db.prepare(`INSERT INTO program_proposal_revisions (proposal_id, revision, spec_json, sent_at)
+      SELECT id, 1, json_object('name', name), sent_at FROM program_proposals WHERE uid = ?`).run(uid);
+  }
 }
 
 test('561 applies to a fresh D1: the proposal store, and every registry row is for every studio', () => {
@@ -171,7 +186,7 @@ test('Send to HQ: what it needs, then OD-PROP\'s closed gate; once a sender may 
   const sent = await sendProposal(envOf(db), uid, { id: LIS1, email: 'person2@example.test', studio: 'lic-lis' }, () => ({ open: true, sentence: '' }));
   assert.equal(sent.status, 'sent');
   assert.ok(sent.sent_at);
-  assert.deepEqual(audit(db, 'program.proposal.send'), [{ uid, licence_uid: 'lic-lis' }]);
+  assert.deepEqual(audit(db, 'program.proposal.send'), [{ uid, licence_uid: 'lic-lis', revision: 1 }]);
   assert.deepEqual([(await call(db, LIS1, 'PATCH', `/proposals/${uid}`, { name: 'Changed' })).body.code], ['not_editable']);
   assert.deepEqual([(await call(db, LIS1, 'POST', `/proposals/${uid}/send`)).status], [409]);
 });
@@ -190,7 +205,7 @@ test('Your proposals: the studio\'s, searched with % and _ taken literally, filt
   assert.deepEqual([all.total, all.page_size], [3, 25]);
   assert.deepEqual(all.rows.map((r: any) => r.uid).sort(), ['pp-a', 'pp-b', 'pp-c'], 'not Nairobi\'s, nor an HQ-held row its admin made');
   assert.equal((await call(db, LIS1, 'GET', '/proposals/pp-e')).status, 404, 'a studio admin reads the studio\'s proposals only');
-  assert.deepEqual(Object.keys(all.rows[0]).sort(), ['hq_note', 'name', 'sent_at', 'status', 'uid', 'updated_at']);
+  assert.deepEqual(Object.keys(all.rows[0]).sort(), ['hq_note', 'name', 'revision', 'sent_at', 'status', 'uid', 'updated_at']);
   assert.equal(all.rows.find((r: any) => r.uid === 'pp-b').hq_note, 'Say how cohorts are selected.');
   assert.deepEqual((await mine('?q=%25')).rows.map((r: any) => r.uid), ['pp-a'], '% matches only a literal %');
   assert.deepEqual((await mine('?q=_')).rows.map((r: any) => r.uid), ['pp-b'], '_ matches only a literal _');
@@ -225,8 +240,8 @@ test('HQ\'s queue: the Super Admin\'s, every studio but drafts, oldest first, wi
 test('the decision: approve for the catalogue writes HQ\'s draft program, read by every studio and listed in its activity', async () => {
   const db = fresh();
   seed(db, 'pp-1', 'lic-nai', NAI, 'sent', 'Founder Fitness Sprint');
-  assert.equal((await call(db, NAI, 'POST', '/proposals/pp-1/decision', { outcome: 'approve_catalogue' })).status, 403, 'only HQ decides');
-  const r = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'approve_catalogue', note: 'Listed for every studio.' });
+  assert.equal((await call(db, NAI, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'approve_catalogue' })).status, 403, 'only HQ decides');
+  const r = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'approve_catalogue', note: 'Listed for every studio.' });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual([r.body.proposal.status, r.body.proposal.decision, r.body.proposal.program_key, r.body.proposal.hq_note],
     ['approved', 'catalogue', 'founder-fitness-sprint', 'Listed for every studio.']);
@@ -235,7 +250,9 @@ test('the decision: approve for the catalogue writes HQ\'s draft program, read b
     ['proposed', 'Access', 'Founders, operating partners', 'By invitation', null, 'A purpose.']);
   const draft = db.prepare("SELECT section_key, title, body FROM program_playbook_sections WHERE program_key = 'founder-fitness-sprint' AND version = 0 ORDER BY position").all() as any[];
   assert.deepEqual(draft.map((s) => [s.section_key, s.body]), [
-    ['purpose', 'A purpose.'], ['who', 'Founders, operating partners'], ['join', 'By invitation · rolling · 20 seats'], ['rewards', 'None'], ['tools', 'Events'],
+    ['purpose', 'A purpose.'], ['who', 'Founders, operating partners'], ['join', 'By invitation · rolling · 20 seats'],
+    // D4808: eligibility and what HQ receives are carried too; what nothing enforces says so.
+    ['eligibility', null], ['rewards', 'None\nRecorded as approved. Nothing enforces it yet.'], ['tools', 'Events\nRecorded as approved. Nothing enforces it yet.'], ['hq', null],
   ]);
   assert.equal(one(db, "SELECT COUNT(*) AS n FROM program_playbook_versions WHERE program_key = 'founder-fitness-sprint'").n, 0, 'unpublished');
   for (const who of [LIS1, NAI, LONE]) {
@@ -244,18 +261,27 @@ test('the decision: approve for the catalogue writes HQ\'s draft program, read b
   }
   const detail = (await call(db, LIS1, 'GET', '/founder-fitness-sprint')).body;
   assert.deepEqual([detail.program.status, detail.playbook.published, detail.draft], ['proposed', false, undefined]);
-  assert.deepEqual(audit(db, 'program.proposal.decide'), [{ uid: 'pp-1', outcome: 'approve_catalogue', note: 'Listed for every studio.', program_key: 'founder-fitness-sprint' }]);
+  // D4808: the page reads the exact proposal the program was approved from, and what it declares, none of it operational.
+  assert.equal(detail.approved_proposal.proposal_uid, 'pp-1');
+  assert.equal(detail.approved_proposal.decision, 'catalogue');
+  assert.equal(detail.approved_proposal.spec.fields.name, 'Founder Fitness Sprint');
+  assert.deepEqual(detail.approved_proposal.spec.not_operational.keys, ['eligibility', 'rewards', 'contracts', 'tools', 'hq_obligations']);
+  assert.deepEqual(detail.capabilities.map((c: any) => [c.label, c.operational]), [['Events', false]]);
+  // The snapshot is append-only: a later edit to the proposal or the row cannot change what was approved.
+  assert.throws(() => db.prepare("UPDATE program_approved_specs SET spec_json = '{}' WHERE program_key = 'founder-fitness-sprint'").run(), /append-only/);
+  assert.throws(() => db.prepare("DELETE FROM program_approved_specs WHERE program_key = 'founder-fitness-sprint'").run(), /append-only/);
+  assert.deepEqual(audit(db, 'program.proposal.decide'), [{ uid: 'pp-1', outcome: 'approve_catalogue', note: 'Listed for every studio.', revision: 1, program_key: 'founder-fitness-sprint' }]);
   const act = (await call(db, SUPER, 'GET', '/founder-fitness-sprint/activity')).body;
   assert.deepEqual(act.rows.map((x: any) => [x.kind, x.concerns.outcome]), [['program.proposal.decide', 'approve_catalogue']]);
   // Decided once: the next decision is not waiting.
-  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'decline', note: 'No.' })).body.code, 'not_waiting');
+  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'decline', note: 'No.' })).body.code, 'not_waiting');
 });
 
 test('approve for this studio only: the studio and HQ read it; another studio is told no program has that key', async () => {
   const db = fresh();
   seed(db, 'pp-1', 'lic-lis', LIS1, 'sent', 'Regional Demo Night');
   seed(db, 'pp-2', null, LONE, 'sent', 'Hardware Sprint');
-  const ok = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'approve_studio' });
+  const ok = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'approve_studio' });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   assert.equal(one(db, "SELECT licence_uid FROM programs WHERE key = 'regional-demo-night'").licence_uid, 'lic-lis');
   const sees = async (who: number) => (await call(db, who, 'GET', '/?weeks=4')).body.programs.rows.some((p: any) => p.key === 'regional-demo-night');
@@ -266,7 +292,7 @@ test('approve for this studio only: the studio and HQ read it; another studio is
     assert.deepEqual([r.status, r.body.code], [404, 'unknown_program'], path);
   }
   assert.equal((await call(db, SUPER, 'GET', '/regional-demo-night')).body.program.studio_only, 'lic-lis');
-  const lone = await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { outcome: 'approve_studio' });
+  const lone = await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { expected_revision: 1, outcome: 'approve_studio' });
   assert.deepEqual([lone.status, lone.body.code], [409, 'no_studio']);
   assert.equal(one(db, "SELECT status FROM program_proposals WHERE uid = 'pp-2'").status, 'sent', 'still waiting');
 });
@@ -277,21 +303,21 @@ test('send back and decline need a note; send back is editable again, decline is
   seed(db, 'pp-2', 'lic-lis', LIS1, 'sent', 'Hardware Sprint');
   for (const outcome of ['send_back', 'decline']) {
     for (const note of [undefined, '', '   ']) {
-      const r = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome, note });
+      const r = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome, note });
       assert.deepEqual([r.status, r.body.code], [400, 'note_required'], `${outcome} ${JSON.stringify(note)}`);
     }
   }
-  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'send_back', note: 'x'.repeat(2001) })).body.code, 'note_too_long');
-  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'maybe', note: 'x' })).body.code, 'bad_outcome');
-  const back = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'send_back', note: 'Say how cohorts are selected.' });
+  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'send_back', note: 'x'.repeat(2001) })).body.code, 'note_too_long');
+  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'maybe', note: 'x' })).body.code, 'bad_outcome');
+  const back = await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'send_back', note: 'Say how cohorts are selected.' });
   assert.deepEqual([back.body.proposal.status, back.body.proposal.hq_note, back.body.proposal.program_key], ['sent_back', 'Say how cohorts are selected.', null]);
   assert.equal((await call(db, LIS1, 'PATCH', '/proposals/pp-1', { eligibility: 'Nominated by a partner.' })).status, 200, 'sent back is editable');
   assert.equal((await call(db, LIS1, 'GET', '/proposals/mine')).body.rows.find((r: any) => r.uid === 'pp-1').hq_note, 'Say how cohorts are selected.');
-  const no = await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { outcome: 'decline', note: 'It overlaps the Spin-Out Lab.' });
+  const no = await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { expected_revision: 1, outcome: 'decline', note: 'It overlaps the Spin-Out Lab.' });
   assert.equal(no.body.proposal.status, 'declined');
   assert.equal((await call(db, LIS1, 'PATCH', '/proposals/pp-2', { name: 'Again' })).body.code, 'not_editable');
   assert.equal((await call(db, LIS1, 'POST', '/proposals/pp-2/send')).status, 409);
-  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { outcome: 'approve_catalogue' })).body.code, 'not_waiting');
+  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-2/decision', { expected_revision: 1, outcome: 'approve_catalogue' })).body.code, 'not_waiting');
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM programs').n, PROGRAM_KEYS.length, 'neither wrote a program');
   assert.deepEqual(audit(db, 'program.proposal.decide').map((d: any) => [d.outcome, d.program_key ?? null]), [['send_back', null], ['decline', null]]);
 });
@@ -301,7 +327,7 @@ test('a key is the name\'s slug and is refused when it is taken or is a sub-path
   assert.equal(keyFromName('Refer & Earn Plus'), 'refer-and-earn-plus');
   assert.equal(keyFromName('  Café  Clinic!! '), 'cafe-clinic');
   seed(db, 'pp-1', 'lic-lis', LIS1, 'sent', 'Perks');
-  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { outcome: 'approve_catalogue' })).body.code, 'program_key_taken');
+  assert.equal((await call(db, SUPER, 'POST', '/proposals/pp-1/decision', { expected_revision: 1, outcome: 'approve_catalogue' })).body.code, 'program_key_taken');
   assert.equal(one(db, "SELECT status FROM program_proposals WHERE uid = 'pp-1'").status, 'sent', 'nothing decided');
   for (const name of ['Proposals', 'Propose', 'Learning']) {
     const r = await call(db, SUPER, 'POST', '/', { name, group: 'Learning' });
@@ -330,7 +356,8 @@ test('New program: HQ\'s own proposed row and its draft, for every studio, audit
   assert.deepEqual((await call(db, SUPER, 'GET', '/operator-fellowship/activity')).body.rows.map((x: any) => x.kind), ['program.registry.create']);
   // Its draft is edited and published with part 1's routes.
   assert.equal((await call(db, SUPER, 'PUT', '/operator-fellowship/playbook/sections/rewards', { body: 'Credits.' })).status, 200);
-  assert.equal((await call(db, SUPER, 'POST', '/operator-fellowship/playbook/publish')).body.playbook.version, 1);
+  const hash = (await call(db, SUPER, 'GET', '/operator-fellowship')).body.draft.hash;
+  assert.equal((await call(db, SUPER, 'POST', '/operator-fellowship/playbook/publish', { expected_hash: hash })).body.playbook.version, 1);
   assert.equal((await call(db, SUPER, 'POST', '/', { name: 'Operator Fellowship', group: 'Access' })).body.code, 'program_key_taken');
 });
 
@@ -342,4 +369,41 @@ test('the mount: /proposals is its own router, never a program key', async () =>
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") < index.indexOf("app.route('/api/admin/programs', adminPrograms);"));
   assert.ok(index.indexOf("app.route('/api/admin/programs/proposals', adminProgramProposals);") > 0);
+});
+
+test('D4808: a synthetic custom program, end to end: create → open → edit → publish → revisit, with no code for its key', async () => {
+  const db = fresh();
+  const made = await call(db, SUPER, 'POST', '/', { name: 'Synthetic Residency', group: 'Learning', purpose: 'A synthetic program.', who: ['Founders'], join_method: 'By application' });
+  assert.equal(made.status, 201, JSON.stringify(made.body));
+  const key = made.body.program.key;
+  assert.equal(key, 'synthetic-residency');
+  // Open: every viewer reads it by key, with nothing a built-in carries; no proposal made it.
+  const opened = await call(db, SUPER, 'GET', `/${key}`);
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.program.status, 'proposed');
+  assert.equal(opened.body.approved_proposal, null, 'no proposal made it');
+  assert.deepEqual(opened.body.capabilities, []);
+  // Edit the draft, then publish it.
+  const edited = await call(db, SUPER, 'PUT', `/${key}/playbook/sections/purpose`, { body: 'Edited by HQ.' });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  const hash = (await call(db, SUPER, 'GET', `/${key}`)).body.draft.hash;
+  const published = await call(db, SUPER, 'POST', `/${key}/playbook/publish`, { expected_hash: hash });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  // Revisit: the published playbook is what an Admin reads, and the registry row is still there.
+  const revisit = await call(db, LIS1, 'GET', `/${key}`);
+  assert.equal(revisit.status, 200);
+  assert.equal(revisit.body.playbook.published, true);
+  assert.equal(revisit.body.playbook.version, 1);
+  assert.equal(revisit.body.playbook.sections.find((s: any) => s.key === 'purpose').body, 'Edited by HQ.');
+  // And it appears in the catalogue under its own key, among the nine.
+  const cat = (await call(db, LIS1, 'GET', '/?weeks=4')).body;
+  assert.ok(cat.programs.rows.some((p: any) => p.key === key));
+});
+
+test('D4808: HQ keeps a branch\'s rows for programs the nine do not include, and drops only a row with no valid key', async () => {
+  const { keepRegistryRows } = await import('../src/services/programCatalogue.ts');
+  const rows = [
+    { key: 'perks' }, { key: 'synthetic-residency' }, { key: 'Not A Key' }, { key: '' }, { key: 'a'.repeat(61) }, null, { name: 'no key' },
+  ];
+  assert.deepEqual(keepRegistryRows(rows).map((r: any) => r.key), ['perks', 'synthetic-residency']);
 });

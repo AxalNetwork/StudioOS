@@ -255,7 +255,7 @@ test('an empty accessible set reads as empty, never as every row', () => {
   // AND IT REFUSES AN UNPRIVILEGED CALLER BEFORE IT READS. The short-circuit
   // above only handles an empty book; without this, any signed-in role reaches
   // the marks of whatever `investorProjectIds` resolves for them.
-  assert.match(surface, /role !== 'admin' && role !== 'partner' && role !== 'investor'/,
+  assert.match(surface, /role !== 'admin' && !\(await heldLicences\(c\.env\.DB, \{ id: userId, role \}\)\)\.some\(licence => licence === 'partner' \|\| licence === 'investor'\)/,
     'the gather no longer refuses an unprivileged caller');
   const gate = surface.indexOf("role !== 'admin'");
   assert.ok(gate > 0 && gate < surface.indexOf('investorProjectIds'),
@@ -301,7 +301,8 @@ test('the false card is gone and the eyebrow with it', () => {
     'the card refusing the AI narrative is back, and the band is mounted');
   // And the band it refused is actually mounted.
   assert.match(shown, /surface="portfolio\/positions"/, 'the artboard’s AI band is not on the page');
-  assert.match(P, /Every valuation and ownership write is an admin action/);
+  // #5365 (F-09) rewords the card for an investor: the writes go through the governed workflow, with their source kept.
+  assert.match(P, /Every valuation and ownership change keeps its source\./);
   // Task #150 asks for the eyebrow to go, as #95 already did for founder.
   assert.ok(!P.includes('i4-eyebrow'), 'the Portfolio / Positions eyebrow is back');
   // D1424 (#3700): the heading is drawn by the shared ZoneHeader.

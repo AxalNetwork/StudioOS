@@ -156,6 +156,7 @@ test('the session page draws Telegram\'s words, and "Agreed in the chat" is Cust
     try { assert.equal(m.text(m.by('chat-consent-line')), text); } finally { await m.unmount(); }
   }
   const src = readFileSync('cloudflare-worker/src/services/records/validate.ts', 'utf8');
-  assert.match(src, /chat_reply: 'Agreed in the chat'/);
+  assert.match(readFileSync('cloudflare-worker/src/services/cycleValidate.ts', 'utf8'), /chat_reply: 'Agreed in the chat'/);
+  assert.match(src, /value: recordingConsentText\(d\.session\)/, 'the record uses the shared recording labels');
   assert.match(src, /telegram: 'Telegram'/, '"Imported from Telegram" keeps its word');
 });

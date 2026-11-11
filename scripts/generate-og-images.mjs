@@ -212,7 +212,7 @@ function esc(s) {
  * The full description still goes into `og:description` — this only governs
  * what is drawn on the card.
  */
-function cardDescription(text, limit = 104) {
+function cardDescription(text, limit = 118) {
   const s = String(text || '').trim();
   if (s.length <= limit) return s;
 
@@ -240,47 +240,45 @@ function titleSize(title) {
 
 /*
  * #3705: the canvas's light family cards
- * (`design/incoming/Share Cards Page.dc.html`, boards SC1–SC10).
+ * (`design/incoming/Share Cards Page.dc.html`, boards SC1–SC10; revised
+ * 2026-11-04, artifact `NuqvJUKoNJbwYfqwZG44WY`).
  *
- * One light image per URL. A lavender art band fills x 0–268; the text block
- * starts at x 300 so the mark, the eyebrow and the title's first words survive
- * the centred square crop (x 285–915) that WhatsApp and iMessage take. Three
- * kinds: `plain` (concentric violet circles in the band), `doc` (trust and
- * legal: a lavender ground, a hairline frame and a document tile) and `lock`
- * (the private-link card: a lock tile, violet, never red). The old dark card
- * is board SC0, kept on the canvas for reference only.
+ * One light image per URL, centred: the mark and "AXAL VC" at the top, the
+ * eyebrow chip, the title and an optional description in the middle, and
+ * "axal.vc" at the foot, all inside the safe area (x 72–1128, y 62–568). The
+ * centred block keeps the mark, the eyebrow and the title inside the square
+ * crop (x 285–915) that WhatsApp and iMessage take. Three kinds: `plain`
+ * (violet arcs in the top-right and bottom-left corners), `doc` (trust and
+ * legal: a lavender ground, a hairline frame and a document glyph above the
+ * eyebrow) and `lock` (the private-link card: a round violet lock, never red).
+ * The old dark card is board SC0, kept on the canvas for reference only.
  */
 const PALETTE = {
-  bg: '#ffffff', band: '#f4f0fe', ink: '#18181b', mut: '#6b6577',
-  vio: '#7c3aed', vdeep: '#6d28d9', lavE: '#ddd0fb', tile: '#ffffff',
+  bg: '#ffffff', lav: '#f4f0fe', ink: '#18181b', mut: '#6b6577', line: '#ececf1',
+  vio: '#7c3aed', vdeep: '#6d28d9', lavE: '#ddd0fb', chip: '#ffffff',
 };
 
 const GLYPHS = {
-  lock: '<rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path>',
-  doc: '<path d="M6 2.5h8l4 4V21.5H6z"></path><path d="M14 2.5v4h4M9 11h6M9 14.5h6M9 18h4"></path>',
+  lock: '<rect x="5" y="10.5" width="14" height="10.5" rx="2"></rect><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"></path>',
+  doc: '<path d="M6 2.8h8.2L18.5 7v14.2H6z"></path><path d="M14 2.8V7h4.5M9 11h6.5M9 14h6.5M9 17h4"></path>',
 };
 
 function glyph(kind, size, stroke = 1.6) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${PALETTE.vio}" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GLYPHS[kind]}</svg>`;
 }
 
-function bandHtml(kind) {
-  if (kind === 'lock' || kind === 'doc') {
-    const fill = kind === 'lock' ? `background:${PALETTE.band};` : '';
-    return `<div class="band" style="${fill}display:grid;place-items:center"><div class="tile">${glyph(kind, 64, kind === 'lock' ? 1.8 : 1.6)}</div></div>`;
-  }
-  const rings = [44, 84, 124, 164, 204, 244, 284].map((r) => `<circle cx="150" cy="430" r="${r}"></circle>`).join('');
-  let dots = '';
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 7; j++) dots += `<circle cx="${26 + i * 22}" cy="${34 + j * 22}" r="2.4"></circle>`;
-  return `<div class="band" style="background:${PALETTE.band}"><svg viewBox="0 0 268 630" width="268" height="630">`
-    + `<g fill="none" stroke="${PALETTE.vio}" stroke-opacity=".28" stroke-width="1.5">${rings}</g>`
-    + `<circle cx="150" cy="430" r="40" fill="${PALETTE.vio}" fill-opacity=".85"></circle>`
-    + `<circle cx="150" cy="430" r="14" fill="${PALETTE.band}"></circle>`
-    + `<g fill="${PALETTE.vio}" fill-opacity=".45">${dots}</g></svg></div>`;
+/** The canvas's ARCS(): a lavender quarter-disc with violet rings in two corners. */
+function arcsHtml() {
+  const ring = (cx, cy, r0, n) => Array.from({ length: n }, (_, i) => `<circle cx="${cx}" cy="${cy}" r="${r0 + i * 28}" fill="none" stroke="${PALETTE.vio}" stroke-width="2" stroke-opacity="${(0.55 - i * 0.08).toFixed(2)}"></circle>`).join('');
+  return `<svg class="arcs" aria-hidden="true" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 1200 630">`
+    + `<circle cx="1200" cy="0" r="212" fill="${PALETTE.lav}"></circle>${ring(1200, 0, 64, 6)}`
+    + `<circle cx="1200" cy="0" r="30" fill="${PALETTE.vio}" fill-opacity=".85"></circle>`
+    + `<circle cx="0" cy="630" r="172" fill="${PALETTE.lav}"></circle>${ring(0, 630, 52, 5)}</svg>`;
 }
 
 function cardHtml({ eyebrow, title, description, kind = 'plain', chips = null }, assets) {
   const doc = kind === 'doc';
+  const lock = kind === 'lock';
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <style>
@@ -294,70 +292,75 @@ function cardHtml({ eyebrow, title, description, kind = 'plain', chips = null },
   html, body { width: ${WIDTH}px; height: ${HEIGHT}px; }
   body {
     font-family: 'Space Grotesk', 'Liberation Sans', sans-serif;
-    background: ${doc ? PALETTE.band : PALETTE.bg};
+    background: ${doc ? PALETTE.lav : PALETTE.bg};
     color: ${PALETTE.ink};
     position: relative;
     overflow: hidden;
   }
-  .band { position: absolute; left: 0; top: 0; bottom: 0; width: 268px; overflow: hidden; }
-  .tile {
-    width: 132px; height: 132px; border-radius: 32px;
-    background: ${PALETTE.tile}; border: 1.5px solid ${PALETTE.lavE};
+  .arcs { position: absolute; inset: 0; display: block; }
+  .frame-line { position: absolute; inset: 28px; border: 1px solid ${PALETTE.lavE}; border-radius: 4px; }
+  .block {
+    position: absolute; left: 72px; right: 72px; top: 62px; bottom: 62px;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+  }
+  .top { display: flex; align-items: center; gap: 14px; height: 54px; flex: none; }
+  .top img { width: 54px; height: 54px; border-radius: 12px; object-fit: contain; display: block; }
+  .wordmark { font-size: 27px; font-weight: 700; letter-spacing: .06em; }
+  .mid { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .doc { margin-bottom: 18px; }
+  .lock {
+    margin-bottom: 20px; width: 76px; height: 76px; border-radius: 999px;
+    background: ${PALETTE.lav}; border: 1.5px solid ${PALETTE.lavE};
     display: grid; place-items: center;
   }
-  .frame-line { position: absolute; inset: 26px; border: 1px solid ${PALETTE.lavE}; border-radius: 18px; }
-  .block {
-    position: absolute; left: 300px; top: 62px; right: 72px; bottom: 58px;
-    display: flex; flex-direction: column;
-  }
-  .top { display: flex; align-items: center; gap: 14px; }
-  .top img { width: 46px; height: 46px; border-radius: 11px; object-fit: contain; display: block; }
-  .wordmark { font-size: 27px; font-weight: 700; letter-spacing: .06em; }
   .eyebrow {
-    align-self: flex-start; margin-top: 26px;
-    display: inline-flex; align-items: center; gap: 8px;
-    height: 42px; padding: 0 18px; border-radius: 999px;
-    border: 1.5px solid ${PALETTE.lavE};
+    display: inline-flex; align-items: center;
+    min-height: 44px; padding: 0 20px; border-radius: 999px;
+    border: 2px solid ${PALETTE.lavE}; background: ${PALETTE.lav};
     font-size: 20px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
     color: ${PALETTE.vdeep}; white-space: nowrap;
   }
   h1 {
-    margin-top: 22px;
+    margin-top: 22px; max-width: 960px;
     font-size: ${titleSize(title)}px;
     font-weight: 700; line-height: 1.06; letter-spacing: -.028em;
+    text-wrap: balance;
     /* Cap at three lines; long registry titles shrink via titleSize() first. */
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
     overflow: hidden;
   }
   p {
-    margin-top: 16px;
+    margin-top: 18px; max-width: 840px;
     font-size: 29px; line-height: 1.42; font-weight: 400;
-    color: ${PALETTE.mut};
+    color: ${PALETTE.mut}; text-wrap: balance;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 26px; max-width: 1000px; }
   .chip {
-    display: inline-flex; align-items: center; height: 42px; padding: 0 16px;
-    border-radius: 999px; background: ${PALETTE.tile}; border: 1.5px solid ${PALETTE.lavE};
-    font-size: 21px; font-weight: 600; white-space: nowrap;
+    display: inline-flex; align-items: center; min-height: 40px; padding: 0 17px;
+    border-radius: 999px; background: ${PALETTE.chip}; border: 2px solid ${PALETTE.line};
+    font-size: 19px; font-weight: 500; white-space: nowrap;
   }
-  .foot { margin-top: auto; display: flex; align-items: center; gap: 12px; height: 30px; }
-  .rule { width: 28px; height: 3px; border-radius: 2px; background: ${PALETTE.vio}; }
-  .domain { font-size: 25px; line-height: 30px; font-weight: 500; }
+  .foot { display: flex; align-items: center; gap: 12px; height: 30px; flex: none; }
+  .rule { width: 32px; height: 3px; border-radius: 2px; background: ${PALETTE.vio}; }
+  .domain { font-size: 25px; line-height: 1; font-weight: 500; }
 </style></head>
 <body>
-  ${bandHtml(kind)}
-  ${doc ? '<div class="frame-line"></div>' : ''}
+  ${doc ? '<div class="frame-line"></div>' : arcsHtml()}
   <div class="block">
     <div class="top">
       <img src="${assets.mark}" alt="" />
       <div class="wordmark">AXAL VC</div>
     </div>
-    ${eyebrow ? `<div class="eyebrow">${doc ? glyph('doc', 20) : ''}${esc(eyebrow)}</div>` : ''}
-    <h1>${esc(title)}</h1>
-    ${description ? `<p>${esc(cardDescription(description))}</p>` : ''}
-    ${chips ? `<div class="chips">${chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}
+    <div class="mid">
+      ${doc ? `<div class="doc">${glyph('doc', 52, 1.4)}</div>` : ''}
+      ${lock ? `<div class="lock">${glyph('lock', 36, 1.8)}</div>` : ''}
+      ${eyebrow ? `<div class="eyebrow">${esc(eyebrow)}</div>` : ''}
+      <h1>${esc(title)}</h1>
+      ${description ? `<p>${esc(cardDescription(description))}</p>` : ''}
+      ${chips ? `<div class="chips">${chips.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}</div>` : ''}
+    </div>
     <div class="foot"><div class="rule"></div><div class="domain">axal.vc</div></div>
   </div>
 </body></html>`;

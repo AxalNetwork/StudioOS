@@ -20,15 +20,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  BillingExceptions, UNAVAILABLE, NOT_RECORDED_H21, isOpenDispute, evidenceOverdue,
+  BillingExceptions, UNAVAILABLE, isOpenDispute, evidenceOverdue,
 } from '../src/pages/hq/RevenuePage.jsx';
 import { REFUND_REASON_MIN, refundReasonOk } from '../src/lib/refundReason.js';
 import { adminConsoleSource } from './_adminConsoles.mjs';
+import { revenuePageSource } from './_revenuePage.mjs';
 
 const raw = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const PAGE = codeOnly(raw('frontend/src/pages/hq/RevenuePage.jsx'));
+const PAGE = codeOnly(revenuePageSource());
 const ADMIN = adminConsoleSource();
 const WORKER = raw('cloudflare-worker/src/routes/admin_billing.ts');
+// D5037: both refund forms are one component now, the review flow.
+const FLOW = codeOnly(raw('frontend/src/components/RefundReviewFlow.jsx'));
 const CANVAS = raw('design/canvases/integrated/Admin · Super.dc.html');
 
 const NOW = 1_800_000_000;
@@ -60,42 +63,42 @@ const DISPUTES = {
   ],
 };
 
+// D5039 (canvas RV08) — Billing exceptions in the v2 cockpit: actionable anomalies only, each figure in a value state
+// (Loading, Zero, Unavailable are three things), and LTV and the per-branch token margin moved out.
 test('readable: refunds per currency, open disputes counted, one row per exception', () => {
   const h = render({ refunds: REFUNDS, disputes: DISPUTES });
   const t = text(h);
   assert.match(t, /Billing exceptions/);
   assert.match(t, /1,200/, 'the EUR refund total is missing');
   assert.match(t, /25/, 'the USD refund total is missing');
-  assert.match(t, /2 issued through HQ in 30 days/);
-  assert.match(t, /Disputes open 2 /, 'a won dispute was counted as open, or an open one was dropped');
+  assert.match(t, /Refunds through HQ Last 30 days[\s\S]{0,60} 2 /, 'the refund count is missing or not labelled as the last 30 days');
+  assert.match(t, /Open disputes Live[\s\S]{0,60} 2 /, 'a won dispute was counted as open, or an open one was dropped');
   assert.match(t, /1 past evidence deadline/);
   const body = h.split('data-testid="hq-revenue-exceptions"')[1] || '';
   assert.equal((body.match(/<tr/g) || []).length, 4, 'two refunds and two open disputes should be four rows');
   assert.match(t, /Seat charged twice in March/, 'the written reason is not beside its refund');
+  assert.match(t, /Dispute · evidence overdue/);
   assert.match(t, /Evidence overdue/);
   assert.match(t, /Account #30/);
 });
 
-test('LTV and token margin per branch render Not recorded with the canvas reasons, whatever loaded', () => {
+test('LTV and token margin per branch are not exceptions, and are not drawn here (RV08)', () => {
   for (const props of [{ refunds: REFUNDS, disputes: DISPUTES }, { refunds: null, disputes: null }, { refunds: UNAVAILABLE, disputes: UNAVAILABLE }]) {
     const t = text(render(props));
-    assert.match(t, /LTV Not recorded /);
-    assert.match(t, /Token margin \/ branch Not recorded /);
-    assert.ok(t.includes(NOT_RECORDED_H21.ltv));
-    assert.ok(t.includes(NOT_RECORDED_H21.tokenMargin));
+    assert.doesNotMatch(t, /\bLTV\b/);
+    assert.doesNotMatch(t, /Token margin \/ branch/);
   }
-  // The reasons are the canvas's own, not new ones.
+  // H5's canvas still drew them; v2's says why they left.
   assert.ok(CANVAS.includes('no store reconciles revenue to account lifetime'));
-  assert.ok(CANVAS.includes('gateway cost is an estimate, not a ledger'));
-  assert.match(NOT_RECORDED_H21.ltv, /no store reconciles revenue to account lifetime/i);
-  assert.match(NOT_RECORDED_H21.tokenMargin, /gateway cost is an estimate, not a ledger/i);
+  assert.ok(raw('design/incoming/Revenue v2 Page.dc.html').includes('LTV and token margin per branch moved out'));
 });
 
-test('empty: both stores answered with nothing, and the page says so rather than drawing zeros', () => {
-  const t = text(render({ refunds: EMPTY_REFUNDS, disputes: { ok: true, disputes: [] } }));
+test('empty: both stores answered with nothing, and the page says so rather than drawing zeros it did not measure', () => {
+  const h = render({ refunds: EMPTY_REFUNDS, disputes: { ok: true, disputes: [] } });
+  const t = text(h);
   assert.match(t, /No refund was issued through HQ in the last 30 days and no dispute is open/);
-  assert.match(t, /Refunds \(30d\) None /);
-  assert.match(t, /Disputes open 0 /);
+  // A measured zero is drawn as Zero, with its mark, because both reads answered.
+  assert.equal((h.match(/data-value-state="zero"/g) || []).length, 2, 'both counts are measured zeros');
   assert.doesNotMatch(t, /could not be read/);
 });
 
@@ -104,8 +107,8 @@ test('unreadable refunds: the block says so, and the disputes still draw', () =>
   const t = text(h);
   assert.match(h, /data-testid="hq-revenue-refunds-unreadable"/);
   assert.match(t, /The refunds HQ issued could not be read\. This is not a claim that none were issued\./);
-  assert.match(t, /Refunds \(30d\) Not recorded /, 'a failed read drew a figure');
-  assert.match(t, /Disputes open 2 /, 'one failed read blanked the other block');
+  assert.match(t, /Refunds through HQ Last 30 days[\s\S]{0,60}Unavailable/, 'a failed read drew a figure');
+  assert.match(t, /Open disputes Live[\s\S]{0,60} 2 /, 'one failed read blanked the other block');
   assert.doesNotMatch(t, /No refund was issued/, 'a failed read was drawn as an empty one');
 });
 
@@ -114,15 +117,16 @@ test('unreadable disputes: the block says so, and the refunds still draw', () =>
   const t = text(h);
   assert.match(h, /data-testid="hq-revenue-disputes-unreadable"/);
   assert.match(t, /Open disputes could not be read\. This is not a claim that there are none\./);
-  assert.match(t, /Disputes open Not recorded /);
-  assert.match(t, /2 issued through HQ/);
+  assert.match(t, /Open disputes Live[\s\S]{0,60}Unavailable/);
+  assert.match(t, /Refunds through HQ Last 30 days[\s\S]{0,60} 2 /);
   assert.doesNotMatch(t, /no dispute is open/);
 });
 
-test('loading: nothing is drawn as a figure while the reads are out', () => {
-  const t = text(render({ refunds: null, disputes: null }));
-  assert.match(t, /Refunds \(30d\) Not recorded /);
-  assert.match(t, /Disputes open Not recorded /);
+test('loading: nothing is drawn as a figure while the reads are out, and loading is not Not recorded', () => {
+  const h = render({ refunds: null, disputes: null });
+  const t = text(h);
+  assert.equal((h.match(/data-value-state="loading"/g) || []).length >= 2, true, 'both counts are drawn as loading');
+  assert.doesNotMatch(t, /Not recorded|Unavailable/, 'a read still out is drawn as a figure that does not exist');
   assert.doesNotMatch(t, /could not be read|No refund was issued/);
 });
 
@@ -145,7 +149,8 @@ test('the page mounts the zone and reads refunds through its own endpoint', () =
   assert.match(PAGE, /<BillingExceptions\b/);
   assert.match(PAGE, /api\.adminBillingRefunds\(\)/);
   assert.match(PAGE, /setRefunds\(UNAVAILABLE\)/, 'a failed refunds read is not recorded as unreadable');
-  assert.match(PAGE, /api\.adminBillingRefund\(/, 'the refund action is not on Revenue');
+  assert.match(PAGE, /refundForm=\{<RefundReviewFlow onDone=\{loadRefunds\} \/>\}/, 'the refund action is not on Revenue');
+  assert.match(FLOW, /api\.adminBillingRefund\(/, 'the review flow does not issue the refund');
 });
 
 test('no margin is computed from est_cost_usd on this screen (D111, D149, D213)', () => {
@@ -160,9 +165,9 @@ test('the reason floor is one number on both sides, and both refund forms requir
   assert.equal(refundReasonOk('x'.repeat(REFUND_REASON_MIN)), true);
   assert.equal(refundReasonOk(` ${'x'.repeat(REFUND_REASON_MIN - 1)} `), false);
   assert.equal(refundReasonOk(undefined), false);
-  assert.match(PAGE, /refundReasonOk\(f\.reason\)/, 'Revenue sends a refund without checking its reason');
-  assert.match(ADMIN, /refundReasonOk\(refForm\.reason\)/, 'the Billing tab sends a refund without checking its reason');
-  assert.match(ADMIN, /body\.reason = refForm\.reason\.trim\(\);/, 'the Billing tab no longer always sends the reason');
+  assert.match(FLOW, /if \(!refundReasonOk\(reason\)\) return \{ error:/, 'the review flow sends a refund without checking its reason');
+  assert.match(FLOW, /const body = \{ review_token: token, reason: String\(reason\)\.trim\(\) \};/, 'the reason is not always sent');
+  assert.match(ADMIN, /<RefundReviewFlow showStripeFields/, 'the Billing tab does not refund through the review flow');
 });
 
 test('Billing stays: its page (D938, /admin/revenue/billing) is linked from Revenue and mounts the panel', () => {

@@ -61,6 +61,8 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Pro
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Product testing') + 1, 0, ['Scoring', '/admin/platform/scoring']);
 // D4155 (#4155) — HQ › Decks joins the Platform row after Promo codes.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Promo codes') + 1, 0, ['Decks', '/admin/platform/decks']);
+// #3588 — Meeting bots joins the Platform row after Decks: the diagnostic the owner runs had no strip link.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Decks') + 1, 0, ['Meeting bots', '/admin/platform/meeting-bots']);
 // D1172 (#3085, STG20) — HQ › Storage joins the Platform row after AI usage.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'AI usage') + 1, 0, ['Storage', '/admin/platform/storage']);
 const CONTENT = [
@@ -78,7 +80,7 @@ const MOVED = {
 };
 for (const list of [PLATFORM, CONTENT]) for (const p of list) if (MOVED[p[1]]) p[1] = MOVED[p[1]];
 // D981 (#2376) — #2375's Licences strip: the ledger and Program grants.
-const LICENCES = [['Ledger', '/admin/licences'], ['Program grants', '/admin/licences/programs']];
+const LICENCES = [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs']];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
 
 /** The literal links inside one `<HqSubNavStrip label="…">` block in the chrome. */

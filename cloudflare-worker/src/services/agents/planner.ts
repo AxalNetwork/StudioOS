@@ -31,6 +31,22 @@ import { agentQuote, agentRun, moduleSurface, optionRowIn, runRefusalStatus, typ
 import { scopeCols, type AgentRow, type Scope, type Spend } from './teams';
 import { agentFits } from './tasks';
 import type { GoalRow } from './goals';
+import { personaOf } from './personas';
+import { heldFor } from './runActivity';
+import { chargedFor } from './agentRun';
+
+/**
+ * #4394 (TM10c, TM10d): the agent that plans, by its persona only, never a job
+ * title (D4117); `null` when Eadwyn plans.
+ */
+export type PlannerRef = { uid: string; persona: { key: string; name: string } | null } | null;
+export function plannerRef(a: Pick<AgentRow, 'uid' | 'persona_key'> | null): PlannerRef {
+  if (!a) return null;
+  const p = personaOf(a.persona_key);
+  return { uid: a.uid, persona: p ? { key: p.key, name: p.name } : null };
+}
+/** #4394 (TM10d): what drafting the plan cost: the hold it took and what it charged; `{ available: false }` when unread, never 0. */
+export type PlanCost = { held: Spend; charged: Spend };
 
 export const PLAN_OPTION = 'propose:goal-plan';
 export const PLAN_MODULE = 'studio';
@@ -188,22 +204,22 @@ const eadwynOpts = (row: NonNullable<ReturnType<typeof optionRowIn>>, user: User
 });
 
 /** What a plan would hold: an upper bound; `{ available: false }` when it cannot be read, never 0. */
-export async function planQuote(env: Env, s: Scope, goal: GoalRow, user: User, deps: PlanDeps = {}): Promise<{ ok: true; quote: Spend; by: 'agent' | 'eadwyn' } | PlanRefusal> {
+export async function planQuote(env: Env, s: Scope, goal: GoalRow, user: User, deps: PlanDeps = {}): Promise<{ ok: true; quote: Spend; by: 'agent' | 'eadwyn'; agent: PlannerRef } | PlanRefusal> {
   const agent = await plannerAgent(env, s);
   if (agent) {
     const q = await (deps.agentQuote ?? agentQuote)(env, { agent, module: PLAN_MODULE, option: PLAN_OPTION, record: record(goal) });
-    return q.ok ? { ok: true, quote: q.quote, by: 'agent' } : q;
+    return q.ok ? { ok: true, quote: q.quote, by: 'agent', agent: plannerRef(agent) } : q;
   }
   const row = optionRowIn(PLAN_MODULE, PLAN_OPTION);
   if (!row) return { ok: false, status: 503, code: 'plan_option_missing', message: 'The planner is not set up yet.' };
   try {
     const m = moduleOf(PLAN_MODULE)!;
     const q = await (deps.quoteRun ?? quoteRun)(env, { ...eadwynOpts(row, user, ' '), rail: { page: row.pageKey, option: row.optionKey, record: record(goal) }, surface: moduleSurface(m) });
-    if (!q.ok && q.refusal === 'misconfigured') return { ok: true, quote: { available: false }, by: 'eadwyn' };
+    if (!q.ok && q.refusal === 'misconfigured') return { ok: true, quote: { available: false }, by: 'eadwyn', agent: null };
     if (!q.ok) return { ok: false, status: runRefusalStatus(q.refusal), code: String(q.refusal), message: q.error };
-    return { ok: true, quote: { available: true, value_microusd: q.hold_microusd }, by: 'eadwyn' };
+    return { ok: true, quote: { available: true, value_microusd: q.hold_microusd }, by: 'eadwyn', agent: null };
   } catch {
-    return { ok: true, quote: { available: false }, by: 'eadwyn' };
+    return { ok: true, quote: { available: false }, by: 'eadwyn', agent: null };
   }
 }
 
@@ -218,23 +234,28 @@ async function setPayload(env: Env, uid: string, payload: Record<string, unknown
  * Run the planner and keep its plan as one proposal on `goal:<uid>`. An
  * unreadable or looping plan is discarded and answers 422 `plan_invalid`.
  */
-export async function draftPlan(env: Env, s: Scope, goal: GoalRow, user: User, deps: PlanDeps = {}): Promise<{ ok: true; proposal: { uid: string; by: 'agent' | 'eadwyn'; plan: Plan } } | PlanRefusal> {
+export async function draftPlan(env: Env, s: Scope, goal: GoalRow, user: User, deps: PlanDeps = {}): Promise<{ ok: true; proposal: { uid: string; by: 'agent' | 'eadwyn'; agent: PlannerRef; plan: Plan; cost: PlanCost } } | PlanRefusal> {
   const prompt = `${await planContext(env, s, goal)}\n\n${INSTRUCTION}`;
   const agent = await plannerAgent(env, s);
   let uid: string;
   let text: string;
   let by: 'agent' | 'eadwyn';
+  let charged: Spend;
+  // #4394: the run's own uid, so its hold can be read back (`ai_budget_reservations.execution_id`).
+  const runUid = crypto.randomUUID();
   if (agent) {
-    const r = await (deps.agentRun ?? agentRun)(env, { agent, module: PLAN_MODULE, option: PLAN_OPTION, record: record(goal), prompt });
+    const r = await (deps.agentRun ?? agentRun)(env, { agent, module: PLAN_MODULE, option: PLAN_OPTION, record: record(goal), prompt, runUid });
     if (!r.ok) return r as AgentRefusal;
     uid = r.proposal.uid; text = String((r.proposal.payload as any)?.text ?? ''); by = 'agent';
+    charged = r.charged ?? { available: false };
   } else {
     const row = optionRowIn(PLAN_MODULE, PLAN_OPTION);
     if (!row) return { ok: false, status: 503, code: 'plan_option_missing', message: 'The planner is not set up yet.' };
-    const r = await (deps.run ?? run)(env, { ...eadwynOpts(row, user, prompt), rail: { page: row.pageKey, option: row.optionKey, record: record(goal) }, surface: moduleSurface(moduleOf(PLAN_MODULE)!) });
+    const r = await (deps.run ?? run)(env, { ...eadwynOpts(row, user, prompt), rail: { page: row.pageKey, option: row.optionKey, record: record(goal) }, surface: moduleSurface(moduleOf(PLAN_MODULE)!), executionId: runUid });
     if (!r.ok) return { ok: false, status: runRefusalStatus(r.refusal), code: r.refusal ?? 'run_failed', message: r.guard?.refusal?.message ?? r.error ?? 'The planner could not run.' };
     const p = await proposeRail(env, { userId: Number(user.id), page: row.pageKey, option: row.optionKey, record: record(goal), kind: 'proposal', payload: { text: r.output ?? '' }, model: r.usage?.model ?? null, usageLogId: r.usageLogId ?? null });
     uid = p.uid; text = r.output ?? ''; by = 'eadwyn';
+    charged = await chargedFor(env, r.usageLogId ?? null);
   }
   const parsed = parsePlan(text);
   if (!parsed.ok) {
@@ -242,7 +263,8 @@ export async function draftPlan(env: Env, s: Scope, goal: GoalRow, user: User, d
     return { ok: false, status: 422, code: parsed.code, message: parsed.message };
   }
   await setPayload(env, uid, { goal: goal.uid, by, plan: parsed.plan });
-  return { ok: true, proposal: { uid, by, plan: parsed.plan } };
+  const cost: PlanCost = { held: await heldFor(env, runUid), charged };
+  return { ok: true, proposal: { uid, by, agent: plannerRef(agent), plan: parsed.plan, cost } };
 }
 
 // ─────────────────────────────────────────────────────────────── accept
@@ -343,4 +365,23 @@ export async function acceptPlan(env: Env, s: Scope, goal: GoalRow, proposalUid:
     return { ok: false, status: 503, code: 'plan_not_saved', message: 'The plan’s tasks could not be saved, so none were. Try again.' };
   }
   return { ok: true, tasks: uids };
+}
+
+// ─────────────────────────────────────────────────────────────── discard
+
+/**
+ * #4394 (TM10d): discard a drafted plan. The proposal is claimed as accept
+ * claims it (`WHERE status = 'proposed'`, once), so a plan already accepted or
+ * discarded answers 409 `plan_decided`, and two presses discard it once.
+ */
+export async function discardPlan(env: Env, goal: GoalRow, proposalUid: unknown): Promise<{ ok: true } | PlanRefusal> {
+  if (typeof proposalUid !== 'string' || !proposalUid) return { ok: false, status: 400, code: 'invalid_plan', message: 'Name the plan to discard.' };
+  const row = await env.DB.prepare('SELECT uid, status FROM ai_rail_proposals WHERE uid = ? AND rail_option = ? AND record_ref = ?')
+    .bind(proposalUid, PLAN_OPTION, record(goal)).first<{ uid: string; status: string }>();
+  if (!row) return { ok: false, status: 404, code: 'not_found', message: 'There is no such plan for this goal.' };
+  const res = await env.DB.prepare(
+    "UPDATE ai_rail_proposals SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND status = 'proposed'",
+  ).bind(row.uid).run();
+  if (!Number(res.meta?.changes ?? 0)) return { ok: false, status: 409, code: 'plan_decided', message: 'This plan was already accepted or discarded.' };
+  return { ok: true };
 }

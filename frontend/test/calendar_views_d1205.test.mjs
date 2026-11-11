@@ -13,12 +13,13 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CalendarPage from '../src/pages/CalendarPage.jsx';
-import { FAMILIES, NOT_YET, VIEWS, WAITS, chipCount, familyOf, viewOf, windowFor } from '../src/pages/calendarViews.js';
+import { FAMILIES, KINDS, NOT_YET, VIEWS, WAITS, chipCount, familyOf, viewOf, waitsOf, windowFor } from '../src/pages/calendarViews.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
-const PAGE_KINDS = [...read('frontend/src/pages/CalendarPage.jsx').matchAll(/\{ id: '([a-z_]+)', label: '[^']+', from: '/g)].map((m) => m[1]);
+// D5205 (#5205): the page's kinds are the Worker registry's, through calendarViews.js.
+const PAGE_KINDS = KINDS.map((k) => k.id);
 
 /* ------------------------------------------------------------------ *
  * The model
@@ -45,20 +46,20 @@ test('the week is Monday to Sunday; the month is the calendar month; the agenda 
 });
 
 test('every kind the page reads is in exactly one family; Deadlines holds the Compliance layer (D1384)', () => {
-  assert.deepEqual(FAMILIES.map((f) => f.label), ['Events', 'Meetings', 'Sessions', 'Deadlines', 'Learning', 'Grow', 'From other calendars', 'AI agents']);
+  // D5205 (#5205): the families are the Worker registry's, in its order, with its names.
+  assert.deepEqual(FAMILIES.map((f) => f.label), ['Meetings', 'Events', 'Validate', 'Grow', 'Deadlines', 'Raise', 'Tasks', 'Learning', 'From other calendars', 'AI agents']);
   assert.deepEqual([...FAMILIES.flatMap((f) => f.kinds)].sort(), [...PAGE_KINDS].sort());
+  assert.equal(new Set(FAMILIES.flatMap((f) => f.kinds)).size, PAGE_KINDS.length, 'a kind sits in two families');
   assert.equal(familyOf('event_ticket'), 'events');
-  assert.equal(familyOf('calendly_event'), 'other');
-  // D1484 (#3977): the cohort dates and deal closings are deadlines too; #3982: so are a round's close and an NDA's expiry.
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing', 'round_close', 'nda_expiry', 'workflow_task', 'mvp_task', 'contact_task', 'engagement_milestone', 'work_item']);
-  assert.equal(PAGE_KINDS.length, 28, 'the page kind table parsed'); // D1614 W4 (#3972): work_item, twenty-seven; #3957's agent sessions, twenty-eight.
+  assert.equal(familyOf('calendly_event'), 'external');
+  // D1484 (#3977): the cohort dates and deal closings are deadlines too.
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'deadlines').kinds, ['compliance_due', 'cohort_date', 'deal_closing']);
+  assert.equal(PAGE_KINDS.length, 32, 'the registry has thirty-two kinds'); // #5131 (D1486 §e): Grow's four make thirty-two.
   // #3957: AI agent sessions are their own family, teal.
   assert.deepEqual(FAMILIES.find((f) => f.key === 'agents').kinds, ['agent_session']);
-  // // #3959: Learning is the fifteenth; D1486 §b's two make seventeen; §c's two, nineteen; §d's four, twenty-four; D1485's two, twenty-six.
   // D1485 (#3979): Google and Outlook events sit beside Calendly, from other calendars.
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'other').kinds, ['calendly_event', 'external_google', 'external_microsoft']);
-  assert.deepEqual(FAMILIES.find((f) => f.key === 'grow').kinds, ['publish_send', 'content_planned']);
-  assert.equal(FAMILIES.find((f) => f.key === 'tasks'), undefined, 'task dates are grouped under Deadlines');
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'external').kinds, ['calendly_event', 'external_google', 'external_microsoft']);
+  assert.deepEqual(FAMILIES.find((f) => f.key === 'grow').kinds, ['publish_send', 'content_planned', 'grow_campaign', 'ad_flight', 'newsletter_send', 'sequence_step']);
 });
 
 test('a failed source counts a dash, never 0; a read list counts; no list counts nothing', () => {
@@ -67,7 +68,7 @@ test('a failed source counts a dash, never 0; a read list counts; no list counts
   assert.equal(chipCount(items, 'calendly_event', new Set()), 0, 'a measured zero is fine');
   assert.equal(chipCount(items, 'calendly_event', new Set(['calendly_event'])), '—');
   assert.equal(chipCount(null, 'ic_meeting', new Set()), null);
-  for (const w of Object.values(WAITS)) assert.ok(!/\b0\b|\bnone\b/i.test(w), w);
+  for (const w of WAITS) assert.ok(!/\b0\b|\bnone\b/i.test(w.text), w.text);
 });
 
 /* ------------------------------------------------------------------ *
@@ -126,14 +127,14 @@ test('a source that did not answer: its chip says a dash with why, never 0; the 
   try {
     // D1210: the counts live in the Kinds panel (CAL6), a dash with why beside the kind.
     await v.click('cal-kinds');
-    assert.ok(v.text('cal-fam-other').includes('— · Could not be read'), 'the failed kind shows a dash with why');
-    assert.ok(v.text('cal-fam-other').includes('and 1 unread'), 'its family says one is unread');
+    assert.ok(v.text('cal-fam-external').includes('— · Could not be read'), 'the failed kind shows a dash with why');
+    assert.ok(v.text('cal-fam-external').includes('and 1 unread'), 'its family says one is unread');
     assert.ok(!/read 0/.test(v.text()), 'the banner no longer says the chip reads 0');
-    assert.equal(v.text('cal-waits').startsWith(NOT_YET), true);
-    // D1212 (#3178) filled the whole-calendar subscription (Subscribe, CAL11): its wait is retired.
-    assert.equal(WAITS.feed, undefined);
-    assert.equal(v.by('cal-wait-feed'), undefined);
-    for (const k of ['deadlines', 'interviews']) assert.ok(v.text(`cal-wait-${k}`).includes(WAITS[k].slice(0, 30)), k);
+    // D5205 (#5205): every wait this card held is read now (cohort dates, deal closings, interview calls), so no
+    // card is drawn; and the page draws exactly the waits `waitsOf` keeps.
+    assert.equal(waitsOf().length, 0);
+    assert.equal(v.by('cal-waits'), undefined, 'a Not read here yet card with nothing in it');
+    assert.ok(!v.text().includes(NOT_YET));
   } finally { await v.close(); }
 });
 

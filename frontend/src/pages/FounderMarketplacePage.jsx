@@ -25,8 +25,8 @@ import {
 // ServiceCatalogPage (reused via named exports, not re-implemented), so every
 // action — post a need, submit/accept/reject/withdraw quotes, book a service,
 // manage offerings, Stripe Connect and the engagement state machine — carries
-// over unchanged. The standalone /needs and /services routes stay registered
-// for the partner/investor/admin sidebars; founders are redirected here.
+// over unchanged. D2319 retires /needs and /services; founders link here
+// directly, while the other profiles use Pipeline Leads or Offers Catalog.
 
 export default function FounderMarketplacePage({ user }) {
   const [searchParams, setSearchParams] = useSearchParams();

@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useSettings } from '../contexts/SettingsContext';
 import { getStripe, buildAppearance } from '../lib/stripe';
 import Skeleton from './Skeleton';
+import { formatStripeAmount } from '../lib/money';
 
 /**
  * Task #4 — Axal-branded embedded checkout component.
@@ -49,21 +50,17 @@ const PROMO_REASONS = {
   already_used: "You've already used this code.",
   not_first_purchase: 'This code is for a first purchase only.',
   first_purchase_unreadable: "We couldn't confirm this is your first purchase. Try again in a moment.",
+  // D4855 (#4855): the licence's promotion ceiling.
+  ceiling_exceeded: "This code's discount is more than this licence's promotion budget has left. Pay without it.",
+  ceiling_unreadable: "This code can't be checked right now. Try again in a moment.",
 };
 function promoReasonText(reason) {
   return PROMO_REASONS[reason] || "That code can't be applied to this purchase.";
 }
 
 function formatMoney(cents, currency) {
-  const amt = (Number(cents) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: (currency || 'usd').toUpperCase(),
-    }).format(amt);
-  } catch {
-    return `${amt.toFixed(2)} ${(currency || '').toUpperCase()}`.trim();
-  }
+  // D5373: Stripe's amount at its currency's own decimals; the storefront's default currency is USD.
+  return formatStripeAmount(Number(cents) || 0, currency || 'usd');
 }
 
 export default function AxalCheckout(props) {

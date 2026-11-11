@@ -16,7 +16,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import WorkspaceShell from '../src/workspaces/WorkspaceShell.jsx';
 import { PRIMARY_ACCENT, ZonePrimary } from '../src/workspaces/ZoneActions.jsx';
 import ProfileHeaderAsk, { headerAskGate } from '../src/workspaces/ProfileHeaderAsk.jsx';
-import { askAvailability, waitingCount } from '../src/workspaces/profileAskAdapter.js';
+import { askAvailability } from '../src/workspaces/profileAskAdapter.js';
 import { AskButtonView } from '../src/ui/AskButton.jsx';
 import { THESIS_PRIMARY } from '../src/pages/investor/dealflow/DealFlow.jsx';
 import { ShowProofLink } from '../src/pages/investor/deals/CommitZone.jsx';
@@ -91,18 +91,14 @@ test('the header Ask gate: a profile, a rail, no support session, and the panel 
   assert.equal(routed(h(ProfileHeaderAsk, { role: 'investor' }), '/deals/closing'), '', 'no rail mounted: no Ask');
 });
 
-test('the waiting count is unavailable until D1442, and an unread count is never "0 waiting"', () => {
-  const w = waitingCount('Investor · Deals · Closing');
-  assert.equal(w.available, false);
-  assert.equal(w.count, null);
-  assert.equal(w.waitsOn, '#3706 (D1442)');
+test('an unread count is never "0 waiting"; the count itself is D1442\'s, through HeaderAsk (D4353)', () => {
   for (const waiting of [null, 0, undefined]) {
     const html = renderToStaticMarkup(h(AskButtonView, { waiting }));
     assert.doesNotMatch(html, /waiting/, `waiting=${waiting} draws a chip`);
     assert.match(html, /aria-label="Ask Eadwyn"/);
   }
-  // D1442 (#3991) added `page` to the client with its route; this header's own
-  // adapter still reaches no API until its flag flips (S1's viewer-gate note on #3706).
+  // D4353 (#4353): the adapter's placeholder count is gone; the header's count is
+  // HeaderAsk's (PageAsk reading `?page=`), pinned by ask_leftovers_d4353.
   assert.match(codeOnly(read('frontend/src/lib/api/railProposals.js')), /\{ page: String\(page\) \}/);
   assert.doesNotMatch(codeOnly(read('frontend/src/workspaces/profileAskAdapter.js')), /\bapi\b|request\(|fetch\(/);
 });

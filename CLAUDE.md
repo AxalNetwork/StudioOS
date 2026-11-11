@@ -80,7 +80,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
-| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — **not deployed yet**; B8 packages it for the host B0 chooses |
+| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — deployed as its own Worker and Cloudflare Container (#3588), `MEETING_BOT=canary` (Super Admins only); the live Meet/Zoom check is open on #3588 |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
@@ -145,11 +145,16 @@ header comment fails the build (#4104). Adding such a file edits no README.
   are the ones issues handed out before that, and keep them.
   `node scripts/check-decision-ids.mjs` reads both places and fails on a
   number used twice, or a D4000+ heading that does not cite its own issue.
-- **A new migration is named by its UTC minute** (D4106):
-  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<slug>.sql`. It sorts after
-  every numbered file and applies once like any other; numbered files stop at
-  799. `scripts/check-sql-migrations.mjs` fails on a shared number or stamp,
-  naming both files.
+- **A new migration is named by its UTC minute and its issue** (D4106, D5398):
+  `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<issue>_<slug>.sql`. It sorts
+  after every numbered file and applies once like any other; numbered files
+  stop at 799. Two PRs writing in the same minute twice turned main red
+  (D5398), so from 2026-11-11 00:00 UTC the issue number is required; a file
+  stamped earlier keeps its name. `scripts/check-sql-migrations.mjs` fails on a
+  shared number or identity, naming both files.
+- **A red main gets one repair, not one per branch** (D5398). Read
+  `AGENTS.md` § "Red main and a backed-up queue" before you merge main into a
+  PR, port a fix or re-run CI.
 
 ## Why this doc exists
 

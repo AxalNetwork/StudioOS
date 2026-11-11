@@ -54,8 +54,8 @@ test('the retired files are deleted, not left orphaned', () => {
 
 test('the /skills and /values routes still redirect, now that their pages are gone', () => {
   const app = codeOnly(read('App.jsx'));
-  assert.match(app, /<Route path="\/skills" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
-  assert.match(app, /<Route path="\/values" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/skills" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/values" element=\{<Navigate to="\/studio" replace \/>\} \/>/);
   assert.doesNotMatch(app, /SkillsProfilePage|ValuesAssessmentPage/);
 });
 
@@ -69,7 +69,8 @@ test('StatusBadge and WeekBadge moved, not deleted, and their importers follow',
 });
 
 test('no tour step points at an anchor only the retired page had', () => {
-  const tour = codeOnly(read('components/ProductTour.jsx'));
+  // D4623: the steps moved to the tour's model file.
+  const tour = codeOnly(read('components/productTourModel.js'));
   const anchors = [...tour.matchAll(/anchor: '([^']+)'/g)].map((m) => m[1]);
   assert.ok(anchors.length >= 3, 'the tour still has its steps');
   assert.ok(!anchors.includes('search') && !anchors.includes('notifications'));

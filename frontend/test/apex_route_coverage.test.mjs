@@ -134,7 +134,8 @@ test('the apex wildcard and assets prefix remain off the route table', () => {
 
 test('D1439: the record-card prefixes are [assets] run_worker_first globs in both lists, never route patterns', () => {
   // Mutation checked: a glob dropped from the production list → the per-list check fails; an `axal.vc/events/*` route → the pattern check fails.
-  const CARD_GLOBS = ['/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*'];
+  // D4289 P2 (#4291) added `/@*`, the influencer handle card.
+  const CARD_GLOBS = ['/events/*', '/articles/*', '/jobs/*', '/u/*', '/startups/*', '/partners/*', '/authors/*', '/insights/public/*', '/@*'];
   const lists = [...wrangler.matchAll(/^run_worker_first = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]));
   assert.equal(lists.length, 2, 'the top-level and production [assets] blocks');
   for (const list of lists) for (const g of CARD_GLOBS) assert.ok(list.includes(g), `${g} runs the Worker first`);

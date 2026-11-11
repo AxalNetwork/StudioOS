@@ -48,3 +48,33 @@ and citations by number keep working.
 | --- | --- |
 | `D1151.md` | Deal Team, Market and Traction read contracts and verification. |
 | `D1364.md` | Time-based deployed asset retention, capacity limits and verification. |
+| `D4447.md` | #4447, Part A of #3722: Grow campaign plans and their routes; carries the spec's D1481. |
+| `D4450.md` | #4450: event Explain reuses the deck quote expiry/binding and ledger retry key, while preserving successful text on receipt-read failure. |
+| `D4421.md` | Answered Team questions and the shared General counsel disclaimer. |
+| `D4422.md` | #4422: inherited Team model and MCP read-tool allow-lists, enforced on the Worker and edited in TM8a. |
+| `D4459.md` | No-call run charges and live Work-item mutation responses. |
+| `D4472.md` | One account, several licences: ordered access union, additional grants and atomic appointment retention. |
+| `D4488.md` | Distribution Ask drafts, scoped proposals and safe acceptance (#4488). |
+| `D4484.md` | Distribution static tabs, existing Overview content, module-specific campaign primary and shared Ask presentation. |
+| `D4494.md` | Distribution Inbox source scope, personal unread receipts, honest missing bodies/counts and the explicit Send boundary. |
+| `D4486.md` | #4486: Distribution Channels, compatible kinds and read-only connection cards. |
+| `D4496.md` | Distribution cross-tab states and responsive layouts (#4496). |
+| `D4592.md` | Fair eligible-work discovery, bounded sweep progress and isolated resend capacity (#4592). |
+| `D4576.md` | Adds 32 specialist agent skills and synthetic golden cases through the existing library contract. |
+| `D4587.md` | Validate review queue ordering, venture-aware links and selected-session request identity. |
+| `D4707.md` | Licence navigation in the URL with filter reconciliation, accessible tabs and reason dialogs, and attributable paginated history (#4707). |
+| `D4555.md` | Cloudflare Agent Skills SDK as a loading adapter behind D1-authorized skills (#4555). |
+| `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
+| `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
+| `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
+| `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
+| `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
+| `D5358.md` | Practice Sessions confirms price changes and clears, preserves status-only updates, and handles billing refusals. |
+| `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
+| `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
+| `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
+| `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
+| `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |
+| `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
+| `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |

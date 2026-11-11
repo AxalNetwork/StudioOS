@@ -9,17 +9,24 @@ import { request } from '../api.js';
 //   connectMcp(body)               POST   /mail/accounts/mcp { connection_uid, address, display_name? } → 201 { account } (D1343:
 //                                  a member's own MCP mail server; its send tool is approved on the custom connector first)
 //   verifyAccount(uid)             POST   /mail/accounts/:uid/verify → { account }
-//   disconnect(uid)                DELETE /mail/accounts/:uid → { ok }
+//   disconnect(uid)                DELETE /mail/accounts/:uid → { ok, account } the persisted state (revoked), or 409 connection_changed when a newer connection was saved meanwhile (#4654)
 //   confirmSend(accountUid)        POST   /mail/send/confirm { account_uid } → { nonce, expires_at }
-//   send(body)                     POST   /mail/send { account_uid, to, subject, body, draft_uid?, nonce } → 201 { sent }
+//   send(body)                     POST   /mail/send { account_uid, to, subject, body, draft_uid?, operation_key?, nonce } → 201 { sent, operation }
+//                                  (D4665: 200 { recovered } for a repeat of an accepted operation; 202 { operation } while pending or uncertain)
+//   sendOperation(uid)             GET    /mail/send/operations/:uid → { operation: { uid, state } }
+//   resolveSend(uid, outcome)      POST   /mail/send/operations/:uid/resolve { outcome: 'arrived' | 'not_arrived' } → { operation }
 // A send needs the nonce from the composer's pressed Send; a credential never comes back.
 // D1341 (#3549, part 2) — Eadwyn's email drafts, on
 // cloudflare-worker/src/routes/mail_drafts.ts (migration 648).
 //   context(person, project?)      GET    /mail/context?person=<kind:id>&project= → { person, intents, items }
 //   block(body)                    POST   /mail/blocks { kind, ref?, project? } → { block | null }
-//   estimate(body)                 POST   /mail/drafts { …, estimate: true } → { estimate: { hold_microusd, model }, sources, blocks }
-//   draft(body)                    POST   /mail/drafts { person, intent, tone, length, refs, blocks, project? } → 201 { draft }
-//   revise(uid, body)              POST   /mail/drafts/:uid/revise { instruction, project?, estimate? } → 201 { draft }
+//   estimate(body)                 POST   /mail/drafts { …, estimate: true } → { estimate: { hold_microusd, model, kind, quote, expires_at }, sources, blocks }
+//   draft(body)                    POST   /mail/drafts { person, intent, tone, length, refs, blocks, project?, quote } → 201 { draft }
+//   revise(uid, body)              POST   /mail/drafts/:uid/revise { instruction, base?: { subject, body }, project?, estimate?, quote? } → 201 { draft }
+// D4666: a run carries the `quote` of the estimate of THAT operation. Without a valid one it is 409 `estimate_required`
+// with a fresh `estimate` in the body, and nothing is run or held. A revision has its own estimate (`estimate: true`).
+//   saveEdit(uid, body)            PATCH  /mail/drafts/:uid { to?, subject, body, expected_revision } → { draft } (D4660: the member's own text of one
+//                                  version, no run and no charge; 409 `stale_edit` carries the current `draft`)
 //   drafts(person?)                GET    /mail/drafts?person= → { drafts }
 //   get(uid)                       GET    /mail/drafts/:uid → { draft }
 //   remove(uid)                    DELETE /mail/drafts/:uid → { ok }
@@ -46,11 +53,14 @@ export const mailApi = {
   disconnect: (uid) => request(`/mail/accounts/${id(uid)}`, { method: 'DELETE' }),
   confirmSend: (accountUid) => post('/mail/send/confirm', { account_uid: accountUid }),
   send: (body) => post('/mail/send', body),
+  sendOperation: (uid) => request(`/mail/send/operations/${id(uid)}`),
+  resolveSend: (uid, outcome) => post(`/mail/send/operations/${id(uid)}/resolve`, { outcome }),
   context: (person, project) => request(`/mail/context?person=${id(person)}${project ? `&project=${id(project)}` : ''}`),
   block: (body) => post('/mail/blocks', body),
   estimate: (body) => post('/mail/drafts', { ...body, estimate: true }),
   draft: (body) => post('/mail/drafts', body),
   revise: (uid, body) => post(`/mail/drafts/${id(uid)}/revise`, body),
+  saveEdit: (uid, body) => request(`/mail/drafts/${id(uid)}`, { method: 'PATCH', body: JSON.stringify(body ?? {}) }),
   drafts: (person) => request(`/mail/drafts${person ? `?person=${id(person)}` : ''}`),
   get: (uid) => request(`/mail/drafts/${id(uid)}`),
   remove: (uid) => request(`/mail/drafts/${id(uid)}`, { method: 'DELETE' }),

@@ -220,7 +220,7 @@ export function RaiseCallView({ state: s, on }) {
   const member = d.relation === 'member';
   const head = (
     <div className="flex flex-col gap-2" data-testid="call-head">
-      <Link to="/raise/calls" className="text-sm font-semibold text-axal-violet dark:text-violet-300">‹ Calls</Link>
+      <Link to="/raise/capital-relationships/calls" className="text-sm font-semibold text-axal-violet dark:text-violet-300">‹ Calls</Link>
       <div className="flex flex-wrap items-center gap-2.5">
         <h1 className="m-0 text-[22px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{c.name}</h1>
         <StateChip state={state} />

@@ -22,10 +22,11 @@ import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 const strip = (pairs) => pairs.map(([label, route]) => ({ label, route }));
 
 export const HQ_STRIPS = {
-  // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants".
+  // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants";
+  // D4819 (#4819) names the second "Program access by licence", at the same address.
   Licences: strip([
     ['Ledger', '/admin/licences'],
-    ['Program grants', '/admin/licences/programs'],
+    ['Program access by licence', '/admin/licences/programs'],
   ]),
   Platform: strip([
     ['Overview', '/admin/platform'],
@@ -44,6 +45,8 @@ export const HQ_STRIPS = {
     ['Promo codes', '/admin/platform/promo-codes'],
     // D4155 (#4155): HQ › Decks, the deck studio's admin screens.
     ['Decks', '/admin/platform/decks'],
+    // #3588: the meeting-bot runs and Diagnose Eadwyn AI had no strip link, only a card the owner could not find.
+    ['Meeting bots', '/admin/platform/meeting-bots'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],
   ]),

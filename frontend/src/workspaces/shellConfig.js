@@ -115,6 +115,19 @@ export const SEAM = { ink: '#0e7490', tint: '#f0fdff', border: '#a5edf5' };
 const A = ARCHETYPE;
 
 /**
+ * D4841 (#4841): the Offers zones grouped by commercial purpose (Offers V2
+ * canvas, OF-01). Display only: `ZoneNav` draws the same pills under these
+ * labels and the readiness root draws one preview per group. The zones, their
+ * order in the bucket and their URLs are unchanged. No other bucket has groups.
+ */
+export const OFFER_GROUPS = [
+  { key: 'sell', label: 'Sell', zones: ['catalog', 'perk-deals'] },
+  { key: 'prove', label: 'Prove', zones: ['proof', 'visibility'] },
+  { key: 'target', label: 'Target', zones: ['audience-fit'] },
+  { key: 'test', label: 'Test', zones: ['testing'] },
+];
+
+/**
  * Zones shared by more than one shell.
  *
  * `/network/*` is identical in all four: a relationship book, a double-opt-in
@@ -144,6 +157,10 @@ const NETWORK_ZONES = [
  */
 const RESEARCH_ZONES = {
   founder: [
+    // D5157 (#5157): My Research, the Research Projects, first after the
+    // Overview as the Research v2 canvas orders it. Its routes are in
+    // `routes/researchProjects.jsx`.
+    { slug: 'projects', label: 'My Research', archetype: A.COLLECTION },
     { slug: 'ask', label: 'Ask', archetype: A.FEED },
     { slug: 'markets', label: 'Markets', archetype: A.ANALYTICS },
     { slug: 'geographies', label: 'Geographies', archetype: A.ANALYTICS },
@@ -390,6 +407,7 @@ export const SHELLS = {
           { slug: 'health', label: 'Health', archetype: A.WORK_BOARD, legacy: '/partner/operations/portfolio' },
         ] },
       { kind: 'bucket', label: 'Offers', prefix: '/offers', tagline: 'Package what we sell',
+        groups: OFFER_GROUPS,
         zones: [
           { slug: 'catalog', label: 'Catalog', archetype: A.LEDGER, legacy: '/services' },
           { slug: 'perk-deals', label: 'Perk deals', archetype: A.LEDGER, legacy: '/perks' },

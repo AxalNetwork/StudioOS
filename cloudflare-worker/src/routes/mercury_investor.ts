@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * /api/mercury/investor — an investor's own Mercury feeds their sections
  * (D840 part 4, #2349). READ-ONLY: nothing here asks Mercury to move money.
@@ -75,7 +76,7 @@ function refused(c: C, status: number, code: string, message: string): Response 
 /** Investor, no support session; on HQ or in a branch (D884). Null when allowed. */
 async function policy(c: C, user: User): Promise<Response | null> {
   if (await isSupportSession(c)) return refused(c, 403, 'support_session_refused', 'A support session cannot read or change a member\'s bank account.');
-  if (String(user.role || '').toLowerCase() !== 'investor') return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
+  if (!holdsLicence(user, 'investor')) return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
   return null;
 }
 

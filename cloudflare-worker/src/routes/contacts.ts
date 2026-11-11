@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Contacts — unified inbound relationship hub (founder side).
  *
@@ -30,6 +31,7 @@ import {
   computeRoundProgress, rollUpTranches, computeProRata, postRoundStake,
 } from '../services/roundMath';
 import { bindingKey } from '../util/schemaBootstrap';
+import { LIST_PAGE_DEFAULT, decodeCursor, encodeCursor, listLimit, trimPage } from '../util/keyset';
 import { logCycleWrite } from '../services/cycleActivity';
 import { exemptionInput, unpublishRoundLinks, unpublishes } from '../services/decks/roundExemption';
 import { roundExemptionOf } from '../services/decks/publish';
@@ -75,7 +77,7 @@ r.use('*', async (c, next) => {
 // brand.ts) but was missing here, so mentor leads were coerced to 'customer' at
 // ingest. Adding it lets mentor leads flow through and route to Advisory.
 export const CONTACT_AUDIENCES = ['customer', 'investor', 'partner', 'advisor', 'mentor', 'cofounder'];
-const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
+export const CONTACT_STATUSES = ['new', 'invited', 'contacted', 'replied', 'qualified', 'active', 'passed'];
 
 /** Investor raise-pipeline stages a promoted investor prospect moves through. */
 export const RAISE_STAGES = ['to_contact', 'contacted', 'meeting', 'diligence', 'committed', 'passed'];
@@ -372,6 +374,22 @@ export async function ingestContact(
   },
 ): Promise<void> {
   await ensureSchema(env);
+  await prepareContactInsert(env, opts).statement.run();
+}
+
+/** D4492: the canonical contact insert, prepared for a caller’s atomic consent/audit batch. */
+export function prepareContactInsert(
+  env: Env,
+  opts: {
+    projectId: number; landingPageId?: number | null; email: string; name?: string | null;
+    audience?: string | null; cta?: string | null; message?: string | null; source?: string | null;
+    status?: string;
+    /** Allowlisted utm_* map from the capturing page's querystring. */
+    utm?: Record<string, string> | null;
+    /** document.referrer of the capturing page. */
+    referrer?: string | null;
+  },
+): { uid: string; statement: D1PreparedStatement } {
   const audience = opts.audience && CONTACT_AUDIENCES.includes(opts.audience) ? opts.audience : 'customer';
   const uid = newUid();
   // Attribution is stored as a JSON blob rather than five columns: the set of
@@ -379,7 +397,7 @@ export async function ingestContact(
   // blob keeps that from being a migration each time. It is written only from
   // the allowlisted+clipped map the caller built, never raw request input.
   const utmJson = opts.utm && Object.keys(opts.utm).length ? JSON.stringify(opts.utm) : null;
-  await env.DB.prepare(
+  const statement = env.DB.prepare(
     `INSERT INTO contacts (uid, project_id, audience, routed_to, name, email, cta, message, source, landing_page_id, status, utm_json, referrer, last_activity_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
@@ -390,7 +408,8 @@ export async function ingestContact(
     opts.status && CONTACT_STATUSES.includes(opts.status) ? opts.status : 'new',
     utmJson, opts.referrer || null,
     nowIso(), nowIso(), nowIso(),
-  ).run();
+  );
+  return { uid, statement };
 }
 
 /** The caller's active company for this request, verified once and memoised. */
@@ -468,7 +487,7 @@ async function ownedProjectScope(c: Context<{ Bindings: Env }>, user: User): Pro
  */
 async function requireRaiseUser(c: Context<{ Bindings: Env }>): Promise<User> {
   const user = await requireAuth(c);
-  if (user.role === 'admin' || user.role === 'founder') return user;
+  if (user.role === 'admin' || holdsLicence(user, 'founder')) return user;
   if (user.role === 'exploring' && Number((user as any).spinout_lab_active ?? 0) === 1) return user;
   if (!capitalInvestor(user) && (await capitalMemberProjectIds(c.env, user)).length > 0) return user;
   throw new Error('Forbidden');
@@ -599,7 +618,55 @@ export async function createProspect(
   return { prospect: prospect || { id: prospectId, project_id: projectId, contact_id: contactId, name, email, firm, stage, amount, notes } };
 }
 
-// GET /api/contacts — founder inbox (filter by audience / status / routed_to)
+/**
+ * #4611 finding 8 — THE PROJECT FILTER RUNS BEFORE THE PAGE, AND THE COUNTS
+ * ARE NOT THE PAGE'S.
+ *
+ * This handler used to answer one bounded page — `LIMIT 500`, no cursor — and
+ * build `counts` by walking that page. `FounderNetworkRelationships` then threw
+ * away every row whose `project_id` was not the selected startup. So the
+ * relationship book of a founder whose account holds more than 500 contacts
+ * showed whichever of the selected startup's contacts happened to fall inside
+ * the newest 500 ACROSS ALL their startups, and the stat block above it counted
+ * that accident. A founder with 600 contacts on startup A and 40 on startup B
+ * could open B's book and be told it was empty.
+ *
+ * Three things change, and they are separable:
+ *
+ * 1. `project_id` IS A SERVER FILTER NOW, applied inside `where` — so inside
+ *    the authorized scope and before `LIMIT`. An id outside the caller's scope
+ *    is refused as `project_not_authorized`, in the same words whether the
+ *    project belongs to somebody else or does not exist, so the refusal
+ *    confirms nothing.
+ * 2. `counts` AND `total` COME FROM THEIR OWN AGGREGATE over the whole filtered
+ *    set, never from `items`. They do not move when the page does. `counts` is
+ *    per audience, as before; `total` is every row the filter matches.
+ * 3. CONTINUATION, through #4701's own `util/keyset.ts` rather than a second
+ *    cursor format: `limit` (`listLimit`, default and maximum 200) and an
+ *    opaque `cursor`, with `next_cursor` and `has_more` in the response. The
+ *    cursor is keyset, not an offset — `(sort key, id)` against the same
+ *    `COALESCE(last_activity_at, created_at) DESC, id DESC` order — so a row
+ *    written between two page reads cannot shift the window and hide a
+ *    contact. `id DESC` is new and is what makes that order TOTAL: the sort
+ *    key alone is not unique, and a non-total order has no keyset cursor.
+ *    A malformed cursor is `decodeCursor`'s 400, never a silent restart at
+ *    page one.
+ *
+ * The 500 that was here was never a page size; it was the cap standing in for
+ * paging. The response keeps `items` and `counts` where they were, so a caller
+ * that reads neither the cursor nor the total behaves as before within the
+ * first page — it just no longer gets 500 rows at once.
+ */
+export const CONTACTS_PAGE_DEFAULT = LIST_PAGE_DEFAULT;
+
+/** The page's last row as the cursor for the next one: its sort key, then its id. */
+export function contactsCursor(row: { last_activity_at?: string | null; created_at?: string | null; id: number } | undefined): string | null {
+  if (!row) return null;
+  return encodeCursor([String(row.last_activity_at || row.created_at || ''), Number(row.id)]);
+}
+
+// GET /api/contacts — founder inbox (filter by audience / status / routed_to /
+// project_id), one keyset page at a time, with whole-scope counts beside it.
 r.get('/', async (c) => {
   try {
     const user = await requireRole(c, 'founder');
@@ -611,9 +678,22 @@ r.get('/', async (c) => {
     const params: any[] = [];
     if (await capitalRestricted(c, user)) where += " AND c.audience != 'investor' AND COALESCE(c.promoted_to, '') != 'raise' AND NOT EXISTS (SELECT 1 FROM raise_prospects p WHERE p.contact_id = c.id)";
     if (scope !== 'all') {
-      if (scope.length === 0) return c.json({ items: [], counts: {} });
+      if (scope.length === 0) return c.json({ items: [], counts: {}, total: 0, has_more: false, next_cursor: null, scope: 'authorized projects' });
       where += ` AND c.project_id IN (${scope.map(() => '?').join(',')})`;
       params.push(...scope);
+    }
+    // THE PROJECT FILTER, INSIDE THE AUTHORIZED SCOPE AND BEFORE THE LIMIT.
+    // `scope` has already narrowed `where` to projects this caller may read,
+    // so this only narrows further; an id outside it is refused rather than
+    // quietly widening or quietly emptying the page.
+    const projectRaw = c.req.query('project_id');
+    let projectId: number | null = null;
+    if (projectRaw != null && String(projectRaw).trim() !== '') {
+      projectId = Number(projectRaw);
+      if (!Number.isSafeInteger(projectId) || projectId < 1) return c.json({ error: 'project_invalid', detail: 'Give project_id as a whole number.' }, 400);
+      if (scope !== 'all' && !scope.includes(projectId)) return c.json({ error: 'project_not_authorized', detail: 'That startup is not one you can read contacts for.' }, 403);
+      where += ' AND c.project_id = ?';
+      params.push(projectId);
     }
     const audience = c.req.query('audience');
     const status = c.req.query('status');
@@ -621,6 +701,36 @@ r.get('/', async (c) => {
     if (audience) { where += ' AND c.audience = ?'; params.push(audience); }
     if (status) { where += ' AND c.status = ?'; params.push(status); }
     if (routed) { where += ' AND c.routed_to = ?'; params.push(routed); }
+
+    // THE AGGREGATE IS ITS OWN STATEMENT, over `where` without the cursor, so
+    // neither the total nor the per-audience counts change when the page does.
+    // It runs before the page: a caller reading only page two still gets the
+    // whole scope's counts, which is the acceptance criterion.
+    const totals = await c.env.DB.prepare(
+      `SELECT c.audience AS audience, COUNT(*) AS n FROM contacts c WHERE ${where} GROUP BY c.audience`,
+    ).bind(...params).all<{ audience: string | null; n: number }>();
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const row of totals.results || []) {
+      const n = Number(row.n || 0);
+      total += n;
+      if (row.audience) counts[row.audience] = n;
+    }
+
+    const limit = listLimit(c.req.query('limit'));
+    // `decodeCursor` THROWS A 400 Response for a malformed cursor rather than
+    // reading it as the first page — #4701's rule, and the one that keeps a
+    // paginated walk from silently restarting at page one for ever.
+    const from = decodeCursor(c.req.query('cursor'), 2);
+    const page = params.slice();
+    let keyset = '';
+    if (from) {
+      // Strictly after the cursor row in `(key DESC, id DESC)`: an earlier key,
+      // or the same key with a lower id. Bound, never interpolated.
+      keyset = ' AND (COALESCE(c.last_activity_at, c.created_at) < ? OR (COALESCE(c.last_activity_at, c.created_at) = ? AND c.id < ?))';
+      page.push(String(from[0]), String(from[0]), Number(from[1]));
+    }
+
     // LEFT JOIN the source landing page so destination pages can show WHICH
     // template a lead signed up through ("Inbound leads · Brand & Pages").
     // Manually-added / invited contacts have no landing_page_id and come back
@@ -629,6 +739,8 @@ r.get('/', async (c) => {
     // per contact: the next open task's due date, how many tasks are open,
     // and when the last reply was logged. A contact with none of them comes
     // back with NULL / 0, which the pages read as "Not recorded" / "none open".
+    // `limit + 1` rows asked for, `limit` returned: the extra row is how
+    // `has_more` is known without a second count, and it is dropped below.
     const rows = await c.env.DB.prepare(
       `SELECT c.*, lp.template_kit AS landing_template_kit, lp.name AS landing_page_name,
               ct.next_task_due AS next_task_due, COALESCE(ct.open_tasks, 0) AS open_tasks,
@@ -641,13 +753,27 @@ r.get('/', async (c) => {
                       FROM contact_tasks WHERE done = 0 GROUP BY contact_id) ct ON ct.contact_id = c.id
          LEFT JOIN (SELECT contact_id, MAX(created_at) AS last_reply_at
                       FROM contact_replies GROUP BY contact_id) cr ON cr.contact_id = c.id
-        WHERE ${where}
-        ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC LIMIT 500`
-    ).bind(...params).all<ContactRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
-    const items = (rows.results || []) as (ContactRow & { landing_template_kit: string | null; landing_page_name: string | null })[];
-    const counts: Record<string, number> = {};
-    for (const it of items) counts[it.audience] = (counts[it.audience] || 0) + 1;
-    return c.json({ items, counts });
+        WHERE ${where}${keyset}
+        ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC, c.id DESC LIMIT ?`
+    ).bind(...page, limit + 1).all<ContactRow & { landing_template_kit: string | null; landing_page_name: string | null }>();
+    const { rows: items, hasMore } = trimPage(
+      (rows.results || []) as (ContactRow & { landing_template_kit: string | null; landing_page_name: string | null })[],
+      limit,
+    );
+    return c.json({
+      items,
+      counts,
+      // EXPLICIT SCOPES, which is the other half of the finding: `total` and
+      // `counts` are the whole filtered set and `items.length` is this page.
+      // A reader that prints one as the other is printing a page count under a
+      // whole-collection label, which is what the audit found on three screens.
+      total,
+      page_size: items.length,
+      has_more: hasMore,
+      next_cursor: hasMore ? contactsCursor(items[items.length - 1]) : null,
+      limit,
+      scope: projectId != null ? 'one project' : scope === 'all' ? 'every project' : 'authorized projects',
+    });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1547,7 +1673,7 @@ r.post('/:uid/promote', async (c) => {
 
       // Free-tier cap mirrors create-interview / waitlist-promote so the button
       // is not a tier-cap bypass. Explicit 402 — never a silent fallback.
-      if (user.role === 'founder' && !userMeetsTier(user, 'growth')) {
+      if (holdsLicence(user, 'founder') && !userMeetsTier(user, 'growth')) {
         const cnt = await db.prepare('SELECT COUNT(*) AS n FROM discovery_interviews WHERE project_id = ?')
           .bind(row.project_id).first<{ n: number }>();
         if (Number(cnt?.n ?? 0) >= FREE_TIER_LIMITS.discoveryInterviews) {

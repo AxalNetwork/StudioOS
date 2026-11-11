@@ -85,6 +85,7 @@ export async function readMemberProgram(uid) {
     program: reply.program,
     contents: listOf(reply, 'contents', 'The program'),
     enrolled: reply.enrolled === true,
+    ...(reply.enrolled === true ? { enrolled_at: reply.enrolled_at ?? null } : {}),
     completion: Array.isArray(reply.my_completion) ? reply.my_completion : null,
   };
 }

@@ -299,7 +299,7 @@ adminExploring.post('/users/:id/assign-role', async (c) => {
       if (pp?.founder_track === 'Spin-Out (New)') {
         const sql = getSQL(c.env);
         try {
-          const { startLab } = await import('./spinout_lab');
+          const { startLab } = await import('../services/labLifecycle');
           const res = await startLab(sql as any, target.id);
           labStarted = !!(res as any)?.ok;
         } finally {

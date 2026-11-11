@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Lightbox } from '../../../ui';
+import { DraftDialog } from '../caprel/CapRelOutreach.jsx';
 import * as v2 from './deckV2Adapter.js';
 import {
-  CONSENT_OFF, NO_MOST_READ, NO_VISITS, VIEWS_UNREAD, barsOf, mostReadWords, ndaPill, timelineRows,
+  CONSENT_OFF, NO_MOST_READ, NO_VISITS, VIEWS_UNREAD, barsOf, mostReadWords, ndaPill, nextStepsOf, timelineRows,
 } from './slideAnalyticsModel.js';
 
 /**
@@ -17,6 +19,12 @@ import {
  * TIMELINE. With Time per slide off: "Visit counts only. Time per slide is off
  * for this link." A failed read: "Views could not be read." with Try again.
  * Nothing reads 0 for what was not counted: an untimed card is "Not read".
+ *
+ * #4272 (ps7s): two next steps under the sheet, for a link whose investor is in
+ * Capital relationships: **Draft follow-up** opens Capital relationships' own
+ * draft dialog on that prospect (a follow-up; Eadwyn drafts, nothing is sent),
+ * and **Open in Capital relationships** goes to the prospect's record. A link
+ * whose investor was typed in has neither: both are drawn off, with the reason.
  */
 
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
@@ -30,8 +38,11 @@ const PILL = {
 };
 const BAR_MAX = 90;
 
-export default function ViewerAnalyticsSheet({ deck, row, onClose }) {
+export default function ViewerAnalyticsSheet({ deck, row, projectId = null, onClose }) {
   const [answer, setAnswer] = useState(null);
+  const [drafting, setDrafting] = useState(false);
+  const next = nextStepsOf(row);
+  const canDraft = next.ok && projectId != null;
   const load = useCallback(() => {
     if (!deck?.id || !row?.id) return;
     setAnswer(null);
@@ -46,7 +57,21 @@ export default function ViewerAnalyticsSheet({ deck, row, onClose }) {
   const rows = timelineRows(value);
 
   return (
-    <Lightbox label="Viewer analytics" title="Viewer analytics" width={760} onClose={onClose} testId="viewer-analytics">
+    <Lightbox label="Viewer analytics" title="Viewer analytics" width={760} onClose={onClose} testId="viewer-analytics"
+      footer={(
+        <div className="flex flex-col gap-1.5" data-testid="viewer-analytics-next">
+          <div className="flex flex-wrap justify-end gap-2">
+            {next.ok ? (
+              <Link className={`${GHOST} no-underline`} to={next.href} data-testid="viewer-analytics-open-caprel">Open in Capital relationships</Link>
+            ) : (
+              <button type="button" className={GHOST} disabled title={next.reason} data-testid="viewer-analytics-open-caprel">Open in Capital relationships</button>
+            )}
+            <button type="button" className={GHOST} disabled={!canDraft} title={next.ok ? undefined : next.reason}
+              onClick={() => setDrafting(true)} data-testid="viewer-analytics-draft">Draft follow-up</button>
+          </div>
+          {!next.ok ? <p className={`m-0 text-right ${MUTED}`} data-testid="viewer-analytics-next-reason">{next.reason}</p> : null}
+        </div>
+      )}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <b className="text-[14px] text-axal-ink dark:text-gray-100">{who}</b>
@@ -101,6 +126,10 @@ export default function ViewerAnalyticsSheet({ deck, row, onClose }) {
           </>
         ) : null}
       </div>
+      {drafting && canDraft ? (
+        <DraftDialog projectId={projectId} purpose="follow_up" prospect={{ id: next.prospectId, name: next.name }}
+          onClose={() => setDrafting(false)} />
+      ) : null}
     </Lightbox>
   );
 }

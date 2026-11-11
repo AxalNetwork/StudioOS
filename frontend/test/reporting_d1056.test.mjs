@@ -160,7 +160,7 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
     assert.ok(at > 0 && at < app.indexOf('<Route path="/grow/:slug"'), path);
     assert.ok(app.slice(at, app.indexOf('\n', at)).includes(`<CycleRoute cycle="grow" ${el} />`), path);
   }
-  assert.match(app, /<Route path="\/grow\/updates" element=\{guard\(\['admin', 'founder'\], <HistoryRedirect to="\/grow\/reporting" hash="" \/>\)\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/grow\/updates" element=\{guard\(\['admin', 'founder'\], <HistoryRedirect to="\/grow\/reporting" hash="" \/>\)\} \/>/);
   for (const p of ['/portfolio/companies/:uid', '/portfolio/companies/:uid/reports', '/portfolio/companies/:uid/terms']) {
     const line = `<Route path="${p}" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />`;
     assert.ok(app.split('\n').some((l) => l.trim() === line), p);
@@ -168,7 +168,7 @@ test('wiring: the routes sit ahead of /grow/:slug, /grow/updates forwards to the
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /\} else if \(reporting && cycle === 'grow'\) \{/);
   assert.match(route, /if \(record \|\| slug \|\| reporting \|\| buildPlan \|\| !projectId \|\| !def\) return undefined;/, 'the desk never reads the overview');
-  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/grow\/updates' \}/);
+  assert.doesNotMatch(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/grow\/updates' \}/);
   assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /\{ to: '\/portfolio\/updates', label: 'Reports',/);
   assert.match(read('frontend/src/workspaces/shellConfig.js'), /\{ slug: 'updates', label: 'Reports', archetype: A\.FEED \}/);
   assert.match(read('frontend/src/pages/investor/InvestorPortfolioUpdates.jsx'), /<Link to=\{companyHref\(row\.project\.uid\)\}/);

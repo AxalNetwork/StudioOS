@@ -159,6 +159,9 @@ export function railView({ reading, page, option = null, pick = null, price = ()
   // Older/cached answers can contain extra cards: keep them selectable in All models.
   const choices = [...models, ...supplied.slice(3), ...(Array.isArray(data.more) ? data.more : [])]
     .filter((m, i, all) => m && typeof m.id === 'string' && all.findIndex(x => x?.id === m.id) === i);
+  // #4313 part 2 (D4313): a pick belongs to a press (an option); the page itself has none.
+  // The Worker refuses an option the page does not register (`option_required`).
+  const registered = !!option;
   const offered = (id) => choices.some((m) => m.id === id);
   const chosen = [pick, data.pick].find((id) => typeof id === 'string' && offered(id));
   const current = chosen ?? models[0]?.id ?? null;
@@ -185,14 +188,14 @@ export function railView({ reading, page, option = null, pick = null, price = ()
   const groups = [];
   for (const [title, rows] of ALL_MODELS) {
     const chips = rows.filter(([, id]) => id).map(([name, id]) => ({
-      id, name, isNew: NEW_MODELS.has(name), pickable: id !== GUARD_MODEL && offered(id), selected: id === current,
+      id, name, isNew: NEW_MODELS.has(name), pickable: registered && id !== GUARD_MODEL && offered(id), selected: id === current,
     }));
     if (chips.length) groups.push({ title, chips });
   }
   const grouped = new Set(groups.flatMap(g => g.chips.map(c => c.id)));
   const additional = choices.filter(m => !grouped.has(m.id) && m.id !== GUARD_MODEL).map(m => ({
-    id: m.id, name: m.name || modelName(m.id) || tail(m.id), isNew: false, pickable: true, selected: m.id === current,
+    id: m.id, name: m.name || modelName(m.id) || tail(m.id), isNew: false, pickable: registered, selected: m.id === current,
   }));
   if (additional.length) groups.push({ title: 'Other models for this page', chips: additional });
-  return { state: 'ready', cards, current, morePick, pickable: choices.length > 1, options, groups };
+  return { state: 'ready', cards, current, morePick, pickable: registered && choices.length > 1, options, groups };
 }

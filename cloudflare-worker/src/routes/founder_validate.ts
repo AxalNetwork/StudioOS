@@ -39,11 +39,11 @@ import {
 } from './_founder_validate_exports';
 import { ensureDiscoveryEvidenceColumns, ensureDiscoveryRecordingColumns } from '../services/discoveryInterviewSchema';
 import {
-  recordVerdictChanges, loadVerdictHistory, type VerdictObservation,
+  recordVerdictChanges, loadVerdictHistory,
 } from '../services/verdictHistory';
 import {
   canReadBoard, canReadDecision, canWrite,
-  verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, VALIDATION_BAR,
+  verdictFor, laneFor, barNoteFor, evidenceFor, isIcp, v1StateFor, VALIDATION_BAR,
   type ProjectRef,
 } from './_founder_validate_helpers';
 // `insertHypothesis` stays — `POST /hypotheses`, the MANUAL form, is in this
@@ -67,7 +67,8 @@ import { neverFillReason, neverFillMessage } from '../services/fills/neverFill';
 import { run as aiRun, audioMinutesFromBytes } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { currentDecision } from '../services/verdict';
-import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
+import { HINT_DEPS, HintRefused, THEME_JOBS, hintSection, themeHints } from '../services/ai/themeHints';
 import { CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS } from '../services/interviewProcessing';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
 
@@ -125,6 +126,25 @@ type InterviewRow = {
  * pains differently from the pain map next door and give two pages two
  * different answers about the same interviews.
  */
+/**
+ * D4585 (#4585): a required evidence read that failed. It is never turned into an empty collection: the board and
+ * the exports refuse with `evidence_unreadable` and say which source, so a failure cannot read as "no claims" or "no
+ * interviews", and so the verdict history is never written from an incomplete read. A genuinely empty venture reads
+ * successfully and exports successfully.
+ */
+export class EvidenceUnreadable extends Error {
+  readonly source: 'claims' | 'pain links' | 'interviews';
+  constructor(source: 'claims' | 'pain links' | 'interviews') { super(`${source} unreadable`); this.source = source; }
+}
+async function required<T>(source: EvidenceUnreadable['source'], read: Promise<T>): Promise<T> {
+  try { return await read; } catch (e) {
+    console.error(`[founder_validate] ${source} unreadable:`, (e as Error)?.message);
+    throw new EvidenceUnreadable(source);
+  }
+}
+const evidenceUnreadable = (e: EvidenceUnreadable, what: string) =>
+  json({ error: 'evidence_unreadable', source: e.source, detail: `The ${e.source} could not be read, so ${what}. Nothing was changed. Try again.` }, 503);
+
 async function loadEvidenceBase(env: Env, projectId: number) {
   const model = await loadPainGroupModel(env, projectId);
   // The SELECT below names migration 211's columns. On an environment where
@@ -132,11 +152,11 @@ async function loadEvidenceBase(env: Env, projectId: number) {
   // interviews" and the board would read as empty rather than broken — so the
   // columns are ensured first, the same way the interview CRUD ensures them.
   await ensureDiscoveryEvidenceColumns(env);
-  const res = await env.DB.prepare(
+  const res = await required('interviews', env.DB.prepare(
     `SELECT id, interviewee_name, interviewee_role, interviewee_company,
             icp_fit, quote_consent, pains_json
        FROM discovery_interviews WHERE project_id = ? ORDER BY id`,
-  ).bind(projectId).all<InterviewRow>().catch(() => ({ results: [] as InterviewRow[] }));
+  ).bind(projectId).all<InterviewRow>());
 
   const interviews = (res.results || []).map((r) => {
     let pains: unknown[] = [];
@@ -149,7 +169,7 @@ async function loadEvidenceBase(env: Env, projectId: number) {
       const gid = model.aliasByNorm.get(normPhrase(typeof p === 'string' ? p : String((p as any)?.pain ?? '')));
       if (gid) groups.add(gid);
     }
-    return { row: r, groups, icp_fit: r.icp_fit };
+    return { row: r, groups, icp_fit: r.icp_fit, name: r.interviewee_name, company: r.interviewee_company };
   });
   return { interviews, model };
 }
@@ -173,17 +193,20 @@ export { claimFills };
  * places gives that away again.
  */
 async function buildBoard(env: Env, projectId: number) {
-  const hyps = await env.DB.prepare(
+  // D4585: the claims, their pain links and the interviews are all required. A failed read throws before any verdict
+  // is derived, so `recordVerdictChanges` below never sees an incomplete board: no false transition is written, and a
+  // later healthy read has nothing to "recover" from.
+  const hyps = await required('claims', env.DB.prepare(
     `SELECT id, code, claim, sort_order, retired_at, sprint
        FROM hypotheses WHERE project_id = ? ORDER BY sort_order, id`,
-  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>());
 
-  const linkRes = await env.DB.prepare(
+  const linkRes = await required('pain links', env.DB.prepare(
     `SELECT l.id, l.hypothesis_id, l.pain_group_id, l.direction
        FROM hypothesis_pain_links l
        JOIN hypotheses h ON h.id = l.hypothesis_id
       WHERE h.project_id = ?`,
-  ).bind(projectId).all<any>().catch(() => ({ results: [] as any[] }));
+  ).bind(projectId).all<any>());
 
   const { interviews, model } = await loadEvidenceBase(env, projectId);
   const linksBy = new Map<number, any[]>();
@@ -206,7 +229,7 @@ async function buildBoard(env: Env, projectId: number) {
       // The page must be able to say WHY a verdict is missing rather than
       // rendering a blank cell that looks like a loading state.
       _note: verdict === null
-        ? `${evidence.fitUnrecorded} interview(s) touching this claim have no ICP fit recorded, so a verdict would be a guess`
+        ? `${evidence.fitUnrecorded} interview(s) touching this claim have no ICP fit recorded, and counting them could change the status, so a verdict would be a guess`
         : null,
     };
   });
@@ -221,13 +244,20 @@ async function buildBoard(env: Env, projectId: number) {
   // see. Writes only on a change, so this is one SELECT in the steady state.
   //
   // Never allowed to cost the board: a history that cannot be written or read
-  // leaves `history: []` and `verdict_history_since: null`, and the chips refuse
-  // rather than drawing an empty answer.
+  // leaves `history: []`, a null start and unavailable coverage, and the chips
+  // refuse rather than drawing an empty answer.
   await recordVerdictChanges(env, projectId, items.map((h: any) => ({
-    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane),
+    hypothesis_id: Number(h.id), verdict: h.verdict ?? null, lane: String(h.lane), v1: v1StateFor(h.evidence),
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(env, projectId)
-    .catch(() => ({ byClaim: new Map<number, VerdictObservation[]>(), since: null as string | null }));
+  const now = new Date();
+  const history = await loadVerdictHistory(env, projectId, {
+    claimIds: items.map((h: any) => Number(h.id)),
+    boundaries: [
+      new Date(now.getTime() - 7 * 86_400_000),
+      new Date(now.getTime() - 14 * 86_400_000),
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+    ],
+  });
   for (const h of items as any[]) {
     h.history = (history.byClaim.get(Number(h.id)) || []).map((o) => ({
       verdict: o.verdict, lane: o.lane, observed_at: o.observed_at,
@@ -258,6 +288,7 @@ async function buildBoard(env: Env, projectId: number) {
     // than as "nothing changed". `/build/this-week` returns `history_since` for
     // exactly this reason and this is the same seam.
     verdict_history_since: history.since,
+    verdict_history_coverage: history.coverage,
     // False when `fill_provenance` could not be read: every `filled` is then
     // unknown, not "typed by hand", and the page says which.
     fills_recorded: fillsRecorded,
@@ -274,7 +305,11 @@ async function buildBoard(env: Env, projectId: number) {
 founderValidate.get('/board/:projectId', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadBoard);
   if (s instanceof Response) return s;
-  const board = await buildBoard(c.env, s.project.id);
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'the board is not shown');
+    throw e;
+  }
   return json({ project: { id: s.project.id, name: s.project.name }, ...board });
 });
 
@@ -417,13 +452,20 @@ founderValidate.get('/interviews/:projectId/export.csv', async (c) => {
   // does it: on an environment where the migration has not run, "no such
   // column" would otherwise read as "no interviews".
   await ensureDiscoveryEvidenceColumns(c.env);
-  const res = await c.env.DB.prepare(
-    `SELECT id, interviewee_name, interviewee_role, interviewee_company,
-            interview_date, icp_fit, quote_consent, featured,
-            validation_rating, validation_comment, notes, pains_json
-       FROM discovery_interviews WHERE project_id = ?
-      ORDER BY interview_date DESC, id DESC LIMIT 5000`,
-  ).bind(s.project.id).all<ExportInterviewRow>().catch(() => ({ results: [] as ExportInterviewRow[] }));
+  // D4585: a failed read refuses the export; an empty CSV would say the venture has no interviews.
+  let res: { results?: ExportInterviewRow[] };
+  try {
+    res = await required('interviews', c.env.DB.prepare(
+      `SELECT id, interviewee_name, interviewee_role, interviewee_company,
+              interview_date, icp_fit, quote_consent, featured,
+              validation_rating, validation_comment, notes, pains_json
+         FROM discovery_interviews WHERE project_id = ?
+        ORDER BY interview_date DESC, id DESC LIMIT 5000`,
+    ).bind(s.project.id).all<ExportInterviewRow>());
+  } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
 
   const rows = res.results || [];
   return csvResponse(
@@ -454,7 +496,11 @@ founderValidate.get('/summary/:projectId/export.csv', async (c) => {
   const s = await scope(c, Number(c.req.param('projectId')), canReadDecision);
   if (s instanceof Response) return s;
 
-  const board = await buildBoard(c.env, s.project.id);
+  let board: Awaited<ReturnType<typeof buildBoard>>;
+  try { board = await buildBoard(c.env, s.project.id); } catch (e) {
+    if (e instanceof EvidenceUnreadable) return evidenceUnreadable(e, 'nothing was exported');
+    throw e;
+  }
   // The venture's current given decision, through the one reader (D693). A
   // read that fails refuses the export: a summary with no decision in it
   // would say the founder has not decided.
@@ -663,15 +709,32 @@ founderValidate.post('/propose/:projectId', async (c) => {
     try { priors.push(spec.readable(JSON.parse(raw))); } catch { /* a malformed row is not a prior */ }
   }
 
+  // D765: the fill's page (its surface's workspace) and the fill as the option.
+  const rail = railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`);
+
+  // #3938 part 6 (D1478): a kind whose plan job retrieves first (GR1, VA11)
+  // embeds its items and themes, and the writer reads each item's nearest
+  // themes as a hint. A refusal the member must hear about stops the press here.
+  let hints = '';
+  const job = THEME_JOBS[spec.task];
+  if (job && spec.hints) {
+    const want = spec.hints(gathered);
+    try {
+      hints = hintSection(await themeHints(want.themes, want.items, HINT_DEPS.make(c.env, { userId: s.user.id, surface: AI_SURFACE.validate, rail }, job)));
+    } catch (e) {
+      if (!(e instanceof HintRefused)) throw e;
+      return refuseRun(c, e.result) ?? json({ detail: 'The retrieval step was refused. Nothing was proposed.' }, 503);
+    }
+  }
+
   const r = await aiRun(c.env, {
     task: spec.task as any,
     userId: s.user.id,
     model,
     surface: AI_SURFACE.validate,
-    // D765: the fill's page (its surface's workspace) and the fill as the option.
-    rail: railFor(c, { page: FOUNDER_FILL_PAGES[kind] ?? pageFromPath(spec.surface, 'validate'), option: `fill:${kind}` }, `project:${s.project.id}`),
+    rail,
     systemPrompt: spec.prompt,
-    messages: [{ role: 'user', content: gathered.facts }],
+    messages: [{ role: 'user', content: gathered.facts + hints }],
     maxTokens: 500,
     temperature: 0.3,
   });
@@ -919,8 +982,13 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
   }
 
   try {
+    // `proposalId` (D4627, #4627) is the idempotency key a kind's `apply` may
+    // use to make its own target creation safe to run twice: a RETRY of this
+    // same proposal after `recordFill` below fails claims the row again and
+    // calls `apply` again, and a kind that keys off this (today: `hypothesis`)
+    // lands on the SAME row rather than allocating a second one.
     const applied = await spec.apply(
-      { env: c.env, user: s.user, projectId: row.project_id }, applyPayload, String(row.target_ref || ''),
+      { env: c.env, user: s.user, projectId: row.project_id, proposalId: row.id }, applyPayload, String(row.target_ref || ''),
     );
     // RECORDED AFTER THE WRITE AND NOT SWALLOWED. A value written with no
     // provenance row is the state `fill_provenance` exists to prevent — on this

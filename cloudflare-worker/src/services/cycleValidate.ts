@@ -30,8 +30,11 @@ import {
   loadPainGroupModel, getPainGroupsView, normPhrase, resolvePhrase, safeParseStrings, severityLevel,
   type PainGroupModel, type PainGroupsView, type PainSeverityLevel,
 } from './painGroups';
-import { evidenceFor, verdictFor, laneFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
-import { loadVerdictHistory, recordVerdictChanges, observationAt, changedWithin, parseObserved, RECENTLY_MOVED_DAYS } from './verdictHistory';
+import { evidenceFor, verdictFor, laneFor, v1StateFor, VALIDATION_BAR } from '../routes/_founder_validate_helpers';
+import {
+  changedWithin, historyChangesAvailable, loadVerdictHistory, movedWithin, observationAt,
+  parseObserved, recordVerdictChanges, RECENTLY_MOVED_DAYS,
+} from './verdictHistory';
 import { seedSegmentFromIcp, WAITLIST_TARGET_KEY } from './validateWriters';
 import { claimFills } from './fills/provenance';
 import { verdictCard, decisionRecords, DECISION_COLUMNS, DECISION_FILTERS, DECISION_SORTS } from './verdict';
@@ -240,7 +243,8 @@ export function themesOf(
 // Claims
 // ---------------------------------------------------------------------------
 
-export const CLAIM_STATUSES = ['untested', 'testing', 'supported', 'refuted', 'inconclusive', 'not_recorded'] as const;
+/** D4586 v2 adds `contested`: the bar is met and the contradiction is material. Its lane is Testing. */
+export const CLAIM_STATUSES = ['untested', 'testing', 'supported', 'contested', 'refuted', 'inconclusive', 'not_recorded'] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 export type Claim = {
@@ -248,6 +252,14 @@ export type Claim = {
   evidence: number; strength: string | null; sprint: string | null;
   owner: string | null; updated_at: string | null;
   supporting: number; contradicting: number; fit_unrecorded: number;
+  /**
+   * D4586 coverage, beside the direction counts and never part of the status: interviews touching both directions,
+   * distinct interviews touching the claim, and the distinct interviewees and organizations behind them (null: not
+   * recorded on every one).
+   */
+  both: number; interviews: number; interviewees: number | null; organizations: number | null;
+  /** The same evidence under v1, which the verdict history reads to tell a method change from new evidence (D4586 § 6). */
+  v1: { verdict: string | null; lane: string };
   /** The founder's Inconclusive mark, which `history:last_week` dates. */
   inconclusive_at: string | null;
   links: LinkRow[];
@@ -272,7 +284,7 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       const gid = model.aliasByNorm.get(normPhrase(p));
       if (gid) groups.add(gid);
     }
-    return { icp_fit: iv.icp_fit, groups };
+    return { icp_fit: iv.icp_fit, groups, name: iv.interviewee_name, company: iv.interviewee_company };
   });
   const linksBy = new Map<number, LinkRow[]>();
   for (const l of links) {
@@ -294,6 +306,8 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
       evidence: e.supporting + e.contradicting, strength, sprint: h.sprint,
       owner: h.owner_name ?? null, updated_at: h.updated_at,
       supporting: e.supporting, contradicting: e.contradicting, fit_unrecorded: e.fitUnrecorded,
+      both: e.both ?? 0, interviews: e.interviews ?? 0, interviewees: e.interviewees ?? null, organizations: e.organizations ?? null,
+      v1: v1StateFor(e),
       inconclusive_at: h.inconclusive_at, links: ls, verdict, lane,
     };
   });
@@ -302,11 +316,14 @@ export function claimsOf(hyps: HypRow[], links: LinkRow[], interviews: Interview
 /**
  * A claim's status from its verdict and lane (D690 decision 16), so a past
  * observation in the verdict history reads in today's words. `inconclusive`
- * is the founder's mark, which sits under a decided verdict.
+ * is the founder's mark, which sits under a decided verdict. `contested`
+ * (D4586 v2) sits above it too: it is what the interviews show, and the
+ * founder's mark cannot hide a material contradiction.
  */
 export function statusOf(verdict: string | null, lane: string, inconclusive: boolean): ClaimStatus {
   return verdict === 'validated' ? 'supported'
     : verdict === 'invalidated' ? 'refuted'
+      : verdict === 'contested' ? 'contested'
       : inconclusive ? 'inconclusive'
         : lane === 'none' ? 'untested'
           : lane === 'testing' ? 'testing'
@@ -895,7 +912,9 @@ export async function demandCard(ctx: Ctx): Promise<Card> {
 }
 
 export async function experimentsCard(ctx: Ctx): Promise<Card> {
-  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; evidence added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
+  // D4585: the status and the weekly bars both count pain-theme links (the interview population the status uses); the
+  // caption says so, since a claim's record also lists evidence linked directly.
+  return safeCard(meta('experiments', 'Last 8 weeks', 'Hypotheses by status; interview-theme links added per week.', 'Hypotheses and their evidence'), async (): Promise<CardBody> => {
     const [{ hyps, links }, interviews, model] = await Promise.all([loadHypotheses(ctx), loadInterviews(ctx), loadPainGroupModel(ctx.env, ctx.projectId, { strict: true })]);
     const lab = interviewClaimsOf(interviews);
     if (hyps.length === 0 && lab.total === 0) {
@@ -1031,11 +1050,12 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'mentions', label: 'Mentions' }, { key: 'trend', label: 'Trend' }, { key: 'theme', label: 'Theme' }, { key: 'recent', label: 'Most recent' }],
   },
   'customer-research': {
-    cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'],
+    cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'],
     filters: [
       { key: 'icp', label: 'ICP fit', options: [opt('strong', 'Strong'), opt('partial', 'Partial'), opt('none', 'None'), NOT_RECORDED] },
       // Deck-eligible is FVW's `quote_consent === true`: the same rows as Agreed.
-      { key: 'consent', label: 'Consent', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
+      { key: 'recording_consent', label: 'Recording consent', options: [opt('given', 'Given'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
+      { key: 'consent', label: 'Quotes OK', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
       // Video and audio calls are one "Call" (the owner, 2026-10-21): `call` matches both stored channels.
       { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('call', 'Call'), opt('text', 'Text chat')] },
     ],
@@ -1066,10 +1086,11 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
     sorts: [{ key: 'newest', label: 'Newest' }],
   },
   experiments: {
-    cols: ['Hypothesis', 'Status', 'Evidence', 'Sprint', 'Owner', 'Source'],
+    // D4585: the status counts interviews only (the approved policy), so the column says so.
+    cols: ['Hypothesis', 'Status', 'Interview support', 'Sprint', 'Owner', 'Source'],
     filters: [
       { key: 'status', label: 'Status', options: [
-        opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('refuted', 'Refuted'),
+        opt('untested', 'Untested'), opt('testing', 'Testing'), opt('supported', 'Supported'), opt('contested', 'Contested'), opt('refuted', 'Refuted'),
         opt('inconclusive', 'Inconclusive'), opt('not_recorded', 'Fit not recorded'), opt('retired', 'Retired'),
       ] },
       { key: 'sprint', label: 'Sprint', options: [] },
@@ -1224,10 +1245,29 @@ function durationMin(activeMs: number | null, recordingSec: number | null): numb
   return ms > 0 ? Math.max(1, Math.round(ms / 60_000)) : null;
 }
 
+/** #4411: permission to record is independent of permission to quote. */
+export const RECORDING_CONSENT_METHODS: Record<string, string> = {
+  verbal: 'Said yes out loud', written: 'In writing', in_app: 'In the app',
+  pre_agreed: 'Agreed beforehand', chat_reply: 'Agreed in the chat',
+};
+export function recordingConsent(session?: { consent_status?: unknown; consent_method?: unknown } | null) {
+  const status = session?.consent_status === 'given' ? 'given'
+    : session?.consent_status === 'declined' ? 'declined' : 'not_asked';
+  const method = status === 'given' && typeof session?.consent_method === 'string'
+    && Object.hasOwn(RECORDING_CONSENT_METHODS, session.consent_method) ? session.consent_method : null;
+  return { status, method };
+}
+export function recordingConsentText(session?: { consent_status?: unknown; consent_method?: unknown } | null): string {
+  const { status, method } = recordingConsent(session);
+  return status === 'given' ? method ? `Given · ${RECORDING_CONSENT_METHODS[method]}` : 'Given'
+    : status === 'declined' ? 'Declined' : 'Not asked';
+}
+
 /** Customer research is the one table paged in SQL: it is the one that grows. */
 async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const f = rq.filter;
   const icp = ['strong', 'partial', 'none'].includes(f.icp) ? f.icp : f.icp === 'not_recorded' ? 'not_recorded' : '';
+  const recording = ['given', 'declined', 'not_asked'].includes(f.recording_consent) ? f.recording_consent : '';
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
   const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
@@ -1235,16 +1275,20 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, stage, channel, channel, channel];
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, recording, recording, recording, recording, stage, stage, stage, channel, channel, channel];
   const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM discovery_interviews
-      WHERE project_id = ?
-        AND (? = '' OR lower(interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(interviewee_company, '')) LIKE ? ESCAPE '\\')
-        AND (? = '' OR (? = 'not_recorded' AND icp_fit IS NULL) OR icp_fit = ?)
-        AND (? = '' OR (? = 'agreed' AND quote_consent = 1) OR (? = 'declined' AND quote_consent = 0) OR (? = 'not_asked' AND quote_consent IS NULL))
-        AND (? = '' OR COALESCE(stage, 'done') = ? OR (? = 'pipeline' AND stage IN ('lead', 'invited', 'booked')))
-        AND (? = '' OR channel = ? OR (? = 'call' AND channel IN ('video', 'phone')))`,
+    `SELECT COUNT(*) AS n
+       FROM discovery_interviews i
+       LEFT JOIN interview_sessions s
+         ON s.id = (SELECT MAX(x.id) FROM interview_sessions x WHERE x.interview_id = i.id AND x.project_id = i.project_id)
+      WHERE i.project_id = ?
+        AND (? = '' OR lower(i.interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.interviewee_company, '')) LIKE ? ESCAPE '\\')
+        AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
+        AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
+        AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
+        AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
+        AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))`,
   ).bind(...binds).first<{ n: number }>();
   // The page, each interview beside its latest session (by id). A pains blob
   // that is not JSON counts as no pain, never as a failed read.
@@ -1253,7 +1297,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
             i.recording_duration_sec,
             json_array_length(CASE WHEN json_valid(i.pains_json) THEN i.pains_json ELSE '[]' END) AS pains,
             COALESCE(substr(i.done_at, 1, 10), NULLIF(trim(i.interview_date), ''), substr(i.created_at, 1, 10)) AS d,
-            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms, s.consent_status
+            s.id AS session_id, s.status AS session_status, s.submitted_via, s.processing_stage, s.active_ms, s.consent_status, s.consent_method
        FROM discovery_interviews i
        LEFT JOIN interview_sessions s
          ON s.id = (SELECT MAX(x.id) FROM interview_sessions x WHERE x.interview_id = i.id AND x.project_id = i.project_id)
@@ -1261,6 +1305,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR lower(i.interviewee_name) LIKE ? ESCAPE '\\' OR lower(COALESCE(i.interviewee_company, '')) LIKE ? ESCAPE '\\')
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
+        AND (? = '' OR (? = 'given' AND s.consent_status = 'given') OR (? = 'declined' AND s.consent_status = 'declined') OR (? = 'not_asked' AND COALESCE(s.consent_status, 'not_recorded') NOT IN ('given', 'declined')))
         AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
         AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))
       ORDER BY CASE WHEN ? = 'booked' THEN CASE i.stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
@@ -1286,6 +1331,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       id: r.id, interviewee: r.interviewee_name, company: r.interviewee_company ?? null,
       role: r.interviewee_role ?? null,
       date: r.d ?? null, icp_fit: r.icp_fit ?? null,
+      recording_consent: recordingConsent(r),
       consent: r.quote_consent === 1 ? 'agreed' : r.quote_consent === 0 ? 'declined' : null,
       channel: r.channel ?? null, stage: r.stage ?? 'done',
       pains: Number(r.pains ?? 0),
@@ -1417,33 +1463,42 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // filters and paging, and before the history is loaded; the writer writes
   // only on a change, logs no activity row, and never fails the read.
   await recordVerdictChanges(ctx.env, ctx.projectId, openClaims.map((c) => ({
-    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane,
+    hypothesis_id: c.id, verdict: c.verdict, lane: c.lane, v1: c.v1,
   }))).catch(() => 0);
-  const history = await loadVerdictHistory(ctx.env, ctx.projectId);
+  const now = new Date();
+  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const lastWeek = new Date(now.getTime() - 7 * 86_400_000);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const history = await loadVerdictHistory(ctx.env, ctx.projectId, {
+    claimIds: openClaims.map((c) => c.id), boundaries: [lastWeek],
+  });
 
   // FVW's views over the verdict history (decision 16), before paging.
-  const now = new Date();
   const historyOf = (id: number) => history.byClaim.get(id) || [];
-  const movedSince = new Date(now.getTime() - RECENTLY_MOVED_DAYS * 86_400_000);
+  const movedAvailable = historyChangesAvailable(history.coverage, movedSince);
+  const monthAvailable = historyChangesAvailable(history.coverage, monthStart);
+  const lastWeekAvailable = history.coverage.boundaries.some((value) => {
+    const at = parseObserved(value);
+    return at != null && Math.abs(at.getTime() - lastWeek.getTime()) < 1000;
+  });
   const f = rq.filter;
-  type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | null };
-  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: changedWithin(historyOf(c.id), movedSince, 'lane') ? 'recent' : null }));
+  // D4586 § 6: a claim moved only by the methodology changing reads `method`, never as new evidence.
+  type Row = { c: Claim; status: ClaimStatus; moved: 'recent' | 'method' | null };
+  let rows: Row[] = claims.map((c) => ({ c, status: c.status, moved: movedAvailable ? movedWithin(historyOf(c.id), movedSince) : null }));
   // The views read unretired claims only.
   if (retired && (f.moved || f.history)) rows = [];
-  if (f.moved === 'recent') rows = rows.filter((r) => r.moved === 'recent');
+  if (f.moved === 'recent') rows = movedAvailable ? rows.filter((r) => r.moved != null) : [];
   if (f.history === 'last_week') {
     // Each claim's status in force seven days ago; a claim with no observation
     // that old is left out, never shown at today's status.
-    const at = new Date(now.getTime() - 7 * 86_400_000);
-    rows = rows.flatMap((r) => {
-      const o = observationAt(historyOf(r.c.id), at);
+    rows = lastWeekAvailable ? rows.flatMap((r) => {
+      const o = observationAt(historyOf(r.c.id), lastWeek);
       if (!o) return [];
       const marked = parseObserved(r.c.inconclusive_at);
-      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= at.getTime()) }];
-    });
+      return [{ ...r, status: statusOf(o.verdict, o.lane, marked != null && marked.getTime() <= lastWeek.getTime()) }];
+    }) : [];
   } else if (f.history === 'this_month') {
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    rows = rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict'));
+    rows = monthAvailable ? rows.filter((r) => changedWithin(historyOf(r.c.id), monthStart, 'verdict')) : [];
   }
   rows = rows.filter((r) => has(rq.q, r.c.code, r.c.claim));
   if (f.status && !retired) rows = rows.filter((r) => r.status === f.status);
@@ -1462,6 +1517,15 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
     ...paged(LISTS.experiments.cols, rows.map(({ c, status, moved }) => ({
       id: c.id, hypothesis: `${c.code} · ${c.claim}`, status,
       evidence: c.evidence, strength: c.strength, sprint: c.sprint, owner: c.owner,
+      // D4585 (#4585): `evidence` is the interviews the claim's status is computed from (its pain links). The claim's
+      // other linked evidence (direct interviews, demand signals, metrics, experiments) is counted apart, by kind, so a
+      // claim with a pre-sale and no interview reads "0 interviews, 1 other", never as having no evidence.
+      interview_support: c.evidence,
+      // D4586 (#4586): support, contradiction, unknown fit and breadth, together. An interview touching both directions
+      // is in both counts and named once in `both`; `interviews` counts each interview once.
+      supporting: c.supporting, contradicting: c.contradicting, fit_unrecorded: c.fit_unrecorded, both: c.both,
+      interviews: c.interviews, interviewees: c.interviewees, organizations: c.organizations,
+      linked_evidence: linkedCounts(evidenceBy.get(c.id) || []),
       provenance: provenanceOf(c.id),
       moved,
       ...(retired ? { retired: true } : {}),
@@ -1482,23 +1546,38 @@ async function experimentRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         stats: {
           hypotheses: openClaims.length,
           supported: count('supported'),
+          // D4586 v2: past the bar with material contradiction; in the Testing lane but never "awaiting".
+          contested: count('contested'),
           refuted: count('refuted'),
           awaiting: count('testing') + count('untested'),
           withheld: count('not_recorded'),
           fit_not_recorded: interviews.filter((i) => i.icp_fit == null).length,
           bar: VALIDATION_BAR,
+          // D4585: what `supported`, `refuted` and each row's `evidence` count. Other linked evidence is `linked_evidence`.
+          status_basis: 'interviews',
           // When the record starts, or null with none: a window opening before
           // it is not an answer, and the page says where the record starts.
           history_since: history.since,
+          history_coverage: history.coverage,
+          history_filter_available: f.moved === 'recent' ? movedAvailable
+            : f.history === 'last_week' ? lastWeekAvailable
+              : f.history === 'this_month' ? monthAvailable : null,
         },
         // Per open claim, how far its ICP support is from the bar.
-        fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'refuted').map((c) => ({
+        fit_gap: openClaims.filter((c) => c.status !== 'supported' && c.status !== 'contested' && c.status !== 'refuted').map((c) => ({
           id: c.id, code: c.code, supporting: c.supporting, bar: VALIDATION_BAR, fit_unrecorded: c.fit_unrecorded,
         })),
       },
     }),
     fills_recorded: fillsRecorded,
   };
+}
+
+/** D4585: a claim's evidence links by kind; these are outside the interview-only status calculation. */
+export function linkedCounts(links: Array<{ kind: string }>) {
+  const n = { interview: 0, signal: 0, metric: 0, experiment: 0 };
+  for (const l of links) if (l.kind in n) n[l.kind as keyof typeof n] += 1;
+  return n;
 }
 
 export const RECORDS_FOR: Record<ModuleSlug, (ctx: Ctx, rq: RecordQuery) => Promise<Records>> = {

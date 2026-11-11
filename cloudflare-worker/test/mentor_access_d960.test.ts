@@ -30,7 +30,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -38,6 +38,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import advisors from '../src/routes/advisors.ts';
+import { labEnrollmentSchema, graduate } from './_lab_evidence.ts';
 import admin from '../src/routes/admin.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -96,6 +97,9 @@ function freshDb() {
   }
   db.exec(noComments(M367));
   db.exec(noComments(M565));
+  // D4472: the assignable Advisor picker checks additional grants as well.
+  const licenceMigration = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find(name => name.endsWith('_account_licences.sql'))!;
+  db.exec(read(`cloudflare-worker/sql/migrations/${licenceMigration}`));
   // The advisor profiles the picker joins (t13_t14_t15.sql); none here has one.
   db.exec('CREATE TABLE advisors (id INTEGER PRIMARY KEY, user_id INTEGER)');
   db.exec(`CREATE TABLE admin_notices (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, subject TEXT, respond_by TEXT, status TEXT)`);
@@ -306,6 +310,9 @@ test('565 applies to a fresh database and backfills what the stores still hold, 
   n.run(1, FIN, 'ended', '2026-08-01T00:00:00Z');   // nor is one whose episode no start notice names
   n.run(1, FAY, 'started', '2026-10-05T00:00:00Z'); // the current episode: already the row's own
   db.exec(noComments(M565));
+  // D4472: the assignable Advisor picker checks additional grants as well.
+  const licenceMigration = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find(name => name.endsWith('_account_licences.sql'))!;
+  db.exec(read(`cloudflare-worker/sql/migrations/${licenceMigration}`));
   const rows = db.prepare('SELECT assignment_id, kind, admin_user_id, created_at FROM advisor_cohort_assignment_events ORDER BY assignment_id, created_at').all()
     .map((r: any) => [r.assignment_id, r.kind, r.admin_user_id, r.created_at]);
   assert.deepEqual(rows, [
@@ -406,7 +413,7 @@ test('O-FND A counts distinct activated founders per cycle from Week 1, on every
   assert.equal(r.status, 200);
   assert.equal(r.body.items.length, 3);
   assert.deepEqual(Object.keys(r.body.items[0]).sort(), [
-    'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
+    'advisor_eligible', 'advisor_email', 'advisor_is_active', 'advisor_name', 'advisor_role', 'advisor_user_id',
     'assigned_at', 'cohort_cycle_id', 'founders_hidden', 'founders_in_cohort', 'id', 'is_active',
     'note', 'uid', 'unassigned_at',
   ]);
@@ -506,6 +513,8 @@ function labDb() {
   const db = freshDb();
   for (const t of ['user_spinout_flags', 'spinout_lab_milestones', 'projects']) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   db.exec(noComments(read('cloudflare-worker/sql/migrations/155_spinout_applications.sql')));
+  // D4659: the graduation view (and the enrollment tables it sits beside).
+  labEnrollmentSchema(db);
   return db;
 }
 
@@ -527,7 +536,8 @@ test('Lab applications: a D1 failure answers 503 lab_applications_unreadable; co
 test('Lab participants: 503 on a failed list, a flag for each failed inner read, and truncated when the page is full', async () => {
   const db = labDb();
   db.prepare('INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted) VALUES (?, 1)').run(FAY);
-  db.prepare(`INSERT INTO spinout_lab_milestones (user_id, milestone_key, week, completed_at) VALUES (?, 'incorporation_completed', 4, '2026-10-01 00:00:00')`).run(FAY);
+  // D4659: a graduate has every step of weeks 1-4 on record, not incorporation alone.
+  graduate(db, FAY, '2026-10-01 00:00:00');
   db.prepare('INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted) VALUES (?, 1)').run(FIN);
 
   const ok = await call(envOf(db), ADMIN, '/api/admin/spinout-participants');

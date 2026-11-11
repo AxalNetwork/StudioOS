@@ -127,7 +127,8 @@ test('a save never sends the candidate set, so a blank relevance is never writte
   // `PATCH /competitors/:id` re-inserts every candidate with
   // `Number(relevance_score) || 0`. The page sends title and output only, and
   // changes a category through the one-company route.
-  const saves = [...page.matchAll(/api\.competitors\.save\(id, \{([^}]*)\}/g)].map((m) => m[1]);
+  // D4607: the editor's Save goes to the loaded record (`target`), Accept to the page's id.
+  const saves = [...page.matchAll(/api\.competitors\.save\((?:id|target), \{([^}]*)\}/g)].map((m) => m[1]);
   assert.ok(saves.length >= 2, 'the saves could not be found');
   for (const body of saves) assert.doesNotMatch(body, /candidates/);
   assert.match(page, /api\.competitors\.candidateUpdate\(id, c\.id, \{ category: e\.target\.value \}\)/);
@@ -155,7 +156,7 @@ test('/build/competitors redirects with its ?id=, and stays only where nothing r
   assert.match(route, /replace/);
   // Partner and investor are not admitted by /research/companies, so a redirect
   // would lock them out of a page they can use today.
-  assert.match(route, /effectiveRole === 'partner' \|\| effectiveRole === 'investor'\s*\?\s*founderWorkspace\('research', <CompetitorAnalysisPage \/>\)/);
+  assert.match(route, /\(effectiveRole === 'partner' \|\| effectiveRole === 'investor'\) && !holds\('founder'\)\s*\?\s*founderWorkspace\('research', <CompetitorAnalysisPage \/>\)/);
 });
 
 test('no fixture from the canvas reaches the page', () => {

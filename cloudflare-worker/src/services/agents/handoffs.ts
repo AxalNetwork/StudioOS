@@ -276,9 +276,10 @@ export async function chainsOf(env: Env, s: Scope) {
     const u = await env.DB.prepare('SELECT uid, name FROM users WHERE id = ?').bind(id).first<{ uid: string; name: string }>();
     return u ? { uid: u.uid, name: u.name } : null;
   };
-  const chains = new Map<string, { uid: string; at: string; steps: unknown[]; refused: { reason: string }[] }>();
+  // #4394 (TM13): `started_at` is the chain's first step; `at` (its latest) only orders the list.
+  const chains = new Map<string, { uid: string; started_at: string; at: string; steps: unknown[]; refused: { reason: string }[] }>();
   for (const h of rows) {
-    const c = chains.get(h.chain_uid) ?? { uid: h.chain_uid, at: h.created_at, steps: [], refused: [] };
+    const c = chains.get(h.chain_uid) ?? { uid: h.chain_uid, started_at: h.created_at, at: h.created_at, steps: [], refused: [] };
     if (h.status === 'refused') c.refused.push({ reason: h.refusal ?? 'refused' });
     c.steps.push({
       uid: h.uid, depth: h.depth, from: { role_key: await roleOfAgent(h.from_agent_id) }, to: { role_key: h.to_role_key },
@@ -286,6 +287,7 @@ export async function chainsOf(env: Env, s: Scope) {
       task_created: h.created_task_id != null,
     });
     if (h.created_at > c.at) c.at = h.created_at;
+    if (h.created_at < c.started_at) c.started_at = h.created_at;
     chains.set(h.chain_uid, c);
   }
   return [...chains.values()].sort((a, b) => (a.at < b.at ? 1 : -1)).map(({ at: _at, ...c }) => c);

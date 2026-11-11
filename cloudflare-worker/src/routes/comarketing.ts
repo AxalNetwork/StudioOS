@@ -1,6 +1,9 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T15 — Co-marketing pitches + admin approval + attribution tracking.
- * Mounted at /api/comarketing.
+ * Mounted at /api/comarketing. D4439 (#4439) splits the member audience:
+ * partners and founders retain their existing permissions; investors cannot
+ * read or write this area. HQ's inner requireAdmin gates remain authoritative.
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
@@ -14,8 +17,19 @@ import { refuse } from '../util/refusal';
 import { logActorAct } from '../services/actorLog';
 import { notify } from '../services/notify';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { hashEmail } from '../util/hashEmail';
 
 const r = new Hono<{ Bindings: Env }>();
+
+r.use('*', async (c, next) => {
+  try {
+    const user = await requireAuth(c);
+    if (user.role !== 'admin' && !holdsLicence(user, 'partner') && !holdsLicence(user, 'founder')) {
+      return refuse(c, 403, { code: 'comarketing_role_required', message: 'Co-marketing is available to partners and founders. HQ reviews it under Approvals.' });
+    }
+  } catch (e) { return mapError(c, e); }
+  return next();
+});
 
 const ASSET_TYPES = new Set(['webinar', 'blog', 'podcast', 'event', 'newsletter', 'other']);
 // Migration 183. An angle is a sentence, not an essay — the whole point of the
@@ -40,6 +54,8 @@ type Pitch = {
   status: string;
   review_notes: string | null; reviewed_by_user_id: number | null; reviewed_at: string | null;
   published_at: string | null; published_url: string | null;
+  /** D5302: who published it, apart from who approved it (migration 202611100935); null before that. */
+  published_by_user_id?: number | null;
   attribution_code: string | null;
   created_at: string; updated_at: string;
 };
@@ -363,12 +379,17 @@ r.get('/admin/pitches/:uid', async (c) => {
  * is undecided. A reviewer whose account is gone reads by its id.
  */
 async function deciderOf(env: Env, p: Pitch) {
-  if (p.status === 'proposed' || p.reviewed_by_user_id == null) return null;
-  const u = await env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(p.reviewed_by_user_id).first<any>();
+  // D5302: a pitch published since migration 202611100935 names its publisher
+  // apart from its approver; one published before it has the publisher in the
+  // review columns, which is what they read then.
+  const published = p.status === 'published' && p.published_by_user_id != null;
+  const by = published ? p.published_by_user_id : p.reviewed_by_user_id;
+  if (p.status === 'proposed' || by == null) return null;
+  const u = await env.DB.prepare('SELECT name, email FROM users WHERE id = ?').bind(by).first<any>();
   return {
     status: p.status,
-    by: { id: Number(p.reviewed_by_user_id), name: (u?.name || '').trim() || u?.email || `account ${p.reviewed_by_user_id}` },
-    at: p.reviewed_at,
+    by: { id: Number(by), name: (u?.name || '').trim() || u?.email || `account ${by}` },
+    at: published ? p.published_at : p.reviewed_at,
   };
 }
 
@@ -428,7 +449,6 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
     } catch {
       return refuse(c, 400, { code: 'https_url_required', message: 'Publishing needs an HTTPS link without sign-in details.' });
     }
-    publishedAt = nowIso();
     if (body.notes) {
       reviewNotes = (p.review_notes ? `${p.review_notes}\n\n` : '') + `[publish] ${body.notes}`;
     }
@@ -438,25 +458,49 @@ async function decide(c: Context<{ Bindings: Env }>, target: 'approve' | 'reject
   // Read response-only data before committing, so a failed read cannot make
   // a completed decision look like a failed one.
   const counts = await attribCounts(c.env, p.id);
-  const reviewedAt = nowIso();
+  const stampedAt = nowIso();
+  // D5302 (#5302): publishing is not a review. It writes its own actor and time
+  // (`published_by_user_id`, `published_at`) and leaves the approval's
+  // `reviewed_by_user_id` and `reviewed_at` as the approve route wrote them.
+  if (next === 'published') publishedAt = stampedAt;
+  const reviewedBy = next === 'published' ? p.reviewed_by_user_id : user.id;
+  const reviewedAt = next === 'published' ? p.reviewed_at : stampedAt;
+  const publishedBy = next === 'published' ? user.id : (p.published_by_user_id ?? null);
   // D1132: only from the status this read saw, so a second admin deciding in
   // between is refused with who decided, never overwritten.
-  const written = await c.env.DB.prepare(
-    `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
-       attribution_code=?, published_at=?, published_url=?, updated_at=? WHERE id=? AND status=?`
-  ).bind(next, reviewNotes, user.id, reviewedAt, setAttribCode, publishedAt, publishedUrl, reviewedAt, p.id, p.status).run();
+  const action = `comarketing_${next}`;
+  const details = JSON.stringify({ pitch_uid: p.uid, partner_id: p.partner_id });
+  const actor = await hashEmail(String(user.email || ''));
+  const committed = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE comarketing_pitches SET status=?, review_notes=?, reviewed_by_user_id=?, reviewed_at=?,
+         attribution_code=?, published_at=?, published_url=?, published_by_user_id=?, updated_at=? WHERE id=? AND status=?`
+    ).bind(next, reviewNotes, reviewedBy, reviewedAt, setAttribCode, publishedAt, publishedUrl, publishedBy, stampedAt, p.id, p.status),
+    c.env.DB.prepare(
+      `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+       SELECT NULL, ?, ?, ?, ? WHERE changes() > 0`,
+    ).bind(user.id, action, details, actor),
+  ]);
+  if (committed.some((row) => 'success' in row && !row.success)) throw new Error('Decision batch failed');
+  const written = committed[0];
   if (Number(written?.meta?.changes ?? 0) !== 1) {
     const now = await c.env.DB.prepare('SELECT * FROM comarketing_pitches WHERE id = ?').bind(p.id).first<Pitch>();
     return alreadyDecided(c, now ?? p, target);
   }
-  await logActorAct(c.env, user, `comarketing_${next}`, { pitch_uid: p.uid, partner_id: p.partner_id });
-  await notify(c.env, {
-    userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
-    body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
-    link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
-  });
-  return c.json(pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: user.id,
-    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl, updated_at: reviewedAt }, counts));
+  // D4814 (AP-18f): the decision is committed above, so a notice that does
+  // not go out is reported (`notified: false`), never thrown as a failure
+  // that would invite a second decision.
+  let notified = false;
+  try {
+    notified = (await notify(c.env, {
+      userId: p.submitter_user_id, type: `comarketing_${next}`, title: `Co-marketing pitch ${next === 'rejected' ? 'declined' : next}`,
+      body: `Your pitch “${p.title}” was ${next === 'rejected' ? 'declined' : next}.${next === 'rejected' ? ` Reason: ${reviewNotes}` : ''}${next === 'published' ? ` ${publishedUrl}` : ''}`,
+      link: '/comarketing', channels: ['in_app', 'email'], payload: { pitch_uid: p.uid, status: next },
+    })) !== null;
+  } catch (e) { console.warn('[comarketing] notify failed', e); }
+  return c.json({ ...pitchDto({ ...p, status: next, review_notes: reviewNotes, reviewed_by_user_id: reviewedBy,
+    reviewed_at: reviewedAt, attribution_code: setAttribCode, published_at: publishedAt, published_url: publishedUrl,
+    published_by_user_id: publishedBy, updated_at: stampedAt }, counts), notified });
 }
 
 r.post('/admin/pitches/:uid/approve', (c) => adminTransition(c, 'approve'));
@@ -612,7 +656,7 @@ r.get('/founder/by-project/:pid', async (c) => {
       .bind(pid).first<{ id: number; founder_id: number | null; company_id: number | null }>();
     if (!project) return notFound();
     if (!isAdmin(user)) {
-      const own = user.role === 'founder' && user.founder_id != null && project.founder_id === user.founder_id;
+      const own = holdsLicence(user, 'founder') && user.founder_id != null && project.founder_id === user.founder_id;
       if (!own || !projectInActiveCompany(await activeCompanyFor(c, user), project)) return notFound();
     }
 

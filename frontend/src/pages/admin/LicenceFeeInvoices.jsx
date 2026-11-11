@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
 import { Pill } from '../../ui';
 import { STATUS_TONE, STATUS_WORDS, feeLine, money, paidLine, parseAmount } from './licenceFeeInvoicesModel';
+import { toMajorString } from '../../lib/money.js';
 
 /**
  * D802 (#2238) — HQ's "Annual fee invoices" on a licence: one invoice per
@@ -26,7 +27,11 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   const act = async (fn, done) => {
     setBusy(true); setOutcome(null);
     try { await fn(); setOutcome({ tone: 'ok', text: done }); await load(); }
-    catch (e) { setOutcome({ tone: 'error', text: e?.message || 'Nothing was saved.' }); }
+    catch (e) {
+      setOutcome({ tone: 'error', text: e?.message || 'Nothing was saved.' });
+      // D4694 — another write got there first: show the invoice as it now stands, so the next try starts from it.
+      if (e?.code === 'invoice_changed') await load();
+    }
     finally { setBusy(false); }
   };
 
@@ -76,9 +81,9 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
 
 function InvoiceRow({ inv, licence, api, busy, act }) {
   const [mode, setMode] = useState(null);
-  const [amount, setAmount] = useState(inv.paid_cents > 0 ? (inv.paid_cents / 100).toFixed(2) : '');
+  const [amount, setAmount] = useState(inv.paid_cents > 0 ? toMajorString(inv.paid_cents, inv.currency) ?? '' : '');
   const [note, setNote] = useState('');
-  const cents = parseAmount(amount);
+  const cents = parseAmount(amount, inv.currency);
   const download = () => act(async () => {
     const { blob, filename } = await api.pdfBlob(licence.uid, inv.uid);
     const url = URL.createObjectURL(blob);
@@ -103,7 +108,7 @@ function InvoiceRow({ inv, licence, api, busy, act }) {
       {mode === 'pay' && (
         <tr><td colSpan={7} className="pb-2">
           <form className="flex flex-wrap items-center gap-2" data-testid="fee-invoice-pay-form"
-            onSubmit={(e) => { e.preventDefault(); if (cents !== null) act(() => api.recordPayment(licence.uid, inv.uid, cents, note.trim()), 'Payment recorded.'); }}>
+            onSubmit={(e) => { e.preventDefault(); if (cents !== null) act(() => api.recordPayment(licence.uid, inv.uid, cents, note.trim(), inv.revision), 'Payment recorded.'); }}>
             <label className="text-[12px]">Total received ({inv.currency})
               <input className="ml-2 w-32 rounded border px-2 py-1 font-mono" inputMode="decimal" value={amount}
                 onChange={(e) => setAmount(e.target.value)} data-testid="fee-invoice-paid" aria-invalid={cents === null ? 'true' : undefined} />
@@ -117,7 +122,7 @@ function InvoiceRow({ inv, licence, api, busy, act }) {
       {mode === 'void' && (
         <tr><td colSpan={7} className="pb-2">
           <form className="flex flex-wrap items-center gap-2" data-testid="fee-invoice-void-form"
-            onSubmit={(e) => { e.preventDefault(); if (note.trim().length >= 10) act(() => api.voidInvoice(licence.uid, inv.uid, note.trim()), 'Invoice voided.'); }}>
+            onSubmit={(e) => { e.preventDefault(); if (note.trim().length >= 10) act(() => api.voidInvoice(licence.uid, inv.uid, note.trim(), inv.revision), 'Invoice voided.'); }}>
             <input className="w-80 rounded border px-2 py-1" placeholder="Why it is void (at least 10 characters)" value={note} onChange={(e) => setNote(e.target.value)} data-testid="fee-invoice-void-note" />
             <button type="submit" className="rounded border border-red-300 px-3 py-1 text-xs text-red-700 disabled:opacity-50" disabled={busy || note.trim().length < 10} data-testid="fee-invoice-void-save">Void invoice</button>
           </form>

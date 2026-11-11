@@ -12,9 +12,8 @@
  * Those zones say so with the reason; none is drawn as zero or as nothing.
  *
  * D1419 (#3698): "Do these next" and "Activity across the platform" left the
- * page, and the activity read with them. `actionsOf` stays: its first open
- * item is what "Continue where you left off" links. The zones are Studio
- * modules now (`pages/studio/tiles/founderTiles.jsx`).
+ * page, and the activity read with them. The zones are Studio modules now
+ * (`pages/studio/tiles/founderTiles.jsx`).
  */
 import { WEEK_DEFS, TOOL_INFO, milestoneKeySet } from '../SpinoutLabWorkspace';
 
@@ -28,6 +27,12 @@ export const READY = 'ready';
 export const SPRINT_DAYS = 28;
 
 export const failedRead = (reason) => ({ failed: String(reason || 'Source unavailable') });
+/**
+ * D4619 (#4619): the venture a link named is not one of this member's. A failed read (so every zone that depends on
+ * the venture is Unreadable, never another venture's figures) that carries the ID it was asked for.
+ */
+export const unavailableProject = (id) => ({ failed: 'This venture is not available to your account.', unavailable: String(id) });
+export const isUnavailableProject = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string' && typeof r.unavailable === 'string';
 const isFailed = (r) => !!r && typeof r === 'object' && typeof r.failed === 'string';
 
 /** The state of one read: loading, unreadable, or ready. */
@@ -186,19 +191,19 @@ export function summaryOf({ lab, advisor, lifecycle, scores, project }) {
     }
   }
 
-  // Modules active and tasks done: the Lab's unlocked features and milestones.
+  // Artifacts active and tasks done: the Lab's unlocked features and milestones.
   {
     const s = joint(lab);
     if (s.state !== READY) {
-      out.push(tile('Modules active', s.state, { reason: s.reason }));
+      out.push(tile('Artifacts active', s.state, { reason: s.reason }));
       out.push(tile('Tasks done', s.state, { reason: s.reason }));
     } else if (!inCohort(lab)) {
-      out.push(tile('Modules active', NOT_RECORDED, { reason: 'Modules open week by week inside a Lab cohort, and you are not in one.' }));
+      out.push(tile('Artifacts active', NOT_RECORDED, { reason: 'Lab artifacts unlock week by week for cohort members.' }));
       out.push(tile('Tasks done', NOT_RECORDED, { reason: 'Tasks are the Lab’s milestones, recorded inside a cohort.' }));
     } else {
       const all = allFeatures();
       const open = new Set(lab.unlocked_features || []);
-      out.push(tile('Modules active', READY, { v: String(all.filter((f) => open.has(f)).length), sub: `of ${all.length}` }));
+      out.push(tile('Artifacts active', READY, { v: String(all.filter((f) => open.has(f)).length), sub: `of ${all.length}` }));
       out.push(tile('Tasks done', READY, { v: String((lab.milestones || []).length), sub: 'cumulative' }));
     }
   }
@@ -217,19 +222,6 @@ export function summaryOf({ lab, advisor, lifecycle, scores, project }) {
 
 function allFeatures() {
   return WEEK_DEFS.flatMap((w) => w.features);
-}
-
-// ---- continue where you left off ---------------------------------------------
-
-export function actionsOf({ lifecycle, project }) {
-  if (readState(project) === READY && !project) {
-    return { state: READY, items: [{ n: '01', title: 'Create your startup record', href: '/build' }] };
-  }
-  const s = joint(lifecycle);
-  if (s.state !== READY) return s;
-  const items = (Array.isArray(lifecycle?.checklist) ? lifecycle.checklist : []).filter((i) => !i.done).slice(0, 4);
-  if (!items.length) return { state: EMPTY };
-  return { state: READY, items: items.map((i, n) => ({ n: `0${n + 1}`, title: String(i.label || ''), href: i.href || null })) };
 }
 
 // ---- advisor questions --------------------------------------------------------

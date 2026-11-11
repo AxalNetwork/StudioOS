@@ -124,7 +124,7 @@ test('an unreadable calendar says so with Try again; nothing is drawn without th
 
 test('the wiring: the card and From Notion on Distribution, From Notion on Product improvement; dialogs in-page, dark mode', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /<ContentCalendar part=\{data\?\.parts\?\.content_calendar\} channels=\{data\?\.records\?\.rows\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>/);
+  assert.match(route, /<CalendarWeek projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<FromNotion section="grow" projectId=\{ctx\.projectId\} module="distribution" \/>/);
   // D1608 (#3731): PostHog's part sits beside From Notion on Product improvement.
   assert.match(route, /'product-improvement': \(_data, ctx\) => \(<>\s*<FromNotion section="grow" projectId=\{ctx\.projectId\} module="product_improvement" \/>/);

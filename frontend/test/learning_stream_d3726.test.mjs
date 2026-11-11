@@ -11,15 +11,17 @@ import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import {
-  LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, RECOMMENDED_FUTURE,
+  LEARNING_STREAM_TASKS, NO_CHAPTERS, PLAIN_TRANSCRIPT_LINE, nextView,
   clockLabel, newThisWeek, positionWriter, resumeAt, statsTiles,
 } from '../src/pages/learning/learningModel.js';
 import { continueTarget, enrolmentCopy, memberProgramHref } from '../src/pages/learning/programModel.js';
 import { readMyStats } from '../src/pages/learning/learningReads.js';
 import { learningApi } from '../src/lib/api/learning.js';
-import { NewThisWeek, ProgressStrip, RecommendedFuture } from '../src/pages/learning/LearningHome.jsx';
+import { NewThisWeek, ProgressStrip } from '../src/pages/learning/LearningHome.jsx';
+import { NextForYouCard } from '../src/pages/learning/NextForYou.jsx';
 import LessonPlayer from '../src/pages/learning/LessonPlayer.jsx';
 import { MemberProgramView } from '../src/pages/learning/MemberProgram.jsx';
+import { readMemberProgram } from '../src/pages/learning/programReads.js';
 
 const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), 'utf8');
 const html = (el) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/learning'] }, el));
@@ -30,12 +32,11 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 test('every board this build cannot fill names its task', () => {
   assert.deepEqual(LEARNING_STREAM_TASKS, { stream: 4176, studio: 4177, player: 4178, copy: 4179, lists: 4180, analytics: 4181 });
-  assert.match(RECOMMENDED_FUTURE, /#3724/);
 });
 
 test('LR1 Your progress: the four figures of #4180; one not recorded reads "Not recorded", never a 0; a failed read is never zeros', () => {
-  const tiles = statsTiles({ courses_in_progress: 2, lessons_completed_this_month: null, watch_seconds_this_month: 3600, exams: { passed: 1, sat: 2 } });
-  assert.deepEqual(tiles.map((t) => t.label), ['Courses in progress', 'Lessons completed this month', 'Watch time this month', 'Exams passed']);
+  const tiles = statsTiles({ courses_in_progress: 2, lessons_completed_this_month: null, videos_played_this_month: 5, exams: { passed: 1, sat: 2 } });
+  assert.deepEqual(tiles.map((t) => t.label), ['Courses in progress', 'Lessons completed this month', 'Videos played this month', 'Exams passed']);
   const m = html(h(ProgressStrip, { state: { status: 'ready', tiles } }));
   assert.equal((m.match(/data-testid="progress-figure"/g) || []).length, 4);
   assert.equal((flat(m).match(/Not recorded/g) || []).length, 1, 'only the figure the route did not record');
@@ -70,10 +71,18 @@ test('LR1 New this week: courses, videos and readings of the last seven days, ne
   assert.match(failed, /not a claim that nothing is new/, 'a failed read is never an empty week');
 });
 
-test('LR1 Recommended for you is a marked future block with no rows', () => {
-  const m = html(h(RecommendedFuture));
-  assert.match(flat(m), /Recommended for you Future/);
-  assert.doesNotMatch(m, /<li/);
+test('LR1 Recommended for you (#4650): the next action with its reason, the server\'s empty state, or a failed read; never an issue number', () => {
+  // Mutation checked: the reason dropped from the card -> the "2 of 5" line is missing; the unreadable branch drawn as empty -> the claim is missing.
+  const next = { status: 'ready', next: { rule: 'continue_course', kind: 'lesson', uid: 'l1', title: 'Raising: Term sheets', href: '/learning/courses/raising/l1', reason: '2 of 5 required lessons complete.', plan: { kind: 'lesson', uid: 'l1', title: 'Term sheets' } }, checked: ['continue_course'], empty: null };
+  const a = flat(html(h(NextForYouCard, { state: next, onRetry: () => {} })));
+  assert.match(a, /Recommended for you Continue Raising: Term sheets 2 of 5 required lessons complete\./);
+  assert.match(a, /Add to my plan/);
+  assert.deepEqual(nextView(next).plan, { kind: 'lesson', uid: 'l1', title: 'Term sheets' });
+  const empty = flat(html(h(NextForYouCard, { state: { status: 'ready', next: null, checked: ['continue_course', 'program', 'plan'], empty: 'Nothing is waiting: browse courses.' }, onRetry: () => {} })));
+  assert.match(empty, /Nothing is waiting: browse courses\./);
+  const failed = flat(html(h(NextForYouCard, { state: { status: 'unreadable' }, onRetry: () => {} })));
+  assert.match(failed, /not a claim that nothing is waiting/);
+  for (const m of [a, empty, failed]) assert.doesNotMatch(m, /#\d{3,}|Future|Waits on/, 'no internal issue or dependency is product copy');
 });
 
 test('LR4 resume: a position worth resuming, as a clock', () => {
@@ -136,9 +145,9 @@ test('LR13 the member program page: route, enrolment words, Continue', () => {
   assert.match(read('routes/learning.jsx'), /path="\/learning\/my-programs\/:program" element=\{guard\(\['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'\], <LearningPage view="myProgram"/);
   assert.equal(memberProgramHref('p 1'), '/learning/my-programs/p%201');
   assert.match(read('pages/learning/MyPrograms.jsx'), /to=\{memberProgramHref\(program\.uid\)\}/);
-  assert.deepEqual(enrolmentCopy({ enrolment: 'invite' }, true).title, 'By invitation');
-  assert.equal(enrolmentCopy({ enrolment: 'invite' }, true).line, 'A Super Admin enrolled you.');
-  assert.equal(enrolmentCopy({ enrolment: 'open' }, false).line, 'Anyone with a profile can join.');
+  assert.deepEqual(enrolmentCopy({ enrolment: 'invite' }, { enrolled: true }).title, 'By invitation');
+  assert.equal(enrolmentCopy({ enrolment: 'invite' }, { enrolled: true }).line, 'A Super Admin enrolled you. The date is not recorded.');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { enrolled: false }).line, 'Anyone with a profile can join.');
   const contents = [
     { subject_kind: 'course', subject_uid: 'c1', status: 'published', href: '/learning/courses/c1' },
     { subject_kind: 'item', subject_uid: 'v1', status: 'draft', href: '/learning/videos/v1' },
@@ -162,7 +171,7 @@ test('LR13 enrolled: progress per item and overall; LR13b open: Join to start an
   const mine = html(h(MemberProgramView, { state: { status: 'ready', program, contents, enrolled: true, completion } }));
   assert.match(mine, /data-testid="member-program-continue"/);
   assert.match(flat(mine), /1 of 2 complete/);
-  assert.match(flat(mine), /By invitation A Super Admin enrolled you\. No cohort dates, mentors or application: none is stored\./);
+  assert.match(flat(mine), /By invitation A Super Admin enrolled you\. The date is not recorded\. No cohort dates, mentors or application: none is stored\./);
   assert.doesNotMatch(mine, /member-program-join/);
   const open = html(h(MemberProgramView, { state: { status: 'ready', program: { ...program, enrolment: 'open' }, contents, enrolled: false, completion: null }, onJoin: () => {} }));
   assert.equal((flat(open).match(/Join to start/g) || []).length, 2);
@@ -173,10 +182,60 @@ test('LR13 enrolled: progress per item and overall; LR13b open: Join to start an
   assert.match(flat(html(h(MemberProgramView, { state: { status: 'unreadable' }, onRetry: () => {} }))), /not a claim that it holds nothing/);
 });
 
+test('#4480: enrolment copy names recorded dates, keeps unknown dates honest, and ignores dates before joining', () => {
+  const date = '2026-10-01T12:00:00.000Z';
+  const options = { enrolled: true, enrolled_at: date, timeZone: 'UTC' };
+  const invite = enrolmentCopy({ enrolment: 'invite' }, options);
+  assert.equal(invite.line, 'A Super Admin enrolled you on 1 Oct 2026.');
+  assert.equal(invite.dateTime, date);
+  assert.equal(invite.date, '1 Oct 2026');
+  assert.equal(enrolmentCopy({ enrolment: 'invite' }, { ...options, enrolled_at: null }).line, 'A Super Admin enrolled you. The date is not recorded.');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, options).line, 'You joined on 1 Oct 2026.');
+  const notJoined = enrolmentCopy({ enrolment: 'open' }, { ...options, enrolled: false });
+  assert.equal(notJoined.line, 'Anyone with a profile can join.');
+  assert.equal(notJoined.date, null);
+  for (const unknown of [null, '', 'not-a-date', 0]) {
+    const copy = enrolmentCopy({ enrolment: 'open' }, { ...options, enrolled_at: unknown });
+    assert.equal(copy.date, null);
+    assert.equal(copy.line, 'You joined this program. The date is not recorded.');
+  }
+});
+
+test('#4480: the enrolment date is en-GB in the member’s zone, including the default viewer zone', () => {
+  const state = { enrolled: true, enrolled_at: '2026-10-01T23:30:00.000Z' };
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { ...state, timeZone: 'UTC' }).date, '1 Oct 2026');
+  assert.equal(enrolmentCopy({ enrolment: 'open' }, { ...state, timeZone: 'Europe/Helsinki' }).date, '2 Oct 2026');
+  const previous = process.env.TZ;
+  try {
+    process.env.TZ = 'Europe/Helsinki';
+    assert.equal(enrolmentCopy({ enrolment: 'open' }, state).date, '2 Oct 2026');
+  } finally { if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous; }
+});
+
+test('#4480: member program read carries the own date into a semantic mono date, never a non-member’s date', async () => {
+  const before = learningApi.program;
+  const date = '2026-10-01T12:00:00.000Z';
+  const program = { uid: 'p1', name: 'Date fixtures', enrolment: 'invite' };
+  try {
+    learningApi.program = async () => ({ program, contents: [], enrolled: true, enrolled_at: date, my_completion: [] });
+    const state = await readMemberProgram('p1');
+    assert.equal(state.enrolled_at, date);
+    const view = html(h(MemberProgramView, { state: { status: 'ready', ...state } }));
+    assert.match(view, /<time dateTime="2026-10-01T12:00:00.000Z" class="font-mono tabular-nums">/i);
+    assert.match(flat(view), /A Super Admin enrolled you on/);
+    learningApi.program = async () => ({ program: { ...program, enrolment: 'open' }, contents: [], enrolled: false, enrolled_at: date });
+    const outsider = await readMemberProgram('p1');
+    assert.equal(Object.hasOwn(outsider, 'enrolled_at'), false);
+    const open = html(h(MemberProgramView, { state: { status: 'ready', ...outsider } }));
+    assert.match(flat(open), /Anyone with a profile can join/);
+    assert.doesNotMatch(open, /<time/);
+  } finally { learningApi.program = before; }
+});
+
 test('LR1 readMyStats reads #4180\'s stats route once and turns it into the four tiles', async () => {
   const real = learningApi.myStats;
   let calls = 0;
-  learningApi.myStats = async () => { calls += 1; return { courses_in_progress: 3, lessons_completed_this_month: 0, watch_seconds_this_month: null, exams: null }; };
+  learningApi.myStats = async () => { calls += 1; return { courses_in_progress: 3, lessons_completed_this_month: 0, videos_played_this_month: null, exams: null }; };
   try {
     const { tiles } = await readMyStats();
     assert.equal(calls, 1);

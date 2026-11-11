@@ -70,7 +70,7 @@ import { requireAuth } from '../auth';
 import { ensureTier } from '../middleware/requireTier';
 import { quoteRun, railOptionKey, run, type RunOptions } from '../services/aiRouter';
 import { pricingVersion } from '../services/ai/pricing';
-import { QUOTE_STALE, ceilingRefusal, dailyCeiling, pinQuote, returnQuote, takeQuote, type QuoteStep, type TakenQuote } from '../services/decks/runQuotes';
+import { QUOTE_REQUIRED, QUOTE_STALE, ceilingRefusal, dailyCeiling, pinQuote, returnQuote, takeQuote, type QuoteStep, type TakenQuote } from '../services/decks/runQuotes';
 import { funnelPoint } from '../services/decks/observability';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { parseJsonLoose } from '../services/decks/autofill';
@@ -98,6 +98,7 @@ import { lockedOut } from '../services/decks/elementModels';
 import { NOT_SWITCHED_ON, flagsFor, notSwitchedOn } from '../services/featureFlags';
 import type { Resolved } from '../services/decks/elementModels';
 import { promptFor } from '../services/decks/prompts';
+import { DECK_STUDIO_TIER } from '../services/decks/studioAccess';
 
 const deckNew = new Hono<{ Bindings: Env }>();
 
@@ -116,7 +117,7 @@ async function venture(c: any, user: User, projectId: number, write: boolean) {
 
 /** The plan gate New deck shares with the old /generate; its 402 is the plan's own body. */
 function planRefusal(user: User): Response | null {
-  try { ensureTier(user, 'studio'); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
+  try { ensureTier(user, DECK_STUDIO_TIER); return null; } catch (e) { if (e instanceof Response) return e; throw e; }
 }
 
 /** A figure stated where only records may state one: 422, with the module that records it. */
@@ -230,7 +231,7 @@ async function chargedOf(env: Env, usageLogId: number | null | undefined, userId
 /**
  * D1540 (#3791): before a run, the price it is held to and the owner's daily
  * ceiling. A `quote_uid` takes the founder's pinned quote for exactly this run
- * (409 `quote_stale` when it cannot), and a run that would pass the ceiling is
+ * (409 `quote_stale` when it cannot), a metered run without one is refused 409 `quote_required` (D4597), and a run that would pass the ceiling is
  * refused 429 `deck_ceiling_reached` before any hold, its quote given back.
  */
 async function priceGate(c: any, user: User, projectId: number, step: QuoteStep | null, body: any, ask: RunOptions):
@@ -249,6 +250,13 @@ async function priceGate(c: any, user: User, projectId: number, step: QuoteStep 
       if (quote) await returnQuote(c.env, quote.uid);
       return { refused: refuse(c, 429, stop) };
     }
+  }
+  if (!quote && step) {
+    // D4597 (#4597): a run that would be metered runs only at a price the member was shown and accepted.
+    // Whether it is metered is decided the way the quote decides it: a run that is refused (AI off for this
+    // page, the build model off, a price that cannot be worked out) is not charged, so it needs no quote.
+    const q = await quoteRun(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
+    if (q.ok) return { refused: refuse(c, 409, { code: 'quote_required', message: QUOTE_REQUIRED }) };
   }
   return { quote };
 }
@@ -387,7 +395,7 @@ deckNew.post('/new/quote', async (c) => {
 });
 
 /** Replaces the venture's unkept proposal with this one (D767: one per venture); returns its id. */
-async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
+export async function writeProposal(env: Env, projectId: number, baseDeckId: number, title: string, slides: any[], outline: any, userId: number): Promise<number> {
   const res = await env.DB.batch([
     env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE project_id = ?').bind(projectId),
     env.DB.prepare(
@@ -398,7 +406,7 @@ async function writeProposal(env: Env, projectId: number, baseDeckId: number, ti
   return Number((res[1] as any)?.meta?.last_row_id || 0);
 }
 
-async function proposalRow(env: Env, id: number) {
+export async function proposalRow(env: Env, id: number) {
   return env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>();
 }
 

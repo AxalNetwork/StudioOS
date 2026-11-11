@@ -13,11 +13,15 @@
  */
 import type { Env } from '../types';
 
-export const SEGMENTS = ['event_organisers', 'venture_scouts', 'deal_makers'] as const;
+// D4289 P1 (#4290): `influencers` is the segment an admitted influencer joins (migration 202611031502);
+// it comes only from admission (routes/admin_influencers.ts), never from Add partner.
+export const SEGMENTS = ['event_organisers', 'venture_scouts', 'deal_makers', 'influencers'] as const;
 export type Segment = typeof SEGMENTS[number];
 export const SEGMENT_LABEL: Record<Segment, string> = {
-  event_organisers: 'Event organisers', venture_scouts: 'Venture scouts', deal_makers: 'Deal makers',
+  event_organisers: 'Event organisers', venture_scouts: 'Venture scouts', deal_makers: 'Deal makers', influencers: 'Influencers',
 };
+/** The segments HQ may add a partner to by hand; an influencer joins by application. */
+export const ADDABLE_SEGMENTS: readonly Segment[] = ['event_organisers', 'venture_scouts', 'deal_makers'];
 export const isSegment = (v: unknown): v is Segment => typeof v === 'string' && (SEGMENTS as readonly string[]).includes(v);
 
 export const STORED_STATES = ['draft', 'submitted', 'approved', 'sent', 'signed', 'ended'] as const;
@@ -28,8 +32,16 @@ export type ReadState = typeof READ_STATES[number];
  * The standard rules an event pays today (OD4 is open). Only KYC approval
  * calls the engine (routes/kyc.ts); the other four seeded rules have no
  * caller, so terms may not name them and the rules read says `fires: false`.
+ * The influencer triggers (D4292) are paid by `invoice.paid` and the daily
+ * sweep, not by the engine; the bonus keys must match `BONUS_MILESTONES`.
  */
-export const FIRING_RULES: ReadonlySet<string> = new Set(['referral_kyc_approved']);
+export const FIRING_RULES: ReadonlySet<string> = new Set([
+  'referral_kyc_approved',
+  // D4292 (#4292): the influencer share of each paid subscription invoice
+  // (services/influencerCommission.ts), and the flat milestone bonuses.
+  'subscription_invoice',
+  'influencer_bonus_10', 'influencer_bonus_25', 'influencer_bonus_50', 'influencer_bonus_100',
+]);
 
 /** The facts strip's words for Referral partners, in OD3's terms. Part 10 draws them. */
 export const FACTS = {

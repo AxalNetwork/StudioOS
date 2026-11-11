@@ -1,0 +1,26 @@
+/* D4493 (#4493): sequence builder layout on the shared Distribution tokens; light and dark come from .distribution-shell. */
+.sq-card{display:flex;flex-direction:column;gap:12px}
+.sq-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.sq-title{font-size:16px;font-weight:800;color:var(--ds-ink);margin:0}
+.sq-sub{font-size:12.5px;color:var(--ds-muted);margin:2px 0}
+.sq-amber{color:var(--ds-amber)}
+.sq-greyed{color:var(--ds-muted);opacity:.7}
+.sq-label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--ds-body)}
+.sq-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.sq-step{display:flex;gap:12px;position:relative;padding-bottom:16px}
+.sq-step:not(:last-child)::before{content:"";position:absolute;left:15px;top:34px;bottom:0;border-left:2px dashed var(--ds-line)}
+.sq-bubble{flex:0 0 32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font:700 13px var(--font-mono);color:var(--ds-violet);background:var(--ds-lav);border:1px solid var(--ds-lav-line)}
+.sq-step-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;border:1px solid var(--ds-line);border-radius:10px;padding:12px;background:var(--ds-raised)}
+.sq-step-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.sq-wait{font:12px var(--font-mono);color:var(--ds-muted);margin:0}
+.sq-voice{display:flex;flex-direction:column;gap:8px}
+.sq-add{display:flex;flex-direction:column;gap:8px}
+.sq-add>button{align-self:flex-start}
+.sq-blocked{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px}
+.sq-blocked li{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sq-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.sq-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px solid var(--ds-line);padding-top:8px}
+.sq-composer{display:flex;flex-direction:column;gap:8px;border:1px solid var(--ds-lav-line);border-radius:10px;padding:12px;background:var(--ds-card)}
+.sq-needs{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.sq-consent .ds-table td,.sq-consent .ds-table th{min-height:44px}
+@media (max-width:639px){.sq-head>button,.sq-add>button{width:100%}.sq-step{gap:8px}}

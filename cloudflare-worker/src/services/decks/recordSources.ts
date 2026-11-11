@@ -156,7 +156,7 @@ const competitorsDetail: Adapter = {
 // ─────────────────────────────────────────────────────────────── Round terms
 
 const roundTerms: Adapter = {
-  id: 'round_terms', area: 'raise', module: 'Raise › Round planner', href: q('/raise/calls'),
+  id: 'round_terms', area: 'raise', module: 'Raise › Round planner', href: q('/raise/capital-relationships/calls'),
   slots: [
     { key: 'raise.pre_money', label: 'Pre-money valuation', unit: 'usd' },
     { key: 'raise.post_money', label: 'Post-money valuation', unit: 'usd' },

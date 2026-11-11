@@ -9,7 +9,7 @@
  * pattern used by services/notify.ts and the telegram/news schemas).
  */
 import type { Env } from '../types';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const READY = new WeakMap<object, boolean>();
 
@@ -24,6 +24,7 @@ const STATEMENTS: string[] = [
      summary            TEXT,
      description        TEXT,
      cover_url          TEXT,
+     topics_json        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array'),
      starts_at          TEXT NOT NULL,
      ends_at            TEXT,
      timezone           TEXT NOT NULL DEFAULT 'UTC',
@@ -170,6 +171,8 @@ export async function ensureEventsSchema(env: Env): Promise<boolean> {
         console.warn('[eventsSchema] statement failed (continuing)', (e as Error).message);
       }
     }
+    // #5343: through `runSchemaBootstrap`, which skips the ALTER when the column is there.
+    await runSchemaBootstrap(env, ["ALTER TABLE events ADD COLUMN topics_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array')"]);
     READY.set(bindingKey(env), true);
     return true;
   } catch (e) {

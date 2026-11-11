@@ -5,8 +5,8 @@
  * On node:sqlite, with the baseline's own DDL for users, sessions, licences,
  * administrators and envelopes, and migrations 259, 260 and 472 from their
  * files. The bank account is written as the console writes it, with a number
- * drawn at run time, so no account number is in this file; the people are
- * placeholders.
+ * drawn at run time with last four matching the statement year (#4279), so
+ * no account number is in this file; the people are placeholders.
  *
  *   node --experimental-strip-types --no-warnings \
  *     --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -51,13 +51,21 @@ const MIGRATIONS = [
   'cloudflare-worker/sql/migrations/512_licence_terms.sql',
 ].map(read);
 
-/** A ten-digit number drawn per run: never a literal in this file. */
 /** As HQ stored them, a fourth stream (D802) and a field no reader here knows included. */
 const STREAMS_09 = JSON.stringify([
   { stream: 'subscriptions', gross_cents: 100000, currency: 'EUR', available: true, is_estimate: true },
   { stream: 'platform_licence_royalties', gross_cents: 6000, currency: 'EUR', available: true, is_estimate: false, royalty_bps: 500 },
 ]);
-const accountNumber = () => String(randomInt(1_000_000_000, 9_999_999_999));
+/** Deliberately collide with the statement dates: a bare last-four search would fail (#4279). */
+const accountNumber = () => `${randomInt(100_000, 1_000_000)}2026`;
+
+/** Refused replies carry neither account fields nor masked/full account text; dates may share the last four. */
+function assertNoAccount(reply: unknown, number: string, message: string) {
+  const json = JSON.stringify(reply);
+  assert.doesNotMatch(json, /"account_(?:last4|number(?:_enc)?)"\s*:/, message);
+  assert.ok(!json.includes(`ending ${number.slice(-4)}`), message);
+  assert.ok(!json.includes(number), message);
+}
 
 function fixture(o: { account?: boolean; branch?: string } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
@@ -356,7 +364,7 @@ test('a licence whose terms name another licensor is refused rather than paid to
   const refused = await licenseeStatements(env, lic, { licensorIpEntity: 'management' });
   assert.equal((refused.payment as any).refusal_code, 'licensor_not_payee');
   assert.equal((refused.payment as any).lines, undefined);
-  assert.ok(!JSON.stringify(refused).includes(number.slice(-4)), 'Holdings\' account was shown');
+  assertNoAccount(refused, number, 'Holdings\' account was shown');
   assert.equal(refused.statements.length, 3, 'the statements are still read');
   const holdings = await licenseeStatements(env, lic, { licensorIpEntity: 'holdings' });
   assert.equal((holdings.payment as any).payee_name, 'Axal VC Holdings LLC');
@@ -392,7 +400,7 @@ test('the route reads D797\'s licensor and report day; an unreadable schedule gi
   const unread = await quietly(() => call(env, PRINCIPAL, 'GET', '/mine/statements'));
   assert.equal(unread.status, 200);
   assert.equal(unread.body.payment.refusal_code, 'terms_unreadable');
-  assert.ok(!JSON.stringify(unread.body).includes(number.slice(-4)), 'an account was shown without the licensor checked');
+  assertNoAccount(unread.body, number, 'an account was shown without the licensor checked');
   assert.equal(unread.body.statements.length, 3, 'the statements are still read');
 });
 

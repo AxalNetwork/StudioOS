@@ -8,6 +8,8 @@ import type { MiddlewareHandler } from 'hono';
 import type { Env } from '../types';
 import { getCurrentUser } from '../auth';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
+// D4672 — before routing nothing names the segments, so opaque ones are redacted by shape.
+import { redactPath } from '../util/pathRedaction';
 
 // A KV round trip that has not answered in this long is treated exactly like a
 // KV error. Two seconds is far above a healthy bump (single-digit ms) and far
@@ -64,7 +66,11 @@ export const DECK_REMOTE_PAIR = /^\/api\/decks\/\d+\/remote\/pair\/?$/;
 export const DECK_REMOTE_JOIN = /^\/api\/decks\/remote\/join\/?$/;
 // D1512 (#3764): `POST /api/decks/:id/areas` is A3's admission path.
 // D1600 (#3879): retrying a run's failed areas starts a run too.
-export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
+export const DECK_GENERATE = /^\/api\/decks\/(?:\d+\/)?(?:areas(?:\/(?:generate|instruct|batches(?:\/[0-9a-f-]{36}\/retry-failed)?))?|build)\/?$/;
+// D1525 (#3783): ranking an area's variants runs one Clef decision; the quote runs nothing.
+export const DECK_JUDGE = /^\/api\/decks\/areas\/[0-9a-f-]{36}\/judge\/?$/;
+// D1516 (#3768): the narrative build admits one run for the whole deck; its outline runs nothing.
+export const DECK_NARRATIVE_BUILD = /^\/api\/decks\/narrative\/build\/?$/;
 
 // D810 — three of the four public newsletter routes, and nothing else under
 // the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
@@ -434,7 +440,7 @@ const BUCKETS: Bucket[] = [
     name: 'deck_generate',
     limit: 6,
     windowSec: 60,
-    test: (p, m) => m === 'POST' && DECK_GENERATE.test(p),
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
     scope: 'user',
     failClosed: true,
   },
@@ -442,7 +448,15 @@ const BUCKETS: Bucket[] = [
     name: 'deck_generate_hour',
     limit: 20,
     windowSec: 3600,
-    test: (p, m) => m === 'POST' && DECK_GENERATE.test(p),
+    test: (p, m) => m === 'POST' && (DECK_GENERATE.test(p) || DECK_NARRATIVE_BUILD.test(p)),
+    scope: 'user',
+    failClosed: true,
+  },
+  {
+    name: 'deck_judge',
+    limit: 30,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && DECK_JUDGE.test(p),
     scope: 'user',
     failClosed: true,
   },
@@ -652,7 +666,8 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     // into 6s, on the exact route where the budget is 30s and already shared
     // with two more limiters and a schema bootstrap.
     const matching = BUCKETS.filter(
-      (b) => b.test(path, method, role) && !(b.scope === 'user' && !userId),
+      (b) => (b.test(path, method, role) || (user?.licences || []).some((licence: string) => b.test(path, method, licence)))
+        && !(b.scope === 'user' && !userId),
     );
 
     for (let i = 0; i < matching.length; i++) {
@@ -703,7 +718,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
         if (closesDoor) {
           const named = (stalled ? matching.slice(i).find((r) => r.failClosed) : b)!;
           await logBlock(env, ctx, {
-            user_id: userId, endpoint: path, bucket: named.name, count: -1, blocked: true,
+            user_id: userId, endpoint: redactPath(path), bucket: named.name, count: -1, blocked: true,
           });
           c.header('Retry-After', '30');
           c.header('X-RateLimit-Bucket', named.name);
@@ -720,7 +735,7 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
 
       if (count > b.limit) {
         await logBlock(env, ctx, {
-          user_id: userId, endpoint: path, bucket: b.name, count, blocked: true,
+          user_id: userId, endpoint: redactPath(path), bucket: b.name, count, blocked: true,
         });
         const retryAfter = b.windowSec >= 3600 ? 3600 : 60;
         c.header('Retry-After', String(retryAfter));

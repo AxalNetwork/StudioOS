@@ -21,6 +21,7 @@
  */
 import { verdictForm } from './verdictForm.js';
 import { newVersionLine } from '../raise/narrative/narrativeModel.js';
+import { CHANNEL_KINDS, channelOptions } from './distribution/channelsModel.js';
 
 import { queueRefusal } from '../raise/dataRoomRead.js';
 
@@ -152,20 +153,25 @@ const feedback = {
   submit: (w, projectId, v) => w.grow.feedback(projectId, feedback.toBody(v)),
 };
 
-const CHANNEL_KIND = opts([['content', 'Content'], ['paid_search', 'Paid search'], ['paid_social', 'Paid social'], ['outbound', 'Outbound'],
-  ['referral', 'Referral'], ['partner', 'Partner'], ['events', 'Events'], ['other', 'Other']]);
+const CHANNEL_KIND = opts(CHANNEL_KINDS);
 const CHANNEL_STATE = opts([['testing', 'Testing'], ['active', 'Active'], ['paused', 'Paused']]);
+const readChannelChoices = async (projectId) => (await import('../../lib/api/growChannels.js')).growChannelsApi.channels(projectId);
 const channelFields = [
   { kind: 'CH', name: 'kind', k: 'Channel', opts: CHANNEL_KIND, def: 0 },
   { kind: 'T', name: 'name', k: 'Name', ph: 'Channel name', required: true, max: 120 },
   { kind: 'CH', name: 'state', k: 'State', opts: CHANNEL_STATE, def: 0 },
   { kind: 'T', name: 'spend', k: 'Spend · 30 days', input: 'money', ph: '$1,440' },
   { kind: 'T', name: 'bar', k: 'Bar', input: 'money', ph: 'Strong when CAC under $200' },
+  { kind: 'T', name: 'purpose', k: 'What it’s for', max: 140 },
+  { kind: 'CH', name: 'owner_user_id', k: 'Owner', opts: [{ value: '', label: 'Not assigned' }] },
 ];
 // The UTM source is derived from the name (#1697); spend and the bar go in the one POST.
 const channelBody = (v) => {
   const bar = toCents(v.bar);
-  return { name: str(v.name), kind: v.kind || null, state: v.state || null, spend_cents: toCents(v.spend), cac_bar_cents: bar, ...(bar == null ? {} : { bar_currency: 'usd' }) };
+  return { name: str(v.name), kind: v.kind || null, state: v.state || null,
+    ...(Object.hasOwn(v, 'purpose') ? { purpose: str(v.purpose) } : {}),
+    ...(Object.hasOwn(v, 'owner_user_id') ? { owner_user_id: v.owner_user_id ? Number(v.owner_user_id) : null } : {}),
+    spend_cents: toCents(v.spend), cac_bar_cents: bar, ...(bar == null ? {} : { bar_currency: 'usd' }) };
 };
 const channel = {
   key: 'channel', cta: 'Add channel', button: 'Add channel',
@@ -173,6 +179,7 @@ const channel = {
   sub: 'A channel with its spend, so cost per customer can be read.',
   foot: 'Customers acquired are attributed to it.',
   fields: channelFields,
+  loadOptions: (_w, projectId) => readChannelChoices(projectId).then((d) => channelOptions(d.members)),
   toBody: channelBody,
   submit: (w, projectId, v) => w.grow.channel(projectId, channel.toBody(v)),
 };
@@ -719,9 +726,15 @@ const splitCheck = (v) => {
   if (v.runway === 'custom' && !(wholeOf(v.runway_months) >= 1 && wholeOf(v.runway_months) <= 120)) e.runway_months = 'Runway is a whole number of months from 1 to 120.';
   return e;
 };
+/**
+ * D5069: the Base revision the form opened at, by venture. Save split sends it back, so a split
+ * saved from a form opened before another save is refused (409 `changed_since_open`), not applied over it.
+ */
+const splitRevision = new Map();
 /** The stored split, so the form opens with it every time (decision 9). */
 const splitOptions = (w, projectId) => raiseOptions(w, projectId, 'use-of-funds').then((r) => {
   const out = {};
+  if (Number.isSafeInteger(r?.revision)) splitRevision.set(String(projectId), r.revision); else splitRevision.delete(String(projectId));
   const stored = new Map((Array.isArray(r?.sections) ? r.sections : []).map((s) => [String(s?.value), s]));
   for (const [key] of FUND_SECTIONS) {
     const s = stored.get(key);
@@ -752,7 +765,10 @@ const useOfFunds = {
     })),
     runway_months: v.runway === 'custom' ? wholeOf(v.runway_months) : Number(v.runway || 24),
   }),
-  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, useOfFunds.toBody(v)),
+  submit: (w, projectId, v) => w.raise.useOfFunds(projectId, {
+    ...useOfFunds.toBody(v),
+    ...(splitRevision.has(String(projectId)) ? { expected_revision: splitRevision.get(String(projectId)) } : {}),
+  }),
 };
 
 /** The stages, stored as #1700 stores them: Identified is `to_contact`. */
@@ -922,10 +938,18 @@ const editChannel = {
   key: 'edit-channel',
   title: 'Edit channel',
   sub: 'Its kind, name, state, bar and this month’s spend. Its UTM source is what counts its customers, so it stays as added.',
-  fields: [bare(channelFields[0]), channelFields[1], { ...bare(channelFields[2]), required: true }, channelFields[4], channelFields[3]],
+  fields: [bare(channelFields[0]), channelFields[1], { ...bare(channelFields[2]), required: true }, channelFields[4], channelFields[3], channelFields[5], bare(channelFields[6])],
+  loadOptions: (_w, projectId, uid) => readChannelChoices(projectId).then((d) => {
+    const ch = d.channels.find((c) => c.uid === uid);
+    return { ...channelOptions(d.members), ...(ch ? { kind: { def: ch.kind || '' }, purpose: { def: ch.purpose || '' },
+      owner_user_id: { ...channelOptions(d.members).owner_user_id, def: ch.owner?.user_id == null ? '' : String(ch.owner.user_id) } } : {}) };
+  }),
   idOf: (row) => growEdit(row)?.uid ?? null,
-  valuesOf: (row) => { const e = growEdit(row) || {}; return { name: asText(e.name), state: asText(e.state) }; },
-  toBody: (v) => sentOnly(v, channelBody(v), CHANNEL_CARRIED, { spend_cents: 'spend', cac_bar_cents: 'bar', bar_currency: 'bar' }),
+  valuesOf: (row) => { const e = growEdit(row) || {}; return { name: asText(e.name), state: asText(e.state),
+    ...(Object.hasOwn(e, 'purpose') ? { purpose: asText(e.purpose) } : {}), ...(Object.hasOwn(e, 'owner_user_id') ? { owner_user_id: asText(e.owner_user_id) } : {}) }; },
+  toBody: (v) => ({ ...sentOnly(v, channelBody(v), CHANNEL_CARRIED, { spend_cents: 'spend', cac_bar_cents: 'bar', bar_currency: 'bar' }),
+    ...(Object.hasOwn(v, 'purpose') ? { purpose: str(v.purpose) } : {}),
+    ...(Object.hasOwn(v, 'owner_user_id') ? { owner_user_id: v.owner_user_id ? Number(v.owner_user_id) : null } : {}) }),
   submit: (w, projectId, id, v) => w.grow.channelUpdate(projectId, id, editChannel.toBody(v)),
 };
 
@@ -1800,6 +1824,8 @@ const filingBody = (v) => ({
   kind: v.kind || null, jurisdiction: str(v.jurisdiction), due_date: str(v.due_date),
   for_holder_id: v.kind === '83b' ? str(v.for_holder_id) : null, state: v.state || null,
 });
+const filingIdempotencyKey = () => globalThis.crypto?.randomUUID?.()
+  ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const buildFiling = {
   key: 'filing', cta: 'Add filing', button: 'Add filing',
   title: 'Add filing',
@@ -1811,19 +1837,40 @@ const buildFiling = {
     jurisdiction: { options: [...readChips(read, 'jurisdiction'), { value: '', label: 'Other' }], def: 0 },
     for_holder_id: { options: readChips(read, 'for_holder_id') },
   })),
+  // D5306: one key for this open form. An ambiguous network retry reuses it;
+  // closing and opening a new form mints a new filing identity.
+  makeMemory: () => ({ idempotencyKey: filingIdempotencyKey() }),
   // Proof is the new step's own Upload proof (D690 decision 13), sent once the filing exists.
-  async submit(w, projectId, v) {
-    const made = await w.build.formationStep(projectId, buildFiling.toBody(v));
+  // D4600: `memory` lives as long as the open form. Once the filing exists its id is kept there,
+  // so a failed upload is retried against that filing and never creates a second one.
+  async submit(w, projectId, v, memory = {}) {
     const file = v.proof;
-    if (made?.id && file && typeof file === 'object' && typeof file.name === 'string') {
+    const hasFile = !!file && typeof file === 'object' && typeof file.name === 'string';
+    if (memory.filing && !hasFile) {
+      throw partialFiling(memory.filing, 'Choose the proof file to upload, or close this form: the filing is already added.');
+    }
+    memory.idempotencyKey ||= filingIdempotencyKey();
+    const made = memory.filing || await w.build.formationStep(projectId, buildFiling.toBody(v), memory.idempotencyKey);
+    if (made?.id && hasFile) {
       const body = new FormData();
       body.append('file', file);
       try { await w.recordAction('build', projectId, 'company-creation', `step-${made.id}`, 'upload-proof', body); }
-      catch (error) { throw new Error(`The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}`); }
+      catch (error) {
+        memory.filing = made;
+        throw partialFiling(made, `The filing was added; its proof was not stored: ${error?.message || 'try Upload proof on the filing'}. Press ${PROOF_RETRY} to try the upload again. The filing is not added twice.`);
+      }
     }
     return made;
   },
 };
+
+/** D4600: the label the Add filing button takes once only the proof upload is left. */
+const PROOF_RETRY = 'Retry proof upload';
+/**
+ * A write that half succeeded: the record exists and one follow-up failed. The form reads
+ * `partial` to refresh its page, to freeze everything but `only`, and to relabel its button.
+ */
+const partialFiling = (made, message) => Object.assign(new Error(message), { partial: { result: made, cta: PROOF_RETRY, only: 'proof' } });
 
 const SYSTEM = [{ value: 'bank', label: 'Bank' }, { value: 'accounting', label: 'Accounting' }, { value: 'payroll', label: 'Payroll' }, { value: 'crm', label: 'CRM' }, { value: 'workspace', label: 'Workspace' }];
 const SYNC = [{ value: 'live', label: 'Live' }, { value: 'hourly', label: 'Hourly' }, { value: 'daily', label: 'Daily' }, { value: 'manual', label: 'Manual' }];

@@ -1,5 +1,5 @@
 /**
- * D690 (#1691, test 10) — the Customer research table's six columns. The
+ * D690 (#1691, test 10) — the Customer research table's separate consent columns. The
  * adapter maps the Worker's labels to its cells by position, so the keys line
  * and the State cell ship with the Worker's new labels: each column draws its
  * own cell, State reads decision 9's words, and no column draws a channel.
@@ -18,7 +18,7 @@ import { adaptRecords } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS, STATE } from '../src/pages/cycles/adapters/validate.js';
 
 const h = React.createElement;
-const LABELS = ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'];
+const LABELS = ['Interviewee', 'Company', 'Date', 'ICP fit', 'Recording consent', 'Quotes OK', 'State'];
 const ROW = {
   id: 7, interviewee: 'Mara Quill', company: 'Tallow & Co', date: '2026-10-02', icp_fit: 'strong',
   consent: 'agreed', channel: 'video', stage: 'done', state: 'ready',
@@ -31,16 +31,16 @@ const WORDS = {
 };
 const records = (rows) => adaptRecords('validate', 'customer-research', { cols: LABELS, rows, total: rows.length, page: 1, page_size: 25 });
 
-test('D690 decision 10: the six labels each draw their own cell, ending in State', () => {
+test('D690 decision 10: the consent labels each draw their own cell, ending in State', () => {
   const recs = records([ROW]);
   assert.deepEqual(recs.cols, [
     { key: 'interviewee', label: 'Interviewee' }, { key: 'company', label: 'Company' }, { key: 'date', label: 'Date' },
-    { key: 'icp_fit', label: 'ICP fit' }, { key: 'consent', label: 'Consent' }, { key: 'state', label: 'State' },
+    { key: 'icp_fit', label: 'ICP fit' }, { key: 'recording_consent', label: 'Recording consent' }, { key: 'consent', label: 'Quotes OK' }, { key: 'state', label: 'State' },
   ]);
   const cells = recs.rows[0].cells;
   const shown = Object.fromEntries(recs.cols.map((c) => [c.label, cellView(cells[c.key]).text]));
   assert.deepEqual(shown, {
-    Interviewee: 'Mara Quill', Company: 'Tallow & Co', Date: '2026-10-02', 'ICP fit': 'Strong', Consent: 'Agreed', State: 'Ready to review',
+    Interviewee: 'Mara Quill', Company: 'Tallow & Co', Date: '2026-10-02', 'ICP fit': 'Strong', 'Recording consent': 'Not asked', 'Quotes OK': 'Agreed · deck-eligible', State: 'Ready to review',
   });
 });
 
@@ -67,4 +67,23 @@ test('D690 decision 10: no column draws a channel, though the row keeps its chan
   assert.equal(text.includes('Call'), false, 'no channel under a State heading');
   assert.equal(text.includes('Channel'), false);
   assert.ok(renderedText(html).includes('Channel: all'), 'Channel is still a filter');
+});
+
+test('#4411: recording pills show the method in words and never borrow the quote status', () => {
+  const cell = (recording_consent, consent = 'agreed') => RECORDS['customer-research'].row({ ...ROW, recording_consent, consent }).cells;
+  for (const [method, words] of [['verbal', 'Said yes out loud'], ['written', 'In writing'], ['in_app', 'In the app'], ['pre_agreed', 'Agreed beforehand'], ['chat_reply', 'Agreed in the chat']]) {
+    assert.deepEqual(cell({ status: 'given', method }, null).recording_consent, { text: `Given · ${words}`, tone: 'ok' });
+    assert.deepEqual(cell({ status: 'given', method }, null).consent, { text: 'Not asked', tone: 'grey' });
+  }
+  assert.deepEqual(cell({ status: 'declined', method: 'verbal' }).recording_consent, { text: 'Declined', tone: 'bad' });
+  assert.deepEqual(cell(undefined).recording_consent, { text: 'Not asked', tone: 'grey' });
+  assert.deepEqual(cell({ status: 'not_recorded', method: 'written' }).recording_consent, { text: 'Not asked', tone: 'grey' });
+  assert.deepEqual(cell({ status: 'given', method: 'unrecognised' }).recording_consent, { text: 'Given', tone: 'ok' });
+  assert.deepEqual(cell(undefined).consent, { text: 'Agreed · deck-eligible', tone: 'ok' });
+  const filters = RECORDS['customer-research'].filters;
+  assert.deepEqual(filters.find(f => f.key === 'recording_consent'), { key: 'recording_consent', label: 'Recording consent', options: [
+    { value: 'given', label: 'Given' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' },
+  ] });
+  assert.equal(filters.find(f => f.key === 'consent').label, 'Quotes OK');
+  assert.equal(filters.find(f => f.key === 'consent').options[0].label, 'Agreed · deck-eligible');
 });

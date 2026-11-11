@@ -132,15 +132,28 @@ async function readOne(env: Env, scope: Scope, dealId: number, nowMs = Date.now(
   return shape(r, nowMs);
 }
 
+type Entry = { id: number; uid: string; stage: Stage; stage_changed_at: string | null };
 async function entryOf(env: Env, scope: Scope, dealId: number) {
-  return env.DB.prepare('SELECT id, stage FROM deal_flow_entries WHERE scope_key = ? AND deal_id = ?').bind(scope.key, dealId)
-    .first<{ id: number; stage: Stage }>();
+  return env.DB.prepare('SELECT id, uid, stage, stage_changed_at FROM deal_flow_entries WHERE scope_key = ? AND deal_id = ?').bind(scope.key, dealId)
+    .first<Entry>();
 }
 
-const event = (env: Env, scope: Scope, dealId: number, kind: string, from: string | null, to: string | null, reason: string | null = null) =>
+/**
+ * D4632: a row's version is its stage and when it entered it. Every statement
+ * of a write that moves the row, its history included, carries this guard and
+ * runs BEFORE the stage changes, so all of them read the same version: a move
+ * that landed meanwhile leaves every one of them with nothing to change.
+ */
+const GUARD = ' AND stage = ? AND stage_changed_at IS ?';
+/** An add writes its row only while the deal is not in this flow. */
+const NOT_IN_FLOW = ' WHERE NOT EXISTS (SELECT 1 FROM deal_flow_entries WHERE scope_key = ? AND deal_id = ?)';
+const guardBinds = (e: Entry) => [e.stage, e.stage_changed_at];
+
+/** A history row for the entry `uid` names, under the version guard when one is given. */
+const event = (env: Env, scope: Scope, dealId: number, uid: string, kind: string, from: string | null, to: string | null, reason: string | null = null, guard: Entry | null = null) =>
   env.DB.prepare(`INSERT INTO deal_flow_events (entry_id, scope_key, deal_id, actor_user_id, kind, from_stage, to_stage, pass_reason)
-    SELECT id, ?, ?, ?, ?, ?, ?, ? FROM deal_flow_entries WHERE scope_key = ? AND deal_id = ?`)
-    .bind(scope.key, dealId, scope.user.id, kind, from, to, reason, scope.key, dealId);
+    SELECT id, ?, ?, ?, ?, ?, ?, ? FROM deal_flow_entries WHERE uid = ? AND scope_key = ? AND deal_id = ?` + (guard ? GUARD : ''))
+    .bind(scope.key, dealId, scope.user.id, kind, from, to, reason, uid, scope.key, dealId, ...(guard ? guardBinds(guard) : []));
 
 /** Adds a deal. `via_key` is a New for you item; its source says how it entered. */
 export async function addToFlow(env: Env, scope: Scope, input: Record<string, unknown>) {
@@ -159,11 +172,16 @@ export async function addToFlow(env: Env, scope: Scope, input: Record<string, un
   }
   const owner = await validOwner(env, scope, input.owner_user_id);
   if (await entryOf(env, scope, dealId)) throw new FlowError('already_in_flow', 409, 'This deal is already in your deal flow.');
-  await env.DB.batch([
+  // D4632: a second add in flight (a double click, a retry) writes nothing:
+  // the row is skipped when one exists, and the history names this row's own
+  // uid, so it cannot attach to the other add's row.
+  const uid = crypto.randomUUID();
+  const results = await env.DB.batch([
     env.DB.prepare(`INSERT INTO deal_flow_entries (uid, scope_key, company_id, investor_user_id, deal_id, stage, owner_user_id, entered_via)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).bind(crypto.randomUUID(), scope.key, scope.companyId, scope.user.id, dealId, stage, owner, via),
-    event(env, scope, dealId, 'entered', null, stage),
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?` + NOT_IN_FLOW).bind(uid, scope.key, scope.companyId, scope.user.id, dealId, stage, owner, via, scope.key, dealId),
+    event(env, scope, dealId, uid, 'entered', null, stage),
   ]);
+  if (Number(results[0]?.meta?.changes) !== 1) throw new FlowError('already_in_flow', 409, 'This deal is already in your deal flow.');
   return readOne(env, scope, dealId);
 }
 
@@ -171,30 +189,39 @@ export async function addToFlow(env: Env, scope: Scope, input: Record<string, un
 export async function updateFlow(env: Env, scope: Scope, dealId: number, input: Record<string, unknown>) {
   const entry = await entryOf(env, scope, dealId);
   if (!entry) throw new FlowError('not_in_flow', 404, 'This deal is not in your deal flow.');
-  const statements: D1PreparedStatement[] = [];
-  if (input.stage !== undefined && input.stage !== entry.stage) {
-    const stage = input.stage as Stage;
+  // D4632: everything is validated before anything is written. With a move,
+  // every statement carries the version guard and the move runs LAST, so the
+  // owner, the note and every history row land only with it.
+  const moving = input.stage !== undefined && input.stage !== entry.stage;
+  const stage = input.stage as Stage;
+  if (moving) {
     if (!STAGES.includes(stage)) throw new FlowError('invalid_stage', 400, 'Choose one of the stages.');
     if (stage === 'passed') throw new FlowError('use_pass', 400, 'Pass with its reason instead.');
     if (stage === 'closing' && !(await hasCommitment(env, scope, dealId))) throw new FlowError('closing_needs_commitment', 409, 'Closing follows a commitment. Commit on the deal page first.');
+  }
+  const owner = input.owner_user_id !== undefined ? await validOwner(env, scope, input.owner_user_id) : undefined;
+  const note = input.note !== undefined ? textOrNull(input.note, NOTE_MAX, 'invalid_note') : undefined;
+  const guard = moving ? GUARD : '';
+  const gb = moving ? guardBinds(entry) : [];
+  // The move's history row first, so the events read in the order sent.
+  const statements: D1PreparedStatement[] = moving ? [event(env, scope, dealId, entry.uid, 'moved', entry.stage, stage, null, entry)] : [];
+  if (owner !== undefined) {
+    statements.push(env.DB.prepare("UPDATE deal_flow_entries SET owner_user_id = ?, updated_at = datetime('now') WHERE scope_key = ? AND deal_id = ?" + guard).bind(owner, scope.key, dealId, ...gb),
+      event(env, scope, dealId, entry.uid, 'owner', null, null, null, moving ? entry : null));
+  }
+  if (note !== undefined) {
+    statements.push(env.DB.prepare("UPDATE deal_flow_entries SET note = ?, updated_at = datetime('now') WHERE scope_key = ? AND deal_id = ?" + guard).bind(note, scope.key, dealId, ...gb),
+      event(env, scope, dealId, entry.uid, 'note', null, null, null, moving ? entry : null));
+  }
+  if (moving) {
     // Leaving Passed keeps the pass in the events and clears it from the row.
     statements.push(env.DB.prepare(`UPDATE deal_flow_entries SET stage = ?, stage_changed_at = datetime('now'), updated_at = datetime('now'),
-        pass_reason = NULL, passed_at = NULL, revisit = NULL, revisit_at = NULL WHERE scope_key = ? AND deal_id = ? AND stage = ?`)
-      .bind(stage, scope.key, dealId, entry.stage), event(env, scope, dealId, 'moved', entry.stage, stage));
-  }
-  if (input.owner_user_id !== undefined) {
-    const owner = await validOwner(env, scope, input.owner_user_id);
-    statements.push(env.DB.prepare("UPDATE deal_flow_entries SET owner_user_id = ?, updated_at = datetime('now') WHERE scope_key = ? AND deal_id = ?").bind(owner, scope.key, dealId),
-      event(env, scope, dealId, 'owner', null, null));
-  }
-  if (input.note !== undefined) {
-    const note = textOrNull(input.note, NOTE_MAX, 'invalid_note');
-    statements.push(env.DB.prepare("UPDATE deal_flow_entries SET note = ?, updated_at = datetime('now') WHERE scope_key = ? AND deal_id = ?").bind(note, scope.key, dealId),
-      event(env, scope, dealId, 'note', null, null));
+        pass_reason = NULL, passed_at = NULL, revisit = NULL, revisit_at = NULL WHERE scope_key = ? AND deal_id = ?` + GUARD)
+        .bind(stage, scope.key, dealId, ...gb));
   }
   if (!statements.length) return readOne(env, scope, dealId);
   const result = await env.DB.batch(statements);
-  if (input.stage !== undefined && input.stage !== entry.stage && Number(result[0]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again.');
+  if (moving && Number(result[result.length - 1]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again. Nothing was saved.');
   return readOne(env, scope, dealId);
 }
 
@@ -221,24 +248,29 @@ export async function passDeal(env: Env, scope: Scope, dealId: number, input: Re
       if (!item) throw new FlowError('inbox_item_not_found', 404, 'That item is no longer new for you.');
       via = item.entered_via;
     }
-    await env.DB.batch([
+    const uid = crypto.randomUUID();
+    const added = await env.DB.batch([
       env.DB.prepare(`INSERT INTO deal_flow_entries (uid, scope_key, company_id, investor_user_id, deal_id, stage, owner_user_id, entered_via, pass_reason, passed_at, revisit, revisit_at, note)
-        VALUES (?, ?, ?, ?, ?, 'passed', ?, ?, ?, datetime('now'), ?, ?, ?)`)
-        .bind(crypto.randomUUID(), scope.key, scope.companyId, scope.user.id, dealId, scope.user.id, via, reason, revisit, revisitAt, note ?? null),
-      event(env, scope, dealId, 'entered', null, 'passed'),
-      event(env, scope, dealId, 'passed', null, 'passed', reason),
+        SELECT ?, ?, ?, ?, ?, 'passed', ?, ?, ?, datetime('now'), ?, ?, ?` + NOT_IN_FLOW)
+        .bind(uid, scope.key, scope.companyId, scope.user.id, dealId, scope.user.id, via, reason, revisit, revisitAt, note ?? null, scope.key, dealId),
+      event(env, scope, dealId, uid, 'entered', null, 'passed'),
+      event(env, scope, dealId, uid, 'passed', null, 'passed', reason),
     ]);
+    // D4632: another add or pass landed first. Nothing of this one was written.
+    if (Number(added[0]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again. Nothing was saved.');
     return readOne(env, scope, dealId);
   }
   if (entry.stage === 'passed') throw new FlowError('already_passed', 409, 'You have already passed on this deal.');
+  // D4632: the history row first, then the pass, both under the version
+  // guard: a move or pass that landed meanwhile leaves both unwritten.
   const statements = [
+    event(env, scope, dealId, entry.uid, 'passed', entry.stage, 'passed', reason, entry),
     env.DB.prepare(`UPDATE deal_flow_entries SET stage = 'passed', stage_changed_at = datetime('now'), updated_at = datetime('now'), pass_reason = ?, passed_at = datetime('now'),
-        revisit = ?, revisit_at = ?` + (note === undefined ? '' : ', note = ?') + ' WHERE scope_key = ? AND deal_id = ? AND stage = ?')
-      .bind(...[reason, revisit, revisitAt, ...(note === undefined ? [] : [note]), scope.key, dealId, entry.stage]),
-    event(env, scope, dealId, 'passed', entry.stage, 'passed', reason),
+        revisit = ?, revisit_at = ?` + (note === undefined ? '' : ', note = ?') + ' WHERE scope_key = ? AND deal_id = ?' + GUARD)
+      .bind(...[reason, revisit, revisitAt, ...(note === undefined ? [] : [note]), scope.key, dealId, ...guardBinds(entry)]),
   ];
   const result = await env.DB.batch(statements);
-  if (Number(result[0]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again.');
+  if (Number(result[1]?.meta?.changes) !== 1) throw new FlowError('flow_changed', 409, 'This deal moved meanwhile. Reload and try again. Nothing was saved.');
   return readOne(env, scope, dealId);
 }
 

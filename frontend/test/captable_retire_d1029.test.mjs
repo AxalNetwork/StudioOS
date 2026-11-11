@@ -1,3 +1,4 @@
+import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 /**
  * D1029 (#2866, part 14 of #2432) — the old Cap table pages are retired.
  *
@@ -102,7 +103,7 @@ test('/raise/capital/cap-table → /raise/cap-table?moved=cap-table, the query, 
 test('/build/captable → /raise/cap-table, no chain through the old page and no notice', async () => {
   const v = await mounted('/build/captable?project=5&x=1#top');
   try { assert.deepEqual(v.landed(), { path: '/raise/cap-table', search: '?x=1&project_id=5', hash: '#top' }); } finally { await v.close(); }
-  assert.match(APP, /<Route path="\/build\/captable" element=\{<CapTableMovedRedirect to="\/raise\/cap-table" \/>\} \/>/);
+  assert.doesNotMatch(APP, /<Route path="\/build\/captable" element=\{<CapTableMovedRedirect to="\/raise\/cap-table" \/>\} \/>/);
 });
 
 test('/raise/cap-table/variants → /raise/cap-table/scenarios?moved=variants, the query, the hash and ?project= kept', async () => {
@@ -118,7 +119,7 @@ test('/raise/cap-table/variants/:variant → /raise/cap-table/scenarios/:variant
 test('App.jsx mounts exactly these four, unguarded (the tool\'s own routes guard), and the old pages are gone', () => {
   for (const [path, { to, moved }] of OLD) {
     const line = APP.split('\n').find((l) => l.includes(`<Route path="${path}" element=`)) || '';
-    assert.equal(line.trim(), `<Route path="${path}" element={<CapTableMovedRedirect to="${to}"${moved ? ` moved="${moved}"` : ''} />} />`, path);
+    assert.equal(line.trim(), isRetiredRedirect(path) ? '' : `<Route path="${path}" element={<CapTableMovedRedirect to="${to}"${moved ? ` moved="${moved}"` : ''} />} />`, path);
   }
   assert.doesNotMatch(APP, /CapTableVariantsPage/);
   for (const gone of ['frontend/src/pages/CapTablePage.jsx', 'frontend/src/pages/CapTableVariantsPage.jsx', 'frontend/src/pages/captable']) assert.equal(existsSync(resolve(root, gone)), false, gone);
@@ -126,15 +127,15 @@ test('App.jsx mounts exactly these four, unguarded (the tool\'s own routes guard
   assert.equal(existsSync(resolve(root, 'frontend/src/pages/CapitalWorkspacePage.jsx')), false, 'D1180 deleted the workspace; it has no Cap Table tab');
 });
 
-test('each old address is counted for #2319, and none is kept past the 90 days', () => {
+test('D2319 removes unused Cap table keys and preserves the opened alias', () => {
   for (const [path] of OLD) {
     const row = REDIRECT_ROUTES.find((r) => r.path === path);
-    assert.ok(row, `${path} is not on REDIRECT_ROUTES`);
-    assert.equal(row.keep, undefined, `${path} is kept`);
+    assert.equal(Boolean(row), !isRetiredRedirect(path), path);
+    assert.equal(row?.keep, undefined, `${path} is kept`);
   }
   assert.equal(redirectPatternFor('/raise/capital/cap-table'), '/raise/capital/cap-table');
-  assert.equal(redirectPatternFor('/raise/cap-table/variants'), '/raise/cap-table/variants');
-  assert.equal(redirectPatternFor('/raise/cap-table/variants/v1'), '/raise/cap-table/variants/:variant');
+  assert.equal(redirectPatternFor('/raise/cap-table/variants'), null);
+  assert.equal(redirectPatternFor('/raise/cap-table/variants/v1'), null);
   assert.equal(redirectPatternFor('/raise/cap-table'), null, 'the tool itself is no redirect');
 });
 

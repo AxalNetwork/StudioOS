@@ -35,9 +35,11 @@ test('a zone and its root read one stored pick, so the card and the run agree', 
   assert.match(src, /railPrefsApi\.setPagePick\(pageKey, id, optionKey\)/, 'the pick is not stored per page');
   assert.match(src, /\{rail\.cards\.map\(\(card\) => \{/, 'a zone does not draw the cards in use');
   // The Worker reads the pick a rail run takes from the same rows the route
-  // writes: section = the page key lower-cased, task = the option or 'page'.
+  // writes: section = the page key lower-cased, task = the option. #4313 part 2
+  // (D4313): the page itself has no pick, so the task is always an option.
   const ai = codeOnly(read('cloudflare-worker/src/routes/ai.ts'));
-  assert.match(ai, /const task = option \?\? 'page';/);
+  assert.match(ai, /const task = option as string;/);
+  assert.match(ai, /code: 'option_required'/);
   assert.match(ai, /writeRailPreference\(c\.env, Number\(user\.id\), railSectionOf\(row\), task,/);
   const router = codeOnly(read('cloudflare-worker/src/services/aiRouter.ts'));
   assert.match(router, /\.bind\(userId, page\.trim\(\)\.toLowerCase\(\), 'page', option \?\? 'page'\)/,

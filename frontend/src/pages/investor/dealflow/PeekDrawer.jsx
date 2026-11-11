@@ -15,6 +15,7 @@ import { actionGhost, actionPrimary } from '../../../ui';
 import VentureScorecard from '../../../components/scoring/scorecard/Scorecard';
 import { SCOPE_KEYS, SCOPE_LABEL, STAGE_WORD, enteredWord, moveTargets, stageWord } from './flowModel';
 import { AskCell, DaysCell, FitCell, ScopeCell } from './FlowCells';
+import WhoKnowsStrip from '../../relationships/WhoKnowsStrip.jsx';
 
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const MUTED = 'm-0 text-[12.5px] text-axal-muted dark:text-gray-400';
@@ -58,6 +59,8 @@ export default function PeekDrawer({ row, picked = [], onClose, onMove, onPass, 
             ? <Link to={`/deals/${row.id}`} className="ml-auto text-[12.5px] font-semibold text-violet-700 underline hover:text-violet-900 dark:text-violet-300 dark:hover:text-violet-100" data-testid="dealflow-peek-open">Open deal page ›</Link>
             : <span className={`${MUTED} ml-auto`}>Opens once you are invited or commit.</span>}
         </div>
+        {/* D1357 (#3572, RI2): teammates who shared knowing someone at this company. */}
+        {row.name ? <WhoKnowsStrip query={{ company: row.name }} subject={`someone at ${row.name}`} testId="dealflow-who-knows" /> : null}
 
         <section className="flex flex-col gap-1" aria-labelledby="peek-scores">
           <h3 id="peek-scores" className={EYE}>Scores by scope</h3>

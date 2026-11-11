@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 import { notifyReasonedRead } from '../services/reasonedReadNotice';
 import { readRecord } from '../services/capTableRecord';
 import { recordAccessView, recordHolder } from '../services/capTableAccessRecord';
@@ -16,7 +17,10 @@ import { recordAccessView, recordHolder } from '../services/capTableAccessRecord
  *   GET    /:projectId/links                  owner and co-founders: the venture's share links
  *   POST   /:projectId/links                  owner: { level, label?, expires_in_hours?, view_limit?, holders_agreed? }
  *   DELETE /:projectId/links/:id              owner: revoke
- *   POST   /:projectId/ask                    an investor related to the venture, not shared with: asks the founder (D1027)
+ *   POST   /:projectId/ask                    an investor related to the venture, not shared with: { level?, note? }; stores a pending request (D1027, D1130)
+ *   GET    /:projectId/requests               owner and co-founders: the pending requests (D1130)
+ *   POST   /:projectId/requests/:uid/approve  owner: { level? }; grants that level and resolves the request in one batch
+ *   POST   /:projectId/requests/:uid/decline  owner: resolves the request; nothing is granted
  *
  * `services/captableAccess.ts` says who reads at which level, and
  * `services/captableShare.ts` what each level returns. Every view is built
@@ -214,40 +218,172 @@ r.get('/:projectId', async (c) => {
 });
 
 /**
- * D1027 (CT15n): "Ask for access". An investor related to the venture
- * (`investorProjectIds`) whom the founder has not shared with asks once a day;
- * the founder is told and answers by granting a level on their Access tab
- * (D1026). One `captable_access_asked` audit row. Nothing is granted here.
+ * D1027 (CT15n), stored by D1130 (#3010): "Ask for access". An investor related
+ * to the venture (`investorProjectIds`) whom the founder has not shared with
+ * asks for a level. The ask is a row in `cap_table_access_requests`, pending
+ * until the founder approves it at a level or declines it on their Access tab.
+ * One pending ask per person and venture; after a decline, once a day.
+ * One `captable_access_asked` audit row. Nothing is granted here.
  */
 export const ASK_SENT = 'Asked. The founder answers on their Access tab.';
+export const ASK_LEVELS = ['own_position', 'summary', 'investor', 'full'] as const;
+export type AskLevel = typeof ASK_LEVELS[number];
+const NOTE_MAX = 500;
+const isAskLevel = (v: unknown): v is AskLevel => typeof v === 'string' && (ASK_LEVELS as readonly string[]).includes(v);
+
 r.post('/:projectId/ask', async (c) => {
   try {
     const user = await requireAuth(c);
-    if (String(user.role ?? '').toLowerCase() !== 'investor') throw new Refusal(403, 'investors_only', 'Only an investor asks a founder for their cap table.');
+    if (!holdsLicence(user, 'investor')) throw new Refusal(403, 'investors_only', 'Only an investor asks a founder for their cap table.');
     if (await isSupportSession(c)) throw new Refusal(403, SUPPORT_SESSION_REFUSED_CODE, 'A support session cannot ask for access.');
     const p = await projectOr404(c);
     const related = await investorProjectIds(c.env, user as any, null);
     if (!related || !related.includes(p.id)) throw new Refusal(404, 'not_a_venture', 'No venture has that id.');
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    if (body.level !== undefined && !isAskLevel(body.level)) throw new Refusal(400, 'bad_level', 'Ask for own_position, summary, investor or full.');
+    const level: AskLevel = isAskLevel(body.level) ? body.level : 'investor';
+    if (body.note !== undefined && body.note !== null && typeof body.note !== 'string') throw new Refusal(400, 'bad_note', 'The note is text, at most 500 characters.');
+    const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null;
+    if (note && note.length > NOTE_MAX) throw new Refusal(400, 'bad_note', 'The note is text, at most 500 characters.');
     const a = await resolveAccess(c.env, user as any, p);
     if (a.ok) throw new Refusal(409, 'already_shared', 'The founder already shares the cap table with you.');
-    const recent = await c.env.DB.prepare(
-      `SELECT 1 FROM activity_logs WHERE project_id = ? AND user_id = ? AND action = 'captable_access_asked' AND created_at > datetime('now', '-1 day') LIMIT 1`,
+    const waiting = await c.env.DB.prepare(
+      `SELECT 1 FROM cap_table_access_requests WHERE project_id = ? AND requester_user_id = ?
+          AND (status = 'pending' OR (status = 'declined' AND resolved_at > datetime('now', '-1 day'))) LIMIT 1`,
     ).bind(p.id, user.id).first();
-    if (recent) throw new Refusal(409, 'already_asked', 'You asked in the last day. The founder answers on their Access tab.');
-    await audit(c.env, p.id, user.id, 'captable_access_asked', { level_now: 'none' });
-    // The founder is told. Best-effort: the audit row is the record.
+    if (waiting) throw new Refusal(409, 'already_asked', 'You asked in the last day. The founder answers on their Access tab.');
+    const uid = crypto.randomUUID();
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare(
+          'INSERT INTO cap_table_access_requests (uid, project_id, requester_user_id, requested_level, note) VALUES (?, ?, ?, ?, ?)',
+        ).bind(uid, p.id, user.id, level, note),
+        auditStmt(c.env, p.id, user.id, 'captable_access_asked', { level_now: 'none', requested_level: level, request_uid: uid }),
+      ]);
+    } catch (e) {
+      // The partial unique index: a pending ask landed between the read and the write.
+      if (/UNIQUE/i.test(String((e as Error)?.message))) throw new Refusal(409, 'already_asked', 'You asked in the last day. The founder answers on their Access tab.');
+      throw e;
+    }
+    // The founder is told. Best-effort: the request row is the record.
     try {
       const owners = (await c.env.DB.prepare('SELECT id FROM users WHERE founder_id = ? AND is_active = 1').bind(p.founder_id).all<{ id: number }>()).results || [];
       for (const o of owners) {
         await notify(c.env, {
           userId: Number(o.id), type: 'captable_access_asked',
           title: `An investor asked to see ${p.name ? `${p.name}’s` : 'your'} cap table`,
-          body: 'Choose a level on your Access tab, or leave it unshared.', link: `/raise/cap-table/access?project_id=${p.id}`,
+          body: 'Approve it at a level on your Access tab, or decline it.', link: `/raise/cap-table/access?project_id=${p.id}`,
           payload: { project_id: p.id }, channels: ['in_app'], category: 'deals',
         });
       }
     } catch { console.warn('[captable-access] ask notify failed'); }
-    return c.json({ ok: true, asked: true, message: ASK_SENT });
+    return c.json({ ok: true, asked: true, message: ASK_SENT, request: { uid, requested_level: level, status: 'pending' } });
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+/** The pending asks, for the venture's founders. A name and role, never an email. */
+r.get('/:projectId/requests', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const p = await projectOr404(c);
+    const me = await teamOf(c, user, p);
+    const rows = await c.env.DB.prepare(
+      `SELECT q.uid, u.uid AS user_uid, u.name AS name, u.role AS role, q.requested_level, q.note, q.created_at AS asked_at
+         FROM cap_table_access_requests q JOIN users u ON u.id = q.requester_user_id
+        WHERE q.project_id = ? AND q.status = 'pending' ORDER BY q.created_at, q.id LIMIT 100`,
+    ).bind(p.id).all<Record<string, unknown>>();
+    return c.json({ requests: rows.results || [], can_change: me.owner });
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+const pendingOf = async (c: C, p: Project) => {
+  const uid = String(c.req.param('uid') || '');
+  const q = await c.env.DB.prepare(
+    'SELECT id, uid, requester_user_id, requested_level, status FROM cap_table_access_requests WHERE uid = ? AND project_id = ?',
+  ).bind(uid, p.id).first<{ id: number; uid: string; requester_user_id: number; requested_level: AskLevel; status: string }>();
+  if (!q) throw new Refusal(404, 'no_such_request', 'This venture has no request with that id.');
+  if (q.status !== 'pending') throw new Refusal(409, 'already_answered', 'This request was already answered.');
+  return q;
+};
+
+const tellAsker = async (env: Env, userId: number, p: Project, approved: boolean) => {
+  try {
+    await notify(env, {
+      userId, type: approved ? 'captable_access_approved' : 'captable_access_declined',
+      title: approved ? `${p.name || 'The founder'} shared the cap table with you` : `${p.name || 'The founder'} did not share the cap table`,
+      body: approved ? 'Open it from the venture’s page.' : 'You can ask again after a day.',
+      link: `/deals?project_id=${p.id}`, payload: { project_id: p.id }, channels: ['in_app'], category: 'deals',
+    });
+  } catch { console.warn('[captable-access] answer notify failed'); }
+};
+
+/**
+ * The owner approves an ask at a level (the asked level unless they name
+ * another). The request's resolution, the revoke of any live grant, the new
+ * grant and the audit row land in one batch, and every statement after the
+ * first only acts on a request this batch has just resolved, so an ask
+ * answered twice grants once.
+ */
+r.post('/:projectId/requests/:uid/approve', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const p = await projectOr404(c);
+    await ownerOf(c, user, p);
+    const q = await pendingOf(c, p);
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    if (body.level !== undefined && !isAskLevel(body.level)) throw new Refusal(400, 'bad_level', 'Approve at own_position, summary, investor or full.');
+    const level: AskLevel = isAskLevel(body.level) ? body.level : q.requested_level;
+    // Each later statement repeats the same literal condition: acts only on the request this batch just resolved.
+    const out = await c.env.DB.batch([
+      c.env.DB.prepare(
+        "UPDATE cap_table_access_requests SET status = 'approved', granted_level = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      ).bind(level, user.id, q.id),
+      c.env.DB.prepare(
+        `UPDATE cap_table_access_grants SET revoked_at = datetime('now'), revoked_by = ? WHERE project_id = ? AND user_id = ? AND revoked_at IS NULL AND EXISTS (SELECT 1 FROM cap_table_access_requests WHERE id = ? AND status = 'approved' AND resolved_by = ? AND grant_id IS NULL)`,
+      ).bind(user.id, p.id, q.requester_user_id, q.id, user.id),
+      c.env.DB.prepare(
+        `INSERT INTO cap_table_access_grants (project_id, user_id, holder_ref, level, source, source_ref, granted_by) SELECT ?, ?, NULL, ?, 'founder', ?, ? WHERE EXISTS (SELECT 1 FROM cap_table_access_requests WHERE id = ? AND status = 'approved' AND resolved_by = ? AND grant_id IS NULL)`,
+      ).bind(p.id, q.requester_user_id, level, `request:${q.uid}`, user.id, q.id, user.id),
+      c.env.DB.prepare(
+        `INSERT INTO activity_logs (project_id, user_id, action, details, actor) SELECT ?, ?, 'captable_access_granted', ?, ? WHERE EXISTS (SELECT 1 FROM cap_table_access_requests WHERE id = ? AND status = 'approved' AND resolved_by = ? AND grant_id IS NULL)`,
+      ).bind(p.id, user.id, JSON.stringify({ level, source: 'request', request_uid: q.uid, target_user_id: q.requester_user_id }), `user:${user.id}`, q.id, user.id),
+      c.env.DB.prepare(
+        `UPDATE cap_table_access_requests SET grant_id = (SELECT max(id) FROM cap_table_access_grants WHERE project_id = ? AND user_id = ? AND revoked_at IS NULL)
+          WHERE id = ? AND status = 'approved' AND resolved_by = ? AND grant_id IS NULL`,
+      ).bind(p.id, q.requester_user_id, q.id, user.id),
+    ]);
+    if (!Number((out?.[0] as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_answered', 'This request was already answered.');
+    await tellAsker(c.env, q.requester_user_id, p, true);
+    const g = await c.env.DB.prepare('SELECT grant_id FROM cap_table_access_requests WHERE id = ?').bind(q.id).first<{ grant_id: number | null }>();
+    return c.json({ ok: true, request: { uid: q.uid, status: 'approved', granted_level: level, grant_id: g?.grant_id ?? null } });
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+/** The owner declines an ask. Nothing is granted; the asker can ask again after a day. */
+r.post('/:projectId/requests/:uid/decline', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const p = await projectOr404(c);
+    await ownerOf(c, user, p);
+    const q = await pendingOf(c, p);
+    const out = await c.env.DB.batch([
+      c.env.DB.prepare(
+        "UPDATE cap_table_access_requests SET status = 'declined', resolved_by = ?, resolved_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      ).bind(user.id, q.id),
+      c.env.DB.prepare(
+        `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+         SELECT ?, ?, 'captable_access_declined', ?, ? WHERE EXISTS (SELECT 1 FROM cap_table_access_requests WHERE id = ? AND status = 'declined' AND resolved_by = ?)`,
+      ).bind(p.id, user.id, JSON.stringify({ request_uid: q.uid, target_user_id: q.requester_user_id }), `user:${user.id}`, q.id, user.id),
+    ]);
+    if (!Number((out?.[0] as any)?.meta?.changes ?? 0)) throw new Refusal(409, 'already_answered', 'This request was already answered.');
+    await tellAsker(c.env, q.requester_user_id, p, false);
+    return c.json({ ok: true, request: { uid: q.uid, status: 'declined' } });
   } catch (e) {
     return answer(c, e);
   }

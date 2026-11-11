@@ -29,7 +29,7 @@ import teamAgents from '../src/routes/team_agents.ts';
 import { ROLES } from '../src/services/agents/catalogue.ts';
 import { FIT_V2_VALUES } from '../src/services/axalFit.ts';
 import {
-  AREAS, AREA_VALUES, PERSONAS, REST_SCORES, ROLE_PERSONA, TOP_SCORES, VALUE_LEGEND, naturalFit, personaDto, personaOf, valueScores,
+  AREAS, PERSONAS, REST_SCORES, ROLE_PERSONA, TOP_SCORES, VALUE_LEGEND, naturalFit, personaDto, personaOf, valueScores,
 } from '../src/services/agents/personas.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
@@ -100,7 +100,7 @@ function noTitles(text: string, where: string) {
 // 1 ───────────────────────────────────────────────────────────────────────────
 test('the catalogue: 16 single-named personas, 8 women and 8 men, the 6 Axal values, top 3 highest, all distinct', () => {
   // Mutations checked: a persona given a family name → the single-word assert fails; a seventh value key added to
-  // valueScores → the key-set assert fails; Kade's top 3 set equal to Ilyse's → the distinct-sets assert fails;
+  // valueScores → the key-set assert fails; Kade's top 3 list equal to Ilyse's → the distinct-lists assert fails;
   // REST_SCORES[0] raised to 0.75 → the top-3-highest assert fails.
   assert.deepEqual(PERSONAS.map((p) => p.key), KEYS);
   assert.equal(new Set(PERSONAS.map((p) => p.name)).size, 16);
@@ -119,12 +119,13 @@ test('the catalogue: 16 single-named personas, 8 women and 8 men, the 6 Axal val
   }
   assert.equal(PERSONAS.filter((p) => p.gender === 'woman').length, 8);
   assert.equal(PERSONAS.filter((p) => p.gender === 'man').length, 8);
-  assert.equal(new Set(PERSONAS.map((p) => [...p.top_values].sort().join('+'))).size, 16, '16 distinct top-3 sets');
+  // D4388: the canvas gives three personas one set of values in three orders, and two another, so the lists differ, not the sets.
+  assert.equal(new Set(PERSONAS.map((p) => p.top_values.join('+'))).size, 16, '16 distinct ordered top-3 lists');
   assert.equal(new Set(PERSONAS.map((p) => JSON.stringify(p.values))).size, 16, '16 pairwise different profiles');
   // #4116's table, spot-checked: the risk words and the top 3 in order.
   assert.deepEqual([personaOf('orrin')!.risk, personaOf('ilyse')!.risk, personaOf('draxen')!.risk, personaOf('solen')!.risk], [1, 5, 5, 3]);
-  assert.deepEqual(personaOf('vesta')!.top_values, ['integrity', 'stewardship', 'collaboration']);
-  assert.deepEqual(personaOf('draxen')!.top_values, ['ambition', 'resilience', 'integrity']);
+  assert.deepEqual(personaOf('vesta')!.top_values, ['integrity', 'collaboration', 'stewardship']);
+  assert.deepEqual(personaOf('draxen')!.top_values, ['ambition', 'integrity', 'resilience']);
   assert.equal(personaOf('vesta')!.tagline, 'No gate opens without its seal.');
   assert.deepEqual(valueScores(['curiosity', 'ambition', 'resilience']),
     { curiosity: TOP_SCORES[0], ambition: TOP_SCORES[1], resilience: TOP_SCORES[2], integrity: REST_SCORES[0], stewardship: REST_SCORES[1], collaboration: REST_SCORES[2] });
@@ -134,22 +135,21 @@ test('the catalogue: 16 single-named personas, 8 women and 8 men, the 6 Axal val
 });
 
 // 2 ───────────────────────────────────────────────────────────────────────────
-test('natural fit: two different areas, the highest value pairs, ties in the radar order', () => {
-  // Mutations checked: the tie-break dropped (sort by score only, reversed input) → Vesta's finance-before-legal fails;
-  // AREA_VALUES.engineering pointed at curiosity → Corvane's fit changes and fails.
+test('natural fit: the canvas\'s two areas, stored; naturalFit() stays the advisory rule for custom agents', () => {
+  // Mutations checked: natural_fit derived from naturalFit(values) again → Vesta's legal-first fails; the tie-break dropped
+  // from naturalFit (sort by score only) → the custom-agent pair's order fails; AREA_VALUES.design pointed at curiosity → it changes.
   for (const p of PERSONAS) {
     assert.equal(p.natural_fit.length, 2);
     assert.notEqual(p.natural_fit[0], p.natural_fit[1]);
     for (const a of p.natural_fit) assert.ok(AREAS.includes(a), `${p.key}: ${a}`);
-    const sum = (a: string) => p.values[AREA_VALUES[a as keyof typeof AREA_VALUES][0]] + p.values[AREA_VALUES[a as keyof typeof AREA_VALUES][1]];
-    const best = Math.max(...AREAS.map(sum));
-    assert.ok(Math.abs(sum(p.natural_fit[0]) - best) < 1e-9, `${p.key}: the first fit is a best area`);
   }
-  assert.deepEqual(personaOf('vesta')!.natural_fit, ['finance', 'legal']);
-  assert.deepEqual(personaOf('ilyse')!.natural_fit, ['gtm', 'capital']);
+  assert.deepEqual(personaOf('vesta')!.natural_fit, ['legal', 'finance']);
+  assert.deepEqual(personaOf('ilyse')!.natural_fit, ['gtm', 'marketing']);
   assert.deepEqual(personaOf('kade')!.natural_fit, ['product', 'marketing']);
-  assert.deepEqual(personaOf('corvane')!.natural_fit, ['engineering', 'finance']);
+  assert.deepEqual(personaOf('corvane')!.natural_fit, ['product', 'design']);
+  // The rule is a suggestion for a custom agent's values; it is not what a persona carries.
   assert.deepEqual(naturalFit(valueScores(['collaboration', 'stewardship', 'integrity'])), ['design', 'finance']);
+  assert.ok(PERSONAS.some((p) => naturalFit(p.values).join() !== p.natural_fit.join()), 'the stored areas are not the rule\'s');
 });
 
 // 3 ───────────────────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ test('immutable: the catalogue is frozen, a DTO is a copy, and no route writes a
   const dto = personaDto(personaOf('vesta')!);
   dto.values.integrity = 0; dto.natural_fit[0] = 'gtm';
   assert.equal(personaOf('vesta')!.values.integrity, TOP_SCORES[0]);
-  assert.equal(personaOf('vesta')!.natural_fit[0], 'finance');
+  assert.equal(personaOf('vesta')!.natural_fit[0], 'legal');
   const w = world();
   for (const m of ['POST', 'PUT', 'PATCH', 'DELETE']) assert.equal((await call(w, EDITOR, m, '/personas', { name: 'X' })).status, 404, m);
   const r = await call(w, MEMBER, 'GET', '/personas');
@@ -250,4 +250,43 @@ test('no job title, outlook, trade-off or Schwartz value reaches the client in a
   const patched = await call(w, EDITOR, 'PATCH', `/agents/${a.body.agent.uid}`, { status: 'paused' });
   assert.equal(patched.status, 200);
   noTitles(patched.text, 'PATCH agent');
+});
+
+// D4388 (#4388) ──────────────────────────────────────────────────────────────
+// The owner's revised HQ › AI agents canvas: each persona's three values, in the canvas's order, and its two areas.
+const CANVAS: Record<string, [string[], string[]]> = {
+  vesta: [['integrity', 'collaboration', 'stewardship'], ['legal', 'finance']],
+  aurel: [['integrity', 'collaboration', 'resilience'], ['finance', 'legal']],
+  kade: [['curiosity', 'ambition', 'collaboration'], ['product', 'marketing']],
+  elara: [['collaboration', 'stewardship', 'curiosity'], ['design', 'product']],
+  tessaly: [['curiosity', 'stewardship', 'integrity'], ['finance', 'capital']],
+  solen: [['stewardship', 'collaboration', 'integrity'], ['capital', 'legal']],
+  seren: [['collaboration', 'integrity', 'stewardship'], ['engineering', 'product']],
+  brann: [['stewardship', 'resilience', 'collaboration'], ['engineering', 'design']],
+  ilyse: [['curiosity', 'ambition', 'resilience'], ['gtm', 'marketing']],
+  corin: [['collaboration', 'curiosity', 'ambition'], ['product', 'engineering']],
+  sylva: [['stewardship', 'collaboration', 'resilience'], ['capital', 'gtm']],
+  orrin: [['stewardship', 'integrity', 'resilience'], ['gtm', 'marketing']],
+  ryssa: [['ambition', 'curiosity', 'integrity'], ['capital', 'finance']],
+  draxen: [['ambition', 'integrity', 'resilience'], ['product', 'gtm']],
+  juno: [['stewardship', 'ambition', 'curiosity'], ['design', 'marketing']],
+  corvane: [['stewardship', 'resilience', 'integrity'], ['product', 'design']],
+};
+
+test('D4388: every persona\'s top values and areas are the canvas\'s, in its order, and the read returns them', async () => {
+  // Mutations checked: one seed's top values in the old order → its row fails; one seed's areas swapped → its row fails.
+  assert.deepEqual(Object.keys(CANVAS).sort(), [...KEYS].sort(), 'the table covers the 16');
+  for (const p of PERSONAS) {
+    assert.deepEqual([...p.top_values], CANVAS[p.key][0], `${p.key}: values`);
+    assert.deepEqual([...p.natural_fit], CANVAS[p.key][1], `${p.key}: areas`);
+    assert.deepEqual([...personaDto(p).natural_fit], CANVAS[p.key][1], `${p.key}: the DTO's natural_fit`);
+  }
+  const r = await call(world(), MEMBER, 'GET', '/personas');
+  for (const p of r.body.personas) assert.deepEqual(p.natural_fit, CANVAS[p.key][1], `${p.key}: the persona read`);
+});
+
+test('D4388: every value a persona carries is one of the six Axal values', () => {
+  // Mutation checked: a seed given a value outside FIT_V2_VALUES ("courage") → this fails (and tsc refuses it).
+  for (const p of PERSONAS) for (const v of p.top_values) assert.ok((FIT_V2_VALUES as readonly string[]).includes(v), `${p.key}: ${v}`);
+  assert.deepEqual([...FIT_V2_VALUES].sort(), ['ambition', 'collaboration', 'curiosity', 'integrity', 'resilience', 'stewardship']);
 });

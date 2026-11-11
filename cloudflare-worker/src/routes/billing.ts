@@ -1611,6 +1611,10 @@ billing.post('/stripe/webhook', async (c) => {
     } catch (e: any) {
       console.warn('[billing] expert connect mirror failed:', String(e?.message || e));
     }
+    // D5299 (#5299): the revenue ledger's row for this event, once. A failed write throws, so the receipt stays
+    // unfinished and the 503 below makes Stripe retry; a replay writes nothing new.
+    const { recordStripeFinancialEvent } = await import('../services/financialEvents');
+    await recordStripeFinancialEvent(c.env, event as Parameters<typeof recordStripeFinancialEvent>[1]);
     const completed = await c.env.DB.prepare(`UPDATE stripe_webhook_events
       SET handled_at = datetime('now'), processing_uid = NULL, processing_until = NULL
       WHERE event_id = ? AND processing_uid = ? AND handled_at IS NULL`)
@@ -1628,7 +1632,7 @@ billing.post('/stripe/webhook', async (c) => {
 
 async function handleStripeEvent(
   env: Env,
-  event: { id?: string; type: string; data: { object: Record<string, unknown> } },
+  event: { id?: string; type: string; created?: number; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
   // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
@@ -1658,6 +1662,12 @@ async function handleStripeEvent(
   if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
     const { syncSubscriptionAlerts } = await import('../services/billingAlerts');
     await syncSubscriptionAlerts(env, event.type, obj);
+  }
+  // D4292: an ended subscription's member no longer counts toward the
+  // influencer's milestone bonuses. Idempotent.
+  if (event.type === 'customer.subscription.deleted') {
+    const { onSubscriptionEnded } = await import('../services/influencerCommission');
+    await onSubscriptionEnded(env, obj);
   }
 
   switch (event.type) {
@@ -1729,7 +1739,8 @@ async function handleStripeEvent(
     case 'customer.subscription.updated':
     case 'customer.subscription.created': {
       // D783: what the member pays for this plan, for its AI allowance. Never fails the webhook.
-      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }); }
+      // D4703: ordered by the event's own `created`, so a late older event cannot overwrite a newer amount.
+      try { await recordSubscriptionAmount(env, obj, { isPlan, isTier, isInvestor }, typeof event.created === 'number' ? event.created : null); }
       catch (e) { console.warn('[billing] subscription amount not recorded:', (e as Error).message); }
       const customer = obj.customer as string | null;
       const status = (obj.status as string) ?? 'active';
@@ -2065,6 +2076,15 @@ async function handleStripeEvent(
           },
         });
       }
+      // D4855: the discount this payment took stops being a hold on the licence's
+      // promotion ceiling and counts for good. Idempotent: a re-delivered event
+      // commits a row that is already committed. A PI with no reservation (HQ,
+      // or made before this) names none and this does nothing.
+      const reservationRef = (meta.promo_reservation_ref || '').trim();
+      if (reservationRef) {
+        const { commitPromoReservation } = await import('../services/promoRedemption');
+        await commitPromoReservation(env, reservationRef);
+      }
       // Task #8 — universal referral commission. ANY PI stamped at creation
       // with referral attribution (referral_code + referrer_user_id + price_id)
       // earns the referrer a commission off the product's `commission_pct`
@@ -2077,7 +2097,10 @@ async function handleStripeEvent(
         const refPriceId = (meta.price_id || '').trim();
         const buyerUserId = Number(meta.user_id);
         const refPiId = (obj.id as string | null) ?? null;
-        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId) {
+        // D4292: no stacking. A payment whose subscription invoice already
+        // earned an influencer commission earns no purchase commission.
+        const { paymentEarnedInfluencerCommission } = await import('../services/influencerCommission');
+        if (refCode && referrerUserId && refPriceId && buyerUserId && refPiId && !(await paymentEarnedInfluencerCommission(env, refPiId))) {
           const { findCatalogProductByPriceId } = await import('../services/catalog');
           const found = await findCatalogProductByPriceId(env, refPriceId);
           const pct = Number(found?.product.metadata?.commission_pct);
@@ -2203,6 +2226,11 @@ async function handleStripeEvent(
         // D1274: a subscription's promo redemption, from its first paid invoice.
         const { recordInvoiceRedemption } = await import('../services/promoUsage');
         await recordInvoiceRedemption(env, obj);
+        // D4292: an attributed member's paid software invoice earns the
+        // influencer a pending commission, once per invoice id. A database
+        // failure throws so Stripe retries; every step above is idempotent.
+        const { onInvoicePaid } = await import('../services/influencerCommission');
+        await onInvoicePaid(env, obj);
       }
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);
@@ -2236,7 +2264,12 @@ async function handleStripeEvent(
     // untouched. A case that cannot act throws, so Stripe retries.
     // D1052 (#2903): a charge that is no token pack's may be a plan payment's:
     // it is recorded and the member is told (owner question 9).
+    // D4292: first, an influencer commission on the charge's invoice is
+    // cancelled inside its hold or clawed back after it. It acts only on a
+    // charge that paid such an invoice, and throws so Stripe retries.
     case 'charge.refunded': {
+      const { onChargeRefunded } = await import('../services/influencerCommission');
+      await onChargeRefunded(env, obj);
       const { reverseRefund } = await import('../services/aiCreditReversals');
       if (await reverseRefund(env, obj)) return;
       const { recordPlanRefund } = await import('../services/billingAlerts');
@@ -2244,6 +2277,8 @@ async function handleStripeEvent(
       return;
     }
     case 'charge.dispute.created': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
       const { reverseDispute } = await import('../services/aiCreditReversals');
       if (await reverseDispute(env, obj)) return;
       const { recordPlanDispute } = await import('../services/billingAlerts');
@@ -2251,6 +2286,8 @@ async function handleStripeEvent(
       return;
     }
     case 'charge.dispute.closed': {
+      const { onDispute } = await import('../services/influencerCommission');
+      await onDispute(env, event.type, obj);
       const { closeDispute } = await import('../services/aiCreditReversals');
       if (await closeDispute(env, obj)) return;
       const { closePlanDispute } = await import('../services/billingAlerts');

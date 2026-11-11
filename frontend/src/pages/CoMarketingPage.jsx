@@ -576,14 +576,14 @@ function PartnerView() {
  * pitch (`POST /comarketing/track`). Fire and forget: the link opens either
  * way, and a failed record never blocks the reader.
  */
-export function recordFeedVisit(p, client = api) {
+export function recordFeedVisit(p, client = api, landingPath = '/comarketing') {
   if (!p?.attribution_code) return null;
   return Promise.resolve()
-    .then(() => client.trackCoMarketing({ code: p.attribution_code, event_kind: 'visit', landing_path: '/comarketing' }))
+    .then(() => client.trackCoMarketing({ code: p.attribution_code, event_kind: 'visit', landing_path: landingPath }))
     .catch(() => null);
 }
 
-export function PublishedFeed() {
+export function PublishedFeed({ landingPath = '/comarketing' }) {
   const [items, setItems] = useState([]);
   const [err, setErr] = useState(null);
   useEffect(() => {
@@ -612,7 +612,7 @@ export function PublishedFeed() {
           <div className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap dark:text-gray-300">{p.summary}</div>
           {p.published_url && (
             <a href={safeExternalUrl(p.published_url)} target="_blank" rel="noreferrer"
-              onClick={() => { recordFeedVisit(p); }} data-testid={`feed-view-${p.uid}`}
+              onClick={() => { recordFeedVisit(p, api, landingPath); }} data-testid={`feed-view-${p.uid}`}
               className="mt-2 inline-flex items-center gap-1 text-xs text-violet-600 hover:underline dark:text-violet-300 dark:hover:underline">
               <Globe size={12} /> View
             </a>
@@ -623,7 +623,7 @@ export function PublishedFeed() {
   );
 }
 
-export default function CoMarketingPage({ user }) {
+export default function CoMarketingPage({ user, landingPath = '/comarketing' }) {
   const role = (user?.role || '').toLowerCase();
   const isAdmin = role === 'admin';
   const isPartner = role === 'partner';
@@ -642,16 +642,17 @@ export default function CoMarketingPage({ user }) {
           <Megaphone size={22} /> Co-marketing
         </h1>
         <PageExplainer pageKey="co_marketing" />
-        <p className="text-sm text-gray-600 mt-1">
-          Pitch a webinar, blog post, or podcast. Once approved by Axal VC, the platform helps
-          run + distribute it, and inbound demand is attributed back to your partner profile.
+        <p className="text-sm text-gray-600 mt-1 dark:text-gray-300">
+          {isPartner || isAdmin
+            ? 'Pitch a webinar, blog post, or podcast. Once approved by Axal VC, the platform helps run + distribute it, and inbound demand is attributed back to your partner profile.'
+            : 'Explore published webinars, blog posts and podcasts from the partner network.'}
         </p>
       </div>
 
       <div className="flex border-b border-gray-200 gap-1 dark:border-gray-800">
         {tabs.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700' : 'border-transparent text-gray-600 hover:text-gray-900'}`}>
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t.id ? 'border-violet-600 text-violet-700 dark:border-violet-400 dark:text-violet-300' : 'border-transparent text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'}`}>
             {t.label}
           </button>
         ))}
@@ -664,7 +665,7 @@ export default function CoMarketingPage({ user }) {
         </p>
       )}
       {tab === 'mine' && <PartnerView />}
-      {tab === 'published' && <PublishedFeed />}
+      {tab === 'published' && <PublishedFeed landingPath={landingPath} />}
     </div>
   );
 }

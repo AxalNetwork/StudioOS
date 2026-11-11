@@ -10,7 +10,7 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { downloadRasterDeckPdf } from '../lib/deckRasterPdf';
 import ShareDeckCTA from '../components/ShareDeckCTA';
 import { ReviewDealSlotContext } from '../decks/templates/reviewDealSlot';
-import { ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
+import { CardVoices, ClosedLink, EmailGate, FigureSources, NdaGate } from './raise/pitch/ShareViewerParts';
 import DeckCardView from './raise/pitch/DeckCardView';
 import { CARD_VIEW, PHONE_WIDTH, SLIDE_VIEW } from './raise/pitch/cardViewModel';
 import { viewerNote } from './raise/pitch/shareModel';
@@ -373,39 +373,17 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
 
   const methodId = useMemo(() => detectMethodId(deck), [deck]);
 
-  // Task #55 — when the deck is a spinout template, fetch live flat fields
-  // from the spinoutDeck API so the print view renders real Lab data.
-  // Task #28 — share + PDF-export viewers are unauthenticated and CANNOT call
-  // the authed spinoutDeck endpoint, so the worker server-bakes the same flat
-  // dotted-key field map onto the read response (deck.spinout_fields). Use it
-  // directly in those modes; the authenticated viewer still fetches live.
+  // D4595 — every viewer renders the selected saved version. The Worker
+  // derives this field map from that version's stored cards; resolving current
+  // Lab records here made history and frozen shares change after save.
   useEffect(() => {
     if (methodId !== 'axal_spinout_demoday') {
       setSpinoutFields(null);
       return undefined;
     }
-    if (shareMode || exportMode) {
-      setSpinoutFields(deck?.spinout_fields || null);
-      return undefined;
-    }
-    if (!deck?.project_id) {
-      setSpinoutFields(null);
-      return undefined;
-    }
-    let alive = true;
-    api.spinoutDeck(deck.project_id)
-      .then((r) => {
-        if (!alive) return;
-        setSpinoutFields(r?.fields || null);
-      })
-      .catch((e) => {
-        if (alive) {
-          setSpinoutFields(null);
-          reportError('PitchDeckPrintPage:spinoutFields', e);
-        }
-      });
-    return () => { alive = false; };
-  }, [methodId, deck?.project_id, deck?.spinout_fields, shareMode, exportMode]);
+    setSpinoutFields(deck?.spinout_fields || null);
+    return undefined;
+  }, [methodId, deck?.spinout_fields]);
 
   // Task #6 — lazy-load the templates registry whenever we have a
   // method_id, regardless of which one. Only decks with no recognisable
@@ -923,6 +901,8 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           reviewSlot={reviewDealSlot}
         />
         {!isFullscreen && shareMode ? <FigureSources slides={deck.slides} /> : null}
+        {/* D1569 (#3816): the cards' AI voice-overs, labelled "AI voice". */}
+        {!isFullscreen && shareMode ? <CardVoices slides={deck.slides} /> : null}
         {!isFullscreen && cta && <div className="deck-print-cta">{cta}</div>}
         {isFullscreen && slideCount > 0 && (
           <>
@@ -1017,6 +997,7 @@ export default function PitchDeckPrintPage({ shareMode = false, exportMode = fal
           </div>
         ))}
         {shareMode ? <FigureSources slides={deck.slides} /> : null}
+        {shareMode ? <CardVoices slides={deck.slides} /> : null}
         {cta}
       </div>
     </div>

@@ -22,17 +22,18 @@ import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
+import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
 import { PUBLISH_TARGETS } from './publishTargets';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
 export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting' | 'Analytics';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting' | 'Analytics' | 'Marketing';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -619,6 +620,14 @@ export const REGISTRY: ProviderDescriptor[] = [
     status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Read-only'],
     audience_rule: 'venture', docs_url: 'https://posthog.com/docs/model-context-protocol', icon: 'BarChart3',
   },
+  // D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, read only, signed in through Beehiiv's MCP server (D1080).
+  // Beta until the owner's first live connection verifies every UNVERIFIED fact in D2407.md.
+  {
+    key: 'beehiiv', display_name: 'Beehiiv', integration_type: 'data_feed',
+    description: 'Your newsletter on Beehiiv, read only, through Beehiiv’s own sign-in: each company reads one publication you choose. It reads audience and post figures, never your subscribers’ addresses.',
+    status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Grow', 'Read-only'],
+    audience_rule: 'venture', docs_url: 'https://www.beehiiv.com/support/article/39255979546263-getting-started-with-the-beehiiv-mcp', icon: 'Mail',
+  },
 ];
 
 // A catalogue entry describes only behaviour that the shipping provider has.
@@ -672,6 +681,16 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
     sends: [],
     feeds: [...new Set(POSTHOG_FEEDS.map((f) => f.module))],
     permissions: ['Sign in with PostHog: read your organisations and projects, saved insights and their results, experiments, surveys and feature flags, read only, through PostHog’s MCP server; it never reads a person, a recording or raw events, and never creates, edits or deletes anything.'],
+  },
+  // D2407: what lands is `beehiivFeeds.ts`'s built feeds (part 2). No `sends`: drafts are #2407 part 3.
+  beehiiv: {
+    category: 'Marketing', verified: false,
+    pulls: BEEHIIV_BUILT_FEEDS.map((f) => ({ what: f.what, module: f.module })),
+    sends: [],
+    // D2407 part 3: a draft when the founder presses Send in PUBLISH's confirm; never a `sends` row.
+    publishes: [{ what: 'A draft post in your publication', target: 'beehiiv' }],
+    feeds: [...new Set(BEEHIIV_BUILT_FEEDS.map((f) => f.module))],
+    permissions: ['Sign in with Beehiiv: read your publications, their subscriber counts and average open and click rates, and your sent posts and their figures, through Beehiiv’s MCP server, and create a draft post in a publication you switched on only when you press Send; it never reads a subscriber or an address, and never publishes, schedules, sends, edits or deletes a post: you publish the draft from Beehiiv.'],
   },
   microsoft_365: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Microsoft 365', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Confirm your Microsoft sign-in identity.', 'Read your public Microsoft profile.', 'Read your account email address.', 'Keep the connection active.', 'Read and update calendar events.', 'Read your basic account profile.'] },
 };
@@ -807,8 +826,8 @@ export async function ensureIntegrationsSchema(env: Env): Promise<void> {
       'updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ' +
       'UNIQUE(user_id, provider_key))',
     );
-    try { await env.DB.exec('ALTER TABLE integrations ADD COLUMN last_error_at TEXT'); }
-    catch (e) { if (!/duplicate column name/i.test(e instanceof Error ? e.message : String(e))) throw e; }
+    // #5343: asked first (`runSchemaBootstrap`), so a migrated database issues no ALTER.
+    await runSchemaBootstrap(env, ['ALTER TABLE integrations ADD COLUMN last_error_at TEXT']);
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_user ON integrations(user_id)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_provider ON integrations(provider_key)');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status)');

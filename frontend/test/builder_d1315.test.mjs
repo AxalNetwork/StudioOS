@@ -106,7 +106,7 @@ test('in the app, a followed old link lands on the new address with its query an
       h(Route, { path: '/account/builder/*', element: h(Where) })))));
     assert.equal(at, '/account/builder/assistants/g1?tab=calls#recent');
   } finally { await act(async () => root.unmount()); restore(); }
-  for (const path of LEGACY_BUILDER_PATHS) assert.ok(REDIRECT_ROUTES.some((r) => r.path === path && !r.keep), `${path} counted until #2319`);
+  for (const path of LEGACY_BUILDER_PATHS) assert.equal(REDIRECT_ROUTES.some((r) => r.path === path), false, `${path} retired by D2319`);
 });
 
 test('Builder is a section for every profile, in the section column with its four pages', () => {

@@ -15,8 +15,8 @@
 4. **After 2 and 3, the real corpus is 105 distinct surfaces**, not 89 and not 107.
 5. **`Compliance` and `Capital` are Lab canvases** even though the brief's
    OUT-OF-SCOPE enumeration does not name them, and both collide by name with a
-   different platform-wide surface (`/compliance` the compliance calendar,
+   different platform-wide surface (`/compliance` (retired D2319) the compliance calendar,
    `/capital` the investor page). Do not collapse either pair.
 6. **`Office Hours` is the Lab's Week-3 tool**, not the advisor-side
-   `/office-hours` availability manager. Two surfaces, one name.
+   `/office-hours` (retired D2319) availability manager. Two surfaces, one name.
 

@@ -288,6 +288,10 @@ async function loadRouter({ documents = [], esign = [], pairwise = [], partner =
     src.match(/const PARTNER_DEAL_DOC_TYPE = [^;]+;/)[0],
     sliceFn('partnerDealTitle'),
     sliceFn('loadPartnerDealContracts'),
+    // D5050: the licence agreements fold into the union from their own module
+    // (contracts_licence_agreements_d5050.test.ts covers them); none here.
+    'const loadLicenceAgreementContexts = async () => [];',
+    sliceFn('withLicenceAgreements'),
     sliceFn('loadAllContracts'),
   ].join('\n');
 

@@ -72,23 +72,26 @@ export const KIND_LABEL = {
 export function slotCounts(slots) {
   const list = Array.isArray(slots) ? slots : [];
   let booked = 0; let open = 0; let held = 0; let blocked = 0; let cancelled = 0;
-  let paid = 0; let free = 0;
+  let paid = 0; let free = 0; let unpriced = 0;
   for (const s of list) {
     switch (slotKind(s)) {
-      case 'booked':
+      case 'booked': {
         booked++;
-        // A booked slot with a price that was actually taken is paid; one with
-        // no price attached is a free intro or an unpriced hour. `null` is not
-        // zero here — 205's distinction, carried forward.
-        if (s.amount_cents != null && s.amount_cents > 0) paid++; else free++;
+        // #4714 (D4714): the worker's `booked_pricing`, from the bookings'
+        // own amounts (205: NULL is unpriced, 0 is free). A slot the read
+        // does not price, or whose bookings disagree, is UNPRICED: an hour
+        // with no recorded price is never counted as a free intro.
+        const p = s.booked_pricing ?? (s.amount_cents == null ? null : s.amount_cents > 0 ? 'priced' : 'free');
+        if (p === 'priced') paid++; else if (p === 'free') free++; else unpriced++;
         break;
+      }
       case 'held': held++; break;
       case 'blocked': blocked++; break;
       case 'cancelled': cancelled++; break;
       default: open++;
     }
   }
-  return { booked, open, held, blocked, cancelled, paid, free, total: list.length };
+  return { booked, open, held, blocked, cancelled, paid, free, unpriced, total: list.length };
 }
 
 /**
@@ -102,9 +105,12 @@ export function bookedNote(counts) {
   const c = counts || {};
   const paid = c.paid || 0;
   const free = c.free || 0;
-  return free > 0
+  const unpriced = c.unpriced || 0;
+  const base = free > 0
     ? `${paid} paid, ${free} free intro${free === 1 ? '' : 's'}`
     : `${paid} paid · no free intros booked`;
+  // #4714: the hours with no recorded price are said, never folded into free.
+  return unpriced > 0 ? `${base} · ${unpriced} with no price recorded` : base;
 }
 
 /**
@@ -231,3 +237,15 @@ export function narrowSlots(slots, view) {
 
 /** The window each view asks the server for, in days. */
 export const VIEW_DAYS = { two_weeks: 14, month: 31, past: 31, unpaid_held: 31 };
+
+/**
+ * #4702 (D4702): where a view's window STARTS. The server reads
+ * `[from, from + days)` and `from` defaults to now, so "Past sessions" asked
+ * for the next 31 days and then filtered them to those already over: nothing.
+ * The past view starts `days` ago, so the window is the 31 days that just
+ * ended; every other view reads forward from now (`undefined` = the server's now).
+ */
+export function windowFrom(view, days, nowMs = Date.now()) {
+  if (view !== 'past') return undefined;
+  return new Date(nowMs - Number(days) * 86_400_000).toISOString();
+}

@@ -31,7 +31,8 @@ import { codeOnly } from './_codeOnly.mjs';
 // The pure module, not the page: importing the page pulls React and a `.css`
 // through its component tree, which the loader cannot resolve. The split is
 // deliberate — see `opportunityLog.js`'s own docblock.
-import { classifyBooking, SYSTEM_CANCELS } from '../src/pages/advisor/practice/opportunityLog.js';
+import { acceptanceRate, classifyBooking, SYSTEM_CANCELS } from '../src/pages/advisor/practice/opportunityLog.js';
+import { advisorRoutesSource } from './_advisorRoutesSource.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const PAGE = read('frontend/src/pages/advisor/practice/OpportunitiesZone.jsx');
@@ -71,11 +72,16 @@ test('the system-cancel set is exactly what the worker writes, not a guess', () 
   // `cancel_reason` itself in exactly two places; if a third is ever added,
   // the new reason would silently be counted as a DECLINE — an advisor
   // refusing work they never saw. This fails instead.
-  const worker = read('cloudflare-worker/src/routes/advisors.ts');
+  // #4715: the advisor router is advisors.ts plus the route modules it mounts.
+  const worker = advisorRoutesSource();
   const written = new Set(
     [...worker.matchAll(/cancel_reason = (?:COALESCE\(cancel_reason, )?'([a-z_]+)'/g)].map((m) => m[1]),
   );
-  assert.deepEqual([...written].sort(), [...SYSTEM_CANCELS].sort());
+  // D4695: a client that loses a capacity contention no longer leaves a cancelled row behind (the INSERT decides
+  // capacity), so the Worker writes one system reason now. `capacity_race` stays in the model's set because rows
+  // written before that change still carry it, and they must keep reading as withdrawn, never as a decline.
+  assert.deepEqual([...written].sort(), ['slot_cancelled']);
+  assert.deepEqual([...SYSTEM_CANCELS].sort(), ['capacity_race', 'slot_cancelled']);
 });
 
 test('the two cancellations the WORKER writes are withdrawn, not declined', () => {
@@ -83,31 +89,54 @@ test('the two cancellations the WORKER writes are withdrawn, not declined', () =
     assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: reason }), NOW),
       'withdrawn', reason);
   }
-  // A reason a PERSON typed is a real decline.
-  assert.equal(
-    classifyBooking(booking({ status: 'cancelled', cancel_reason: 'Wanted implementation' }), NOW),
-    'declined',
-  );
-  // ...and so is a cancellation with no reason at all: it is still an answer.
-  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: null }), NOW), 'declined');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancelled_by: 'system' }), NOW), 'withdrawn');
 });
 
-test('the accept rate is over answered requests only', () => {
-  // Reading the expression rather than re-implementing it: the denominator is
-  // what makes this right or wrong, and it must exclude both the withdrawn
-  // (not the advisor's answer) and the expired (no answer at all).
+test('#4702: the advisor\'s recorded answer decides the bucket, not the status a later cancel left', () => {
+  // A decline the advisor gave is a decline, whatever reason they typed or left blank.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'declined', cancel_reason: null }), NOW), 'declined');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'declined', cancel_reason: 'Wanted implementation' }), NOW), 'declined');
+  // The client cancelling a session the advisor ACCEPTED is still an accept.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: 'accepted', cancelled_by: 'client', cancel_reason: 'Schedule clash' }), NOW), 'accepted');
+  // The client withdrawing a request before any answer is a withdrawal, not a decline.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', advisor_decision: null, cancelled_by: 'client', cancel_reason: 'Changed my mind' }), NOW), 'withdrawn');
+  // A cancelled row from before the answer was recorded could be either: it is counted as neither.
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: 'Wanted implementation' }), NOW), 'unrecorded');
+  assert.equal(classifyBooking(booking({ status: 'cancelled', cancel_reason: null }), NOW), 'unrecorded');
+});
+
+test('the accept rate is over answered requests only, and a client cancelling an accepted session does not lower it', () => {
+  // Mutation checked: classifying every cancelled row as declined → the client cancellation below lowers the rate.
+  const rows = [
+    booking({ status: 'confirmed' }),
+    booking({ status: 'cancelled', advisor_decision: 'accepted', cancelled_by: 'client' }),   // accepted, then the client left
+    booking({ status: 'completed' }),
+    booking({ status: 'cancelled', advisor_decision: 'declined' }),                           // the one real decline
+    booking({ status: 'cancelled', cancelled_by: 'client' }),                                 // withdrawn before any answer
+    booking({ status: 'cancelled', cancel_reason: 'slot_cancelled' }),                        // the slot went
+    booking({ status: 'cancelled', cancel_reason: 'old row, answer never stored' }),          // unrecorded
+    booking({ status: 'pending', startsAt: '2026-01-01T00:00:00Z' }),                         // expired unanswered
+  ];
+  const counts = { awaiting: 0, accepted: 0, declined: 0, expired: 0, withdrawn: 0, unrecorded: 0 };
+  for (const r of rows) counts[classifyBooking(r, NOW)] += 1;
+  assert.deepEqual(counts, { awaiting: 0, accepted: 3, declined: 1, expired: 1, withdrawn: 2, unrecorded: 1 });
+  assert.equal(acceptanceRate(counts), 75, '3 accepted of 4 answered');
+  assert.equal(acceptanceRate({ accepted: 0, declined: 0 }), null, 'an empty denominator reports nothing, not 0%');
+  assert.equal(acceptanceRate({ accepted: 0, declined: 2 }), 0, 'two real declines is a real 0%');
+  // And the page uses that definition (the expression is what makes it right).
   assert.match(P, /const decided = counts\.accepted \+ counts\.declined;/);
-  assert.doesNotMatch(P, /const decided = [^;]*counts\.(expired|withdrawn)/,
-    'silence and a withdrawn slot are not decisions the advisor made');
-  assert.match(P, /acceptRate = decided > 0/, 'and an empty denominator reports nothing, not 0%');
+  assert.doesNotMatch(P, /const decided = [^;]*counts\.(expired|withdrawn|unrecorded)/);
+  assert.match(P, /const acceptRate = acceptanceRate\(counts\);/);
 });
 
 // ---------------------------------------------------------------------------
 // What the page must NOT claim
 // ---------------------------------------------------------------------------
-test('the median decision tile says it is not recorded rather than deriving one', () => {
+test('the median decision tile reads the decision time, never the last-touched stamp', () => {
   assert.match(PAGE, /Median decision/);
-  assert.match(PAGE, /No decision timestamp is stored/);
+  // #4714 (D4714): advisor_decided_at (D4702) is the decision's own time.
+  assert.match(PAGE, /medianDecision\(state\.bookings\)/);
+  assert.match(PAGE, /No answer here has its time recorded/);
   // THE BAN IS ON THE ARITHMETIC, NOT THE WORD. "Median decision" is the
   // tile's own label, so banning /median/ fails against correct code — the
   // self-matching trap. What must not happen is `updated_at` being turned
@@ -131,7 +160,8 @@ test('the absences are stated on the page, not silently omitted', () => {
   for (const claim of [
     /investor/i,                      // no investor path to a booking
     /referral|Referred by/i,          // no column records where a request came from
-    /used 6/,                         // the artboard's template usage count
+    // #4715 (D4715): the page says it in product words now, not by quoting the design file's "used 6×".
+    /no usage count/i,                // a template carries no usage count
   ]) {
     assert.match(PAGE, claim, 'the artboard draws it and the schema cannot — say so');
   }

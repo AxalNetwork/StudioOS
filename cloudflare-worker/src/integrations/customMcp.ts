@@ -109,10 +109,13 @@ export function customUrlRefusal(raw: unknown, ownHost: string | null = null): U
   if (u.hash) return 'fragment';
   // A query string could carry a key; nothing secret is kept in a connection's config or a log.
   if (u.search) return 'query';
-  const host = u.hostname.toLowerCase();
+  // A fully qualified name may end in the root's dot (`name.`); the name rules below compare without it,
+  // or `localhost.` and `axal.vc.` would pass checks written for `localhost` and `axal.vc`.
+  const host = u.hostname.toLowerCase().replace(/\.+$/, '');
+  if (!host) return 'bad_url';
   if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return 'ip_literal';
   if (!host.includes('.') || PRIVATE_SUFFIXES.some((s) => host === s || host.endsWith(`.${s}`))) return 'private_name';
-  const own = ownHost ? ownHost.toLowerCase().replace(/:\d+$/, '') : null;
+  const own = ownHost ? ownHost.toLowerCase().replace(/:\d+$/, '').replace(/\.+$/, '') || null : null;
   if ([...AXAL_HOSTS, ...(own ? [own] : [])].some((h) => host === h || host.endsWith(`.${h}`))) return 'axal_host';
   return null;
 }
@@ -352,6 +355,8 @@ export function configOf(row: Pick<IntegrationRow, 'config_json'>): CustomConfig
 // ─────────────────────────────────────────────────────────── sign-in
 
 export interface CustomDeps {
+  /** D4422: engine-supplied restrictive context, never taken from tool arguments. */
+  agentContext?: { agent_uid: string; integration_uid: string };
   resolve?: Resolver;
   fetcher?: McpFetch;
   /** The host this request came to; never a custom server's. */
@@ -479,7 +484,14 @@ async function openCustom(env: Env, row: IntegrationRow, deps: CustomDeps, captu
   const attempt = async (token: string) => {
     const listed: Array<Record<string, unknown>> = [];
     const fetcher = guardedFetcher(cfg.hosts, resolve, deps.fetcher ?? fetch, captureList ? listed : undefined, deps.ownHost ?? null);
-    const session = await openMcpSession(provider, { accessToken: token, fetcher, era: cfg.era, log: deps.log });
+    const session = await openMcpSession(provider, { accessToken: token, fetcher: async (url, init) => {
+      const headers = new Headers(init.headers);
+      if (deps.agentContext) {
+        headers.set('X-Axal-Agent', deps.agentContext.agent_uid);
+        headers.set('X-Axal-Integration', deps.agentContext.integration_uid);
+      }
+      return fetcher(url, { ...init, headers });
+    }, era: cfg.era, log: deps.log });
     return { session, listed };
   };
   try {

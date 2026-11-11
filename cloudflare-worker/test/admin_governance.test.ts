@@ -86,6 +86,9 @@ const ALL_TABLES = [
 
 const SECURITY_EVENTS_MIGRATION = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/migrations/282_security_events.sql'), 'utf8',
+) + readFileSync(
+  // D4691 — the support operator column the feed reads.
+  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611072219_security_events_support_actor.sql'), 'utf8',
 );
 
 function freshDb(tables: string[] = ALL_TABLES) {
@@ -519,9 +522,11 @@ test('the guardrail rollup is one definition, and the sentence it replaced canno
     'the not-counted list is declared once and read by /overview and /governance — three mentions, no more',
   );
   // ONE window, so the two zones cannot count different days.
+  // D4803 — and by the recent guard verdicts (SE08), so the table and the
+  // counters above it count the same days.
   assert.equal(
-    src.split('AI_SAFETY_WINDOW_DAYS').length - 1, 3,
-    'the AI-safety window is one constant read by the block and the pointer',
+    src.split('AI_SAFETY_WINDOW_DAYS').length - 1, 4,
+    'the AI-safety window is one constant read by the block, the recent verdicts and the pointer',
   );
   // ONE reader of the rollup in this file. A second call would be a second
   // pair of D1 reads AND a second figure that can disagree with the first.

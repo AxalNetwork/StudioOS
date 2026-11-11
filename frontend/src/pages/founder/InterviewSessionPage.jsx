@@ -203,7 +203,7 @@ export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () =>
       set((st) => ({ ...st, running: true, runError: null }));
       // Only a model id is sent; anything else (a click event, say) is no model, so the Worker picks its default (#1589).
       // D778 part 8: the press names its own option, keeping the mounted rail's page.
-      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) {
+      try { if (model?.output && typeof api.retryOutput === 'function') { await api.retryOutput(sessionId, model.output); } else await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) {
         put((st) => ({ ...st, runError: e }));
         // A timeout is not a refusal: the server may have saved placements.
         // Read them without repeating the paid write; retain the uncertain outcome.
@@ -248,9 +248,12 @@ export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () =>
 
 export const REVIEW_INITIAL = { read: undefined, running: false, runError: null, errors: {}, busyId: null, ask: {}, acceptAll: {} };
 
+export const OUTPUT_POLL_LIMIT_MS = 15 * 60 * 1000;
 /** The review step, mounted: reads the placements and wires each action. */
 export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, grouped = null }) {
   const [st, setSt] = useState(REVIEW_INITIAL);
+  const pollStarted = React.useRef(Date.now());
+  const [pollExpired, setPollExpired] = useState(false);
   // D778 part 8: each session's actions carry their own liveness, ended when another session opens.
   const actions = React.useMemo(() => {
     const live = { current: true };
@@ -261,9 +264,19 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
     actions.live.current = true;
     // Another session: its state starts clean rather than inheriting a running press.
     if (opened.current !== sessionId) { opened.current = sessionId; setSt(REVIEW_INITIAL); }
+    pollStarted.current = Date.now(); setPollExpired(false);
     actions.reload();
     return () => { actions.live.current = false; };
   }, [actions, sessionId]);
+  useEffect(() => {
+    if (pollExpired || !st.read?.outputs?.some((o) => ['queued', 'running'].includes(o.status) && !o.retryable)) return undefined;
+    const remaining = OUTPUT_POLL_LIMIT_MS - (Date.now() - pollStarted.current);
+    const timer = setTimeout(() => {
+      if (remaining <= 3000) setPollExpired(true);
+      else actions.reload();
+    }, Math.max(0, Math.min(3000, remaining)));
+    return () => clearTimeout(timer);
+  }, [st.read, actions, pollExpired]);
   // D771 (#2097): a structuring run or a question at the transcript is the rail's option while it runs.
   useRailOption(st.running ? 'structure:transcript' : null, 'Structure the transcript');
   useRailOption(st.ask?.busy ? 'ask:transcript' : null, 'Ask');
@@ -271,10 +284,10 @@ export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, group
   if (st.read === null) return <p role="alert" className="text-[13px] text-red-700 dark:text-red-400">Unreadable: the placements could not be read.</p>;
   return (
     <InterviewReview
-      theme={theme} read={st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
-      onAccept={actions.accept} onDiscard={actions.discard} onStructure={actions.structure}
+      theme={theme} read={pollExpired ? { ...st.read, outputs: st.read.outputs?.map((o) => ({ ...o, retryable: o.retryable || ['queued','running'].includes(o.status) })) } : st.read} running={st.running} runError={st.runError} errors={st.errors} busyId={st.busyId}
+      onAccept={actions.accept} onDiscard={actions.discard} onStructure={(model) => { pollStarted.current = Date.now(); setPollExpired(false); return actions.structure(model); }}
       ask={st.ask} onAsk={actions.ask} receiptItems={receiptItems}
-      grouped={grouped} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
+      grouped={grouped || !!st.read?.outputs} onAcceptAll={actions.acceptAll} acceptAll={st.acceptAll}
     />
   );
 }
@@ -484,6 +497,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const failure = life && !recordingOther ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
   const interviewId = interview?.id ?? session.interview_id ?? null;
   const retryHref = interviewId != null ? `/validate/record?interview=${encodeURIComponent(interviewId)}&project_id=${encodeURIComponent(session.project_id)}` : null;
+  const setupIncomplete = session.setup_complete_at === null;
+  const setupHref = retryHref && session.client_key
+    ? `${retryHref}&setup_key=${encodeURIComponent(session.client_key)}`
+    : retryHref;
   const runAgain = async () => {
     setRetry({ busy: true, error: null });
     try { await api.process(session.id); setRetry({ busy: false, error: null }); await load(); loadReceipt(); }
@@ -542,6 +559,17 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
       <main className="min-w-0 space-y-4">
         <nav className="flex items-center gap-2 text-[12px]"><Link to={`/validate/customer-research?project_id=${session.project_id}`} className="text-axal-muted underline dark:text-gray-400">Customer research</Link><AssistantBadge session={session} /><ChannelOriginBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
+        {setupIncomplete && (
+          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950/30" data-testid="session-setup-incomplete">
+            <h2 className="m-0 text-[16px] font-bold">Session setup did not finish</h2>
+            <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-300">Nothing can be recorded, uploaded or sent to a meeting until setup finishes.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {setupHref && <Link to={setupHref} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800" data-testid="finish-session-setup">Finish setup</Link>}
+              <button type="button" onClick={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }}
+                className="rounded-md border border-red-300 px-3 py-1.5 text-[12.5px] font-bold text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300" data-testid="delete-incomplete-session">Delete</button>
+            </div>
+          </section>
+        )}
         {data.channel_consent?.required && (
           <ChatConsentLine consent={data.channel_consent} name={intervieweeName} provider={session.submitted_via}
             onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
@@ -550,8 +578,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         {life && <SessionStepper view={life} />}
         {botSession && botRead?.bot !== null && <ParticipantsTimeline participants={botParticipants} bot={botRead?.bot || null} segments={segments} />}
         {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} />}
-        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
-        {session.status === 'draft' && !botSession && (waiting
+        {!setupIncomplete && botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
+        {!setupIncomplete && session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (

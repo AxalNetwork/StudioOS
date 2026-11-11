@@ -43,12 +43,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://axal.vc/login</loc>
-    <lastmod>2026-05-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-  <url>
     <loc>https://axal.vc/terms</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>yearly</changefreq>
@@ -119,6 +113,12 @@
     <lastmod>2026-10-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://axal.vc/influencers</loc>
+    <lastmod>2026-11-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://axal.vc/intelligence</loc>

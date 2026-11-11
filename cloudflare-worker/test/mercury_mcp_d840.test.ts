@@ -149,7 +149,9 @@ function walk(dir: string, out: string[] = []): string[] {
 test('7. only reads.ts imports mcp.ts, and no token reaches a log', async () => {
   const ROOT = process.cwd();
   const importers = walk(resolve(ROOT, 'cloudflare-worker/src'))
-    .filter((p) => /from\s+['"][^'"]*mercury\/mcp['"]|from\s+['"]\.\/mcp['"]|import\(['"][^'"]*mercury\/mcp['"]\)/.test(readFileSync(p, 'utf8')))
+    // D2407: `./mcp` is Mercury's only inside services/mercury/; services/beehiiv/reads.ts imports its own.
+    .filter((p) => /from\s+['"][^'"]*mercury\/mcp['"]|import\(['"][^'"]*mercury\/mcp['"]\)/.test(readFileSync(p, 'utf8'))
+      || (/services\/mercury\//.test(p) && /from\s+['"]\.\/mcp['"]/.test(readFileSync(p, 'utf8'))))
     .map((p) => relative(ROOT, p));
   assert.deepEqual(importers, ['cloudflare-worker/src/services/mercury/reads.ts']);
 

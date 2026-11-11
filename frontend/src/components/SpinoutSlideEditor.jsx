@@ -27,7 +27,7 @@ import { reportError } from '../lib/log';
 const sources = (projectId) => ({
   project: { label: 'Startup', href: `/projects/${projectId}` },
   account: { label: 'Account', href: '/account' },
-  discovery: { label: 'Customer Discovery', href: '/customer-discovery' },
+  discovery: { label: 'Customer Discovery', href: '/validate/customer-research' },
   roadmap: { label: 'Roadmap', href: '/build/roadmap' },
   captable: { label: 'Cap Table', href: '/raise/cap-table' },
   incorporation: { label: 'Incorporation', href: '/incorporate' },

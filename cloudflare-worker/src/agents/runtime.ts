@@ -17,7 +17,7 @@
  *
  * Also here: the engine's state as every caller reads it, so the kill switch
  * is written once.
- *   AGENT_ENGINE   off | paused | canary | on (var; anything else is `off`).
+ *   AGENT_ENGINE   off | paused | canary | cohort | on (var; anything else is `off`).
  *                  `paused` stops admissions only; a run already admitted
  *                  carries on to its proposal.
  *   agents:halt    KV (`RATE_LIMITS`): set, every run ends at its next step
@@ -33,8 +33,8 @@ export type ScopeKind = 'company' | 'project';
 export type ScopeRef = { kind: ScopeKind; id: number };
 export const scopeName = (s: ScopeRef) => `${s.kind}:${s.id}`;
 
-export type EngineMode = 'off' | 'paused' | 'canary' | 'on';
-export const ENGINE_MODES: readonly EngineMode[] = ['off', 'paused', 'canary', 'on'];
+export type EngineMode = 'off' | 'paused' | 'canary' | 'cohort' | 'on';
+export const ENGINE_MODES: readonly EngineMode[] = ['off', 'paused', 'canary', 'cohort', 'on'];
 export type Autonomy = 'manual' | 'self_start';
 export type RuntimeName = 'do' | 'sdk';
 
@@ -46,9 +46,19 @@ export const DAILY_LIMIT = 20;
 export const OPEN_PROPOSALS_MAX = 5;
 
 /** What admits a run: a person's start, the sweep, a decided run's `after`, a duty. */
-export type Trigger = { agentId: number; taskId: number; by: number | null; source: 'person' | 'sweep' | 'after' | 'duty' };
+export type Trigger = {
+  agentId: number; taskId: number; by: number | null; source: 'person' | 'sweep' | 'after' | 'duty';
+  /**
+   * D4535: a run uid minted ahead of admission, the per-attempt `run_uid` a
+   * workflow plan froze (`wf-` + 40 hex). Admission uses it in place of a fresh
+   * uid, so the attempt's proposal and hold keys are the plan's, and a repeated
+   * admission of the same attempt answers the run already admitted. Absent for
+   * every other trigger, which keeps a fresh uid.
+   */
+  runUid?: string;
+};
 export type Refusal = { ok: false; status: number; code: string; message: string };
-export type Admission = { ok: true; run: { uid: string; attempt: number } } | Refusal;
+export type Admission = { ok: true; run: { uid: string; attempt: number }; replayed?: true } | Refusal;
 /** A duty's next firing, as an epoch millisecond. */
 export type DutyTimer = { dutyId: number; at: number };
 export type RunHandle = { runUid: string; started: boolean };

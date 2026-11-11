@@ -4,6 +4,7 @@ import { railProposalsApi } from '../../../lib/api/railProposals';
 import { Unreadable } from '../../../ui';
 import { ACCEPT_ALL_MAX, PROPOSABLE, proposalGroups, proposalLine } from './capRelTabsModel';
 import Sheet from '../../../ui/Sheet.jsx';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 /**
  * D1193 (#3127, CRL11) — Eadwyn's proposals: next steps and stage moves from
@@ -32,7 +33,7 @@ function Proposal({ projectId, p, onDecided }) {
   const [edit, setEdit] = useState(p.payload.type === 'next_step' ? { text: p.payload.text || '', due: p.payload.due || '' } : { to: p.payload.to || 'meeting' });
   const go = async (fn) => {
     setBusy(true); setError('');
-    try { await fn(); setBusy(false); setMode(''); onDecided?.(); } catch (e) { setBusy(false); setError(e?.message || 'That could not be saved'); }
+    try { await fn(); setBusy(false); setMode(''); onDecided?.(); } catch (e) { setBusy(false); setError(userFacingRaiseError(e, { fallback: 'That could not be saved' })); }
   };
   const confirmLine = mode === 'dismiss' ? 'This proposal is thrown away. Nothing changes.'
     : p.payload.type === 'next_step' ? `The next step with ${p.investor || 'this investor'} becomes “${mode === 'edit' ? edit.text : p.payload.text}”${(mode === 'edit' ? edit.due : p.payload.due) ? `, due ${mode === 'edit' ? edit.due : p.payload.due}` : ''}.`
@@ -103,14 +104,18 @@ export default function CapRelProposals({ projectId, prospect = null, onClose, o
   const ask = async () => {
     setRun({ busy: true, error: '' });
     try { await capitalRelationshipsApi.proposeFromNote(projectId, { prospect_id: prospect.id }); setRun({ busy: false, error: '' }); reload(); }
-    catch (e) { setRun({ busy: false, error: e?.message || 'Eadwyn could not read that note just now. Try again.' }); }
+    catch (e) { setRun({ busy: false, error: userFacingRaiseError(e, { fallback: 'Eadwyn could not read that note just now. Try again.' }) }); }
   };
   const acceptAll = async (group) => {
     setAll({ busy: true, failed: 0, open: '' });
-    let failed = 0;
-    for (const p of group.items.slice(0, ACCEPT_ALL_MAX)) {
-      try { await capitalRelationshipsApi.acceptProposal(projectId, p.uid, null); } catch { failed += 1; }
-    }
+    // D5073: one request for the whole note, one result per proposal. A refusal on one (no longer open) is counted
+    // and the rest are written; a request that fails as a whole counts every proposal as not accepted.
+    const uids = group.items.slice(0, ACCEPT_ALL_MAX).map((p) => p.uid);
+    let failed = uids.length;
+    try {
+      const out = await capitalRelationshipsApi.acceptProposals(projectId, uids);
+      failed = Array.isArray(out?.results) ? out.results.filter((r) => r.ok !== true).length : uids.length;
+    } catch { failed = uids.length; }
     setAll({ busy: false, failed, open: '' });
     reload();
   };

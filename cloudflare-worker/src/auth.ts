@@ -6,6 +6,11 @@ import { getSQL } from './db';
 import { branchOf, authCookieName, csrfCookieName, HQ_ONLY, HQ_AUTHORING_ONLY, BRANCH_SUSPENDED } from './util/branch';
 import { ADMIN_FROZEN, FREEZING_STATUSES } from './util/authErrors';
 import { recordSecurityEvent } from './services/securityEvents';
+import { heldLicences, holdsLicence, isLicence, type Licence } from './services/accountLicences';
+
+// Contexts live for one request. Repeated requireAuth/requireRole calls share
+// exactly one grant lookup, always keyed to the selected token's subject.
+const requestLicences = new WeakMap<Context<{ Bindings: Env }>, Map<number, Promise<Licence[]>>>();
 
 const JWT_ALGORITHM = 'HS256';
 export const JWT_EXPIRY_HOURS = 24;
@@ -133,6 +138,9 @@ export async function createJWT(
   // Only the impersonation paths pass this. Everything else keeps the
   // ordinary session length, so the ~460 existing call sites are untouched.
   expiresIn: string = `${JWT_EXPIRY_HOURS}h`,
+  // D4669 — the support session this token belongs to. Only the two
+  // support-session mints pass it (routes/admin.ts, rpc/branchOps.ts).
+  supportSessionId?: number,
 ) {
   const payload: Record<string, unknown> = {
     user_id: userId,
@@ -144,6 +152,7 @@ export async function createJWT(
   // sessions can be revoked from /settings without nuking every device.
   // Optional for back-compat with existing in-flight tokens.
   if (jti) payload.jti = jti;
+  if (supportSessionId) payload.sid = supportSessionId;
 
   return new SignJWT(payload)
     .setProtectedHeader({ alg: JWT_ALGORITHM })
@@ -324,7 +333,53 @@ export async function revokeStaleCrossIdentitySession(
   }
 }
 
+/**
+ * #4573 H1 — the caller is resolved once per request.
+ *
+ * Before H1 every `getCurrentUser` / `requireAuth` / `requireAdmin` call ran the
+ * whole resolution again: the user row, licences, MI Pro, recovery state, the
+ * Super Admin elevation and the session check, so a signed-in request read the
+ * caller two to four times (rate limit, then the route, then its helpers). The
+ * answer is now memoized on the request context, keyed on the raw credentials
+ * the request carries (the bearer and the session cookie), so a different token
+ * on the same context can never reuse another's answer.
+ *
+ * - Only a resolved user is kept. A null answer (no credentials, a refused or
+ *   revoked session, or a read that failed inside the resolution) and a throw are
+ *   not, so the next call in the request resolves again, exactly as before H1.
+ * - Each caller gets its own shallow copy, so a handler that edits the user it was
+ *   given (or its licence list) cannot change what another caller sees.
+ * - A route that changes the caller's own user, session or side-table rows and
+ *   then needs the fresh answer IN THE SAME REQUEST calls `forgetCurrentUser(c)`
+ *   first. None does today (audited at H1: no handler writes those rows and then
+ *   resolves the caller again).
+ */
+const requestCallers = new WeakMap<Context<{ Bindings: Env }>, Map<string, Promise<User | null>>>();
+
+/** Drop this request's memoized caller, so the next `getCurrentUser` reads it again. */
+export function forgetCurrentUser(c: Context<{ Bindings: Env }>): void {
+  requestCallers.delete(c);
+}
+
 export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
+  const { bearer, cookie } = extractJwtCandidates(c);
+  const key = `${bearer ?? ''}\u0000${cookie ?? ''}`;
+  let byKey = requestCallers.get(c);
+  if (!byKey) { byKey = new Map(); requestCallers.set(c, byKey); }
+  let pending = byKey.get(key);
+  if (!pending) {
+    const p = resolveCurrentUser(c);
+    pending = p;
+    byKey.set(key, p);
+    const memo = byKey;
+    const drop = () => { if (memo.get(key) === p) memo.delete(key); };
+    p.then((u) => { if (!u) drop(); }, drop);
+  }
+  const u = await pending;
+  return u ? { ...u, licences: u.licences ? [...u.licences] : u.licences } : null;
+}
+
+async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
   const sel = await selectJwt(c);
   if (!sel) return null;
   try {
@@ -334,6 +389,18 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
     const u = users[0];
+    let licenceReads = requestLicences.get(c);
+    if (!licenceReads) { licenceReads = new Map(); requestLicences.set(c, licenceReads); }
+    if (!licenceReads.has(u.id)) {
+      licenceReads.set(u.id, heldLicences(c.env.DB, u).catch(error => {
+        // A missing migration/read failure cannot grant additional access.
+        // Preserve primary-only access; the account licence read reports its
+        // own unavailable state rather than fabricating an empty grant list.
+        console.warn('[auth] account licences unreadable', error);
+        return isLicence(u.role) ? [u.role] : [];
+      }));
+    }
+    u.licences = await licenceReads.get(u.id)!;
     // MI Pro subscription state lives in the mi_pro_subscriptions side table
     // (the `users` table is at D1's hard 100-column limit, and D1 also rejects
     // any result set wider than 100 columns — so we cannot JOIN it into the
@@ -404,49 +471,14 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     // that applied the first version of 199 still carries `users.is_super_admin`
     // saying every admin is elevated, and SELECT * would hand that back.
     await hydrateSuperAdmin(c.env, u);
-    // Epic 3 — global sign-out: reject tokens issued before users.jwt_min_iat.
-    // Normalize ms→s for any legacy ms-based iat values.
-    const minIat = u.jwt_min_iat ?? 0;
-    let tokenIat = payload.iat;
-    if (typeof tokenIat === 'number' && tokenIat > 1e12) {
-      tokenIat = Math.floor(tokenIat / 1000);
-    }
-    if (minIat > 0 && typeof tokenIat === 'number' && tokenIat < minIat) {
-      return null;
-    }
-    // Per-session revocation. Tokens without jti skip (back-compat).
-    const tokenJti = payload.jti;
-    // Task IB — session-scoped step-up deadline. Captured here so the
-    // auto-relock below can prefer it over the prod-broken users column.
-    let sessionStepUpDue: string | null = null;
-    if (tokenJti) {
-      try {
-        let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null = null;
-        try {
-          sess = await c.env.DB.prepare(
-            'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
-        } catch {
-          // step_up_due_at column not migrated yet — fall back to the base check.
-          sess = await c.env.DB.prepare(
-            'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?'
-          ).bind(tokenJti, payload.user_id).first<{ revoked_at: string | null }>();
-        }
-        if (!sess || sess.revoked_at) return null;
-        sessionStepUpDue = (sess as any).step_up_due_at ?? null;
-        try {
-          // T22.6 — Coalesce last_seen_at writes. Only update if the row's
-          // existing value is >5 min old. Prevents a write per request on a
-          // hot session (which serialises through D1 and inflates write QPS).
-          await c.env.DB.prepare(
-            "UPDATE user_sessions SET last_seen_at = datetime('now') " +
-              "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
-          ).bind(tokenJti).run();
-        } catch {}
-      } catch {
-        // user_sessions not migrated yet; rely on iat alone.
-      }
-    }
+    // D4669 — the token's standing: the account's sign-out floor, its own
+    // session row, and (for a support session) the support-session record and
+    // the operator who opened it. One function, shared with the realtime
+    // upgrade, so no door checks less than this one. An unreadable store is a
+    // refusal, never a pass.
+    const standing = await sessionStanding(c.env, payload, u);
+    if (!standing.ok) return null;
+    const sessionStepUpDue: string | null = standing.stepUpDue;
     // Task #50 / Task IB — lower-assurance step-up deadline. When a session
     // was minted via the email-magic recovery layer OR the BLOCK-AUTH-01
     // magic-link sign-in ('email_only'), the user has 7 days to re-enrol a
@@ -512,6 +544,134 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
   } catch {
     return null;
   }
+}
+
+/**
+ * D4669 — WHETHER A SIGNED TOKEN STILL STANDS, beyond its signature and expiry.
+ *
+ * Every door that accepts a session token asks this: `getCurrentUser` for
+ * HTTP, and the realtime upgrade, which decodes its own token. Before D4669
+ * the upgrade checked neither the floor nor the session row, and the HTTP
+ * path treated an unreadable session store as "no row to check".
+ *
+ *   1. The account's floor (`users.jwt_min_iat`): sign-out-everywhere and HQ's
+ *      "Sign out account" raise it, and every older token is refused.
+ *   2. A support-session token carries `sid`, its `impersonation_sessions`
+ *      row, and that row must be open, for this account, opened by this
+ *      operator (`impersonated_by`; 0 for a branch's HQ support session). HQ's operator must
+ *      still be an active administrator whose own sign-out floor is not above
+ *      the token, so signing the operator out ends the support sessions they
+ *      hold. Ending the record ends the token on its next request.
+ *   3. A token with a `jti` must match a `user_sessions` row that is not
+ *      revoked.
+ *
+ * Any store that cannot be read is a refusal (`*_unavailable`). A token
+ * without its binding (`jti`, or `sid` for an HQ support session) is a shape
+ * no mint path issues any more — `session_containment_d4669.test.ts` holds
+ * every `createJWT` call site to that — and one still in flight from before
+ * is held to the floor and its own expiry alone.
+ *
+ * `support_session_unbound` covers a `sid` that names no row, or a row for
+ * another account or another operator.
+ */
+export type SessionStanding =
+  | { ok: true; stepUpDue: string | null }
+  | {
+    ok: false;
+    reason:
+      | 'below_floor'
+      | 'session_unknown'
+      | 'session_revoked'
+      | 'session_store_unavailable'
+      | 'support_session_unbound'
+      | 'support_session_ended'
+      | 'support_session_unavailable'
+      | 'support_operator_signed_out';
+  };
+
+function iatSeconds(iat: unknown): number | null {
+  if (typeof iat !== 'number' || !Number.isFinite(iat)) return null;
+  return iat > 1e12 ? Math.floor(iat / 1000) : iat;
+}
+
+export async function sessionStanding(
+  env: Env,
+  payload: JWTPayload,
+  user: { id: number; jwt_min_iat?: number | null },
+): Promise<SessionStanding> {
+  const iat = iatSeconds(payload.iat);
+  const floor = Number(user.jwt_min_iat ?? 0);
+  if (floor > 0 && iat !== null && iat < floor) return { ok: false, reason: 'below_floor' };
+
+  const operator = payload.impersonated_by ? Number(payload.impersonated_by) : 0;
+  if (payload.sid !== undefined && payload.sid !== null) {
+    const sid = Number(payload.sid);
+    if (!Number.isInteger(sid) || sid <= 0) return { ok: false, reason: 'support_session_unbound' };
+    type SupportRecord = {
+      admin_user_id: number; target_user_id: number; ended_at: string | null;
+      admin_active: number | null; admin_role: string | null; admin_min_iat: number | null;
+    };
+    let rec: SupportRecord | null;
+    try {
+      rec = await env.DB.prepare(
+        `SELECT i.admin_user_id, i.target_user_id, i.ended_at,
+                a.is_active AS admin_active, a.role AS admin_role, a.jwt_min_iat AS admin_min_iat
+           FROM impersonation_sessions i
+           LEFT JOIN users a ON a.id = i.admin_user_id
+          WHERE i.id = ?`,
+      ).bind(sid).first<SupportRecord>();
+    } catch (e) {
+      console.warn('[auth] support-session record unreadable', (e as Error).message);
+      return { ok: false, reason: 'support_session_unavailable' };
+    }
+    if (!rec) return { ok: false, reason: 'support_session_unbound' };
+    if (Number(rec.target_user_id) !== Number(user.id) || Number(rec.admin_user_id) !== operator) {
+      return { ok: false, reason: 'support_session_unbound' };
+    }
+    if (rec.ended_at) return { ok: false, reason: 'support_session_ended' };
+    if (operator) {
+      if (!Number(rec.admin_active) || String(rec.admin_role ?? '').toLowerCase() !== 'admin') {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+      const opFloor = Number(rec.admin_min_iat ?? 0);
+      if (opFloor > 0 && iat !== null && iat < opFloor) {
+        return { ok: false, reason: 'support_operator_signed_out' };
+      }
+    }
+  }
+
+  const jti = payload.jti;
+  if (!jti) return { ok: true, stepUpDue: null };
+  let sess: { revoked_at: string | null; step_up_due_at?: string | null } | null;
+  try {
+    try {
+      sess = await env.DB.prepare(
+        'SELECT revoked_at, step_up_due_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null; step_up_due_at: string | null }>();
+    } catch (e) {
+      // Only a database that has not added the step-up column falls back to
+      // the base check; any other failure is the store being unreadable.
+      if (!/no such column/i.test(String((e as Error)?.message ?? ''))) throw e;
+      sess = await env.DB.prepare(
+        'SELECT revoked_at FROM user_sessions WHERE jti = ? AND user_id = ?',
+      ).bind(jti, payload.user_id).first<{ revoked_at: string | null }>();
+    }
+  } catch (e) {
+    console.warn('[auth] session store unreadable', (e as Error)?.message);
+    return { ok: false, reason: 'session_store_unavailable' };
+  }
+  if (!sess) return { ok: false, reason: 'session_unknown' };
+  if (sess.revoked_at) return { ok: false, reason: 'session_revoked' };
+  try {
+    // T22.6 — Coalesce last_seen_at writes. Only update if the row's
+    // existing value is >5 min old. Prevents a write per request on a
+    // hot session (which serialises through D1 and inflates write QPS).
+    await env.DB.prepare(
+      "UPDATE user_sessions SET last_seen_at = datetime('now') " +
+        "WHERE jti = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-5 minutes'))"
+    ).bind(jti).run();
+  } catch {}
+  return { ok: true, stepUpDue: sess.step_up_due_at ?? null };
 }
 
 export async function requireAuth(c: Context<{ Bindings: Env }>): Promise<User> {
@@ -823,11 +983,11 @@ export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): 
  */
 export async function requireRole(
   c: Context<{ Bindings: Env }>,
-  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'guest'>
+  ...roles: Array<'admin' | 'partner' | 'founder' | 'investor' | 'advisor' | 'guest'>
 ): Promise<User> {
   const user = await requireAuth(c);
   if (user.role === 'admin') return user;
-  if (!roles.includes(user.role as any)) throw new Error('Forbidden');
+  if (!roles.includes(user.role as any) && !roles.some(role => isLicence(role) && holdsLicence(user, role))) throw new Error('Forbidden');
   return user;
 }
 
@@ -859,7 +1019,7 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
   // a matching founder_id) means a non-founder principal that happens to carry
   // a residual founder_id (e.g. a founder later converted to an investor) can
   // never bypass into the un-masked data this predicate guards.
-  return user.role === 'founder' && !!user.founder_id && user.founder_id === ownerFounderId;
+  return holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === ownerFounderId;
 }
 
 /**
@@ -884,10 +1044,10 @@ export type EntityListScope =
   | { kind: 'none' };
 
 export function entityListScope(user: User): EntityListScope {
-  if (user.role === 'admin' || user.role === 'partner') return { kind: 'all' };
+  if (user.role === 'admin' || holdsLicence(user, 'partner')) return { kind: 'all' };
   // Role-gated, not merely founder_id-gated — a principal converted to another
   // role may still carry a residual founder_id, and must not read through it.
-  if (user.role === 'founder' && !!user.founder_id) {
+  if (holdsLicence(user, 'founder') && !!user.founder_id) {
     return { kind: 'own_projects', founderId: user.founder_id };
   }
   return { kind: 'none' };
@@ -896,13 +1056,13 @@ export function entityListScope(user: User): EntityListScope {
 /** Phase 0.1 — true iff viewer may see capital / LP / fund cashflow data.
  * Strictly admin or investor. Mirrors `services.access_policy.can_view_lp_data`. */
 export function canViewLpData(user: User | null | undefined): boolean {
-  return !!user && (user.role === 'admin' || user.role === 'investor');
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'investor'));
 }
 
 /** Phase 0.1 — true iff viewer may see partner-side demand boards.
  * Strictly admin or partner. */
 export function canViewPartnerDemand(user: User | null | undefined): boolean {
-  return !!user && (user.role === 'admin' || user.role === 'partner');
+  return !!user && (user.role === 'admin' || holdsLicence(user, 'partner'));
 }
 
 /**
@@ -974,7 +1134,31 @@ async function recordGateRefusal(
     userId: Number(user.id),
     email: user.email,
     ip,
+    supportUserId: await supportOperatorOf(c, Number(user.id)),
   });
+}
+
+/**
+ * D4691 — who is really calling, when the caller is a support session: the
+ * operator's HQ id from an impersonation token, 0 for a branch support token
+ * (its session row's factor names it; the operator is held at HQ), or null
+ * when the account holder is acting as themselves. Never throws: it only
+ * labels a security event, so a failed read labels nothing.
+ */
+export async function supportOperatorOf(c: Context<{ Bindings: Env }>, userId: number): Promise<number | null> {
+  try {
+    const sel = await selectJwt(c);
+    const by = Number(sel?.payload?.impersonated_by);
+    if (Number.isSafeInteger(by) && by > 0) return by;
+    const jti = typeof sel?.payload?.jti === 'string' ? sel.payload.jti : null;
+    if (!jti) return null;
+    const row = await c.env.DB.prepare(
+      'SELECT factor FROM user_sessions WHERE jti = ? AND user_id = ?',
+    ).bind(jti, userId).first<{ factor: string | null }>();
+    return row?.factor === 'hq_support' ? 0 : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─────────────────────────────────────── BLOCK-AUTH-03 — step-up auth ──
@@ -1144,7 +1328,7 @@ export async function requireApprovedKyc(c: Context<{ Bindings: Env }>): Promise
   // and pass through. Only investors must be approved before reaching
   // gated capital / deal-flow / signing endpoints.
   if (user.role === 'admin') return user;
-  if (user.role !== 'investor') return user;
+  if (!holdsLicence(user, 'investor')) return user;
   if ((user as any).kyc_status === 'approved') return user;
   throw new Error('KYC required');
 }

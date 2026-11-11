@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
 import BrandIcon from '../../ui/BrandIcon.jsx';
-import { api as defaultApi } from '../../lib/api.js';
+import { api as defaultApi, readRefusal } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
 import { liveRefusal } from '../../lib/activeRecording.js';
@@ -172,6 +172,7 @@ const BOT_INSTEAD = new Set(['meeting_not_in_calendar', 'meeting_not_hosted', 'm
 export default function RecordLightbox({
   projectId, interview = null, onClose, onStarted, initialModels, initialBoard, channels: initialChannels, fields = SETUP_FIELDS,
   initialMode = 'in_person', initialConsent = '', api = defaultApi, sessions = interviewSessionsApi, channelsSource = channelsApi, returnFocusTo,
+  initialClientKey = null,
   cycle = cycleValidateApi,
   // D685 §5.6 (#1588): the app's recorder, which takes the draft. Without one, Start opens the session page as before.
   recorder = null,
@@ -222,7 +223,8 @@ export default function RecordLightbox({
   const nameRef = useRef(null);
   const sending = useRef(false); // a second press in the same render must not send again
   const startKey = useRef(null);
-  if (startKey.current === null) startKey.current = newStartKey();
+  if (startKey.current === null) startKey.current = initialClientKey || newStartKey();
+  const setupKey = (bot) => initialClientKey || `${startKey.current}${bot ? '-bot' : ''}`;
   const [name, setName] = useState(interview?.interviewee_name || '');
   const [company, setCompany] = useState(interview?.interviewee_company || '');
   const [mode, setMode] = useState(initialMode);
@@ -235,6 +237,34 @@ export default function RecordLightbox({
   const [final, setFinal] = useState(initialModels?.defaults?.final ?? null);
   const [language, setLanguage] = useState('');
   const [minutes, setMinutes] = useState(30);
+  const supportsOutputs = typeof sessions.outputs === 'function';
+  const [outputs, setOutputs] = useState(['customer-research', 'pain-points', 'icp-fit']);
+  const [outputsLoaded, setOutputsLoaded] = useState(false);
+  const [outputQuote, setOutputQuote] = useState(undefined);
+  const [outputIssue, setOutputIssue] = useState('');
+  const unavailableOutputs = (message) => { setOutputs([]); setOutputQuote(null); setOutputIssue(message || 'The extraction estimate is unavailable.'); };
+  useEffect(() => {
+    if (!supportsOutputs || !projectId) return undefined;
+    let alive = true;
+    setOutputsLoaded(false); setOutputQuote(undefined); setOutputIssue('');
+    sessions.outputs(projectId).then((r) => {
+      if (alive) {
+        if (!Array.isArray(r?.outputs) || !r.outputs.every((x) => typeof x === 'string')) { unavailableOutputs('The output choices could not be read.'); return; }
+        setOutputs(r.outputs); setOutputsLoaded(true);
+      }
+    }).catch(() => { if (alive) unavailableOutputs('The output choices could not be read.'); });
+    return () => { alive = false; };
+  }, [sessions, projectId, supportsOutputs]);
+  useEffect(() => {
+    if (!supportsOutputs || !outputsLoaded) return undefined;
+    if (!outputs.length) { setOutputQuote(0); return undefined; }
+    let alive = true;
+    setOutputQuote(undefined);
+    const timer = setTimeout(() => sessions.outputs(projectId, minutes, outputs).then((r) => {
+      if (alive) { if (r.quote?.ok && Number.isFinite(r.quote.microusd)) { setOutputQuote(r.quote.microusd); setOutputIssue(''); } else unavailableOutputs(r.quote?.message); }
+    }).catch(() => { if (alive) unavailableOutputs('The extraction estimate could not be read.'); }), 200);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [sessions, projectId, minutes, outputs, outputsLoaded, supportsOutputs]);
   const [board, setBoard] = useState(initialBoard);
   const [selected, setSelected] = useState(null); // null: the defaults (the first two), until the founder toggles one
   const [assistant, setAssistant] = useState(false);
@@ -326,7 +356,7 @@ export default function RecordLightbox({
   const captureReason = state.ok && !blockedReason && captureKind === 'none' ? (meeting ? plan?.reason ?? null : capture.reason) : null;
   const ready = state.ok && !blockedReason && !linkProblem && captureKind !== 'none' && !busy
     && (!meeting || !!String(link).trim() || (fields.meeting_url && typeof channelsSource?.instantMeeting === 'function'));
-  const label = howOf(mode) === 'call' ? 'Start Call' : m.start;
+  const label = refusal?.retrySetup ? 'Try again' : howOf(mode) === 'call' ? 'Start Call' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -494,11 +524,16 @@ export default function RecordLightbox({
     const named = (who?.interviewee_name || name).trim();
     const into = (r) => ({ id: r?.id ?? who?.id, interviewee_name: r?.interviewee_name ?? who?.interviewee_name ?? named, interviewee_company: r?.interviewee_company ?? who?.interviewee_company ?? (company.trim() || null) });
     try {
-      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: null, final: '@cf/deepgram/nova-3', language, conversation, ...(supportsOutputs ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link: url, points: chosenPoints.map((p) => p.id), name, company };
       const botFields = { ...fields, meeting_url: false };
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: `${startKey.current}-bot` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}-bot` }, botFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: setupKey(true) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(true) }, botFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       // D1363: refused for AI tokens, the member tops up here and the send is made again on
       // the same session once the tokens land; the meeting then opens (or the session page offers it).
       const send = async () => {
@@ -553,15 +588,20 @@ export default function RecordLightbox({
         setBusy(false); sending.current = false;
         return;
       }
-      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, ...(supportsOutputs && m.audio ? { outputs: Number.isFinite(outputQuote) ? outputs : [] } : {}), provider, link, points: chosenPoints.map((p) => p.id), name, company };
       // An interview it was opened on (a row's "Record a session") may already
       // be held, which the setup call refuses: it opens on that interview's own
       // route, with the same fields. A pick from the pipeline, or a new person,
       // is the one setup call.
       const captureFields = useBot ? { ...fields, meeting_url: false } : fields;
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: `${startKey.current}${useBot ? '-bot' : ''}` })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}${useBot ? '-bot' : ''}` }, captureFields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: setupKey(useBot) })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(useBot) }, captureFields));
+      if (r?.detail === 'setup_incomplete') {
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
+        error.code = 'setup_incomplete'; error.data = r;
+        throw error;
+      }
       const into = person(r.interview);
       if (useBot) {
         const url = link.trim();
@@ -809,6 +849,30 @@ export default function RecordLightbox({
                     </div>
                   </>
                 )}
+          </Section>
+        )}
+
+        {m.audio && supportsOutputs && (
+          <Section title="What do you want from this call?" testId="record-outputs">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {[
+                ['problem-discovery', 'Problem discovery'], ['customer-research', 'Customer research'],
+                ['ideal-customer-profile', 'Ideal customer profile'], ['market-intelligence', 'Market intelligence'],
+                ['demand-signals', 'Demand and urgency signals'], ['experiments', 'Experiments and evidence'],
+                ['verdict', 'Verdict'], ['pain-points', 'Pain points'], ['icp-fit', 'ICP fit'],
+                ['feature-requests-quotes', 'Feature requests & quotes'],
+              ].map(([id, label]) => <label key={id} className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
+                <input type="checkbox" checked={outputs.includes(id)} disabled={!outputsLoaded || busy} onChange={(e) => {
+                  setOutputQuote(undefined); setOutputIssue('');
+                  setOutputs((old) => e.target.checked ? [...old, id] : old.filter((x) => x !== id));
+                }} />{label}
+              </label>)}
+            </div>
+            <p role="status" className="m-0 text-[12px] text-axal-muted dark:text-gray-300" data-testid="record-outputs-cost">
+              {outputIssue ? `${outputIssue} No outputs selected. You can still start recording.` : outputQuote === undefined ? 'Estimating AI tokens… Recording can start without outputs.' : outputQuote === null ? 'The extraction estimate is unavailable. Recording can start without outputs.'
+                : `Estimated extraction: $${(outputQuote / 1000000).toFixed(6)} of AI tokens · based on ${minutes} minutes. Actual usage depends on the final transcript.`}
+            </p>
+            <p className="m-0 text-[11.5px] text-axal-faint">After the call only. Eadwyn proposes each selected output for you to Accept. Quotable lines need Quotes OK.</p>
           </Section>
         )}
 

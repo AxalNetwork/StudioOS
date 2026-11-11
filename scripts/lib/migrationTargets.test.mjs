@@ -23,7 +23,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { resolveTarget, bootstrapRefusal, branchConfigPath, HQ_CONFIG } from './migrationTargets.mjs';
+import { resolveTarget, bootstrapRefusal, branchConfigPath, HQ_CONFIG, rehearsalConfigPath, REHEARSAL_DB_PREFIX } from './migrationTargets.mjs';
 import {
   LEDGER_TABLE, BASELINE_CUTOFF, listMigrationFiles, planActions, migrationNumber,
 } from './migrationPlan.mjs';
@@ -117,4 +117,22 @@ test('a bootstrapped branch is marked up to the cutoff and then migrated forward
   // Worker have no super admin of its own. If the cutoff ever moves below it,
   // every new branch would seed HQ's holder into its own database.
   assert.ok(marked.some((n) => n.startsWith('207_')), 'the super-admin seed must be marked, never executed, on a fresh database');
+});
+
+test('#4591: a rehearsal target names its own throwaway database and config, never production or a branch', () => {
+  const t = resolveTarget(['--rehearsal', 'abc123-src']);
+  assert.deepEqual(t, {
+    label: 'rehearsal abc123-src', kind: 'rehearsal', rehearsal: 'abc123-src',
+    dbName: `${REHEARSAL_DB_PREFIX}abc123-src`, config: rehearsalConfigPath('abc123-src'), flags: ['--remote'],
+  });
+  assert.notEqual(t.config, HQ_CONFIG, "a rehearsal must not carry HQ's config");
+  assert.deepEqual(resolveTarget(['--rehearsal', 'abc123-dst', '--local']).flags, ['--local'], '--local proves the script offline');
+  assert.equal(bootstrapRefusal(t), null, 'a fresh rehearsal database is bootstrapped, as a branch is');
+  // Ids that could reach another database, or no database, throw.
+  for (const bad of ['', 'abc123', 'db', 'abc12-src', 'ABC123-src', 'abc123-prod', '../x-src', 'abc123-src;--']) {
+    assert.throws(() => resolveTarget(['--rehearsal', bad]), /rehearsal id/, `--rehearsal ${JSON.stringify(bad)}`);
+  }
+  for (const other of [['--remote'], ['--preview'], ['--branch', 'fr']]) {
+    assert.throws(() => resolveTarget(['--rehearsal', 'abc123-src', ...other]), /do not combine/, `--rehearsal with ${other[0]}`);
+  }
 });

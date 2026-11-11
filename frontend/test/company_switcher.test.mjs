@@ -30,6 +30,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
+import { VENTURE_PARAM, ventureRef } from '../src/pages/cycles/ventureQuery.js';
 
 const root = resolve(process.cwd());
 const read = (p) => readFileSync(resolve(root, p), 'utf8');
@@ -115,7 +116,17 @@ test('the scope notice stands exactly as long as scoping is incomplete', () => {
       let src = codeOnly(read(`cloudflare-worker/src/routes/${f}`));
       // #2435 moves the real request-aware gate into shared middleware.
       // Follow its import and call; an unscoped router gains no exemption.
-      if (f === 'decks.ts' || f === 'brand.ts') {
+      if (f === 'decks.ts') {
+        // D4595 moves the deck role matrix into services/decks/access.ts,
+        // which delegates company scope to the same shared gate. Follow both hops.
+        assert.match(src, /import \{ projectOwned \} from '\.\.\/services\/decks\/access'/, `${f} must import its deck gate`);
+        assert.match(src, /await projectOwned\(c, user,/, `${f} must call its deck gate`);
+        const deckAccess = codeOnly(read('cloudflare-worker/src/services/decks/access.ts'));
+        assert.match(deckAccess, /import \{ projectOwned as sharedProjectOwned \} from '\.\.\/\.\.\/middleware\/projectContentAccess'/, 'the deck gate must import the shared gate');
+        assert.match(deckAccess, /await sharedProjectOwned\(c, user, projectId, opts\)/, 'the deck gate must delegate every scoped option');
+        src += deckAccess + codeOnly(read('cloudflare-worker/src/middleware/projectContentAccess.ts'));
+      }
+      if (f === 'brand.ts') {
         assert.match(src, /import \{ projectOwned(?: as sharedProjectOwned)? \} from '\.\.\/middleware\/projectContentAccess'/, `${f} must import its shared gate`);
         assert.match(src, /await projectOwned\(c, user,/, `${f} must call its shared gate`);
         if (src.includes('projectOwned as sharedProjectOwned')) assert.match(src, /await sharedProjectOwned\(c, user, projectId, opts\)/, `${f} must delegate every scoped option`);
@@ -182,6 +193,9 @@ test('no founder landing offers its own startup picker', () => {
     assert.doesNotMatch(src, /projects\.map\(\(project\) => <option/,
       `${file} must not build a project option list`);
   }
-  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /searchParams\.get\('project_id'\)/,
+  // D5074 (#5074): CycleRoute reads the venture through the shared helper, which reads `?project_id=`.
+  assert.match(codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx')), /ventureRef\(searchParams\)/,
     'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
+  assert.equal(VENTURE_PARAM, 'project_id');
+  assert.equal(ventureRef('?project_id=7')?.id, 7, 'the cycle pages must still honour ?project_id=, so no project becomes unreachable');
 });

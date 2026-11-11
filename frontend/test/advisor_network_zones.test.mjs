@@ -179,7 +179,7 @@ test('Research is given who you are wherever it is mounted, and the retired Sign
   // half of this test now: it is mounted nowhere, and `/signals` redirects.
   assert.equal(app.split('\n').filter((l) => l.includes('<SignalsPage')).length, 0,
     'SignalsPage is mounted again; D670 retired it');
-  assert.match(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\} \/>/);
   for (const line of app.split('\n').filter((l) => l.includes('<ResearchWorkspace'))) {
     assert.match(line, /user=\{user\}/, `ResearchWorkspace mounted without a user: ${line.trim()}`);
   }

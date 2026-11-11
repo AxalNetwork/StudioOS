@@ -135,7 +135,7 @@ test('every item is all day on its due date, names its source in plain words, an
       assert.equal(by[k].source.family, 'tasks', k);
       assert.equal(by[k].family, 'deadlines', k);
     }
-    assert.deepEqual(KINDS.map((k) => by[k].href), [null, '/build/board', '/contacts', '/delivery/health']);
+    assert.deepEqual(KINDS.map((k) => by[k].href), [null, '/build/board', '/network?tab=contacts', '/delivery/health']);
     assert.deepEqual(KINDS.map((k) => by[k].my_role.words), ['Assigned to you', 'Assigned to you', 'Your venture’s follow-up', 'You deliver this']);
   } finally { db.close(); }
 });

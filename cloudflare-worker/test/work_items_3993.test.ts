@@ -38,6 +38,8 @@ function world() {
   db.exec(stripForeignKeys(sql('migrations/727_scope_goals_and_tasks.sql')));
   db.exec(sql('migrations/762_scope_task_work_board.sql'));
   db.exec(sql('migrations/763_task_comments_labels_milestones.sql'));
+  // #3968: the production board now reads E3's canonical run store.
+  db.exec(stripForeignKeys(tableFromBaseline(sql('migrations/728_agent_engine.sql'), 'agent_task_runs')));
   // D1614 W8 (#3994): W1's write clears needs_reassignment.
   db.exec(sql('migrations/202611022015_scope_task_needs_reassignment.sql'));
   db.exec(sql('migrations/202611022205_work_workload.sql')); // D1614 W4: the board reads the time block
@@ -350,4 +352,19 @@ test('migration 763 on real legacy rows: labels_json becomes labels and links; e
     assert.throws(() => db.exec("INSERT INTO scope_task_events (task_id,kind) VALUES (1,'invented')"));
     assert.throws(() => db.exec("INSERT INTO task_comments (uid,task_id,project_id,body) VALUES ('c',1,5,'no author')"));
   } finally { db.close(); }
+});
+
+test('#4419: Accept edited draft keeps original proposal and records the accepted task fields', async () => {
+  const w=world();
+  try {
+    const cfo=await agent(w);
+    const uid=await proposeTaskDraft(w.env,cfo.id,{title:'Original title',body:'Original body',type:'chore'});
+    const res=await call(w,OWNER,'POST',`/project/7/work/drafts/${uid}/accept`,{title:'Reviewed title',body:'Reviewed body'});
+    assert.equal(res.status,201,res.text);
+    assert.deepEqual([res.body.task.title,res.body.task.body],['Reviewed title','Reviewed body']);
+    const proposal=w.db.prepare('SELECT status,payload_json,decided_payload_json FROM ai_rail_proposals WHERE uid=?').get(uid) as any;
+    assert.equal(proposal.status,'edited');
+    assert.equal(JSON.parse(proposal.payload_json).create_task.title,'Original title');
+    assert.equal(JSON.parse(proposal.decided_payload_json).create_task.title,'Reviewed title');
+  }finally{w.db.close();}
 });

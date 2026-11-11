@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * D1215 (#3212, part 2 of #2424) — a closing as a record: its lines, their
  * capital route, the evidence that money moved, the cap-table proposal and the
@@ -92,7 +93,7 @@ const isAdmin = (user: User) => String(user?.role ?? '') === 'admin';
  */
 const ownerFounderId = (user: User): number => {
   const id = (user as any)?.founder_id;
-  return String(user?.role ?? '') === 'founder' && Number.isInteger(id) && id > 0 ? Number(id) : -1;
+  return !!user && holdsLicence(user, 'founder') && Number.isInteger(id) && id > 0 ? Number(id) : -1;
 };
 const OWNS_PROJECT = 'SELECT 1 AS yes FROM projects p WHERE p.id = ? AND p.founder_id = ? AND p.deleted_at IS NULL';
 

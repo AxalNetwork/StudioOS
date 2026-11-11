@@ -27,12 +27,12 @@ export const learningApi = {
 
   // #4180 (D4180) — the list reads (routes/learning_lists.ts). Published and
   // visible only; a figure not recorded is null, never 0.
-  //   exercises({ limit, offset }) → { items: [{ uid, title, submission_kind, where: { kind, title } | null, status, submitted_at, updated_at, href }], total, limit, offset }
-  //   exams({ limit, offset })     → { items: [{ uid, title, where, question_count, time_limit_minutes, pass_mark_percent,
+  //   exercises({ limit, offset, q }) → { items: [{ uid, title, submission_kind, where: { kind, title } | null, status, submitted_at, updated_at, href }], total, limit, offset }
+  //   exams({ limit, offset, q })     → { items: [{ uid, title, where, question_count, time_limit_minutes, pass_mark_percent,
   //                                    attempts_left, attempts_used, best_score_percent, passed, updated_at, href }], total, limit, offset }
   //   mySubmissions()              → { submissions: [{ uid, status, feedback, submitted_at, reviewed_at, exercise: { uid, title, href } }] }
   //   myAttempts()                 → { attempts: [{ uid, started_at, submitted_at, score_percent, passed, timed_out, exam: { uid, title, pass_mark_percent, href } }] }
-  //   myStats()                    → { month, courses_in_progress, lessons_completed_this_month, watch_seconds_this_month, exams: { passed, sat } }
+  //   myStats()                    → { month, courses_in_progress, lessons_completed_this_month, videos_played_this_month, exams: { passed, sat } }
   // The catalog also takes `max_minutes`, and a row found in a transcript carries `match: { in, snippet, at_seconds }`.
   exercises: (params) => request(`/learning/exercises${qs(params)}`),
   exams: (params) => request(`/learning/exams${qs(params)}`),
@@ -50,6 +50,8 @@ export const learningApi = {
   startExam: (uid) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts`, { method: 'POST' }),
   // answers: { [questionUid]: [optionIndex, …] }
   submitExam: (uid, attemptUid, answers) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts/${encodeURIComponent(attemptUid)}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  // D5356 part 2: save an open attempt's choices on the server ({ answers, revision }); 409 stale_revision carries the saved copy.
+  saveExamAnswers: (uid, attemptUid, answers, revision) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts/${encodeURIComponent(attemptUid)}/answers`, { method: 'PUT', body: JSON.stringify({ answers, revision }) }),
   examAttempts: (uid) => request(`/learning/exams/${encodeURIComponent(uid)}/attempts`),
   // Read-only review of learners' work, for whoever may review it (D559).
   reviewSubmissions: (exerciseUid) => request(`/learning/review/exercises/${encodeURIComponent(exerciseUid)}/submissions`),
@@ -62,7 +64,10 @@ export const learningApi = {
   program: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}`),
   enrolInProgram: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/enrol`, { method: 'POST' }),
   assignedPrograms: () => request('/learning/programs/mine'),
-  programLearners: (uid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners`),
+  // D4810: `{ limit, offset }` reads a page (with `total`); without, every learner.
+  programLearners: (uid, page = null) => request(`/learning/programs/${encodeURIComponent(uid)}/learners${page ? `?limit=${Number(page.limit)}&offset=${Number(page.offset) || 0}` : ''}`),
+  // D4810: Completion by program, one read for every published program in the caller's scope.
+  programsCompletion: () => request('/learning/programs/mine/completion'),
   programLearner: (uid, userUid) => request(`/learning/programs/${encodeURIComponent(uid)}/learners/${encodeURIComponent(userUid)}`),
 
   // D560 — webinars. `join_url` arrives only for a registered member, from 15

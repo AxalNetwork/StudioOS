@@ -154,7 +154,7 @@ test('AK12: every host\'s rail track reads the panel\'s width, which is 420px on
 });
 
 test('the source: every shared header mounts HeaderAsk, and the pages that drew PageAsk directly go through it', () => {
-  assert.match(codeOnly(read('ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} \/>;/);
+  assert.match(codeOnly(read('ui/HeaderAsk.jsx')), /return <PageAsk label=\{label\} testId=\{testId\} page=\{page\} state=\{state\} disabled=\{disabled\} sub=\{sub\} title=\{title\} ariaLabel=\{ariaLabel\} \/>;/);
   assert.match(codeOnly(read('workspaces/ZoneActions.jsx')), /<HeaderAsk testId="zone-actions-ask" \/>/);
   assert.match(codeOnly(read('workspaces/ProfileHeaderAsk.jsx')), /return <HeaderAsk testId="zone-header-ask" \/>;/);
   assert.match(codeOnly(read('pages/cycles/CycleOverview.jsx')), /const askNode = ask \?\? <HeaderAsk label=/);

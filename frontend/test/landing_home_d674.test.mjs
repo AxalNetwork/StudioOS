@@ -22,12 +22,15 @@ import { resolve } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { readRoutesSource } from './_routesSource.mjs';
 
 const ROOT = process.cwd();
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
 const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const LANDING_SRC = read('frontend/src/pages/LandingPage.jsx');
 const APP = read('frontend/src/App.jsx');
+// #4105: a route can live in a module under frontend/src/routes/; the shell's links are checked against both.
+const ROUTES = readRoutesSource();
 
 const { default: LandingPage, heroFigures, figure } = await import('../src/pages/LandingPage.jsx');
 const { PLATFORM_MODULE_COUNT } = await import('../src/lib/siteModules.js');
@@ -81,7 +84,7 @@ test('every link the shell draws is a route App.jsx serves', () => {
   assert.ok(paths.length >= 14, 'the shell lists its doors, network, build and legal links');
   for (const p of paths) {
     const routed = new RegExp(`<Route\\s+path="${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`);
-    assert.match(APP, routed, `${p} is linked from the shell but not routed — it would 404`);
+    assert.match(ROUTES, routed, `${p} is linked from the shell but not routed — it would 404`);
   }
 });
 

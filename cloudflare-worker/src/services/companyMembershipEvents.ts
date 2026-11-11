@@ -19,6 +19,11 @@ export const MEMBERSHIP_EVENT_KINDS = [
   'project_move', 'project_transfer', 'seat_add', 'seat_remove',
   // #3932 (migration 757): a change to the company's default currency, recorded beside 'rename'.
   'currency_change',
+  // #4201 (migration 202611031619): an uploaded, replaced or removed logo; before/after say 'stored', 'outside' or null.
+  'logo_change',
+  // #4963 (migration 202611072255): a committed General profile change; after_json names the changed fields and the
+  // revision before and after, never their values.
+  'profile_update',
 ] as const;
 export type MembershipEventKind = (typeof MEMBERSHIP_EVENT_KINDS)[number];
 
@@ -30,6 +35,12 @@ export type MembershipEvent = {
   targetUserId?: number | null;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
+  /**
+   * #4963: record the event only if the company row holds exactly this version AND this `updated_at` once the batch's
+   * earlier statements ran, i.e. only if THIS request's compare-and-swap update matched. The version alone is not
+   * enough: a concurrent writer that won the race leaves the same next version behind.
+   */
+  onlyIfProfile?: { version: number; updatedAt: string };
 };
 
 const json = (o: Record<string, unknown> | null | undefined) => (o && Object.keys(o).length ? JSON.stringify(o) : null);
@@ -41,9 +52,22 @@ export function membershipEvent(env: Pick<Env, 'DB'>, ev: MembershipEvent): D1Pr
   const companyId = idOrNull(ev.companyId);
   const projectId = idOrNull(ev.projectId);
   if (companyId == null && projectId == null) throw new Error('a membership event names a company or a venture');
+  const values = [companyId, projectId, idOrNull(ev.actorUserId), idOrNull(ev.targetUserId), ev.kind, json(ev.before), json(ev.after)];
+  if (ev.onlyIfProfile !== undefined) {
+    const { version, updatedAt } = ev.onlyIfProfile;
+    if (companyId == null || !Number.isSafeInteger(version) || typeof updatedAt !== 'string' || !updatedAt) {
+      throw new Error('a version-conditioned event names a company, a version and the update stamp');
+    }
+    return env.DB.prepare(
+      `INSERT INTO company_membership_events
+         (company_id, project_id, actor_user_id, target_user_id, kind, before_json, after_json)
+       SELECT ?, ?, ?, ?, ?, ?, ?
+        WHERE EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND profile_version = ? AND updated_at = ?)`,
+    ).bind(...values, companyId, version, updatedAt);
+  }
   return env.DB.prepare(
     `INSERT INTO company_membership_events
        (company_id, project_id, actor_user_id, target_user_id, kind, before_json, after_json)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(companyId, projectId, idOrNull(ev.actorUserId), idOrNull(ev.targetUserId), ev.kind, json(ev.before), json(ev.after));
+  ).bind(...values);
 }

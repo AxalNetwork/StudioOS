@@ -20,6 +20,7 @@ import {
   notOfferedReason, optionMismatches, outsideFit, renderCoverage,
 } from '../src/services/ai/coverage.ts';
 import { ROUTE } from '../src/services/aiRouter.ts';
+import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
 import { STT_MODELS, isChoosable } from '../src/services/sttModels.ts';
 
 const DOC = new URL('../../documentation/architecture/AI_MODEL_COVERAGE.md', import.meta.url);
@@ -85,7 +86,8 @@ test('every model a job routes to, a page lists or a session can pick is offered
   for (const r of Object.values(ROUTE) as Array<{ model: string; fallbackChain?: string[]; alternates?: string[] }>) {
     for (const id of [r.model, ...(r.fallbackChain ?? []), ...(r.alternates ?? [])]) ids.add(id);
   }
-  for (const row of [...matrix.rows, ...matrix.options]) for (const m of [...row.models, ...(row.more ?? [])]) ids.add(m.id);
+  // #4313 part 3: a page row stores no models, so what a page lists is the row its job builds.
+  for (const row of [...railRows(), ...railOptionRows(), ...matrix.options]) for (const m of [...row.models, ...(row.more ?? [])]) ids.add(m.id);
   for (const s of STT_MODELS) if (isChoosable(s.model, s.kind)) ids.add(s.model);
   const unoffered = [...ids].filter((id) => {
     const m = modelById(id);

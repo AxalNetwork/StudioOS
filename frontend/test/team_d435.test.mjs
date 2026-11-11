@@ -77,7 +77,7 @@ test('the Team page is mounted in workspace mode, the old page is gone, and the 
   // #2355 removed the /cofounder page: its address forwards every role to
   // Co-founder Match, the one matcher (#2297 §3), not to the Team page.
   const cofounder = APP.split('\n').find((l) => l.includes('path="/cofounder"'));
-  assert.match(cofounder, /element=\{<Navigate to="\/spinout-lab\/cofounder-match" replace \/>\}/);
+  assert.equal(cofounder, undefined);
   // The founder home's bookings card that linked here was retired with the
   // 69dc42f3 body (D564); no founder Studio link sends a bare ?tab= either.
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /\/build\/team\?tab=/);

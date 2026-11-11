@@ -40,6 +40,7 @@ export const SCOPE_LABELS: Readonly<Record<string, { label: string; write: boole
   // D846 (#2467): the read scopes the tool registry added, in the consent page's words (routes/mcp_consent.ts).
   'build:read': { label: 'Read your Build progress, from the records your connected tools fed', write: false },
   'raise:read': { label: 'Read your Raise context', write: false },
+  'raise:write': { label: 'Propose deck changes and keep follow-up drafts for you to accept. Nothing is saved to your deck or sent without your press.', write: true },
   'connectors:read': { label: 'See which tools you have connected, their status and last sync. Never their tokens.', write: false },
   // D1343 (#3551): Email's MCP tools.
   'mail:read': { label: 'Read the records Eadwyn may quote in an email to someone, with their dates. Never sends.', write: false },
@@ -48,8 +49,8 @@ export const SCOPE_LABELS: Readonly<Record<string, { label: string; write: boole
 /** A scope with no label here is shown by name and counted as a write, so a new scope is never under-described. */
 export const scopeOptions = () => keyScopes().map((name) => ({ name, label: SCOPE_LABELS[name]?.label ?? name, write: SCOPE_LABELS[name]?.write ?? true }));
 
-/** The scopes a key may carry: the MCP server's own (read at call time, so a later import cycle cannot leave it undefined). */
-export const keyScopes = (): readonly string[] => SCOPES;
+/** Ordinary member scopes only; Team scopes require an OAuth grant with a verified live binding (D4424). */
+export const keyScopes = (): readonly string[] => SCOPES.filter(scope => !scope.startsWith('team:'));
 
 const KEY_RE = /^axk_([a-z0-9]{12})_([A-Za-z0-9_-]{43})$/;
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';

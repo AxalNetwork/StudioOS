@@ -20,6 +20,7 @@ import { NOT_RECORDED } from './absence';
 import { bpsPercent } from './bps';
 import { longDate, dayOf } from './licencePage';
 import { PROGRAMS } from './programGrants';
+import { formatMinorOrCount } from './money.js';
 import {
   ASKED_MAX, NOTE_MAX, PROGRAM_KINDS, TERM_LABEL, answerSentence, askableTerms, termsFor,
 } from './studioProgramTerms';
@@ -66,13 +67,8 @@ const set = (v) => v !== null && v !== undefined && v !== '';
 /** Money in the grant's currency; a currency nobody recorded is said, never assumed. */
 export function grantMoney(cents, currency) {
   if (!set(cents) || !Number.isFinite(Number(cents))) return NOT_RECORDED;
-  const amount = Number(cents) / 100;
-  if (!currency) return `${amount.toLocaleString('en-GB')} (currency not recorded)`;
-  try {
-    return new Intl.NumberFormat('en-GB', { style: 'currency', currency, maximumFractionDigits: amount % 1 ? 2 : 0 }).format(amount);
-  } catch {
-    return `${amount.toLocaleString('en-GB')} ${currency}`;
-  }
+  // D5373: at the currency's own decimals; a currency nobody recorded (or not a listed one) names the stored count.
+  return formatMinorOrCount(Number(cents), currency, { locale: 'en-GB', trimWhole: true });
 }
 
 
@@ -191,6 +187,8 @@ export function scheduleOf(p) {
   if (!p.grant) return null;
   if (s?.status === 'signed') return { text: `Signed ${longDate(s.signed_at)}`, muted: false };
   if (s?.status === 'sent') return { text: 'Sent, not signed', muted: false };
+  // D4805 (#4805): the schedule the studio signed was for earlier terms.
+  if (s?.status === 'amendment_needed') return { text: 'Terms changed, new signature needed', muted: false };
   if (s?.status === 'not_sent') return { text: 'Not sent', muted: true };
   return { text: NOT_RECORDED, muted: true };
 }
@@ -294,6 +292,7 @@ export function scheduleChip(grant) {
   const s = grant?.schedule?.status;
   if (s === 'signed') return 'Program schedule · signed';
   if (s === 'sent') return 'Program schedule · sent';
+  if (s === 'amendment_needed') return 'Program schedule · amendment needed';
   return 'No schedule sent yet';
 }
 
@@ -347,12 +346,15 @@ export function termRows(p) {
   const s = g.schedule || {};
   const contract = s.status === 'signed' ? `Program schedule: ${nameOf(p.program_key)} · Signed ${longDate(s.signed_at)}`
     : s.status === 'sent' ? `Program schedule: ${nameOf(p.program_key)} · Sent, not signed`
-      : 'Not sent';
+      : s.status === 'amendment_needed' ? `Program schedule: ${nameOf(p.program_key)} · Terms changed, new signature needed`
+        : 'Not sent';
   out.push({
     eye: 'CONTRACT', text: contract, unset: s.status !== 'signed' && s.status !== 'sent', chip: null,
     sub: t.requires_signed_schedule === 0
       ? 'HQ does not wait on a signed schedule for this program.'
-      : s.status === 'signed' ? 'It states the terms as they stood the day HQ sent it.' : 'This program is in force only once the schedule is signed.',
+      : s.status === 'signed' ? 'It states the terms as they stood the day HQ sent it.'
+        : s.status === 'amendment_needed' ? 'The schedule you signed was for earlier terms. This program is in force only once the amended schedule is signed.'
+          : 'This program is in force only once the schedule is signed.',
   });
   out.push(g.note
     ? { eye: 'NOTE TO THE STUDIO', text: g.note, sub: null, unset: false, chip: null }

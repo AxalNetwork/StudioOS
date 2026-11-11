@@ -486,6 +486,7 @@ export function sessionBody(s, fields = SETUP_FIELDS) {
   const m = modeOf(s.mode);
   const body = { channel: s.mode };
   if (m.audio) {
+    if (Array.isArray(s.outputs)) body.outputs = s.outputs;
     body.consent = { status: 'given', method: s.consent };
     body.live_model = s.live ?? null;
     body.final_model = s.final ?? null;
@@ -532,6 +533,9 @@ export function startRefusal(e) {
   const storage = storageRefusal(e);
   if (storage) return { text: storage.text, liveHref: null, storage };
   const text = (typeof e?.message === 'string' && e.message.trim()) || 'The session could not be created.';
+  if (e?.code === 'setup_incomplete' || Number(e?.status) >= 500) {
+    return { text: e?.code === 'setup_incomplete' ? text : 'Session setup did not finish. Try again.', liveHref: null, retrySetup: true };
+  }
   // D1363: refused for AI tokens: the dialog offers Top up in place.
   if (tokenRefusal(e)) return { text, liveHref: null, topUp: true };
   const sid = e?.data?.session_id;

@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * Task #8 (X-1) — Admin endpoints for the partner deal engine.
  *
@@ -904,7 +905,7 @@ admin_partners.post('/links', async (c) => {
     'SELECT id, email, role, partner_id FROM users WHERE id = ?',
   ).bind(userId).first<{ id: number; email: string; role: string; partner_id: number | null }>();
   if (!user) return c.json({ error: 'user not found' }, 404);
-  if (String(user.role || '').toLowerCase() !== 'partner') {
+  if (!holdsLicence(user, 'partner')) {
     return c.json({
       error: 'only a partner account can be attached to a firm; read a firm as an admin by impersonating one of its accounts',
     }, 400);

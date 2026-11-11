@@ -4,7 +4,7 @@
 // `adapter_ready: false` and Connect answers 409 adapter_not_ready.
 //
 // HQ (`/api/admin/event-syndication`):
-//   GET   /channels                   → { channels: [{ channel, capability|null, adapter_ready, account|null }] }   Super Admin
+//   GET   /channels                   → { channels: [{ channel, capability|null, adapter_ready, auth|null, account|null }] }   Super Admin
 //   POST  /channels/:channel/connect  { api_key } or {} → 201 { account } | { authorize_url }                      write bar
 //   PATCH /channels/:uid              { default_on } → { account }
 //   POST  /channels/:uid/disconnect   → { account } (posted listings stay up)
@@ -15,7 +15,7 @@
 //   connected_by_name, connected_at }; it never carries credentials.
 //
 // One event (`/api/events/:id/syndication`, host or admin; anyone else 404):
-//   GET  → { eligible, reason|null, rows: [{ uid|null, channel, account_uid, display_name, capability, on, status,
+//   GET  → { eligible, approved, reason|null, rows: [{ uid|null, channel, account_uid, display_name, capability, adapter_ready, title_limit, text_limit, on, status,
 //         sync_state, skip_reason, last_error, external_url, posted_at, overrides, registrations: null, registrations_reason }] }
 //         (`overrides` is the saved { title?, description?, ticket_url? }, D1493)
 //   PUT  { channels: [{ account_uid, on, overrides?: { title?, description?, ticket_url? } }] } → the same shape

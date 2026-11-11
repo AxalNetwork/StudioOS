@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Loader2, Save, Send, ArrowLeft, ImageIcon,
-  CheckCircle2, Eye, MessageSquare, Sparkles, Wand2,
+  CheckCircle2, Eye, MessageSquare, Wand2,
   Copy, ExternalLink, ShieldAlert, Clock, Globe,
 } from 'lucide-react';
 import { api as appApi, articles as api, adminArticles as adminApi } from '../lib/api';
@@ -17,8 +17,9 @@ import { appOrigin } from '../lib/branchHost';
 import { isSuperAdminUser, readHqView, shellRoleFor } from '../lib/shellRole';
 import Lightbox from '../ui/Lightbox';
 import { RailFrame, WorkerRail } from '../ui';
+import { useAskPanel } from '../ui/eadwynPanel.js';
 import ArticleLibrary from './articles/ArticleLibrary';
-import ArticleWritingPanel from './articles/ArticleWritingPanel';
+import ArticleWritingIntent, { ArticleAsk } from './articles/ArticleWritingIntent';
 import ArticleImageSheet from './articles/ArticleImageSheet';
 import ArticlePublishSheet from './articles/ArticlePublishSheet';
 import {
@@ -33,7 +34,8 @@ import { ghost as actionGhost, primary as actionPrimary } from '../ui/ActionShee
 //
 // D1408 (#3694) — the Article Authoring canvas (boards AR1–AR6): the
 // library at /articles/draft (AR1), the editor at /articles/edit/:id (AR2),
-// Eadwyn's writing panel (AR3), the image sheet (AR4) and Publish… (AR5),
+// Eadwyn's writing actions (AR3; D4353: an intent in the docked Ask panel),
+// the image sheet (AR4) and Publish… (AR5),
 // inside the page's own rail (`<Profile> · Articles`, D1409). The parts live
 // in `pages/articles/`; this file keeps the store, the save, the submit and
 // the D1292 publish chain.
@@ -363,9 +365,11 @@ export default function ArticleAuthorPage() {
   const [listError, setListError] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelRun, setPanelRun] = useState(null);
-  const [waiting, setWaiting] = useState(0);
+  const [asking, setAsking] = useState(false);
+  const [askRun, setAskRun] = useState(null);
+  const [waiting, setWaiting] = useState(null);
+  // D4353: Ask (and a field's Ask in Publish…) is drawn only while the docked Ask panel serves this viewer.
+  const askServed = useAskPanel().available;
   const [imageSheet, setImageSheet] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
   const [slashOpen, setSlashOpen] = useState(false);
@@ -386,10 +390,11 @@ export default function ArticleAuthorPage() {
   useEffect(() => {
     const id = routeId ? Number(routeId) : null;
     setSelectedIdState(id);
+    setWaiting(null); // another article's count is not this one's
     if (!id) {
       setArticle(null);
       articleRef.current = null;
-      setPanelOpen(false);
+      setAsking(false);
       setPublishOpen(false);
       setImageSheet(null);
     }
@@ -859,7 +864,7 @@ export default function ArticleAuthorPage() {
       || (comments.length ? comments[comments.length - 1].body : '')
       || article.rejection_reason || '';
   }
-  // D1408 — what the writing panel is working on: the selection, the text
+  // D1408 — what the writing intent is working on: the selection, the text
   // before the caret, and the heading of the section the caret is in.
   const getContext = useCallback(() => {
     const ta = bodyRef.current;
@@ -933,10 +938,12 @@ export default function ArticleAuthorPage() {
     }
   };
 
+  // D4353 — Ask opens the writing actions as the docked Ask panel's intent; a
+  // field's Ask (Publish…'s blank search fields) opens it on that one option.
   const openAsk = (option = null) => {
     setPublishOpen(false);
-    setPanelRun(option);
-    setPanelOpen(true);
+    setAskRun(option);
+    setAsking(true);
   };
 
   // D1408 (AR5, admin): an approved article another member wrote can be given a
@@ -996,8 +1003,8 @@ export default function ArticleAuthorPage() {
       ) : !article ? (
         <div className="text-center text-slate-500 dark:text-slate-400 mt-20"><Loader2 className="w-5 h-5 animate-spin inline" /> Opening the article…</div>
       ) : (
-        <div className="flex flex-col lg:flex-row min-h-screen">
-          <main className="flex-1 min-w-0">
+        <div className="min-h-screen">
+          <main className="min-w-0">
             <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800">
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-2.5">
                 <div className="min-w-0">
@@ -1065,16 +1072,28 @@ export default function ArticleAuthorPage() {
                         <ArrowLeft className="w-4 h-4" /> Retract
                       </button>
                     )}
-                    <button type="button" onClick={() => (panelOpen ? setPanelOpen(false) : openAsk())} aria-pressed={panelOpen}
-                      className="text-sm px-3 py-1.5 rounded border border-violet-300 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 flex items-center gap-1" data-testid="article-ask">
-                      <Sparkles className="w-4 h-4" /> Ask
-                      {waiting > 0 && <span className="ml-1 text-[11px] px-1.5 rounded-full bg-violet-600 text-white" data-testid="article-ask-waiting">{waiting} waiting</span>}
-                    </button>
+                    <ArticleAsk open={asking} waiting={waiting} onAsk={() => openAsk()} />
                   </div>
               </div>
             </div>
 
             <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+                {/* D4353: no side panel. The intent portals into the docked Ask panel (`AskIntent`); only
+                  where no panel has drawn its slot yet is it drawn here, in the column. */}
+                {asking && (
+                  <ArticleWritingIntent
+                    key={`${article.id}:${askRun || ''}`}
+                    articleId={article.id}
+                    editable={isEditable}
+                    autoRun={askRun}
+                    getContext={getContext}
+                    onPlace={onPlace}
+                    onApplySeo={onApplySeo}
+                    onApplyHeadline={onApplyHeadline}
+                    onWaiting={setWaiting}
+                    onClose={() => { setAsking(false); setAskRun(null); }}
+                  />
+                )}
                 {article.status === 'changes_requested' && reviewerNote && (
                   <div className="mb-4 px-4 py-3 border border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-900/20 text-sm rounded-lg">
                     <div className="font-semibold text-orange-800 dark:text-orange-200 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Reviewer asked for changes</div>
@@ -1232,9 +1251,6 @@ export default function ArticleAuthorPage() {
                       </div>
                       <div className="flex-1" />
                       {imageUploading && <span className="text-xs inline-flex items-center gap-1 text-amber-600"><Loader2 className="w-3 h-3 animate-spin" /> Uploading…</span>}
-                      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => openAsk()} className="text-xs px-2 py-1 rounded text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 inline-flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5" /> Ask
-                      </button>
                     </div>
                   )}
 
@@ -1289,20 +1305,6 @@ export default function ArticleAuthorPage() {
               )}
             </div>
           </main>
-          {panelOpen && (
-            <ArticleWritingPanel
-              key={`${article.id}:${panelRun || ''}`}
-              articleId={article.id}
-              editable={isEditable}
-              autoRun={panelRun}
-              getContext={getContext}
-              onPlace={onPlace}
-              onApplySeo={onApplySeo}
-              onApplyHeadline={onApplyHeadline}
-              onWaiting={setWaiting}
-              onClose={() => { setPanelOpen(false); setPanelRun(null); }}
-            />
-          )}
         </div>
       )}
 
@@ -1321,7 +1323,7 @@ export default function ArticleAuthorPage() {
           onClose={() => setPublishOpen(false)}
           onSave={save}
           onSubmit={async () => { await submit(); setPublishOpen(false); }}
-          onAsk={canSendForReview ? openAsk : null}
+          onAsk={canSendForReview && askServed ? openAsk : null}
           chain={chain}
           onPublishNow={() => { setPublishOpen(false); adminPublish(); }}
           publishing={publishing}

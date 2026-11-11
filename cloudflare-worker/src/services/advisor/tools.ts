@@ -107,27 +107,25 @@ function asPositiveInt(v: unknown): number | null {
  * destinations below. Keeps the LLM from inventing routes that 404.
  */
 const PAGE_ALLOWLIST: Record<string, string> = {
-  '/projects': 'Projects',
+  '/build': 'Projects',
   '/validate/customer-research': 'Customer research',
   '/build/roadmap': 'Roadmap',
   '/build/brand': 'Brand',
-  '/build/deck': 'Pitch Deck',
+  '/raise/pitch': 'Pitch Deck',
   '/network': 'Network',
   '/onboarding/persona': 'Persona',
   '/portfolio': 'Portfolio',
   '/advisors': 'Advisors',
-  '/partners': 'Partners',
-  '/marketplace': 'Marketplace',
+  '/directory': 'Partners',
+  '/build/marketplace': 'Marketplace',
   '/incorporate': 'Incorporate',
   '/legal': 'Legal',
   // `/legal-capital` was removed (#2354); its contract CTAs open Raise › Legal.
   '/raise/legal': 'Legal',
   '/help': 'Help Center',
-  // `/docs` redirects into `/help`; kept so an older stored CTA still labels.
-  '/docs': 'Docs',
   '/calendar': 'Calendar',
   '/account/billing': 'Billing',
-  '/pricing/investor': 'Investor Pricing',
+  '/pricing': 'Investor Pricing',
   '/dashboard': 'Dashboard',
 };
 
@@ -217,14 +215,14 @@ async function findPartner(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelo
   const hits = await searchByType(ctx.env, query, 'partner', limit);
   const result = { query, count: hits.length, partners: hitsToResult(hits) };
   const top = hits[0];
-  // /partners is admin/partner/investor only; founders use /marketplace
-  // to discover service partners. Route per persona so the CTA always
+  // Founders use their service marketplace; other personas use the directory.
+  // Route per persona so the CTA always
   // lands on a page the caller can actually open.
-  const browseRoute = ctx.persona === 'founder' ? '/marketplace' : '/partners';
+  const browseRoute = ctx.persona === 'founder' ? '/build/marketplace?tab=services' : '/directory';
   const topRoute = top
     ? (ctx.persona === 'founder'
-        ? `/marketplace?provider=${top.entity_id}`
-        : `/partners?user=${top.entity_id}`)
+        ? `/build/marketplace?tab=services&provider=${top.entity_id}`
+        : `/directory?user=${top.entity_id}`)
     : browseRoute;
   const cta: ToolCta = top
     ? {
@@ -250,14 +248,14 @@ async function findDeal(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope>
   const cta: ToolCta = top
     ? {
         label: `Open ${top.title}`,
-        route: top.url || '/projects',
-        primary: { label: `Open ${top.title}`, route: top.url || '/projects' },
-        secondary: { label: 'See all deals', route: '/projects' },
+        route: top.url || '/build',
+        primary: { label: `Open ${top.title}`, route: top.url || '/build' },
+        secondary: { label: 'See all deals', route: '/build' },
       }
     : {
         label: 'Browse deals',
-        route: '/projects',
-        primary: { label: 'Browse deals', route: '/projects' },
+        route: '/build',
+        primary: { label: 'Browse deals', route: '/build' },
       };
   return { result, cta };
 }
@@ -417,15 +415,15 @@ async function listMyTasks(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelo
 async function surfacePaywall(ctx: ToolContext, args: ToolArgs): Promise<ToolEnvelope> {
   const feature = asString(args?.feature || args?.gated_tool || 'studio', 64);
   const tier = asString(args?.required_tier || 'studio', 32);
-  // Real upgrade entrypoints: investors land on /pricing/investor (public),
+  // Real upgrade entrypoints: investors land on the public Investor pricing tab,
   // everyone else on /account/billing (open to all roles via /account/:section).
   // The frontend PaywallModal also listens for `studioos:tier_required`; we
   // emit `action:'open_paywall'` so the CTA renderer can additionally dispatch
   // that event and pop the modal in-place — but the route is always real.
   const route = ctx.persona === 'investor'
-    ? `/pricing/investor?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`
+    ? `/pricing?for=investor&feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`
     : `/account/billing?feature=${encodeURIComponent(feature)}&required=${encodeURIComponent(tier)}`;
-  const browseRoute = ctx.persona === 'investor' ? '/pricing/investor' : '/account/billing';
+  const browseRoute = ctx.persona === 'investor' ? '/pricing?for=investor' : '/account/billing';
   const label = `Upgrade to ${tier === 'investor_pro' ? 'Investor Pro' : 'Studio'}`;
   return {
     result: { feature, required_tier: tier, gated: true },

@@ -88,7 +88,7 @@ custom_domain  = true
 # invoking the Hono router. `/mcp` and `/mcp/*` are the MCP server
 # (D784), answered before the Hono app. `/account/developer` and
 # `/account/developer/*` are D1315's 308s to `/account/builder`, so a page load
-# of an old address is redirected by the Worker. The eight record prefixes
+# of an old address is redirected by the Worker. The eight record prefixes, and D4289's `/@*` (#4291),
 # (`/events/*` … `/insights/public/*`) are D1439's social cards: the Worker
 # reads the record behind the page's own public gate and rewrites the shell's
 # Open Graph tags (`services/socialCards.ts`), setting the `_headers` values
@@ -127,7 +127,7 @@ not_found_handling = "single-page-application"
 # URL, and the one every `location.replace('/login')` uses — and sends
 # `/login/` to `/login` once.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
 
 # ---------- Module Rules ----------
 # Task #9 (AO) — register `.md` files (and the Vite-style `?raw` suffix)
@@ -166,10 +166,12 @@ fallthrough = true
 
 # ---------- Public (non-secret) variables ----------
 [vars]
-# D1496 (#3840): team agents (/api/teams). Off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845, #3742 E1): the agent engine's goals and tasks (/api/teams). "off" until the owner turns it on; needs TEAM_AGENTS_ENABLED too.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 # D1528 (#3847, #3742 E3): "manual" admits nothing on its own; "self_start" only after E3 and E5 merge (owner Q1 B).
 AGENT_AUTONOMY = "manual"
 # D1528: the runtime behind the seam (src/agents/runtime.ts). "do" is the only one built.
@@ -179,6 +181,8 @@ DECK_GEN_RUNTIME = "do"
 # D1528: AGENT_AI_GATEWAY (the `agents` AI Gateway id) stays unset until the owner creates the gateway.
 # D886 B9: meeting bot rollout; B1 enforces Super-Admin-only canary.
 MEETING_BOT = "canary"
+# D1451 (#5297): Teams joins stay off until the bot's Teams page driver is measured; only "on" lets the bot take a Teams link.
+MEETING_BOT_TEAMS = "off"
 # Task #5 — canonical-host flip complete. APP_URL / PUBLIC_BASE_URL
 # now point at axal.vc (the canonical host). All post-login redirects
 # and user-facing links (email verification, magic links, etc.) will
@@ -710,10 +714,12 @@ pattern        = "app.axal.vc"
 custom_domain  = true
 
 [env.production.vars]
-# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; off until the owner turns them on.
-TEAM_AGENTS_ENABLED = "false"
+# D1496 (#3840): team agents (/api/teams). Mirrored from [vars]; enabled by owner request in D4522.
+TEAM_AGENTS_ENABLED = "true"
 # D1529 (#3845): the agent engine. Mirrored from [vars]; "off" until the owner turns it on.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 # D1528 (#3847): mirrored from [vars].
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
@@ -721,6 +727,8 @@ AGENT_RUNTIME = "do"
 DECK_GEN_RUNTIME = "do"
 # D886 B9: vars do not inherit into named environments.
 MEETING_BOT = "canary"
+# D1451 (#5297): mirrored from [vars]; the owner turns it on in its own PR.
+MEETING_BOT_TEAMS = "off"
 # Task #5 — canonical-host flip. APP_URL/PUBLIC_BASE_URL now point at
 # axal.vc. OAUTH_CALLBACK_BASE_URL keeps OAuth redirect_uri registrations
 # pinned to app.axal.vc until all provider dashboards are updated.
@@ -998,7 +1006,7 @@ not_found_handling = "single-page-application"
 # production deploy that kept the default would 307 `/login` back to
 # `/login/` — the URL Safari crashes on.
 html_handling = "drop-trailing-slash"
-run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
+run_worker_first = ["/api/*", "/mcp", "/mcp/*", "/landing/*", "/p/*", "/assets/*", "/.well-known/oauth-authorization-server*", "/.well-known/oauth-protected-resource*", "/account/developer", "/account/developer/*", "/events/*", "/articles/*", "/jobs/*", "/u/*", "/startups/*", "/partners/*", "/authors/*", "/insights/public/*", "/@*", "/esign/*", "/deck/share/*", "/share/*", "/invite/*", "/join/*", "/embed/*"]
 
 # Task #9 (AO) — wire the studioos-tail consumer worker
 # (cloudflare-worker-tail/) so all production worker tail events get
@@ -1050,8 +1058,12 @@ workers_dev = true
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
 MEETING_BOT = "off"
+# D1451 (#5297): Teams joins off, as everywhere.
+MEETING_BOT_TEAMS = "off"
 # D1528 (#3847): the agent engine stays off in preview until the owner's account steps are done.
 AGENT_ENGINE = "off"
+# D4423: owner-approved monthly gateway limit ($100); does not enable agents.
+AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD = "100000000"
 AGENT_AUTONOMY = "manual"
 AGENT_RUNTIME = "do"
 # D1536 (#3785): the deck generation runtime. "do" (the default): each deck's DeckGenRoom drives its runs and the Queue fallback takes a run of more than 18 variant steps; "queue": JOB_QUEUE drives every run.
@@ -1072,9 +1084,11 @@ WHATSAPP_CALLS = "false"
 WHATSAPP_MCP_SETUP = "off"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
-# `advisor-ongoing-preview`) created in the dashboard. Defaults to the
-# prod slug so the binding still works before a preview gateway exists.
-CF_AI_GATEWAY_SLUG_ADVISOR     = "advisor-ongoing"
+# `advisor-ongoing-preview`) created in the dashboard. #4566: empty (inert,
+# calls go direct, `advisorGatewaySlug`) until that gateway exists. It used to
+# default to production's `advisor-ongoing`, which shares production's gateway
+# logs, cache and rate limits; `scripts/check-preview-isolation.mjs` refuses that.
+CF_AI_GATEWAY_SLUG_ADVISOR     = ""
 # D1504 (#3755): the deck's AI Gateway, empty (inert) until the owner creates it (owner question L).
 CF_AI_GATEWAY_SLUG_DECK        = ""
 WORKERS_AI_ADVISOR_BUDGET_USD_DAY = "100"

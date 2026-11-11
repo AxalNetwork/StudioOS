@@ -210,7 +210,7 @@ export function useAskRail(serves, page, label) {
 let intentSeq = 0;
 
 /** Opens the panel holding this intent. Returns its id, or null when Ask serves no one here. */
-export function openAskIntent({ label, onClose } = {}) {
+export function openAskIntent({ label, onClose, exclusive = false } = {}) {
   if (!ask.available) return null;
   const id = ++intentSeq;
   const prev = ask.intent;
@@ -218,7 +218,7 @@ export function openAskIntent({ label, onClose } = {}) {
   const name = typeof label === 'string' && label.trim() ? label.trim() : ask.label;
   ask = { ...ask, intent: null };
   prev?.onClose?.();
-  setAsk({ ...ask, open: true, label: name, intent: { id, onClose } });
+  setAsk({ ...ask, open: true, label: name, intent: { id, onClose, exclusive } });
   return id;
 }
 

@@ -46,6 +46,11 @@ function builtFromMigrations(): DatabaseSync {
   // 389 (D558, programs) sits between: the member reads join its tables.
   db.exec(sqlOf('389'));
   db.exec(sqlOf('390'));
+  // D4643 (#4643): the attempt's own pass mark, time limit and reveal policy.
+  db.exec(sqlOf('202611062214'));
+  // D4650 part 2: course metadata. D4650 part 3: question explanations.
+  db.exec(sqlOf('202611071012'));
+  db.exec(sqlOf('202611071049'));
   return db;
 }
 const BUILT = builtFromMigrations();
@@ -282,4 +287,37 @@ test('authoring: only the Super Admin; questions freeze at the first attempt; a 
   assert.equal(tree.questions[0].prompt, 'Who leads?');
   assert.deepEqual(tree.questions[0].correct, [1], 'the Super Admin\'s own view lost the answers');
   assert.equal(tree.attempt_count, 1);
+});
+
+
+test('D4479: text exercise reads advertise the character cap; checklists do not', async () => {
+  const db = seeded();
+  try {
+    for (const kind of ['text', 'checklist']) {
+      const ex = (await admin(db, SUPER, '/exercises', { method: 'POST', body: { title: 'Cap fixture', submission_kind: kind, ...(kind === 'checklist' ? { checklist: ['One'] } : {}) } })).body.exercise;
+      await admin(db, SUPER, `/exercises/${ex.uid}/publish`, { method: 'POST' });
+      const view = await member(db, MEMBER, `/exercises/${ex.uid}`);
+      assert.equal(view.status, 200);
+      assert.equal(Object.hasOwn(view.body.exercise, 'answer_max_chars'), kind === 'text');
+      if (kind === 'text') assert.equal(view.body.exercise.answer_max_chars, 2000);
+    }
+  } finally { db.close(); }
+});
+
+test('D4479: 2000 code points pass and 2001 are refused without storing another answer', async () => {
+  const db = seeded();
+  try {
+    const ex = (await admin(db, SUPER, '/exercises', { method: 'POST', body: { title: 'Cap fixture', submission_kind: 'text' } })).body.exercise;
+    await admin(db, SUPER, `/exercises/${ex.uid}/publish`, { method: 'POST' });
+    for (const character of ['a', '🙂']) {
+      const accepted = await member(db, MEMBER, `/exercises/${ex.uid}/submissions`, { method: 'POST', body: { body: character.repeat(2000) } });
+      assert.equal(accepted.status, 201);
+      assert.equal(accepted.body.submission.body, character.repeat(2000));
+      const refused = await member(db, MEMBER, `/exercises/${ex.uid}/submissions`, { method: 'POST', body: { body: character.repeat(2001) } });
+      assert.equal(refused.status, 400);
+      assert.equal(refused.body.error, 'bad_answer');
+      assert.equal(refused.body.message, 'An answer is at most 2,000 characters.');
+    }
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_exercise_submissions').get()!.n, 2);
+  } finally { db.close(); }
 });

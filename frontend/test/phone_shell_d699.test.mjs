@@ -99,7 +99,7 @@ test('#2297: the More page is gone; More opens the drawer, and Email is an accou
   assert.ok(!existsSync(resolve('frontend/src/pages/MorePage.jsx')), 'MorePage.jsx is back');
   const app = read('frontend/src/App.jsx');
   assert.doesNotMatch(app, /path="\/more"/);
-  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
   // The drawer is the sidebar, persona extras and all (getSidebarGroups), so More's rows are all in it.
   assert.match(app, /<SidebarNav groups=\{sidebarGroups\}/);
   const plan = mobilePlan('founder');
@@ -250,7 +250,7 @@ test('D699 the recorder sends a founder\'s visit, and never an operator\'s (test
   assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { support: true }), [], 'an HQ support session');
   assert.deepEqual(await visitsSent({ role: 'investor', record: true }), [], 'not a founder');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} held=\{isLicence\(shellRole\) \? heldLicences : null\} groups=\{isLicence\(shellRole\) \? sidebarGroups : null\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
 });
 
 const ada = { id: 7, name: 'Ada Quill', email: 'ada@example.test' };
@@ -329,9 +329,11 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   const wanted = new Map();
   const want = (to, from) => wanted.set(to, from);
   for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) want(row.to, 'sidebar');
-  // D1140 (#3020): the drawer's pinned footer is Companies and projects.
-  assert.match(read('frontend/src/ui/SidebarNav.jsx'), /to="\/account\/portfolio"/);
-  want('/account/portfolio', 'drawer');
+  // D4416: Account keeps the companies/projects door after it leaves the drawer.
+  assert.doesNotMatch(read('frontend/src/ui/SidebarNav.jsx'), /to="\/account\/portfolio"/);
+  const accountSheet = read('frontend/src/ui/phone/AccountSheet.jsx');
+  assert.match(accountSheet, /\['Portfolio', '\/account\/portfolio'\]/);
+  want('/account/portfolio', 'AccountSheet');
   const dropdownLinks = [...dropdown.matchAll(/to="([^"]+)"/g)].map(match => match[1]);
   assert.ok(dropdownLinks.length >= 10, 'the census no longer reads UserDropdown');
   for (const to of dropdownLinks) want(to, 'UserDropdown');
@@ -340,9 +342,8 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   want('/wellbeing', 'FounderWellbeingMenu');
 
   const offered = new Set(['/studio', ...mobilePlan('founder').tabs.map(row => row.to)]);
-  // More opens the drawer (#2297), which holds every sidebar row and the Companies and projects link.
+  // More opens the drawer (#2297); AccountSheet supplies the account-only links.
   for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) offered.add(row.to);
-  offered.add('/account/portfolio');
   const sheets = read('frontend/src/ui/phone/CompanySheet.jsx') + read('frontend/src/ui/phone/AccountSheet.jsx');
   for (const [, to] of sheets.matchAll(/'(\/[a-z][a-z/-]*)'/g)) offered.add(to);
   for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)"/g)) offered.add(to);

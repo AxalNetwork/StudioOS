@@ -143,7 +143,8 @@ export type AssignResult =
 
 const UPSERT =
   'INSERT INTO approval_assignments (lane, item_id, assignee_user_id, assigned_by_user_id) '
-  + 'VALUES (?, ?, ?, ?) '
+  + 'SELECT ?, ?, ?, ? WHERE NOT EXISTS ('
+  + 'SELECT 1 FROM approval_assignments WHERE lane = ? AND item_id = ? AND assignee_user_id = ?) '
   + 'ON CONFLICT(lane, item_id) DO UPDATE SET '
   + 'assignee_user_id = excluded.assignee_user_id, '
   + 'assigned_by_user_id = excluded.assigned_by_user_id, '
@@ -151,12 +152,12 @@ const UPSERT =
 
 const EVENT =
   "INSERT INTO approval_events (lane, item_id, kind, actor_user_id, assignee_user_id) "
-  + "VALUES (?, ?, 'assigned', ?, ?)";
+  + "SELECT ?, ?, 'assigned', ?, ? WHERE changes() > 0";
 
 /**
- * Assign every item, or none of the checks. A write that throws after an
- * earlier item in the same call has landed is reported as unreadable; the
- * caller does not hear a partial success.
+ * Assign every item and append its event in one D1 transaction, or write none
+ * of them. Each event immediately follows its conditional upsert and uses
+ * `changes()`, so assigning the same reviewer again stays idempotent.
  */
 export async function assignReviewers(
   env: Env,
@@ -223,24 +224,25 @@ export async function assignReviewers(
     }
   }
   const name = personLabel({ id: Number(reviewer.id), name: reviewer.name, email: reviewer.email });
-  const assigned: Array<{ lane: string; item_id: number; assignee_user_id: number; assignee_name: string }> = [];
+  const assigned = items.map((it) => ({
+    lane: it.lane,
+    item_id: it.item_id,
+    assignee_user_id: assigneeUserId,
+    assignee_name: name,
+  }));
   try {
+    const statements = [];
     for (const it of items) {
-      const current = await env.DB.prepare(
-        'SELECT assignee_user_id FROM approval_assignments WHERE lane = ? AND item_id = ?',
-      ).bind(it.lane, it.item_id).first<{ assignee_user_id: number }>();
-      const same = current && Number(current.assignee_user_id) === assigneeUserId;
-      if (!same) {
-        await env.DB.prepare(UPSERT).bind(it.lane, it.item_id, assigneeUserId, actorUserId).run();
-        await env.DB.prepare(EVENT).bind(it.lane, it.item_id, actorUserId, assigneeUserId).run();
-      }
-      assigned.push({
-        lane: it.lane,
-        item_id: it.item_id,
-        assignee_user_id: assigneeUserId,
-        assignee_name: name,
-      });
+      statements.push(
+        env.DB.prepare(UPSERT).bind(
+          it.lane, it.item_id, assigneeUserId, actorUserId,
+          it.lane, it.item_id, assigneeUserId,
+        ),
+        env.DB.prepare(EVENT).bind(it.lane, it.item_id, actorUserId, assigneeUserId),
+      );
     }
+    const results = await env.DB.batch(statements);
+    if (results.some((row) => 'success' in row && !row.success)) throw new Error('Assignment batch failed');
   } catch (e) {
     console.error('[approval-assignments] could not write', (e as Error).message);
     return { ok: false, status: 503, code: 'assignments_unreadable', message: ASSIGNMENTS_UNREADABLE };
@@ -418,6 +420,20 @@ export async function inboxItem(env: Env, a: { lane: ApprovalLaneKey; itemId: nu
 export type InboxItem = ApprovalItem & { assignee?: Assignee | null };
 
 /**
+ * D4814: the oldest item with a known age, and its lane, or null when nothing
+ * read has one. An item with no arrival time is never the oldest.
+ */
+function oldestOf(items: ApprovalItem[], lanes: Array<{ key: string; label: string }>) {
+  let top: ApprovalItem | null = null;
+  for (const it of items) {
+    if (it.age_hours == null) continue;
+    if (!top || (it.age_hours as number) > (top.age_hours as number)) top = it;
+  }
+  if (!top) return null;
+  return { age_hours: top.age_hours, lane: top.lane, label: lanes.find((l) => l.key === top!.lane)?.label ?? top.lane_label };
+}
+
+/**
  * GET /api/admin/approvals — every waiting item, oldest first, with its
  * assignee, paged, with an exact total of the lanes that answered and the
  * three tiles (over 72 hours, assigned to the caller, per admin).
@@ -454,6 +470,25 @@ export async function hqInbox(env: Env, a: {
     per_admin: short || !assignments.available || !assignments.reviewers ? null : assignments.reviewers.map((r) => ({
       id: r.id, name: r.name, count: board.items.filter((it) => assigneeOf(it)?.user_id === r.id).length,
     })),
+    // D4814: the items nobody holds, across every lane read, not one page. Like
+    // the others it is null when a lane failed or was cut at the cap (shown
+    // short), and null when the assignment record could not be read (that is
+    // "not read", never "nobody").
+    unassigned: short || !assignments.available ? null : board.items.filter((it) => !assigneeOf(it)).length,
+    overdue_unassigned: short || !assignments.available ? null : board.items.filter((it) => it.sla === 'past' && !assigneeOf(it)).length,
+    // D4814: the oldest item read, with its lane. With a lane unreadable it is
+    // the oldest of the lanes that answered, and `complete` says so.
+    oldest: oldestOf(board.items, board.lanes),
+    ...(short ? {
+      // D4814: what the rows that were read hold, so a page can say "127+"
+      // rather than nothing; each is a floor, never the figure.
+      at_least: {
+        over_72h: board.items.filter((it) => it.sla === 'past').length,
+        unassigned: assignments.available ? board.items.filter((it) => !assigneeOf(it)).length : null,
+        assigned_to_me: assignments.available ? board.items.filter((it) => assigneeOf(it)?.user_id === a.callerId).length : null,
+      },
+    } : {}),
+    complete: !short,
     ...(short ? { reason: short }
       : !assignments.available ? { reason: assignments.reason }
         : !assignments.reviewers ? { reason: assignments.reviewers_reason } : {}),

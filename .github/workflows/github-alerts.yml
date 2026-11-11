@@ -1,0 +1,178 @@
+name: GitHub alerts
+
+# GitHub health alerts to one Slack channel (scripts/github-alerts.mjs, rules in
+# scripts/lib/githubAlerts.mjs). Found on 2026-11-09:
+#   main-red      every 15 min: the latest finished CI run on a push to main
+#                 failed, so every PR that merges main fails
+#   queue         the Actions queue backed up, so CI results arrive hours late
+#   future-clock  nightly: the suites with the clock 7 days ahead, which finds a
+#                 date-bound test (D5052, D5039) before its date breaks main
+# The reviewer's alert (no model called) is a job in claude-review.yml, where
+# its outcome is known. main-red polls instead of using `workflow_run`, which
+# WF-4 (frontend/test/workflow_security_4571.test.mjs) keeps out of the repo.
+#
+# Each alert is one issue titled `[alert] ...`: the channel hears only when it
+# opens and when it closes. Needs the secret SLACK_GITHUB_WEBHOOK_URL (a Slack
+# incoming webhook for the channel); without it the issues still open and close
+# and the job warns. These jobs never fail on an alert.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # main red
+    - cron: '7 * * * *'    # queue, hourly
+    - cron: '23 2 * * *'   # future clock, nightly
+  workflow_dispatch:
+    inputs:
+      check:
+        description: 'Which check to run now'
+        type: choice
+        options: [main-red, queue, future-clock]
+        default: queue
+
+permissions: {}
+
+concurrency:
+  group: github-alerts-${{ github.event_name }}-${{ github.event.schedule || github.event.inputs.check || 'run' }}
+  cancel-in-progress: false
+
+jobs:
+  main-red:
+    name: main is red
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'main-red')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs main-red
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+
+  queue:
+    name: Actions queue
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '7 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
+          QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
+
+  future-clock-part:
+    name: future clock (${{ matrix.part }})
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [frontend-1-of-2, frontend-2-of-2, worker-1-of-6, worker-2-of-6, worker-3-of-6, worker-4-of-6, worker-5-of-6, worker-6-of-6]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      - name: Install age and libfaketime
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age faketime
+      - name: Build the SPA
+        run: npm run build
+      # The same part CI runs, with every test process's clock 7 days ahead.
+      # libfaketime moves the operating system's clock, so Date, node:sqlite's
+      # datetime('now') and a shell's date agree, as D1 and the Worker do; the
+      # loader carries it into children started with their own env (D5398).
+      # Moving only Date made 817 false failures on 2026-11-10. A failure here
+      # is a warning for the channel, not a red job; a clock that did not move
+      # fails the job, so a silent no-op never reads as "nothing will break".
+      - name: Run the part 7 days ahead
+        env:
+          FUTURE_CLOCK_DAYS: '7'
+          FAKETIME: '+7d'
+          FAKETIME_DONT_FAKE_MONOTONIC: '1'
+          FAKETIME_DONT_RESET: '1'
+        run: |
+          export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1
+          export NODE_OPTIONS="--import=$GITHUB_WORKSPACE/scripts/future-clock.mjs"
+          node scripts/future-clock-check.mjs
+          node scripts/test-drift-parts.mjs ${{ matrix.part }} > "$RUNNER_TEMP/future-clock.tap" 2>&1 || true
+          grep -E '^\s*not ok ' "$RUNNER_TEMP/future-clock.tap" | head -50 || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: future-clock-${{ matrix.part }}
+          path: ${{ runner.temp }}/future-clock.tap
+          retention-days: 3
+
+  future-clock:
+    name: future clock (report)
+    needs: future-clock-part
+    if: ${{ always() && needs.future-clock-part.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: future-clock-*
+          path: ${{ runner.temp }}/fc
+      - run: |
+          cat "$RUNNER_TEMP"/fc/*/future-clock.tap > "$RUNNER_TEMP/all.tap" 2>/dev/null || true
+          node scripts/github-alerts.mjs future-clock
+        env:
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+          FUTURE_CLOCK_DAYS: '7'
+          FUTURE_CLOCK_LOG: ${{ runner.temp }}/all.tap
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

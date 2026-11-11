@@ -24,6 +24,7 @@ import { changeProfileView } from '../accounts/allAccountsModel';
 // D1306 (#3403): the drawer's tabs and ACC7's dialogs, in place of every browser pop-up.
 import AccountDialog from '../accounts/AccountDialog';
 import AccountSubAccounts from '../accounts/AccountSubAccounts';
+import AccountLicencesBlock from '../accounts/AccountLicencesBlock';
 import {
   DRAWER_TABS, PROFILE_CHOICES, PROFILE_LABEL, SUPPORT_SESSION_CEILING_MINUTES, SUPPORT_SESSION_MINUTES,
   accountDialog, day, drawerRefusal, identityWord, notesSavedLine, onboardingProfileLine, profileLabel,
@@ -408,13 +409,15 @@ function ChangeProfileDialog({ user, canOverride, onClose, children }) {
  * D1299 (#2377): with `onOpenChange`, the page owns which record is open, as
  * `/admin/accounts/all/<id>` (`openId`); without it, the console keeps it.
  */
-export default function UsersConsole({ onImpersonate, openId = null, onOpenChange = null }) {
+export default function UsersConsole({ onImpersonate, openId = null, onOpenChange = null, reloadKey: outsideKey = 0, onChanged = null }) {
   // D1305 (#3402): the table is `../accounts/AllAccounts.jsx` over D1300's
   // list read; this console keeps the record, the dialogs and the actions.
   // `users` holds the page the table last read, so an address's record opens
   // from its row; `reloadKey` re-reads the table after an action.
   const [users, setUsers] = useState([]);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [ownKey, setOwnKey] = useState(0);
+  // D5044 — the table re-reads on its own actions and on the host page's key.
+  const reloadKey = ownKey + outsideKey;
   const [spinoutAdmit, setSpinoutAdmit] = useState(null);
   const [changeProfile, setChangeProfile] = useState(null);
   const [openUser, setOpenUser] = useState(null);
@@ -427,7 +430,10 @@ export default function UsersConsole({ onImpersonate, openId = null, onOpenChang
   }, [openId, users, onOpenChange]);
   const openRecord = (u) => (onOpenChange ? onOpenChange(u.id) : setOpenUser(u));
   const closeRecord = () => (onOpenChange ? onOpenChange(null) : setOpenUser(null));
-  const loadAll = () => setReloadKey((k) => k + 1);
+  // D5044 — after an account changes here, the table re-reads, and a page that shows the same
+  // accounts elsewhere (HQ Team's roster) is told through `onChanged`; a change made elsewhere on
+  // that page reaches this table through `reloadKey`. Neither is a page reload.
+  const loadAll = () => { setOwnKey((k) => k + 1); onChanged?.(); };
 
   // The dialog collects the reason the worker requires; nothing is minted
   // until Begin session. `handleImpersonate` is the one funnel both View As
@@ -912,6 +918,8 @@ export function UserDetailModal({ userRow, onClose, onImpersonate, onToggleActiv
                   </div>
                 );
               })()}
+              {/* D4473 (#4473): the member's licences, granted and revoked here. */}
+              <AccountLicencesBlock userId={userRow.id} />
               {integrations.length > 0 && (
                 <div className="col-span-2 mt-3">
                   <div className="text-xs font-semibold text-gray-700 mb-2 dark:text-gray-300">Connected integrations</div>

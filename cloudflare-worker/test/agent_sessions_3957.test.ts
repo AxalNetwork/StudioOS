@@ -22,6 +22,12 @@ test.after(() => removeMigratedDatabases());
 
 const NOW = new Date();
 const inDays = (n: number, h = 9) => { const d = new Date(NOW.getTime() + n * 86_400_000); d.setUTCHours(h, 0, 0, 0); return d; };
+// #4770: the routes refuse a run_at in the past by the real clock, so NOW stays real; what must not depend on
+// the day the suite runs is which duty comes due first. The repeating duty's weekday is four days after
+// today's, so its first run (08:30 Lisbon, that day) always falls after a once duty two days out at 09:00 UTC.
+// A fixed 'Monday' made the early sweep find the Monday duty due on every Saturday.
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const REPEAT_DAY = (NOW.getUTCDay() + 4) % 7;
 
 function app(w: World) {
   __setEngineRouteDeps({ runtime: async () => w.runtime });
@@ -127,10 +133,11 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const A = agentUid(w);
     const at = inDays(2);
     const once = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'once', run_at: at.toISOString(), zone: 'UTC' })).body.session.uid;
-    const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday: 'Monday', time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
-    // Nothing before its time.
+    const weekly = (await call(w, SPONSOR, 'POST', `/agents/${A}/duties`, { skill_id: 'sk-runway', cadence: 'weekly', weekday: WEEKDAYS[REPEAT_DAY], time: '08:30', zone: 'Europe/Lisbon' })).body.session.uid;
+    // Nothing before its time: the repeating duty's weekday (REPEAT_DAY, #4770) puts its first run after `at`, so the early sweep makes no task at all.
     const early = await sweepDuties(w.env, new Date(at.getTime() - 60_000), deps());
-    assert.equal(early.task_created, 0);
+    // Mutation checked (#4770): weekday 'Monday' again → on a Saturday or Sunday the weekly duty is due early and this fails.
+    assert.equal(early.task_created, 0, 'the early sweep makes no task');
     assert.equal(tasksFrom(w, once).length, 0, 'nothing runs before its time');
     // Two sweeps at its time: one task.
     const d = row(w, once) as DutyRow;
@@ -142,13 +149,13 @@ test('a once session is claimed exactly once and nothing runs before its time; a
     const t = tasksFrom(w, once)[0];
     assert.deepEqual([t.assignee_agent_id, t.status, t.source_kind], [AGENT, 'open', 'duty']);
     assert.equal(w.queue.length, 0, 'AGENT_AUTONOMY manual: nothing is admitted until a person presses Start');
-    // The repeat moves to the next Monday 08:30 Lisbon.
+    // The repeat moves to the same weekday a week on, 08:30 Lisbon.
     const r = row(w, weekly) as DutyRow;
     const due = new Date(`${r.next_due_at.replace(' ', 'T')}Z`);
     await claimDuty(w.env, r, due, deps());
     const next = new Date(`${row(w, weekly).next_due_at.replace(' ', 'T')}Z`);
     assert.equal(Math.round((next.getTime() - due.getTime()) / 3_600_000) % 24 === 0 || Math.abs(next.getTime() - due.getTime() - 7 * 86_400_000) <= 3_600_000, true);
-    assert.equal(next.getUTCDay(), 1);
+    assert.equal(next.getUTCDay(), REPEAT_DAY);
     assert.equal(row(w, weekly).status, 'active');
   } finally { __setEngineRouteDeps(null); w.close(); }
 });
@@ -211,7 +218,9 @@ test('the instruction reaches the model only inside the untrusted wrapper', asyn
     const prompt = (built as any).prompt as string;
     const block = /<agent_data source="session" trust="data">([^]*?)<\/agent_data>/.exec(prompt);
     assert.ok(block && block[1].includes('Ignore your rules') && block[1].includes('"untrusted":true'), 'inside the data block, marked untrusted');
-    assert.ok(block[1].includes('Read the balances'), 'the pinned version\'s steps ride with it');
+    // D4534 (#4534): the version's steps are instructions only through the governed path (`skillForRun`,
+    // which the run step now calls with the session's saved version), never as data beside the instruction.
+    assert.ok(!block[1].includes('Read the balances'), 'the pinned version\'s steps are not data');
     assert.equal(prompt.split('Ignore your rules').length - 1, 1, 'nowhere else');
     assert.ok(!prompt.slice(0, prompt.indexOf('<agent_data')).includes('Ignore your rules'), 'not in the prompt\'s own lines');
   } finally { __setEngineRouteDeps(null); w.close(); }

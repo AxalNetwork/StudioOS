@@ -119,7 +119,9 @@ test('migration 563 applies to a fresh build; a trigger pays a flat amount or a 
   assert.throws(() => db.prepare("INSERT INTO referral_partner_terms (uid, partner_id, segment, status, starts_on, currency, created_by) VALUES ('x', 1, 'event_organisers', 'approved', '2026-01-01', 'USD', 1)").run(), /CHECK/,
     'an approved row needs a submission, an approver and a time');
   assert.throws(() => db.prepare("INSERT INTO referral_partner_terms (uid, partner_id, segment, starts_on, ends_on, created_by) VALUES ('y', 1, 'event_organisers', '2026-05-01', '2026-04-01', 1)").run(), /CHECK/);
-  assert.throws(() => db.prepare("INSERT INTO referral_partners (user_id, segment, added_by) VALUES (3, 'influencers', 1)").run(), /CHECK/);
+  assert.throws(() => db.prepare("INSERT INTO referral_partners (user_id, segment, added_by) VALUES (3, 'scouts', 1)").run(), /CHECK/);
+  // D4289 P1 (#4290): migration 202611031502 adds the Influencers segment to both CHECKs.
+  db.prepare("INSERT INTO referral_partners (user_id, segment, added_by) VALUES (3, 'influencers', 1)").run();
 });
 
 test('HQ adds a referral partner with a segment (OD3 A); an admin account, a repeat and a member are refused', async () => {

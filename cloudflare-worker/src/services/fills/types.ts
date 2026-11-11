@@ -143,6 +143,15 @@ export interface FillContext {
   env: Env;
   user: User;
   projectId: number;
+  /**
+   * D4627 (#4627): the `validate_proposals` row being accepted, when `apply`
+   * is running from the accept route rather than the manual form. A kind
+   * whose target creation is not already an upsert (`hypothesis`) uses it as
+   * the idempotency key that lets a retry after a partial failure land on
+   * the row it already created instead of allocating a second one. Absent
+   * (undefined) for every caller that is not accepting a specific proposal.
+   */
+  proposalId?: number | null;
 }
 
 export interface FillKind {
@@ -203,6 +212,13 @@ export interface FillKind {
   readable(payload: Record<string, unknown>): string;
 
   gather(ctx: FillContext): Promise<Gathered>;
+  /**
+   * #3938 part 6 (D1478): what the job's retrieve step embeds before the writer
+   * runs, for a kind whose plan job has one (`services/ai/themeHints.ts`
+   * `THEME_JOBS`): the themes the founder named and the items to place. Each
+   * item's nearest themes go to the writer as a hint; the parser is unchanged.
+   */
+  hints?(gathered: Gathered): { themes: string[]; items: Array<{ key: string; text: string }> };
   /**
    * The model's reply, turned into proposals — and this is where a proposal earns
    * the right to be offered at all.

@@ -48,7 +48,7 @@ test('the redirects are in #2301\'s inventory, and no share card describes a pag
   const listed = new Set(REDIRECT_ROUTES.map((r) => r.path));
   for (const from of Object.keys(DOORS)) {
     assert.ok(listed.has(from), `${from} is not counted`);
-    assert.equal(REDIRECT_ROUTES.find((r) => r.path === from).keep, undefined, `${from} should retire with the others unless still hit`);
+    assert.equal(REDIRECT_ROUTES.find((r) => r.path === from).keep, true, `${from} stays under D1440`);
     assert.equal(OG_ROUTES.some((r) => r.path === from), false, `${from} still has its own share card`);
   }
   assert.ok(OG_ROUTES.some((r) => r.path === '/lp/spinout-demo-day'));

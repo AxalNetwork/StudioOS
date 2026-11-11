@@ -230,15 +230,25 @@ test('a release check lists the must-haves merged before it as in, and those sti
   } finally { gh.restore(); }
 });
 
-test('a re-sync changes nothing twice', async () => {
+test('a re-sync leaves unchanged must-haves alone and applies a renamed pull request', async () => {
   const w = await world();
-  const gh = fakeGithub(repoOf());
+  const repo = repoOf();
+  const gh = fakeGithub(repo);
   try {
     await syncGithub(w.env, w.row());
+    // Use an older timestamp so this catches a no-op write even within one clock tick.
+    const old = '2000-01-01 00:00:00';
+    w.db.prepare('UPDATE mvp_features SET updated_at = ?').run(old);
     const before = snapshot(w);
     const again = await syncGithub(w.env, w.row());
-    assert.equal(snapshot(w), before, 'the same read writes the same rows');
+    assert.equal(snapshot(w), before, 'the same read leaves the same rows');
     assert.equal(again.counts.release_checks_created, 0);
+
+    repo.pulls[0].title = 'Sketch first-run onboarding';
+    await syncGithub(w.env, w.row());
+    const renamed = w.one('SELECT title, updated_at FROM mvp_features WHERE pr_url = ?', repo.pulls[0].html_url);
+    assert.equal(renamed.title, repo.pulls[0].title);
+    assert.notEqual(renamed.updated_at, old);
   } finally { gh.restore(); }
 });
 

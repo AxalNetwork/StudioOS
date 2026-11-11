@@ -114,9 +114,11 @@ export const QUEUE_PERSONAS: readonly TicketPersona[] = ['hq_held', 'admin_produ
  * administrators filing about the Admin product, which is the queue H30 puts
  * them in; a kind filter here would hide exactly them.
  *
- * NOW, NOT AS FILED. Nothing stamps a persona when a ticket is filed, so an
- * administrator demoted since filing moves queue. A write-time stamp would be a
- * column and a change to the writer; D204 records why it was not taken.
+ * NOW, NOT AS FILED — and since D5030 (#5030) that is only half the story.
+ * This function says what the account is NOW. The queue a ticket belongs to is
+ * `queuePersonaOf`: the persona `filingSnapshot` recorded when it was filed,
+ * and this function's answer only for a ticket filed before that record
+ * existed. The page shows both where they differ.
  * H22's "HQ-held users" is also narrower than H9's "every account on HQ's
  * database": H9's groups every account that LIVES on HQ, staff and licence
  * administrators included, while this queue is the customers among them.
@@ -139,11 +141,45 @@ export type OpenTicketRow = {
   account_id: number | null; requester_name: string | null; requester_email: string | null;
   requester_role: string | null; requester_active: number | null;
   licence_uid: string | null; licence_ref: string | null; licence_brand: string | null;
+  /**
+   * D5030 (#5030) — the context the ticket was FILED in, written once by the
+   * INSERT (the 202611082048 migration). All null on a ticket filed before
+   * that, or when this database has not applied it: then nothing recorded the
+   * filing, and the queue falls back to current standing, flagged as such.
+   */
+  filed_persona?: string | null; filed_role?: string | null;
+  filed_licence_uid?: string | null; filed_branch_code?: string | null;
+  filed_licence_ref?: string | null; filed_licence_brand?: string | null;
 };
 
 export type OpenTicketsRead =
-  | { available: true; complete: boolean; rows: OpenTicketRow[] }
+  | {
+      available: true; complete: boolean; rows: OpenTicketRow[];
+      /** D5030 — `false` when the filing columns could not be read: every row is then queued from current standing. */
+      snapshot_readable?: boolean;
+    }
   | { available: false; reason: string };
+
+/** How a ticket's queue was decided (D5030): from what was recorded at filing, or from current standing because nothing was. */
+export type QueueBasis = 'as_filed' | 'current_standing';
+
+/**
+ * The queue a ticket belongs to (D5030, #5030). THE FILING WINS: a ticket
+ * filed by a licence's Administrator stays in the About-Admin queue after
+ * that account is demoted, closed or detached — its ownership is historical,
+ * and `personaOf` (standing now) is shown beside it, not instead of it.
+ *
+ * A ticket with no filing record — filed before the snapshot existed — is
+ * queued from current standing, and `basis` says so. Nothing is inferred into
+ * the snapshot: current standing is not what the filing was.
+ */
+export function queuePersonaOf(row: OpenTicketRow): { persona: TicketPersona; basis: QueueBasis; licence_uid: string | null } {
+  const filed = row.filed_persona;
+  if (filed && (TICKET_PERSONAS as readonly string[]).includes(filed)) {
+    return { persona: filed as TicketPersona, basis: 'as_filed', licence_uid: row.filed_licence_uid ?? null };
+  }
+  return { persona: personaOf(row), basis: 'current_standing', licence_uid: row.licence_uid ?? null };
+}
 
 export const TICKETS_UNREADABLE =
   'The ticket queue could not be read on this database, so how many tickets are waiting is unknown — not none.';
@@ -159,6 +195,37 @@ export const TICKETS_UNREADABLE =
  * `id` breaks ties because `created_at` is one-second resolution.
  */
 export async function readOpenTickets(env: Env): Promise<OpenTicketsRead> {
+  const shape = (all: OpenTicketRow[], snapshotReadable: boolean): OpenTicketsRead => {
+    const complete = all.length <= OPEN_TICKET_CEILING;
+    return {
+      available: true, complete, rows: complete ? all : all.slice(0, OPEN_TICKET_CEILING),
+      snapshot_readable: snapshotReadable,
+    };
+  };
+  // D5030 — the filing snapshot first. A database without its migration fails
+  // this statement alone, and the queue is read as it was before, with every
+  // row flagged as classified by current standing.
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at,
+              u.id AS account_id, u.name AS requester_name, u.email AS requester_email,
+              u.role AS requester_role, u.is_active AS requester_active,
+              tl.uid AS licence_uid, tl.licence_ref AS licence_ref, tl.brand_name AS licence_brand,
+              t.filed_persona, t.filed_role, t.filed_licence_uid, t.filed_branch_code,
+              fl.licence_ref AS filed_licence_ref, fl.brand_name AS filed_licence_brand
+         FROM tickets t
+         LEFT JOIN users u ON u.id = t.user_id
+         LEFT JOIN licence_admins la ON la.user_id = u.id
+         LEFT JOIN territory_licences tl ON tl.id = la.licence_id
+         LEFT JOIN territory_licences fl ON fl.uid = t.filed_licence_uid
+        WHERE t.status IN (?, ?)
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<OpenTicketRow>();
+    return shape(res.results || [], true);
+  } catch {
+    // fall through to the read without the snapshot
+  }
   try {
     const res = await env.DB.prepare(
       `SELECT t.id, t.title, t.status, t.priority, t.created_at,
@@ -172,15 +239,8 @@ export async function readOpenTickets(env: Env): Promise<OpenTicketsRead> {
         WHERE t.status IN (?, ?)
         ORDER BY t.created_at ASC, t.id ASC
         LIMIT ?`,
-    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<{
-      id: number; title: string; status: string; priority: string; created_at: string;
-      account_id: number | null; requester_name: string | null; requester_email: string | null;
-      requester_role: string | null; requester_active: number | null;
-      licence_uid: string | null; licence_ref: string | null; licence_brand: string | null;
-    }>();
-    const all = res.results || [];
-    const complete = all.length <= OPEN_TICKET_CEILING;
-    return { available: true, complete, rows: complete ? all : all.slice(0, OPEN_TICKET_CEILING) };
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<OpenTicketRow>();
+    return shape(res.results || [], false);
   } catch {
     return { available: false, reason: TICKETS_UNREADABLE };
   }
@@ -195,7 +255,16 @@ export type SupportTicketItem = {
   /** Derived from priority and age against HQ's inherited P1/P2/P3 hours (D455). */
   sla_band: SlaBand | null;
   requester: string | null;
+  /** The licence the queue attributes it to: the one administered at filing, or now when nothing was recorded. */
   licence: { uid: string; licence_ref: string | null; brand_name: string | null } | null;
+  /** D5030 — whether the queue comes from the filing record or, lacking one, from current standing. */
+  basis: QueueBasis;
+  /** D5030 — what was recorded at filing. Null when nothing was. */
+  filed: { persona: string; role: string | null; licence_uid: string | null; branch_code: string | null } | null;
+  /** D5030 — the requester's standing now, always: shown beside the filing when the two differ. */
+  current: { persona: TicketPersona; licence_uid: string | null; licence_ref: string | null };
+  /** D5030 — true when the filing record and today's standing name a different queue or licence. */
+  standing_changed: boolean;
 };
 
 export type PersonaBucket = {
@@ -210,10 +279,17 @@ export type PersonaBucket = {
   bands: { ok: number; due_soon: number; past: number; undated: number } | null;
   /** The oldest `SUPPORT_LIST_LIMIT`, oldest first. Exact even past the ceiling, because the read is ordered. */
   items: SupportTicketItem[];
+  /**
+   * D5030 — how many of the bucket were queued from current standing because
+   * no filing context was recorded. Null when the read was cut.
+   */
+  from_current_standing: number | null;
 };
 
 export type TicketQueues = {
   complete: boolean;
+  /** D5030 — false when the filing columns could not be read on this database. */
+  snapshot_readable: boolean;
   /** Every open ticket, all five buckets — HQ Home's Queue backlog. Null past the ceiling. */
   open: number | null;
   buckets: Record<TicketPersona, PersonaBucket>;
@@ -226,24 +302,33 @@ export type TicketQueues = {
  * than banded against hours HQ may since have changed.
  */
 export function summariseTickets(
-  read: { complete: boolean; rows: OpenTicketRow[] }, nowMs: number,
+  read: { complete: boolean; rows: OpenTicketRow[]; snapshot_readable?: boolean }, nowMs: number,
   tierHours: TierHours | null = HQ_TICKET_SLA_HOURS,
 ): TicketQueues {
   const buckets = {} as Record<TicketPersona, PersonaBucket>;
   const bandScratch = {} as Record<TicketPersona, Array<SlaBand | null>>;
   for (const p of TICKET_PERSONAS) {
-    buckets[p] = { count: 0, oldest_age_hours: null, bands: null, items: [] };
+    buckets[p] = { count: 0, oldest_age_hours: null, bands: null, items: [], from_current_standing: 0 };
     bandScratch[p] = [];
   }
   for (const row of read.rows) {
-    const bucket = buckets[personaOf(row)];
+    const q = queuePersonaOf(row);
+    const now = personaOf(row);
+    const bucket = buckets[q.persona];
     const age = ageHours(row.created_at, nowMs);
     const slaBand = tierHours ? ticketSlaBandForPriority(age, String(row.priority ?? ''), tierHours) : null;
     bucket.count = (bucket.count || 0) + 1;
-    bandScratch[personaOf(row)].push(slaBand);
+    if (q.basis === 'current_standing') bucket.from_current_standing = (bucket.from_current_standing || 0) + 1;
+    bandScratch[q.persona].push(slaBand);
     // Rows arrive oldest first, so the first dated row a bucket sees is its oldest.
     if (bucket.oldest_age_hours === null && age !== null) bucket.oldest_age_hours = age;
     if (bucket.items.length < SUPPORT_LIST_LIMIT) {
+      const asFiled = q.basis === 'as_filed';
+      const licence = asFiled
+        ? (row.filed_licence_uid
+          ? { uid: row.filed_licence_uid, licence_ref: row.filed_licence_ref ?? null, brand_name: row.filed_licence_brand ?? null }
+          : null)
+        : (row.licence_uid ? { uid: row.licence_uid, licence_ref: row.licence_ref, brand_name: row.licence_brand } : null);
       bucket.items.push({
         id: Number(row.id),
         title: String(row.title ?? ''),
@@ -252,9 +337,16 @@ export function summariseTickets(
         age_hours: age,
         sla_band: slaBand,
         requester: row.requester_name || row.requester_email || null,
-        licence: row.licence_uid
-          ? { uid: row.licence_uid, licence_ref: row.licence_ref, brand_name: row.licence_brand }
+        licence,
+        basis: q.basis,
+        filed: asFiled
+          ? {
+            persona: String(row.filed_persona), role: row.filed_role ?? null,
+            licence_uid: row.filed_licence_uid ?? null, branch_code: row.filed_branch_code ?? null,
+          }
           : null,
+        current: { persona: now, licence_uid: row.licence_uid ?? null, licence_ref: row.licence_ref ?? null },
+        standing_changed: asFiled && (now !== q.persona || (row.licence_uid ?? null) !== (row.filed_licence_uid ?? null)),
       });
     }
   }
@@ -262,13 +354,19 @@ export function summariseTickets(
     for (const p of TICKET_PERSONAS) {
       buckets[p].count = null;
       buckets[p].bands = null;
+      buckets[p].from_current_standing = null;
     }
   } else if (tierHours) {
     for (const p of QUEUE_PERSONAS) {
       buckets[p].bands = tallySlaBands(bandScratch[p]);
     }
   }
-  return { complete: read.complete, open: read.complete ? read.rows.length : null, buckets };
+  return {
+    complete: read.complete,
+    snapshot_readable: read.snapshot_readable !== false,
+    open: read.complete ? read.rows.length : null,
+    buckets,
+  };
 }
 
 // ─── Tickets filed on a branch host (D485) ────────────────────────────────
@@ -301,19 +399,11 @@ export const BRANCH_TICKETS_UNREADABLE =
   'This branch\'s ticket queue could not be read on its database, so how many its administrators have waiting is unknown — not none.';
 
 export async function readBranchAdminTickets(env: Env): Promise<BranchTicketsRead> {
-  try {
-    const res = await env.DB.prepare(
-      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
-         FROM tickets t
-         JOIN users u ON u.id = t.user_id
-        WHERE t.status IN (?, ?) AND u.role = 'admin' AND u.is_active = 1
-        ORDER BY t.created_at ASC, t.id ASC
-        LIMIT ?`,
-    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<{
-      id: number; title: string; status: string; priority: string; created_at: string;
-      requester_name: string | null; requester_email: string | null;
-    }>();
-    const all = res.results || [];
+  type Row = {
+    id: number; title: string; status: string; priority: string; created_at: string;
+    requester_name: string | null; requester_email: string | null;
+  };
+  const shape = (all: Row[]): BranchTicketsRead => {
     const complete = all.length <= OPEN_TICKET_CEILING;
     const rows = complete ? all : all.slice(0, OPEN_TICKET_CEILING);
     return {
@@ -330,8 +420,103 @@ export async function readBranchAdminTickets(env: Env): Promise<BranchTicketsRea
         requester: r.requester_name || r.requester_email || null,
       })),
     };
+  };
+  // D5030 (#5030) — a ticket an administrator FILED stays HQ's to see after
+  // that account is demoted or closed: the filing record decides, and current
+  // standing only for a ticket filed before the record existed. A database
+  // without the filing columns is read as before.
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
+         FROM tickets t
+         LEFT JOIN users u ON u.id = t.user_id
+        WHERE t.status IN (?, ?)
+          AND (t.filed_persona = 'admin_product'
+               OR (t.filed_persona IS NULL AND u.role = 'admin' AND u.is_active = 1))
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<Row>();
+    return shape(res.results || []);
+  } catch {
+    // fall through to the read without the filing record
+  }
+  try {
+    const res = await env.DB.prepare(
+      `SELECT t.id, t.title, t.status, t.priority, t.created_at, u.name AS requester_name, u.email AS requester_email
+         FROM tickets t
+         JOIN users u ON u.id = t.user_id
+        WHERE t.status IN (?, ?) AND u.role = 'admin' AND u.is_active = 1
+        ORDER BY t.created_at ASC, t.id ASC
+        LIMIT ?`,
+    ).bind(...OPEN_TICKET_STATUSES, OPEN_TICKET_CEILING + 1).all<Row>();
+    return shape(res.results || []);
   } catch {
     return { available: false, reason: BRANCH_TICKETS_UNREADABLE };
+  }
+}
+
+/**
+ * D5030 (#5030) — the support context a ticket is filed in, computed by the
+ * same rules `personaOf` applies, at the moment of filing. Written once by the
+ * INSERT and never updated, so later changes to the account cannot move it.
+ *
+ * ON A BRANCH (`branchCode` set) the queue is the branch's own split
+ * (`readBranchAdminTickets`): an active administrator files about the Admin
+ * product; anyone else is the branch's member, whose ticket the branch answers.
+ *
+ * NEVER THROWS. A standing that cannot be read answers all-null — nothing
+ * recorded — rather than a guess; the ticket is still filed, and is queued from
+ * current standing like any ticket without a record.
+ */
+export type FilingSnapshot = {
+  filed_persona: string | null; filed_role: string | null;
+  filed_licence_uid: string | null; filed_branch_code: string | null;
+};
+export const NO_FILING_SNAPSHOT: FilingSnapshot = {
+  filed_persona: null, filed_role: null, filed_licence_uid: null, filed_branch_code: null,
+};
+
+export async function filingSnapshot(env: Env, userId: number, branchCode: string | null): Promise<FilingSnapshot> {
+  try {
+    if (branchCode) {
+      const u = await env.DB.prepare('SELECT role, is_active FROM users WHERE id = ?')
+        .bind(userId).first<{ role: string | null; is_active: number | null }>();
+      if (!u) return NO_FILING_SNAPSHOT;
+      const admin = u.role === 'admin' && Number(u.is_active) === 1;
+      return {
+        filed_persona: admin ? 'admin_product' : 'branch_member',
+        filed_role: u.role ?? null,
+        filed_licence_uid: null,
+        filed_branch_code: branchCode,
+      };
+    }
+    const row = await env.DB.prepare(
+      `SELECT u.id AS account_id, u.role AS requester_role, u.is_active AS requester_active,
+              tl.uid AS licence_uid
+         FROM users u
+         LEFT JOIN licence_admins la ON la.user_id = u.id
+         LEFT JOIN territory_licences tl ON tl.id = la.licence_id
+        WHERE u.id = ?`,
+    ).bind(userId).first<{ account_id: number; requester_role: string | null; requester_active: number | null; licence_uid: string | null }>();
+    if (!row) return NO_FILING_SNAPSHOT;
+    let branch: string | null = null;
+    if (row.licence_uid) {
+      // Its own try: a registry that cannot be read leaves the branch unknown,
+      // not the whole filing context.
+      try {
+        const d = await env.DB.prepare('SELECT code FROM licence_deployments WHERE licence_uid = ?')
+          .bind(row.licence_uid).first<{ code: string }>();
+        branch = d?.code ?? null;
+      } catch { branch = null; }
+    }
+    return {
+      filed_persona: personaOf(row),
+      filed_role: row.requester_role ?? null,
+      filed_licence_uid: row.licence_uid ?? null,
+      filed_branch_code: branch,
+    };
+  } catch {
+    return NO_FILING_SNAPSHOT;
   }
 }
 
@@ -343,7 +528,7 @@ export type BranchTicketLine =
       count: number | null;
       oldest_age_hours: number | null;
       bands: { ok: number; due_soon: number; past: number; undated: number } | null;
-      items: Array<Omit<SupportTicketItem, 'licence'> & { created_at: string }>;
+      items: Array<Omit<SupportTicketItem, 'licence' | 'basis' | 'filed' | 'current' | 'standing_changed'> & { created_at: string }>;
     }
   | { code: string; label: string; state: 'unreadable' | 'not_deployed'; reason: string };
 
@@ -698,9 +883,11 @@ export function buildTenantMatrix(input: {
   const hqHeld: Tally = { n: 0, oldest: null };
   if (tickets.available) {
     for (const row of tickets.rows) {
-      const persona = personaOf(row);
+      // D5030 — the queue as filed, so a demoted administrator's ticket stays
+      // on the licence it was filed under.
+      const { persona, licence_uid: licenceUid } = queuePersonaOf(row);
       const age = ageHours(row.created_at, nowMs);
-      if (persona === 'admin_product' && row.licence_uid) tally(aboutByLicence, row.licence_uid, age);
+      if (persona === 'admin_product' && licenceUid) tally(aboutByLicence, licenceUid, age);
       if (persona === 'hq_held') {
         hqHeld.n += 1;
         if (hqHeld.oldest === null && age !== null) hqHeld.oldest = age;

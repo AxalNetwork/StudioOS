@@ -57,7 +57,7 @@ function fixture() {
   const cols = (t: string) => new Set((db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name));
   if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   for (const m of ['129_captable_one_canonical_per_project.sql', '249_project_metrics.sql', '410_safe_issuances.sql', '442_raise_cycle_stores.sql',
-    '459_cycle_activity_convention.sql', '463_raise_record_stores.sql', '544_narrative_sections.sql', '545_narrative_notes.sql', '761_narrative_read_end.sql']) db.exec(sqlOf(m));
+    '459_cycle_activity_convention.sql', '463_raise_record_stores.sql', '544_narrative_sections.sql', '202611082100_narrative_version_revision.sql', '545_narrative_notes.sql', '761_narrative_read_end.sql']) db.exec(sqlOf(m));
   raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

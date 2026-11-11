@@ -19,11 +19,26 @@ export type ImapCreds = {
 export type McpCreds = { kind: 'mcp'; connection_uid: string; user_id: number };
 export type Creds = OAuthCreds | ImapCreds | McpCreds;
 
-export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string };
+/** D4493: one file at most, today only a sequence step's voice note the founder recorded. */
+export type Attachment = { filename: string; mime: string; bytes: Uint8Array };
+/**
+ * D5333: `listUnsubscribe`, a sequence step's signed opt-out URL. An adapter that builds the RFC 5322 message
+ * (Gmail, SMTP) sets `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) from it.
+ * Outlook's Graph `sendMail` accepts only `x-` custom headers, and an MCP send tool takes text only: both leave it
+ * out, and the body's opt-out line stays the way out.
+ */
+export type Outgoing = { from: string; fromName: string | null; to: string; subject: string; body: string; attachments?: Attachment[]; listUnsubscribe?: string };
 export type SendResult = { messageId: string | null; creds?: Creds };
-export type ThreadMessage = { from: string | null; subject: string | null; received_at: string | null; preview: string | null };
+export type ThreadMessage = { id?: string; from: string | null; subject: string | null; received_at: string | null; preview: string | null };
+/** D4494: a thread read can rotate the mailbox's access just as a send can. */
+export type ThreadRead = { messages: ThreadMessage[]; creds?: Creds };
 
-export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured';
+/**
+ * `uncertain` (D4665): the provider may or may not have the message. It is raised only from the point
+ * where the message has left (an SMTP payload written, a send request issued) and the answer was lost.
+ * `consent`: the provider refused for want of a permission the member did not grant.
+ */
+export type AdapterCode = 'expired' | 'auth_failed' | 'refused' | 'unreachable' | 'unconfigured' | 'uncertain' | 'consent';
 
 export class AdapterError extends Error {
   readonly code: AdapterCode;
@@ -38,5 +53,5 @@ export interface MailAdapter {
   /** Revokes at the provider where it can; a provider that cannot is a no-op. */
   revoke(env: Env, creds: Creds): Promise<void>;
   /** Only where the account `can_read`: the messages of a thread Axal sent. */
-  listThread?(env: Env, creds: Creds, threadId: string): Promise<ThreadMessage[]>;
+  listThread?(env: Env, creds: Creds, sentMessageId: string): Promise<ThreadRead>;
 }

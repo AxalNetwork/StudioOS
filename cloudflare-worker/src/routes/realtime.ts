@@ -1,3 +1,4 @@
+import { heldLicences, holdsLicence } from '../services/accountLicences';
 /**
  * WebSocket upgrade routes for real-time fan-out.
  *
@@ -15,8 +16,9 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { decodeJWT } from '../auth';
+import { decodeJWT, sessionStanding } from '../auth';
 import { getSQL } from '../db';
+import { pipelineCan, pipelineProject, type PipelinePrincipal } from '../services/pipelineAccess';
 import { doNamespace } from '../util/doNamespace';
 
 const realtime = new Hono<{ Bindings: Env }>();
@@ -56,16 +58,43 @@ function extractBearerToken(c: any): string | null {
   return q || null;
 }
 
-export async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null } | null> {
+/**
+ * D4676 — the token facts a long-lived socket is re-checked against: issue
+ * time, session row, support-session record and operator. Carried to the
+ * Durable Object so an established connection asks `sessionStanding` the same
+ * question the upgrade asked, at every event, and ends when the answer
+ * changes. Identifiers only; no token or secret is forwarded.
+ */
+export type UpgradeSession = { iat: number | null; jti: string | null; sid: number | null; impersonated_by: number | null };
+
+export async function authenticateForUpgrade(c: any): Promise<{ id: number; email: string; role: string; kyc_status: string | null; licences?: string[]; founder_id?: number | null; session?: UpgradeSession } | null> {
   const token = extractBearerToken(c);
   if (!token) return null;
   try {
     const payload = await decodeJWT(c.env, token);
     const sql = getSQL(c.env);
-    const rows = await sql`SELECT id, email, role, is_active, kyc_status FROM users WHERE id = ${payload.user_id}`;
+    const rows = await sql`SELECT id, email, role, is_active, kyc_status, jwt_min_iat, founder_id FROM users WHERE id = ${payload.user_id}`;
     await sql.end();
     if (!rows.length || !rows[0].is_active) return null;
-    return { id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null };
+    // D4669 — the same standing `getCurrentUser` asks for: the sign-out floor,
+    // the session row, the support-session record. This door decoded the
+    // token and checked the account only, so a revoked or signed-out session
+    // could still open a realtime channel. An unreadable store refuses.
+    const standing = await sessionStanding(c.env, payload, rows[0]);
+    if (!standing.ok) return null;
+    if (standing.stepUpDue && new Date(standing.stepUpDue).getTime() < Date.now()) return null;
+    const num = (v: unknown) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+    return {
+      id: rows[0].id, email: rows[0].email, role: rows[0].role, kyc_status: rows[0].kyc_status ?? null,
+      licences: await heldLicences(c.env.DB, rows[0]),
+      founder_id: rows[0].founder_id ?? null,
+      session: {
+        iat: num(payload.iat),
+        jti: typeof payload.jti === 'string' ? payload.jti : null,
+        sid: num(payload.sid),
+        impersonated_by: num(payload.impersonated_by),
+      },
+    };
   } catch {
     return null;
   }
@@ -78,12 +107,14 @@ export async function authenticateForUpgrade(c: any): Promise<{ id: number; emai
  * handshake REQUIRES the server to echo exactly one of the offered
  * subprotocols, otherwise the browser closes the socket with code 1006.
  */
-function buildUpgradeRequest(c: any, user: { id: number; role: string }): Request {
+function buildUpgradeRequest(c: any, user: { id: number; role: string; session?: UpgradeSession }): Request {
   const headers: Record<string, string> = {
     upgrade: 'websocket',
     'x-auth-user-id': String(user.id),
     'x-auth-role': user.role,
   };
+  // D4676: the session facts the room re-checks at every event (see UpgradeSession).
+  if (user.session) headers['x-auth-session'] = JSON.stringify(user.session);
   const proto = c.req.header('sec-websocket-protocol');
   if (proto) headers['sec-websocket-protocol'] = proto;
   return new Request('https://do/ws', { headers });
@@ -98,12 +129,14 @@ function kycOk(user: { role: string; kyc_status: string | null }): boolean {
   // investors are required to be approved to subscribe to per-deal
   // realtime channels (the overview channel allows any authed user).
   if (user.role === 'admin') return true;
-  if (user.role !== 'investor') return true;
+  if (!holdsLicence(user, 'investor')) return true;
   return user.kyc_status === 'approved';
 }
 
 // GET /api/pipeline/ws/:deal_id — broadcasts pipeline events for one deal.
-// Allowed: admin, partner. Founders cannot snoop on other deals.
+// D4676: admitted by the Pipeline READ rule for THIS deal
+// (`services/pipelineAccess.ts`), the rule the list and the detail use. It
+// used to admit any partner or investor to any deal.
 realtime.get('/pipeline/ws/:deal_id', async (c) => {
   if (c.req.header('upgrade') !== 'websocket') {
     return c.json({ error: 'Expected WebSocket upgrade' }, 426);
@@ -117,13 +150,17 @@ realtime.get('/pipeline/ws/:deal_id', async (c) => {
   // Special channel "overview" is the global notifications + board feed —
   // any authenticated active user may subscribe (founders need it for the
   // bell). The PipelineRoom DO filters per-user `notification` frames by
-  // socket attachment, and only emits aggregate events (vote_updated,
-  // stage_change) on this channel — those are non-PII, board-level data.
-  // Per-deal numeric rooms remain restricted to admin/partner/investor.
+  // socket attachment, and (D4676) sends a deal's board event only to a
+  // socket whose account may READ that deal, re-checking its session first.
   const isOverview = dealId === 'overview';
   if (!isOverview) {
     if (!/^\d+$/.test(dealId)) return c.json({ error: 'Invalid deal_id' }, 400);
-    if (!['admin', 'partner', 'investor'].includes(user.role)) return c.json({ error: 'Forbidden' }, 403);
+    const project = await pipelineProject(c.env, Number(dealId));
+    // Not found either way: an account that may not read a deal does not
+    // learn from this door that it exists.
+    if (!project || !(await pipelineCan(c.env, { id: user.id, role: user.role as PipelinePrincipal['role'], founder_id: user.founder_id ?? null, licences: user.licences }, project, 'read'))) {
+      return c.json({ error: 'Not found' }, 404);
+    }
     if (!kycOk(user)) return c.json({ error: 'KYC verification required', kyc_required: true }, 403);
   }
   if (!(await checkUpgradeRate(c.env, user.id))) return c.json({ error: 'Too many WS upgrades' }, 429);

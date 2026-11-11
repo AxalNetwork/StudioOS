@@ -127,8 +127,9 @@ async function assertChips(m) {
     assert.deepEqual(mk.values('geography_ref'), ['', 'PT', 'ES']);
   } finally { await mk.unmount(); }
 
-  // Channel, partner and obligation have no chip set in form-options, so they read nothing.
-  for (const slug of ['distribution', 'partner-network', 'durable-company-building']) assert.equal(form(slug).loadOptions, undefined, slug);
+  // D4486: Channel now reads venture-member owner choices from its dedicated channel read.
+  assert.equal(typeof form('distribution').loadOptions, 'function');
+  for (const slug of ['partner-network', 'durable-company-building']) assert.equal(form(slug).loadOptions, undefined, slug);
 }
 
 test('1: Log feedback, Enter a KPI, Open a role and Add market read their chips from form-options', async () => {

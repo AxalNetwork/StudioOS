@@ -136,7 +136,7 @@ function assertBody(source) {
 }
 
 test('the cycle body takes the canvas gutter in a cycle size container, and no overlay sits inside it', () => {
-  const source = read(routePath).replace('className={CYCLE_GUTTER}', `className="${CYCLE_GUTTER}"`);
+  const source = read(routePath).replace("className={distribution ? 'min-w-0' : CYCLE_GUTTER}", `className="${CYCLE_GUTTER}"`);
   assertBody(source);
   // D703 (#1665's PR 2c): the container and body sit in the one `!actionPage` condition, which closes with them.
   const close = '      </div>\n      </div>\n      )}\n';

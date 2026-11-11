@@ -194,3 +194,21 @@ are actions (a match, a folder), not field values.
     two, so HQ revises the words in the segment's own edit. The statements
     still bump `version`. The Edit side is exempt in the #3740 guard for the
     same reason.
+
+## #4046, the last two placements (S1, 2026-11-04)
+
+- **Grow › Distribution's channel** (`Founder · Grow · Distribution` / `channel`):
+  `growth_channels.name`, composition only, on Add channel and `edit-channel`.
+  The kind and the state are the founder's choice; the spend and the bar are
+  money; none is listed. A channel is keyed by its uid (`ROW_KEYS`,
+  `KEYED_FILL_TABLES`): Add channel answers `{ uid }` and the Edit names its
+  row by it. The run reads the venture's own channel names and nothing else:
+  never a spend, a bar, a UTM source or another venture's channel. An Undo to
+  blank is refused (`required`), since the writer requires a name, and it never
+  rewrites the UTM source the channel's customers are counted by.
+- **Publish to…'s post text** is not a fill: the text lives in
+  `publish_drafts.body_json` and is drafted for the places the founder ticks,
+  which are not stored. It is `POST /api/publish/ask`
+  (`../publishAsk.ts`, `../../routes/publish.ts`): one `rail_write` under
+  `draft:publish`, quoted first, that writes nothing. The sheet's Accept
+  places the text in its Draft; Publishing stays the confirm dialog's Send.

@@ -112,7 +112,7 @@ function Triggers({ triggers, currency, onChange, disabled }) {
                 <input type="radio" checked={g.kind === 'share'} disabled={def?.flatOnly} onChange={() => set(i, { kind: 'share', value: '' })} data-testid={`programs-terms-trigger-${g.rule_key}-share`} />Share
               </label>
             </fieldset>
-            {def?.flatOnly ? <span className={SUB}>An identity check carries no amount, so it pays a flat amount.</span> : null}
+            {def?.flatOnly ? <span className={SUB}>{def.flatWhy}</span> : null}
             <input className={`${INPUT} w-40`} inputMode="decimal" value={g.value} disabled={disabled} onChange={(e) => set(i, { value: e.target.value })}
               aria-label={g.kind === 'share' ? 'Share, in percent' : `Amount, in ${currency}`} placeholder={g.kind === 'share' ? '%' : currency} data-testid={`programs-terms-trigger-${g.rule_key}-value`} />
             {triggers.length > 1 && !disabled ? <button type="button" className="self-start text-[12px] font-bold text-axal-violet dark:text-violet-300" onClick={() => onChange(triggers.filter((_, j) => j !== i))}>Remove</button> : null}

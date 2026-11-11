@@ -162,6 +162,15 @@ const ROUTES = [
     section: 'company',
   },
   {
+    // D4297 (#4297): the Influencer program; the company section's card, so no new image.
+    path: '/influencers',
+    title: 'Influencers',
+    description:
+      'Earn recurring revenue by bringing people to Axal VC. Share your own handle; when someone subscribes through it, you earn part of every invoice.',
+    type: 'website',
+    section: 'company',
+  },
+  {
     path: '/demo',
     title: 'Book a demo',
     description:
@@ -350,15 +359,6 @@ const ROUTES = [
     type: 'website',
     section: 'company',
   },
-  {
-    path: '/pricing/investor',
-    title: 'Investor plans',
-    description:
-      'Plans for investors and LPs, and what each tier includes. The investor-side counterpart to the main pricing page.',
-    key: 'pricing-investor',
-    type: 'website',
-    section: 'company',
-  },
 
   // ---- Trust center (#3705) ---------------------------------------------
   // The public trust center and its five tabs (`pages/site/trustCenterModel.js`
@@ -432,6 +432,10 @@ const ROUTES = [
     description: 'Sign in to Axal VC StudioOS.',
     type: 'website',
     section: 'company',
+    // D4582: the sign-in form is a way in, not something to find in a search. `noindex, follow` is carried three ways,
+    // each checked on its own: this meta tag (prerender and client navigation), and an `X-Robots-Tag` header for the
+    // path in `frontend/public/_headers`. `/register` is shared and indexed as before.
+    robots: 'noindex, follow',
   },
 
   // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
@@ -554,5 +558,7 @@ export function ogTagsFor(pathname, overrides = {}) {
     siteName: SITE_NAME,
     card: 'summary_large_image',
     imageAlt: title,
+    /** D4582: the route's robots directive, or null when it has none (indexable by default). */
+    robots: entry?.robots || null,
   };
 }

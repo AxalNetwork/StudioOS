@@ -1,0 +1,34 @@
+{
+  "skill": "investment-agreement-clause-review",
+  "version": 1,
+  "note": "Newly authored synthetic evaluation case; not recovered from an original definition.",
+  "input": {
+    "records": {
+      "raise.records": {
+        "synthetic_fixture": true,
+        "skill_name": "Investment Agreement Clause Review",
+        "task_scope": "Reviews investment-agreement provisions for economic and control implications, cross-reference issues and counsel questions.",
+        "evidence": [
+          "economic and control provision"
+        ],
+        "omitted_field": "side letter reference"
+      },
+      "data_room.index": {
+        "synthetic_fixture": true,
+        "corroborating_context": "Synthetic context for economic and control provision."
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "economic and control provision"
+    ],
+    "must_say_not_recorded": [
+      "side letter reference"
+    ],
+    "must_not_include": [
+      "guaranteed"
+    ]
+  }
+}

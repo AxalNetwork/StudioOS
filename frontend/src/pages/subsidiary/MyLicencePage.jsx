@@ -5,6 +5,7 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
+import { TOKEN_SPLIT_OWN_LABEL } from '../../lib/tokenSplit';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
@@ -26,6 +27,7 @@ import ContractTab from './licence/ContractTab';
 import RequestsTab from './licence/RequestsTab';
 import ProgramsTab, { ProgramsUnlinked } from './licence/ProgramsTab';
 import StatementsTab from './licence/StatementsTab';
+import { formatMinorOrCount } from '../../lib/money.js';
 
 /**
  * Licences — /admin/my-licence and its five tabs (D800, #2233: Summary, Terms,
@@ -56,10 +58,8 @@ import StatementsTab from './licence/StatementsTab';
 
 const fmtMoney = (cents, currency) => {
   if (cents == null) return 'Not recorded';
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: currency || 'EUR' })
-      .format(Number(cents) / 100);
-  } catch { return `${(Number(cents) / 100).toLocaleString()} ${currency || ''}`.trim(); }
+  // D5373: at the currency's own decimals; a missing or unlisted currency names the stored count, it is not read as euros.
+  return formatMinorOrCount(Number(cents), currency);
 };
 // Basis points, not a float — see migration 187. 3500 → "35%".
 //
@@ -413,7 +413,7 @@ export function ledgerSections(l) {
     { title: 'Fees and money', schedule: true, rows: [
       r('Annual licence fee', fmtMoney(l?.annual_fee_cents, l?.currency), 'fee'),
       r('Revenue share', fmtBps(l?.revenue_share_bps)),
-      r('AI token split', fmtBps(l?.token_split_bps)),
+      r(TOKEN_SPLIT_OWN_LABEL, fmtBps(l?.token_split_bps)),
     ] },
     { title: 'Deal terms', schedule: true, rows: [] },
     { title: 'Seats', rows: ['founder', 'investor', 'advisor', 'partner'].map((k) => r(

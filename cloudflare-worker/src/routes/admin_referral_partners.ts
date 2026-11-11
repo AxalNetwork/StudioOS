@@ -37,10 +37,11 @@ import { isSuperAdmin, requireHqAdmin, requireSuperAdminWriteBar } from '../auth
 import { refuse } from '../util/refusal';
 import { likeNeedle } from '../util/likeSearch';
 import { logAdminAction } from '../services/adminAudit';
+import { INFLUENCER_RULE } from '../services/influencerActions';
 import { quarterOf } from '../services/partnerLeaderboard';
 import { envelopeHandler } from './admin_contracts';
 import {
-  FACTS, FIRING_RULES, LIVE_STATES, READ_STATES, SEGMENT_LABEL, STORED_STATES, effectiveState, isSegment, rangesOverlap, todayUtc,
+  ADDABLE_SEGMENTS, FACTS, FIRING_RULES, LIVE_STATES, READ_STATES, SEGMENT_LABEL, STORED_STATES, effectiveState, isSegment, rangesOverlap, todayUtc,
 } from '../services/referralPartnerTerms';
 
 type Ctx = Context<{ Bindings: Env }>;
@@ -122,8 +123,9 @@ export function readTermsInput(b: any, base?: TermsInput): TermsInput | Refusal 
   const triggers: Trigger[] = [];
   for (const t of rawTriggers) {
     const key = t?.rule_key;
-    if (typeof key !== 'string' || !FIRING_RULES.has(key)) {
-      return { status: 400, code: 'trigger_unknown', message: 'Terms can pay only on a trigger an event fires today: a referred member’s identity check (referral_kyc_approved).' };
+    // D4292 (#4292) pays the rules in FIRING_RULES. D4289 P1 (#4290) also drafts INFLUENCER_RULE; the invoice share is read from either key.
+    if (typeof key !== 'string' || !(FIRING_RULES.has(key) || key === INFLUENCER_RULE)) {
+      return { status: 400, code: 'trigger_unknown', message: `Terms can pay only on a trigger an event fires today: a referred member’s identity check (referral_kyc_approved), a paid subscription invoice (subscription_invoice, or the influencer draft ${INFLUENCER_RULE}), or an influencer milestone bonus (influencer_bonus_10, _25, _50 or _100).` };
     }
     if (triggers.some((x) => x.rule_key === key)) return { status: 400, code: 'trigger_repeated', message: 'Name each trigger once.' };
     const amount = t.amount_cents ?? null;
@@ -291,6 +293,8 @@ r.post('/', async (c) => {
   const userId = b?.user_id;
   if (!Number.isSafeInteger(userId) || userId <= 0) return refuse(c, 400, { code: 'invalid_request', message: 'Name the member by their account number.' });
   if (!isSegment(b?.segment)) return refuse(c, 400, { code: 'unknown_segment', message: 'Segment is event_organisers, venture_scouts or deal_makers.' });
+  // D4289 P1 (#4290): an influencer joins by application, so HQ cannot add one here.
+  if (!ADDABLE_SEGMENTS.includes(b.segment)) return refuse(c, 400, { code: 'segment_by_application', message: 'Influencers join through their application. Admit them in Programs › Influencers.' });
   const note = textOrNull(b?.note, NOTE_MAX);
   if (note === 'bad') return refuse(c, 400, { code: 'invalid_request', message: `Keep the note to ${NOTE_MAX} characters.` });
   try {
@@ -423,12 +427,32 @@ r.get('/terms', async (c) => {
   } catch (e) { return unreadable(c, e); }
 });
 
+/** A new row's triggers: nothing else can have decided it yet. */
 async function saveTriggers(env: Env, termsId: number, triggers: Trigger[]) {
   return [
     env.DB.prepare('DELETE FROM referral_partner_term_triggers WHERE terms_id = ?').bind(termsId),
     ...triggers.map((g) => env.DB.prepare(
       'INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps) VALUES (?, ?, ?, ?)',
     ).bind(termsId, g.rule_key, g.amount_cents, g.percentage_bps)),
+  ];
+}
+
+/**
+ * D4804 (#4804): an EDIT's triggers. Every statement names the parent's status, so a stale edit that lost
+ * to submit or approve replaces nothing: the parent UPDATE changes no row AND its triggers stay as they
+ * were, in the same batch. The parent UPDATE leaves the status as it found it, so while the draft is
+ * still a draft each of these statements sees it and runs.
+ */
+async function replaceDraftTriggers(env: Env, termsId: number, triggers: Trigger[]) {
+  return [
+    env.DB.prepare(
+      `DELETE FROM referral_partner_term_triggers WHERE terms_id = ?
+         AND EXISTS (SELECT 1 FROM referral_partner_terms WHERE id = ? AND status = 'draft')`,
+    ).bind(termsId, termsId),
+    ...triggers.map((g) => env.DB.prepare(
+      `INSERT INTO referral_partner_term_triggers (terms_id, rule_key, amount_cents, percentage_bps)
+       SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM referral_partner_terms WHERE id = ? AND status = 'draft')`,
+    ).bind(termsId, g.rule_key, g.amount_cents, g.percentage_bps, termsId)),
   ];
 }
 
@@ -474,7 +498,7 @@ r.patch('/terms/:uid', async (c) => {
          contract_slug = ?, note = ?, updated_at = datetime('now') WHERE id = ? AND status = 'draft'`,
     ).bind(input.starts_on, input.ends_on, input.cap_per_intro_cents, input.overall_cap_cents, input.currency, input.sectors,
       input.contract_slug, input.note, t.id);
-    const results = await c.env.DB.batch([update, ...await saveTriggers(c.env, Number(t.id), input.triggers)]);
+    const results = await c.env.DB.batch([update, ...await replaceDraftTriggers(c.env, Number(t.id), input.triggers)]);
     if (!Number(results[0]?.meta?.changes)) return refuse(c, 409, { code: 'terms_not_draft', message: 'Only a draft can be edited. Submitted terms are HQ’s to decide.' });
     await logAdminAction(c.env, admin.id, admin.email, 'referral_terms.updated', { uid: t.uid });
     const saved = await termsByUid(c.env, t.uid);
@@ -596,6 +620,7 @@ r.patch('/:userId', async (c) => {
   const hasNote = b && Object.prototype.hasOwnProperty.call(b, 'note');
   if (!hasSeg && !hasNote) return refuse(c, 400, { code: 'invalid_request', message: 'Change the segment, the note, or both.' });
   if (hasSeg && !isSegment(b.segment)) return refuse(c, 400, { code: 'unknown_segment', message: 'Segment is event_organisers, venture_scouts or deal_makers.' });
+  if (hasSeg && !ADDABLE_SEGMENTS.includes(b.segment)) return refuse(c, 400, { code: 'segment_by_application', message: 'Influencers join through their application. Admit them in Programs › Influencers.' });
   const note = hasNote ? textOrNull(b.note, NOTE_MAX) : null;
   if (note === 'bad') return refuse(c, 400, { code: 'invalid_request', message: `Keep the note to ${NOTE_MAX} characters.` });
   try {

@@ -121,7 +121,7 @@ function world() {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
     '529_meeting_transcript_source.sql',
-    '452_record_session_setup.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
+    '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql', '488_channel_consents.sql']) db.exec(mig(m));
   applyEngineSchema(db);
   applySessionTranslationColumns(db); // D857: production applies migration 527 before the Worker ships.

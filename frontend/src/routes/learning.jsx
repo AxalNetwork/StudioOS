@@ -39,6 +39,8 @@ export default function learningRoutes({ guard, hqOnly, user, effectiveRole }) {
       <Route path="/learning/exercises/:slug" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage view="exercise" user={user} activeRole={effectiveRole} />)} />
       <Route path="/learning/exams/:slug" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage view="exam" user={user} activeRole={effectiveRole} />)} />
       <Route path="/learning/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage view="me" user={user} activeRole={effectiveRole} />)} />
+      {/* D3959 (#3959): the member's own learning plan. */}
+      <Route path="/learning/plan" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage view="plan" user={user} activeRole={effectiveRole} />)} />
       <Route path="/learning/my-programs/:program" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <LearningPage view="myProgram" user={user} activeRole={effectiveRole} />)} />
       <Route path="/learning/programs" element={guard(['admin'], <LearningPage view="programs" user={user} activeRole={effectiveRole} />)} />
       <Route path="/learning/programs/:program" element={guard(['admin'], <LearningPage view="program" user={user} activeRole={effectiveRole} />)} />

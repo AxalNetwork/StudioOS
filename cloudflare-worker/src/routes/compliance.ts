@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /**
  * T12 — Compliance calendar (port of backend/app/api/routes/compliance.py).
  *
@@ -217,8 +218,8 @@ type EventRow = {
 type Project = { id: number; founder_id: number | null; entity_id: number | null; company_id?: number | null };
 
 function role(u: { role: string }): string { return (u.role || '').toLowerCase(); }
-function isPrivilegedReader(r: string): boolean { return r === 'admin' || r === 'partner' || r === 'investor'; }
-function isPrivilegedWriter(r: string): boolean { return r === 'admin' || r === 'partner'; }
+function isPrivilegedReader(user: { role: string }): boolean { return role(user) === 'admin' || holdsLicence(user, 'partner') || holdsLicence(user, 'investor'); }
+function isPrivilegedWriter(user: { role: string }): boolean { return role(user) === 'admin' || holdsLicence(user, 'partner'); }
 
 /**
  * Load a project, narrowed to the caller's active company (company scoping,
@@ -241,8 +242,9 @@ async function loadProject(
   if (!row) return null;
   // D702 — a venture its founder keeps to introductions is missing to an
   // investor without one, as the other venture reads answer.
-  if (role(user) === 'investor' && !(await findableBy(c.env, user as any, row.id))) return null;
-  if (isPrivilegedReader(role(user))) return row;
+  if (isPrivilegedWriter(user)) return row;
+  if (holdsLicence(user, 'investor') && !(await findableBy(c.env, user as any, row.id))) return null;
+  if (isPrivilegedReader(user)) return row;
   return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
 }
 
@@ -257,14 +259,14 @@ async function activeCompanyFor(c: Context<{ Bindings: Env }>, user: any): Promi
 const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 
 function checkRead(user: { role: string; founder_id?: number | null }, p: Project) {
-  if (isPrivilegedReader(role(user))) return;
-  if (p.founder_id != null && p.founder_id === user.founder_id) return;
+  if (isPrivilegedReader(user)) return;
+  if (holdsLicence(user, 'founder') && p.founder_id != null && p.founder_id === user.founder_id) return;
   throw new Error('Forbidden');
 }
 
 function checkWrite(user: { role: string; founder_id?: number | null }, p: Project) {
-  if (isPrivilegedWriter(role(user))) return;
-  if (p.founder_id != null && p.founder_id === user.founder_id) return;
+  if (isPrivilegedWriter(user)) return;
+  if (holdsLicence(user, 'founder') && p.founder_id != null && p.founder_id === user.founder_id) return;
   throw new Error('Forbidden');
 }
 

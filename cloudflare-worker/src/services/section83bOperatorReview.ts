@@ -1,3 +1,4 @@
+import { holdsLicence } from './accountLicences';
 /**
  * D580 (#1207) — 83(b) operator review: an Axal admin assigned to a startup
  * checks its 83(b) filing record (the owner's answers 1A, 2A, 3A).
@@ -66,7 +67,8 @@ export async function projectById(env: Env, projectId: number): Promise<ProjectR
 export async function canReadOperatorReview(
   env: Env, user: Pick<User, 'id' | 'role' | 'founder_id'>, project: ProjectRow,
 ): Promise<boolean> {
-  if (user.role === 'partner' || user.role === 'investor') return false;
+  if (user.role === 'admin') return true;
+  if ((holdsLicence(user, 'partner') || holdsLicence(user, 'investor')) && !holdsLicence(user, 'founder') && !holdsLicence(user, 'advisor')) return false;
   // An admin passes `canAccessProject` on role alone.
   return canAccessProject(env, user, project, { write: true });
 }

@@ -130,7 +130,8 @@ export default function AreaLightbox({
   // The model chip reads the AIRail's own row for each option in use, once.
   // A read in flight is the dialog's, not the effect run's: when the options
   // change before it answers, its answer still lands (only unmount drops it).
-  const options = [...new Set(plans.filter((r) => charged(r.plan)).map((r) => r.plan.option))].sort().join(',');
+  // D1542: a diagram names no rail option (its model is the Diagrams group's, resolved on the server), so it reads none.
+  const options = [...new Set(plans.filter((r) => charged(r.plan)).map((r) => r.plan.option).filter(Boolean))].sort().join(',');
   const asked = useRef(new Set());
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);

@@ -26,7 +26,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import decks, { ensureSchema, getDeckRow } from './decks';
 import type { RouteMount } from '../util/routeRegistry';
 import { cardStates, filterCards, filterOf, isTracked, notDone } from '../services/decks/cardStatus';

@@ -42,6 +42,8 @@ import { canWrite, type ProjectRef } from '../routes/_founder_validate_helpers';
 
 export type FocusRule =
   | 'first_interview' | 'review' | 'next_interview'
+  // D4589 (#4589): Validate's shared next-action policy (`validateNextAction.ts`).
+  | 'stopped' | 'missing_fit' | 'record_result' | 'next_test' | 'decision_ready' | 'plan_build' | 'unavailable'
   | 'first_feature' | 'connect_tools'
   | 'first_readiness' | 'call_for_capital'
   | 'first_kpi' | 'tell_customers'
@@ -54,6 +56,10 @@ export interface Focus {
   why: string | null;
   cta: { label: string; href: string } | null;
   then: string | null;
+  /** D4589: other actions the policy keeps in reach (Record a session, Record a new decision). */
+  secondary?: Array<{ label: string; href: string }>;
+  /** D4589: 'unavailable' when a fact the policy needs could not be read; the cta is then null. */
+  state?: 'ok' | 'unavailable';
 }
 
 export interface Meter {
@@ -212,23 +218,32 @@ function buildIndex(project: BuildProject, reads: BuildRead[], figures: Figure[]
   const facts = systems?.facts ?? {};
   const tools = Number(facts.tools_total);
   const toolsRow: IndexRow = systems?.card.state === 'unreadable'
-    ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: UNREADABLE, href: `/build/tools?project=${project.id}` }
+    ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: UNREADABLE, href: `/build/operating-systems?project=${project.id}#tools` }
     : project.company_id == null || !num(tools) || tools === 0
-      ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/tools?project=${project.id}` }
-      : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/tools?project=${project.id}` };
-  // #1693's keys, never the cells: a stored pain theme, and an open filing's date.
-  const linked = (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
+      ? { key: 'tools', title: 'Tools', detail: 'Connected tools', value: null, href: `/build/operating-systems?project=${project.id}#tools` }
+      : { key: 'tools', title: 'Tools', detail: `${Number(facts.tools_connected)} connected · ${Number(facts.tools_failing)} failing`, value: String(tools), href: `/build/operating-systems?project=${project.id}#tools` };
+  // #1693's keys, never the cells: a stored pain theme or hypothesis, and an open filing's date.
+  // #4603 part 2: the counts come from the read's facts when it gives them (the overview reads no feature rows).
+  // #5067: `linked` is the module's own count (a pain theme OR a hypothesis) — this label agrees with it.
+  const counted = num(Number(solution?.facts?.features)) && num(Number(solution?.facts?.linked));
+  const features = counted ? Number(solution!.facts!.features) : (solution?.rows ?? []).length;
+  const linked = counted ? Number(solution!.facts!.linked) : (solution?.rows ?? []).filter((r) => r.keys?.linked === 'yes').length;
   const solutionRow: IndexRow = solution?.card.state === 'unreadable'
-    ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: UNREADABLE, href: href('solution-design') }
-    : !(solution?.rows ?? []).length
-      ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain', value: null, href: href('solution-design') }
-      : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain', 'features linked to a pain'), value: '', href: href('solution-design') };
-  const due = (company?.rows ?? [])
-    .filter((r) => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string')
-    .map((r) => String(r.keys!.due)).sort()[0];
+    ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain or hypothesis', value: UNREADABLE, href: href('solution-design') }
+    : !features
+      ? { key: 'solution-design', title: 'Solution design', detail: 'Features linked to a pain or hypothesis', value: null, href: href('solution-design') }
+      : { key: 'solution-design', title: 'Solution design', detail: plural(linked, 'feature linked to a pain or hypothesis', 'features linked to a pain or hypothesis'), value: '', href: href('solution-design') };
+  // #4603 part 2b: Company creation's count and next open filing come from its facts when the read gives them (the overview reads no record rows).
+  const filed = num(Number(company?.facts?.filings));
+  const filings = filed ? Number(company!.facts!.filings) : (company?.rows ?? []).length;
+  const due = filed
+    ? (typeof company!.facts!.next_filing_due === 'string' ? company!.facts!.next_filing_due : undefined)
+    : (company?.rows ?? [])
+      .filter((r) => r.keys?.state !== 'filed' && typeof r.keys?.due === 'string')
+      .map((r) => String(r.keys!.due)).sort()[0];
   const companyRow: IndexRow = company?.card.state === 'unreadable'
     ? { key: 'company-creation', title: 'Company creation', detail: 'Next filing', value: UNREADABLE, href: href('company-creation') }
-    : !(company?.rows ?? []).length
+    : !filings
       ? { key: 'company-creation', title: 'Company creation', detail: 'Next filing', value: null, href: href('company-creation') }
       : { key: 'company-creation', title: 'Company creation', detail: due && dayMonth(due) ? `Next filing ${dayMonth(due)}` : 'Next filing', value: '', href: href('company-creation') };
   return [
@@ -264,7 +279,11 @@ export async function buildPhone(env: Env, project: BuildProject, viewer: User, 
 // Raise
 // ---------------------------------------------------------------------------
 
-const raiseHref = (ctx: RaiseCtx, slug: string) => `/raise/${slug}?project=${ctx.projectId}`;
+// #4853: the deck's module page IS the Pitch Studio, which reads the venture as `project_id`
+// (the same address `raiseCycle.ts` gives it).
+const raiseHref = (ctx: RaiseCtx, slug: string) => (slug === 'pitch-deck'
+  ? `/raise/pitch?project_id=${ctx.projectId}`
+  : `/raise/${slug}?project=${ctx.projectId}`);
 
 /**
  * Nothing in Raise is recorded: no readiness item, no saved narrative version,
@@ -339,7 +358,7 @@ function raiseIndex(ctx: RaiseCtx, figures: Figure[], cards: Card[], calls: Call
     rows.push({
       key: 'calls', title: 'Calls', detail: 'Calls for Capital',
       value: 'state' in calls ? UNREADABLE : items && items.length ? `${items.filter((i) => i.effective_state === 'open').length} open` : null,
-      href: `/raise/calls?project=${ctx.projectId}`,
+      href: `/raise/capital-relationships/calls?project=${ctx.projectId}`,
     });
   }
   rows.push({
@@ -493,7 +512,7 @@ async function growIndex(x: GrowCtx, figures: Figure[], cards: Card[]): Promise<
   }
   const card = (slug: string, title: string, detail: string): IndexRow => ({ key: slug, title, detail, value: cardValue(cardOf(cards, slug)), href: href(slug) });
   return [
-    { key: 'updates', title: 'Updates', detail: 'Updates shared', value: updates, href: `/grow/updates?project=${x.projectId}` },
+    { key: 'updates', title: 'Updates', detail: 'Updates shared', value: updates, href: `/grow/reporting?project=${x.projectId}` },
     card('product-improvement', 'Product improvement', 'Feedback themes by status'),
     card('distribution', 'Distribution', 'Cost per customer by channel'),
     {

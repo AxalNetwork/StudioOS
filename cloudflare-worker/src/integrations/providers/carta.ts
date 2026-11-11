@@ -1,3 +1,4 @@
+import { holdsLicence } from '../../services/accountLicences';
 /**
  * Task #5 — Carta provider.
  *
@@ -394,7 +395,7 @@ export async function boundVenture(env: Env, row: IntegrationRow): Promise<numbe
 
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
   if (safeParse(row.config_json || '{}').audience === 'investor') return { summary: 'Investor Carta is read live in Deals and Portfolio; no founder records imported.', counts: { pulled: 0 } };
-  if (_user.role && _user.role !== 'founder') throw new Error('carta_reconnect_required');
+  if (_user.role && !holdsLicence(_user, 'founder')) throw new Error('carta_reconnect_required');
   const counts = { pulled: 0, holders: 0, securities: 0, vesting: 0, option_pools: 0, errors: 0 };
   const issuer = await ensureIssuer(c.env, row);
   // D1020: the venture this issuer is the record for, while the founder still owns it.

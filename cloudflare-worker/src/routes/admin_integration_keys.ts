@@ -7,7 +7,9 @@
  *                              to register, the connector it serves and its setup
  *                              guide (D751), plus the OAuth clients set only at
  *                              deploy (`other_oauth`: Zoom, Google, Microsoft)
- *  PUT    /:provider         → upsert {client_id, client_secret}
+ *  PUT    /:provider         → upsert {client_id, client_secret, expires_at?}
+ *                              (D5304: `expires_at` is the date the provider's
+ *                              console shows for the key, if it shows one)
  *                              → pushes BOTH as Cloudflare Worker secrets
  *                                via the CF API, deletes the encrypted DB row
  *  POST   /:provider/rotate  → push a fresh client_secret as a Worker secret
@@ -64,7 +66,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { modelProviderRows } from '../services/aiProviders';
+import { gatewayProviderRows, modelProviderRows } from '../services/aiProviders';
 import {
   MANAGED_PROVIDERS,
   PROVIDER_ENV_VARS,
@@ -74,6 +76,8 @@ import {
   deleteOauthCredsRowOnly,
   listProviderKeyStatus,
   keyHeldAsWorkerSecret,
+  parseKeyExpiry,
+  recordProviderKeyExpiry,
   _clearOauthCredsCache,
 } from '../services/providerOauthKeys';
 import { testOauthCreds } from '../services/providerOauthTest';
@@ -380,7 +384,11 @@ r.get('/', async (c) => {
     channels: channelRows(c.env),
     // D851 · D848: the model providers (pattern C), read only: the switch and whether the key is set.
     model_providers: modelProviderRows(c.env),
+    // D4556: third-party models through AI Gateway, read only: the switch, which config is missing (names), ZDR and workloads.
+    gateway_providers: gatewayProviderRows(c.env),
     db_readable: status.db_readable,
+    // D5304: whether each key's expiry and last use could be read; false reads as Unreadable, never as none.
+    stamps_readable: status.stamps_readable,
     ...(status.db_readable ? {} : {
       unreadable_reason:
         'The table that holds database-kept keys could not be read, so for any provider without a Worker '
@@ -481,13 +489,16 @@ r.put('/:provider', async (c) => {
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
   }
-  let body: { client_id?: string; client_secret?: string } = {};
+  let body: { client_id?: string; client_secret?: string; expires_at?: unknown } = {};
   try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
   const clientId = String(body.client_id || '').trim();
   const clientSecret = String(body.client_secret || '').trim();
   if (!clientId || !clientSecret) {
     return c.json({ error: 'client_id_and_client_secret_required' }, 400);
   }
+  // D5304: the expiry the provider's console shows for this key, if it shows one. Blank records none.
+  const expiresAt = parseKeyExpiry(body.expires_at);
+  if (expiresAt === undefined) return c.json({ error: 'expires_at_invalid' }, 400);
   if (clientId.length > 4096 || clientSecret.length > 4096) {
     return c.json({ error: 'value_too_long' }, 400);
   }
@@ -525,10 +536,13 @@ r.put('/:provider', async (c) => {
   // tokens issued under the same client_id remain valid).
   await deleteOauthCredsRowOnly(c.env, provider);
   _clearOauthCredsCache();
+  // D5304: the row (and so the old key's stamps) is gone; the new key's reported expiry, if any, is recorded.
+  const expiryRecorded = await recordProviderKeyExpiry(c.env, provider, expiresAt);
 
   await audit(c.env, admin, {
     action: 'integration_key_cf_secret_push',
     provider, envVars, outcome: 'ok', cfStatus: secretRes.status,
+    ...(expiresAt ? { extra: { expires_at: expiresAt, expiry_recorded: expiryRecorded } } : {}),
   });
   // `source: 'env'` is the cosmetic post-promote state — the next
   // /api/admin/integration-keys GET will reflect the live env binding
@@ -547,12 +561,15 @@ r.post('/:provider/rotate', async (c) => {
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);
   }
-  let body: { client_secret?: string } = {};
+  let body: { client_secret?: string; expires_at?: unknown } = {};
   try { body = await c.req.json(); } catch { /* empty body → 400 below */ }
   const clientSecret = String(body.client_secret || '').trim();
   if (!clientSecret) {
     return c.json({ error: 'client_secret_required' }, 400);
   }
+  // D5304: the expiry the provider shows for the new secret, if it shows one.
+  const expiresAt = parseKeyExpiry(body.expires_at);
+  if (expiresAt === undefined) return c.json({ error: 'expires_at_invalid' }, 400);
   if (clientSecret.length > 4096) {
     return c.json({ error: 'value_too_long' }, 400);
   }
@@ -576,7 +593,7 @@ r.post('/:provider/rotate', async (c) => {
     // and change nothing a user's connection reads.
     if (res.code === 'cloudflare_api_token_missing' && !keyHeldAsWorkerSecret(c.env, provider)) {
       try {
-        const rotated = await rotateOauthSecret(c.env, provider, clientSecret, admin.id);
+        const rotated = await rotateOauthSecret(c.env, provider, clientSecret, admin.id, expiresAt);
         await audit(c.env, admin, {
           action: 'integration_key_cf_secret_rotate',
           provider, envVars, outcome: 'ok', cfStatus: res.status, cfCode: res.code,
@@ -594,9 +611,11 @@ r.post('/:provider/rotate', async (c) => {
 
   await deleteOauthCredsRowOnly(c.env, provider);
   _clearOauthCredsCache();
+  const expiryRecorded = await recordProviderKeyExpiry(c.env, provider, expiresAt);
   await audit(c.env, admin, {
     action: 'integration_key_cf_secret_rotate',
     provider, envVars, outcome: 'ok', cfStatus: res.status,
+    ...(expiresAt ? { extra: { expires_at: expiresAt, expiry_recorded: expiryRecorded } } : {}),
   });
   return c.json({ ok: true, provider, source: 'env', rotated_at: new Date().toISOString() });
 });

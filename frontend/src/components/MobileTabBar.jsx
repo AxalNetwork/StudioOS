@@ -30,14 +30,19 @@ import './mobileTabBar.css';
  * bar's height (`mobileTabBar.css`), so nothing sits under it.
  *
  * FOUNDER FIRST. `mobilePlan` returns null for the other licences until their
- * allocations are built, and the bar then renders nothing.
+ * allocations are built, and the bar then renders nothing. D4473 (#4473): a
+ * member who holds Founder gets the founder plan over the BUILT sidebar (the
+ * union of held licences), so the four cycle tabs stay and every other row the
+ * sidebar draws lands in More, in sidebar order. Without Founder: no bar.
  *
  * MOUNTED BY THE SHELL, NOT HERE. App.jsx mounts it beside the drawer.
  */
 
-export default function MobileTabBar({ role, onMore }) {
+export default function MobileTabBar({ role, onMore, held = null, groups = null }) {
   const { pathname } = useLocation();
-  const plan = mobilePlan(role);
+  const plan = Array.isArray(held) && Array.isArray(groups)
+    ? (held.includes('founder') ? mobilePlan('founder', { founder: groups }) : null)
+    : mobilePlan(role);
   const drawn = plan !== null;
 
   // The page's own content is padded by the bar's height only while a bar is

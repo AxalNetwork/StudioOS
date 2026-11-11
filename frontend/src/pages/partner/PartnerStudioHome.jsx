@@ -46,6 +46,9 @@ export default function PartnerStudioHome({
   previewing = false,
   dashboardUnavailable = '',
   onRetryDashboard,
+  // D4474 (#4474): a block on a multi-licence Studio. The page owns its <main> and the "Studio" h1, so the
+  // home draws a <section> and leaves out its own h1.
+  embedded = false,
 }) {
   const [profile, setProfile] = useState(loading);
   const [assistantAvailable, setAssistantAvailable] = useState(true);
@@ -61,19 +64,21 @@ export default function PartnerStudioHome({
   const partner = profile.state === 'ready' ? profile.data : null;
   const first = String(partner?.name || user?.name || '').trim().split(/\s+/)[0] || 'there';
 
-  const studio = useStudioLayout({ profile: 'partner', viewer: user, readOnly: previewing });
+  // D4362 (#4362): an admin previewing arranges their own Partner Studio; its tiles stay withheld (`withheld`).
+  const studio = useStudioLayout({ profile: 'partner', viewer: user });
   const home = usePartnerHome(previewing);
   const tiles = partnerTiles(home.state, home.load);
   const dim = studio.editing ? 'sm-dim' : '';
 
+  const Root = embedded ? 'section' : 'main';
   return (
-    <main className="partner-studio sm-tokens" data-testid="partner-studio-home">
+    <Root className="partner-studio sm-tokens" data-testid="partner-studio-home">
       {previewing && <div className="partner-preview" role="status" data-testid="status-partner-preview"><Eye size={15} /> Partner role preview. Private firm records and actions are withheld.</div>}
       {dashboardUnavailable && <div className="partner-warning"><span>{dashboardUnavailable}</span>{onRetryDashboard && <button type="button" onClick={onRetryDashboard} data-testid="button-retry-dashboard"><RefreshCw size={13} /> Retry</button>}</div>}
 
       <header className="partner-masthead">
         <div>
-          <div className="partner-title"><h1 data-testid="text-partner-studio-title">Studio</h1><span>Good to see you, {first}.</span></div>
+          <div className="partner-title">{!embedded && <h1 data-testid="text-partner-studio-title">Studio</h1>}<span>Good to see you, {first}.</span></div>
           <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{PURPOSE.partner}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -103,6 +108,6 @@ export default function PartnerStudioHome({
 
       {home.state.status === 'unlinked' && <NoFirmAttached />}
       <StudioModules studio={studio} tiles={tiles} withheld={previewing} />
-    </main>
+    </Root>
   );
 }

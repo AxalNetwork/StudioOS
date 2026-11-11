@@ -11,6 +11,7 @@ import { projectCompany, projectsOfCompany, scopeFor, usePublishScope } from '..
 import { ActionDialog } from '../account/companies/LifecycleDialogs.jsx';
 import { day, incorporatePath, lifecycleRefusal, stageWord } from '../account/companies/companiesModel.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, MUTED, TeamCard } from './teamUi.jsx';
+import WorkSettings from '../work/WorkSettings.jsx';
 import { initials, moveOutCopy, moveTarget, moveUnderLines } from './teamModel.js';
 
 /**
@@ -129,6 +130,7 @@ export default function ProjectSettingsPage() {
       <TeamCard title="Work" testId="project-settings-work">
         <p className={`m-0 ${MUTED}`}>The board, backlog and burn-up of {name}: what its people and AI agents are doing.</p>
         <Link to={`/projects/${encodeURIComponent(id)}/work`} className={`mt-3 ${BTN_TEXT}`} data-testid="project-settings-open-work">Open Work ›</Link>
+        {ready && <WorkSettings key={id} projectId={id} canManage={state.manage} />}
       </TeamCard>
       <TeamCard title="Company" testId="project-settings-company">
         {!ready ? <p className={MUTED} data-testid="project-settings-company-reading">Reading…</p> : scope.kind === 'project' ? (

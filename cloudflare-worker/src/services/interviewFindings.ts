@@ -12,6 +12,7 @@
  */
 import type { Env } from '../types';
 import type { ModuleSlug } from './cycleValidate';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export const str = (v: unknown, max: number): string | null => {
   if (typeof v !== 'string') return null;
@@ -63,7 +64,7 @@ export type FindingKind =
   // D859 (#2504): a conversation's next step, and a feature the customer asked for.
   | 'follow_up' | 'prototype_ask'
   // D873 (#2520): what a call decided.
-  | 'decision';
+  | 'decision' | 'quotable_line' | 'verdict_contribution';
 
 /** The modules `interview_findings.module` admits (its CHECK). */
 export type FindingModule = Extract<ModuleSlug, 'customer-research' | 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals' | 'experiments'>;
@@ -82,6 +83,17 @@ export interface FindingSpec {
 const single = (kind: string) => () => kind;
 
 export const FINDING_KINDS: Record<FindingKind, FindingSpec> = {
+  // D4412: accepted quotations and decision context, never a machine's decision.
+  quotable_line: {
+    mcpModule: 'customer_research', slug: () => 'customer-research',
+    parse: (p) => { const text = str(p.text, 400); return text ? { text } : null; },
+    key: (p) => norm(p.text),
+  },
+  verdict_contribution: {
+    mcpModule: 'verdict', slug: () => 'experiments',
+    parse: (p) => { const text = str(p.text, 400); return text ? { text } : null; },
+    key: (p) => norm(p.text),
+  },
   firmographic: {
     mcpModule: 'ideal_customer_profile',
     slug: (p) => ((INTERVIEW_FIELDS as readonly string[]).includes(String(p.attribute)) ? 'customer-research' : 'ideal-customer-profile'),
@@ -238,7 +250,7 @@ export function amountWord(p: Record<string, unknown>): string | null {
   const cents = posInt(p.amount_cents);
   if (!cents) return null;
   const period = p.period === 'month' ? ' / month' : p.period === 'year' ? ' / year' : '';
-  return `${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })} ${String(p.currency || 'usd').toUpperCase()}${period}`;
+  return `${suffixAmount(cents, String(p.currency || 'usd').toUpperCase(), { trimWhole: true })}${period}`;
 }
 
 /**
@@ -248,6 +260,8 @@ export function amountWord(p: Record<string, unknown>): string | null {
  */
 export function findingLine(kind: FindingKind, p: Record<string, unknown>): { what: string; detail: string } {
   switch (kind) {
+    case 'quotable_line': return { what: 'Quotable line', detail: 'Accepted quotation' };
+    case 'verdict_contribution': return { what: 'Contribution to Verdict', detail: String(p.text ?? '') };
     case 'firmographic': return { what: ATTRIBUTE_WORD[String(p.attribute)] ?? 'Firmographic', detail: String(p.value ?? '') };
     case 'job_to_be_done': return { what: 'Job to be done', detail: String(p.job ?? '') };
     case 'market_fact': return { what: `Market fact · ${capital(String(p.topic ?? 'other'))}`, detail: String(p.fact ?? '') };

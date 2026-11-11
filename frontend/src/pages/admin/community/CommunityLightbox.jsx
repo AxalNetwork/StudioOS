@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { reportError } from '../../../lib/log';
 import { Lightbox } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
-import { filtersOn } from './lightboxModel';
+import { SEARCH_WAIT_MS, filtersOn } from './lightboxModel';
 
 /**
  * D934 (#2718) — the shell the four Community lightboxes share (CM3–CM6).
@@ -32,6 +32,22 @@ export const LINK = 'font-bold text-axal-ink hover:text-axal-violet dark:text-gr
  * `dep` changes (the activity read's query). `{ status: 'loading' | 'ready' |
  * 'error', data }`. `tag` names it in the error log; nothing else is logged.
  */
+/**
+ * #4717 — a search box's text once the typing has stopped for `ms`. A lightbox
+ * builds its query from this, so each keystroke is not a read; and
+ * `useBoxRead`'s `live` flag drops any answer to a query the box has moved
+ * past, so a slow, stale answer is never drawn over the current one.
+ */
+export function useSettled(value, ms = SEARCH_WAIT_MS) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (value === settled) return undefined;
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, settled, ms]);
+  return settled;
+}
+
 export function useBoxRead(load, tag, dep = '') {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [tick, setTick] = useState(0);
@@ -151,13 +167,27 @@ export function BoxTable({ id, cols, rows, phone, phoneLine, phoneValue, empty }
   );
 }
 
-/** The `Lightbox`, with the Close footer the canvas draws. `children` is called with whether this is the phone page. */
-export function BoxShell({ id, title, sub, onClose, children }) {
+/**
+ * The `Lightbox`, with the Close footer the canvas draws. `children` is called with whether this is the phone page.
+ * D4820 part 2 (CM05, CM10a): `manage` is the domain's console link, literal in each lightbox. A dialog shows it
+ * beside Close; the phone page pins it to the bottom of the screen.
+ */
+export function BoxShell({ id, title, sub, onClose, manage, children }) {
   const phone = usePhoneWidth();
+  const footer = phone
+    ? (manage ? <div className="sticky bottom-0 flex" data-testid={`${id}-manage`}>{manage}</div> : null)
+    : (
+      <div className="flex items-center justify-end gap-4">
+        {manage ? <span data-testid={`${id}-manage`}>{manage}</span> : null}
+        <button type="button" className={GHOST} onClick={onClose} data-testid={`${id}-done`}>Close</button>
+      </div>
+    );
   return (
-    <Lightbox label={title} title={title} sub={sub} eyebrow="Community" onClose={onClose} width={1040} pageBelow="lg" testId={id}
-      footer={phone ? null : <div className="flex justify-end"><button type="button" className={GHOST} onClick={onClose} data-testid={`${id}-done`}>Close</button></div>}>
+    <Lightbox label={title} title={title} sub={sub} eyebrow="Community" onClose={onClose} width={1040} pageBelow="lg" testId={id} footer={footer}>
       {children(phone)}
     </Lightbox>
   );
 }
+
+/** The console link a lightbox pins: a full-width 44px button on a phone, a text link in a dialog. */
+export const MANAGE = 'inline-flex min-h-[36px] max-lg:min-h-[44px] max-lg:w-full items-center justify-center rounded-[9px] bg-axal-violet px-3.5 text-[12.5px] font-bold text-white hover:bg-axal-violet-deep';

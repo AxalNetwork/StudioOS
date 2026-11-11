@@ -88,7 +88,7 @@ test('consent gates Start: aria-disabled, described by the amber note; recorded,
   assert.match(startTag(none), /aria-describedby="record-consent-note"/);
   assert.match(none, /id="record-consent-note"[^>]*>Audio starts only once consent is recorded\./);
   assert.match(none, /text-amber-800[^"]*dark:text-amber-300/);
-  const given = render({ initialConsent: 'written', interview: { id: 7, interviewee_name: 'Dana' } });
+  const given = render({ sessions: {}, initialConsent: 'written', interview: { id: 7, interviewee_name: 'Dana' } });
   assert.doesNotMatch(startTag(given), /aria-disabled/);
   assert.match(given, />Consent recorded\. Audio starts when you press Start\.</);
   const nameless = render({ interview: null, initialConsent: 'written' });
@@ -350,6 +350,40 @@ test('a refused Start prints the Worker\'s words, deletes nothing, and keeps its
     refuse = false;
     await m.click('record-start');
     assert.equal(s.calls.open[1].client_key, s.calls.open[0].client_key, 'the same Start, so a lost answer is not a second interview');
+    assert.equal(s.calls.started.length, 1);
+  } finally { await m.unmount(); }
+});
+
+test('D5353: a 202 setup_incomplete keeps the form open and retries the same client key without starting capture', async () => {
+  const s = spies();
+  let attempt = 0;
+  s.props.sessions.open = async (body) => {
+    s.calls.open.push(body);
+    attempt += 1;
+    return attempt === 1
+      ? { detail: 'setup_incomplete', message: 'This session was opened but its setup has not finished.', session: { id: 501, setup_complete_at: null } }
+      : { session: { id: 501, interview_id: 41 }, interview: { id: 41, interviewee_name: body.interviewee.name, interviewee_company: body.interviewee.company } };
+  };
+  const capture = { prepared: 0, released: 0, begun: 0 };
+  const recorder = {
+    prepare() { capture.prepared += 1; }, release() { capture.released += 1; }, begin() { capture.begun += 1; },
+    isCapturing: () => false, getSnapshot: () => ({}),
+  };
+  const m = await mount({ ...s.props, recorder });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.type('record-company', 'Acme');
+    await m.click('record-consents-written');
+    await m.click('record-start');
+    assert.equal(capture.begun, 0, 'the recorder began on an unfinished session');
+    assert.equal(s.calls.started.length, 0, 'the unfinished session was opened as usable');
+    assert.equal(m.text(m.by('record-start')), 'Try again');
+    assert.match(m.text(m.by('record-error')), /setup has not finished/);
+    assert.equal(m.pr(m.by('record-name')).value, 'Dana', 'the entered person was cleared');
+    assert.equal(m.pr(m.by('record-company')).value, 'Acme', 'the entered company was cleared');
+    await m.click('record-start');
+    assert.equal(s.calls.open[1].client_key, s.calls.open[0].client_key, 'retry changed the setup key');
+    assert.equal(capture.begun, 1);
     assert.equal(s.calls.started.length, 1);
   } finally { await m.unmount(); }
 });
@@ -887,4 +921,44 @@ test('#1588 r2 a Start that becomes busy while its session is being made is refu
     assert.equal(m.pr(m.by('record-error-live')).href, '/validate/record/live?session=88');
     assert.equal(s.calls.started.length, 0, 'nothing opens');
   } finally { await m.unmount(); }
+});
+
+
+test('D4412: default call outputs, estimated tokens and selection sent on Start', async () => {
+ const s = spies();
+ s.props.sessions.outputs = async (_p, _m, picked) => ({ outputs: picked ?? ['customer-research','pain-points','icp-fit'], quote: { ok:true, microusd:1250 } });
+ const m = await mount(s.props);
+ try {
+  await act(async () => { await new Promise((r) => setTimeout(r, 250)); });
+  assert.match(m.text(), /What do you want from this call/);
+  assert.match(m.text(), /Estimated extraction: \$0.001250/);
+  await m.type('record-name', 'Synthetic interview'); await m.click('record-consents-verbal'); await m.click('record-start');
+  assert.deepEqual(s.calls.open[0].outputs, ['customer-research','pain-points','icp-fit']);
+ } finally { await m.unmount(); }
+});
+
+
+test('#4449: unreadable output preferences still allow recording with no AI outputs', async () => {
+  const s = spies(); s.props.sessions.outputs = async () => ({});
+  const m = await mount(s.props);
+  try {
+    await m.type('record-name', 'Synthetic interview'); await m.click('record-consents-verbal');
+    assert.match(m.text(), /output choices could not be read.*No outputs selected.*still start recording/);
+    assert.notEqual(m.pr(m.by('record-start'))['aria-disabled'], true);
+    await m.click('record-start'); assert.deepEqual(s.calls.open[0].outputs, []);
+  } finally { await m.unmount(); }
+});
+
+
+test('#4449: a refused AI estimate clears selections, explains why and leaves Start available',async()=>{
+ for(const failure of ['AI assistance is off','Model unavailable']){
+  const s=spies();s.props.sessions.outputs=async(_p,_m,picked)=>({outputs:picked??['pain-points'],quote:{ok:false,message:failure}});
+  const m=await mount(s.props);
+  try{await act(async()=>{await new Promise(r=>setTimeout(r,250));});
+   await m.type('record-name','Synthetic interview');await m.click('record-consents-verbal');
+   assert.ok(m.text().includes(failure));assert.match(m.text(),/No outputs selected/);
+   assert.notEqual(m.pr(m.by('record-start'))['aria-disabled'],true);
+   await m.click('record-start');assert.deepEqual(s.calls.open[0].outputs,[]);
+  }finally{await m.unmount();}
+ }
 });

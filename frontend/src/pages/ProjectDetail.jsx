@@ -15,6 +15,7 @@ import VentureRiskPanel from '../components/VentureRiskPanel';
 import CompetitorAnalysis from '../components/CompetitorAnalysis';
 import { useActiveCompany } from '../contexts/ActiveCompanyContext';
 import { projectCompany, scopeFor, usePublishScope } from '../lib/settingsScope.js';
+import SkillsLink from './team/SkillsLink.jsx';
 
 const weekLabels = {
   week_1: { name: 'Week 1 — Validation Sprint', tasks: ['Define problem + ICP', 'Run user interviews', 'Validate willingness to pay', 'Draft 1-page concept'] },
@@ -1168,6 +1169,8 @@ function ProjectMembersSection({ projectId, onError }) {
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Team</h3>
         {/* D1497 (#3727): the full Team page; it forwards to the company form when the project sits under one. */}
         <Link to={`/projects/${encodeURIComponent(projectId)}/settings/team`} className="ml-auto text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" data-testid="project-team-link">Team ›</Link>
+        {/* #4363: the project's Skills tab; the standalone form forwards to the company form, keeping ?tab=. */}
+        <SkillsLink scope={{ kind: 'project', project: { id: projectId } }} className="text-xs font-semibold text-violet-700 hover:underline dark:text-violet-300" testId="project-skills-link">Skills ›</SkillsLink>
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
         Co-founders can read &amp; edit startup data; advisors have read-only access.

@@ -17,6 +17,7 @@
  * services/columnCipher.ts). NEVER write a raw api_key/access_token/
  * refresh_token into D1.
  */
+import { holdsLicence } from '../services/accountLicences';
 import { Hono } from 'hono';
 import { revokeAndDisconnectGoogle } from './calendar';
 import { cartaAudience } from '../integrations/cartaScopes';
@@ -69,13 +70,14 @@ import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 import { syncedWithOf } from '../integrations/providers/github/lovableMark';
+import { markProviderKeyUsed } from '../services/providerOauthKeys';
 
 const integrations = new Hono<{ Bindings: Env }>();
 
 const ALLOWED_ROLES = new Set(['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider']);
 
 export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
-  if (!ALLOWED_ROLES.has((user.role || '').toLowerCase())) {
+  if (!ALLOWED_ROLES.has((user.role || '').toLowerCase()) && !(user.licences || []).some(licence => ALLOWED_ROLES.has(licence))) {
     throw new Response(JSON.stringify({ error: 'forbidden', message: 'Your role cannot manage integrations.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -664,6 +666,9 @@ integrations.post('/connect', async (c) => {
     });
     return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
+  // D5304: a code exchange authenticated with Axal's managed client secret and succeeded. Stamped hourly at most;
+  // a provider whose key is not managed is skipped, and the stamp never fails the connection.
+  if (desc.auth_type === 'oauth2' && body.oauth_code) await markProviderKeyUsed(c.env, key);
 
   // Upsert. Insert with random uid, encrypt against that uid; on conflict
   // (user already has this provider) update credentials in place but keep
@@ -810,7 +815,7 @@ integrations.post('/:uid/sync', async (c) => {
   const uid = c.req.param('uid');
   const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
-  if (row.provider_key === 'carta' && !cartaAudience(user.role)) return refuse(c, 403, { code: 'purpose_not_allowed', message: LEGACY_CARTA_NOTICE });
+  if (row.provider_key === 'carta' && !holdsLicence(user, 'founder') && !holdsLicence(user, 'investor')) return refuse(c, 403, { code: 'purpose_not_allowed', message: LEGACY_CARTA_NOTICE });
   if (writesProjectData(row.provider_key)) {
     const selectedCompany = await activeCompanyFor(c, user);
     if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {
@@ -1606,6 +1611,8 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       });
       return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }
+    // D5304: the code exchange used Axal's managed client secret and succeeded (hourly at most, never throws).
+    await markProviderKeyUsed(c.env, provider);
     const sql = getSQL(c.env);
     try {
       const existing = await c.env.DB.prepare(

@@ -139,3 +139,23 @@ test('search, related-area rail, popular cards and admin answers name the task a
   const view = adminFeedbackView({ guides: [{ anchor, yes: 1, no: 2 }], missing: [] }, SECTIONS);
   assert.match(renderedText(html(GuideAnswersAdminView, { read: { status: 'ok', view }, onRetry() {} })), /Raising & cap table/);
 });
+
+test('D4439: Help opens canonical founder co-marketing, partner Offers, and no investor surface', () => {
+  const cases = [
+    [{ role: 'founder' }, null, '/grow/partner-network/co-marketing'],
+    [{ role: 'partner' }, null, '/comarketing'],
+    [{ role: 'investor', spinout_lab_active: 1 }, null, null],
+    [{ role: 'admin' }, { viewMode: 'founder', isImpersonating: false }, '/grow/partner-network/co-marketing'],
+    [{ role: 'admin' }, { viewMode: 'partner', isImpersonating: false }, '/comarketing'],
+    [{ role: 'admin' }, { viewMode: 'investor', isImpersonating: false }, null],
+  ];
+  for (const [user, session, target] of cases) {
+    const article = h(HelpArticle, { sections: SECTIONS, area: 'network', guide: 'partners', user });
+    const output = renderToStaticMarkup(h(MemoryRouter, null,
+      h(ViewModeContext.Provider, { value: session }, article)));
+    for (const path of ['/comarketing', '/grow/partner-network/co-marketing']) {
+      assert.equal(output.includes(`href="${path}"`), path === target, `${user.role}/${session?.viewMode || user.role}: ${path}`);
+    }
+    assert.equal(renderedText(output).includes('Open the surface'), target !== null);
+  }
+});

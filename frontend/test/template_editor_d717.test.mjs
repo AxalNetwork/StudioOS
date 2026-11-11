@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { api, contractsApi } from '../src/lib/api.js';
+import { editorStoredFormat } from '../src/lib/templateFormatState.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import Desk from '../src/pages/admin/contracts/ContractsDesk.jsx';
 import PaperPreview, { PaperFrame } from '../src/components/PaperPreview.jsx';
@@ -34,6 +35,7 @@ const base = { category: 'gp', layer: 'gp', layer_label: 'Internal Management (G
 const ROWS = {
   agree: { ...base, slug: 'd717_test_agreement', title: 'Test Agreement', version: 3, body_md: '# Test Agreement\n## One {{a.b}}\nText', kind: 'agreement', party: 'gp', usage_count: 3, format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
   policy: { ...base, slug: 'd717_test_policy', title: 'Test Policy', version: 1, body_md: 'Policy text', kind: 'policy', party: 'none', format_options: OPTIONS({ kind: 'policy', party: 'none' }, 'management') },
+  stalePolicy: { ...base, slug: 'd717_test_stale_policy', title: 'Legacy Test Policy', version: 2, body_md: 'Policy text', doc_kind: 'policy', axal_party: 'management', kind: 'policy', party: 'management', format_options: OPTIONS({ kind: 'policy', party: 'none' }, 'management') },
   notice: { ...base, slug: 'd717_test_notice', title: 'Test Notice', version: 1, body_md: 'Notice text', kind: 'notice', party: 'gp', format_fixed: true, format_options: OPTIONS({ kind: 'notice', party: 'gp' }, 'gp') },
   stub: { ...base, slug: 'd717_test_stub', title: 'Test Stub', version: 2, body_md: '', is_stub: 1, published_version: 2, kind: 'agreement', party: 'gp', format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
   live: { ...base, slug: 'd717_test_live', title: 'Test Live', version: 3, body_md: 'Live body', published_version: 2, kind: 'agreement', party: 'gp', format_options: OPTIONS({ kind: 'agreement', party: 'gp' }, 'gp') },
@@ -141,6 +143,21 @@ test('Party: four entities for a party kind, None only for a partyless one, a ki
   } finally { await e.view.unmount(); restore(); }
 });
 
+test('A stale kind-party mismatch returns to the slug for preview and is repaired only when Save draft is pressed', async () => {
+  assert.deepEqual(editorStoredFormat(ROWS.stalePolicy), { kind: 'policy', party: null });
+  const e = await open('stalePolicy');
+  try {
+    assert.equal(e.groupButtons('Kind').find(b => b.text === 'policy').pressed, true);
+    assert.equal(e.groupButtons('Axal VC party')[0].text, 'From the slug (None)');
+    assert.equal(e.groupButtons('Axal VC party')[0].pressed, true);
+    const preview = of(e.calls, 'renderPaper').at(-1)[1][0];
+    assert.deepEqual([preview.doc_kind, preview.axal_party], ['policy', null]);
+    assert.deepEqual([ROWS.stalePolicy.doc_kind, ROWS.stalePolicy.axal_party], ['policy', 'management'], 'loading never mutates the source row');
+    await e.click('Save draft'); await e.view.flush();
+    assert.deepEqual([e.lastPut().doc_kind, e.lastPut().axal_party], ['policy', null]);
+  } finally { await e.view.unmount(); restore(); }
+});
+
 test('A notice reads "Set by the notice type" and saves neither key; a row with no format_options offers no control and still saves', async () => {
   let e = await open('notice');
   try {
@@ -209,6 +226,15 @@ test('The mirror numbers each line, draws a token as its own chip, and adds a ro
 });
 function view_has(e, n, attr) { const p = e.view.props(n); return !!p && attr in p; }
 
+// D4811 part 13: publishing asks for a reason and the typed word PUBLISH (CT-16).
+async function fillPublish(view, reason = 'Counsel approved this text on 2026-11-09.', word = 'PUBLISH') {
+  const { act } = await import('react');
+  const area = view.nodes().find((n) => n.tagName === 'TEXTAREA' && String(view.props(n)?.placeholder || '').startsWith('What approves'));
+  const typed = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.autoComplete === 'off' && view.props(n)?.id?.endsWith('-word'));
+  await act(async () => { view.props(area).onChange({ target: { value: reason } }); });
+  await act(async () => { view.props(typed).onChange({ target: { value: word } }); });
+}
+
 test('Save then Publish: disabled while unsaved, asks first, publishes once at the saved version, then reads Published v[N]', async () => {
   const publication = { slug: 'd717_test_agreement', version: 4, published_at: '2026-10-18 12:00:00', published_by: 2 };
   const e = await open('agree', { contract: { publishOne: async () => ({ ok: true, publication }) } });
@@ -224,10 +250,13 @@ test('Save then Publish: disabled while unsaved, asks first, publishes once at t
     assert.match(e.text(), /Templates › Test Agreement · v4(?! draft)/);
     await e.click('Publish v4');
     assert.match(e.text(), /Publish v4 of Test Agreement/);
-    assert.match(e.text(), /Documents issued from now use this text\. Documents already issued do not change\./);
-    assert.equal(of(e.calls, 'publishOne').length, 0);
+    assert.match(e.text(), /v4 of “Test Agreement” becomes Approved for use\. New envelopes and generated documents use this text; 3 documents issued earlier keep the text they were issued with\./);
+    assert.equal(e.view.props(e.byTestId('template-publish-confirm')).disabled, true, 'D4811 part 13: no reason or word yet');
     await e.clickId('template-publish-confirm'); await e.view.flush();
-    assert.deepEqual(of(e.calls, 'publishOne').map(([, a]) => a), [['d717_test_agreement', 4]]);
+    assert.equal(of(e.calls, 'publishOne').length, 0, 'a press without the reason and word sends nothing');
+    await fillPublish(e.view);
+    await e.clickId('template-publish-confirm'); await e.view.flush();
+    assert.deepEqual(of(e.calls, 'publishOne').map(([, a]) => a), [['d717_test_agreement', 4, { reason: 'Counsel approved this text on 2026-11-09.', confirm: 'PUBLISH' }]]);
     const done = e.textOf(e.byTestId('template-publish-done'));
     assert.match(done, /^Published v4/);
     assert.match(done, /Oct 18, 2026 · Test Admin\. The card now reads Published v4\./);
@@ -237,10 +266,18 @@ test('Save then Publish: disabled while unsaved, asks first, publishes once at t
   } finally { await e.view.unmount(); restore(); }
 });
 
+test('D4811 part 15: an admin who is not the Super Admin is told publishing is the Super Admin\'s, and is offered no Publish', async () => {
+  const e = await open('agree', { who: { ...user, is_super_admin: 0 } });
+  try {
+    assert.equal(e.byTestId('template-publish-one'), undefined);
+    assert.equal(e.textOf(e.byTestId('template-publish-super-admin')), 'Only the Super Admin publishes a template.');
+  } finally { await e.view.unmount(); restore(); }
+});
+
 test('Publish names the recorded admin id when someone else published', async () => {
   const e = await open('agree', { contract: { publishOne: async () => ({ ok: true, publication: { version: 3, published_at: '2026-10-18 12:00:00', published_by: 77 } }) } });
   try {
-    await e.click('Publish v3'); await e.clickId('template-publish-confirm'); await e.view.flush();
+    await e.click('Publish v3'); await fillPublish(e.view); await e.clickId('template-publish-confirm'); await e.view.flush();
     assert.match(e.textOf(e.byTestId('template-publish-done')), / · Admin #77\./);
   } finally { await e.view.unmount(); restore(); }
 });
@@ -249,7 +286,7 @@ test('A refusal prints the Worker\'s sentence and no result', async () => {
   for (const [code, message] of [['published_version_changed', 'This template changed since it was opened. Open it again to publish the saved version.'], ['template_has_no_body', 'A stub has no body to publish.']]) {
     const e = await open('agree', { contract: { publishOne: async () => { throw Object.assign(new Error(message), { code, status: 409 }); } } });
     try {
-      await e.click('Publish v3'); await e.clickId('template-publish-confirm'); await e.view.flush();
+      await e.click('Publish v3'); await fillPublish(e.view); await e.clickId('template-publish-confirm'); await e.view.flush();
       assert.equal(e.textOf(e.byTestId('template-publish-refusal')), message);
       assert.equal(e.byTestId('template-publish-done'), undefined);
       assert.doesNotMatch(e.text(), /The card now reads/);

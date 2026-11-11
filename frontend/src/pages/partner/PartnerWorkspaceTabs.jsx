@@ -21,11 +21,11 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  *   /pipeline/leads, /offers/catalog  admin partner
  *   /partner/insights                 admin partner
  *   /perks                            admin founder partner investor advisor exploring
- *   /comarketing                      admin partner founder investor
+ *   /comarketing                      admin partner (D4439: founders forward to Partner network)
  *   /partner/office-hours             admin partner
  *   /pipeline/*, /offers/* zones      admin partner
  *
- * An investor on /comarketing would otherwise see Office Hours and Capabilities
+ * A viewer on a shared page would otherwise see Office Hours and Capabilities
  * tabs that bounce them off the guard. A tab that cannot be opened is worse
  * than an absent one: the absent one costs a click-path this shell already
  * accounts for, the dead one costs trust in the whole bar. So each tab carries
@@ -69,7 +69,7 @@ const SETS = {
     { to: '/perks', label: 'Perk deals', icon: Gift,
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'] },
     { to: '/comarketing', label: 'Visibility', icon: Megaphone,
-      roles: ['admin', 'partner', 'founder', 'investor'] },
+      roles: ['admin', 'partner'] },
     { to: '/offers/proof', label: 'Proof', icon: Award,
       roles: ['admin', 'partner'] },
   ],

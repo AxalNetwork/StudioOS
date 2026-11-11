@@ -380,3 +380,22 @@ test('exportAgentData: the agents, rule books, notes and run history the member 
     assert.match(settings, /agents = await exportAgentData\(c\.env, user as any\);/);
   } finally { w.close(); }
 });
+
+test('#4394 (TM13): each chain in GET /handoffs carries started_at, its first step\'s time; the list stays newest first by its latest step', async () => {
+  // Mutation checked: started_at taken from the latest step → the long chain reads 2026-10-03.
+  const w = world();
+  try {
+    w.agent(CTO, 'cto'); w.agent(CFO, 'cfo'); w.agent(GC, 'general_counsel');
+    const step = w.db.prepare(`INSERT INTO agent_handoffs (uid, chain_uid, depth, from_agent_id, to_role_key, to_agent_id, title, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'accepted', ?)`);
+    step.run('ho-l2', 'chain-long', 2, CFO, 'general_counsel', GC, 'Second', '2026-10-03 09:00:00');
+    step.run('ho-l1', 'chain-long', 1, CTO, 'cfo', CFO, 'First', '2026-10-01 09:00:00');
+    step.run('ho-s1', 'chain-short', 1, CTO, 'cfo', CFO, 'Only', '2026-10-02 09:00:00');
+    const r = await call(w, SPONSOR, 'GET', `/project/${PROJECT}/handoffs`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.chains.map((c: any) => [c.uid, c.started_at, c.steps.length]), [
+      ['chain-long', '2026-10-01 09:00:00', 2], ['chain-short', '2026-10-02 09:00:00', 1],
+    ]);
+    assert.equal('at' in r.body.chains[0], false, 'the ordering key stays internal');
+  } finally { w.close(); }
+});

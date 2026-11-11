@@ -1,3 +1,4 @@
+import { holdsLicence } from '../accountLicences';
 /**
  * D1348 (#3555, part 7 of #3547) — the people an investor, an advisor, an
  * operating partner and an admin write to, and what Eadwyn may quote for each.
@@ -26,6 +27,7 @@ import { updateFigures } from '../../routes/portfolio_updates';
 import { optedOutFounderIds } from '../cohortAdvisorAccess';
 import type { Person, PackItem } from './contextPack';
 import { RELATIONSHIP_OF } from './intents';
+import { suffixAmount } from '../../../../frontend/src/lib/money.js';
 
 export type Profile = 'founder' | 'investor' | 'advisor' | 'partner' | 'admin' | 'explorer';
 
@@ -183,7 +185,7 @@ async function services(env: Env, advisorId: number): Promise<PackItem[]> {
     'SELECT uid, title, kind, duration_note, price_cents, currency, scope, updated_at FROM advisor_services WHERE advisor_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 5',
   ).bind(advisorId).all<any>();
   return (results || []).map((s: any) => source(`service:${s.uid}`, 'service', `Expertise · ${said(s.title)}`, day(s.updated_at), '/expertise',
-    [said(s.title), `Kind: ${said(s.kind)}`, `Price: ${s.price_cents == null ? 'Not recorded' : `${(Number(s.price_cents) / 100).toFixed(2)} ${said(s.currency, '')}`.trim()}`,
+    [said(s.title), `Kind: ${said(s.kind)}`, `Price: ${s.price_cents == null ? 'Not recorded' : suffixAmount(Number(s.price_cents), String(s.currency ?? '').toUpperCase())}`,
       `Duration: ${said(s.duration_note)}`, `Scope: ${said(s.scope)}`].join('\n')));
 }
 
@@ -224,7 +226,7 @@ const COHORT_ID = /^([1-9][0-9]{0,9})-([1-9][0-9]{0,9})$/;
 /** A founder in a cohort the advisor is actively assigned to, and not hidden from them: the cohort's week plan and their progress. */
 async function cohortFounder(env: Env, user: User, id: string, now: number): Promise<ProfileRead> {
   const m = COHORT_ID.exec(id);
-  if (!m || String(user.role || '').toLowerCase() !== 'advisor') throw missing();
+  if (!m || !holdsLicence(user, 'advisor')) throw missing();
   const [cycle, founder] = [Number(m[1]), Number(m[2])];
   const assigned = await env.DB.prepare('SELECT 1 AS ok FROM advisor_cohort_assignments WHERE advisor_user_id = ? AND cohort_cycle_id = ? AND is_active = 1').bind(user.id, cycle).first();
   if (!assigned) throw missing();
@@ -253,7 +255,7 @@ async function cohortFounder(env: Env, user: User, id: string, now: number): Pro
 
 // ── Operating partner ───────────────────────────────────────────────────────
 
-const partnerOf = (user: User) => (String(user.role || '').toLowerCase() === 'partner' && (user as any).partner_id ? Number((user as any).partner_id) : null);
+const partnerOf = (user: User) => (holdsLicence(user, 'partner') && (user as any).partner_id ? Number((user as any).partner_id) : null);
 
 /** The partner's own Offers (`service_offerings`, active): offered, never ticked. */
 async function offers(env: Env, user: User): Promise<PackItem[]> {

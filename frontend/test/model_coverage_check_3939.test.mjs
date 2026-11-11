@@ -37,6 +37,15 @@ const clean = () => ({
     { where: 'railMatrix Founder · Raise · Data room', kind: 'vision', models: ['@cf/google/gemma-4-26b-a4b-it'] },
   ],
   elementGroups: [{ id: 'text', job: 'ST1' }, { id: 'images', job: 'DK4' }],
+  // #4313 part 3: every offered id is reached by a job's list, unless the table hides it.
+  offered: ['@cf/zai-org/glm-4.7-flash', '@cf/openai/whisper-large-v3-turbo', '@cf/black-forest-labs/flux-1-schnell', '@cf/google/gemma-4-26b-a4b-it', '@cf/meta/llama-3.1-70b-instruct-fp8-fast'],
+  hidden: ['@cf/meta/llama-3.1-70b-instruct-fp8-fast'],
+  reach: [
+    { job: 'ST1 step 0', models: ['@cf/zai-org/glm-4.7-flash'] },
+    { job: 'VA1 step 0', models: ['@cf/openai/whisper-large-v3-turbo'] },
+    { job: 'DK4 step 0', models: ['@cf/black-forest-labs/flux-1-schnell'] },
+    { job: 'RA3 step 0', models: ['@cf/google/gemma-4-26b-a4b-it'] },
+  ],
   sources: [
     { path: 'cloudflare-worker/src/services/ai/catalogue.ts', text: "{ id: '@cf/meta/llama-3.1-8b-instruct', status: 'deprecated' }" },
     { path: 'cloudflare-worker/src/services/aiRouter.ts', text: "export const PRICE_USD_PER_1M_TOKENS: X = tokenPriceView([\n  '@cf/meta/llama-3.1-8b-instruct',\n]);\nconst SMALL = '@cf/meta/llama-3.1-8b-instruct-fp8';" },
@@ -57,6 +66,17 @@ test('uncovered: a current catalogue id in no row', () => {
 test('duplicated: a catalogue id in two rows', () => {
   const x = clean(); x.models.push({ id: '@cf/zai-org/glm-4.7-flash' });
   assert.deepEqual(rules(x), ['duplicated']);
+});
+
+test('unreachable: an offered model no job lists; a hidden one is not reached and is not a finding', () => {
+  const x = clean(); x.reach = x.reach.filter((r) => r.job !== 'RA3 step 0');
+  const f = checkCoverage(x);
+  assert.deepEqual(f.map((r) => r.rule), ['unreachable']);
+  assert.match(f[0].detail, /gemma-4-26b-a4b-it is offered but in no job's list/);
+  const y = clean(); y.hidden = [];
+  assert.deepEqual(checkCoverage(y).map((r) => r.detail), ["@cf/meta/llama-3.1-70b-instruct-fp8-fast is offered but in no job's list, so no job runs it"], 'hidden is what excuses it');
+  const z = clean(); z.reach.push({ job: 'XX1 step 0', models: ['@cf/meta/llama-3.1-70b-instruct-fp8-fast'] });
+  assert.deepEqual(checkCoverage(z), [], 'a hidden model a job still lists is not a finding either');
 });
 
 test('no-default: a job, or one step of a chain, with no Default', () => {

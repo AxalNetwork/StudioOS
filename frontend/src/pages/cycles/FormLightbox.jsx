@@ -18,6 +18,14 @@
  * #3712: `readOnly` explains a read-only sheet; `renderReadRecovery(error,
  * retry)` replaces a failed choices read with its domain's access form.
  * Recovery sits outside the data form so its own submit cannot save a record.
+ *
+ * D4630 (#4630): a pending Save holds the form open. Cancel, the close icon,
+ * Escape, the backdrop and the phone page's Back do nothing until the write
+ * answers, and the footer says so. A write already sent cannot be taken back,
+ * so the form never offers to cancel it. A route change still unmounts the
+ * form: its write lands, and its answer then calls neither `onSaved` nor
+ * `onClose`, so it cannot navigate or close whatever is open by then. The
+ * completion belongs to the form instance that sent it.
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Lightbox from '../../ui/Lightbox.jsx';
@@ -113,8 +121,9 @@ const groupsOf = (options) => {
   return [...groups];
 };
 
-function Note({ note, values, id, name }) {
-  const content = typeof note === 'function' ? note(values) : note;
+function Note({ note, values, id, name, field = null }) {
+  // D4586: a note may read its field's options too (Record a decision counts distinct sources).
+  const content = typeof note === 'function' ? note(values, field) : note;
   if (!content) return null;
   const href = typeof content === 'object' ? linkOf(content.href) : null;
   return <p id={id} data-testid={'cycle-form-note-' + name} className="m-0 text-xs leading-normal text-axal-muted dark:text-gray-400">
@@ -131,7 +140,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
   if (field.parts) return <fieldset className="min-w-0 space-y-1.5">
     <legend className={LABEL}>{field.label}</legend>
     <div className="grid grid-cols-2 gap-2">{field.parts.map((part) => <Field key={part.name} field={part} values={values} errors={errors} setValue={setValue} prefix={prefix} busy={busy} compact search={search} />)}</div>
-    <Note note={field.note} values={values} id={id + '-note'} name={field.name} />
+    <Note note={field.note} values={values} id={id + '-note'} name={field.name} field={field} />
   </fieldset>;
   const common = { id, name: field.name, 'data-testid': 'cycle-form-' + field.name, 'aria-invalid': error ? 'true' : undefined, 'aria-describedby': description, 'aria-required': field.required || undefined, disabled: busy || field.disabled };
   const value = values[field.name];
@@ -171,7 +180,7 @@ function Field({ field, values, errors, setValue, prefix, busy, compact = false,
       </div>)}
     </div>}
     {error && <p id={id + '-error'} role="alert" className="m-0 text-[11.5px] text-red-700 dark:text-red-300">{error}</p>}
-    <Note note={field.note ?? field.hint} values={values} id={id + '-note'} name={field.name} />
+    <Note note={field.note ?? field.hint} values={values} id={id + '-note'} name={field.name} field={field} />
   </div>;
 }
 
@@ -208,6 +217,15 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
   const [refusal, setRefusal] = useState(refused);
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
+  // D4600: what a write that half succeeded leaves behind. `memory` outlives one Save (a submit keeps there the
+  // id of the record it made); `partial` freezes the form to the one operation left.
+  const memory = useRef(typeof base?.makeMemory === 'function' ? base.makeMemory() : {});
+  const [partial, setPartial] = useState(null);
+  // D4630: false once this instance unmounts; a later answer acts on nothing.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  // D4630: every way out of the form is this one, and it waits for a pending Save.
+  const dismiss = () => { if (saving.current) return; onClose?.(); };
   const [loaded, setLoaded] = useState(refused ? null : loadOptions ? undefined : {});
   // D969: a failed read of the choices says so with Try again, and reads them again.
   const [readFailed, setReadFailed] = useState(false);
@@ -321,28 +339,34 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
     saving.current = true; setBusy(true);
     try {
       const sent = { ...submittedValues(fields, values), ...picked() };
-      const result = await onSubmit(sent);
+      const result = await onSubmit(sent, memory.current);
       await afterSave(result, sent);
+      if (!mounted.current) return;
       const completion = base.done?.(result);
       if (completion) setDone(completion);
       onSaved?.(result);
       if (!completion) onClose?.();
     } catch (error) {
+      if (!mounted.current) return;
+      // The record exists; one follow-up failed. Refresh the page behind (the saved record shows) and keep only that operation open.
+      if (error?.partial && !partial) onSaved?.(error.partial.result);
+      if (error?.partial) setPartial(error.partial);
       const sentence = error?.message || 'This could not be saved. Try again.';
       if (error?.field && leaves(fields, values).some((field) => field.name === error.field)) setErrors({ [error.field]: sentence });
       else setRefusal(sentence);
-    } finally { saving.current = false; setBusy(false); }
+    } finally { saving.current = false; if (mounted.current) setBusy(false); }
   };
   const setValue = (name, value) => setValues((old) => ({ ...old, [name]: value }));
   const footer = <div className="flex flex-wrap items-center justify-between gap-2.5 max-lg:flex-col max-lg:items-stretch">
-    {!readOnly && base.foot && <p className="m-0 text-xs text-axal-muted dark:text-gray-400">{cleanFormCopy(base.foot)}</p>}
+    {busy ? <p role="status" data-testid="cycle-form-saving" className="m-0 text-xs text-axal-muted dark:text-gray-400">Saving. The form stays open until the save answers.</p>
+      : !readOnly && base.foot && <p className="m-0 text-xs text-axal-muted dark:text-gray-400">{cleanFormCopy(base.foot)}</p>}
     <div className="flex justify-end gap-2 max-lg:flex-col">
-      <button type="button" onClick={onClose} className="rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{done || (readOnly && loaded) ? 'Close' : 'Cancel'}</button>
-      {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : base.cta || base.button || 'Save'}</button>}
+      <button type="button" onClick={dismiss} disabled={busy} data-testid="cycle-form-cancel" className="rounded-[9px] border border-axal-hairline bg-white px-3.5 py-[9px] text-[12.5px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{done || (readOnly && loaded) ? 'Close' : 'Cancel'}</button>
+      {!done && !readOnly && <button type="submit" form={id} disabled={busy || !loaded || blocked} data-testid="cycle-form-save" className="rounded-[9px] bg-axal-violet px-3.5 py-[9px] text-[12.5px] font-bold text-white disabled:opacity-50 dark:bg-violet-600 dark:text-white max-lg:h-[52px] max-lg:w-full">{busy ? 'Saving…' : partial?.cta || base.cta || base.button || 'Save'}</button>}
     </div>
   </div>;
   // D1443 part 4 (#3992, S1's B = a): the rail and the Ask panel stay live beside the open form, so Ask opens next to it.
-  return <Lightbox keep={FORM_KEEP} pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={onClose} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
+  return <Lightbox keep={FORM_KEEP} pageBelow="lg" width={560} label={base.title} eyebrow={eyebrow} title={base.title} sub={base.sub ?? base.lead} onClose={dismiss} footer={footer} focusKey={readRecovery ? 'read-reason' : done ? 'done' : 'form'} testId="cycle-form" bar={bar}>
     {readOnly ? <p role="status" data-testid="cycle-form-read-only" className="m-0 px-5 pt-4 text-[13px] text-axal-muted dark:text-gray-400">{readOnly}</p> : null}
     {readRecovery ? <div className="px-5 py-4">{readRecovery}</div> : null}
     {!readRecovery && <form id={id} onSubmit={save} noValidate className="flex flex-col gap-3.5 px-5 py-4">
@@ -370,7 +394,7 @@ export default function FormLightbox({ form: base, current = null, cycle, slug, 
             : fill.aiOff ? 'Ask fills the blank fields from your sources only.' : 'Ask Eadwyn to fill the blank fields, or fill them from your sources.'}</span>
           {fillable ? <FillFormTrigger aiOff={!!fill.aiOff || sourcesOnly} disabled={busy} onOpen={() => setFillOpen(true)} /> : null}
         </div> : null}
-        {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly} search={finder} fill={fillCtl} />)}
+        {loaded && fields.map((field) => <Field key={field.name} field={readOnly ? { ...field, note: null, hint: null } : field} values={values} errors={errors} setValue={setValue} prefix={id} busy={busy || !!readOnly || (!!partial && field.name !== partial.only)} search={finder} fill={fillCtl} />)}
         {loaded && !readOnly && renderAssistant?.({ fields, values, setValue, busy })}
       </>}
     </form>}

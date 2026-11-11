@@ -1,8 +1,8 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { RailFrame, WorkerRail } from '../../ui';
+import { RailFrame } from '../../ui';
 import { isSuperAdminUser } from '../../lib/shellRole';
-import { COMING_SOON_LINE, learningComingSoon } from './learningAccess';
+import { learningComingSoon } from './learningAccess';
 import { ComingSoonCard, LearningHeader } from './LearningStates';
 import LearningHome from './LearningHome';
 import { CoursePage, ItemPage, LessonPage, MePage } from './LearningWired';
@@ -12,6 +12,7 @@ import { ProgramPage, ProgramsPage } from './LearningPrograms';
 import { StudioProgramPage, StudioProgramsPage } from './ProgramStudio';
 import { WebinarPage } from './LearningWebinars';
 import MemberProgramPage from './MemberProgram';
+import LearningPlanPage from './LearningPlanPage';
 
 /**
  * Every Learning route renders this page (D562), one `view` per route in
@@ -25,6 +26,7 @@ import MemberProgramPage from './MemberProgram';
  *   exercise        /learning/exercises/:slug                  "            reads and submits, D559
  *   exam            /learning/exams/:slug                      "            reads and sits, D559
  *   me              /learning/me                               "            reads D557
+ *   plan            /learning/plan                             "            reads and writes the plan, D3959
  *   programs        /learning/programs                         admin        reads D558
  *   program         /learning/programs/:program                admin        reads D558
  *   studio          /learning/studio                           Super Admin  reads and writes D557, D559, D560, D561
@@ -55,6 +57,7 @@ export const LEARNING_VIEWS = {
   exercise: { tier: 'member', title: 'Exercise', back: () => LEARNING },
   exam: { tier: 'member', title: 'Exam', back: () => LEARNING },
   me: { tier: 'member', title: 'My learning', sub: 'Everything you have started, finished, submitted or sat.', back: () => LEARNING },
+  plan: { tier: 'member', title: 'My learning plan', sub: 'What you have put on your calendar to learn.', back: () => LEARNING },
   myProgram: { tier: 'member', title: 'Program', back: () => LEARNING },
   programs: { tier: 'admin', title: 'Programs', sub: 'Programs a Super Admin has assigned to you.', back: () => LEARNING },
   program: {
@@ -96,6 +99,7 @@ const WIRED = {
   exercise: ({ params }) => <ExercisePage key={params.slug} uid={params.slug} />,
   exam: ({ params }) => <ExamPage key={params.slug} uid={params.slug} />,
   me: ({ config }) => <MePage sub={config.sub} />,
+  plan: () => <LearningPlanPage />,
   myProgram: ({ params }) => <MemberProgramPage key={params.program} uid={params.program} />,
   programs: ({ config }) => <ProgramsPage sub={config.sub} />,
   program: ({ params, config }) => <ProgramPage key={params.program} uid={params.program} sub={config.sub} />,
@@ -108,50 +112,24 @@ const WIRED = {
 export function adminLinks(user, activeRole, gated) {
   if (gated || activeRole !== 'admin') return [];
   return [
-    { to: '/learning/me', label: 'My learning' },
     { to: '/learning/programs', label: 'Programs assigned to you' },
     ...(isSuperAdminUser(user) ? [{ to: '/learning/studio', label: 'Learning studio' }] : []),
   ];
 }
 
 /**
- * The rail beside the coming-soon card, with a literal accent per tier:
- * violet for learners, steel for an admin, oxblood for HQ. An admin browsing
- * as a held profile ("View as") can stand on an admin route and see the card.
+ * #4742 — "My learning" and "My learning plan" for every profile the gate
+ * admits, not only an admin: `/learning/me` and `/learning/plan` are mounted
+ * for every profile in `frontend/src/routes/learning.jsx`, so a founder,
+ * investor, partner or advisor needs a way in too. "Programs assigned to you"
+ * and "Learning studio" stay in `adminLinks`, behind their own conditions.
  */
-function SubPageRail({ tier }) {
-  const unavailable = [['Courses, videos, webinars and more', COMING_SOON_LINE]];
-  if (tier === 'super') {
-    return (
-      <WorkerRail
-        workspace="Learning studio"
-        role="super_admin"
-        stance="Authoring view"
-        note="Eadwyn reads back what this page has loaded. It does not publish, assign, enrol or edit anything: every write here is the Super Admin’s own."
-        unavailable={unavailable}
-      />
-    );
-  }
-  if (tier === 'admin') {
-    return (
-      <WorkerRail
-        workspace="Learning programs"
-        role="admin"
-        stance="Read-only program view"
-        note="Eadwyn reads back what this page has loaded. A program view writes nothing: content and enrolment are managed at HQ."
-        unavailable={unavailable}
-      />
-    );
-  }
-  return (
-    <WorkerRail
-      workspace="Learning"
-      role="founder"
-      stance="Read-only learning view"
-      note="Eadwyn reads back what this page has loaded, on a click. It does not mark progress, register you, submit an answer or sit an exam."
-      unavailable={unavailable}
-    />
-  );
+export function learnerLinks(gated) {
+  if (gated) return [];
+  return [
+    { to: '/learning/me', label: 'My learning' },
+    { to: '/learning/plan', label: 'My learning plan' },
+  ];
 }
 
 /** Any Learning route but the home: its wired view, or, for a profile the gate holds, the coming-soon card in place. */
@@ -162,7 +140,7 @@ export function LearningSubPage({ view, gated }) {
   if (!config || !Wired) return null;
   if (!gated) return <Wired params={params} config={config} />;
   return (
-    <RailFrame rail={<SubPageRail tier={config.tier} />} data-testid={`learning-${view}`}>
+    <RailFrame data-testid={`learning-${view}`}>
       <div className="space-y-4">
         <LearningHeader title={config.title} sub={config.sub} back={config.back(params)} />
         <ComingSoonCard />
@@ -178,6 +156,8 @@ export function LearningSubPage({ view, gated }) {
  */
 export default function LearningPage({ view = 'home', user, activeRole }) {
   const gated = learningComingSoon(user, activeRole ?? user?.role);
-  if (view === 'home') return <LearningHome gated={gated} links={adminLinks(user, activeRole ?? user?.role, gated)} />;
+  if (view === 'home') {
+    return <LearningHome gated={gated} links={adminLinks(user, activeRole ?? user?.role, gated)} learnerLinks={learnerLinks(gated)} />;
+  }
   return <LearningSubPage view={view} gated={gated} />;
 }

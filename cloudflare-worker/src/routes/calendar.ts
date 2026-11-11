@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence, heldLicences } from '../services/accountLicences';
 /**
  * Calendar routes — port of backend/app/api/routes/calendar.py.
  *
@@ -53,12 +54,13 @@ import {
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, fetchCalendarScope, attachPushRecords, eventsToIcs, FEED_KINDS, SCOPED_EXCLUDED_KINDS, validScopeWindow,
+  personalWindowRefusal, PERSONAL_WINDOW_MAX_DAYS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
 export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 
@@ -130,7 +132,8 @@ async function verifyState(env: Env, raw: string): Promise<string | null> {
 // string. Bootstrap the calendar shape once per isolate so the OAuth
 // start handler is self-healing.
 const CALENDAR_OAUTH_STATE_READY = new WeakMap<object, boolean>();
-async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
+/** Exported for #5343's runtime-DDL test. */
+export async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
   if (CALENDAR_OAUTH_STATE_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
@@ -142,11 +145,10 @@ async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
       'expires_at TEXT NOT NULL, ' +
       "created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))",
     );
-    // Add expires_at if the table existed in the integrations/oauth.ts
-    // shape (no expires_at column). Ignore "duplicate column" errors.
-    try {
-      await env.DB.exec("ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
-    } catch { /* column already exists */ }
+    // Add expires_at if the table existed in the integrations/oauth.ts shape
+    // (no expires_at column). #5343: asked first (`runSchemaBootstrap`); a real
+    // failure reaches the catch below and the table is not marked ready.
+    await runSchemaBootstrap(env, ["ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''"]);
     CALENDAR_OAUTH_STATE_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[CAL:ensureOauthStateTable]', (e as Error).message);
@@ -218,6 +220,12 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     return c.json({ items: result.events, sources: result.sources, coverage: result.coverage,
       scope, read_only: true, excluded_kinds: SCOPED_EXCLUDED_KINDS, from: fromDt.toISOString(), to: toDt.toISOString() });
   }
+  // D5203 (#5203): the member's own read is bounded like the staff scope's.
+  // An empty or reversed window, or one wider than PERSONAL_WINDOW_MAX_DAYS, is
+  // refused rather than read from every source.
+  const windowRefusal = personalWindowRefusal(fromDt.toISOString(), toDt.toISOString());
+  if (windowRefusal === 'invalid_window') return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
+  if (windowRefusal) return refuse(c, 400, { code: 'window_too_wide', message: `A calendar window can span at most ${PERSONAL_WINDOW_MAX_DAYS} days. Narrow the dates.` });
   // THE DEGRADING READ, deliberately — see `gather` in services/calendar.ts.
   // Until now one unreadable source turned the whole agenda into a 500 and
   // nothing in the response could say which one. `sources` reports every kind
@@ -245,6 +253,34 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const tok = (await sql`SELECT 1 FROM google_oauth_tokens WHERE user_id = ${user.id}` as any[])[0];
+  /**
+   * D5204 (#5204) — COVERAGE IS THE SERVER'S. The page built "26 of 28 sources answered" from its own
+   * `KINDS.length`, a constant in the frontend. That denominator counted sources the member had hidden, sources
+   * their role never had, providers they have not connected, and anything a later registry adds that the page
+   * has not been rebuilt for — so the sentence could be wrong in four ways at once, and a new source changed it
+   * only after a frontend edit.
+   *
+   * It is derived here, from the set actually attempted:
+   *   attempted  the sources this read asked for (hidden ones are not asked, and are counted in `hidden`)
+   *   answered   of those, the ones that answered
+   *   failed     of those, the ones that did not
+   *   hidden     how many the member has hidden, so the page can say the read was deliberately narrower
+   *   complete   every attempted source answered and none stopped at its page cap
+   *   truncated_kinds  the sources that answered in part
+   * A provider with no connection is in none of them: it was never a source (`NoSource`), and it is not a
+   * failure. `attempted` is `answered + failed` by construction.
+   */
+  const truncatedKinds = sources.filter((s) => s.truncated).map((s) => s.kind);
+  const answeredCount = sources.filter((s) => s.ok).length;
+  const failedCount = sources.filter((s) => !s.ok).length;
+  const coverage = {
+    attempted: sources.length,
+    answered: answeredCount,
+    failed: failedCount,
+    hidden: hidden.length,
+    complete: failedCount === 0 && truncatedKinds.length === 0,
+    ...(truncatedKinds.length ? { truncated_kinds: truncatedKinds } : {}),
+  };
   return c.json({
     items,
     from: fromDt.toISOString(),
@@ -253,6 +289,7 @@ calendar.get('/events', safe('events', 'Could not list calendar events', async (
     // D1484: each source's family, module and label from the registry, so the legend names what it read.
     sources: sources.map((s) => { const src = SOURCES[s.kind]; return src ? { ...s, family: src.family, module: src.module, label: src.label } : s; }),
     hidden,
+    coverage,
   });
 }));
 
@@ -314,6 +351,8 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
   if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
     return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
   }
+  // D5203 (#5203): an empty or reversed window is refused, never read as an empty file.
+  if (toDt.getTime() <= fromDt.getTime()) return refuse(c, 400, { code: 'invalid_window', message: 'A calendar window must end after it starts.' });
   // D1033 — `kinds` narrows the file as it narrows `/events`, so
   // `?kinds=event_ticket,event_hosted` is "my events" alone. A kind the
   // aggregator does not know is refused rather than read as an empty file.
@@ -431,9 +470,8 @@ calendar.get('/feed/calendar.ics', safe('cal_feed_ics', 'Could not export calend
 // ===========================================================================
 // IC meetings
 // ===========================================================================
-function canScheduleIc(role: string): boolean {
-  const r = role.toLowerCase();
-  return r === 'admin' || r === 'investor';
+function canScheduleIc(user: User): boolean {
+  return user.role === 'admin' || holdsLicence(user, 'investor');
 }
 
 async function serializeIc(env: Env, m: any): Promise<any> {
@@ -458,7 +496,8 @@ async function serializeIc(env: Env, m: any): Promise<any> {
 // permission. Investor access follows the deal invitation/commitment stores;
 // advisor access follows the founder's live, unexpired session grant.
 async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }, allowVentureLead = true): Promise<boolean> {
-  if (user.role === 'founder' && user.founder_id && user.founder_id === project.founder_id) return true;
+  if (!user.licences) user.licences = await heldLicences(env.DB, user);
+  if (holdsLicence(user, 'founder') && user.founder_id && user.founder_id === project.founder_id) return true;
   const member = await getProjectMembershipRole(env, project.id, user.id);
   if (member && await canAccessProject(env, user, project)) return true;
   const sql = getSQL(env);
@@ -466,15 +505,15 @@ async function isProjectParty(env: Env, user: User, project: { id: number; found
     const lead = await sql`SELECT 1 FROM deals WHERE project_id = ${project.id} AND lead_partner_id = ${user.id} LIMIT 1`;
     if (lead.length) return true;
   }
-  if (user.role === 'investor') {
+  if (holdsLicence(user, 'investor')) {
     const invited = await sql`SELECT 1 FROM deal_invitations i JOIN deals d ON d.id = i.deal_id
       WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} AND i.status IN ('invited','interested') LIMIT 1`;
     if (invited.length) return true;
     const committed = await sql`SELECT 1 FROM commitments c JOIN deals d ON d.id = c.deal_id
       WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} AND c.status IN ('pending','confirmed') LIMIT 1`;
-    return committed.length > 0;
+    if (committed.length > 0) return true;
   }
-  if (String(user.role) === 'advisor') {
+  if (holdsLicence(user, 'advisor')) {
     const grants = await sql`SELECT 1 FROM advisor_client_grants
       WHERE project_id = ${project.id} AND advisor_user_id = ${user.id} AND status = 'active'
         AND scope_sessions = 1 AND (expires_at IS NULL OR datetime(expires_at) > datetime('now')) LIMIT 1`;
@@ -487,18 +526,23 @@ async function isProjectParty(env: Env, user: User, project: { id: number; found
 // to the same venture. Reading a deal as staff alone does not make an invitee
 // a party to it; the authenticated organiser is explicitly opting in themselves.
 async function isDealParty(env: Env, user: User, dealId: number): Promise<boolean> {
+  if (!user.licences) user.licences = await heldLicences(env.DB, user);
   const sql = getSQL(env);
   const deal = (await sql`SELECT p.id, p.founder_id, d.lead_partner_id FROM deals d JOIN projects p ON p.id = d.project_id
     WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as any[])[0];
   if (!deal) return false;
   if (deal.lead_partner_id === user.id) return true;
-  if (user.role === 'investor') {
+  if (holdsLicence(user, 'investor')) {
     const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('invited','interested') LIMIT 1`;
     if (invited.length) return true;
     const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('pending','confirmed') LIMIT 1`;
-    return committed.length > 0;
+    if (committed.length > 0) return true;
+    if (holdsOnlyLicence(user, 'investor')) return false;
   }
-  return isProjectParty(env, user, deal, false);
+  // Other held licences keep their own project ties. A project's OTHER deal
+  // invitation must never stand in for an exact IC-deal Investor relationship.
+  const otherLicences = { ...user, licences: (user.licences || []).filter(licence => licence !== 'investor') };
+  return isProjectParty(env, otherLicences, deal, false);
 }
 
 /** A person's id from the uid the people picker gave, or null. */
@@ -564,7 +608,7 @@ async function keepMeetCopy(env: Env, userId: number, kind: 'ic_meeting' | 'foun
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
-  if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+  if (!canScheduleIc(user)) return c.json({ detail: 'Investor or admin role required' }, 403);
   const body = await c.req.json().catch(() => ({}));
   const title = String(body?.title || '').trim().slice(0, 240);
   if (title.length < 2) return c.json({ detail: 'title required (min 2 chars)' }, 400);
@@ -578,7 +622,7 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   const dealId = Number(body.deal_id);
   if (!Number.isSafeInteger(dealId) || dealId <= 0) return c.json({ detail: 'deal_id required' }, 400);
   if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
-  if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+  if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
   if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
   if (body.attendee_uids != null && !Array.isArray(body.attendee_uids)) return c.json({ detail: 'Invalid attendees' }, 400);
   const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
@@ -678,6 +722,19 @@ calendar.post('/ic-meetings/:id/rsvp', safe('ic_rsvp', 'Could not record RSVP', 
   return c.json({ ok: true, rsvp });
 }));
 
+/**
+ * #4570 — who may learn that an IC meeting exists: an admin, its organiser,
+ * or someone invited to it (the people `GET /ic-meetings` shows it to). Anyone
+ * else is answered as for a missing id, as the RSVP is, so a sequential id
+ * tells them nothing. An invitee who may see it but not cancel or move it
+ * still gets the organiser-or-admin refusal.
+ */
+async function icVisibleTo(env: Env, user: User, m: { id: number; organizer_user_id: number }): Promise<boolean> {
+  if (isAdmin(lc(user.role)) || m.organizer_user_id === user.id) return true;
+  const sql = getSQL(env);
+  return !!(await sql`SELECT 1 FROM ic_meeting_attendees WHERE meeting_id = ${m.id} AND user_id = ${user.id}` as any[])[0];
+}
+
 calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeting', async (c) => {
   const user = await requireAuth(c);
   const id = parseInt(c.req.param('id'), 10);
@@ -685,7 +742,7 @@ calendar.delete('/ic-meetings/:id', safe('ic_cancel', 'Could not cancel IC meeti
   const reason = (url.searchParams.get('reason') || '').trim().slice(0, 240) || null;
   const sql = getSQL(c.env);
   const m = (await sql`SELECT id, organizer_user_id FROM ic_meetings WHERE id = ${id}` as any[])[0];
-  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!m || !(await icVisibleTo(c.env, user, m))) return c.json({ detail: 'IC meeting not found' }, 404);
   if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
     return c.json({ detail: 'Only the organiser or an admin can cancel' }, 403);
   }
@@ -715,7 +772,7 @@ calendar.patch('/ic-meetings/:id', safe('ic_reschedule', 'Could not reschedule I
   const body = await c.req.json().catch(() => ({}));
   const sql = getSQL(c.env);
   const m = (await sql`SELECT id, organizer_user_id, status, duration_min FROM ic_meetings WHERE id = ${id}` as any[])[0];
-  if (!m) return c.json({ detail: 'IC meeting not found' }, 404);
+  if (!m || !(await icVisibleTo(c.env, user, m))) return c.json({ detail: 'IC meeting not found' }, 404);
   if (!(isAdmin(lc(user.role)) || m.organizer_user_id === user.id)) {
     return c.json({ detail: 'Only the organiser or an admin can reschedule' }, 403);
   }
@@ -812,7 +869,7 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   const founder = (await sql`SELECT * FROM users WHERE id = ${founderId} AND is_active = 1` as any[])[0];
   if (!founder) return c.json({ detail: 'founder user not found' }, 404);
 
-  if (founder.role !== 'founder') return c.json({ detail: 'Target must be a founder' }, 403);
+  if (!(await heldLicences(c.env.DB, founder)).includes('founder')) return c.json({ detail: 'Target must be a founder' }, 403);
   const projectId = body.project_id == null ? null : Number(body.project_id);
   if (projectId !== null && (!Number.isSafeInteger(projectId) || projectId <= 0)) return c.json({ detail: 'Invalid project_id' }, 400);
   const projects = projectId === null
@@ -895,9 +952,10 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
   const row = (await sql`
     SELECT founder_user_id, counterpart_user_id FROM founder_checkins WHERE id = ${id}
   ` as any[])[0];
-  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
-  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
-    return c.json({ detail: 'Only attendees or admin can cancel' }, 403);
+  // #4570: only its two people and an admin may act on a check-in, and
+  // anyone else is answered as for a missing id.
+  if (!row || !(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Check-in not found' }, 404);
   }
   const nowIso = new Date().toISOString();
   await sql`
@@ -925,9 +983,10 @@ calendar.patch('/founder-checkins/:id', safe('ck_reschedule', 'Could not resched
   const row = (await sql`
     SELECT founder_user_id, counterpart_user_id, status, duration_min FROM founder_checkins WHERE id = ${id}
   ` as any[])[0];
-  if (!row) return c.json({ detail: 'Check-in not found' }, 404);
-  if (!(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
-    return c.json({ detail: 'Only attendees or admin can reschedule' }, 403);
+  // #4570: only its two people and an admin may act on a check-in, and
+  // anyone else is answered as for a missing id.
+  if (!row || !(isAdmin(lc(user.role)) || row.founder_user_id === user.id || row.counterpart_user_id === user.id)) {
+    return c.json({ detail: 'Check-in not found' }, 404);
   }
   if (row.status === 'cancelled') return c.json({ error: 'cancelled', detail: 'A cancelled check-in cannot be moved.' }, 409);
   const next = rescheduleOf(body, Number(row.duration_min), 10, 240);
@@ -991,7 +1050,7 @@ async function ventureCandidates(env: Env, v: Venture, into: Map<number, Picked>
     for (const r of await sql`SELECT investor_user_id AS id FROM commitments WHERE deal_id = ${d.id} AND status IN ('pending','confirmed')` as any[]) note(into, r.id, `Committed to ${v.name}`, v);
   }
   if (v.founder_id) {
-    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id} AND role = 'founder'` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
+    for (const r of await sql`SELECT id FROM users WHERE founder_id = ${v.founder_id}` as any[]) note(into, r.id, `Founder of ${v.name}`, v);
   }
   // A removed or pending member is dropped by the create's rule in `presentPicked`.
   for (const r of await sql`SELECT user_id AS id FROM project_members WHERE project_id = ${v.id}` as any[]) note(into, r.id, `On the ${v.name} team`, v);
@@ -1022,7 +1081,9 @@ async function presentPicked(env: Env, picked: Map<number, Picked>, keep: (u: Us
   const items: any[] = [];
   for (const [id, p] of picked) {
     const u = await env.DB.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').bind(id).first<User & { uid: string; display_name?: string | null; headline?: string | null }>();
-    if (!u || !(await keep(u))) continue;
+    if (!u) continue;
+    u.licences = await heldLicences(env.DB, u);
+    if (!(await keep(u))) continue;
     const name = String(u.display_name || u.name || '').trim();
     if (!name || (q && !name.toLowerCase().includes(q))) continue;
     items.push({
@@ -1042,13 +1103,13 @@ calendar.get('/people', safe('people_pick', 'Could not search people', async (c)
   const sql = getSQL(c.env);
   const picked = new Map<number, Picked>();
   if (purpose === 'ic') {
-    if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
+    if (!canScheduleIc(user)) return c.json({ detail: 'Investor or admin role required' }, 403);
     const dealId = Number(url.searchParams.get('deal_id'));
     if (!Number.isSafeInteger(dealId) || dealId <= 0) {
       return c.json({ error: 'deal_required', detail: 'Choose the deal first: the people come from it.' }, 400);
     }
     if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
-    if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+    if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
     const v = (await sql`SELECT p.id, p.name, p.founder_id FROM deals d JOIN projects p ON p.id = d.project_id
       WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as Venture[])[0];
     if (v) await ventureCandidates(c.env, v, picked, dealId);
@@ -1058,7 +1119,7 @@ calendar.get('/people', safe('people_pick', 'Could not search people', async (c)
   }
   if (purpose === 'checkin') {
     const ventures = await venturesOf(c.env, user);
-    const mine = ventures.filter((v) => user.role === 'founder' && user.founder_id && v.founder_id === user.founder_id);
+    const mine = ventures.filter((v) => holdsLicence(user, 'founder') && user.founder_id && v.founder_id === user.founder_id);
     if (mine.length) {
       // A founder books with anyone on their ventures, as the counterpart.
       for (const v of mine) await ventureCandidates(c.env, v, picked);
@@ -1075,7 +1136,7 @@ calendar.get('/people', safe('people_pick', 'Could not search people', async (c)
     }
     picked.delete(user.id);
     // The create books only a founder (`Target must be a founder`).
-    return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => u.role === 'founder', q) });
+    return c.json({ for: 'checkin', items: await presentPicked(c.env, picked, async (u) => holdsLicence(u, 'founder'), q) });
   }
   return c.json({ error: 'for_required', detail: "Say who the search is for: 'ic' or 'checkin'." }, 400);
 }));
@@ -1094,7 +1155,7 @@ calendar.get('/deals', safe('deal_pick', 'Could not search deals', async (c) => 
     if (items.length >= PICK_MAX) break;
     if (!(await userMayReadDeal(c.env, user, d.id))) continue;
     // An investor schedules only on a deal they are still on (the create's rule).
-    if (user.role === 'investor' && !(await isDealParty(c.env, user, d.id))) continue;
+    if (holdsOnlyLicence(user, 'investor') && !(await isDealParty(c.env, user, d.id))) continue;
     items.push({ id: d.id, name: d.name, status: d.status });
   }
   return c.json({ items });
@@ -1987,6 +2048,8 @@ calendar.get('/google/callback', async (c) => {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;
     }
+    const { resumeCalendarCopies } = await import('../services/calendar/sync');
+    await resumeCalendarCopies(c.env, userId, 'google');
     return successRedirect(c.env, 'google', returnTo, extra);
   } catch (e: any) {
     const msg = String(e?.message || e);
@@ -2141,6 +2204,8 @@ calendar.get('/microsoft/callback', async (c) => {
         await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'microsoft'`;
       }
     }
+    const { resumeCalendarCopies } = await import('../services/calendar/sync');
+    await resumeCalendarCopies(c.env, userId, 'microsoft');
     return successRedirect(c.env, 'microsoft', returnTo);
   } catch (e: any) {
     const msg = String(e?.message || e);
@@ -2228,8 +2293,8 @@ calendar.patch('/events/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
     .bind(id).first<{ id: number; user_id: number }>();
-  if (!row) return c.json({ detail: 'Event not found' }, 404);
-  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // #4570: a manual row is its owner's alone; anyone else but an admin is answered as for a missing id.
+  if (!row || (row.user_id !== user.id && user.role !== 'admin')) return c.json({ detail: 'Event not found' }, 404);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const fields: string[] = [];
   const vals: (string | null)[] = [];
@@ -2252,8 +2317,8 @@ calendar.delete('/events/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await c.env.DB.prepare('SELECT id, user_id FROM calendar_events WHERE id = ?')
     .bind(id).first<{ id: number; user_id: number }>();
-  if (!row) return c.json({ detail: 'Event not found' }, 404);
-  if (row.user_id !== user.id && user.role !== 'admin') return c.json({ detail: 'Forbidden' }, 403);
+  // #4570: a manual row is its owner's alone; anyone else but an admin is answered as for a missing id.
+  if (!row || (row.user_id !== user.id && user.role !== 'admin')) return c.json({ detail: 'Event not found' }, 404);
   await c.env.DB.prepare('DELETE FROM calendar_events WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });

@@ -1,56 +1,43 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Lock, RefreshCw } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { railPressHeaders } from '../../../lib/railPage';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, WorkerRail } from '../../../ui';
-import { useRailOption } from '../../../ui/railCrumbs';
 import PitchPage from './PitchPage';
-import { SURFACES } from './deckV2Adapter';
-
-/**
- * D1535 (#3782) put the template routes on main and swapped the adapter's
- * `templates`, `myTemplates` and `saveAsTemplate`. This screen does not read
- * them yet: until S1 wires the filters and Yours to those methods, they stay
- * greyed with the seam's words, so no chip looks live and does nothing.
- */
-const NOT_WIRED = (name) => Object.freeze({ available: false, reason: 'Not switched on yet.', issue: SURFACES[name].issue });
-import { LATER } from './deckV2Model';
+import { myTemplates, saveAsTemplate, templates } from './deckV2Adapter';
+import { deckTemplatesApi } from '../../../lib/api/deckTemplates';
 import { deckRail } from './deckRailGroups';
 import { refusalOf } from './newDeckModel';
 import { RefusalLine, reviewHref } from './OneClickBuild';
-import { EDIT_PATH, READ_ONLY, STUDIO_PATH, asList, isReadOnly, ventureQuery } from './pitchStudioModel';
+import { READ_ONLY, asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import {
-  FILTERS, GALLERY, LOCKED_LINE, METHODS_FAILED, NO_TEMPLATES, RECOMMENDED, SAVE_MINE, SAVE_MINE_LINE, TEMPLATES_TITLE, USE_TEMPLATE, YOURS,
-  galleryTiles, templateSentence,
+  GALLERY, NO_MATCH, NO_TEMPLATES, PREVIEW_FAILED, SAVED_MINE, SAVE_MINE, SAVE_MINE_LINE, SAVE_NO_DECK, STORE_FAILED, TEMPLATES_TITLE,
+  STORE_SENTENCE, USE_TEMPLATE, YOURS, YOURS_EMPTY, filterGroups, previewTitles, storeTiles, toggleFilter,
 } from './templatesModel';
 import HeaderAsk from '../../../ui/HeaderAsk.jsx';
 
 /**
- * D1604 (#3716, pd29, plan §7) — the templates gallery at
- * /raise/pitch/templates, behind the same boundary as the studio (App.jsx).
+ * D1604 (#3716, pd29), wired to the template store by #3876 (canvas pd29c,
+ * pd29s, pd29y): the templates gallery at /raise/pitch/templates, behind the
+ * same boundary as the studio (App.jsx).
  *
- *   Gallery   wired now from `GET /api/decks/methods`: a tile per template
- *             with a thumbnail of its first cards, its name, "N cards" and
- *             what it is best for; a locked one reads "Part of a paid plan".
- *             `GET /api/decks/recommend` marks the one recommended for the
- *             venture's stage, first, with its reason. Selecting a tile
- *             previews its cards; Use this template fills it from the records
- *             (`POST /api/decks/apply-method`, rail option form:deck-template)
- *             as a proposal and lands on the shared review, so nothing is
- *             saved before Accept. The Spin-Out demo day template is the one
- *             exception on main: it copies Lab records with no model and
- *             writes its version at once, and its dialog says so
- *             (`templateSentence`). A refusal keeps its plan link.
- *   Filters   Stage, Audience (New deck's seven) and Style chips, greyed
- *             "Coming later" from the adapter until #3782's tagged store.
- *   Yours     "Your own templates" and Save as my template, from the adapter
- *             (#3782): "Not switched on yet.", never an empty list.
+ *   Gallery   the store's templates (`deckV2Adapter.templates`, D1535): 24
+ *             covers, each the template's title card on its own swatch
+ *             ("[Venture name]" and "[One-line pitch]" only), its name, "N
+ *             cards", its stage, style and audiences. The Stage, Audience
+ *             (New deck's seven) and Style chips filter the list on the
+ *             Worker, one chip per group. Selecting a cover opens PREVIEW
+ *             with every card in order (`GET /decks/templates/:uid`); Use this
+ *             template writes a proposal (`POST …/:uid/apply`), which runs no
+ *             model, and lands on the shared review: nothing is saved before
+ *             Accept. v1's deck methods stay on New deck (D1535 Q5).
+ *   Yours     the caller's own templates, used the same way, and Save as my
+ *             template from the venture's current version: text and figures
+ *             are removed; structure, theme and decor are kept.
  *
- * A reader (read-only HQ) browses and gets no Use this template.
- *
+ * A reader (read-only HQ) browses and gets no Use this template and no Save.
  * Gallery and Yours are two buttons with `aria-pressed`, as New deck's Length
  * switcher is, not an ARIA tab list.
  */
@@ -63,19 +50,23 @@ const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const SMALL = 'text-[11.5px] text-axal-muted dark:text-gray-400';
 const EYE = 'font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const PILL = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-bold';
-const PILL_VIO = `${PILL} border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300`;
-const PILL_MU = `${PILL} border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400`;
+const TAG = 'inline-flex items-center rounded-full border border-axal-hairline bg-axal-ground px-2 py-0.5 text-[10.5px] font-semibold text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400';
+const FIELD = 'min-h-[40px] w-full rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 
-function useRead(load, deps) {
-  const [state, setState] = useState({ status: 'loading', data: null });
+/** An adapter read (`{ available, value }`): loading → ok | error, with Try again. */
+function useAdapter(load, deps) {
+  const [state, setState] = useState({ status: 'loading', data: null, reason: null });
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let live = true;
-    setState({ status: 'loading', data: null });
+    setState((s) => ({ ...s, status: 'loading' }));
     Promise.resolve().then(load).then(
-      (data) => { if (live) setState({ status: 'ok', data }); },
-      (e) => { if (live) setState({ status: 'error', data: null }); reportError('pitch-templates:read', e); },
+      (r) => {
+        if (!live) return;
+        if (r && r.available === false) setState({ status: 'error', data: null, reason: r.reason || null });
+        else setState({ status: 'ok', data: r && 'value' in r ? r.value : r, reason: null });
+      },
+      (e) => { if (live) setState({ status: 'error', data: null, reason: null }); reportError('pitch-templates:read', e); },
     );
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,14 +79,17 @@ export default function TemplatesGallery() {
   const readOnly = isReadOnly(user);
   const [params] = useSearchParams();
   const requested = params.get('project_id');
-  const projects = useRead(() => api.listProjects(), []);
+  const projects = useAdapter(() => api.listProjects(), []);
   const list = asList(projects.data, 'items', 'projects');
   const project = list.find((p) => String(p.id) === String(requested)) || list[0] || null;
   const projectId = project?.id ?? null;
   const q = ventureQuery(projectId || requested);
   const [tab, setTab] = useState('gallery');
+  const [filters, setFilters] = useState({ stage: null, audience: null, style: null });
   const railGroups = useMemo(() => deckRail(null), []);
-  const rail = <WorkerRail workspace="Raise" role="founder" groups={railGroups} note="A template is filled from your records as a proposal; you review it before anything is saved." data-testid="pitch-templates-rail" />;
+  const rail = <WorkerRail workspace="Raise" role="founder" groups={railGroups} note="A template becomes a proposal with your venture's name; you review it before anything is saved. No model runs to use one." data-testid="pitch-templates-rail" />;
+  const gallery = useAdapter(() => templates(filters), [filters.stage, filters.audience, filters.style]);
+  const canUse = !readOnly && projectId != null && projects.status === 'ok';
 
   return (
     <PitchPage rail={rail} crumb={{ query: q, trail: TEMPLATES_TITLE }} ask={{ projectId, readOnly }} testId="pitch-templates">
@@ -112,105 +106,115 @@ export default function TemplatesGallery() {
           <HeaderAsk />
         </header>
         {readOnly ? <div role="note" className="rounded-[10px] bg-amber-100 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-templates-readonly">{READ_ONLY}</div> : null}
-        <Filters />
-        {tab === 'yours' ? <Yours /> : <Gallery projectId={projectId} projects={projects} q={q} readOnly={readOnly} />}
+        {tab === 'yours'
+          ? <Yours projectId={projectId} q={q} canUse={canUse} readOnly={readOnly} />
+          : (
+            <>
+              <Filters read={gallery} filters={filters} onToggle={(g, k) => setFilters((f) => toggleFilter(f, g, k))} />
+              <Browse read={gallery} q={q} projectId={projectId} canUse={canUse} filtered={Boolean(filters.stage || filters.audience || filters.style)} testId="pitch-templates-gallery" label={GALLERY} empty={NO_TEMPLATES} />
+            </>
+          )}
       </div>
     </PitchPage>
   );
 }
 
-/** Stage, Audience and Style: greyed until #3782's tags, each chip reached by the keyboard so its reason is read. */
-function Filters() {
-  const off = NOT_WIRED('templates');
-  const later = off && off.available !== true;
+/** Stage, Audience and Style from the store's own list: one chip per group; pressing the chosen one clears it. */
+function Filters({ read, filters, onToggle }) {
+  const groups = filterGroups(read.data);
+  if (!groups.some((g) => g.chips.length)) return null;
   return (
     <section className={`${CARD} flex flex-col gap-2 p-3.5`} aria-label="Filters" data-testid="pitch-templates-filters">
-      {FILTERS.map((f) => (
-        <div key={f.id} className="flex flex-wrap items-center gap-1.5" data-testid={`pitch-templates-filter-${f.id}`}>
-          <span className={`${EYE} w-[72px]`}>{f.label}</span>
-          {f.chips.map((c) => (
-            <button key={c} type="button" aria-pressed="false" aria-disabled={later ? 'true' : undefined} title={later ? off.reason : undefined}
-              className="min-h-[30px] rounded-full border border-axal-hairline px-2.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:text-gray-500"
-              onClick={(e) => e.preventDefault()}>{c}</button>
-          ))}
+      {groups.map((g) => (
+        <div key={g.id} role="group" aria-label={g.label} className="flex flex-wrap items-center gap-1.5" data-testid={`pitch-templates-filter-${g.id}`}>
+          <span className={`${EYE} w-[72px]`}>{g.label}</span>
+          {g.chips.map((c) => {
+            const on = filters[g.id] === c.key;
+            return (
+              <button key={c.key} type="button" aria-pressed={on} onClick={() => onToggle(g.id, c.key)}
+                className={`min-h-[30px] rounded-full border px-2.5 text-[11.5px] font-semibold ${on ? 'border-violet-300 bg-axal-lavender text-violet-800 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-200' : 'border-axal-hairline text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800'}`}
+                data-testid={`pitch-templates-chip-${g.id}-${c.key}`}>{c.label}</button>
+            );
+          })}
         </div>
       ))}
-      {later ? <span className={`${SMALL} font-mono`} title={off.reason} data-testid="pitch-templates-filters-later">{LATER}</span> : null}
     </section>
   );
 }
 
-function Yours() {
-  const mine = NOT_WIRED('myTemplates');
-  const save = NOT_WIRED('saveAsTemplate');
+/** pd29c: the template's title card on its swatch, placeholders only; its accent and display face when the store gives them. */
+function Cover({ cover }) {
+  if (!cover) return <span className="flex aspect-video w-full rounded-[6px] border border-axal-hairline bg-axal-ground dark:border-gray-700 dark:bg-gray-800" aria-hidden="true" />;
+  const face = cover.font ? `'${cover.font}', 'Space Grotesk', system-ui, sans-serif` : "'Space Grotesk', system-ui, sans-serif";
   return (
-    <section className={`${CARD} flex flex-col gap-2.5 p-5`} aria-label={YOURS} data-testid="pitch-templates-yours">
-      <span className={`text-[14px] font-extrabold ${INK}`}>{YOURS}</span>
-      <span className={MUTED} data-testid="pitch-templates-yours-off">{mine?.available === true ? null : mine?.reason}</span>
-      <span className="flex flex-wrap items-center gap-2" title={save?.reason}>
-        <button type="button" className={GHOST} aria-disabled="true" onClick={(e) => e.preventDefault()} data-testid="pitch-templates-save-mine">{SAVE_MINE}</button>
-        <span className="font-mono text-[10px] text-axal-muted dark:text-gray-500">{LATER}</span>
-      </span>
-      <span className={SMALL}>{SAVE_MINE_LINE}</span>
-    </section>
+    <span className="relative flex aspect-video w-full flex-col justify-center gap-1 overflow-hidden rounded-[6px] px-[8%]" style={{ background: cover.ground, border: `1px solid ${cover.rule || 'rgba(0,0,0,.08)'}` }} aria-hidden="true">
+      {cover.accent ? <span className="block h-[4px] w-[14%]" style={{ background: cover.accent }} /> : null}
+      <span className="text-[15px] font-bold leading-tight" style={{ color: cover.ink, fontFamily: face }}>[Venture name]</span>
+      <span className="text-[10px] leading-snug" style={{ color: cover.muted }}>[One-line pitch]</span>
+    </span>
   );
 }
 
-function Gallery({ projectId, projects, q, readOnly }) {
+/** The covers and the preview for one list (the Gallery or Yours). */
+function Browse({ read, q, projectId, canUse, filtered = false, testId, label, empty }) {
   const navigate = useNavigate();
-  const methods = useRead(() => api.deckMethods(), []);
-  const recommended = useRead(() => (projectId == null ? null : api.deckRecommend(projectId)), [projectId]);
-  const tiles = useMemo(() => galleryTiles(methods.data?.methods, recommended.status === 'ok' ? recommended.data : null), [methods.data, recommended.status, recommended.data]);
+  const tiles = useMemo(() => (read.status === 'ok' ? storeTiles(read.data) : []), [read.status, read.data]);
   const [selected, setSelected] = useState(null);
+  const tile = tiles.find((t) => t.id === selected) || null;
+  const [preview, setPreview] = useState({ status: 'idle', titles: [] });
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
-  useRailOption(busy ? 'form:deck-template' : null, USE_TEMPLATE);
-  const tile = tiles.find((t) => t.id === selected) || null;
+
+  useEffect(() => {
+    if (!tile) { setPreview({ status: 'idle', titles: [] }); return undefined; }
+    let live = true;
+    setPreview({ status: 'loading', titles: [] });
+    deckTemplatesApi.template(tile.id).then(
+      (r) => { if (live) setPreview({ status: 'ok', titles: previewTitles(r) }); },
+      (e) => { if (live) setPreview({ status: 'error', titles: [] }); reportError('pitch-templates:preview', e); },
+    );
+    return () => { live = false; };
+  }, [tile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const use = async () => {
     if (!tile || projectId == null) return;
     setBusy(true); setRefusal(null);
     try {
-      const r = await api.deckApplyMethod(projectId, tile.id, railPressHeaders('form:deck-template'));
+      const r = await deckTemplatesApi.applyTemplate(tile.id, projectId);
       setConfirm(false);
-      if (r?.deck) navigate(`${EDIT_PATH}${q}`);
-      else if (r?.proposal?.id != null) navigate(reviewHref(q, r.proposal.id));
-      else navigate(`${STUDIO_PATH}${q}`);
+      if (r?.proposal?.id != null) navigate(reviewHref(q, r.proposal.id));
     } catch (e) { setRefusal(refusalOf(e)); setConfirm(false); reportError('pitch-templates:use', e); } finally { setBusy(false); }
   };
 
-  if (methods.status === 'loading') {
+  if (read.status === 'loading') {
     return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4" aria-busy="true" data-testid="pitch-templates-loading">{[0, 1, 2, 3].map((i) => <div key={i} className="h-40 animate-pulse rounded-[12px] bg-axal-hairline dark:bg-gray-800" aria-hidden="true" />)}</div>;
   }
-  if (methods.status === 'error') {
+  if (read.status === 'error') {
     return (
       <div className={`${CARD} flex flex-col items-start gap-2.5 p-5`} role="alert" data-testid="pitch-templates-error">
-        <span className={`text-[13.5px] font-bold ${INK}`}>{METHODS_FAILED}</span>
-        <button type="button" className={GHOST} onClick={methods.retry}><RefreshCw size={14} aria-hidden="true" /> Try again</button>
+        <span className={`text-[13.5px] font-bold ${INK}`}>{read.reason && read.reason !== 'could not be read' ? read.reason : STORE_FAILED}</span>
+        <button type="button" className={GHOST} onClick={read.retry}><RefreshCw size={14} aria-hidden="true" /> Try again</button>
       </div>
     );
   }
-  if (!tiles.length) return <div className={`${CARD} p-6 text-center ${MUTED}`} data-testid="pitch-templates-empty">{NO_TEMPLATES}</div>;
-  const canUse = !readOnly && projectId != null && projects.status === 'ok';
+  if (!tiles.length) return <div className={`${CARD} p-6 text-center ${MUTED}`} data-testid={`${testId}-empty`}>{filtered ? NO_MATCH : empty}</div>;
 
   return (
     <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3" aria-label={GALLERY} data-testid="pitch-templates-gallery">
+      <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4" aria-label={label} data-testid={testId}>
         {tiles.map((t) => (
           <li key={t.id}>
             <button type="button" aria-pressed={selected === t.id} onClick={() => setSelected(t.id)}
               className={`${CARD} flex w-full flex-col gap-2 p-2.5 text-left ${selected === t.id ? 'outline outline-2 outline-axal-violet dark:outline-violet-400' : ''}`}
               data-testid={`pitch-templates-tile-${t.id}`}>
-              <span className="flex aspect-video w-full flex-col justify-end gap-0.5 rounded-[6px] border border-axal-hairline bg-axal-ground p-2.5 dark:border-gray-700 dark:bg-gray-800" aria-hidden="true">
-                <span className={`text-[12.5px] font-extrabold leading-tight ${INK}`}>{t.titles[0] || t.label}</span>
-                {t.titles.slice(1, 4).map((x, i) => <span key={`${x}-${i}`} className="text-[10px] text-axal-muted dark:text-gray-400">{x}</span>)}
-              </span>
+              <Cover cover={t.cover} />
               <span className={`text-[13px] font-bold ${INK}`}>{t.label}</span>
               <span className="flex flex-wrap items-center gap-1.5">
                 {t.count ? <span className={SMALL}>{t.count}</span> : null}
-                {t.recommended ? <span className={PILL_VIO} data-testid="pitch-templates-recommended">{RECOMMENDED}</span> : null}
-                {t.locked ? <span className={PILL_MU}><Lock size={11} aria-hidden="true" />{LOCKED_LINE}</span> : null}
+                {t.stage ? <span className={TAG}>{t.stage}</span> : null}
+                {t.style ? <span className={TAG}>{t.style}</span> : null}
+                {t.audiences[0] ? <span className={TAG}>{t.audiences[0]}</span> : null}
               </span>
             </button>
           </li>
@@ -220,15 +224,18 @@ function Gallery({ projectId, projects, q, readOnly }) {
         {tile ? (
           <>
             <span className={EYE}>Preview · {tile.label}</span>
-            {tile.bestFor ? <span className={MUTED}>{tile.bestFor}</span> : null}
-            {tile.reason ? <span className={SMALL} data-testid="pitch-templates-reason">{tile.reason}</span> : null}
-            <ol className="m-0 flex list-none flex-col gap-1 p-0">
-              {tile.titles.map((x, i) => (
-                <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
-              ))}
-            </ol>
-            {tile.locked ? <span className={SMALL}>{LOCKED_LINE}. <Link to="/pricing" className="font-bold text-axal-violet hover:underline dark:text-violet-300">See plans ›</Link></span> : null}
-            {canUse && !tile.locked ? <button type="button" className={PRIMARY} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button> : null}
+            {tile.description ? <span className={MUTED}>{tile.description}</span> : null}
+            {tile.audiences.length ? <span className={SMALL} data-testid="pitch-templates-audiences">For: {tile.audiences.join(', ')}</span> : null}
+            {preview.status === 'loading' ? <span className={SMALL}>Reading the cards…</span> : null}
+            {preview.status === 'error' ? <span className={SMALL} role="alert" data-testid="pitch-templates-preview-error">{PREVIEW_FAILED}</span> : null}
+            {preview.status === 'ok' ? (
+              <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="pitch-templates-strip">
+                {preview.titles.map((x, i) => (
+                  <li key={`${x}-${i}`} className="flex gap-2 text-[12px]"><span className="font-mono text-axal-muted dark:text-gray-400">{String(i + 1).padStart(2, '0')}</span><span className={INK}>{x}</span></li>
+                ))}
+              </ol>
+            ) : null}
+            {canUse ? <button type="button" className={PRIMARY} onClick={() => setConfirm(true)} data-testid="pitch-templates-use">{USE_TEMPLATE}</button> : null}
             <RefusalLine refusal={refusal} testId="pitch-templates-refusal" />
           </>
         ) : <span className={MUTED}>Select a template to see its cards.</span>}
@@ -241,7 +248,59 @@ function Gallery({ projectId, projects, q, readOnly }) {
               <button type="button" className={PRIMARY} onClick={use} disabled={busy} data-testid="pitch-templates-confirm">{busy ? 'Working…' : USE_TEMPLATE}</button>
             </div>
           )}>
-          <p className={`m-0 ${MUTED}`} data-testid="pitch-templates-dialog-sentence">{templateSentence(tile.id)}</p>
+          <p className={`m-0 ${MUTED}`} data-testid="pitch-templates-dialog-sentence">{STORE_SENTENCE}</p>
+        </Lightbox>
+      ) : null}
+    </div>
+  );
+}
+
+/** pd29y: the caller's own templates, and Save as my template from the venture's current version. */
+function Yours({ projectId, q, canUse, readOnly }) {
+  const mine = useAdapter(() => myTemplates(), []);
+  const versions = useAdapter(() => (projectId == null ? { value: null } : api.deckListVersions(projectId)), [projectId]);
+  const current = versions.status === 'ok' ? currentVersion(asList(versions.data, 'versions', 'decks')) : null;
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  const save = async () => {
+    if (!current?.id || !name.trim()) return;
+    setBusy(true); setRefusal(null);
+    const r = await saveAsTemplate(current.id, name.trim());
+    setBusy(false);
+    if (r?.available === false) { setRefusal({ message: r.reason }); return; }
+    setNaming(false); setName(''); setSaved(true); mine.retry();
+  };
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      {!readOnly ? (
+        <section className={`${CARD} flex flex-col gap-2 p-4`} aria-label={SAVE_MINE} data-testid="pitch-templates-yours">
+          <span className="flex flex-wrap items-center gap-2">
+            <button type="button" className={GHOST} disabled={!current?.id || !canUse} onClick={() => { setSaved(false); setNaming(true); }} data-testid="pitch-templates-save-mine">{SAVE_MINE}</button>
+            {saved ? <span className={SMALL} role="status" data-testid="pitch-templates-saved">{SAVED_MINE}</span> : null}
+          </span>
+          <span className={SMALL}>{current?.id ? SAVE_MINE_LINE : SAVE_NO_DECK}</span>
+          <RefusalLine refusal={refusal} testId="pitch-templates-save-refusal" />
+        </section>
+      ) : null}
+      <Browse read={mine} q={q} projectId={projectId} canUse={canUse} testId="pitch-templates-mine" label={YOURS} empty={YOURS_EMPTY} />
+      {naming ? (
+        <Lightbox label={SAVE_MINE} title={SAVE_MINE} width={460} onClose={() => !busy && setNaming(false)} testId="pitch-templates-save-dialog"
+          footer={(
+            <div className="flex justify-end gap-2">
+              <button type="button" className={GHOST} onClick={() => setNaming(false)} disabled={busy}>Cancel</button>
+              <button type="button" className={PRIMARY} onClick={save} disabled={busy || !name.trim()} data-testid="pitch-templates-save-confirm">{busy ? 'Saving…' : 'Save'}</button>
+            </div>
+          )}>
+          <label className="flex flex-col gap-1.5 text-[12.5px] font-semibold text-axal-ink dark:text-gray-200">
+            Name
+            <input className={FIELD} value={name} maxLength={40} onChange={(e) => setName(e.target.value)} data-testid="pitch-templates-save-name" />
+          </label>
+          <p className={`m-0 mt-2 ${MUTED}`}>{SAVE_MINE_LINE}</p>
         </Lightbox>
       ) : null}
     </div>

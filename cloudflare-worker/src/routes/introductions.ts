@@ -1,3 +1,5 @@
+import { holdsLicence } from '../services/accountLicences';
+import { propositionDestination } from '../services/introDestination';
 /**
  * Task #6 (W-1) — Investor introduction requests with quarterly quota.
  *
@@ -39,7 +41,7 @@ import {
   ensureIntroNetworkSchema,
   getIntroCreditState,
   generateIntroPropositions,
-  pickSpendBucket,
+  acceptIntroProposition,
 } from '../services/introductions';
 import { hashEmail } from '../util/hashEmail';
 
@@ -53,7 +55,7 @@ introductions.use('*', async (c, next) => {
 
 introductions.get('/quota', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor' && user.role !== 'admin') {
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
   const state = await getIntroQuotaState(c.env, user.id);
@@ -68,7 +70,7 @@ introductions.get('/quota', async (c) => {
 
 introductions.get('/', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor' && user.role !== 'admin') {
+  if (!holdsLicence(user, 'investor') && user.role !== 'admin') {
     return c.json({ error: 'investor_only' }, 403);
   }
   const rows = await c.env.DB.prepare(
@@ -83,7 +85,7 @@ introductions.get('/', async (c) => {
 
 introductions.post('/request', async (c) => {
   const user = (await requireAuth(c)) as InvestorUser;
-  if (user.role !== 'investor') {
+  if (!holdsLicence(user, 'investor')) {
     return c.json({ error: 'investor_only' }, 403);
   }
 
@@ -314,79 +316,44 @@ introductions.get('/propositions', async (c) => {
   });
 });
 
-// POST /propositions/:uid/accept — spends exactly one credit, atomically.
-// The D1 batch guards all three invariants in one transaction: the row is
-// still pending, the balance is positive, and this uid was never spent
-// before (UNIQUE(user_id, kind, source_ref) → no double-accept, no double
-// spend even under concurrent clicks).
+// POST /propositions/:uid/accept — spends exactly one credit, atomically
+// (D4606: `acceptIntroProposition`). The debit guards the chosen bucket's own
+// balance, the row still being pending, and this uid never having been spent;
+// a debit that loses a race is retried with a fresh bucket. Failures say why:
+// 402 no_credits, 409 already_responded, 409 credit_conflict (retry, nothing spent).
 introductions.post('/propositions/:uid/accept', async (c) => {
   const user = (await requireAuth(c)) as User;
   await ensureIntroNetworkSchema(c.env);
   const uid = String(c.req.param('uid') || '').trim();
   if (!uid) return c.json({ error: 'uid_required' }, 400);
 
-  const prop = await c.env.DB.prepare(
-    `SELECT id, uid, user_id, target_user_id, status FROM intro_propositions
-      WHERE uid = ? AND user_id = ?`,
-  ).bind(uid, user.id).first<{ id: number; uid: string; user_id: number; target_user_id: number; status: string }>();
-  if (!prop) return c.json({ error: 'not_found' }, 404);
-  if (prop.status !== 'pending') {
-    return c.json({ error: 'already_responded', status: prop.status }, 409);
-  }
-
-  const state = await getIntroCreditState(c.env, user as any);
-  if (state.balance <= 0) {
+  const outcome = await acceptIntroProposition(c.env, user as any, uid);
+  if (!outcome.ok) {
+    if (outcome.error === 'not_found') return c.json({ error: 'not_found' }, 404);
+    if (outcome.error === 'already_responded') {
+      return c.json({ error: 'already_responded', status: outcome.proposition_status }, 409);
+    }
+    if (outcome.error === 'credit_conflict') {
+      c.header('Retry-After', '1');
+      return c.json({
+        error: 'credit_conflict', retryable: true,
+        message: 'Another request changed your credits at the same moment. Nothing was spent. Try again.',
+      }, 409);
+    }
     return c.json(
       {
         error: 'no_credits',
         code: 'intro_credits_exhausted',
         message: 'You are out of introduction credits for now.',
-        credits: state,
+        credits: outcome.credits,
         // D755 — packs are retired, so none is offered (#2079 removed the branch).
         refer_path: '/account/referrals',
       },
       402,
     );
   }
-  const bucket = pickSpendBucket(state);
-  const sourceRef = `intro:${uid}`;
-
-  const batch = await c.env.DB.batch([
-    // 1. Conditional spend — only lands while the row is pending, the balance
-    //    is still positive, and no spend for this uid exists yet.
-    c.env.DB.prepare(
-      `INSERT INTO intro_credit_ledger (user_id, delta, bucket, kind, source_ref, note)
-       SELECT ?1, -1, ?2, 'spend', ?3, 'Accepted introduction'
-        WHERE EXISTS (SELECT 1 FROM intro_propositions
-                       WHERE uid = ?4 AND user_id = ?1 AND status = 'pending')
-          AND NOT EXISTS (SELECT 1 FROM intro_credit_ledger
-                           WHERE user_id = ?1 AND kind = 'spend' AND source_ref = ?3)
-          AND (
-            (SELECT COALESCE(SUM(delta), 0) FROM intro_credit_ledger
-              WHERE user_id = ?1 AND bucket = 'allowance'
-                AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now'))
-            + (SELECT COALESCE(SUM(delta), 0) FROM intro_credit_ledger
-                WHERE user_id = ?1 AND bucket IN ('purchased', 'referral'))
-          ) > 0`,
-    ).bind(user.id, bucket, sourceRef, uid),
-    // 2. Flip the proposition only if the spend row actually landed.
-    c.env.DB.prepare(
-      `UPDATE intro_propositions
-          SET status = 'accepted', responded_at = datetime('now')
-        WHERE uid = ? AND user_id = ? AND status = 'pending'
-          AND EXISTS (SELECT 1 FROM intro_credit_ledger
-                       WHERE user_id = ? AND kind = 'spend' AND source_ref = ?)`,
-    ).bind(uid, user.id, user.id, sourceRef),
-  ]);
-  const accepted = Number(batch[1]?.meta?.changes || 0) > 0;
-  if (!accepted) {
-    // Re-read to give the caller a precise reason.
-    const fresh = await getIntroCreditState(c.env, user as any);
-    if (fresh.balance <= 0) {
-      return c.json({ error: 'no_credits', code: 'intro_credits_exhausted', credits: fresh }, 402);
-    }
-    return c.json({ error: 'already_responded' }, 409);
-  }
+  const bucket = outcome.bucket;
+  const prop = { target_user_id: Number(outcome.target_user_id) };
 
   // Audit trail (append-only, mirrors the products/redeem pattern).
   try {
@@ -419,7 +386,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
           category: 'proactive_nudges',
           title: `Introduction complete — you're connected with ${accepterName}`,
           body: 'Both of you accepted. Open their profile to start the conversation.',
-          link: `/network?tab=introductions&intro=${mirror.uid}`,
+          link: propositionDestination(mirror.uid),
           payload: { proposition_uid: mirror.uid, counterpart_user_id: user.id },
           channels: ['in_app', 'email'],
         }),
@@ -429,7 +396,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
           category: 'proactive_nudges',
           title: `Introduction complete — you're connected with ${targetName}`,
           body: 'Both of you accepted. Open their profile to start the conversation.',
-          link: `/network?tab=introductions&intro=${uid}`,
+          link: propositionDestination(uid),
           payload: { proposition_uid: uid, counterpart_user_id: prop.target_user_id },
           channels: ['in_app'],
         }),
@@ -446,9 +413,7 @@ introductions.post('/propositions/:uid/accept', async (c) => {
         body: mirror
           ? 'Review the match on your side to complete the connection.'
           : 'Open Introductions to see the match.',
-        link: mirror
-          ? `/network?tab=introductions&intro=${mirror.uid}`
-          : '/network?tab=introductions',
+        link: propositionDestination(mirror?.uid),
         payload: { counterpart_user_id: user.id },
         channels: ['in_app'],
       });

@@ -22,7 +22,6 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireBranchNotSuspended } from '../auth';
-import { programRefusal } from '../services/programEnforcement';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -99,8 +98,10 @@ app.post('/certificates', async (c) => {
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
   // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
-  const notGranted = await programRefusal(c.env, 'spinout-lab');
-  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  // D5360 — asked through the one gate every issuing path calls.
+  const { labIssuanceHold } = await import('../services/certificateIssuance');
+  const held = await labIssuanceHold(c.env);
+  if (held) return c.json(held.body, held.http);
   await ensureTables(c.env);
 
   const body = await c.req.json().catch(() => ({} as any));
@@ -114,7 +115,7 @@ app.post('/certificates', async (c) => {
     const { issueOnGraduation } = await import('../services/certificateIssuance');
     const outcome = await issueOnGraduation(c.env, userId, user.id);
     const refusals: Record<string, [number, string]> = {
-      not_graduated: [409, 'This founder has no incorporation_completed milestone, so there is no graduation to certify.'],
+      not_graduated: [409, 'This founder has not completed every week of the programme (or has not yet named their Lab venture), so there is no graduation to certify.'],
       insufficient_data: [422, 'The graduate’s record has no name or no conferral date, so the certificate would be blank. Fill the record in, then issue.'],
       reissue_blocked: [409, 'This graduate’s credential was revoked. Its id is derived from the cohort, the date and the account, so reissuing it would collide; reissue waits on a credential-id change.'],
       error: [500, 'The certificate could not be written. Nothing was issued; try again.'],
@@ -210,25 +211,36 @@ app.get('/certificates', async (c) => {
   const unavailable: Record<string, string> = {};
   try {
     const a = await c.env.DB.prepare(
-      `SELECT m.user_id, u.name, MIN(m.completed_at) AS conferred_at
-         FROM spinout_lab_milestones m
+      `SELECT m.user_id, u.name, MIN(m.graduated_at) AS conferred_at
+         FROM spinout_lab_graduates m
          JOIN users u ON u.id = m.user_id
          LEFT JOIN spinout_certificates sc ON sc.user_id = m.user_id
-        WHERE m.milestone_key = 'incorporation_completed' AND sc.id IS NULL
+        WHERE m.by_rule = 1 AND sc.id IS NULL
         GROUP BY m.user_id, u.name
         ORDER BY conferred_at DESC
         LIMIT 500`,
     ).all<{ user_id: number; name: string | null; conferred_at: string | null }>();
     awaiting = a.results || [];
     const t = await c.env.DB.prepare(
-      `SELECT COUNT(DISTINCT user_id) AS n FROM spinout_lab_milestones WHERE milestone_key = 'incorporation_completed'`,
+      `SELECT COUNT(*) AS n FROM spinout_lab_graduates`,
     ).first<{ n: number }>();
     eligibleTotal = Number(t?.n ?? 0);
   } catch (e) {
     console.error('[certificates] awaiting read failed', (e as Error)?.message);
     unavailable.awaiting = 'The graduate list could not be read, so who is still waiting for a certificate is unknown.';
   }
-  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, unavailable });
+  // D4663 — what the scheduled backfill last did. `last_tick: null` is "not
+  // recorded" (no tick has run here), never "0 issued"; a failed read is
+  // `null` with its sentence in `unavailable`.
+  let scheduledBackfill: unknown = null;
+  try {
+    const { readCertificateBackfillState } = await import('../services/certificateIssuance');
+    scheduledBackfill = await readCertificateBackfillState(c.env);
+  } catch (e) {
+    console.error('[certificates] scheduled backfill read failed', (e as Error)?.message);
+    unavailable.scheduled_backfill = 'When the scheduled backfill last ran could not be read.';
+  }
+  return c.json({ certificates: rows.results || [], awaiting, eligible_total: eligibleTotal, scheduled_backfill: scheduledBackfill, unavailable });
 });
 
 app.post('/certificates/:id/revoke', async (c) => {
@@ -284,8 +296,10 @@ app.post('/certificates/backfill', async (c) => {
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
   // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
-  const notGranted = await programRefusal(c.env, 'spinout-lab');
-  if (notGranted) return c.json(notGranted.body, notGranted.status);
+  // D5360 — asked through the one gate every issuing path calls.
+  const { labIssuanceHold } = await import('../services/certificateIssuance');
+  const held = await labIssuanceHold(c.env);
+  if (held) return c.json(held.body, held.http);
   await ensureTables(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
   const { backfillCertificates } = await import('../services/certificateIssuance');

@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { railPressHeaders } from '../../../lib/railPage';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { Lightbox } from '../../../ui';
 import { useRailOption } from '../../../ui/railCrumbs';
 import { NEW_PATH } from './newDeckModel';
@@ -130,7 +131,7 @@ export function SpinoutReadiness({ projectId, deck }) {
       {state.status === 'loading' ? <div className={`${SKEL} h-14 w-full`} aria-hidden="true" /> : null}
       {state.status === 'error' ? (
         <div role="alert" className="flex flex-col gap-2" data-testid="pitch-studio-readiness-error">
-          <span className={MUTED}>{state.error?.status === 402 && state.error?.message ? state.error.message : READINESS_FAILED}</span>
+          <span className={MUTED}>{state.error?.status === 402 ? userFacingRaiseError(state.error, { fallback: READINESS_FAILED, scope: 'raise:pitch:readiness' }) : READINESS_FAILED}</span>
           {state.error?.status !== 402 ? <button type="button" className={`${GHOST} self-start`} onClick={() => setTick((t) => t + 1)}><RefreshCw size={14} aria-hidden="true" /> Try again</button> : null}
         </div>
       ) : null}
@@ -187,7 +188,7 @@ export function BrandingCard({ projectId, readOnly }) {
       setDraft(saved);
       setDialog(null);
     } catch (e) {
-      setRefusal({ message: e?.message || 'The watermark was not changed.' }); setDialog(null);
+      setRefusal({ message: userFacingRaiseError(e, { fallback: 'The watermark was not changed.', scope: 'raise:pitch:watermark' }) }); setDialog(null);
       reportError('pitch-studio:watermark', e);
     } finally { setBusy(false); }
   };

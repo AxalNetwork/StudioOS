@@ -105,6 +105,9 @@ export interface Env {
   // New code should prefer these; APP_URL stays as the legacy name.
   PUBLIC_BASE_URL?: string;
   PUBLIC_MARKETING_URL?: string;
+  // D4356 (#4356): the owner's Mercury referral link for Incorporate's bank step. Used only when it is https on
+  // mercury.com (`services/mercury/oauth.ts` `isMercuryHttps`); else `/api/mercury/personal/status` names Mercury's public site.
+  MERCURY_REFERRAL_URL?: string;
   // Phase 2 canonical-host flip: post-callback redirects go to axal.vc
   // (via APP_URL / PUBLIC_BASE_URL), but the Google OAuth redirect_uri
   // must stay on the host registered in Google Cloud Console
@@ -362,8 +365,14 @@ export interface Env {
   AGENT_AUTONOMY?: string;
   /** D1528: the runtime behind the seam (`src/agents/runtime.ts`): `do` (default) or `sdk` (#3852, an evaluation; needs `AGENT_SCOPE_SDK`). */
   AGENT_RUNTIME?: string;
+  /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
+  AGENT_SKILL_RUNTIME?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
+  /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
+  AGENT_COMPUTE?: string;
+  /** D4557: the master key run grants are derived from, per job. A secret, at least 32 characters; unset keeps compute off. */
+  AGENT_COMPUTE_SECRET?: string;
   /** #3851 (E7): the `agents` gateway's monthly limit in micro-USD, mirrored from its dashboard; at 70% HQ ops hear once a month. Unset = no alert. */
   AGENT_GATEWAY_MONTHLY_LIMIT_MICROUSD?: string;
   /** D1528: one `AgentScope` Durable Object per scope, named `project:{id}` or `company:{id}`. */
@@ -374,6 +383,10 @@ export interface Env {
   AGENT_TASK?: Workflow<{ run_uid: string }>;
   /** D1528: `studioos-agent-queue`; messages are `{ job_type: 'agent_run', payload: { run_uid } }`. */
   AGENT_QUEUE?: Queue<JobMessage>;
+  /** D4559 (#4559): optional whole-byte overrides for the D1 plan limit and its warning/critical review sizes (services/platformCapacity). Unset: 10 GB / 5 GB / 7.5 GB. */
+  PLATFORM_D1_LIMIT_BYTES?: string;
+  PLATFORM_D1_WARN_BYTES?: string;
+  PLATFORM_D1_CRIT_BYTES?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never
@@ -441,6 +454,9 @@ export interface Env {
   // #3778 phase 2 (D1534): the deck's Bria image tools (background removal) through AI Gateway,
   // offered only when exactly 'on' (`imageToolsOn`). Off until the owner's steps on #1008.
   AI_PROVIDER_BRIA?: string;
+  // D4316 (#4316): the deck's Upscale (Pruna p-image-upscale) through AI Gateway, its own switch,
+  // exactly 'on' (`imageToolOn`). Off until the owner's 10-day sub-processor notice (#1008).
+  AI_PROVIDER_PRUNA?: string;
   AI_PROVIDER_ANTHROPIC_KEY?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
@@ -481,9 +497,16 @@ export interface Env {
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
   MEETING_BOT?: string;
+  // D1451 (#5297): a var, not a secret. Only 'on' lets the bot take a Teams link; missing or anything else is off.
+  MEETING_BOT_TEAMS?: string;
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;
+  // D3678 (#3678): Eadwyn AI's own Google Workspace account, for a signed-in Meet join.
+  // The TOTP key never leaves the site Worker (services/meetBotGoogle.ts).
+  MEET_BOT_GOOGLE_EMAIL?: string;
+  MEET_BOT_GOOGLE_PASSWORD?: string;
+  MEET_BOT_GOOGLE_TOTP?: string;
   MEETING_BOT_ZOOM_CLIENT_ID?: string;
   MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
   MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
@@ -690,7 +713,10 @@ export interface User {
   name: string;
   // 'exploring' = Spin-Out Lab holding role (Task #9 onboarding queue) — it
   // authenticates like any other role, so it belongs in the union.
-  role: 'admin' | 'founder' | 'partner' | 'investor' | 'exploring';
+  role: 'admin' | 'founder' | 'partner' | 'investor' | 'advisor' | 'exploring';
+  /** D4472: request-time union of the primary licence and active additional grants. */
+  licences?: Array<'founder' | 'investor' | 'advisor' | 'partner'>;
+  advisor_id?: number | null;
   investor_id?: number | null;
   password_hash: string | null;
   founder_id: number | null;
@@ -721,6 +747,12 @@ export interface JWTPayload {
   exp: number;
   iat: number;
   jti?: string;
+  /**
+   * D4669 — the `impersonation_sessions` row a support-session token was
+   * minted for. Every request re-reads that row, so ending the session ends
+   * the token.
+   */
+  sid?: number;
 }
 
 export interface UserSessionRow {

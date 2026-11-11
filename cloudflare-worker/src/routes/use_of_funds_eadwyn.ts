@@ -1,3 +1,4 @@
+import { holdsLicence } from '../services/accountLicences';
 /** D1179: preview and Keep only. No scenario, milestone or forecast writer. */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -26,7 +27,7 @@ export function createUseOfFundsEadwyn(runner: typeof runAI = runAI) {
   const r = new Hono<Bindings>();
   r.use('*', async (c, next) => {
     let user; try { user = await requireAuth(c as any); } catch { return refuse(c, 401, { code: 'unauthorized', message: 'Sign in first.' }); }
-    if (user.role !== 'founder' || await isSupportSession(c as any)) return refuse(c, 403, { code: 'founder_only', message: 'Eadwyn reads this plan for its founder.' });
+    if (!holdsLicence(user, 'founder') || await isSupportSession(c as any)) return refuse(c, 403, { code: 'founder_only', message: 'Eadwyn reads this plan for its founder.' });
     if (!validId(c.req.query('project'))) return refuse(c, 400, { code: 'project_required', message: 'Choose a venture first.' });
     const projectId = Number(c.req.query('project'));
     try {

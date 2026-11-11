@@ -44,7 +44,7 @@ test('2. a remote step moves Present as its keys do, or to a card by number', ()
   assert.equal(remoteSocketPath(42), '/api/decks/42/remote/ws');
 });
 
-test('3. the wiring: the presenter view draws the budget and obeys the remote; no pairing screen; the client calls mounted routes', () => {
+test('3. the wiring: the presenter view draws the budget, obeys the remote and draws its pairing (PR1); the client calls mounted routes', () => {
   // Mutation checked: Present ignoring the `step` frame → the onRemote line no longer matches.
   const src = read('frontend/src/pages/raise/pitch/PitchPresent.jsx');
   assert.match(src, /<Budget marks=\{marks\}/);
@@ -52,7 +52,9 @@ test('3. the wiring: the presenter view draws the budget and obeys the remote; n
   assert.match(src, /frame\?\.type !== 'step' \|\| view === 'rehearse'/);
   assert.match(src, /remoteMove\(at\.card, frame\.step, n\)/);
   assert.match(src, /useWebSocket\(status === 'ok' && deck\?\.id && !phone \? remoteSocketPath\(deck\.id\)/);
-  assert.doesNotMatch(src, /deckRemoteApi|remote\/pair|Pair a phone/i, 'the pairing screen waits on design');
+  // #3828 PR1: the pairing canvas landed; Present draws it through RemotePair, which alone presses pair and unpair.
+  assert.match(src, /<RemotePair deckId=\{deck\.id\} paired=\{remotePaired\}/);
+  assert.doesNotMatch(src, /deckRemoteApi\.(pair|unpair)\(/, 'pairing is RemotePair\'s, not the page\'s');
   assert.doesNotMatch(read('frontend/src/pages/raise/pitch/presentTimingModel.js'), /\/ n\b|Math\.round\(pitch/, 'no second split');
   // The client's paths are the Worker's: each client call names a route deck_remote.ts mounts.
   const client = read('frontend/src/lib/api/deckRemote.js');

@@ -4,10 +4,11 @@
  * open an advisor's profile to see open office-hour slots, request a
  * booking, and after a booking is completed file a 1-5 star review.
  */
-import { useEffect, useState } from 'react';
-import { Search, Star, Calendar, Clock, Video, X, MessageCircle, Loader2 } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { Search, Star, Calendar, Clock, Video, MessageCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import Sheet from '../ui/Sheet.jsx';
+import Lightbox from '../ui/Lightbox';
 import { useAuth } from '../hooks/useAuthSync';
 import UserTrustBadge from '../components/UserTrustBadge';
 import PageExplainer from '../components/PageExplainer';
@@ -16,21 +17,39 @@ import { markMilestone } from '../lib/spinoutLabHooks';
 // Advisory workspace, which is exactly why this page stayed broken against the
 // same DTOs — see their header in that file.
 import {
-  bookingView, formatDateTime, isBookableSlot, slotMinutes, slotView,
+  bookingView, formatDateTime, isBookableSlot, offerFromType, offerLine, slotMinutes,
+  slotUnavailableReason, slotView,
 } from './advisor/advisory/kit';
 
-function StarRow({ rating, onChange }) {
+/**
+ * #4715 (D4715): a rating someone sets is five named, pressed-state buttons; a
+ * rating someone reads is one image with its value in words, not five unnamed
+ * buttons that do nothing.
+ */
+export function StarRow({ rating, onChange }) {
   const stars = [1, 2, 3, 4, 5];
+  const value = Number(rating || 0);
+  if (!onChange) {
+    return (
+      <div className="flex items-center gap-1" role="img" aria-label={`Rated ${value} of 5`}>
+        {stars.map((n) => (
+          <Star key={n} size={14} aria-hidden="true" className={n <= value ? 'text-amber-400' : 'text-zinc-300'} fill={n <= value ? 'currentColor' : 'none'} />
+        ))}
+      </div>
+    );
+  }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" role="group" aria-label={`Rating: ${value} of 5`}>
       {stars.map((n) => (
         <button
           key={n}
           type="button"
-          onClick={() => onChange?.(n)}
-          className={n <= (rating || 0) ? 'text-amber-400' : 'text-zinc-300'}
+          onClick={() => onChange(n)}
+          aria-label={`${n} star${n === 1 ? '' : 's'}`}
+          aria-pressed={n === value}
+          className={`${n <= value ? 'text-amber-400' : 'text-zinc-300'} min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600`}
         >
-          <Star size={onChange ? 22 : 14} fill={n <= (rating || 0) ? 'currentColor' : 'none'} />
+          <Star size={22} aria-hidden="true" fill={n <= value ? 'currentColor' : 'none'} />
         </button>
       ))}
     </div>
@@ -113,6 +132,8 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
   const [questions, setQuestions] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const offer = offerFromType(sessionType);
+  const ids = useId();
   async function submit() {
     if (!topic.trim()) { setErr('Topic is required'); return; }
     setErr(null); setBusy(true);
@@ -135,35 +156,38 @@ function BookingForm({ slot, advisor, sessionType, bookingLinkSlug, onClose, onB
       }
     } finally { setBusy(false); }
   }
+  // #4715 (D4715): a real dialog (Lightbox: role, name, focus in and back, Escape, ×), labelled fields,
+  // and an error that is announced rather than only drawn.
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 dark:bg-gray-900">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Book {advisor.display_name}</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              {formatDateTime(slot.startsAt)}
-              {slotMinutes(slot) != null && ` · ${slotMinutes(slot)} min`}
-            </div>
+    <Lightbox label={`Book ${advisor.display_name || 'this advisor'}`} title={`Book ${advisor.display_name || 'this advisor'}`}
+      sub={`${formatDateTime(slot.startsAt)}${slotMinutes(slot) != null ? ` · ${slotMinutes(slot)} min` : ''}`}
+      onClose={onClose} width={460} phone="sheet" testId="booking-dialog">
+      <form className="px-5 py-4" onSubmit={(e) => { e.preventDefault(); submit(); }} noValidate>
+        {/* D4715: the exact offer being booked, as the worker will copy it onto the booking. */}
+        {offer && (
+          <div data-testid="booking-offer" className="mb-3 rounded border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-100">
+            You are booking: <span className="font-medium">{offerLine(offer)}</span>
+            {offer.cadence_note && <div className="mt-0.5 text-violet-700 dark:text-violet-300">{offer.cadence_note}</div>}
           </div>
-          <button onClick={onClose}><X size={18} className="text-gray-500" /></button>
-        </div>
-        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Topic</label>
-        <input value={topic} onChange={(e) => setTopic(e.target.value)}
-          placeholder="GTM strategy review"
-          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm dark:border-gray-700" />
-        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Questions / context</label>
-        <textarea value={questions} onChange={(e) => setQuestions(e.target.value)}
+        )}
+        <label htmlFor={`${ids}-topic`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Topic</label>
+        <input id={`${ids}-topic`} value={topic} onChange={(e) => setTopic(e.target.value)}
+          placeholder="GTM strategy review" required aria-required="true"
+          aria-invalid={err === 'Topic is required' ? 'true' : undefined}
+          aria-describedby={err ? `${ids}-error` : undefined}
+          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        <label htmlFor={`${ids}-notes`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Questions / context</label>
+        <textarea id={`${ids}-notes`} value={questions} onChange={(e) => setQuestions(e.target.value)}
           rows={4} placeholder="What I want to walk away with…"
-          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm dark:border-gray-700" />
-        {err && <div className="text-sm text-red-600 mb-2">{err}</div>}
-        <button disabled={busy} onClick={submit}
-          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium flex items-center justify-center gap-2">
-          {busy && <Loader2 size={14} className="animate-spin" />}
-          Request booking
+          className="w-full px-3 py-2 border border-gray-300 rounded mb-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        {err && <div id={`${ids}-error`} role="alert" className="text-sm text-red-600 mb-2">{err}</div>}
+        <button type="submit" disabled={busy} aria-busy={busy ? 'true' : undefined}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
+          {busy && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+          {busy ? 'Sending request…' : 'Request booking'}
         </button>
-      </div>
-    </div>
+      </form>
+    </Lightbox>
   );
 }
 
@@ -186,7 +210,18 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
   // What the worker calls bookable. `s.status === 'open' && s.remaining > 0`
   // stood here and matched nothing — `slotDto` emits neither key — so every
   // advisor looked fully booked and native booking was unreachable.
-  const bookable = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
+  const offered = (slots || []).filter(isBookableSlot).map(slotView).filter(s => sessionType?.duration_minutes == null || slotMinutes(s) === sessionType.duration_minutes);
+  // #4692: the booking refuses an hour inside the advisor's minimum notice, a
+  // blackout or the buffer around a session they hold, and a paid one in a week
+  // at their paid cap. `GET /:uid/slots` answers all four per slot (D4692); the
+  // page offered them a Book button regardless and let the founder find out at
+  // the click. The hour stays listed, under the reason, so the schedule still
+  // shows the time exists.
+  const offer = sessionType ? offerFromType(sessionType) : null;
+  const bookable = offered.filter((s) => !slotUnavailableReason(s, offer));
+  const ruledOut = offered
+    .map((s) => ({ slot: s, reason: slotUnavailableReason(s, offer) }))
+    .filter((r) => r.reason);
   return (
     <Sheet label={advisor.display_name || 'Advisor'} title={advisor.display_name} sub={advisor.headline || undefined}
       onClose={onClose} width={640} testId="advisor-detail">
@@ -199,7 +234,12 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
         )}
         {advisor.bio && <p className="text-sm text-gray-700 mb-4 dark:text-gray-300">{advisor.bio}</p>}
         <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-          <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
+          {/* D4715: a booking made for one session type states that offer, not the general hourly rate. */}
+          {sessionType ? (
+            <div data-testid="detail-offer" className="col-span-2"><span className="text-gray-500">Session:</span> {offerLine(offerFromType(sessionType))}</div>
+          ) : (
+            <div><span className="text-gray-500">Rate:</span> {advisor.hourly_rate_usd == null ? 'Not recorded — no rate set' : advisor.hourly_rate_usd > 0 ? `$${advisor.hourly_rate_usd}/hr` : 'Free'}</div>
+          )}
           <div><span className="text-gray-500">Capacity:</span> Not recorded — no weekly capacity published</div>
           {advisor.timezone && <div><span className="text-gray-500">Timezone:</span> {advisor.timezone}</div>}
           {advisor.calcom_username && <div><span className="text-gray-500">Cal.com:</span> @{advisor.calcom_username}</div>}
@@ -212,10 +252,15 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
           </div>
         ) : slots === null ? (
           <div className="text-sm text-gray-500">Loading…</div>
-        ) : bookable.length === 0 ? (
+        ) : bookable.length === 0 && ruledOut.length === 0 ? (
           <div className="text-sm text-gray-500">No open slots — check back later.</div>
         ) : (
           <div className="space-y-2">
+            {bookable.length === 0 && (
+              <div className="text-sm text-gray-500" data-testid="slots-all-ruled-out">
+                This advisor has open hours, but none of them can be booked right now. Each one says why below.
+              </div>
+            )}
             {bookable.map((s) => (
               <div key={s.id} className="flex items-center justify-between border border-gray-200 rounded p-3 dark:border-gray-800">
                 <div className="text-sm">
@@ -229,14 +274,30 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
                     {slotMinutes(s) != null && (
                       <span className="flex items-center gap-1"><Clock size={12} /> {slotMinutes(s)} min</span>
                     )}
-                    {s.meetingUrl && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
+                    {s.hasMeetingLink && <span className="flex items-center gap-1"><Video size={12} /> video</span>}
                     {s.capacity > 1 && <span>group · {s.available}/{s.capacity} left</span>}
                   </div>
                 </div>
-                <button onClick={() => setBookSlot(s)}
-                  className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded font-medium">
+                <button type="button" onClick={() => setBookSlot(s)}
+                  aria-label={`Book ${formatDateTime(s.startsAt)}${slotMinutes(s) != null ? `, ${slotMinutes(s)} minutes` : ''}`}
+                  className="text-xs bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 min-h-[44px] rounded font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
                   Book
                 </button>
+              </div>
+            ))}
+            {ruledOut.map(({ slot: s, reason }) => (
+              <div key={s.id} data-testid={`slot-unavailable-${s.id}`}
+                className="flex items-center justify-between border border-dashed border-gray-200 rounded p-3 dark:border-gray-800">
+                <div className="text-sm">
+                  <div className="font-medium text-gray-500 flex items-center gap-2 dark:text-gray-400">
+                    <Calendar size={14} /> {formatDateTime(s.startsAt)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {slotMinutes(s) != null && <span className="mr-2">{slotMinutes(s)} min</span>}
+                    {reason}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-400 px-3 py-1.5">Not bookable</span>
               </div>
             ))}
           </div>
@@ -265,11 +326,12 @@ export function AdvisorDetail({ advisor, sessionType, bookingLinkSlug, onClose, 
   );
 }
 
-function ReviewModal({ booking, onClose, onSubmitted }) {
+export function ReviewModal({ booking, onClose, onSubmitted }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const ids = useId();
   async function submit() {
     setErr(null); setBusy(true);
     try {
@@ -289,25 +351,26 @@ function ReviewModal({ booking, onClose, onSubmitted }) {
       }
     } finally { setBusy(false); }
   }
+  // #4715 (D4715): the same dialog contract as the booking form.
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-md w-full p-6 dark:bg-gray-900">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-lg font-semibold">Review your session</div>
-          <button onClick={onClose}><X size={18} /></button>
-        </div>
-        <div className="mb-3 text-sm text-gray-600">Topic: {booking.topic}</div>
-        <div className="mb-3"><StarRow rating={rating} onChange={setRating} /></div>
-        <textarea value={comment} onChange={(e) => setComment(e.target.value)}
-          rows={4} placeholder="What stood out? (optional)"
-          className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3 dark:border-gray-700" />
-        {err && <div className="text-sm text-red-600 mb-2">{err}</div>}
-        <button disabled={busy} onClick={submit}
-          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium">
+    <Lightbox label="Review your session" title="Review your session" sub={booking.topic ? `Topic: ${booking.topic}` : undefined}
+      onClose={onClose} width={460} phone="sheet" testId="review-dialog">
+      <form className="px-5 py-4" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+        <fieldset className="mb-3">
+          <legend className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Rating</legend>
+          <StarRow rating={rating} onChange={setRating} />
+        </fieldset>
+        <label htmlFor={`${ids}-comment`} className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">Comment (optional)</label>
+        <textarea id={`${ids}-comment`} value={comment} onChange={(e) => setComment(e.target.value)}
+          rows={4} placeholder="What stood out?"
+          className="w-full px-3 py-2 border border-gray-300 rounded text-sm mb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 dark:border-gray-700" />
+        {err && <div role="alert" className="text-sm text-red-600 mb-2">{err}</div>}
+        <button type="submit" disabled={busy} aria-busy={busy ? 'true' : undefined}
+          className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white py-2 rounded text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-600">
           {busy ? 'Submitting…' : 'Submit review'}
         </button>
-      </div>
-    </div>
+      </form>
+    </Lightbox>
   );
 }
 
@@ -342,6 +405,7 @@ function MyBookings({ refreshKey }) {
           <div className="flex items-center justify-between">
             <div>
               <div className="font-medium text-gray-900 dark:text-gray-100">{b.topic}</div>
+              {b.offer && <div data-testid={`booking-offer-${b.id}`} className="text-xs text-gray-700 mt-0.5 dark:text-gray-300">{offerLine(b.offer)}</div>}
               <div className="text-xs text-gray-500 mt-0.5">
                 {b.startsAt ? formatDateTime(b.startsAt) : 'Time not recorded'} · status:{' '}
                 <span className="font-medium">{b.status}</span>

@@ -68,14 +68,14 @@ export function StateChip({ session, testId = 'cal-agent-state' }) {
   );
 }
 
-/** CAL11 "AI agents not switched on": the reason, Close, and the way to Team › Agents. */
-function OffBlock({ reason, company, team, onClose, testId }) {
+/** CAL11 "AI agents not switched on": the reason, Close, and the way to Team › Agents when the reply names a team (never the public /team page, #4735). */
+export function OffBlock({ reason, company, team, onClose, testId }) {
   return (
     <div className="flex flex-col gap-3 px-5 py-6" data-testid={testId}>
       <p className={`m-0 text-[13.5px] font-semibold ${INK}`}>{company ? offLine(company) : reason}</p>
       <span className="flex flex-wrap gap-2">
         <button type="button" className={actionGhost} onClick={onClose}>Close</button>
-        <Link to={team || '/team'} className={actionPrimary}>Open Team › Agents ›</Link>
+        {team ? <Link to={team} className={actionPrimary}>Open Team › Agents ›</Link> : null}
       </span>
     </div>
   );

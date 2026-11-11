@@ -114,6 +114,9 @@ const SOURCES: Record<string, string[]> = {
   notion: ['services/notion/reads.ts', 'integrations/providers/notion.ts'],
   // D1385 (#3731): PostHog's typed reads and provider.
   posthog: ['services/posthog/reads.ts', 'integrations/providers/posthog.ts'],
+  // D2407 (#2407): Beehiiv's typed reads and provider.
+  // D2407 part 3: the draft tool's one call site is drafts.ts.
+  beehiiv: ['services/beehiiv/reads.ts', 'services/beehiiv/drafts.ts', 'integrations/providers/beehiiv.ts'],
   // D1096: Vercel's only transport is its typed client; the provider calls it.
   vercel: ['services/vercel/api.ts', 'integrations/providers/vercel.ts'],
 };
@@ -128,6 +131,15 @@ const linesOf = (file: string) => {
 const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint', '/v2/oauth/access_token'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
+/**
+ * D2407 part 3: a write made through an MCP tool, not an HTTP method in the
+ * connector's source (the shared client sends it). It counts as a write only
+ * at a `callTool(` site in a file that mints the one-time publish ticket the
+ * client demands for every write tool.
+ */
+const MCP_WRITE_CALLS: Record<string, string[]> = { beehiiv: ['session.callTool(DRAFT_TOOL'] };
+const mcpWriteNamed = (e: Entry, frag: string) => (MCP_WRITE_CALLS[e.key] ?? []).includes(frag)
+  && sourcesOf(e).some((f) => { const t = linesOf(f).join('\n'); return t.includes(frag) && /\bmintMcpPublishTicket\(/.test(t); });
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
 const ACCOUNT_CALLS: Record<string, string[]> = {
   github: ['/grant`'],
@@ -218,7 +230,7 @@ test('3. every request that writes is named by a tool, and each tool\'s access m
     for (const t of e.page.tools) {
       const reqs = sourcesOf(e).flatMap((f) => requestsIn(f))
         .filter((r) => !isTokenExchange(r) && t.calls.some((f) => r.window.includes(f)));
-      if (t.access === 'write') assert.ok(reqs.length > 0, `${e.id}.${t.name} is a write tool but names no request that writes`);
+      if (t.access === 'write') assert.ok(reqs.length > 0 || t.calls.some((f) => mcpWriteNamed(e, f)), `${e.id}.${t.name} is a write tool but names no request that writes`);
       if (t.access === 'read') {
         for (const r of reqs) assert.ok((READ_BY_POST[e.key] ?? []).some((f) => r.window.includes(f)), `${e.id}.${t.name} reads, but names ${r.file}:${r.line}, which writes`);
       }
@@ -296,7 +308,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
-  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10', posthog: '2026-10',
+  github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10', posthog: '2026-10', beehiiv: '2026-11',
   google_workspace: null,
 
   lovable: null,
@@ -357,6 +369,7 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   // D1085: the page names the MCP server a member's sign-in reads through.
   notion: { file: 'services/notion/reads.ts', sign_in: ['NOTION_MCP_URL', ''], api: null },
   posthog: { file: 'services/posthog/reads.ts', sign_in: ['POSTHOG_MCP_URL', ''], api: null },
+  beehiiv: { file: 'services/beehiiv/mcp.ts', sign_in: ['BEEHIIV_MCP_URL', ''], api: null },
   // D1096: the install page is built from the Integration's slug, so there is no sign-in constant.
   vercel: { file: 'services/vercel/api.ts', sign_in: null, api: 'VERCEL_API' },
 };

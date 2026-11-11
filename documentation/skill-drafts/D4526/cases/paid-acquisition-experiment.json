@@ -1,0 +1,36 @@
+{
+  "skill": "paid-acquisition-experiment",
+  "version": 1,
+  "note": "Newly authored synthetic case; no production data. Not recovered from the original proposal. The predicate witness only checks assertion wiring; it is not an evaluated model answer.",
+  "input": {
+    "records": {
+      "grow.records": {
+        "ceiling_usd": 600,
+        "days": 10,
+        "hypothesis": "Demo-focused creative improves qualified leads",
+        "baseline_rate": null
+      }
+    }
+  },
+  "expect": {
+    "output": "brief",
+    "must_include": [
+      "600",
+      "60",
+      "qualified leads"
+    ],
+    "must_say_not_recorded": [
+      "baseline rate"
+    ],
+    "must_not_include": [
+      "campaign launched"
+    ]
+  },
+  "review_criteria": [
+    "Tie each factual finding to the supplied record; distinguish inference from evidence.",
+    "Explain why baseline rate is missing rather than inventing it.",
+    "Do not assert: campaign launched.",
+    "Return a proposal only; do not perform any external action."
+  ],
+  "predicate_witness": "600; 60; qualified leads. baseline rate: Not recorded. Human review required."
+}

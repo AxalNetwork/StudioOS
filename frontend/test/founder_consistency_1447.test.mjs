@@ -4,8 +4,8 @@
  *   - Liquidity was a working link in every Raise zone. The owner removed
  *     Liquidity & Exits (2026-10-20), so no Raise zone links it any more and
  *     `/raise/liquidity` is not a route.
- *   - Grow lists `/comarketing` under the founder's name for it, not the admin
- *     palette's "Co-Marketing Review".
+ *   - D4439 moves founder co-marketing to Grow's Partner network module;
+ *     partners retain the original Offers/palette address.
  *   - The sidebar's stage comment states the order the rows and the Worker's
  *     lifecycle actually follow. The lifecycle order itself is tested in
  *     `cloudflare-worker/test/lifecycle_order_1447.test.ts`.
@@ -18,7 +18,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { alsoInFor } from '../src/lib/adminPlacement.js';
-import AlsoIn from '../src/workspaces/AlsoIn.jsx';
+import FounderCoMarketingPage from '../src/pages/founder/FounderCoMarketingPage.jsx';
+import { moduleToolLinks } from '../src/pages/cycles/founderToolNavigation.js';
 
 const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8');
 
@@ -48,17 +49,17 @@ test('Liquidity has no route left: /raise/liquidity and /liquidity are gone', ()
   assert.doesNotMatch(app, /<Route path="\/liquidity"/);
 });
 
-test('Grow lists co-marketing under the founder\'s label, and the partner keeps the palette one', () => {
-  const founder = alsoInFor('founder', 'Grow').find((w) => w.route === '/comarketing');
-  assert.ok(founder, 'Grow no longer lists /comarketing');
-  assert.equal(founder.label, 'Co-marketing');
-  assert.doesNotMatch(founder.description, /review/i);
-  const partner = alsoInFor('partner', 'Offers').find((w) => w.route === '/comarketing');
+test('Grow Partner network opens the founder feed, and partners keep their Offers address', () => {
+  const founder = { role: 'founder', subscription_tier: 'studio' };
+  assert.deepEqual(moduleToolLinks('grow', 'partner-network', founder, '?project_id=41'),
+    [{ label: 'Open co-marketing', href: '/grow/partner-network/co-marketing?project_id=41' }]);
+  assert.equal(alsoInFor('founder', 'Grow').some(w => w.route === '/comarketing'), false);
+  const partner = alsoInFor('partner', 'Offers').find(w => w.route === '/comarketing');
   assert.equal(partner.label, 'Co-Marketing Review');
-  // Rendered: the Grow desk draws this list.
-  const html = renderToStaticMarkup(h(MemoryRouter, null, h(AlsoIn, { role: 'founder', row: 'Grow' })));
-  assert.match(html, /href="\/comarketing"[^>]*>Co-marketing<\/a>/);
-  assert.doesNotMatch(html, /Co-Marketing Review/);
+  const html = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/grow/partner-network/co-marketing?project_id=41'] },
+    h(FounderCoMarketingPage, { user: founder })));
+  assert.match(html, /href="\/grow\/partner-network\?project_id=41"/);
+  assert.doesNotMatch(html, /Co-Marketing Review|Propose a pitch/);
 });
 
 test('the sidebar comment states the stage order the rows follow', () => {

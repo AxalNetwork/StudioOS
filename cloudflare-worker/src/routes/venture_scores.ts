@@ -1,3 +1,4 @@
+import { holdsLicence, holdsOnlyLicence } from '../services/accountLicences';
 /**
  * D1256 (#3279, part 3 of #2428) — the venture scorecard's routes.
  *
@@ -123,17 +124,16 @@ r.get('/models', async (c) => {
   } catch (e) { return fail(c, e, 'The scoring model'); }
 });
 
-const WEIGHT_ROLES = new Set(['investor', 'admin', 'partner']);
 
 r.get('/weights', async (c) => {
   const user = await requireAuth(c);
-  if (!WEIGHT_ROLES.has(roleOf(user))) return refuse(c, 403, { code: 'no_weighting', message: 'Your weighting is for investors and studio staff.' });
+  if (!(isStaff(user) || holdsLicence(user, 'investor'))) return refuse(c, 403, { code: 'no_weighting', message: 'Your weighting is for investors and studio staff.' });
   try { return c.json(await readWeights(c.env, user.id)); } catch (e) { return fail(c, e, 'Your weighting'); }
 });
 
 r.put('/weights', async (c) => {
   const user = await requireAuth(c);
-  if (!WEIGHT_ROLES.has(roleOf(user))) return refuse(c, 403, { code: 'no_weighting', message: 'Your weighting is for investors and studio staff.' });
+  if (!(isStaff(user) || holdsLicence(user, 'investor'))) return refuse(c, 403, { code: 'no_weighting', message: 'Your weighting is for investors and studio staff.' });
   const body = await c.req.json().catch(() => ({}));
   try {
     const weights = parseWeights(body);
@@ -145,7 +145,7 @@ r.put('/weights', async (c) => {
 r.post('/batch', async (c) => {
   const user = await requireAuth(c);
   const role = roleOf(user);
-  if (role !== 'investor' && !isStaff(user)) return refuse(c, 403, { code: 'no_access', message: 'The deal list’s scorecards are for investors and studio staff.' });
+  if (!holdsLicence(user, 'investor') && !isStaff(user)) return refuse(c, 403, { code: 'no_access', message: 'The deal list’s scorecards are for investors and studio staff.' });
   const body = await c.req.json().catch(() => ({}));
   const ids = Array.isArray(body?.deal_ids) ? [...new Set(body.deal_ids.map(Number))] as number[] : null;
   if (!ids || ids.length > BATCH_MAX || ids.some((n) => !Number.isSafeInteger(n) || n < 1)) {
@@ -158,7 +158,7 @@ r.post('/batch', async (c) => {
       if (!readable.has(dealId)) continue;
       const projectId = await dealProject(c.env, dealId);
       if (projectId == null) continue;
-      if (role === 'investor' && !(await investorsMaySee(c.env, projectId)).on) {
+      if (holdsLicence(user, 'investor') && !isStaff(user) && !(await investorsMaySee(c.env, projectId)).on) {
         items.push({ deal_id: dealId, project_id: projectId, locked: true, reason: LOCKED_REASON });
         continue;
       }
@@ -191,7 +191,7 @@ r.get('/deal/:dealId', async (c) => {
     if (projectId == null) return refuse(c, 404, { code: 'not_found', message: 'No such deal.' });
     const project = await ventureRow(c.env, projectId);
     if (!project) return refuse(c, 404, { code: 'not_found', message: 'No such venture.' });
-    if (roleOf(user) !== 'investor') {
+    if (!holdsLicence(user, 'investor')) {
       const viewer = await viewerOf(c.env, user, project);
       if (!viewer) return refuse(c, 403, { code: 'no_access', message: 'You cannot read this scorecard.' });
       return await fullRead(c, user, project, viewer, dealId);
@@ -231,7 +231,7 @@ r.get('/:projectId', async (c) => {
   try {
     const project = await venture(c);
     if (!project) return refuse(c, 404, { code: 'not_found', message: 'No such venture.' });
-    if (roleOf(user) === 'investor') return refuse(c, 403, { code: 'read_through_deal', message: 'Investors read a scorecard through a deal they are on.' });
+    if (holdsOnlyLicence(user, 'investor')) return refuse(c, 403, { code: 'read_through_deal', message: 'Investors read a scorecard through a deal they are on.' });
     const viewer = await viewerOf(c.env, user, project);
     if (!viewer) return refuse(c, 403, { code: 'no_access', message: 'You cannot read this scorecard.' });
     return await fullRead(c, user, project, viewer);

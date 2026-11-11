@@ -18,7 +18,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
+import { projectOwned } from '../services/decks/access';
 import { ensureSchema, getDeckRow, rowToDeck } from './decks';
 import { mercuryFor } from './deck_sources';
 import { stagePlan } from '../services/decks/stagePlan';

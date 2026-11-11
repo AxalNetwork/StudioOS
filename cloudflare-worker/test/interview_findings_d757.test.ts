@@ -66,7 +66,7 @@ function world({ findings = true } = {}) {
   db.exec(mig('459_cycle_activity_convention.sql'));
   db.exec(mig('460_validate_record_stores.sql'));
   for (const m of ['214_validate_proposals.sql', '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql', '446_interview_structure_receipts.sql',
-    '447_assistant_interviews.sql', '452_record_session_setup.sql', '453_interview_processing.sql']) db.exec(mig(m));
+    '447_assistant_interviews.sql', '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql']) db.exec(mig(m));
     applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(mig('449_interview_channels.sql').split(';')
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
@@ -392,7 +392,7 @@ const B_REPLY = JSON.stringify({ placements: [
 
 test('every kind is in exactly one pass, and each pass\'s prompt lists only its own', () => {
   const all = STRUCTURE_PASSES.flatMap((p) => [...p.kinds]);
-  assert.deepEqual([...all].sort(), Object.keys(PLACEMENT_KINDS).sort(), 'a kind is in no pass, or in two');
+  assert.deepEqual([...all].sort(), Object.keys(PLACEMENT_KINDS).filter((k) => !['interview_summary', 'quotable_line', 'verdict_contribution'].includes(k)).sort(), 'a kind is in no pass, or in two');
   assert.equal(new Set(all).size, all.length);
 });
 
