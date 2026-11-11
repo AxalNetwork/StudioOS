@@ -15,10 +15,18 @@
  * for a local or test D1, or a separately authorized read-only preflight.
  * `reconcile` compares the two by identity and content hash, never by count,
  * and only reports: it never renames, overwrites or deletes a draft or a case.
+ *
+ * D5336 (#5336): a skill's sources are its golden case and its scenario pack
+ * (`skills/scenarios/<slug>.json`). Each case is identified through
+ * `skillCaseIdentity.ts` (`case_id` + `revision`, or `<slug>#<sha12>`), the
+ * scenario rules are `skillScenarios.checkScenarioPacks`, and a skill whose
+ * cases exceed `CASES_MAX`, or two of whose cases share an identity, fails.
  */
 import type { Env } from '../../types';
 import { READ_KEYS } from './catalogue';
 import { draftHash, type CaseExpect } from './skillLifecycle';
+import { caseIdentity, storedCaseIdentity, type CaseIdentity } from './skillCaseIdentity';
+import { checkScenarioPacks, scenarioCase, type ScenarioCoverage } from './skillScenarios';
 import { ASSERTION_KEYS } from './skillAssertions';
 import { checkLibrary } from './skillLibrarySeed';
 import { isSkillSlug } from './skills';
@@ -32,7 +40,7 @@ export const CATALOGUE_CHECK_VERSION = 1;
 export const ROLES_REVIEW_AT = 3;
 export const TAGS_REVIEW_AT = 7;
 const FRONT_KEYS = ['name', 'description', 'roles', 'tools', 'output', 'taxonomy', 'version'];
-const CASE_KEYS = ['skill', 'version', 'note', 'input', 'expect'];
+const CASE_KEYS = ['skill', 'version', 'case_id', 'revision', 'name', 'note', 'input', 'expect'];
 /** The `expect` keys `checkCase` keeps and `judge()` evaluates (`numbers` and the slice-2 assertions since #4531). */
 const EXPECT_KEYS: readonly string[] = ['output', 'must_include', 'must_say_not_recorded', 'must_not_include', ...ASSERTION_KEYS];
 const READ_SOURCES = new Set(READ_KEYS.map((k) => k.split('.')[0]));
@@ -43,17 +51,11 @@ export type Finding = {
   file: string | null; slug: string | null; field: string | null; case_id: string | null;
   rule: string; message: string; remediation: string;
 };
-export type CaseManifest = { case_id: string; sha256: string };
+/** A case's identity (`skillCaseIdentity.ts`): `case_id`, `revision`, `key` and the content `sha256`. */
+export type CaseManifest = CaseIdentity;
 export type ManifestEntry = { slug: string; draft_hash: string | null; cases: CaseManifest[] };
 
-const sha256 = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))]
-  .map((b) => b.toString(16).padStart(2, '0')).join('');
-
-/** A case's content identity: what `checkCase` keeps of it. Until #4588 adds an explicit id, the id is `<slug>#<first 12 of the hash>`. */
-export async function caseIdentity(slug: string, input: unknown, expect: unknown): Promise<CaseManifest> {
-  const hash = await sha256(JSON.stringify({ input, expect }));
-  return { case_id: `${slug}#${hash.slice(0, 12)}`, sha256: hash };
-}
+export { caseIdentity } from './skillCaseIdentity';
 
 const front = (md: string): Record<string, string> => {
   const m = /^---\n([\s\S]*?)\n---\n/.exec(md);
@@ -67,6 +69,8 @@ export type SourceInput = {
   definitions: Record<string, string>;
   /** `<slug>.json` → text, from `services/agents/skills/cases/`. */
   cases: Record<string, string>;
+  /** `<slug>.json` → text, from `services/agents/skills/scenarios/` (D5336); none when absent. */
+  scenarios?: Record<string, string>;
   /** The generated module's entries as they are committed. */
   generated: readonly LibraryEntry[];
   /** Whether `render()` of the files equals the committed module. */
@@ -76,7 +80,7 @@ export type SourceInput = {
 };
 
 /** Every source check; see the header. Findings are in file order. */
-export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings: Finding[]; manifest: ManifestEntry[] }> {
+export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings: Finding[]; manifest: ManifestEntry[]; coverage: ScenarioCoverage[] }> {
   const findings: Finding[] = [];
   const add = (f: Omit<Finding, 'level'> & { level?: Finding['level'] }) => findings.push({ level: f.level ?? 'error', ...f });
   const mdSlugs = Object.keys(src.definitions).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3)).sort();
@@ -96,14 +100,21 @@ export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings
     if (n && files.length > 1) add({ file: files.map((f) => `${f}.md`).join(', '), slug: n, field: 'name', case_id: null, rule: 'duplicate_slug', message: `${files.length} definitions name ${n}.`, remediation: 'Give each skill its own slug; never rename an existing one to resolve this.' });
   }
 
-  // 2. Definitions and cases, through the runtime checks.
+  // 1b. Scenario packs (D5336): their own rules; each valid pack's scenarios become the skill's further cases.
+  const scen = checkScenarioPacks(src.scenarios ?? {}, new Set(mdSlugs));
+  findings.push(...scen.findings);
+
+  // 2. Definitions and cases, through the runtime checks. The golden case first, then the scenarios, as the generator packs them.
   const entries: LibraryEntry[] = mdSlugs.filter((s) => caseSlugs.includes(s)).map((s) => {
     let kase: any = null;
     try { kase = JSON.parse(src.cases[`${s}.json`]); } catch {
       add({ file: `cases/${s}.json`, slug: s, field: null, case_id: null, rule: 'case_malformed', message: `cases/${s}.json is not JSON.`, remediation: 'Fix the JSON syntax.' });
     }
-    return { slug: s, skill_md: src.definitions[`${s}.md`], cases: kase && typeof kase === 'object' && !Array.isArray(kase) ? [kase] : [] };
+    const golden = kase && typeof kase === 'object' && !Array.isArray(kase) ? [kase] : [];
+    const pack = scen.parsed.get(s);
+    return { slug: s, skill_md: src.definitions[`${s}.md`], cases: [...golden, ...(pack?.scenarios ?? []).map((x) => scenarioCase(pack!.skill, x))] as LibraryEntry['cases'] };
   });
+  // More than `CASES_MAX` cases is `checkLibrary`'s own `cases_max` refusal, reported below like every runtime code.
   const manifest: ManifestEntry[] = [];
   const caseIds = new Map<string, string>();
   const checked = checkLibrary(new Set(src.taxonomy.keys()), entries.filter((e) => e.cases.length));
@@ -128,10 +139,15 @@ export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings
     if (d.roles.length >= ROLES_REVIEW_AT) add({ level: 'warning', file: `${s}.md`, slug: s, field: 'roles', case_id: null, rule: 'roles_broad', message: `${d.roles.length} roles.`, remediation: 'Confirm every role runs the same workflow, or split the skill.' });
     if (d.tags.length >= TAGS_REVIEW_AT) add({ level: 'warning', file: `${s}.md`, slug: s, field: 'taxonomy', case_id: null, rule: 'tags_broad', message: `${d.tags.length} taxonomy tags.`, remediation: 'Keep the tags the skill really exercises.' });
     const cases: CaseManifest[] = [];
-    for (const raw of c.entry.cases as any[]) {
-      const id = await caseIdentity(s, raw.input, raw.expect);
+    const keys = new Set<string>();
+    for (const [i, raw] of (c.entry.cases as any[]).entries()) {
+      // The identity of what `checkCase` keeps (D4532 §2), through the one helper the store side uses too.
+      const kept = c.cases[i];
+      const id = await caseIdentity(s, { case_id: raw.case_id, revision: raw.revision, input: kept.input, expect: kept.expect });
       cases.push(id);
-      const where = { file: `cases/${s}.json`, slug: s, case_id: id.case_id };
+      const where = { file: raw.case_id ? `scenarios/${s}.json` : `cases/${s}.json`, slug: s, case_id: id.key };
+      if (keys.has(id.key)) add({ ...where, field: 'case_id', rule: 'case_identity_duplicate', message: `Two of ${s}'s cases are ${id.key}.`, remediation: 'Give each case its own case_id, or bump the revision of a changed one.' });
+      keys.add(id.key);
       if (raw.skill !== s) add({ ...where, field: 'skill', rule: 'case_skill_mismatch', message: `The case names ${String(raw.skill)}.`, remediation: `Set "skill": "${s}".` });
       if ((raw.expect as CaseExpect).output !== d.output_kind) add({ ...where, field: 'expect.output', rule: 'case_output_mismatch', message: `The case expects ${raw.expect.output}; the skill proposes ${d.output_kind}.`, remediation: 'Make the two agree.' });
       for (const key of Object.keys(raw.input.records)) {
@@ -154,7 +170,7 @@ export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings
   for (const s of new Set(gen.filter((x, i) => gen.indexOf(x) !== i))) add({ file: 'skillLibrary.generated.ts', slug: s, field: null, case_id: null, rule: 'duplicate_slug', message: `${s} is in the generated module twice.`, remediation: 'Rebuild with the script.' });
   for (const s of gen) if (!mdSlugs.includes(s)) add({ file: 'skillLibrary.generated.ts', slug: s, field: null, case_id: null, rule: 'generated_without_source', message: `${s} is generated but has no definition.`, remediation: 'Rebuild with the script.' });
   for (const s of mdSlugs) if (!gen.includes(s)) add({ file: 'skillLibrary.generated.ts', slug: s, field: null, case_id: null, rule: 'source_not_generated', message: `${s} is not in the generated module.`, remediation: 'Rebuild with the script.' });
-  return { findings, manifest };
+  return { findings, manifest, coverage: scen.coverage };
 }
 
 // ── The store ────────────────────────────────────────────────────────────────
@@ -171,14 +187,11 @@ export async function persistedManifest(env: Env): Promise<PersistedEntry[]> {
   const out: PersistedEntry[] = [];
   for (const s of rows) {
     const parts = await draftPartsOf(env, s);
-    const live = (await env.DB.prepare('SELECT input_json, expect_json FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
-      .bind(s.id).all<{ input_json: string; expect_json: string }>()).results ?? [];
+    const live = (await env.DB.prepare('SELECT input_json, expect_json, source_case_id, source_revision FROM agent_skill_cases WHERE skill_id = ? AND removed_at IS NULL ORDER BY id')
+      .bind(s.id).all<{ input_json: string; expect_json: string; source_case_id: string | null; source_revision: number | null }>()).results ?? [];
+    // An unreadable case is still a case; its hash is of nulls.
     const cases: CaseManifest[] = [];
-    for (const k of live) {
-      let input: unknown = null; let expect: unknown = null;
-      try { input = JSON.parse(k.input_json); expect = JSON.parse(k.expect_json); } catch { /* an unreadable case is still a case; its hash is of nulls */ }
-      cases.push(await caseIdentity(s.slug, input, expect));
-    }
+    for (const k of live) cases.push(await storedCaseIdentity(s.slug, k));
     out.push({ slug: s.slug, uid: s.uid, status: s.status, current_version: Number(s.current_version), draft_hash: await draftHash(parts), cases });
   }
   return out;
@@ -187,8 +200,8 @@ export async function persistedManifest(env: Env): Promise<PersistedEntry[]> {
 export type ReconcileClass = 'exact' | 'source_only' | 'persisted_only' | 'content_drift' | 'case_drift' | 'missing_case' | 'duplicate_identity' | 'invalid_reference';
 export type ReconcileLine = {
   slug: string; class: ReconcileClass; disposition: 'none' | 'report' | 'seed' | 'fail';
-  source: { draft_hash: string | null; case_hashes: string[] } | null;
-  persisted: { uid: string; status: string; draft_hash: string | null; live_case_hashes: string[] } | null;
+  source: { draft_hash: string | null; case_hashes: string[]; case_keys: string[] } | null;
+  persisted: { uid: string; status: string; draft_hash: string | null; live_case_hashes: string[]; live_case_keys: string[] } | null;
 };
 
 /**
@@ -201,21 +214,24 @@ export function reconcile(source: readonly ManifestEntry[], persisted: readonly 
   const out: ReconcileLine[] = [];
   const seen = new Map<string, PersistedEntry[]>();
   for (const p of persisted) seen.set(p.slug, [...(seen.get(p.slug) ?? []), p]);
-  const src = (e: ManifestEntry) => ({ draft_hash: e.draft_hash, case_hashes: e.cases.map((c) => c.sha256).sort() });
-  const per = (p: PersistedEntry) => ({ uid: p.uid, status: p.status, draft_hash: p.draft_hash, live_case_hashes: p.cases.map((c) => c.sha256).sort() });
+  const src = (e: ManifestEntry) => ({ draft_hash: e.draft_hash, case_hashes: e.cases.map((c) => c.sha256).sort(), case_keys: e.cases.map((c) => c.key).sort() });
+  const per = (p: PersistedEntry) => ({ uid: p.uid, status: p.status, draft_hash: p.draft_hash, live_case_hashes: p.cases.map((c) => c.sha256).sort(), live_case_keys: p.cases.map((c) => c.key).sort() });
   const sourceSlugs = new Set<string>();
   for (const e of source) {
     if (sourceSlugs.has(e.slug)) { out.push({ slug: e.slug, class: 'duplicate_identity', disposition: 'fail', source: src(e), persisted: null }); continue; }
     sourceSlugs.add(e.slug);
+    // Two source cases with one identity: the seed could not tell them apart.
+    if (new Set(e.cases.map((c) => c.key)).size !== e.cases.length) { out.push({ slug: e.slug, class: 'duplicate_identity', disposition: 'fail', source: src(e), persisted: null }); continue; }
     const rows = seen.get(e.slug) ?? [];
     if (rows.length > 1) { out.push({ slug: e.slug, class: 'duplicate_identity', disposition: 'fail', source: src(e), persisted: per(rows[0]) }); continue; }
     if (e.draft_hash == null) { out.push({ slug: e.slug, class: 'invalid_reference', disposition: 'fail', source: src(e), persisted: rows[0] ? per(rows[0]) : null }); continue; }
     const p = rows[0];
     if (!p) { out.push({ slug: e.slug, class: 'source_only', disposition: 'seed', source: src(e), persisted: null }); continue; }
-    const live = new Set(p.cases.map((c) => c.sha256));
+    // A source case is in the store when a live case has its identity AND its content (D5336).
+    const live = new Set(p.cases.map((c) => `${c.key} ${c.sha256}`));
     const klass: ReconcileClass = p.draft_hash !== e.draft_hash ? 'content_drift'
       : !p.cases.length ? 'missing_case'
-      : e.cases.some((c) => !live.has(c.sha256)) ? 'case_drift' : 'exact';
+      : e.cases.some((c) => !live.has(`${c.key} ${c.sha256}`)) ? 'case_drift' : 'exact';
     out.push({ slug: e.slug, class: klass, disposition: klass === 'exact' ? 'none' : 'report', source: src(e), persisted: per(p) });
   }
   for (const [slug, rows] of seen) {
@@ -226,7 +242,7 @@ export function reconcile(source: readonly ManifestEntry[], persisted: readonly 
 }
 
 /** The machine-readable summary the command prints with `--json`. */
-export function summary(findings: readonly Finding[], manifest: readonly ManifestEntry[], lines: readonly ReconcileLine[] | null) {
+export function summary(findings: readonly Finding[], manifest: readonly ManifestEntry[], lines: readonly ReconcileLine[] | null, coverage: readonly ScenarioCoverage[] = []) {
   const count = (l: Finding['level']) => findings.filter((f) => f.level === l).length;
   const classes: Record<string, number> = {};
   for (const l of lines ?? []) classes[l.class] = (classes[l.class] ?? 0) + 1;
@@ -237,6 +253,13 @@ export function summary(findings: readonly Finding[], manifest: readonly Manifes
     cases: manifest.reduce((n, m) => n + m.cases.length, 0),
     errors: count('error'), warnings: count('warning'),
     findings,
+    // D5336: what the sources cover, per skill with scenarios, deterministically. Never a count of model runs.
+    scenario_coverage: {
+      scenarios: coverage.reduce((n, c) => n + c.scenarios, 0),
+      skills: coverage.map((c) => ({ ...c, cases: manifest.find((m) => m.slug === c.slug)?.cases.length ?? 0 })),
+    },
+    // Repeated executions (each case run on each required model) are HQ's evaluation, never CI's.
+    executions: { status: 'not_run' as const, runs: 0 },
     // Ordinary CI never runs a paid model. Saying so is not a pass.
     model_evaluation: { status: 'not_run' as const, reason: 'Pull-request CI runs no model. Draft and published evaluations run from HQ › AI agents.' },
     reconciliation: lines ? { classes, lines } : { status: 'not_run' as const, reason: 'No persisted manifest was given (--persisted <file>).' },

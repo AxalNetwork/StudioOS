@@ -47,8 +47,8 @@ export default function CompanyFromVercel({ part, projectId, ventureName, reload
       await (how === 'accept' ? cyclesWrite.build.acceptVercelProposal : cyclesWrite.build.dismissVercelProposal)(projectId, id);
       setAsking(null);
       reload?.();
-    } catch (e) {
-      setError(e?.message || (how === 'accept' ? 'That proposal could not be accepted. Nothing changed.' : 'That proposal could not be dismissed.'));
+    } catch {
+      setError(how === 'accept' ? 'That proposal could not be accepted. Nothing changed.' : 'That proposal could not be dismissed.');
     } finally { setBusy(null); }
   };
   return (

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { ogTagsFor } from '../src/lib/ogRegistry.js';
+import { OG_ROUTES, ogTagsFor } from '../src/lib/ogRegistry.js';
 import { applyPageMeta } from '../src/lib/seo.js';
 
 const root = new URL('../../', import.meta.url);
@@ -108,6 +108,27 @@ test('the header policy is on the static shell and the live smoke names it', () 
   assert.match(headers, /^\/login\n  X-Robots-Tag: noindex, follow$/m, 'a path rule, not the /* block that every route gets');
   assert.doesNotMatch(headers.split('/login')[0].split('/*')[1] || '', /X-Robots-Tag/, 'not sitewide');
   assert.match(read('scripts/check-spa-live.mjs'), /x-robots-tag/i, 'the post-deploy smoke reads it');
+});
+
+test('a registry route marked noindex is absent from the sitemap but remains crawlable', () => {
+  const sitemap = read('frontend/public/sitemap.xml');
+  const sitemapPaths = new Set(
+    [...sitemap.matchAll(/<loc>(https:\/\/axal\.vc(?:\/[^<]*)?)<\/loc>/g)]
+      .map(([, absolute]) => new URL(absolute).pathname),
+  );
+  const noindexPaths = OG_ROUTES
+    .filter((route) => /(?:^|[,\s])noindex(?:[,\s]|$)/i.test(route.robots || ''))
+    .map((route) => route.path);
+
+  assert.ok(noindexPaths.length > 0, 'the rule is exercised by at least one registered noindex route');
+  for (const path of noindexPaths) {
+    assert.equal(sitemapPaths.has(path), false, `${path} is noindex and must not be submitted in the sitemap`);
+  }
+  assert.ok(sitemapPaths.has('/register'), 'the indexed registration route stays in the sitemap');
+
+  const robots = read('frontend/public/robots.txt');
+  assert.match(robots, /^Allow: \/$/m, 'crawlers may fetch public routes to read their noindex directive');
+  assert.doesNotMatch(robots, /^Disallow: \/login(?:$|[/?#])/m, '/login itself must not be blocked');
 });
 
 test('the sign-in and registration screen applies its head on arrival, without a pageview beacon', () => {

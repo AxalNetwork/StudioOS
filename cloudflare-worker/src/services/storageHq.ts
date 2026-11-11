@@ -58,8 +58,8 @@ async function readPlans(env: Env): Promise<Map<number, StoragePlanKey> | null> 
 }
 
 const POPULATIONS_NOTE =
-  'Members hold every plan but staff; staff hold the admin plan; unattributed are stored files whose owner is no account. '
-  + 'A file with no owner at all is not attributed by any area’s read, so it is in none of these and not in the total.';
+  'Members hold every plan but staff; staff hold the admin plan; unattributed are stored files whose owner is no account or is not recorded. '
+  + 'Every stored file read by these areas is in one population and in the total.';
 
 type PopulationTotals = { accounts: number; accounts_with_files: number; files: number; measured_bytes: number; unknown_size_files: number };
 
@@ -70,7 +70,7 @@ type PopulationTotals = { accounts: number; accounts_with_files: number; files: 
  * its own accounts, files, measured bytes and unknown-size files, so no figure
  * pairs one population's numerator with another's denominator.
  */
-function readPopulations(owners: Map<number, OwnerTotals>, plans: Map<number, StoragePlanKey>) {
+function readPopulations(owners: Map<number, OwnerTotals>, unowned: OwnerTotals, plans: Map<number, StoragePlanKey>) {
   const blank = (): PopulationTotals => ({ accounts: 0, accounts_with_files: 0, files: 0, measured_bytes: 0, unknown_size_files: 0 });
   const members = blank(), staff = blank(), unattributed = blank();
   const add = (p: PopulationTotals, t: OwnerTotals | undefined) => {
@@ -79,8 +79,12 @@ function readPopulations(owners: Map<number, OwnerTotals>, plans: Map<number, St
     p.accounts_with_files += 1; // an owner is read only for files it has
     p.files += t.files; p.measured_bytes += t.measured_bytes; p.unknown_size_files += t.unknown_size_files;
   };
+  const addFiles = (p: PopulationTotals, t: OwnerTotals) => {
+    p.files += t.files; p.measured_bytes += t.measured_bytes; p.unknown_size_files += t.unknown_size_files;
+  };
   for (const [id, key] of plans) add(key === 'admin' ? staff : members, owners.get(id));
   for (const [id, t] of owners) if (!plans.has(id)) add(unattributed, t);
+  addFiles(unattributed, unowned);
   const total = { files: 0, measured_bytes: 0, unknown_size_files: 0 };
   for (const p of [members, staff, unattributed]) {
     total.files += p.files; total.measured_bytes += p.measured_bytes; total.unknown_size_files += p.unknown_size_files;
@@ -89,7 +93,7 @@ function readPopulations(owners: Map<number, OwnerTotals>, plans: Map<number, St
 }
 
 export async function readPlatformStorage(env: Env) {
-  const [{ owners, unreadable }, plans] = await Promise.all([readStorageByOwner(env), readPlans(env)]);
+  const [{ owners, unowned, unreadable }, plans] = await Promise.all([readStorageByOwner(env), readPlans(env)]);
   const complete = unreadable.length === 0;
 
   let files = 0, measured = 0, unknown = 0;
@@ -98,6 +102,8 @@ export async function readPlatformStorage(env: Env) {
     files += t.files; measured += t.measured_bytes; unknown += t.unknown_size_files;
     for (const k of STORAGE_KINDS) kinds[k] += t.kinds[k];
   }
+  files += unowned.files; measured += unowned.measured_bytes; unknown += unowned.unknown_size_files;
+  for (const k of STORAGE_KINDS) kinds[k] += unowned.kinds[k];
 
   const byPlan = plans === null ? null : (Object.keys(STORAGE_PLANS) as StoragePlanKey[]).map((key) => {
     const plan = storagePlan(key)!;
@@ -142,7 +148,7 @@ export async function readPlatformStorage(env: Env) {
       by_state: complete ? states : null,
     };
   });
-  const populations = plans === null ? null : readPopulations(owners, plans);
+  const populations = plans === null ? null : readPopulations(owners, unowned, plans);
 
   return {
     complete,

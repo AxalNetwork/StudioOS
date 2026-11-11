@@ -53,12 +53,12 @@ test('the words: stamps in UTC, the reconnect sentence, each health line, and ea
   assert.deepEqual(runsOnView({ state: 'ok', items: null, total: 2 }), { state: 'members_only', total: 2, asOf: null });
 });
 
-test('buildParts: the two #2962 lines draw; the other Vercel tasks keep their null lines', () => {
+test('buildParts: the two #2962 lines draw, and D5064 (#5064) mounts the other three Vercel tasks', () => {
   assert.deepEqual(builtParts('operating-systems').map(([k]) => k), ['tools', 'vercel', 'posthog']);
   // D1088 (#2953) draws From Notion after Runs on; D1093 (#2958) From Google between them.
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion']);
   for (const slug of ['prototype-mvp', 'product-roadmap', 'company-creation']) {
-    assert.ok(BUILD_PARTS[slug].some(([k, r]) => k === 'vercel' && r === null), `${slug}'s Vercel line stays its own task's`);
+    assert.ok(BUILD_PARTS[slug].some(([k, r]) => k === 'vercel' && r !== null), `${slug}'s Vercel line draws (D5064)`);
   }
 });
 

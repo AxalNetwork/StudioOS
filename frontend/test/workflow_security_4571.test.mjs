@@ -35,10 +35,7 @@ const FILES = readdirSync(DIR).filter((n) => /\.ya?ml$/.test(n)).sort();
 const read = (name) => readFileSync(new URL(name, DIR), 'utf8');
 
 /** Recorded findings: file → register id. Each id must be a row in the register. */
-export const MUTABLE_IMAGES = Object.freeze({
-  'ci.yml': 'SC-03',
-  'deck-visual.yml': 'SC-03',
-});
+export const MUTABLE_IMAGES = Object.freeze({});
 // SC-02 (claude-code.yml) was closed by gating each comment event on its author's association.
 export const UNGATED_COMMENT_TRIGGERS = Object.freeze({});
 
