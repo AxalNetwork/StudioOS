@@ -91,7 +91,7 @@ jobs:
   # D4130 (#4130): the suite runs in PARTS, in parallel. As one job it took 74
   # minutes on one runner (main at c8c362cd17), on every push to every PR. The
   # `suite` matrix runs one part each (scripts/test-drift-parts.mjs: the
-  # frontend and worker suites cut by node's own --test-shard, plus `rest`, the
+  # frontend and worker suites packed by measured duration, plus `rest`, the
   # other steps of test:drift in order); the parts are derived from
   # package.json's test:drift, and ci_suite_parts_4130.test.mjs proves their
   # union is exactly the suite and that this matrix lists exactly them. The
@@ -139,9 +139,51 @@ jobs:
             echo "No merge-queue run passed on $SHA, so the full suite runs."
           fi
 
+  plan:
+    name: suite plan
+    needs: verified
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Newest main timing artifact, or equal weights
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact=$(gh api "repos/$REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main" and (.name | startswith("test-deps-")))] | sort_by(.created_at) | reverse | .[0].id // empty' || true)
+          if [ -n "$artifact" ]; then
+            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
+              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
+            fi
+          fi
+          if [ ! -f test-timings.json ]; then
+            echo "::notice::No main timings artifact available; using equal weights."
+          fi
+      - name: Generate the exact-once plan
+        id: plan
+        run: |
+          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+
   suite:
     name: suite (${{ matrix.part }})
-    needs: verified
+    needs: [verified, plan]
     # Runs whenever `verified` found nothing (always on a PR and in the queue,
     # where `verified` is skipped, and when its lookup failed).
     if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
@@ -153,16 +195,7 @@ jobs:
       # Every part reports, so one red part does not hide another.
       fail-fast: false
       matrix:
-        part:
-          - frontend-1-of-2
-          - frontend-2-of-2
-          - worker-1-of-6
-          - worker-2-of-6
-          - worker-3-of-6
-          - worker-4-of-6
-          - worker-5-of-6
-          - worker-6-of-6
-          - rest
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -173,6 +206,9 @@ jobs:
             frontend/package-lock.json
             cloudflare-worker/package-lock.json
             package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: suite-plan
       # The suite imports React deck templates and the worker's TypeScript, so
       # it needs both workspaces' dependencies installed.
       - name: Install frontend deps
@@ -195,11 +231,11 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
-      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
 
   gate:
     name: test:drift (full suite)
-    needs: [verified, suite]
+    needs: [verified, plan, suite]
     # Always, never skipped: a skipped required check reports as passed. This
     # job decides, and it passes only when every part passed — or, on a push
     # to main only, when the merge queue already passed this exact commit.
@@ -212,12 +248,13 @@ jobs:
           EVENT: ${{ github.event_name }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
+          PLAN: ${{ needs.plan.result }}
         run: |
           if [ "$EVENT" = "push" ] && [ -n "$VERIFIED_RUN" ] && [ "$SUITE" = "skipped" ]; then
             echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
             exit 0
           fi
-          if [ "$SUITE" = "success" ]; then
+          if [ "$PLAN" = "success" ] && [ "$SUITE" = "success" ]; then
             echo "Every part of test:drift passed."
             exit 0
           fi

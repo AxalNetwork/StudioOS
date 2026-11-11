@@ -158,3 +158,6 @@ D1165 (#3072, PR #3230): the form/lightbox workflow keeps all focused checks,
 guards, the root build and full drift. Its job has the same 60-minute bound as
 the main CI gate: the prior 30-minute limit cancelled a run during final lint.
 No trigger, permission, secret or check changes.
+
+D5609 (#5609): `ci.yml` and `github-alerts.yml` consume generated suite-plan
+artifacts and compact name outputs. Missing main timings use equal weights.
