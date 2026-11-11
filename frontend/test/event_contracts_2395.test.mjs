@@ -72,6 +72,10 @@ async function editorScenario(source = editor) {
       title: event.title, type: event.type, summary: event.summary, description: event.description,
       starts_at: '2099-01-01T12:00:00.000Z', ends_at: '2099-01-01T14:00:00.000Z', timezone: 'UTC',
       location_kind: 'hybrid', location_text: event.location_text, location_url: event.location_url, cover_url: event.cover_url,
+      // #5309 (D5309, D3724 §gaps 8 and 11): the cover's own fields travel with
+      // the Save. This fixture's cover is a bare link with nothing recorded
+      // about it, and each one is `null` — "not recorded", never a guess.
+      cover_alt: null, cover_source: null, cover_focal: null, cover_crops: null,
       capacity: 12, waitlist_enabled: 0, approval_required: 1, visibility: 'public', audience_rules_json: event.audience_rules,
     });
     assert.equal(Object.hasOwn(payload, 'agenda'), false, 'details edit leaves separately managed agenda alone');

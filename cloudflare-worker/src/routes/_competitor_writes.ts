@@ -39,6 +39,28 @@ export interface ManualCandidateInput {
   category?: string;
   summary?: string;
   crawl?: boolean;
+  /** D5352: internal fill-accept retry key; the manual route never sets it. */
+  sourceProposalId?: number | null;
+}
+
+function storedCandidate(row: any): Candidate {
+  let scores = {};
+  let details = {};
+  try { scores = JSON.parse(String(row.scores_json || '{}')); } catch { /* corrupt legacy JSON stays empty */ }
+  try { details = JSON.parse(String(row.details_json || '{}')); } catch { /* corrupt legacy JSON stays empty */ }
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    domain: row.domain == null ? null : String(row.domain),
+    url: row.url == null ? null : String(row.url),
+    category: row.category === 'adjacent' ? 'adjacent' : 'direct',
+    relevance_score: Number(row.relevance_score) || 0,
+    scores: scores as Candidate['scores'],
+    summary: String(row.summary || ''),
+    details: details as Candidate['details'],
+    origin: row.origin === 'known' || row.origin === 'discovered' ? row.origin : 'manual',
+    position: Number(row.position) || 0,
+  };
 }
 
 /**
@@ -61,10 +83,23 @@ export async function insertManualCandidate(
 ): Promise<Candidate> {
   const sql = getSQL(env);
   try {
+    const sourceProposalId = Number.isSafeInteger(data.sourceProposalId) && Number(data.sourceProposalId) > 0
+      ? Number(data.sourceProposalId) : null;
+    const stableId = sourceProposalId == null ? null : `fill-proposal-${sourceProposalId}`;
+    if (stableId) {
+      const existing = await sql`SELECT id, name, domain, url, category, relevance_score, scores_json, summary,
+        details_json, origin, position FROM competitor_candidates WHERE id = ${stableId} AND analysis_id = ${analysisId}`;
+      if (existing[0]) return storedCandidate(existing[0]);
+    }
     const posRows = await sql`SELECT COALESCE(MAX(position), -1) AS maxpos FROM competitor_candidates WHERE analysis_id = ${analysisId}`;
     const nextPos = Number(posRows[0]?.maxpos ?? -1) + 1;
 
     const { candidate, sources, signals } = await buildManualCandidate(env, userId, inputs, data, rail);
+    if (stableId) {
+      candidate.id = stableId;
+      for (const source of sources) source.candidate_id = stableId;
+      for (const signal of signals) signal.candidate_id = stableId;
+    }
     candidate.position = nextPos;
 
     await sql`INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)

@@ -93,9 +93,13 @@ test('matching fields: codes as a list, a changed link checked as the Worker doe
   assert.match(problemOf({ ...form, current_products: 'x'.repeat(501) }, row), /at most 500/);
   assert.equal(profileUrlOk('https://www.linkedin.com/company/x', { linkedin: true }), true);
   const src = read('pages/account/companies/CompanyGeneralForm.jsx');
-  assert.match(src, /type="url"/);
+  // D4966 (#5312): the two link fields are `UrlField` now, in `CompanyGeneralFields.jsx`.
+  assert.match(src, /<UrlField field=\{f\}/);
+  assert.match(read('pages/account/companies/CompanyGeneralFields.jsx'), /type="url"/);
   assert.match(src, /type="number" min=\{0\} step=\{1\}/);
   assert.match(src, /<fieldset[^>]*data-testid="general-regions"/);
   assert.match(src, /data-testid="general-revenue-range"/);
-  assert.match(src, /<label htmlFor=\{id\}/, 'every field label names its control');
+  // D4966 (#5312): every field's label, hint, help and error are `FieldFrame`'s, in one place.
+  assert.match(read('pages/account/companies/CompanyGeneralFields.jsx'), /<label htmlFor=\{htmlFor\}/, 'every field label names its control');
+  assert.match(src, /<FieldFrame field=\{f\} htmlFor=\{id\} dirty=\{dirty\} error=\{error\}>/, 'and every other field goes through it');
 });

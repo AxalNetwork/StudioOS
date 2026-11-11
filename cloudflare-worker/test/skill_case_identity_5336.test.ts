@@ -260,8 +260,7 @@ test('gate: the unmutated pack is clean, and each scenario rule fails its target
 
 test('gate: two cases with one identity fail; a stale generated module fails', async () => {
   // A golden case file that claims a scenario's identity.
-  const golden = JSON.parse(REAL.cases[`${SLUG}.json`]);
-  Object.assign(golden, { case_id: PACK.scenarios[0].case_id, revision: PACK.scenarios[0].revision });
+  const golden = { ...JSON.parse(REAL.cases[`${SLUG}.json`]), case_id: PACK.scenarios[0].case_id, revision: PACK.scenarios[0].revision };
   const dup = await gate(PACK, { cases: { [`${SLUG}.json`]: JSON.stringify(golden) } });
   assert.deepEqual(errs(dup.findings).map((f) => [f.rule, f.case_id]), [['case_identity_duplicate', `${PACK.scenarios[0].case_id}:r1`]]);
   // The reconciliation fails on it too.

@@ -114,6 +114,31 @@ test('marks: the owner marks a question; its answers become signals to confirm, 
   assert.equal(n(db, 'SELECT COUNT(*) AS n FROM posthog_survey_marks'), 0);
 });
 
+test('D5352: a survey-signal retry after the target write reuses the proposal-keyed demand signal', async () => {
+  const { env, fake, db } = await fixture();
+  const app = appFor(fake);
+  assert.equal((await call(app, env, FOUNDER, 'PUT', `/api/cycles/validate/posthog/surveys/${SURVEY_A}/marks`, {
+    project: P, question_id: 'q1', mark: 'would_pay',
+  })).status, 200);
+  await sync(app, env);
+  const proposal = db.prepare("SELECT id FROM posthog_proposals WHERE kind = 'survey_signal'").get() as any;
+  const at = () => call(app, env, FOUNDER, 'POST', `/api/cycles/validate/posthog/proposals/${proposal.id}/accept`, { project: P });
+
+  env.DB = flaky(env.DB, (sql: string) => sql.includes('SET target_ref = ?'), 1);
+  const first = await at();
+  assert.equal(first.status, 503, JSON.stringify(first.body));
+  const target = db.prepare('SELECT id, source_proposal_id FROM demand_signals').get() as any;
+  assert.equal(target.source_proposal_id, proposal.id, 'the surviving target is addressable by its proposal');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM demand_signals'), 1);
+  assert.equal((db.prepare('SELECT status FROM posthog_proposals WHERE id = ?').get(proposal.id) as any).status, 'pending');
+
+  const second = await at();
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM demand_signals'), 1, 'the retry must not duplicate the demand signal');
+  const decided = db.prepare('SELECT status, target_ref FROM posthog_proposals WHERE id = ?').get(proposal.id) as any;
+  assert.deepEqual({ ...decided }, { status: 'accepted', target_ref: `demand_signals:${target.id}` });
+});
+
 test('Accept an experiment: the hypothesis and direction are the founder\'s, never guessed; it lands as measured evidence', async () => {
   const { env, fake, db } = await fixture();
   const app = appFor(fake);

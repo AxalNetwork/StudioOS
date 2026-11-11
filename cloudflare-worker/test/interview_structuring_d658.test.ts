@@ -17,6 +17,7 @@
  *     --test cloudflare-worker/test/interview_structuring_d658.test.ts
  */
 import test from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
@@ -90,6 +91,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  applyAcceptRetryKeys(db); // D5352
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
