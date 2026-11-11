@@ -60,7 +60,7 @@ import {
 } from '../services/calendar';
 export { preflightOAuthSecrets };
 import { encryptString } from '../services/cryptoBox';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
 import { parseReturn, returnFromNonce, returnTag } from '../util/oauthReturn';
 
@@ -132,7 +132,8 @@ async function verifyState(env: Env, raw: string): Promise<string | null> {
 // string. Bootstrap the calendar shape once per isolate so the OAuth
 // start handler is self-healing.
 const CALENDAR_OAUTH_STATE_READY = new WeakMap<object, boolean>();
-async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
+/** Exported for #5343's runtime-DDL test. */
+export async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
   if (CALENDAR_OAUTH_STATE_READY.get(bindingKey(env))) return;
   try {
     await env.DB.exec(
@@ -144,11 +145,10 @@ async function ensureCalendarOauthStateTable(env: Env): Promise<void> {
       'expires_at TEXT NOT NULL, ' +
       "created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))",
     );
-    // Add expires_at if the table existed in the integrations/oauth.ts
-    // shape (no expires_at column). Ignore "duplicate column" errors.
-    try {
-      await env.DB.exec("ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''");
-    } catch { /* column already exists */ }
+    // Add expires_at if the table existed in the integrations/oauth.ts shape
+    // (no expires_at column). #5343: asked first (`runSchemaBootstrap`); a real
+    // failure reaches the catch below and the table is not marked ready.
+    await runSchemaBootstrap(env, ["ALTER TABLE oauth_state_tokens ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''"]);
     CALENDAR_OAUTH_STATE_READY.set(bindingKey(env), true);
   } catch (e) {
     console.warn('[CAL:ensureOauthStateTable]', (e as Error).message);
