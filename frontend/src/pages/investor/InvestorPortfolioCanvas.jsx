@@ -82,7 +82,12 @@ export default function InvestorPortfolioCanvas() {
     return { ...position, health, reported: reportedProjects.has(position.project_id) };
   }), [state.positions, state.health, reportedProjects]);
   const latestUpdate = state.updates[0];
-  const interventionCount = state.health?.totals?.intervention ?? rows.filter((row) => row.health?.intervention).length;
+  const interventionCount = state.health?.totals?.intervention;
+  const healthyCount = state.health?.totals?.green;
+  const unmeasured = state.health?.totals?.not_measured;
+  const healthUnavailable = state.unavailable.health || !Number.isInteger(interventionCount) || !Number.isInteger(healthyCount);
+  const healthStatus = healthUnavailable ? 'Health signals are unavailable.'
+    : `${interventionCount} flagged for attention${Number.isInteger(unmeasured) ? ` · ${unmeasured} without a measurement` : ''}`;
   const acceptedIntros = state.intros.filter((item) => ['accepted', 'meeting_set'].includes(item.status)).length;
   const hasPartialFailure = Object.values(state.unavailable).some(Boolean);
   const statCards = [
@@ -143,13 +148,13 @@ export default function InvestorPortfolioCanvas() {
             <article className="i4-card i4-updates" id="portfolio-updates">
                <div className="i4-section-head"><div><h2>Updates &amp; KPI collection</h2><p>{state.unavailable.updates ? 'Update source unavailable' : `${state.updates.length} founder-submitted update${state.updates.length === 1 ? '' : 's'} in this accessible book`}</p></div><Link to="/portfolio/updates" data-testid="link-investor-updates-detail">Open updates <ArrowUpRight size={13} /></Link></div>
                {state.unavailable.updates ? <div className="i4-empty"><Inbox size={16} /> Founder updates are temporarily unavailable. No empty-reporting claim is being made.</div> : latestUpdate ? <div className="i4-update"><div className="i4-proposal">Founder update</div><h3>{latestUpdate.title}</h3><p>{latestUpdate.project?.name || `Startup ${latestUpdate.project_id}`}{latestUpdate.period ? ` · ${latestUpdate.period}` : ''}</p><div className="i4-kpis">{Object.entries(latestUpdate.kpis || {}).slice(0, 4).map(([key, value]) => <div key={key}><span>{label(key)}</span><b>{String(value)}</b></div>)}</div><Link to="/portfolio/updates" className="i4-primary-link" data-testid="link-review-latest-founder-update">Review source update</Link></div> : <div className="i4-empty"><Inbox size={16} /> No founder update is available yet. Incoming reports retain their source when published.</div>}
-               <div className="i4-health-line"><Activity size={14} /><span>{state.unavailable.health ? 'Health signals are temporarily unavailable.' : interventionCount ? `${interventionCount} position${interventionCount === 1 ? '' : 's'} need attention.` : 'No intervention flags in the latest health sweep.'}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
+               <div className="i4-health-line"><Activity size={14} /><span>{healthStatus}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
             </article>
             <article className="i4-card i4-value-add" id="portfolio-value-add">
             <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
                <div className="i4-value-row"><UsersRound size={15} /><div><b>Introductions</b><p>{state.unavailable.intros ? 'Introduction records unavailable' : `${state.intros.length} recorded · ${acceptedIntros} accepted or meeting set`}</p></div><strong>{state.unavailable.intros ? 'Unavailable' : state.intros.length}</strong></div>
-               <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{state.unavailable.health ? 'Health source unavailable' : `${state.health?.totals?.green ?? 0} currently healthy in the latest sweep`}</p></div><strong>{state.unavailable.health ? 'Unavailable' : (state.health?.totals?.green ?? 0)}</strong></div>
-               <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{state.unavailable.health ? 'Health source unavailable' : 'Open the health register for reasons and source signals'}</p></div><strong>{state.unavailable.health ? 'Unavailable' : interventionCount}</strong></div>
+               <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{healthUnavailable ? 'Health source unavailable' : 'Healthy in the latest recorded snapshots'}</p></div><strong>{healthUnavailable ? 'Unavailable' : healthyCount}</strong></div>
+               <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{healthStatus}</p></div><strong>{healthUnavailable ? 'Unavailable' : interventionCount}</strong></div>
               <p className="i4-seam-note">Support given is kept beside the position it serves. Founder-facing records remain distinct.</p>
             </article>
           </section>
