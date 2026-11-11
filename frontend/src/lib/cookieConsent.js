@@ -4,13 +4,13 @@
 // ./storage). There is NO server-side logging or per-user storage — the visitor's
 // choice is a local preference.
 //
-// WHAT EACH CATEGORY GATES TODAY (D680, re-read 2026-10-12):
+// WHAT EACH CATEGORY GATES TODAY (D680, D5509):
 //   - analytics   — the first-party sign-up funnel tracker, `lib/funnel.js`.
 //                   It checks hasConsent('analytics') before it mints its
 //                   random id, persists anything or sends an event, and on
 //                   revoke it deletes its keys (see COOKIE_ROWS below).
 //   - functional  — nothing. No code calls hasConsent('functional').
-//   - advertising — nothing. No code calls hasConsent('advertising').
+//   - advertising — first-touch referral attribution (`lib/referralRef.js`).
 // The app loads no third-party analytics or advertising script. Functional and
 // advertising are still stored (the record's shape is unchanged), but the
 // preferences dialog draws a row only for a category in COOKIE_ROWS, and
@@ -25,7 +25,7 @@ const STORAGE_KEY = 'axal_cookie_consent_v1';
 
 // Bump when the cookie policy materially changes: a stored choice carrying an
 // older version is treated as "not decided", so every visitor is re-prompted.
-export const CONSENT_VERSION = 1;
+export const CONSENT_VERSION = 2;
 
 // Order matters for display. Essential is always on and not toggleable.
 export const COOKIE_CATEGORIES = ['essential', 'functional', 'analytics', 'advertising'];
@@ -37,15 +37,11 @@ const TOGGLEABLE = ['functional', 'analytics', 'advertising'];
  *
  * The canvas drew four rows: Essential, Preferences, Analytics, Marketing.
  *   - Essential is locked on.
- *   - Analytics is the one optional category with code behind it
- *     (`lib/funnel.js`). `controls` names the browser storage it writes, which
- *     the test checks is really written there and is gone when the row is off.
+ *   - Analytics controls signup funnel measurement and handle visit counts.
+ *   - Marketing controls first-touch referral attribution.
  *   - Preferences (view state, saved filters) has no row: those settings are
  *     kept whatever the visitor chooses, so a switch for them would do nothing.
  *     They are named under Essential instead.
- *   - Marketing has no row: nothing gates on it. The one attribution cookie the
- *     site sets, `axal_ref` (App.jsx, from `?ref=`), is set without asking, as
- *     it was before D680, so it is named under Essential too.
  * The descriptions say what the code does; where the canvas's wording did not
  * (its Analytics line described aggregate page reads, which is the cookieless
  * pageview counter in `lib/seo.js`, not the tracker this switch controls),
@@ -57,7 +53,7 @@ export const COOKIE_ROWS = [
     title: 'Essential',
     description:
       'Session, authentication, and security. Required for the workspaces to function. '
-      + 'This also keeps the settings you choose, and for 30 days the code of any referral link you arrived through.',
+      + 'This also keeps the settings you choose.',
     locked: true,
   },
   {
@@ -65,10 +61,21 @@ export const COOKIE_ROWS = [
     title: 'Analytics',
     description:
       'Which steps of signing up are reached and which link brought you here, kept under a random ID '
-      + 'in this browser and sent only to Axal.',
+      + 'in this browser and sent only to Axal. Handle visits are counted using a random ID kept for the tab session.',
     controls: {
       module: 'frontend/src/lib/funnel.js',
       storage: ['axal:funnel_anon_id', 'axal:funnel_once', 'axal:funnel_session_id', 'axal:funnel_attribution'],
+    },
+  },
+  {
+    key: 'advertising',
+    title: 'Marketing',
+    description:
+      'Remembers the first referral link you use so Axal can credit the referrer and apply eligible offers. '
+      + 'The cookie lasts up to 30 days for a code or 90 days for a handle.',
+    controls: {
+      module: 'frontend/src/lib/referralRef.js',
+      storage: ['axal_ref'],
     },
   },
 ];
@@ -162,7 +169,7 @@ export function resetConsent() {
 export function subscribe(callback) {
   if (typeof window === 'undefined') return () => {};
   const onChange = (e) => callback(e?.detail ?? readConsent());
-  const onStorage = (e) => { if (e.key === STORAGE_KEY) callback(readConsent()); };
+  const onStorage = (e) => { if (e.key === STORAGE_KEY || e.key === null) callback(readConsent()); };
   window.addEventListener(CHANGE_EVENT, onChange);
   window.addEventListener('storage', onStorage);
   return () => {
