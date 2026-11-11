@@ -165,7 +165,7 @@ export default {
         'Profile visibility and directory discoverability are separate controls. The Download my data JSON is a defined account snapshot, not an export of everything stored in every Axal VC subsystem.',
       howto: [
         'Open Account → Privacy (or /profile/visibility where available) and choose Public, Members only or Hidden. The corresponding stored values are public, network and private.',
-        'Public is served to anyone with the address; Members only is for signed-in members; Hidden is only for you. Directory and discoverability settings are separate from this profile visibility.',
+        'Until you choose, your profile is public. The visibility options are Public (anyone with the address) / Members only (signed-in Axal VC members) / Hidden (only you).',
         'Open Account → Account & data → Download my data (JSON). The current file includes your selected user profile fields, recent activity up to 500 records and an agents export when readable.',
         'The downloaded file does not contain the full deals, projects or KYC datasets; private relationship notes are not included in this endpoint. For data held in other subsystems or a full access request, contact support/privacy through the approved channel.',
         'Request account deletion from Account & data if appropriate. The request is reviewable and cancellable in the interface; do not treat the request itself as proof that all records were erased.',
