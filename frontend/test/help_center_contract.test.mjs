@@ -120,8 +120,8 @@ const CHAT_WORKER = read('cloudflare-worker/src/routes/customer_chat.ts');
 test('/help is the Help Center and the ticket flow sits under it', () => {
   assert.match(
     APP_CODE,
-    /path="\/help" element=\{guard\([^)]*<HelpCenterPage \/>\)\}/,
-    '/help must mount the Help Center, not the ticket tracker',
+    /path="\/help" element=\{<HelpCenterPage \/>\}/,
+    '/help must mount the public Help Center, not the ticket tracker',
   );
   assert.match(
     APP_CODE,
