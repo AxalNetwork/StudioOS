@@ -15,15 +15,36 @@ import { titleCase } from '../../lib/absence';
 import { companyHref } from '../cycles/reportingModel';
 import PortfolioReports from './PortfolioReports';
 
-const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
+const money = (value) => value == null || !Number.isFinite(Number(value)) ? 'Unavailable' : `$${Math.round(Number(value)).toLocaleString()}`;
 const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
-const dateLabel = (value) => value ? new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+const dateLabel = (value) => {
+  const at = value ? new Date(value) : null;
+  return at && Number.isFinite(at.getTime())
+    ? at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    : 'Unavailable';
+};
 const list = (value, ...keys) => {
   if (Array.isArray(value)) return value;
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const kpiText = (update) => Object.entries(update?.kpis || {}).slice(0, 4).map(([key, value]) => `${title(key)} ${typeof value === 'number' ? money(value) : String(value)}`).join(' · ');
+const unitFor = (key, units) => units?.get(key) || (/month|runway/i.test(key) ? 'months'
+  : /headcount|customer|employee|user|account/i.test(key) ? 'count'
+    : /pct|percent|margin|retention|churn/i.test(key) ? '%'
+      : /cash|burn|revenue|arr|mrr/i.test(key) ? 'USD' : null);
+const kpiValue = (key, value, units) => {
+  const numeric = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return String(value);
+  const unit = unitFor(key, units);
+  if (/^(usd|money|currency)$/i.test(unit || '')) return money(numeric);
+  if (unit === '%') return `${numeric.toLocaleString()}%`;
+  if (unit === 'months') return `${numeric.toLocaleString()} ${numeric === 1 ? 'month' : 'months'}`;
+  return numeric.toLocaleString();
+};
+export const kpiText = (update, rules = []) => {
+  const units = new Map((rules || []).map((rule) => [rule.kpi_key, rule.unit]));
+  return Object.entries(update?.kpis || {}).slice(0, 4).map(([key, value]) => `${title(key)} ${kpiValue(key, value, units)}`).join(' · ');
+};
 
 export default function InvestorPortfolioUpdates() {
   const [filter, setFilter] = useState('period');
@@ -48,7 +69,7 @@ export default function InvestorPortfolioUpdates() {
         unavailable: { positions: false, updates: optional[0].status === 'rejected', compliance: optional[1].status === 'rejected', health: optional[2].status === 'rejected' },
       });
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error?.message || 'The positions source could not be loaded.', unavailable: { positions: true, updates: true, compliance: true, health: true } }));
+      setState((current) => ({ ...current, loading: false, error: true, unavailable: { positions: true, updates: true, compliance: true, health: true } }));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -183,13 +204,13 @@ export default function InvestorPortfolioUpdates() {
       actions={investorZoneActions('portfolio/updates', { handlers: { chaseOverdue }, view: { header: ['Company', 'Stage', 'Arrived', 'State', 'Update'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.arrived, r.status, r.update?.title] } })}
     />
     {chaseNote && <div className="i4-partial" data-testid="status-chase-note">{chaseNote}</div>}
-    {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Portfolio update source unavailable in local development. No empty inbox claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
+    {state.error && <div className="i4-error" data-testid="status-investor-updates-error"><span>The portfolio update book could not be read.</span><button type="button" onClick={load}>Retry</button></div>}
     {partial && !state.loading && <div className="i4-partial" data-testid="status-investor-updates-partial">Some portfolio sources are temporarily unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
-    {state.loading ? <Skeleton /> : <>
-      <section className="i4-stats"><Stat label="Arrived" value={complianceUnavailable ? 'Unavailable' : `${arrived} of ${total}`} note={complianceUnavailable ? 'Cadence source unavailable' : `${rows.filter((row) => row.current === true && row.update).length} with a stored update`} /><Stat label="Never arrived" value={complianceUnavailable ? 'Unavailable' : neverArrived} note={complianceUnavailable ? 'Cadence source unavailable' : 'Current period not reported'} /><Stat label="Parse review" value="Not decided" note="Whether updates are parsed is the owner’s decision, asked on #1023" muted /><Stat label="Runway alerts" value={runwayAlerts} note={healthUnavailable ? 'Health source unavailable' : 'Below 6 months from health records'} /></section>
+    {state.loading ? <Skeleton /> : state.error ? null : <>
+      <section className="i4-stats"><Stat label="Arrived" value={complianceUnavailable ? 'Unavailable' : `${arrived} of ${total}`} note={complianceUnavailable ? 'Cadence source unavailable' : `${rows.filter((row) => row.current === true && row.update).length} with a stored update`} /><Stat label="Never arrived" value={complianceUnavailable ? 'Unavailable' : neverArrived} note={complianceUnavailable ? 'Cadence source unavailable' : 'Current period not reported'} /><Stat label="Source handling" value="Source-preserved" note="KPI values and narrative are shown as submitted" muted /><Stat label="Runway alerts" value={runwayAlerts} note={healthUnavailable ? 'Health source unavailable' : 'Below 6 months from health records'} /></section>
       {showingRules
         ? <RuleSet kpiSet={kpiSet} cadence={cadence} storedUpdates={storedUpdates} />
-        : <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · the chase writes to the log, never to the update</span></div><UpdateTable rows={visible} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} lastChaseByProject={lastChaseByProject} onChase={chaseOne} chasing={chasing} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company. IP2 does not edit, parse, or submit an update — the chase asks for one and is logged.</p></section>}
+        : <section className="i4-card i4-positions ip2-inbox"><div className="i4-section-head"><div><h2>Update inbox</h2><p>Cadence status and founder-submitted content</p></div><span>Source-preserved · the chase writes to the log, never to the update</span></div><UpdateTable rows={visible} rules={kpiSet || []} updatesUnavailable={state.unavailable.updates} complianceUnavailable={complianceUnavailable} lastChaseByProject={lastChaseByProject} onChase={chaseOne} chasing={chasing} /><p className="i4-seam-note"><span>Founder record</span> Submitted updates remain attributable to their source company and are shown as submitted. A chase asks the company for an update and is logged.</p></section>}
       {/* The artboard's band is "parse N updates … arriving as editable
           proposals". Half of that has somewhere to land and half does not, so
           half is mounted: the read names which asked-for figures are missing
@@ -206,15 +227,15 @@ export default function InvestorPortfolioUpdates() {
         empty="What arrived measured against what was asked for: which required figures no stored update carries, and which arrived as a sentence rather than a number. Ambiguity is named, never resolved into a figure."
         nothingToDraft="No stored update is recorded against an accessible company, so there is nothing to read the rule set against."
       />
-      <section className="i4-card ip2-unavailable"><div className="i4-section-head"><div><h2>Two rule sets, and only one of them exists</h2><p>What companies are asked for is stored; how a sentence becomes a number is not</p></div></div><strong>The collection rules are stored, and the Rules view above shows them.</strong><p>The KPI set companies are held to — the wording, the unit, the cadence and whether each is required — is stored firm-wide, and this page has been reading it on every load since it was written. What is not stored is an extraction rule: nothing records how “a team of ~12” becomes a headcount, so there is no parse-review state, no ambiguity flag and no proposal queue for this page to show. Those stay absent, and the strip above labels them rather than reporting a zero. Whether an extraction step should exist at all (a model proposing figures for you to accept, a check that lists the fields a founder left blank or not numeric, or nothing) is the owner’s decision, asked on #1023, and this page does not guess it.</p><p>Editing is a third thing again. No write path for the KPI set is exposed anywhere in the API, so the ops row leaves Edit rules unoffered rather than opening an editor that could not save.</p></section>
+      <section className="i4-card ip2-unavailable"><div className="i4-section-head"><div><h2>How updates are handled</h2><p>Reporting rules are visible; submitted text stays source-preserved</p></div></div><strong>The Rules view shows the KPI set companies report against.</strong><p>Narrative text is kept as submitted and is not converted into KPI figures. If a value is absent or written only in prose, this workspace names the gap instead of inferring a number.</p><p>The reporting rules are read-only here. Changes to what companies report are handled through the authorised portfolio workflow.</p></section>
       <footer className="i4-boundary">Investor workspace · updates shown are restricted to this investor’s accessible portfolio.</footer></>}
   </main><UpdatesRail rows={rows} unavailable={state.unavailable} /></div></ZonePrimaryScope>;
 }
 
-function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {
+function UpdateTable({ rows, rules, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {
   if (updatesUnavailable) return <div className="i4-empty"><AlertCircle size={16} />Portfolio update source unavailable. No empty-reporting claim is being made.</div>;
   if (!rows.length) return <div className="i4-empty"><Inbox size={16} />No accessible portfolio companies are recorded for this investor.</div>;
-  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{companyHref(row.project?.uid) ? <Link to={companyHref(row.project.uid)} data-testid={`link-company-${row.project_id}`}>{row.project?.name || `Startup ${row.project_id}`}</Link> : row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
+  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{companyHref(row.project?.uid) ? <Link to={companyHref(row.project.uid)} data-testid={`link-company-${row.project_id}`}>{row.project?.name || `Startup ${row.project_id}`}</Link> : row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : 'Unavailable'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update, rules) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
 }
 /**
  * The KPI rule set — what accessible companies are asked for, in the wording
@@ -301,7 +322,7 @@ function UpdatesRail({ rows, unavailable }) {
         unavailable.compliance ? 'Cadence compliance unavailable' : 'Reporting status read from cadence compliance',
       ]}
       unavailable={[
-        ['Parse review', 'No parse-review or extraction-rule fields are returned by the source, and whether updates are parsed at all is not decided yet.'],
+        ['Narrative extraction', 'Narrative text stays source-preserved; no figures are inferred from it.'],
         ['Editing', 'No update is edited or submitted from this page — the chase asks for one and is logged.'],
       ]}
     />

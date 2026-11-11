@@ -731,6 +731,8 @@ for (const [name, profile] of Object.entries(PROFILES)) {
     const canvas = canvasFilters(profile);
     // D549 explicitly excludes Cited in deck until its design/store exists.
     if (name === 'founder') canvas['research/ask'] = canvas['research/ask'].filter((label) => label !== 'Cited in deck');
+    // #5365 (F-09) retires IP2's Parse review chip: it was internal working copy shown to investors, and no extraction layer exists.
+    if (name === 'investor') canvas['portfolio/updates'] = canvas['portfolio/updates'].filter((label) => label !== 'Parse review');
     const zones = Object.keys(profile.table);
     assert.equal(zones.length, profile.zones, 'the table gained or lost a zone');
     for (const zone of zones) {

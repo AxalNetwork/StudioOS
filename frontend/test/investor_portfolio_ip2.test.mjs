@@ -168,19 +168,17 @@ test('the rule set is a stored table, and this page was already being handed it'
 test('the Rules chip is live, and it is a view rather than a predicate that empties the inbox', () => {
   const row = FILTERS.slice(FILTERS.indexOf("'portfolio/updates': ["), FILTERS.indexOf('],', FILTERS.indexOf("'portfolio/updates': [")));
   assert.match(row, /\{ canvas: 'Rules', key: 'rules' \}/, 'the Rules chip is unbuilt again');
-  // Parse review stays dark. Lighting it would be the defect this zone is
-  // careful about, one step further along.
-  assert.match(row, /\{ canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER, hover: '/,
-    'Parse review was lit over a store that does not exist');
+  assert.doesNotMatch(row, /Parse review/,
+    'internal parse-review working copy is visible to investors');
 
   // The page implements it, and implements it as a swap.
   assert.match(P, /const showingRules = filter === 'rules';/, 'the page does not implement the Rules key');
   assert.match(P, /\{showingRules\s*\?\s*<RuleSet/, 'the Rules chip no longer opens the rule set');
-  // The two dead predicates that used to return false are not back. `visible`
-  // is the only row filter on this page and it may only narrow on `overdue`.
+  // The dead predicates that used to return false are not back. `visible` is
+  // the only row filter on this page and it may only narrow on `overdue`.
   const visible = P.slice(P.indexOf('const visible = rows.filter'), P.indexOf('\n', P.indexOf('const visible = rows.filter')));
   assert.ok(!visible.includes("'rules'"), 'the Rules chip empties the inbox again');
-  assert.ok(!visible.includes("'parse'"), 'the Parse review chip empties the inbox again');
+  assert.ok(!visible.includes("'parse'"), 'a retired parse predicate filters the inbox');
 });
 
 test('the panel tells an unreadable rule set apart from an empty one', () => {
@@ -334,16 +332,14 @@ test('the AI band mounts the half that has somewhere to land, and refuses the ha
   assert.match(spec, /WHERE fund_id IS NULL\s*\n\s*ORDER BY cadence, sort_order/,
     'the gather now filters the rule set to one cadence and would report a gap-free month');
 
-  // THE HALF THAT IS NOT MOUNTED, stated on the page rather than left to be
-  // discovered by pressing something.
+  // The source-preservation boundary is stated without internal roadmap copy.
   const card = limits();
-  assert.match(card, /no parse-review state, no ambiguity flag and no proposal queue/,
-    'the card no longer says which parts of the band are absent');
-  assert.match(card, /nothing records how “a team of ~12” becomes a headcount/,
-    'the card no longer says what an extraction rule would be');
-  // And the strip still labels parse review rather than counting it.
-  assert.match(P, /<Stat label="Parse review" value="Not decided" note="Whether updates are parsed is the owner’s decision, asked on #1023" muted \/>/,
-    'the parse-review tile reports a number over a store that does not exist');
+  assert.match(card, /Narrative text is kept as submitted and is not converted into KPI figures/,
+    'the card no longer explains the source-preservation boundary');
+  assert.doesNotMatch(card, /parse-review|proposal queue|#\d+|IP2/,
+    'the card exposes internal working copy');
+  assert.match(P, /<Stat label="Source handling" value="Source-preserved"/,
+    'the strip no longer explains how submitted updates are handled');
 });
 
 test('the strip, the instrument and the header row still match the artboard', () => {
@@ -355,14 +351,15 @@ test('the strip, the instrument and the header row still match the artboard', ()
   for (const col of columns) {
     assert.ok(P.includes(`<th>${col}</th>`), `the update inbox lost its ${col} column`);
   }
-  for (const label of ['Arrived', 'Never arrived', 'Parse review', 'Runway alerts']) {
+  for (const label of ['Arrived', 'Never arrived', 'Source handling', 'Runway alerts']) {
     assert.ok(P.includes(`label="${label}"`), `the strip lost its ${label} tile`);
   }
   // The header row's two halves, verbatim from the artboard.
   const filters = /filters: fil\(\[([^\]]*)\]/.exec(board);
-  for (const label of filters[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''))) {
+  for (const label of filters[1].split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter((label) => label !== 'Parse review')) {
     assert.ok(FILTERS.includes(`canvas: '${label}'`), `the filter table lost ${label}`);
   }
+  assert.doesNotMatch(FILTERS, /canvas: 'Parse review'/, 'retired internal working copy returned');
   const ops = /ops:\[([^\]]*)\]/.exec(board);
   for (const label of ops[1].split(',').map((x) => x.trim().replace(/^'|'$/g, ''))) {
     assert.ok(ACTIONS.includes(`label: '${label}'`), `the ops row lost ${label}`);
