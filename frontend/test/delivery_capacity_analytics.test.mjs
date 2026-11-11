@@ -271,8 +271,14 @@ test('the cap writer is the firm’s own number, and it can be taken back', () =
   const put = between(worker, "partnerDelivery.put('/capacity/cap'", "partnerDelivery.put('/capacity/internal-hours'");
   assert.ok(/hours <= 0 \|\| hours >= 168/.test(put), 'a cap outside a week that exists is now accepted');
   assert.ok(/if \(b\.weekly_hours === null\) \{/.test(put), 'a cap can be set and not unset');
-  assert.equal((put.match(/DELETE FROM partner_capacity/g) || []).length, 2,
-    'one of the two clear paths — the firm’s default and one person’s — is gone');
+  // #5314 part 3: the cap row is read for its scope (two literal reads, the
+  // firm's default and one person's) and cleared by that row's id and revision.
+  assert.ok(put.includes("'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL'"),
+    'the firm’s default can no longer be read, so it can no longer be cleared');
+  assert.ok(put.includes("'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?'"),
+    'one person’s cap can no longer be read, so it can no longer be cleared');
+  assert.equal((put.match(/DELETE FROM partner_capacity WHERE id = \? AND revision = \?/g) || []).length, 1,
+    'the clear path is gone, or no longer names the revision it read');
   // TWO LITERAL STATEMENTS, because `check-sql-prepare` refuses a `${}` inside
   // `DB.prepare` and the partial unique indexes need the NULL case spelled out.
   assert.ok(/ON CONFLICT \(partner_id\) WHERE person_user_id IS NULL/.test(put));

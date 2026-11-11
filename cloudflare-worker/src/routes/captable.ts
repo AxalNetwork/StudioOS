@@ -30,7 +30,8 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
-import { ensureTier } from '../middleware/requireTier';
+import { ensureTier, userMeetsTier } from '../middleware/requireTier';
+import { recordCan, recordCapabilities, type RecordStanding } from '../services/capTableCapabilities';
 import type { Env } from '../types';
 import { requireAuth, isSuperAdmin } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
@@ -1155,23 +1156,38 @@ async function recordReader(c: Ctx) {
   return projectId;
 }
 
-/** The writer, and which of the three it is. `records`: only the owner or an admin may. */
+/** D5074: who the caller is on this venture, for the capability map. Read once, by the read and by every write. */
+async function recordStanding(c: Ctx, user: Awaited<ReturnType<typeof requireAuth>>, proj: Awaited<ReturnType<typeof loadProject>>, projectId: number): Promise<RecordStanding> {
+  const admin = user.role.toLowerCase() === 'admin';
+  const founderOwns = holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === proj!.founder_id;
+  return {
+    readable: canReadProject(user, proj!),
+    writable: canWriteProject(user, proj!),
+    admin,
+    superAdmin: isSuperAdmin(user),
+    owner: founderOwns || (!admin && (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner'),
+    plan: userMeetsTier(user, 'studio'),
+  };
+}
+
+/**
+ * The writer, and which of the three it is. `records`: only the owner or an admin may. D5074: every refusal here is
+ * the capability map's (`services/capTableCapabilities.ts`), the same map the read returns.
+ */
 async function recordWriter(c: Ctx, records: boolean): Promise<{ projectId: number; actor: RecordActor }> {
   const user = await requireAuth(c);
-  ensureTier(user, 'studio');
   const { projectId, proj } = await recordProject(c, user);
-  const role = user.role.toLowerCase();
-  const correction = role === 'admin' && !isSuperAdmin(user);
-  if (!canWriteProject(user, proj) && !correction) throw new HttpError(403, "You don't have access to that project");
-  if (correction) {
+  const standing = await recordStanding(c, user, proj, projectId);
+  const caps = recordCapabilities(standing);
+  if (!caps.plan) ensureTier(user, 'studio');
+  if (!recordCan(caps, 'propose')) throw new HttpError(403, "You don't have access to that project");
+  if (recordCan(caps, 'admin_reason_required')) {
     const b = await recordBody(c);
     const reason = typeof (b.reason ?? b.correction_reason) === 'string' ? String(b.reason ?? b.correction_reason).trim() : '';
     if (reason.length < CAPTABLE_SUPPORT_REASON_MIN || reason.length > CAPTABLE_SUPPORT_REASON_MAX) throw new RecordError(400, 'reason_required', 'A studio correction needs a support reason the founder can read.', { missing: ['reason'] });
   }
-  const founderOwns = holdsLicence(user, 'founder') && !!user.founder_id && user.founder_id === proj.founder_id;
-  const actorRole: RecordActor['role'] = role === 'admin' ? 'admin'
-    : founderOwns || (await getProjectMembershipRole(c.env, projectId, user.id)) === 'owner' ? 'owner' : 'cofounder';
-  if (records && actorRole === 'cofounder') {
+  const actorRole: RecordActor['role'] = standing.admin ? 'admin' : standing.owner ? 'owner' : 'cofounder';
+  if (records && !recordCan(caps, 'record')) {
     throw new HttpError(403, { error: 'owner_records', code: 'owner_records', message: 'A co-founder proposes; only the venture’s owner records it.', detail: 'A co-founder proposes; only the venture’s owner records it.' });
   }
   await auditMemberWrite(c, user, proj);
@@ -1190,8 +1206,13 @@ const recordBody = async (c: Ctx): Promise<Record<string, unknown>> => {
 };
 
 captable.get('/record/:projectId', async (c) => {
-  try { return c.json(await readRecord(c.env, await recordReader(c))); }
-  catch (e) { return recordError(c, e); }
+  try {
+    const projectId = await recordReader(c);
+    const user = await requireAuth(c);
+    const { proj } = await recordProject(c, user);
+    // D5074: the caller's capabilities ride with the record; the writes refuse from the same map.
+    return c.json({ ...(await readRecord(c.env, projectId)), capabilities: recordCapabilities(await recordStanding(c, user, proj, projectId)) });
+  } catch (e) { return recordError(c, e); }
 });
 
 captable.get('/record/:projectId/history', async (c) => {

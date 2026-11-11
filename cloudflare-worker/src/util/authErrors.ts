@@ -35,6 +35,14 @@ export const STEP_UP_REQUIRED = 'step_up_required';
 export const ADMIN_FROZEN = 'admin_frozen';
 
 /**
+ * D5249 — the sentence `requireAdmin` throws while "Require MFA for admins" is
+ * on and this admin has no MFA. 403 with a body naming where to enrol (option
+ * B, enrol-first): the enrolment routes are `requireAuth`, never
+ * `requireAdmin`, so the refusal cannot lock the holder out of the way back.
+ */
+export const ADMIN_MFA_REQUIRED = 'admin_mfa_required';
+
+/**
  * D142 — the MACHINE-READABLE half of `BRANCH_SUSPENDED`, and the reason it is
  * a second constant rather than the thrown sentence itself.
  *
@@ -108,6 +116,9 @@ export const AUTH_ERROR_STATUSES: Record<string, 401 | 403 | 423> = {
   // same reason. The two are twins, not two mechanisms: one asks whether this
   // DEPLOYMENT may act, the other whether this ADMIN may.
   [ADMIN_FROZEN]: 423,
+  // D5249 — an admin without MFA while enforcement is on. A permission
+  // refusal with a remedy, so 403; the body (adminMfaRequiredBody) names it.
+  [ADMIN_MFA_REQUIRED]: 403,
   // D134 — `step_up_required` was in this table nowhere and in `app.onError`
   // as a special case above the lookup, so the two readers disagreed exactly
   // as they did over `Super admin required` before D110 moved the table here.
@@ -185,6 +196,19 @@ export function branchSuspendedBody(err: unknown): {
     code: BRANCH_SUSPENDED_CODE,
     since: str(e?.since),
     reason: str(e?.reason),
+  };
+}
+
+/**
+ * D5249 — the enrol-first refusal's body: the code the SPA keys on and the
+ * page where enrolment lives. Shared by `app.onError` and `mapError`, as the
+ * step-up body is, so a route that catches its own throws answers the same.
+ */
+export function adminMfaRequiredBody(): { detail: string; code: string; enrol_path: string } {
+  return {
+    detail: 'Multi-factor authentication is required for administrators. Enrol an authenticator to continue.',
+    code: ADMIN_MFA_REQUIRED,
+    enrol_path: '/account/security',
   };
 }
 

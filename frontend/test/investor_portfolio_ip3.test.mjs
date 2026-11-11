@@ -267,7 +267,7 @@ test('an unrecorded hour count is never a zero, on the page or in the total', ()
     'an untimed entry renders as a number');
   // The strip refuses to print a 0 total when the only reason it is zero is
   // that nothing was timed.
-  assert.match(P, /totals\.entries_without_hours > 0 && totals\.hours_recorded === 0\s*\n?\s*\? 'Not recorded'/,
+  assert.match(P, /totals\.entries > 0 && totals\.entries_without_hours === totals\.entries\s*\n?\s*\? 'Not recorded'/,
     'a ledger of untimed entries reports 0 hours');
   // The route counts the untimed entries rather than folding them in.
   //

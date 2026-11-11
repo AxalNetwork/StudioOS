@@ -15,8 +15,8 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
-import { HoursEntries, SeatScopeEditor } from './deliveryEdits';
-import { useMutations, useZoneRead } from './useZoneMutations';
+import { HoursEntries, SeatScopeEditor, DeliveryNote } from './deliveryEdits';
+import { useMutations, useZoneRead, failureNote, stated } from './useZoneMutations';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 
 /**
@@ -165,17 +165,32 @@ export default function PartnerCapacityZone() {
     const r = await runMutation(key, fn);
     if (r.skipped) return false;
     if (!r.ok) {
-      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); loadEntries(); fn.after?.(); },
+        retry: (now) => act(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
       return false;
     }
     setNote({ ok: true, text: ok, scope });
     load();
+    if (fn.retried) fn.after?.();
     loadEntries();
     return true;
   }, [runMutation, load, loadEntries]);
 
   const d = state.data;
   const people = Array.isArray(d?.people) ? d.people : [];
+  // #5314 part 3: the revision each form's target was read at — null where the
+  // read found none (a first save), undefined where the read itself failed.
+  const personRow = (pid) => people.find((p) => String(p.user_id) === String(pid));
+  const capRevisionFor = (pid) => (pid ? (personRow(pid)?.cap_revision ?? null) : (d?.cap_revision ?? null));
+  const internalRevisionFor = (pid) => personRow(pid)?.internal_revision ?? null;
+  const hoursRevisionFor = (eid, pid, p) => (entries.kind !== 'ready' ? undefined
+    : entries.entries.find((x) => String(x.engagement_id) === String(eid) && String(x.person_user_id) === String(pid))?.revisions?.[p] ?? null);
   // D4822 part 2: `?engagement=` narrows the seats to that engagement. The roster stays the firm's: a person's room
   // is a fact about their whole month, not one client's slice of it, and the bar says so.
   const focus = useEngagementFocus();
@@ -330,7 +345,8 @@ export default function PartnerCapacityZone() {
                     const raw = sending.weekly_hours.trim();
                     const ok = await act(
                       'cap',
-                      () => api.setPartnerCapacityCap({
+                      (rev) => api.setPartnerCapacityCap({
+                        expected_revision: stated(rev, capRevisionFor(sending.person_user_id)),
                         person_user_id: sending.person_user_id ? Number(sending.person_user_id) : null,
                         // EMPTY CLEARS, it does not save a zero. Zero hours
                         // would say this person works none, which is a claim;
@@ -352,7 +368,7 @@ export default function PartnerCapacityZone() {
                 ? d?.cap_note
                 : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
             </p>
-            <SaveNote note={note?.scope === 'cap' ? note : null} />
+            <DeliveryNote note={note?.scope === 'cap' ? note : null} />
           </Section>
 
           {/* ══ THE HOURS NO CLIENT PAYS FOR ══════════════════════════════════ */}
@@ -382,7 +398,8 @@ export default function PartnerCapacityZone() {
                     const raw = sending.hours.trim();
                     const ok = await act(
                       'internal',
-                      () => api.setPartnerInternalHours({
+                      (rev) => api.setPartnerInternalHours({
+                        expected_revision: stated(rev, internalRevisionFor(sending.person_user_id)),
                         person_user_id: Number(sending.person_user_id),
                         period: d.period,
                         hours: raw === '' ? null : Number(raw),
@@ -396,7 +413,7 @@ export default function PartnerCapacityZone() {
                 </button>
               </div>
             </div>
-            <SaveNote note={note?.scope === 'internal' ? note : null} />
+            <DeliveryNote note={note?.scope === 'internal' ? note : null} />
           </Section>
 
           <Section title={`Client hours · ${d?.period || ''}`}>
@@ -435,9 +452,12 @@ export default function PartnerCapacityZone() {
                     const sending = hours;
                     const ok = await act(
                       'hours',
-                      () => api.savePartnerHours(
+                      (rev) => api.savePartnerHours(
                         sending.engagement_id, sending.person_user_id, d.period,
-                        { hours: Number(sending.hours) },
+                        {
+                          hours: Number(sending.hours),
+                          expected_revision: stated(rev, hoursRevisionFor(sending.engagement_id, sending.person_user_id, d.period)),
+                        },
                       ),
                       'Hours logged.', 'hours',
                     );
@@ -448,14 +468,14 @@ export default function PartnerCapacityZone() {
                 </button>
               </div>
             </div>
-            <SaveNote note={note?.scope === 'hours' ? note : null} />
+            <DeliveryNote note={note?.scope === 'hours' ? note : null} />
             <div className="mt-3">
               <HoursEntries
                 read={entries} onRetry={loadEntries}
                 isBusy={(e, p) => isPending(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`)}
                 onDelete={(e, p) => {
                   if (!window.confirm(`Delete ${e.hours[p]} h for ${e.person_name || 'this person'} in ${p}? The month then reads Not recorded, not 0.`)) return;
-                  act(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`, () => api.deletePartnerHours(e.engagement_id, e.person_user_id, p), 'Hours entry deleted.', 'hours');
+                  act(`hours-delete:${e.engagement_id}:${e.person_user_id}:${p}`, (rev) => api.deletePartnerHours(e.engagement_id, e.person_user_id, p, stated(rev, e.revisions?.[p])), 'Hours entry deleted.', 'hours');
                 }}
               />
             </div>
@@ -679,7 +699,7 @@ export default function PartnerCapacityZone() {
                     </span>
                     <SeatScopeEditor
                       seat={s} busy={isPending(`seat-scope:${s.id}`) || isPending(`seat-revoke:${s.id}`)}
-                      onSave={(scope) => act(`seat-scope:${s.id}`, () => api.updatePartnerSeat(s.id, { scope: scope || null }), 'Scope saved.', `seat:${s.id}`)}
+                      onSave={(scope) => act(`seat-scope:${s.id}`, (rev) => api.updatePartnerSeat(s.id, { scope: scope || null, expected_revision: stated(rev, s.revision) }), 'Scope saved.', `seat:${s.id}`)}
                     />
                     <span className="text-[11px] text-axal-faint">
                       granted {formatDay(s.granted_at)}
@@ -692,7 +712,7 @@ export default function PartnerCapacityZone() {
                           type="button" className={`${ghostButtonClass} ml-auto`}
                           aria-disabled={isPending(`seat-revoke:${s.id}`) || isPending(`seat-scope:${s.id}`) || undefined}
                           title="Records the revocation. The seat stays on this page struck through — the fact that access existed is worth keeping."
-                          onClick={() => { if (!isPending(`seat-revoke:${s.id}`)) act(`seat-revoke:${s.id}`, () => api.revokePartnerSeat(s.id), 'Seat revoked.', `seat:${s.id}`); }}
+                          onClick={() => { if (!isPending(`seat-revoke:${s.id}`)) act(`seat-revoke:${s.id}`, (rev) => api.revokePartnerSeat(s.id, stated(rev, s.revision)), 'Seat revoked.', `seat:${s.id}`); }}
                         >
                           Revoke
                         </button>
@@ -701,7 +721,7 @@ export default function PartnerCapacityZone() {
                 ))}
               </div>
             )}
-            <SaveNote note={String(note?.scope || '').startsWith('seat:') ? note : null} />
+            <DeliveryNote note={String(note?.scope || '').startsWith('seat:') ? note : null} />
           </Section>
 
           <StatedLimit title="What this page will and will not say">

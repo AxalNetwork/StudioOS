@@ -384,6 +384,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
       ['recipient_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN recipient_user_id INTEGER'],
       ['opened_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN opened_by_user_id INTEGER'],
       ['signed_off_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN signed_off_by_user_id INTEGER'],
+      // #5316 / migration 202611110740: the "ready to send" mark, cleared by the send.
+      ['ready_at', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_at TEXT'],
+      ['ready_by_user_id', 'ALTER TABLE advisor_deliverable_versions ADD COLUMN ready_by_user_id INTEGER'],
     ]);
     await addMissingColumns(env, 'advisor_session_types', [
       ['is_included', 'ALTER TABLE advisor_session_types ADD COLUMN is_included INTEGER'],
@@ -391,9 +394,18 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisor_bookings', [
       ['session_type_id', 'ALTER TABLE advisor_bookings ADD COLUMN session_type_id INTEGER'],
       ['booking_link_id', 'ALTER TABLE advisor_bookings ADD COLUMN booking_link_id INTEGER'],
+      // #5316 / migration 202611110746: a session recorded as included in an engagement.
+      ['included_at', 'ALTER TABLE advisor_bookings ADD COLUMN included_at TEXT'],
+      ['included_by_user_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_by_user_id INTEGER'],
+      ['included_engagement_id', 'ALTER TABLE advisor_bookings ADD COLUMN included_engagement_id INTEGER'],
     ]);
     await addMissingColumns(env, 'advisor_booking_links', [
       ['opens_count', 'ALTER TABLE advisor_booking_links ADD COLUMN opens_count INTEGER'],
+    ]);
+    // #5316 / migration 202611110734: why a signed engagement ended (bare here;
+    // the CHECK is the migration's, the route validates every write).
+    await addMissingColumns(env, 'advisor_engagements', [
+      ['end_reason', 'ALTER TABLE advisor_engagements ADD COLUMN end_reason TEXT'],
     ]);
     READY.set(key, true);
   } catch (e) {
