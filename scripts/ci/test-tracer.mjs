@@ -1,5 +1,5 @@
 /** D5608 — opt-in dependency and timing evidence from Node test-file processes. */
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { performance } from 'node:perf_hooks';
@@ -10,16 +10,16 @@ function start() {
   if (!process.env.TEST_TRACE_DIR) return;
   const root = resolve(process.env.TEST_TRACE_ROOT || process.cwd());
   const traceDir = resolve(root, process.env.TEST_TRACE_DIR);
-  const isTest = !process.env.TEST_TRACE_TEST && process.env.NODE_TEST_CONTEXT === 'child-v8';
-  const test = inRepo(process.env.TEST_TRACE_TEST || (isTest ? process.argv[1] : null), root);
+  const isTest = !process.env.TEST_TRACE_TEST && process.env.NODE_TEST_CONTEXT === 'child-v8' &&
+    /\.(?:test|spec)\.[^/\\]+$/.test(process.argv[1] ?? '');
+  const owner = process.env.TEST_TRACE_TEST;
+  const test = inRepo(owner ? resolve(root, owner) : isTest ? process.argv[1] : null, root);
   if (!test) return;
 
   const fs = process.getBuiltinModule('node:fs');
   const modules = process.getBuiltinModule('node:module');
   const subprocess = process.getBuiltinModule('node:child_process');
   const { mkdirSync, writeFileSync } = fs;
-  const nativeRealpath = fs.realpath.native;
-  const nativeRealpathSync = fs.realpathSync.native;
   const reads = new Set();
   const directories = new Set();
   const resolvedModules = new Set();
@@ -28,12 +28,13 @@ function start() {
   const sqlite = new Set();
   const children = new Set();
   let opaque = false;
-  const cwd = () => process.cwd();
+  const repoPath = (input) => {
+    try { return inRepo(input, root); }
+    catch { return null; } // The observed operation owns its argument validation.
+  };
   const collect = (set, input) => {
-    try {
-      const path = inRepo(input, root, cwd());
-      if (path !== null) set.add(path);
-    } catch { /* The observed operation owns its argument validation. */ }
+    const path = repoPath(input);
+    if (path !== null) set.add(path);
   };
   const wrap = (target, name, observe) => {
     const original = target?.[name];
@@ -50,9 +51,17 @@ function start() {
     Object.defineProperties(observed, properties);
     target[name] = observed;
   };
-  const record = (set, paths = (args) => [args[0]]) => (original, self, args) => {
+  const record = (set) => (original, self, args) => {
+    collect(set, args[0]);
+    return Reflect.apply(original, self, args);
+  };
+  const recordOpen = (original, self, args) => {
+    if (readsFromOpen(args[1])) collect(reads, args[0]);
+    return Reflect.apply(original, self, args);
+  };
+  const recordGlob = (original, self, args) => {
     try {
-      for (const input of paths(args)) collect(set, input);
+      for (const input of globRoots(args)) collect(directories, input);
     } catch { /* Preserve the original call even for an invalid input. */ }
     return Reflect.apply(original, self, args);
   };
@@ -70,19 +79,19 @@ function start() {
     } catch { /* Trace output is advisory. */ }
   });
 
-  for (const name of ['readFile', 'readFileSync', 'createReadStream', 'readlink', 'readlinkSync', 'copyFile', 'copyFileSync', 'cp', 'cpSync']) {
+  for (const name of ['readFile', 'readFileSync', 'createReadStream', 'readlink', 'readlinkSync']) {
     wrap(fs, name, record(reads));
   }
-  for (const name of ['readFile', 'readlink', 'copyFile', 'cp']) wrap(fs.promises, name, record(reads));
-  for (const name of ['open', 'openSync']) wrap(fs, name, record(reads, readOpen));
-  wrap(fs.promises, 'open', record(reads, readOpen));
+  for (const name of ['readFile', 'readlink']) wrap(fs.promises, name, record(reads));
+  for (const name of ['open', 'openSync']) wrap(fs, name, recordOpen);
+  wrap(fs.promises, 'open', recordOpen);
   for (const name of ['readdir', 'readdirSync', 'opendir', 'opendirSync']) wrap(fs, name, record(directories));
   for (const name of ['readdir', 'opendir']) wrap(fs.promises, name, record(directories));
-  for (const name of ['glob', 'globSync']) wrap(fs, name, record(directories, globRoots));
-  wrap(fs.promises, 'glob', record(directories, globRoots));
+  for (const name of ['glob', 'globSync']) wrap(fs, name, recordGlob);
+  wrap(fs.promises, 'glob', recordGlob);
 
   const probe = (input, found) => collect(found ? hits : misses, input);
-  for (const name of ['existsSync', 'statSync', 'lstatSync', 'accessSync', 'realpathSync']) {
+  for (const name of ['existsSync', 'statSync', 'lstatSync', 'accessSync']) {
     wrap(fs, name, (original, self, args) => {
       try {
         const result = Reflect.apply(original, self, args);
@@ -94,40 +103,36 @@ function start() {
       }
     });
   }
-  for (const name of ['exists', 'stat', 'lstat', 'access', 'realpath']) {
+  for (const name of ['exists', 'stat', 'lstat', 'access']) {
     wrap(fs, name, (original, self, args) => {
       const last = args.length - 1;
       const callback = args[last];
       if (typeof callback === 'function') {
-        args[last] = function (...result) {
-          probe(args[0], name === 'exists' ? result[0] : !result[0]);
+        const path = repoPath(args[0]);
+        if (path !== null) args[last] = function (...result) {
+          const found = name === 'exists' ? result[0] : !result[0];
+          (found ? hits : misses).add(path);
           return Reflect.apply(callback, this, result);
         };
       }
       return Reflect.apply(original, self, args);
     });
-    wrap(fs.promises, name, (original, self, args) => Reflect.apply(original, self, args).then(
-      (result) => { probe(args[0], true); return result; },
-      (error) => { probe(args[0], false); throw error; },
-    ));
+    wrap(fs.promises, name, (original, self, args) => {
+      const path = repoPath(args[0]);
+      const promise = Reflect.apply(original, self, args);
+      if (path === null) return promise;
+      return promise.then(
+        (result) => { hits.add(path); return result; },
+        (error) => { misses.add(path); throw error; },
+      );
+    });
   }
-
-  // fs.realpath and realpathSync expose an additional native implementation.
-  // Preserve it and record its calls through the same wrappers.
-  fs.realpath.native = function (input, ...args) {
-    collect(reads, input);
-    return Reflect.apply(nativeRealpath, this, [input, ...args]);
-  };
-  fs.realpathSync.native = function (input, ...args) {
-    collect(reads, input);
-    return Reflect.apply(nativeRealpathSync, this, [input, ...args]);
-  };
 
   let sqliteWrapped = false;
   modules.registerHooks?.({
     resolve(specifier, context, next) {
       const result = next(specifier, context);
-      if (result.url?.startsWith('file:')) collect(resolvedModules, result.url);
+      if (result.url?.startsWith('file:') && !result.url.includes('/node_modules/')) collect(resolvedModules, result.url);
       if (result.url === 'node:sqlite' && !sqliteWrapped) {
         sqliteWrapped = true;
         try {
@@ -157,7 +162,7 @@ function start() {
       try {
         const index = Array.isArray(args[1]) ? 2 : 1;
         const options = args[index];
-        const validOptions = options == null || typeof options === 'object';
+        const validOptions = options == null || (typeof options === 'object' && !Array.isArray(options));
         const command = name === 'fork' ? options?.execPath ?? process.execPath : args[0];
         const node = typeof command === 'string' && (command === process.execPath || /(?:^|[\\/])node(?:\.exe)?$/.test(command));
         children.add(typeof command === 'string' ? command.split(/[\\/]/).at(-1) : 'unknown');
@@ -178,11 +183,6 @@ function start() {
       return Reflect.apply(original, self, args);
     });
   }
-  // Indirect Node children may inherit the environment from a shell. The
-  // direct shell itself remains opaque because its other reads are invisible.
-  process.env.TEST_TRACE_TEST = test;
-  process.env.TEST_TRACE_ROOT = root;
-  process.env.TEST_TRACE_DIR = traceDir;
   modules.syncBuiltinESMExports();
 }
 
@@ -190,20 +190,29 @@ function sorted(values) {
   return [...values].sort();
 }
 
-function inRepo(input, root, cwd = root) {
-  if (input instanceof URL || (typeof input === 'string' && input.startsWith('file:'))) input = fileURLToPath(input);
-  if (Buffer.isBuffer(input)) input = input.toString();
-  if (typeof input !== 'string' || !input) return null;
-  const path = relative(root, resolve(cwd, input));
-  if (isAbsolute(path) || path === '..' || path.startsWith(`..${sep}`)) return null;
-  const parts = path.split(sep);
-  if (parts.includes('node_modules')) return null;
-  return parts.join('/') || '.';
+function inRepo(input, root) {
+  if (typeof input !== 'string') {
+    if (input instanceof URL) input = fileURLToPath(input);
+    else if (Buffer.isBuffer(input)) input = input.toString();
+    else return null;
+  } else if (input.startsWith('file:')) {
+    input = fileURLToPath(input);
+  }
+  if (!input) return null;
+  const canonical = sep === '/' && input.startsWith('/') &&
+    !input.includes('/.') && !input.includes('//') && !input.endsWith('/');
+  const absolute = canonical ? input : resolve(input);
+  if (absolute === root) return '.';
+  const prefix = root.endsWith(sep) ? root : root + sep;
+  if (!absolute.startsWith(prefix)) return null;
+  const path = absolute.slice(prefix.length);
+  if (path === 'node_modules' || path.startsWith('node_modules' + sep) ||
+      path.includes(sep + 'node_modules' + sep) || path.endsWith(sep + 'node_modules')) return null;
+  return sep === '/' ? path : path.replaceAll(sep, '/');
 }
 
-function readOpen(args) {
-  const flags = args[1];
-  return (typeof flags === 'number' ? (flags & 3) !== 1 : flags == null || /^[r]|\+/.test(flags)) ? [args[0]] : [];
+function readsFromOpen(flags) {
+  return typeof flags === 'number' ? (flags & 3) !== 1 : flags == null || (typeof flags === 'string' && /^r|\+/.test(flags));
 }
 
 function globRoots([patterns, options]) {

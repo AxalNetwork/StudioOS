@@ -38,7 +38,7 @@ function fixture(t) {
       const db = new DatabaseSync('local.db');
       db.close();
       const { stdout, stderr } = await promisify(execFile)(process.execPath, ['-e',
-        "require('node:fs').readFileSync('child.txt'); console.log('ok')"], { env: {} });
+        "require('node:fs').readFileSync('../child.txt'); console.log('ok')"], { cwd: 'listed', env: {} });
       assert.equal(stdout.trim(), 'ok');
       assert.equal(stderr, '');
       assert.equal(spawnSync('/bin/sh', ['-c', 'true']).status, 0);
