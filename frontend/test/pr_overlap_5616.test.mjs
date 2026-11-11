@@ -83,6 +83,6 @@ test('workflow has exact read/comment permissions, pinned actions, and safe trig
   const permissions=[...source.matchAll(/^      (contents|issues|pull-requests): (\w+)$/gm)].map(m=>m.slice(1));
   assert.deepEqual(permissions,[['contents','read'],['issues','write'],['pull-requests','write']]);
   assert.doesNotMatch(source,/workflow_run|pull_request_target/);
-  assert.match(source,/filter: blob:none/);
+  assert.match(source,/filter: blob:none/);assert.match(source,/if: github.ref == 'refs\/heads\/main'/);
   for(const match of source.matchAll(/uses: (\S+)/g))assert.match(match[1],/@[a-f0-9]{40}$/);
 });
