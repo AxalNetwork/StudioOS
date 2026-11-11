@@ -19,6 +19,15 @@ import type { CalendarEvent } from '../calendar';
 
 export type SourceFamily = 'meetings' | 'events' | 'validate' | 'grow' | 'deadlines' | 'raise' | 'tasks' | 'learning' | 'external' | 'agents';
 export const SOURCE_FAMILIES: readonly SourceFamily[] = ['meetings', 'events', 'validate', 'grow', 'deadlines', 'raise', 'tasks', 'learning', 'external', 'agents'];
+/**
+ * Each family's name as a member reads it. D5205 (#5205): moved here from `prefs.ts` (which re-exports it) so
+ * the page can import the whole registry with no database code behind it: `/calendar`'s Kinds filter, its
+ * families and its legend are built from this file, not from a second list in the frontend.
+ */
+export const FAMILY_LABELS: Readonly<Record<SourceFamily, string>> = Object.freeze({
+  meetings: 'Meetings', events: 'Events', validate: 'Validate', grow: 'Grow', deadlines: 'Deadlines',
+  raise: 'Raise', tasks: 'Tasks', learning: 'Learning', external: 'From other calendars', agents: 'AI agents',
+});
 
 export interface SourceDef {
   family: SourceFamily;

@@ -30,6 +30,7 @@ import { computeDiscount, getPromoById, planKeyOf, promoExpired, readIntervals, 
 import { canRedeemPromo } from './promoRedemption';
 import { planByKey } from './planCatalogue';
 import { todayUtc } from './referralPartnerTerms';
+import { plainStripeAmount, suffixAmount } from '../../../frontend/src/lib/money.js';
 
 export const NOT_RECORDED = 'Not recorded';
 export const OFFER_STATUSES = ['active', 'paused', 'ended'] as const;
@@ -102,6 +103,13 @@ function planInScope(promo: PromoRow, product: { metadata?: Record<string, strin
 export type AutoOffer = { offer: OfferRow; promo: PromoRow; discountCents: number };
 export type OfferSkip = 'paused' | 'ended' | 'budget_used' | 'terms_budget_used' | 'currency' | 'code_refused' | 'plan_not_in_offer';
 
+/** Recover the automatic offer a checkout reference already reserved. */
+export async function heldAutoOffer(env: Env, promoId: string, unitAmount: number): Promise<AutoOffer | null> {
+  const offer = await env.DB.prepare('SELECT * FROM influencer_offers WHERE promo_id = ? ORDER BY id LIMIT 1').bind(promoId).first<OfferRow>();
+  const promo = offer ? await getPromoById(env, promoId) : null;
+  return offer && promo ? { offer, promo, discountCents: computeDiscount(promo, unitAmount).discountCents } : null;
+}
+
 /**
  * The offer checkout applies for this member and price, or null. `skipped`
  * says why each of the influencer's offers was not applied, for the tests and
@@ -154,7 +162,7 @@ export function whoFor(promo: PromoRow): string {
 export function discountLine(promo: PromoRow): string {
   let amount: string;
   if (promo.percent_off != null) amount = `${promo.percent_off}% off`;
-  else if (promo.amount_off != null && promo.currency) amount = `${(promo.amount_off / 100).toFixed(2)} ${promo.currency.toUpperCase()} off`;
+  else if (promo.amount_off != null && promo.currency) amount = `${plainStripeAmount(promo.amount_off, promo.currency)} ${promo.currency.toUpperCase()} off`;
   else return NOT_RECORDED;
   if (promo.duration === 'repeating') return promo.duration_in_months ? `${amount} for ${promo.duration_in_months} months` : `${amount} (${NOT_RECORDED.toLowerCase()} how many months)`;
   if (promo.duration === 'forever') return `${amount} every invoice`;
@@ -281,7 +289,7 @@ export async function linkOffer(env: Env, adminId: number, influencerUserId: num
     const linked = await env.DB.prepare(`SELECT COALESCE(SUM(budget_cents), 0) AS n FROM influencer_offers WHERE influencer_user_id = ? AND status <> 'ended' AND currency = ?`)
       .bind(influencerUserId, input.currency).first<{ n: number }>();
     if (Number(linked?.n || 0) + input.budget_cents > cap.cents) {
-      return { status: 409, code: 'terms_budget_exceeded', message: `The terms allow ${(cap.cents / 100).toFixed(2)} ${cap.currency} of offers in all. Lower this budget or end another offer.` };
+      return { status: 409, code: 'terms_budget_exceeded', message: `The terms allow ${suffixAmount(cap.cents, cap.currency)} of offers in all. Lower this budget or end another offer.` };
     }
   }
   const uid = newUid();

@@ -19,7 +19,8 @@
  */
 import type { Env } from '../types';
 import { readMeta, laterOf, type OperationalReadMeta } from '../util/operationalRead';
-import { buildHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
+import { readMeetingBotHealth } from './meetingBotHealth';
+import { buildHealth, readBranchHealth, readCronStreaks, readTelemetryHealth, readWebhookHealth, type HealthInput } from './platformHealth';
 import { readWebhookDeliveries } from './stripeWebhookDeliveries';
 import { CRON_TRIGGERS, STALE_GRACE_MINUTES, latestRunPerTrigger, triggerState } from '../util/cronHistory';
 import { dlqDepth } from './deadLetters';
@@ -28,7 +29,7 @@ import { telegramTokenConfigured } from './telegramClient';
 import { xClientConfigured } from './xClient';
 import { MANAGED_PROVIDERS, keyStateOf, readProviderKeyLastSet, readProviderKeyStatus } from './providerOauthKeys';
 import { githubMirrorTarget } from './githubSync';
-import { readRecentSyncAttempts, readTicketSync } from './supportQueues';
+import { readRecentSyncAttempts, readTicketSync, SYNC_LAG_UNREADABLE } from './supportQueues';
 import { getPublishableKey, maskPublishableKey, publishableKeyMode, readCatalogMirrorSummary, CATALOG_SYNC_CAPABILITY } from './catalog';
 import { promoState, readProductIds } from './promos';
 
@@ -66,6 +67,13 @@ const LAST_SET_BASIS_NOTE =
   'A key held as a Worker secret is dated by the last save or rotation the Integration keys '
   + 'console recorded; one set at deploy, or saved again at deploy after being removed from the '
   + 'console, has no date here. A key held in the database is dated by its row.';
+
+/** D5304: where a key's expiry and last use come from, and what neither means. */
+const KEY_STAMPS_NOTE =
+  'Expiry is recorded only where the provider reports one: the date its console shows, entered '
+  + 'when the key is saved or rotated. No managed provider returns an expiry to any call the '
+  + 'platform makes. Last use is the last call that authenticated with the key and succeeded, '
+  + 'recorded at most once an hour. A key saved again at deploy keeps the stamps of the key before it.';
 
 /** P2's note: what the recent list is, and is not. */
 const SYNC_RECENT_NOTE =
@@ -319,7 +327,13 @@ export async function readIntegrationKeySummary(env: Env) {
         lastSetAt = item.updated_at ?? null;
         lastSetBasis = lastSetAt ? 'd1_row' : 'no_record';
       }
-      return { provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis };
+      // D5304: a key's expiry and last use belong to the key in place, so a provider with no key carries neither.
+      const held = state === 'env' || state === 'db';
+      return {
+        provider_key: item.provider_key, state, last_set_at: lastSetAt, last_set_basis: lastSetBasis,
+        expires_at: held ? item.expires_at : null,
+        last_used_at: held ? item.last_used_at : null,
+      };
     });
     const count = (st: string) => items.filter((it) => it.state === st).length;
     return {
@@ -333,6 +347,10 @@ export async function readIntegrationKeySummary(env: Env) {
       counts: { env: count('env'), db: count('db'), unset: count('unset'), unreadable: count('unreadable') },
       items,
       last_set_available: lastSet.available,
+      stamps_available: status.stamps_readable,
+      stamps_reason: status.stamps_readable
+        ? KEY_STAMPS_NOTE
+        : 'The key table\'s expiry and last-use columns could not be read, so both are unknown for every key.',
       last_set_reason: lastSet.available
         ? LAST_SET_BASIS_NOTE
         : 'The audit log could not be read, so when a key held as a Worker secret was last saved is unknown.',
@@ -471,6 +489,9 @@ export type PlatformSummaryReaders = {
   cron_streaks: (env: Env) => Promise<unknown>;
   webhook_health: (env: Env) => Promise<unknown>;
   telemetry: (env: Env) => Promise<unknown>;
+  /** D5370: the meeting bot's start outcomes, and each live branch's last stored check. */
+  meeting_bot_health: (env: Env) => Promise<unknown>;
+  branch_health: (env: Env) => Promise<unknown>;
 };
 
 export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
@@ -488,6 +509,8 @@ export const PLATFORM_SUMMARY_READERS: PlatformSummaryReaders = {
   cron_streaks: (env) => readCronStreaks(env),
   webhook_health: readWebhookHealth,
   telemetry: (env) => readTelemetryHealth(env),
+  meeting_bot_health: (env) => readMeetingBotHealth(env),
+  branch_health: readBranchHealth,
 };
 
 /** Each block's answer when its reader fails or times out: its own shape, `available: false`, and why. */
@@ -517,6 +540,8 @@ function fallbacks(env: Env): Record<keyof PlatformSummaryReaders, (w: 'failed' 
     cron_streaks: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The recent runs of each scheduled job')(w) }),
     webhook_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The webhook delivery streak')(w) }),
     telemetry: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The telemetry probe')(w) }),
+    meeting_bot_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The meeting bot\'s start outcomes')(w) }),
+    branch_health: (w: 'failed' | 'timed_out') => ({ available: false, reason: why('The branches\' stored health checks')(w) }),
   };
 }
 
@@ -540,6 +565,8 @@ export const PLATFORM_READ_SOURCES: Record<keyof PlatformSummaryReaders, string>
   cron_streaks: 'cron_run_history (D1), the latest runs of each declared trigger',
   webhook_health: 'activity_logs (D1), the Stripe webhook\'s request log',
   telemetry: 'Analytics Engine, through its SQL API',
+  meeting_bot_health: 'meeting_bots (D1): each run\'s startup stage, code and first callback (D5153)',
+  branch_health: 'licence_deployments (D1): the last health check Deployments stored for each live branch (D452)',
 };
 
 type Block = Record<string, unknown> | null | undefined;
@@ -555,10 +582,22 @@ export function blockReadMeta(key: keyof PlatformSummaryReaders, value: unknown,
   const base = { read_at: readAt, source };
   switch (key) {
     case 'github_sync': {
-      const parts = [obj(b?.window), obj(b?.recent)];
+      const window = obj(b?.window);
+      const recent = obj(b?.recent);
+      const parts = [window, recent];
       const up = parts.filter(answered);
       const down = parts.find((p) => !answered(p));
-      return readMeta({ ...base, answered: up.length > 0, complete: up.length === parts.length, reason: reasonOf(down ?? null) });
+      // The window's counts and its create-to-mirror lag are separate reads. The
+      // counts can answer while ticket_sync_events does not; keep those counts,
+      // but do not call the composite complete when its lag is unreadable.
+      const lag = obj(window?.lag);
+      const lagUnreadable = answered(window) && str(lag?.reason) === SYNC_LAG_UNREADABLE;
+      return readMeta({
+        ...base,
+        answered: up.length > 0,
+        complete: up.length === parts.length && !lagUnreadable,
+        reason: reasonOf(down ?? null) ?? (lagUnreadable ? SYNC_LAG_UNREADABLE : null),
+      });
     }
     case 'payments_catalog': {
       const catalog = obj(b?.catalog);
@@ -650,6 +689,8 @@ export async function readPlatformSummary(env: Env, { readers = PLATFORM_SUMMARY
       webhook: got.webhook_health as HealthInput['webhook'],
       telemetry: got.telemetry as HealthInput['telemetry'],
       published: got.incidents as HealthInput['published'],
+      meeting_bot: got.meeting_bot_health as HealthInput['meeting_bot'],
+      branches: got.branch_health as HealthInput['branches'],
       stripe_configured: !!env.STRIPE_SECRET_KEY,
       now: new Date(readAt),
     }),

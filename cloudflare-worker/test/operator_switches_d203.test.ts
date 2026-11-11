@@ -679,6 +679,7 @@ test('D4703: the take rate needs the write bar, and is saved with its audit row'
 test('D4703: HQ reads the advisory charges owed back, open first; a plain admin cannot', async () => {
   const db = freshDb();
   db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611070915_advisory_refunds_due.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611100930_advisory_refunds_due_resolution_reason.sql'), 'utf8'));
   db.exec(`INSERT INTO advisory_refunds_due (booking_id, booking_uid, booking_status, payment_intent_id, amount_cents, currency, created_at, resolved_at)
     VALUES (1, 'bk-old', 'cancelled', 'pi_1', 30000, 'usd', '2026-11-01 00:00:00', '2026-11-02 00:00:00'),
            (2, 'bk-new', 'no_show', 'pi_2', 12000, 'usd', '2026-11-05 00:00:00', NULL)`);

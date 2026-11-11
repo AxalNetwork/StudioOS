@@ -60,7 +60,7 @@ test('the catalogue reads `.items` on both tabs, never `.offerings`', () => {
 
 test('My offerings reads the route the worker actually serves', () => {
   const code = codeOnly(PAGE);
-  assert.match(code, /api\.listServiceOfferings\(\{ mine: 1 \}\)/,
+  assert.match(code, /api\.listServiceOfferings\(\{ mine: 1, page \}\)/,
     '`?mine=1` scopes on owner_user_id and includes inactive drafts — the arm services.ts added for this view');
   assert.doesNotMatch(code, /listPartnerOfferings/,
     'that method called a route the worker has never served');

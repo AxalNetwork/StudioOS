@@ -15,6 +15,7 @@
  * the one decision that names a tier instead.
  */
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { formatMinorOrCount, parseMinor } from '../../../lib/money.js';
 
 export { NOT_RECORDED };
 export const HQ_READS = 'HQ reads';
@@ -88,11 +89,8 @@ export function absenceWord(reason) {
 export function money(cents, currency) {
   const n = Number(cents);
   if (!Number.isFinite(n)) return NOT_RECORDED;
-  try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: String(currency || '').toUpperCase() }).format(n / 100);
-  } catch {
-    return `${(n / 100).toFixed(2)} ${currency}`;
-  }
+  // D5373: at the currency's own decimals; a code that is not a listed currency names the stored count.
+  return formatMinorOrCount(n, String(currency || '').toUpperCase(), { locale: 'en-US' });
 }
 
 /**
@@ -218,14 +216,21 @@ export function defaultsBody({ rate = '', invoices = '', budget = '', currency =
     body.duration_invoices = n;
   }
   const b = String(budget).trim();
+  let budgetText = null;
   if (b === '') body.offer_budget_cents = null;
   else {
     const n = Number(b);
     if (!Number.isFinite(n) || n <= 0) return { error: 'An offer budget is an amount above 0.' };
-    body.offer_budget_cents = Math.round(n * 100);
+    budgetText = b;
   }
   const c = String(currency || '').trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(c)) return { error: 'The currency is a three-letter code, such as USD.' };
+  if (budgetText !== null) {
+    // D5373: the budget is typed in the budget's own currency, at that currency's decimals.
+    const parsed = parseMinor(budgetText, c);
+    if (!parsed.ok) return { error: parsed.reason === 'decimals' || parsed.reason === 'currency' ? parsed.message : 'An offer budget is an amount above 0.' };
+    body.offer_budget_cents = parsed.minor;
+  }
   body.currency = c;
   return { body };
 }

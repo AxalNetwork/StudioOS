@@ -83,6 +83,7 @@ import { activeGrant, projectNdaActive, logAccess } from './data_room';
 import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff, refuseRun } from '../util/railContext';
 import { assertStorageRoom, noteStorageLanded } from '../services/storageRoom';
+import { suffixAmount } from '../../../frontend/src/lib/money.js';
 
 const research = new Hono<{ Bindings: Env }>();
 research.route('/collections', researchCollections);
@@ -371,9 +372,9 @@ research.post('/documents/:uid/reindex', async (c) => {
   try {
     await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id: doc.id });
   } catch {
-    // The hourly sweep walks `index_state` past a watermark and will catch it,
-    // which is why the upload path swallows this too. The row is already
-    // 'pending', so the page reports the truth either way.
+    // #5350's hourly recovery picks up a pending row after 60 minutes when no
+    // live job exists. The row is already 'pending', so the page reports the
+    // truth while that bounded retry waits.
   }
   const fresh = await ownDoc(c.env, user.id, doc.uid);
   return c.json({ item: fresh ? dto(fresh) : null });
@@ -440,7 +441,9 @@ research.post('/documents', async (c) => {
   // useful (listed, downloadable) while `index_state` is 'pending'.
   const id = (ins as any).meta?.last_row_id;
   if (id) {
-    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch { /* the hourly sweep will catch it */ }
+    // A failed producer write leaves the row pending; #5350's hourly recovery
+    // enqueues it after 60 minutes when no live job exists.
+    try { await Jobs.enqueue(c.env, 'embed_entity', { type: 'research_doc', id }); } catch {}
   }
 
   await noteStorageLanded(c.env, storage);
@@ -2712,10 +2715,16 @@ const DRAFT_SURFACES: Record<string, {
       if (!me?.partner_id) return [];
       const rows = await c.env.DB.prepare(
         `SELECT p.title AS title, p.outcome_note AS outcome, n.title AS need_title,
+                -- D4672: a consent counts only about the claim as it now reads (its pinned
+                -- hash is the item's current one), and an ask is pending only while its
+                -- link is live and about that same revision.
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL) AS live,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256) AS live,
                 (SELECT COUNT(*) FROM partner_proof_consents k
-                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL) AS pending,
+                  WHERE k.proof_item_id = p.id AND k.consent_given = 0 AND k.withdrawn_at IS NULL
+                    AND k.claim_sha256 IS NOT NULL AND k.claim_sha256 = p.claim_sha256
+                    AND (k.expires_at IS NULL OR datetime(k.expires_at) > datetime('now'))) AS pending,
                 (SELECT COUNT(*) FROM partner_proof_consents k
                   WHERE k.proof_item_id = p.id AND k.withdrawn_at IS NOT NULL) AS withdrawn
            FROM partner_proof_items p
@@ -3255,7 +3264,7 @@ const DRAFT_SURFACES: Record<string, {
         + `; kind ${s.kind || 'not recorded'}`
         // The price is spelled as unset rather than zeroed: 0 is a price an
         // advisor may genuinely mean, and the instruction turns on this word.
-        + `; price ${s.price_cents == null ? 'NOT SET' : `${Number(s.price_cents) / 100} ${s.currency || 'USD'}`}`
+        + `; price ${s.price_cents == null ? 'NOT SET' : suffixAmount(Number(s.price_cents), String(s.currency || 'USD').toUpperCase(), { trimWhole: true })}`
         + `; duration ${s.duration_note || 'not recorded'}`
         + `; scope ${String(s.scope || '').replace(/\s+/g, ' ').slice(0, 400) || 'not recorded'}`
       ));

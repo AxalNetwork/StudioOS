@@ -327,7 +327,7 @@ test('A2: the canvas rule — no price, not bookable — in the body, the switch
   assert.equal(sessionTypeBody({ name: '', mode: 'free' }).error, 'A session type needs a name.');
   assert.equal(sessionTypeBody({ name: 'X', mode: 'free', duration: '0' }).error, 'Length is whole minutes, from 1 to 1440.');
   assert.deepEqual(parseAmount('12.345'), { error: 'Enter an amount like 150 or 150.50' });
-  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.5', bookable: true, note: '' });
+  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.50', bookable: true, note: '' });
 });
 
 test('A2: the table — switch disabled where the rule forbids it, the contradiction flagged, bookings Not recorded', () => {

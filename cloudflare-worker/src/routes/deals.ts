@@ -1026,11 +1026,11 @@ deals.get('/:id/documents', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql, deal, user, audience } = ctx;
+  const { sql, deal, user } = ctx;
   if (!deal.project_id) { await sql.end(); return c.json([]); }
   // D4631: the venture's document list is behind the venture's NDA, as its team, market and traction sections are.
   // The platform admin and the venture's own founder are exempt; an investor without an active NDA is told why, not given [].
-  if (!ndaExempt(audience, user as any) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
+  if (!ndaExempt(user, deal.project_founder_id) && !(await hasActiveDealNda(c.env, Number(user.id), deal.project_founder_id))) {
     await sql.end();
     return c.json({ error: 'nda_required', masked: true, reason: 'no_pairwise_nda', detail: 'Sign the venture\'s NDA to see its documents.' }, 403);
   }
@@ -1082,20 +1082,19 @@ deals.get('/:id/commitments', async (c) => {
   // D4631: who is named follows the caller's relationship to THIS deal, not their primary role.
   // D4633: an investor's own commitments under ONE firm, the one the commit
   // and withdrawal routes act under (the active firm, else the only one).
-  // Each row names its firm and whether it belongs to that context. A row
-  // recorded before commitments named a firm (company_id NULL) is listed
-  // too, marked `legacy` when a firm is selected: it is the investor's, but
-  // no firm's, so the page shows it and offers no action on it.
+  // Each row names its firm and whether it belongs to that context. D5355:
+  // production held no pre-firm rows, so a NULL row is not carried into a
+  // later selected firm's context. It remains readable only while the
+  // resolved context is the investor's own name (companyId is NULL).
   if (audience === 'investor') {
     const firm = await transferFirm(c, user, COMMITMENT_FIRM_REQUIRED);
     if ('refuse' in firm) { await sql.end(); return firm.refuse; }
     const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.company_id, cp.company_name, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name
       FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id LEFT JOIN company_profiles cp ON cp.id = c.company_id
-      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND (c.company_id IS ${firm.companyId} OR c.company_id IS NULL) ORDER BY c.created_at DESC`;
+      WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} AND c.company_id IS ${firm.companyId} ORDER BY c.created_at DESC`;
     await sql.end();
     return c.json((rows as any[]).map((r) => {
-      const legacy = r.company_id == null && firm.companyId != null;
-      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: !legacy, legacy };
+      return { ...r, company_name: r.company_name ?? null, firm_context: firm.companyId, in_context: true, legacy: false };
     }));
   }
   if (namesInvestors(audience)) {

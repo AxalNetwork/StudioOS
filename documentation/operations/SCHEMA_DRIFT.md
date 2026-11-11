@@ -148,8 +148,8 @@ is how `schema.sql` drifted for four months unnoticed (D60).
 6. **Correct it.** There are three cases:
 
    - **Intended, missing from the repository.** Add one new append-only
-     migration, `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<slug>.sql`
-     (D4106), that copies production's DDL with `CREATE … IF NOT EXISTS`.
+     migration, `cloudflare-worker/sql/migrations/YYYYMMDDHHMM_<issue>_<slug>.sql`
+     (D4106, D5398), that copies production's DDL with `CREATE … IF NOT EXISTS`.
      Keep every column, default, unique constraint, foreign key, index and
      view definition. Add no house-convention columns, because the file has
      to match production and be a no-op there. Then:

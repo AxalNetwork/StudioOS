@@ -13,7 +13,7 @@ import {SECTION_KEYS} from '../src/services/useOfFunds/plan.ts';
 import {addSectionHire} from '../src/services/raiseWriters.ts';
 const secret='synthetic-d1176-test-jwt-not-a-credential';
 const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-const migrations=['442_raise_cycle_stores.sql','463_raise_record_stores.sql','436_round_calls.sql','520_mercury_raise_feeds.sql','249_project_metrics.sql','606_use_of_funds_scenarios.sql','202611082130_uof_scenario_revision.sql','607_raise_money_cents.sql'].map(n=>readFileSync(new URL(`../sql/migrations/${n}`,import.meta.url),'utf8'));
+const migrations=['442_raise_cycle_stores.sql','463_raise_record_stores.sql','436_round_calls.sql','520_mercury_raise_feeds.sql','249_project_metrics.sql','606_use_of_funds_scenarios.sql','202611082130_uof_scenario_revision.sql','202611101555_5375_uof_hire_revision.sql','607_raise_money_cents.sql'].map(n=>readFileSync(new URL(`../sql/migrations/${n}`,import.meta.url),'utf8'));
 const roles=['founder','founder','admin','partner','investor','advisor','exploring'];
 let savedFetch:typeof fetch;let dbs:DatabaseSync[]=[];let fetches=0;
 beforeEach(()=>{ savedFetch=globalThis.fetch;fetches=0;globalThis.fetch=async()=>{fetches++;throw new Error('Provider stub: no network');}; });
@@ -35,6 +35,9 @@ function fixture(){
 // helper reads the scenario's stored revision for them; the stale-revision tests pass their own.
 function revisionFor(f:any,method:string,path:string,b:any){
   if(!b||typeof b!=='object'||'expected_revision' in b) return b;
+  // D5375: a hire edit names the hire's own revision.
+  const hr=/^\/hires\/([0-9]+)(?:\?|$)/.exec(path);
+  if(hr&&method==='PATCH'){const h=f.db.prepare('SELECT revision FROM use_of_funds_hires WHERE id=?').get(Number(hr[1])) as any;return h?{...b,expected_revision:Number(h.revision)}:b;}
   let sid:number|null|undefined;let matched=true;
   const sc=/^\/scenarios\/([0-9]+)(?:\?|$)/.exec(path);const ms=/^\/milestones\/([0-9]+)(?:\?|$)/.exec(path);
   const base=():number|undefined=>(f.db.prepare('SELECT id FROM uof_scenarios WHERE project_id=1 AND is_base=1').get() as any)?.id;
@@ -50,6 +53,8 @@ function revisionFor(f:any,method:string,path:string,b:any){
 }
 async function call(f:any,method:string,path:string,b?:unknown,who=1,extra:Record<string,unknown>={},headers:Record<string,string>={}){
   b=revisionFor(f,method,path,b);
+  const hd=method==='DELETE'?/^\/hires\/([0-9]+)$/.exec(path):null;
+  if(hd){const row=f.db.prepare('SELECT revision FROM use_of_funds_hires WHERE id=?').get(Number(hd[1])) as any;path=`${path}?expected_revision=${row?Number(row.revision):0}`;}
   const dm=method==='DELETE'?/^\/milestones\/([0-9]+)$/.exec(path):null;
   if(dm){const row=f.db.prepare('SELECT s.revision FROM uof_milestones m JOIN uof_scenarios s ON s.id=m.scenario_id WHERE m.id=?').get(Number(dm[1])) as any;path=`${path}?expected_revision=${row?Number(row.revision):0}`;}
   const token=await new SignJWT({user_id:who,role:roles[who-1],...extra}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
@@ -213,6 +218,14 @@ test('D1176 round precedence is approved current call, active record, plan; ever
   assert.equal(r.sources.cap_table.value.link_state,'not_recorded');
   f.db.exec("UPDATE round_calls SET counsel_approved_hash=NULL");r=(await call(f,'GET','/plan')).body.round;assert.equal(r.chosen.value,150000);assert.equal(r.chosen.source,'Typed');
   f.db.exec("UPDATE raise_rounds SET status='closed'");r=(await call(f,'GET','/plan')).body.round;assert.equal(r.chosen.value,120000);
+});
+test('D5496 a legacy round target uses the recorded currency exponent', async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO raise_rounds(id,uid,project_id,name,target_amount,currency) VALUES(1,'round-one',1,'Seed',1234,'JPY')");
+  const response = await call(f, 'GET', '/plan');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.round.chosen.value, 1234);
+  assert.equal(response.body.round.chosen.currency, 'jpy');
 });
 test('D1176 measured runway is founder Mercury, then connector metrics, then Typed; forecast never substitutes and Mercury is private',async()=>{
   const f=fixture();mercury(f);
@@ -477,4 +490,55 @@ test('D5069 a competing write that lands between the read and the batch aborts t
   assert.equal(raced,true);
   assert.deepEqual([r.status,r.body.code,r.body.current_revision],[409,'changed_since_open',1]);
   assert.deepEqual({...state(f,a.id),revision:0},{...before},'no line, name or audit row of the aborted save remains');
+});
+
+// D5375 — a planned hire has its own revision. Two tabs read revision N; the first save wins and the second is refused.
+const hireState=(f:any)=>JSON.stringify([rows(f,'SELECT * FROM use_of_funds_hires ORDER BY id'),rows(f,"SELECT action,entity_id FROM activity_logs WHERE action LIKE 'uof_hire%'")]);
+const seedHires=(f:any)=>f.db.exec("INSERT INTO use_of_funds_hires(id,project_id,category_key,role,start_month,annual_cents) VALUES(1,1,'product','Engineer','2027-03',12000),(2,2,'product','Other',NULL,NULL)");
+test('D5375 a hire edit names the revision it read; a second tab with the old one gets 409 changed_since_open and writes nothing',async()=>{
+  const f=fixture();seedHires(f);
+  const read=await call(f,'GET','/hires');assert.equal(read.body.items[0].revision,0,'a hire is read with its revision');
+  assert.equal((await call(f,'GET','/plan')).body.base.value.hires.items[0].revision,0,'and so is the plan\'s hire list');
+  const none=await call(f,'PATCH','/hires/1',{role:'No revision',expected_revision:undefined});
+  assert.deepEqual([none.status,none.body.code],[400,'expected_revision_required']);
+  assert.match(none.body.detail,/as read with the hire/);
+  assert.equal((await call(f,'PATCH','/hires/1',{role:'x',expected_revision:-1})).status,400);
+  const tabA=await call(f,'PATCH','/hires/1',{role:'Tab A',expected_revision:0});
+  assert.equal(tabA.status,200,JSON.stringify(tabA.body));assert.equal(tabA.body.revision,1);
+  const before=hireState(f);
+  const tabB=await call(f,'PATCH','/hires/1',{role:'Tab B',annual_cents:1,expected_revision:0});
+  assert.equal(tabB.status,409);assert.equal(tabB.body.code,'changed_since_open');assert.equal(tabB.body.error,'changed_since_open');assert.equal(tabB.body.current_revision,1);
+  assert.match(tabB.body.detail,/This hire was changed somewhere else/);
+  assert.equal(hireState(f),before,'the refused save changed no row and logged nothing');
+  const tabBRemoves=await call(f,'DELETE','/hires/1?expected_revision=0');
+  assert.deepEqual([tabBRemoves.status,tabBRemoves.body.code,tabBRemoves.body.current_revision],[409,'changed_since_open',1]);
+  assert.equal(hireState(f),before,'a stale removal removed nothing and logged nothing');
+  // Review latest, then save again from it.
+  const again=await call(f,'PATCH','/hires/1',{role:'Tab B',expected_revision:tabB.body.current_revision});
+  assert.equal(again.status,200);assert.equal(again.body.revision,2);
+  const gone=await call(f,'DELETE','/hires/1?expected_revision=2');assert.equal(gone.status,200);
+  assert.equal(rows(f,'SELECT id FROM use_of_funds_hires WHERE project_id=1').length,0);
+  assert.deepEqual(rows(f,"SELECT action FROM activity_logs WHERE action LIKE 'uof_hire%' ORDER BY id").map((r:any)=>r.action),['uof_hire_updated','uof_hire_updated','uof_hire_deleted']);
+  // A hire of another venture is still 404 whatever revision is named.
+  for(const [method,path,b] of [['PATCH','/hires/2',{role:'No',expected_revision:0}],['DELETE','/hires/2?expected_revision=0',undefined]] as any[])assert.equal((await call(f,method,path,b)).status,404);
+});
+test('D5375 a removal names the revision it read too',async()=>{
+  const f=fixture();seedHires(f);
+  const none=await call(f,'DELETE','/hires/1?expected_revision=');
+  assert.equal(none.status,400);assert.equal(none.body.code,'expected_revision_required');
+  const bare=await call(f,'DELETE','/hires/1?x=1');
+  assert.equal(bare.status,400);assert.equal(rows(f,'SELECT id FROM use_of_funds_hires WHERE project_id=1').length,1,'a removal with no revision removes nothing');
+});
+test('D5375 a competing hire write between the read and the batch changes no row and leaves no audit row',async()=>{
+  for(const method of ['PATCH','DELETE']) {
+    const f=fixture();seedHires(f);
+    const original=f.env.DB.batch;let raced=false;
+    f.env.DB.batch=async(stmts:any[])=>{if(!raced){raced=true;f.db.exec("UPDATE use_of_funds_hires SET revision=revision+1, role='Other tab' WHERE id=1");}return original(stmts);};
+    const before=rows(f,'SELECT * FROM use_of_funds_hires WHERE id=1')[0];
+    const r=await call(f,method,'/hires/1',method==='PATCH'?{role:'Mine'}:undefined,1);
+    assert.equal(raced,true);
+    assert.deepEqual([r.status,r.body.code,r.body.current_revision],[409,'changed_since_open',1],`${method}: ${JSON.stringify(r.body)}`);
+    assert.deepEqual(rows(f,'SELECT * FROM use_of_funds_hires WHERE id=1')[0],{...before,revision:1,role:'Other tab'});
+    assert.equal(rows(f,'SELECT id FROM activity_logs').length,0,`${method}: no audit row of the refused write`);
+  }
 });

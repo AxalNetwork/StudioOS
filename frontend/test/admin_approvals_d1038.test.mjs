@@ -655,7 +655,10 @@ test('mounted, Lanes: each group\'s lanes with New pills, Could not be read with
     assert.equal(v.of('approvals-hq-count-tickets'), 'Could not be read');
     assert.equal(v.of('approvals-hq-count-grants'), 'Not read here yet', 'a lane off the glance is never 0');
     assert.match(v.of('approvals-tab-lanes'), /Lanes\s*29/);
-    assert.match(v.of('approvals-hq-proposals'), /not built yet/);
+    // D5302: Program proposals opens HQ's queue (D964), which decides it; never "not built yet".
+    assert.match(v.of('approvals-hq-proposals'), /Programs › Proposals/);
+    assert.doesNotMatch(v.of('approvals-hq-proposals'), /not built yet/);
+    assert.ok(v.hrefs().includes('/admin/programs/proposals'));
     // D1132: Program-grant requests opens HQ's Requests page (D987), not "not built yet".
     assert.match(v.of('approvals-hq-grants'), /Licences › Program access by licence › Requests/);
     assert.doesNotMatch(v.of('approvals-hq-grants'), /not built yet/);
@@ -784,8 +787,8 @@ test('every decision says what changes, who is told and what is recorded; reason
   assert.match(doneLine('tester_remove', 'Eva', { places_ended: 2 }), /2 open program places ended/);
   assert.deepEqual(['https://example.com/post', 'http://example.com', 'https://u:p@example.com', 'not a url', `https://e.com/${'a'.repeat(500)}`].map(publishUrlOk), [true, false, false, false, false]);
   assert.equal(refusalLine(Object.assign(new Error('Gus’s email is not verified, so they cannot be told.'), { status: 409 })), 'Gus’s email is not verified, so they cannot be told.');
-  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /Nothing changed/);
-  assert.match(refusalLine(new Error('Network down')), /Nothing changed/, 'no status is never shown as saved');
+  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /outcome could not be confirmed/i);
+  assert.match(refusalLine(new Error('Network down')), /outcome could not be confirmed/i, 'no status never claims that a possibly committed write changed nothing');
 });
 
 test('the boards read every page: testers to a thousand, experts to a thousand, and say when they stopped (D1046)', async () => {

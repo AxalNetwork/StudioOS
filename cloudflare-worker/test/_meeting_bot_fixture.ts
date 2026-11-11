@@ -19,7 +19,8 @@ export function world(monthMicro=500_000_000, Supervisor=UnpublishedMeetingBotRu
   w.db.prepare("UPDATE interview_sessions SET status='draft', processing_stage=NULL, consent_method='written', consent_at=datetime('now') WHERE id=?").run(session);
   w.db.prepare('DELETE FROM interview_transcript_segments WHERE session_id=?').run(session);
   const starts:any[]=[], stops:string[]=[], objects=new Map<string,any>();
-  Object.assign(w.env,{AI_BILLING:'charged',MEETING_BOT:'on',MEETING_BOT_SECRET:hmacSecret,MEETING_BOT_COST_MICROUSD_PER_MINUTE:'10000',
+  // D1451: the fixture turns the Teams switch on so the shared run tests keep covering Teams; meeting_bot_teams_d1451 tests it off.
+  Object.assign(w.env,{AI_BILLING:'charged',MEETING_BOT:'on',MEETING_BOT_TEAMS:'on',MEETING_BOT_SECRET:hmacSecret,MEETING_BOT_COST_MICROUSD_PER_MINUTE:'10000',
     MEETING_BOT_RUNTIME:{ async start(run:any){starts.push(run);}, async stop(run:any){stops.push(run.uid);} }});
   w.env.MEETING_BOT_RUN={idFromName:(s:string)=>s,get(uid:string){
     if (!objects.has(uid)) {

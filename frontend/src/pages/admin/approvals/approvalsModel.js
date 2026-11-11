@@ -94,7 +94,8 @@ export const HQ_LANES = [
   { key: 'ai_runs', label: 'Held AI runs', door: 'Platform › AI allowances' },
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
-  { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
+  // D5302: HQ's proposal queue is built (D964), and the Worker's lane is decided there and keeps its history.
+  { key: 'proposals', label: 'Program proposals', door: 'Programs › Proposals' },
   { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program access by licence › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
@@ -532,10 +533,10 @@ export function doneLine(kind, who, extra = {}) {
   }[kind] || 'Saved.';
 }
 
-/** A refusal in the Worker's own sentence (the client's `e.message`), or one that says nothing changed. */
+/** A refusal in the Worker's own sentence. A 5xx/network failure has an unknown outcome until the item is read again. */
 export function refusalLine(e) {
   const said = typeof e?.message === 'string' && e.message.includes(' ') && e.message !== 'Request failed' ? e.message : null;
   if (said && e?.status && e.status < 500) return said;
-  if (e?.status >= 500 || !e?.status) return 'This could not be saved. Nothing changed. Read the item again before retrying.';
+  if (e?.status >= 500 || !e?.status) return 'The outcome could not be confirmed. Read the item again before retrying.';
   return 'This was refused. Nothing changed. Read the item again before retrying.';
 }

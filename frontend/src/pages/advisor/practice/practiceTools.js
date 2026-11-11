@@ -1,5 +1,8 @@
 /** D571/D573: pure derivations for Ops A1–A5. Nullable migration-394 facts stay unknown; receipts, manual work status and included pricing are distinct. */
 
+import { parseMinor } from '../../../lib/money.js';
+import { centsToInput } from '../../../lib/moneyInput.js';
+
 // ───────────────────────────── A1 · Deliverables ─────────────────────────────
 
 /** Planned/in-progress are manual facts; delivery and acceptance come from version receipts. */
@@ -183,7 +186,8 @@ export function parseAmount(input) {
   const raw = String(input ?? '').trim().replace(/[$,\s]/g, '');
   if (!raw) return { cents: null };
   if (!/^\d+(\.\d{1,2})?$/.test(raw)) return { error: 'Enter an amount like 150 or 150.50' };
-  return { cents: Math.round(Number(raw) * 100) };
+  const amount = parseMinor(raw, 'USD');
+  return amount.ok ? { cents: amount.minor } : { error: amount.message };
 }
 
 /** The editor's starting values for a stored type, or for a new one. */
@@ -193,7 +197,7 @@ export function sessionTypeForm(type) {
     name: type?.name || '',
     duration: type?.duration_minutes == null ? '' : String(type.duration_minutes),
     mode,
-    amount: mode === 'price' ? String(Number(type.price_cents) / 100) : '',
+    amount: mode === 'price' ? centsToInput(type.price_cents) : '',
     bookable: Boolean(type?.is_active),
     note: type?.cadence_note || '',
   };

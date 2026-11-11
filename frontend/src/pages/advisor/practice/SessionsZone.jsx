@@ -1,13 +1,16 @@
+import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import { railProposalsApi } from '../../../lib/api/railProposals.js';
-import { BLOCK_QUERY_KEYS, BLOCK_WHOLE_DAYS, parseBlockQuery } from '../../../ui/sessionsBlockHandoff.js';
+import {
+  BLOCK_EXACT_SCOPE, BLOCK_QUERY_KEYS, blockWallInstant, blockWallRange, parseBlockQuery,
+} from '../../../ui/sessionsBlockHandoff.js';
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
-  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money,
+  buttonClass, dollarsToCents, ghostButtonClass, inputClass, money, zoneError,
 } from '../expertise/kit';
 import {
   KIND_LABEL, KIND_TONE, VIEW_DAYS, blackoutLabel, bookedNote, groupByDay,
@@ -114,7 +117,10 @@ const EMPTY_RULES = Object.freeze({
 });
 
 /** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
-const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '', proposal: '' });
+const CLOSED_BLOCK = Object.freeze({
+  open: false, from: '', startTime: '', until: '', endTime: '', reason: '', error: '', proposal: '',
+  sourceFrom: '', sourceUntil: '', timezone: '',
+});
 
 export default function SessionsZone() {
   const [view, setView] = useState('two_weeks');
@@ -138,6 +144,7 @@ export default function SessionsZone() {
   const [linksRead, setLinksRead] = useState(true);
   const [bookings, setBookings] = useState({ loading: true, error: '', items: [] });
   const [editing, setEditing] = useState(null);
+  const [billingNotice, setBillingNotice] = useState(null);
   const [blocking, setBlocking] = useState(false);
   const [blockNote, setBlockNote] = useState(null);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -159,7 +166,7 @@ export default function SessionsZone() {
       const res = await api.listMyAdvisorSlots({ days, from: windowFrom(forView, days) });
       setSlots({ loading: false, error: '', items: Array.isArray(res?.items) ? res.items : [], truncated: res?.truncated === true });
     } catch (e) {
-      setSlots({ loading: false, error: e?.message || 'Your calendar could not be read.', items: [] });
+      setSlots({ loading: false, error: zoneError(e, e?.message || 'Your calendar could not be read.', 'practice'), items: [] });
     }
   }, []);
 
@@ -192,7 +199,7 @@ export default function SessionsZone() {
         items: (Array.isArray(res?.items) ? res.items : []).map(bookingView),
       });
     } catch (e) {
-      setBookings({ loading: false, error: e?.message || 'Your sessions could not be read.', items: [] });
+      setBookings({ loading: false, error: zoneError(e, e?.message || 'Your sessions could not be read.', 'practice'), items: [] });
     }
   }, []);
 
@@ -204,6 +211,7 @@ export default function SessionsZone() {
   useScrollToHash(restLoading);
 
   const onSaved = useCallback(() => { setEditing(null); loadBookings(); }, [loadBookings]);
+  const onBillingChanged = (note) => { setBillingNotice(note); onSaved(); };
 
   // NARROWING LIVES IN THE PAGE, not in `sessionGrid`. A chip declared live in
   // `advisorZoneFilters.js` must be served by the page that mounts the chip
@@ -219,9 +227,9 @@ export default function SessionsZone() {
 
   // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
   // own Block form instead of three `window.prompt`s. It is where a Block
-  // card accepted in the Ask panel puts its dates (#4737, D1596 §4): the panel
-  // sends the advisor here with the card's uid and dates in the address, this
-  // page fills the form from them and takes them out of the address, and the
+  // card accepted in the Ask panel puts its exact range here (D5364): the panel
+  // sends the advisor here with the card's uid and instants in the address,
+  // this page fills date/time inputs in their zone and takes the keys out, and the
   // proposal is decided (`railProposalsApi.decide`) only after `POST
   // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card
   // waiting in Ask. Nothing is blocked until the advisor presses Block. The
@@ -232,13 +240,27 @@ export default function SessionsZone() {
     const handoff = parseBlockQuery(searchParams);
     if (!handoff) return;
     setBlockNote(null);
-    setBlockForm({ ...CLOSED_BLOCK, open: true, from: handoff.from, until: handoff.until, proposal: handoff.uid });
+    setBlockForm({
+      ...CLOSED_BLOCK,
+      open: true,
+      from: handoff.exact ? '' : handoff.from,
+      until: handoff.exact ? '' : handoff.until,
+      proposal: handoff.uid,
+      sourceFrom: handoff.exact ? handoff.from : '',
+      sourceUntil: handoff.exact ? handoff.until : '',
+    });
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       BLOCK_QUERY_KEYS.forEach((k) => next.delete(k));
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    if (!blockForm.open || !blockForm.sourceFrom || blockForm.timezone || rulesRead === 'loading') return;
+    const timezone = rules?.timezone || 'UTC';
+    const wall = blockWallRange({ from: blockForm.sourceFrom, until: blockForm.sourceUntil }, timezone);
+    setBlockForm((form) => ({ ...form, ...wall, timezone }));
+  }, [blockForm.open, blockForm.sourceFrom, blockForm.sourceUntil, blockForm.timezone, rules?.timezone, rulesRead]);
   const blockFromRef = useRef(null);
   const blockRange = useCallback(() => {
     setBlockNote(null);
@@ -248,13 +270,33 @@ export default function SessionsZone() {
 
   const submitBlock = useCallback(async (event) => {
     event?.preventDefault?.();
-    const { from, until, reason, proposal } = blockForm;
+    const { from, startTime, until, endTime, reason, proposal } = blockForm;
     if (!from || !until) { setBlockForm((f) => ({ ...f, error: 'Choose the first day and the day after the last.' })); return; }
-    if (until <= from) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
+    if (!!startTime !== !!endTime) { setBlockForm((f) => ({ ...f, error: 'Choose both a start time and an end time, or leave both empty for whole days.' })); return; }
+    let fromInstant;
+    let untilInstant;
+    try {
+      if (startTime && endTime) {
+        const timezone = blockForm.timezone || rules?.timezone || 'UTC';
+        const original = blockForm.sourceFrom && blockForm.sourceUntil
+          ? blockWallRange({ from: blockForm.sourceFrom, until: blockForm.sourceUntil }, timezone) : null;
+        const unchanged = original && original.from === from && original.startTime === startTime
+          && original.until === until && original.endTime === endTime;
+        fromInstant = unchanged ? blockForm.sourceFrom : blockWallInstant(from, startTime, timezone);
+        untilInstant = unchanged ? blockForm.sourceUntil : blockWallInstant(until, endTime, timezone);
+      } else {
+        fromInstant = `${from}T00:00:00.000Z`;
+        untilInstant = `${until}T00:00:00.000Z`;
+      }
+    } catch (e) {
+      setBlockForm((f) => ({ ...f, error: e?.message || 'Choose a valid range.' }));
+      return;
+    }
+    if (Date.parse(untilInstant) <= Date.parse(fromInstant)) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
     setBlocking(true); setBlockNote(null);
     try {
       const res = await api.blockMyAdvisorSlotRange({
-        from: `${from}T00:00:00.000Z`, until: `${until}T00:00:00.000Z`, reason: reason || '',
+        from: fromInstant, until: untilInstant, reason: reason || '',
       });
       // THE SKIPPED COUNT IS REPORTED, NEVER SWALLOWED. A booked hour cannot be
       // blocked — someone holds it — and an advisor who asked for a fortnight
@@ -277,7 +319,7 @@ export default function SessionsZone() {
     } catch (e) {
       setBlockNote({ ok: false, text: e?.message || 'Nothing was blocked.' });
     } finally { setBlocking(false); }
-  }, [blockForm, loadSlots, view]);
+  }, [blockForm, loadSlots, rules?.timezone, view]);
 
   const exportCalendar = useCallback(() => {
     // Built from rows already on screen, so nothing leaves the browser and no
@@ -323,17 +365,25 @@ export default function SessionsZone() {
 
       {blockForm.open && (
         <Card padding="lg">
-          <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="advisor-block-form">
-            {blockForm.proposal ? (
-              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-3" data-testid="advisor-block-from-ask">{BLOCK_WHOLE_DAYS}</p>
+          <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-4" data-testid="advisor-block-form">
+            {blockForm.proposal && blockForm.sourceFrom ? (
+              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-4" data-testid="advisor-block-from-ask">{BLOCK_EXACT_SCOPE}</p>
             ) : null}
             <Field label="From">
               <input ref={blockFromRef} type="date" className={inputClass} value={blockForm.from} data-testid="advisor-block-from"
                 onChange={(e) => setBlockForm({ ...blockForm, from: e.target.value, error: '' })} />
             </Field>
-            <Field label="Until" hint="The day after the last one blocked.">
+            <Field label="Start time" hint={`Optional · ${blockForm.timezone || rules?.timezone || 'UTC'}`}>
+              <input type="time" className={inputClass} value={blockForm.startTime} data-testid="advisor-block-start-time"
+                onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value, sourceFrom: '', sourceUntil: '', error: '' })} />
+            </Field>
+            <Field label="Until" hint={blockForm.endTime ? 'The ending date.' : 'The day after the last whole day.'}>
               <input type="date" className={inputClass} value={blockForm.until} data-testid="advisor-block-until"
                 onChange={(e) => setBlockForm({ ...blockForm, until: e.target.value, error: '' })} />
+            </Field>
+            <Field label="End time" hint={`Optional · ${blockForm.timezone || rules?.timezone || 'UTC'}`}>
+              <input type="time" className={inputClass} value={blockForm.endTime} data-testid="advisor-block-end-time"
+                onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value, sourceFrom: '', sourceUntil: '', error: '' })} />
             </Field>
             <Field label="Why" hint="Optional, and private to you.">
               <input className={inputClass} value={blockForm.reason}
@@ -464,6 +514,7 @@ export default function SessionsZone() {
           Your own record of what you charged and whether you were paid. Nothing is billed,
           invoiced or collected through Axal — this is bookkeeping, not a payment rail.
         </p>
+        <SaveNote note={billingNotice} />
         <ZoneBody loading={bookings.loading} error={bookings.error} onRetry={loadBookings}
           isEmpty={billable.length === 0}
           empty={<NothingYet
@@ -495,12 +546,12 @@ export default function SessionsZone() {
                       {money(b.amount_cents) ?? <Unrecorded />}
                     </div>
                     <button type="button" className={`${ghostButtonClass} mt-2`}
-                      onClick={() => setEditing(editing === b.id ? null : b.id)}>
+                      onClick={() => { setBillingNotice(null); setEditing(editing === b.id ? null : b.id); }}>
                       {editing === b.id ? 'Close' : (b.amount_cents == null ? 'Set a price' : 'Change')}
                     </button>
                   </div>
                 </div>
-                {editing === b.id && <BillingEditor booking={b} onSaved={onSaved} />}
+                {editing === b.id && <BillingEditor booking={b} onSaved={onSaved} onChanged={onBillingChanged} />}
               </div>
             ))}
             <p className="text-[11px] leading-relaxed text-axal-faint">
@@ -673,18 +724,51 @@ function RulesBody({ rules, read: readState, onSaved }) {
   );
 }
 
-function BillingEditor({ booking, onSaved }) {
+const BILLING_REFUSALS = new Map([
+  ['reprice_required', 'Confirm the new price before recording the change.'],
+  ['settled_price', 'This session was marked Collected or Written off. Its price cannot be changed or cleared.'],
+  ['booking_changed', 'This session changed while you were editing. Review the refreshed record before trying again.'],
+  ['fee_snapshot_missing', 'The fee details are missing. Confirm the current price to record them at today’s rate.'],
+]);
+
+function BillingEditor({ booking, onSaved, onChanged }) {
   const [amount, setAmount] = useState(
-    booking.amount_cents == null ? '' : String(Number(booking.amount_cents) / 100),
+    centsToInput(booking.amount_cents),
   );
   const [state, setState] = useState(
     booking.billing_state === 'unpriced' ? 'billed' : (booking.billing_state || 'billed'),
   );
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
+  const [pending, setPending] = useState(null);
+  const pendingAmount = pending?.amount_cents;
+  const writing = useRef(false);
+  const stored = booking.amount_cents == null ? null : Number(booking.amount_cents);
+  const priceLocked = ['collected', 'written_off'].includes(booking.billing_state);
+  const missingFee = stored != null && (booking.take_rate_bps === null || booking.platform_cut_cents === null);
 
-  const save = async (e) => {
+  const record = async (body) => {
+    if (writing.current) return;
+    writing.current = true;
+    setBusy(true);
+    setNote(null);
+    try {
+      await api.updateMyAdvisorBookingBilling(booking.id, body);
+      onSaved();
+    } catch (err) {
+      const refusal = { ok: false, text: BILLING_REFUSALS.get(err?.code) || 'The billing change could not be recorded. Try again.' };
+      if (err?.code === 'booking_changed') onChanged(refusal);
+      else setNote(refusal);
+      setPending(null);
+    } finally {
+      writing.current = false;
+      setBusy(false);
+    }
+  };
+
+  const save = (e) => {
     e.preventDefault();
+    if (busy || pending) return;
     setNote(null);
     const parsed = dollarsToCents(amount);
     if (parsed.error) { setNote({ ok: false, text: parsed.error }); return; }
@@ -692,61 +776,53 @@ function BillingEditor({ booking, onSaved }) {
       setNote({ ok: false, text: 'Enter an amount, or use Clear to take the price off entirely.' });
       return;
     }
-    setBusy(true);
-    try {
-      await api.updateMyAdvisorBookingBilling(booking.id, {
-        amount_cents: parsed.cents,
-        billing_state: state,
-      });
-      onSaved();
-    } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be recorded. Nothing was changed.' });
-    } finally {
-      setBusy(false);
+    if (stored != null && parsed.cents !== stored) {
+      setPending({ amount_cents: parsed.cents, billing_state: state, reprice: true });
+      return;
     }
-  };
-
-  const clear = async () => {
-    setNote(null);
-    setBusy(true);
-    try {
-      // Back to where every session starts. The worker refuses any other state
-      // without an amount, so clearing the amount and the state is one act.
-      await api.updateMyAdvisorBookingBilling(booking.id, {
-        amount_cents: null,
-        billing_state: 'unpriced',
-      });
-      onSaved();
-    } catch (err) {
-      setNote({ ok: false, text: err?.message || 'That could not be cleared.' });
-    } finally {
-      setBusy(false);
-    }
+    record(stored == null ? { amount_cents: parsed.cents, billing_state: state } : { billing_state: state });
   };
 
   return (
-    <form onSubmit={save} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
+    <form data-testid="session-billing-editor" onSubmit={save} className="mt-3 border-t border-axal-hairline pt-3 dark:border-gray-700">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Amount" hint="What you charged for this session.">
-          <input className={inputClass} value={amount} inputMode="decimal"
+          <input data-testid="session-billing-amount" className={inputClass} value={amount} inputMode="decimal" disabled={priceLocked || busy || Boolean(pending)}
             onChange={(e) => setAmount(e.target.value)} placeholder="300" />
         </Field>
         <Field label="What happened to it">
-          <select className={inputClass} value={state} onChange={(e) => setState(e.target.value)}>
+          <select data-testid="session-billing-state" className={inputClass} value={state} disabled={busy || Boolean(pending)} onChange={(e) => setState(e.target.value)}>
             {SETTABLE.map((s) => <option key={s} value={s}>{STATE_LABEL[s]}</option>)}
           </select>
         </Field>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button type="submit" className={buttonClass} disabled={busy}>
+        <button type="submit" className={buttonClass} disabled={busy || Boolean(pending)}>
           {busy ? 'Recording…' : 'Record'}
         </button>
-        {booking.amount_cents != null && (
-          <button type="button" className={ghostButtonClass} onClick={clear} disabled={busy}>
+        {stored != null && !priceLocked && (
+          <button type="button" className={ghostButtonClass} disabled={busy || Boolean(pending)}
+            onClick={() => { setNote(null); setPending({ amount_cents: null, billing_state: 'unpriced', reprice: true }); }}>
             Clear the price
           </button>
         )}
+        {stored != null && !priceLocked && (missingFee || note?.text === BILLING_REFUSALS.get('fee_snapshot_missing')) && (
+          <button type="button" className={ghostButtonClass} disabled={busy || Boolean(pending)}
+            onClick={() => setPending({ amount_cents: stored, billing_state: booking.billing_state, reprice: true })}>
+            Confirm the current price
+          </button>
+        )}
       </div>
+      {priceLocked && <p className="mt-2 text-sm">{BILLING_REFUSALS.get('settled_price')}</p>}
+      {pending && <div className="mt-3 space-y-2" role="group" aria-label="Confirm price change">
+        <p>Stored price: {money(stored)}. {pendingAmount == null
+          ? 'Clearing the price also clears the recorded fee rate and cut.'
+          : `Confirm ${money(pendingAmount)}. The fee rate and cut will be recorded at today’s rate.`}</p>
+        <button type="button" className={buttonClass} disabled={busy} onClick={() => record(pending)}>
+          {pendingAmount == null ? 'Confirm clear' : 'Confirm price'}
+        </button>
+        <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => setPending(null)}>Cancel price change</button>
+      </div>}
       <SaveNote note={note} />
     </form>
   );

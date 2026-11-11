@@ -354,6 +354,40 @@ test('a refused Start prints the Worker\'s words, deletes nothing, and keeps its
   } finally { await m.unmount(); }
 });
 
+test('D5353: a 202 setup_incomplete keeps the form open and retries the same client key without starting capture', async () => {
+  const s = spies();
+  let attempt = 0;
+  s.props.sessions.open = async (body) => {
+    s.calls.open.push(body);
+    attempt += 1;
+    return attempt === 1
+      ? { detail: 'setup_incomplete', message: 'This session was opened but its setup has not finished.', session: { id: 501, setup_complete_at: null } }
+      : { session: { id: 501, interview_id: 41 }, interview: { id: 41, interviewee_name: body.interviewee.name, interviewee_company: body.interviewee.company } };
+  };
+  const capture = { prepared: 0, released: 0, begun: 0 };
+  const recorder = {
+    prepare() { capture.prepared += 1; }, release() { capture.released += 1; }, begin() { capture.begun += 1; },
+    isCapturing: () => false, getSnapshot: () => ({}),
+  };
+  const m = await mount({ ...s.props, recorder });
+  try {
+    await m.type('record-name', 'Dana');
+    await m.type('record-company', 'Acme');
+    await m.click('record-consents-written');
+    await m.click('record-start');
+    assert.equal(capture.begun, 0, 'the recorder began on an unfinished session');
+    assert.equal(s.calls.started.length, 0, 'the unfinished session was opened as usable');
+    assert.equal(m.text(m.by('record-start')), 'Try again');
+    assert.match(m.text(m.by('record-error')), /setup has not finished/);
+    assert.equal(m.pr(m.by('record-name')).value, 'Dana', 'the entered person was cleared');
+    assert.equal(m.pr(m.by('record-company')).value, 'Acme', 'the entered company was cleared');
+    await m.click('record-start');
+    assert.equal(s.calls.open[1].client_key, s.calls.open[0].client_key, 'retry changed the setup key');
+    assert.equal(capture.begun, 1);
+    assert.equal(s.calls.started.length, 1);
+  } finally { await m.unmount(); }
+});
+
 test('409 session_active: the Worker\'s sentence, and a link back to the recording already live', async () => {
   const s = spies();
   const released = [];

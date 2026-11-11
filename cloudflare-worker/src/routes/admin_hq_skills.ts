@@ -6,8 +6,14 @@
  *   GET  /                           the library: [Row], with status, version, agents pinned, pass rate, last eval;
  *                                    D4537: each row's slug, roles ({ key, label }) and tools
  *                                    D4536: `coverage`, the catalogue's counts (SKILL_ANALYTICS_METRICS.md)
+ *                                    D5325: each row's `readiness` (SK-13, `services/agents/skillReadiness.ts`) and
+ *                                    `run_cost: null` (Not recorded until #4536 records cost by executed version)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
+ *   GET  /library/reconcile          D5335: READ ONLY. The generated library against the store's HQ skills (D4532 §3) →
+ *                                    { report_version, scope: 'hq', read_at, totals: { <class>: n }, skills: [{ slug, class,
+ *                                    disposition, source_hash, persisted_hash, published_version }], manifest: [persisted, hashes only] };
+ *                                    audited (`agent_skill_library_reconciled`, the totals only)
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
@@ -82,6 +88,8 @@ import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
+import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
+import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
 
 const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
@@ -91,7 +99,6 @@ const adminHqSkills = new Hono<{ Bindings: Env }>();
 export const REASON_MIN = 10;
 export const REASON_MAX = 500;
 const BULK_MAX = 50;
-const LEVELS = ['aware', 'working', 'proficient', 'advanced', 'expert'];
 
 const parse = <T>(json: string | null | undefined, fallback: T): T => { try { const v = JSON.parse(json ?? ''); return v ?? fallback; } catch { return fallback; } };
 const say = (c: C, status: number, code: string, message: string, extra?: Record<string, unknown>) => refuse(c, status, { code, message, extra });
@@ -120,10 +127,10 @@ async function audit(env: Env, admin: User, action: string, s: Pick<SkillRow, 'u
   await logAdminAction(env, admin.id, admin.email, action, { skill_uid: s.uid, skill_name: s.name, reason, before, after, ...extra });
 }
 
-function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
-  const axis = p.tags.map((t) => RADAR_AXES.find((a) => a.slug === category.get(t.slug))).find(Boolean);
-  const level = p.tags.reduce<string | null>((best, t) => (best == null || LEVELS.indexOf(t.level) > LEVELS.indexOf(best) ? t.level : best), null);
-  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level };
+export function areaAndLevel(p: DraftParts, category: ReadonlyMap<string, string>) {
+  const primary = areaOf(p.tags, (slug) => category.get(slug) ?? null);
+  const axis = RADAR_AXES.find((candidate) => candidate.slug === primary.area);
+  return { area: axis ? { slug: axis.slug, label: axis.label } : null, level: primary.level };
 }
 
 // D4533: `current` is the whole evidence; `changes` says which part moved since (null: not recorded on a review from before D4533).
@@ -203,25 +210,13 @@ adminHqSkills.get('/', async (c) => {
 
   // Only the latest result per case and REQUIRED model under the current
   // evidence counts; a required run with no result is not evaluated, as on the detail page.
-  const [evalResult, tokens] = await Promise.all([
-    env.DB.prepare(`WITH want AS (
-        SELECT CAST(j.key AS INTEGER) AS skill_id, json_extract(j.value, '$.e') AS evidence, json_extract(j.value, '$.m') AS models FROM json_each(?) j
-      ), latest AS (
-        SELECT MAX(r.id) AS id
-        FROM want w JOIN agent_skill_eval_results r ON r.skill_id = w.skill_id AND r.evidence_hash = w.evidence
-        WHERE r.model_id IN (SELECT value FROM json_each(w.models))
-        GROUP BY r.skill_id, r.case_id, r.model_id
-      )
-      SELECT r.skill_id, COUNT(*) AS recorded,
-        SUM(CASE WHEN r.result = 'pass' THEN 1 ELSE 0 END) AS pass,
-        MAX(r.run_at) AS last_run
-      FROM latest JOIN agent_skill_eval_results r ON r.id = latest.id
-      JOIN agent_skill_cases k ON k.id = r.case_id AND k.skill_id = r.skill_id AND k.removed_at IS NULL
-      GROUP BY r.skill_id`).bind(JSON.stringify(Object.fromEntries(drafts.map(({ row, models, evidence }) => [row.id, { e: evidence, m: models }]))))
-      .all<{ skill_id: number; recorded: number; pass: number; last_run: string }>(),
+  // D5325: the same evidence answers each row's readiness, with one more read for the reviews and older runs.
+  const wants = drafts.map(({ row, models, evidence }) => ({ skill_id: row.id, evidence, models }));
+  const [evals, history, tokens] = await Promise.all([
+    currentResults(env, wants),
+    reviewHistory(env, wants),
     pinTokenMap(env, rows.filter((s) => s.current_version).map((s) => ({ skill_id: s.id, version: s.current_version }))),
   ]);
-  const evals = new Map((evalResult.results ?? []).map((r) => [r.skill_id, r]));
   let draftsUnevaluated = 0;
   const skills = drafts.map(({ row, draft, models, evidence }) => {
     const summary = evals.get(row.id);
@@ -237,6 +232,11 @@ adminHqSkills.get('/', async (c) => {
       version: row.current_version || null, agents: row.agents,
       tokens_per_run: tokens.get(`${row.id}:${row.current_version}`) ?? null,
       golden: { pass, total, not_evaluated: notEvaluated, meets_bar: notEvaluated === 0 && meetsBar(pass, total) }, last_eval: summary?.last_run ?? null,
+      // D5325: SK-13's state, decided here (`skillReadiness.ts`); `unknown` when a fact it needs could not be read.
+      readiness: readinessOf({ scope: row.scope, status: row.status, live_cases: row.live_cases, models: models.length,
+        results: summary ?? { recorded: 0, pass: 0, last_run: null }, history: history ? history.get(row.id) ?? null : null }),
+      // D5325: a recorded cost per run does not exist yet (#4536 records it by executed version); null reads "Not recorded", never 0.
+      run_cost: null,
     };
   });
   // D4536: the catalogue's coverage, in two more fixed reads whatever the page.
@@ -296,6 +296,18 @@ adminHqSkills.post('/library/seed', async (c) => {
   if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
   const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
   return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
+});
+
+// D5335 (#5335): the read-only preflight D4532 §3 names. It hashes the HQ drafts and live cases and returns hashes,
+// identities and classes, never their text; company skills are outside `persistedManifest`. It repairs nothing.
+adminHqSkills.get('/library/reconcile', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const tax = await taxonomyMaps(c.env);
+  const persisted = await persistedManifest(c.env);
+  const source = await libraryManifest(new Set(tax.category.keys()), SKILL_LIBRARY);
+  const report = reconcileReport(reconcile(source, persisted), persisted);
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_library_reconciled', { scope: 'hq', skills: report.skills.length, totals: report.totals });
+  return c.json({ report_version: report.report_version, scope: report.scope, read_at: new Date().toISOString(), totals: report.totals, skills: report.skills, manifest: report.manifest });
 });
 
 adminHqSkills.get('/:uid', async (c) => {

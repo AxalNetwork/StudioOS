@@ -33,6 +33,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { formatMinorOrCount } from '../../../lib/money.js';
 import { ventureRef, ventureSearch } from '../../cycles/ventureQuery.js';
 
 export const SLUG = 'cap-table';
@@ -120,12 +121,8 @@ export function dollars(v) {
 export function money(cents, currency = 'USD') {
   const n = num(cents);
   if (n == null) return NOT_RECORDED;
-  const code = /^[A-Za-z]{3}$/.test(String(currency || '')) ? String(currency).toUpperCase() : 'USD';
-  try {
-    return (n / 100).toLocaleString('en-US', { style: 'currency', currency: code, maximumFractionDigits: n % 100 ? 2 : 0 });
-  } catch {
-    return `${(n / 100).toLocaleString('en-US')} ${code}`;
-  }
+  // D5373: at the currency's own decimals; a missing currency is the issuance's USD default, an unlisted code names the count.
+  return formatMinorOrCount(n, String(currency || 'USD').toUpperCase(), { locale: 'en-US', trimWhole: true });
 }
 
 /** "61.54%" to two places; missing is "Not recorded". */

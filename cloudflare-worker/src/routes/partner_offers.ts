@@ -41,7 +41,13 @@
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
-import { requireAuth } from '../auth';
+import { getCurrentUser, requireAuth } from '../auth';
+import { refuse } from '../util/refusal';
+import { offerPage, offerPageResult } from '../util/offerPages';
+import {
+  CODE_MAX_ATTEMPTS, CODE_TTL_MS, CODES_PER_HOUR, LINK_TTL_MS, emailOf, maskEmail, newCode,
+  proofClaimJson, proofClaimSha256, proofCodeHash, proofConsentMailer, proofConsentState,
+} from '../services/partnerProofConsent';
 import {
   mapError, newUid, nowIso, requirePartnerProfile, trimOrNull,
 } from './_t13t14t15_helpers';
@@ -239,8 +245,12 @@ partnerOffers.delete('/surfaces/:id', async (c) => {
     const { partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     await ownSurface(c.env, partnerId, id);
-    await c.env.DB.prepare('DELETE FROM engagement_sources WHERE surface_id = ?').bind(id).run();
-    await c.env.DB.prepare('DELETE FROM partner_surfaces WHERE id = ?').bind(id).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        'DELETE FROM engagement_sources WHERE surface_id IN (SELECT id FROM partner_surfaces WHERE id = ? AND partner_id = ?)',
+      ).bind(id, partnerId),
+      c.env.DB.prepare('DELETE FROM partner_surfaces WHERE id = ? AND partner_id = ?').bind(id, partnerId),
+    ]);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -297,6 +307,8 @@ partnerOffers.delete('/engagements/:engagementId/source', async (c) => {
 partnerOffers.get('/attribution', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status, e.price,
               n.title AS need_title, f.name AS founder_name,
@@ -307,11 +319,10 @@ partnerOffers.get('/attribution', async (c) => {
          LEFT JOIN engagement_sources es ON es.engagement_id = e.id
          LEFT JOIN partner_surfaces s ON s.id = es.surface_id
         WHERE e.partner_id = ?
-        ORDER BY es.id IS NOT NULL, e.created_at DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
-    return c.json({
-      items: (rows.results || []).map((r: any) => ({
+        ORDER BY es.id IS NOT NULL, e.created_at DESC, e.id DESC
+        LIMIT ? OFFSET ?`,
+    ).bind(partnerId, page.limit, page.offset).all<any>();
+    return c.json(offerPageResult((rows.results || []).map((r: any) => ({
         engagement_id: Number(r.engagement_id),
         engagement_uid: r.engagement_uid,
         status: r.status,
@@ -320,8 +331,7 @@ partnerOffers.get('/attribution', async (c) => {
         founder_name: r.founder_name ?? null,
         surface_id: r.surface_id ? Number(r.surface_id) : null,
         surface_name: r.surface_name ?? null,
-      })),
-    });
+      })), page));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -331,16 +341,33 @@ partnerOffers.get('/attribution', async (c) => {
 
 const PROOF_KINDS = ['case_study', 'outcome', 'testimonial'];
 
+type ProofRow = {
+  id: number; uid: string; partner_id: number; engagement_id: number | null; kind: string; title: string;
+  detail: string | null; outcome_note: string | null; revision: number | null; claim_sha256: string | null;
+  created_at: string; updated_at: string;
+  engagement_uid?: string | null; need_title?: string | null; founder_name?: string | null;
+};
+type ConsentRow = {
+  id: number; uid: string; proof_item_id: number;
+  consenter_name: string; consenter_email: string | null; consenter_role: string | null;
+  requested_at: string | null; requested_by: number | null; request_token: string | null;
+  consent_given: number; consent_given_at: string | null; consent_text: string | null;
+  withdrawn_at: string | null; claim_sha256: string | null; claim_json: string | null;
+  revision: number | null; expires_at: string | null; closed_at: string | null;
+  created_at: string; updated_at: string;
+};
+
 /**
- * A consent as the FIRM may see it.
+ * A consent as the FIRM may see it (D4672).
  *
- * `request_token` is never included — it is the client's credential for
- * answering, and a firm that could read it back could answer on the client's
- * behalf, which would make every consent in the table self-issued and worth
- * nothing. The same reasoning `advisors.ts` records; the column names are 209's
- * (`consenter_*`, `consent_text`), NOT 204's.
+ * `invite_token` is the link the firm hands over, readable again while the
+ * request is open so a refresh never loses it. Since D4672 the link only shows
+ * the claim it is about; answering needs a code mailed to the client's address,
+ * so holding the link is not being able to answer. Once the request is
+ * answered, superseded or expired the link is not returned at all.
  */
-function consentDto(r: any) {
+function consentDto(r: ConsentRow, currentSha: string) {
+  const state = proofConsentState(r, currentSha);
   return {
     id: Number(r.id),
     uid: r.uid,
@@ -349,30 +376,36 @@ function consentDto(r: any) {
     consenter_email: r.consenter_email ?? null,
     consenter_role: r.consenter_role ?? null,
     requested_at: r.requested_at ?? null,
-    consent_given: !!r.consent_given,
+    state,
+    // The revision this consent is about. A superseded confirmation stays
+    // attached to the revision it confirmed; it is never carried forward.
+    revision: r.revision == null ? null : Number(r.revision),
+    consent_given: state === 'confirmed',
     consent_given_at: r.consent_given_at ?? null,
     // The exact words agreed to. Consent to "a case study" and consent to "a
     // case study naming our revenue" are different consents, so the wording is
     // returned rather than a boolean standing in for it.
     consent_text: r.consent_text ?? null,
     withdrawn_at: r.withdrawn_at ?? null,
+    expires_at: r.expires_at ?? null,
+    invite_token: state === 'requested' ? r.request_token : null,
     created_at: r.created_at,
   };
 }
 
 /**
- * PUBLISHED IS DERIVED, never stored — migration 209's header, enforced here.
- *
- * A live consent is `consent_given = 1 AND withdrawn_at IS NULL`. Both halves,
- * so a withdrawal cannot be undone by forgetting to update one of two columns.
+ * PUBLISHED IS DERIVED, never stored — migration 209's header, enforced here,
+ * and since D4672 a consent counts only while it is confirmed about the claim
+ * as it now reads (`proofConsentState`): a withdrawal, an edit after the
+ * answer, or a confirmation recorded before D4672 does not.
  *
  * `status` is `published` or `self_stated`, and the second word is the point:
  * the firm's own account of a result and the client's confirmation of it are
- * different evidence and must never render identically. An item with no consent
- * is the firm reporting a metric about itself, which the zone says out loud.
+ * different evidence and must never render identically.
  */
-function proofDto(r: any, consents: any[]) {
-  const live = consents.filter((x) => Number(x.consent_given) === 1 && !x.withdrawn_at);
+function proofDto(r: ProofRow, consents: ConsentRow[], currentSha: string) {
+  const views = consents.map((x) => consentDto(x, currentSha));
+  const live = views.filter((x) => x.state === 'confirmed');
   return {
     id: Number(r.id),
     uid: r.uid,
@@ -384,24 +417,43 @@ function proofDto(r: any, consents: any[]) {
     title: r.title,
     detail: r.detail ?? null,
     outcome_note: r.outcome_note ?? null,
+    revision: Number(r.revision ?? 1),
     is_published: live.length > 0,
     status: live.length > 0 ? 'published' : 'self_stated',
-    consents: consents.map(consentDto),
+    consents: views,
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
 }
 
-async function ownProofItem(env: Env, partnerId: number, id: number) {
+async function ownProofItem(env: Env, partnerId: number, id: number): Promise<ProofRow> {
   const row = await env.DB.prepare('SELECT * FROM partner_proof_items WHERE id = ?')
-    .bind(id).first<any>();
+    .bind(id).first<ProofRow>();
   if (!row || Number(row.partner_id) !== Number(partnerId)) throw notFound('Proof item');
   return row;
+}
+
+/** The item's current claim hash, written back when a row from before D4672 has none. */
+async function currentClaim(env: Env, row: ProofRow): Promise<string> {
+  const sha = await proofClaimSha256(row);
+  if (row.claim_sha256 !== sha) {
+    await env.DB.prepare('UPDATE partner_proof_items SET claim_sha256 = ? WHERE id = ?').bind(sha, row.id).run();
+    row.claim_sha256 = sha;
+  }
+  return sha;
+}
+
+async function proofEvent(env: Env, consentId: number, kind: string, revision: number | null, sha: string | null, at: string) {
+  await env.DB.prepare(
+    'INSERT INTO partner_proof_consent_events (consent_id, kind, revision, claim_sha256, created_at) VALUES (?, ?, ?, ?, ?)',
+  ).bind(consentId, kind, revision, sha, at).run();
 }
 
 partnerOffers.get('/proof', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const items = await c.env.DB.prepare(
       `SELECT p.*, e.uid AS engagement_uid, n.title AS need_title, f.name AS founder_name
          FROM partner_proof_items p
@@ -409,36 +461,56 @@ partnerOffers.get('/proof', async (c) => {
          LEFT JOIN founder_needs n ON n.id = e.need_id
          LEFT JOIN founders f ON f.id = e.founder_id
         WHERE p.partner_id = ?
-        ORDER BY p.created_at DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT ? OFFSET ?`,
+    ).bind(partnerId, page.limit, page.offset).all<ProofRow>();
+    const result = offerPageResult(items.results || [], page);
 
-    // Joined back to `partner_proof_items.partner_id` for the same two reasons
-    // the pipeline reads do: no `${}` reaches `DB.prepare`, and a consent can
-    // only come back for an item this firm owns.
-    const consents = await c.env.DB.prepare(
+    // Read history only for the displayed items. Older revisions are needed
+    // for their history labels, but the lookahead item needs no consent rows.
+    const consents = result.items.length ? await c.env.DB.prepare(
       `SELECT k.*
          FROM partner_proof_consents k
          JOIN partner_proof_items p ON p.id = k.proof_item_id
         WHERE p.partner_id = ?
-        ORDER BY k.proof_item_id, k.created_at ASC`,
-    ).bind(partnerId).all<any>();
-    const byItem = new Map<number, any[]>();
-    for (const k of consents.results || []) {
+          AND k.proof_item_id IN (SELECT value FROM json_each(?))
+        ORDER BY k.proof_item_id, k.created_at ASC, k.id ASC`,
+    ).bind(partnerId, JSON.stringify(result.items.map((item) => item.id))).all<ConsentRow>() : null;
+    const byItem = new Map<number, ConsentRow[]>();
+    for (const k of consents?.results || []) {
       const id = Number(k.proof_item_id);
       if (!byItem.has(id)) byItem.set(id, []);
       byItem.get(id)!.push(k);
     }
 
-    const list = (items.results || []).map((r: any) => proofDto(r, byItem.get(Number(r.id)) || []));
-    const published = list.filter((x: any) => x.is_published).length;
+    const list = [];
+    for (const r of result.items) {
+      // Hashed from the row as it reads, not trusted from the stored column, so
+      // an item written before D4672 is judged by its content too.
+      list.push(proofDto(r, byItem.get(Number(r.id)) || [], await proofClaimSha256(r)));
+    }
+    // D4672 stores the canonical hash with every material edit and with
+    // each pinned consent. The aggregate needs no consent details.
+    const counts = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(EXISTS (
+                SELECT 1 FROM partner_proof_consents k
+                 WHERE k.proof_item_id = p.id AND k.claim_sha256 = p.claim_sha256
+                   AND k.consent_given = 1 AND k.withdrawn_at IS NULL
+              )), 0) AS published
+         FROM partner_proof_items p WHERE p.partner_id = ?`,
+    ).bind(partnerId).first<{ total: number; published: number }>();
+    const total = Number(counts?.total ?? 0);
+    const published = Number(counts?.published ?? 0);
     return c.json({
+      ...result,
       items: list,
+      total,
       published_count: published,
       // Said as two counts rather than one, because "3 case studies" and
       // "3 case studies, none of which the client agreed to publish" describe
       // very different storefronts.
-      self_stated_count: list.length - published,
+      self_stated_count: total - published,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -460,20 +532,28 @@ partnerOffers.post('/proof', async (c) => {
       const e = await requireOwnEngagement(c.env, partnerId, Number(b.engagement_id));
       engagementId = Number(e.id);
     }
+    const detail = trimOrNull(b.detail, 4000);
+    const outcome = trimOrNull(b.outcome_note, 1000);
+    const sha = await proofClaimSha256({ kind, title, detail, outcome_note: outcome, engagement_id: engagementId });
     const ins = await c.env.DB.prepare(
       `INSERT INTO partner_proof_items
-         (uid, partner_id, engagement_id, kind, title, detail, outcome_note, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      newUid(), partnerId, engagementId, kind, title,
-      trimOrNull(b.detail, 4000), trimOrNull(b.outcome_note, 1000), nowIso(), nowIso(),
-    ).run();
+         (uid, partner_id, engagement_id, kind, title, detail, outcome_note, revision, claim_sha256, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    ).bind(newUid(), partnerId, engagementId, kind, title, detail, outcome, sha, nowIso(), nowIso()).run();
     const row = await c.env.DB.prepare('SELECT * FROM partner_proof_items WHERE id = ?')
-      .bind((ins as any).meta?.last_row_id).first<any>();
-    return c.json(proofDto(row, []));
+      .bind((ins as any).meta?.last_row_id).first<ProofRow>();
+    return c.json(proofDto(row!, [], sha));
   } catch (e) { return mapError(c, e); }
 });
 
+/**
+ * Edit a proof item (D4672). A MATERIAL edit — kind, title, detail, outcome or
+ * the engagement it is about — is a new revision. Every consent stays attached
+ * to the revision it was asked about: a confirmation of the old wording no
+ * longer publishes the new one, and a request still out about the old wording
+ * can no longer confirm anything. Each consent that was live or open when the
+ * claim moved gets a `superseded` event, so the history says when.
+ */
 partnerOffers.patch('/proof/:id', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
@@ -487,24 +567,38 @@ partnerOffers.patch('/proof/:id', async (c) => {
       return c.json({ detail: `Kind must be one of ${PROOF_KINDS.join(', ')}` }, 400);
     }
     let engagementId: number | null = null;
-    if (merged.engagement_id !== null && merged.engagement_id !== undefined) {
+    if (merged.engagement_id !== null && merged.engagement_id !== undefined && (merged.engagement_id as unknown) !== '') {
       const e = await requireOwnEngagement(c.env, partnerId, Number(merged.engagement_id));
       engagementId = Number(e.id);
     }
+    const next = {
+      kind: String(merged.kind), title, detail: trimOrNull(merged.detail, 4000),
+      outcome_note: trimOrNull(merged.outcome_note, 1000), engagement_id: engagementId,
+    };
+    const before = await proofClaimSha256(row);
+    const after = await proofClaimSha256(next);
+    const moved = before !== after;
+    const revision = Number(row.revision ?? 1) + (moved ? 1 : 0);
+    const now = nowIso();
     await c.env.DB.prepare(
       `UPDATE partner_proof_items
-          SET engagement_id = ?, kind = ?, title = ?, detail = ?, outcome_note = ?, updated_at = ?
+          SET engagement_id = ?, kind = ?, title = ?, detail = ?, outcome_note = ?,
+              revision = ?, claim_sha256 = ?, updated_at = ?
         WHERE id = ?`,
-    ).bind(
-      engagementId, String(merged.kind), title,
-      trimOrNull(merged.detail, 4000), trimOrNull(merged.outcome_note, 1000), nowIso(), id,
-    ).run();
+    ).bind(next.engagement_id, next.kind, next.title, next.detail, next.outcome_note, revision, after, now, id).run();
+    if (moved) {
+      const stale = await c.env.DB.prepare(
+        `SELECT id, revision, claim_sha256 FROM partner_proof_consents
+          WHERE proof_item_id = ? AND claim_sha256 = ? AND withdrawn_at IS NULL AND closed_at IS NULL`,
+      ).bind(id, before).all<{ id: number; revision: number | null; claim_sha256: string }>();
+      for (const k of stale.results || []) await proofEvent(c.env, k.id, 'superseded', k.revision, k.claim_sha256, now);
+    }
     const out = await c.env.DB.prepare('SELECT * FROM partner_proof_items WHERE id = ?')
-      .bind(id).first<any>();
+      .bind(id).first<ProofRow>();
     const consents = await c.env.DB.prepare(
-      'SELECT * FROM partner_proof_consents WHERE proof_item_id = ? ORDER BY created_at ASC',
-    ).bind(id).all<any>();
-    return c.json(proofDto(out, consents.results || []));
+      'SELECT * FROM partner_proof_consents WHERE proof_item_id = ? ORDER BY created_at ASC, id ASC',
+    ).bind(id).all<ConsentRow>();
+    return c.json(proofDto(out!, consents.results || [], after));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -513,24 +607,34 @@ partnerOffers.delete('/proof/:id', async (c) => {
     const { partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     await ownProofItem(c.env, partnerId, id);
-    // The consents go with it. A consent row whose item is gone is a record of
-    // a decision about nothing, and it would keep a person's name and email
-    // in the store after the thing they agreed to had been removed.
-    await c.env.DB.prepare('DELETE FROM partner_proof_consents WHERE proof_item_id = ?')
-      .bind(id).run();
-    await c.env.DB.prepare('DELETE FROM partner_proof_items WHERE id = ?').bind(id).run();
+    // The consents and their codes go with it. A consent row whose item is gone
+    // is a record of a decision about nothing, and it would keep a person's
+    // name and email in the store after the thing they agreed to had been
+    // removed. The event history stays: it holds no name or address.
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `DELETE FROM partner_proof_consent_codes WHERE consent_id IN (
+           SELECT k.id FROM partner_proof_consents k JOIN partner_proof_items p ON p.id = k.proof_item_id
+            WHERE p.id = ? AND p.partner_id = ?
+         )`,
+      ).bind(id, partnerId),
+      c.env.DB.prepare(
+        'DELETE FROM partner_proof_consents WHERE proof_item_id IN (SELECT id FROM partner_proof_items WHERE id = ? AND partner_id = ?)',
+      ).bind(id, partnerId),
+      c.env.DB.prepare('DELETE FROM partner_proof_items WHERE id = ? AND partner_id = ?').bind(id, partnerId),
+    ]);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
 
 /**
- * Record the ASK. It does not send it.
+ * Record the ASK, about this revision of the claim. It does not send it.
  *
  * Whether this product should email a client on a firm's behalf is a separate
- * decision, and a route that quietly sent mail to an address a user typed would
- * be making it. The token is returned to the firm ONCE here so the link can be
- * handed over by whatever channel they already have with the client; no later
- * read includes it.
+ * decision, so the firm hands over the link by whatever channel it already has
+ * with the client. The client's email is required because answering needs a
+ * code mailed there on the client's own request (D4672), and it cannot be an
+ * address of the firm asking: the subject of a claim never confirms it.
  */
 partnerOffers.post('/proof/:id/consent-request', async (c) => {
   try {
@@ -539,98 +643,263 @@ partnerOffers.post('/proof/:id/consent-request', async (c) => {
     const item = await ownProofItem(c.env, partnerId, id);
     const b = await body<any>(c);
     const name = trimOrNull(b.consenter_name, 200);
-    if (!name) return c.json({ detail: 'Name the person being asked to confirm' }, 400);
+    if (!name) return refuse(c, 400, { code: 'consenter_name_required', message: 'Name the person being asked to confirm.' });
+    const email = emailOf(b.consenter_email);
+    if (!email) {
+      return refuse(c, 400, { code: 'consenter_email_required', message: 'Give the client’s email address; the code that lets them answer is sent there.' });
+    }
+    const firm = await c.env.DB.prepare('SELECT email FROM partners WHERE id = ?').bind(partnerId).first<{ email: string | null }>();
+    const members = await c.env.DB.prepare('SELECT email FROM users WHERE partner_id = ?').bind(partnerId).all<{ email: string | null }>();
+    const own = [user.email, firm?.email, ...(members.results || []).map((m) => m.email)].map(emailOf).filter(Boolean);
+    if (own.includes(email)) {
+      return refuse(c, 422, { code: 'consenter_is_requester', message: 'The client confirms your claim, not your firm: that address belongs to your firm.' });
+    }
+    const sha = await currentClaim(c.env, item);
+    const revision = Number(item.revision ?? 1);
     const token = newUid();
-    const now = nowIso();
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
     const ins = await c.env.DB.prepare(
       `INSERT INTO partner_proof_consents
          (uid, proof_item_id, consenter_name, consenter_email, consenter_role,
-          requested_at, requested_by, request_token, consent_given, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+          requested_at, requested_by, request_token, consent_given,
+          claim_sha256, claim_json, revision, expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      newUid(), item.id, name,
-      trimOrNull(b.consenter_email, 300), trimOrNull(b.consenter_role, 200),
-      now, user.id, token, now, now,
+      newUid(), item.id, name, email, trimOrNull(b.consenter_role, 200),
+      now, user.id, token, sha, proofClaimJson(item), revision,
+      new Date(nowMs + LINK_TTL_MS).toISOString(), now, now,
     ).run();
+    const consentId = Number((ins as any).meta?.last_row_id);
+    await proofEvent(c.env, consentId, 'asked', revision, sha, now);
     const row = await c.env.DB.prepare('SELECT * FROM partner_proof_consents WHERE id = ?')
-      .bind((ins as any).meta?.last_row_id).first<any>();
-    return c.json({ ...consentDto(row), request_token: token, delivered: false });
+      .bind(consentId).first<ConsentRow>();
+    return c.json({ ...consentDto(row!, sha), delivered: false });
   } catch (e) { return mapError(c, e); }
 });
 
 /**
  * The firm records a withdrawal it was told about out of band.
  *
- * WITHDRAWAL IS A STATE, NOT A DELETE — 209's header. The row stays and says
- * so, because a consent that can silently vanish is not evidence, and because
- * the fact that consent was once given and then taken back is itself worth
- * keeping. The firm CANNOT grant consent through any route: only the token
- * holder can, which is the whole value of the record.
+ * WITHDRAWAL IS A STATE, NOT A DELETE — 209's header — and since D4672 it
+ * closes the request: nothing reopens it, and asking again is a new request on
+ * the record. Only an agreement can be withdrawn; a request nobody answered
+ * has nothing to take back. The firm CANNOT grant consent through any route.
  */
 partnerOffers.post('/proof/:id/consents/:consentId/withdraw', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
-    await ownProofItem(c.env, partnerId, id);
+    const item = await ownProofItem(c.env, partnerId, id);
     const consentId = Number(c.req.param('consentId'));
     const row = await c.env.DB.prepare(
       'SELECT * FROM partner_proof_consents WHERE id = ? AND proof_item_id = ?',
-    ).bind(consentId, id).first<any>();
+    ).bind(consentId, id).first<ConsentRow>();
     if (!row) return c.json({ detail: 'Consent not found' }, 404);
+    if (row.withdrawn_at || row.closed_at) {
+      return refuse(c, 409, { code: 'consent_closed', message: 'This consent is already withdrawn or declined.' });
+    }
+    if (Number(row.consent_given) !== 1) {
+      return refuse(c, 409, { code: 'nothing_to_withdraw', message: 'The client has not agreed to this yet, so there is nothing to withdraw.' });
+    }
     const now = nowIso();
-    await c.env.DB.prepare(
+    const upd = await c.env.DB.prepare(
       `UPDATE partner_proof_consents
-          SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ?`,
-    ).bind(now, now, consentId).run();
+          SET consent_given = 0, withdrawn_at = ?, closed_at = ?, updated_at = ?
+        WHERE id = ? AND withdrawn_at IS NULL AND closed_at IS NULL`,
+    ).bind(now, now, now, consentId).run();
+    if (Number((upd as any)?.meta?.changes ?? 1)) await proofEvent(c.env, consentId, 'withdrawn', row.revision, row.claim_sha256, now);
     const out = await c.env.DB.prepare('SELECT * FROM partner_proof_consents WHERE id = ?')
-      .bind(consentId).first<any>();
-    return c.json(consentDto(out));
+      .bind(consentId).first<ConsentRow>();
+    return c.json(consentDto(out!, await proofClaimSha256(item)));
+  } catch (e) { return mapError(c, e); }
+});
+
+/** The consent a link names, the item it is about, the firm, and the item's current claim hash. */
+async function consentByToken(env: Env, token: string) {
+  if (!token || token.length > 100) return null;
+  const row = await env.DB.prepare('SELECT * FROM partner_proof_consents WHERE request_token = ?')
+    .bind(token).first<ConsentRow>();
+  if (!row) return null;
+  const item = await env.DB.prepare('SELECT * FROM partner_proof_items WHERE id = ?')
+    .bind(row.proof_item_id).first<ProofRow>();
+  if (!item) return null;
+  const firm = await env.DB.prepare('SELECT id, name, company FROM partners WHERE id = ?')
+    .bind(item.partner_id).first<{ id: number; name: string | null; company: string | null }>();
+  return { row, item, firm, currentSha: await proofClaimSha256(item) };
+}
+
+const NO_REQUEST = { code: 'consent_not_found', message: 'This request does not exist, or the claim it was about was removed.' } as const;
+
+/** Why a request answers nothing, as the client reads it; null when it can be answered. */
+function unanswerable(row: ConsentRow, currentSha: string) {
+  const state = proofConsentState(row, currentSha);
+  if (state === 'declined' || state === 'withdrawn') {
+    return { code: 'consent_closed', message: 'This request is closed: it was declined or withdrawn, and that stays on the record. The firm can send a new request.' };
+  }
+  if (state === 'expired') return { code: 'request_expired', message: 'This request has expired. Ask the firm to send a new one.' };
+  if (state === 'superseded' && Number(row.consent_given) !== 1) {
+    return { code: 'claim_changed', message: 'The firm changed this claim after asking, so this request can no longer confirm it. Ask the firm to send a new request.' };
+  }
+  return null;
+}
+
+/**
+ * The client's view (D4672): the claim exactly as they are asked to confirm
+ * it, the firm that asked, the revision, and the history of the request. No
+ * account and no code: reading is what the link is for. Never the client's
+ * address in full, and never anything about another claim.
+ *
+ * Three segments with a literal first, so `/proof/:id` two segments up cannot
+ * shadow these, and neither can any future single-segment route.
+ */
+partnerOffers.get('/proof-consents/:token/claim', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, firm, currentSha } = found;
+    const events = (await c.env.DB.prepare(
+      'SELECT kind, revision, created_at FROM partner_proof_consent_events WHERE consent_id = ? ORDER BY id ASC',
+    ).bind(row.id).all<{ kind: string; revision: number | null; created_at: string }>()).results || [];
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({
+      firm_name: firm?.company || firm?.name || null,
+      consenter_name: row.consenter_name,
+      email_hint: maskEmail(row.consenter_email),
+      // Only the claim as pinned. A request from before D4672 pinned nothing,
+      // and showing today's wording would ask the client about text they were
+      // never shown.
+      claim: row.claim_json ? JSON.parse(row.claim_json) : null,
+      revision: row.revision == null ? null : Number(row.revision),
+      claim_sha256: row.claim_sha256,
+      claim_changed: !!row.claim_sha256 && row.claim_sha256 !== currentSha,
+      state: proofConsentState(row, currentSha),
+      consent_text: row.consent_text,
+      expires_at: row.expires_at,
+      history: events,
+    });
   } catch (e) { return mapError(c, e); }
 });
 
 /**
- * The client answers. Token-authenticated and NOT firm-scoped.
+ * Mail the client a one-time code (D4672), on their own request, to the
+ * address the firm named. Five an hour per request; a code lasts 15 minutes.
+ * The address is never echoed in full and never logged. A closed, expired or
+ * superseded request sends nothing: there is nothing it could answer.
+ */
+partnerOffers.post('/proof-consents/:token/code', async (c) => {
+  try {
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, firm, currentSha } = found;
+    const why = unanswerable(row, currentSha);
+    if (why) return refuse(c, 409, why);
+    const to = emailOf(row.consenter_email);
+    if (!to) {
+      return refuse(c, 409, { code: 'consenter_email_missing', message: 'This request names no email address, so no code can be sent. Ask the firm to send a new request.' });
+    }
+    const nowMs = Date.now();
+    const recent = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM partner_proof_consent_codes WHERE consent_id = ? AND datetime(created_at) > datetime(?)',
+    ).bind(row.id, new Date(nowMs - 3600_000).toISOString()).first<{ n: number }>();
+    if (Number(recent?.n || 0) >= CODES_PER_HOUR) {
+      return refuse(c, 429, { code: 'code_rate_limited', message: 'Several codes were sent in the last hour. Use the latest one, or try again later.' });
+    }
+    const code = newCode();
+    await c.env.DB.prepare(
+      'INSERT INTO partner_proof_consent_codes (consent_id, code_hash, expires_at, attempts, created_at) VALUES (?, ?, ?, 0, ?)',
+    ).bind(row.id, await proofCodeHash(row.id, code), new Date(nowMs + CODE_TTL_MS).toISOString(), new Date(nowMs).toISOString()).run();
+    const sent = await proofConsentMailer.send(c.env, to, firm?.company || firm?.name || 'A firm', code);
+    if (!sent) return refuse(c, 503, { code: 'code_unsent', message: 'The code could not be emailed just now. Try again in a few minutes.' });
+    return c.json({ sent: true, email_hint: maskEmail(to), expires_in_seconds: CODE_TTL_MS / 1000 });
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * The client answers (D4672). The link names the request; the code proves the
+ * person answering reads the address the firm named, and is spent by the
+ * answer. `claim_sha256` is the claim the client was shown: a confirmation is
+ * recorded only when it is the claim this request pinned AND the item still
+ * reads that way. Declining or withdrawing closes the request for good. A
+ * signed-in member of the firm is refused even with a code.
  *
- * `requireAuth` is deliberately absent, for the reason `advisors.ts` records
- * for its twin: the counterparty on an engagement is often not a user of this
- * product, and requiring an account would mean the only publishable outcomes
- * are the ones a client who already has an Axal login will vouch for.
- *
- * Three segments with a literal first, so `/proof/:id` two segments up cannot
- * shadow it and neither can any future single-segment route.
+ * `requireAuth` is deliberately absent: the counterparty on an engagement is
+ * often not a user of this product.
  */
 partnerOffers.post('/proof-consents/:token/respond', async (c) => {
   try {
-    const token = String(c.req.param('token') || '');
-    const row = await c.env.DB.prepare(
-      'SELECT * FROM partner_proof_consents WHERE request_token = ?',
-    ).bind(token).first<any>();
-    if (!row) return c.json({ detail: 'Consent request not found' }, 404);
+    const found = await consentByToken(c.env, String(c.req.param('token') || ''));
+    if (!found) return refuse(c, 404, NO_REQUEST);
+    const { row, item, currentSha } = found;
     const b = await body<any>(c);
-    const now = nowIso();
-    if (b.consent_given === false) {
-      // Declining and withdrawing are the same shape: the row stays and says
-      // no. A request that vanished on refusal would let a firm re-ask until
-      // it got a yes, with nothing on the record.
-      await c.env.DB.prepare(
-        `UPDATE partner_proof_consents
-            SET consent_given = 0, withdrawn_at = ?, updated_at = ? WHERE id = ?`,
-      ).bind(now, now, row.id).run();
-    } else {
-      const text = String(b.consent_text || '').trim();
-      if (!text) {
-        return c.json({ detail: 'consent_text must record what was agreed to' }, 400);
+    const caller = await getCurrentUser(c).catch(() => null);
+    if (caller?.partner_id != null && Number(caller.partner_id) === Number(item.partner_id)) {
+      return refuse(c, 403, { code: 'requester_cannot_confirm', message: 'Your firm cannot answer a request about its own claim.' });
+    }
+    const code = typeof b.code === 'string' ? b.code.trim() : '';
+    if (!/^\d{6}$/.test(code)) return refuse(c, 400, { code: 'code_required', message: 'Enter the six-digit code emailed to you.' });
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const latest = await c.env.DB.prepare(
+      'SELECT id, code_hash, expires_at, attempts, used_at FROM partner_proof_consent_codes WHERE consent_id = ? ORDER BY id DESC LIMIT 1',
+    ).bind(row.id).first<{ id: number; code_hash: string; expires_at: string; attempts: number; used_at: string | null }>();
+    if (!latest || latest.used_at || Date.parse(latest.expires_at) <= nowMs || Number(latest.attempts) >= CODE_MAX_ATTEMPTS) {
+      return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+    }
+    if (latest.code_hash !== await proofCodeHash(row.id, code)) {
+      await c.env.DB.prepare('UPDATE partner_proof_consent_codes SET attempts = attempts + 1 WHERE id = ?').bind(latest.id).run();
+      return refuse(c, 401, { code: 'code_wrong', message: 'That code is not right. Check the latest email and try again.' });
+    }
+
+    const declining = b.consent_given === false;
+    const why = unanswerable(row, currentSha);
+    if (why) return refuse(c, 409, why);
+    let consentText = '';
+    if (!declining) {
+      if (Number(row.consent_given) === 1) {
+        return refuse(c, 409, { code: 'already_confirmed', message: 'You have already confirmed this. To take it back, withdraw it.' });
       }
-      await c.env.DB.prepare(
+      consentText = String(b.consent_text || '').trim();
+      if (!consentText) return refuse(c, 400, { code: 'consent_text_required', message: 'consent_text must record what was agreed to.' });
+      if (row.claim_sha256 !== currentSha || b.claim_sha256 !== row.claim_sha256) {
+        return refuse(c, 409, { code: 'claim_changed', message: 'The claim has changed since you were asked. Nothing was recorded; the firm needs to ask again.' });
+      }
+    }
+
+    // The code is spent before anything is written, so it answers once.
+    const spent = await c.env.DB.prepare('UPDATE partner_proof_consent_codes SET used_at = ? WHERE id = ? AND used_at IS NULL')
+      .bind(now, latest.id).run();
+    if (!Number((spent as any)?.meta?.changes ?? 1)) {
+      return refuse(c, 401, { code: 'code_expired', message: 'That code has expired or was already used. Ask for a new one.' });
+    }
+
+    if (declining) {
+      // Declining and withdrawing are the same shape: the row stays, says no,
+      // and the request is closed. The event says which it was.
+      const upd = await c.env.DB.prepare(
         `UPDATE partner_proof_consents
-            SET consent_given = 1, consent_given_at = ?, consent_text = ?,
-                withdrawn_at = NULL, updated_at = ?
-          WHERE id = ?`,
-      ).bind(now, text.slice(0, 2000), now, row.id).run();
+            SET consent_given = 0, withdrawn_at = ?, closed_at = ?, updated_at = ?
+          WHERE id = ? AND withdrawn_at IS NULL AND closed_at IS NULL`,
+      ).bind(now, now, now, row.id).run();
+      if (Number((upd as any)?.meta?.changes ?? 1)) {
+        await proofEvent(c.env, row.id, row.consent_given_at ? 'withdrawn' : 'declined', row.revision, row.claim_sha256, now);
+      }
+    } else {
+      const upd = await c.env.DB.prepare(
+        `UPDATE partner_proof_consents
+            SET consent_given = 1, consent_given_at = ?, consent_text = ?, updated_at = ?
+          WHERE id = ? AND consent_given = 0 AND withdrawn_at IS NULL AND closed_at IS NULL AND claim_sha256 = ?`,
+      ).bind(now, consentText.slice(0, 2000), now, row.id, currentSha).run();
+      if (!Number((upd as any)?.meta?.changes ?? 1)) {
+        return refuse(c, 409, { code: 'consent_closed', message: 'This request changed while you were answering. Nothing was recorded; reload to see where it stands.' });
+      }
+      await proofEvent(c.env, row.id, 'confirmed', row.revision, currentSha, now);
     }
     const out = await c.env.DB.prepare('SELECT * FROM partner_proof_consents WHERE id = ?')
-      .bind(row.id).first<any>();
-    return c.json(consentDto(out));
+      .bind(row.id).first<ConsentRow>();
+    // The client's own answer: never the firm's link, never the address.
+    const { invite_token: _link, consenter_email: _addr, ...answer } = consentDto(out!, currentSha);
+    return c.json(answer);
   } catch (e) { return mapError(c, e); }
 });
 

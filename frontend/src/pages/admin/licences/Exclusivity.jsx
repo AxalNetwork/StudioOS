@@ -15,19 +15,20 @@ import { reportError } from '../../../lib/log';
 import OutcomeNotice from '../../../components/OutcomeNotice';
 import { describeOutcome, outcomeFromError } from '../../../lib/mutationOutcome';
 import { ACTION_LABELS, NOT_RECORDED, SCOPE_LABELS, STATE_LABELS, buildSave, yearLine } from './exclusivityModel';
+import { codeAmount, parseMinor, toMajorString } from '../../../lib/money.js';
 
 const input = 'mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-900';
 const btn = 'rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-gray-800';
 const EYE = 'text-[11px] uppercase tracking-wide text-gray-500';
-const money = (c, cur) => (c === null || c === undefined ? NOT_RECORDED : `${cur || ''} ${(Number(c) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim());
+const money = (c, cur) => (c === null || c === undefined ? NOT_RECORDED : codeAmount(Number(c), cur, { locale: undefined }));
 
-function formFrom(x) {
+function formFrom(x, currency) {
   const t = x?.targets || [];
   const year = (n) => {
     const y = t.find((v) => v.year === n) || {};
     return {
       year: n, period_start: y.period_start || '', period_end: y.period_end || '',
-      min_revenue: y.min_revenue_cents == null ? '' : String(y.min_revenue_cents / 100),
+      min_revenue: y.min_revenue_cents == null ? '' : toMajorString(y.min_revenue_cents, currency) ?? String(y.min_revenue_cents),
       min_cohorts: y.min_cohorts == null ? '' : String(y.min_cohorts), min_active_members: y.min_active_members == null ? '' : String(y.min_active_members),
     };
   };
@@ -40,14 +41,14 @@ function formFrom(x) {
 }
 
 function Editor({ api, view, onDone, setNotice }) {
-  const [form, setForm] = useState(() => formFrom(view.exclusivity));
+  const [form, setForm] = useState(() => formFrom(view.exclusivity, view.operating.currency));
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const setT = (i, k) => (e) => setForm((f) => ({ ...f, targets: f.targets.map((t, j) => (j === i ? { ...t, [k]: e.target.value } : t)) }));
   const hasAgreement = view.agreement?.state === 'matches' || view.agreement?.state === 'mismatch';
   async function save() {
-    const built = buildSave({ form, revision: view.exclusivity?.revision ?? 0 });
+    const built = buildSave({ form, revision: view.exclusivity?.revision ?? 0, currency: view.operating.currency });
     if (!built.ok) { setErrors(built.errors); return; }
     setErrors({}); setBusy(true); setNotice(null);
     try {
@@ -125,7 +126,9 @@ function ObservationForm({ api, view, onDone, setNotice }) {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
   const revenue = f.metric === 'qualifying_revenue_cents';
-  const value = String(f.value).trim() === '' ? null : revenue ? Math.round(Number(f.value) * 100) : Number(f.value);
+  // D5373: an amount is typed in the licence's operating currency, at that currency's own decimals.
+  const revenueParsed = revenue ? parseMinor(f.value, view.operating.currency) : null;
+  const value = String(f.value).trim() === '' ? null : revenue ? (revenueParsed.ok ? revenueParsed.minor : Number.NaN) : Number(f.value);
   const ok = value !== null && Number.isSafeInteger(value) && value >= 0 && f.period_start && f.period_end && f.source.trim().length >= 2 && f.reason.trim().length >= 3;
   async function save() {
     setBusy(true); setNotice(null);

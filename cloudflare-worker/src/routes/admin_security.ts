@@ -79,7 +79,7 @@ import {
   loadSecurityEventCounts, SECURITY_EVENT_KINDS, SECURITY_EVENT_RETENTION_DAYS, SECURITY_EVENTS_NOT_COUNTED,
 } from '../services/securityEvents';
 import { screeningSummary } from '../services/sanctions';
-import { readBackupHeartbeat, readRestoreDrill } from '../services/backup';
+import { readBackupHeartbeat, readRestoreDrill, readRestoreDrillHistory } from '../services/backup';
 import { branchBindings } from '../services/branches';
 import {
   emergencyScope, deploymentOutcomes, signOutOnBranches, type BranchSignOutTarget,
@@ -90,6 +90,7 @@ import {
   dsrStampMs, dsrDeadlineIso, loadOpenDsrRequestIds, DSR_CLOSE_KEY_RE, loadRecentDsrClosures,
 } from '../services/dsrRequests';
 import { ensureAdminAuditLogTable } from './admin';
+import { freshnessFor, type SecuritySource } from '../services/securitySourceFreshness';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -101,6 +102,8 @@ const ADMIN_MFA_GAP_LIMIT = 50;
 
 type Absent = { available: false; reason: string };
 const absent = (reason: string): Absent => ({ available: false, reason });
+/** D5247 — a freshness row's fields beside a ledger source, whose own key stays `table`. */
+const withoutSource = ({ source: _s, ...rest }: { source: string } & Record<string, unknown>) => rest;
 
 /**
  * D152 — THE SENTENCE WAS WRONG ON TWO OF ITS THREE CLAUSES, AND IT IS
@@ -463,7 +466,7 @@ r.get('/overview', async (c) => {
     };
   });
 
-  return c.json({
+  const body = {
     audit,
     impersonations,
     sessions,
@@ -521,9 +524,29 @@ r.get('/overview', async (c) => {
       // read with the same validation. KV has no restore drill.
       kv: await readBackupHeartbeat(env, 'kv'),
       drill: await readRestoreDrill(env),
+      drill_history: await readRestoreDrillHistory(env, now),
       not_recorded: DR_NOT_RECORDED,
     },
-  });
+  };
+
+  // D5247 — per store this read touched: whether it answered, the last good read, the store's own age and
+  // whether it is past it. The ledger's own stores carry the same fields on /governance's `sources[]`. A
+  // heartbeat or marker answered when R2 answered (one never written, or invalid, is a read that found no
+  // evidence); its evidence time is the recovery point or the marker's stamp.
+  const r2Answered = (state: string) => state !== 'unreadable';
+  const { backup: hbD1, kv: hbKv } = body.backup_dr;
+  const marker = body.backup_dr.drill;
+  const sources = await freshnessFor(env, [
+    { source: 'admin_audit_log', answered: body.audit.available },
+    { source: 'impersonation_sessions', answered: body.impersonations.available },
+    { source: 'security_events', answered: body.security_events.available },
+    { source: 'sanctions_screenings', answered: body.sanctions.available },
+    { source: 'backup_d1', answered: r2Answered(hbD1.state), evidence_at: hbD1.available ? hbD1.recovery_point : null },
+    { source: 'backup_kv', answered: r2Answered(hbKv.state), evidence_at: hbKv.available ? hbKv.recovery_point : null },
+    { source: 'restore_drill', answered: r2Answered(marker.state), evidence_at: 'at' in marker ? marker.at : null },
+  ], now);
+
+  return c.json({ ...body, sources });
 });
 
 // ── Canvas H7 · the privileged-action feed ────────────────────────────────
@@ -1337,6 +1360,11 @@ r.get('/governance', async (c) => {
     accessExports = absent('The export records could not be read.');
   }
 
+  // D5247 — each store this read touched gains its last good read and its own age, so the Overview can mark it
+  // Stale; a store this filter did not read is not in `sources` and is not recorded.
+  const fresh = await freshnessFor(env, sources.map((s) => ({ source: s.table as SecuritySource, answered: s.available })));
+  const withFreshness = sources.map((s, i) => ({ ...s, ...withoutSource(fresh[i]) }));
+
   return c.json({
     filter,
     filters: FEED_FILTERS,
@@ -1351,7 +1379,7 @@ r.get('/governance', async (c) => {
     page_split_second: split,
     outcomes: FEED_OUTCOMES,
     stores: FEED_SOURCES,
-    sources,
+    sources: withFreshness,
     // What no store can say, said once rather than once per row.
     tenant_available: false,
     tenant_reason:

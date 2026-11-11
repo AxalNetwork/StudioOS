@@ -87,7 +87,7 @@ function CompareTable({ ventures, flowUnknown = false }) {
           ))}
           <tr className="border-t border-axal-hairline dark:border-gray-700"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Ask</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><AskCell row={v} /></td>)}</tr>
           <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Your stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5">{flowUnknown ? 'Unreadable' : stageWord(v.stage)}</td>)}</tr>
-          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Days in stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><DaysCell row={v} /></td>)}</tr>
+          <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Days in stage</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><DaysCell row={v} flowUnknown={flowUnknown} testId={`dealflow-compare-days-${v.id}`} /></td>)}</tr>
           <tr className="border-t border-gray-100 dark:border-gray-800"><th scope="row" className="px-2 py-1.5 text-left font-semibold">Fit to my thesis</th>{ventures.map((v) => <td key={v.id} className="px-2 py-1.5"><FitCell fit={v.fit} /></td>)}</tr>
         </tbody>
       </table>

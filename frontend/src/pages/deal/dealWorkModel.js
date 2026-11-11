@@ -226,19 +226,17 @@ const STATUS_WORD = { pending: 'Pending', confirmed: 'Confirmed', withdrawn: 'Wi
 /** D4633: whom a commitment is held for, said outright. */
 export function firmLine(row) {
   if (!row) return null;
-  if (row.legacy) return LEGACY_LINE;
   if (row.company_id == null) return 'Held in your own name.';
   return `Held for ${row.company_name || 'your firm'}.`;
 }
-/** D4633: a commitment recorded before commitments named a firm; listed, never acted on here. */
-export const LEGACY_LINE = 'Recorded before commitments named a firm. Ask the studio to assign it to a firm; until then it cannot be changed or withdrawn here.';
 
 /**
  * Your commitment: the live one, if any; withdrawn ones are history.
  * D4633: `read.dealId` is the deal the read was for. A read for another deal
  * (an answer that arrived after the page moved on) reads as loading, never as
  * this deal's commitment. The live row is the one in the firm context the
- * Worker read under (`in_context`); a legacy row is shown apart, with no action.
+ * Worker read under (`in_context`). D5355 retired the pre-firm compatibility
+ * branch after a production count found no such rows.
  */
 export function myCommitment(read, currency = 'USD', dealId = undefined) {
   if (!read || read.status === 'loading') return { state: 'loading' };
@@ -247,14 +245,11 @@ export function myCommitment(read, currency = 'USD', dealId = undefined) {
   const rows = (Array.isArray(read.items) ? read.items : []).filter((r) => dealId === undefined || r.deal_id == null || String(r.deal_id) === String(dealId));
   const liveOf = (r) => r.status === 'pending' || r.status === 'confirmed';
   const live = rows.find((r) => liveOf(r) && r.in_context !== false);
-  const legacy = rows.filter((r) => liveOf(r) && r.in_context === false)
-    .map((r) => ({ uid: r.uid, line: `${dealMoney(r.amount, currency) || NOT_RECORDED} · ${STATUS_WORD[r.status] || r.status}`, note: LEGACY_LINE }));
   const history = rows.filter((r) => r !== live && !liveOf(r)).map((r) => ({ uid: r.uid, line: `${dealMoney(r.amount, currency) || NOT_RECORDED} · ${STATUS_WORD[r.status] || r.status} · recorded ${dayOf(r.created_at) || 'on a date not recorded'}` }));
-  if (!live) return { state: 'none', history, legacy };
+  if (!live) return { state: 'none', history };
   return {
     state: 'ready',
     firm: firmLine(live),
-    legacy,
     uid: live.uid,
     amount: dealMoney(live.amount, currency) || NOT_RECORDED,
     status: STATUS_WORD[live.status],

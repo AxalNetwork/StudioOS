@@ -130,8 +130,27 @@ test('Resilience renders a failed drill first, with a green backup beside it tha
   assert.match(t, /Restore drill failed at the restore step/);
   assert.match(t, /evidence of a backup, not of a restore/);
   assert.match(t, /No drill for KV/);
-  assert.match(t, /Latest run only/);
+  assert.match(t, /The restore drill history could not be read/);
   assert.match(out, /data-mark="failed"/);
+});
+
+test('D5317: an empty history says Not recorded and recorded runs retain their own outcomes', () => {
+  const block = BACKUP(FAILED());
+  block.drill_history = { available: true, rows: [] };
+  assert.match(text(h(ResilienceWorkspace, { block })), /No runs have been recorded in the history yet/);
+  block.drill_history.rows = [
+    { id: 'new', at: '2026-11-01T03:10:00Z', outcome: 'failed', step: 'restore', exit_code: 2, run_id: '101', reason: 'restore_failed' },
+    { id: 'old', at: '2026-09-01T03:10:00Z', outcome: 'passed', fresh: false },
+  ];
+  const out = text(h(ResilienceWorkspace, { block }));
+  assert.ok(out.indexOf('View run 101') < out.lastIndexOf('Stale'));
+  assert.match(out, /Failed step.*Restore.*Exit code.*2.*restore_failed/i);
+  assert.doesNotMatch(out, /Some restore drill records could not be read/);
+  block.drill_history.partial = true;
+  const partial = text(h(ResilienceWorkspace, { block, onRetry: () => {} }));
+  assert.match(partial, /Some restore drill records could not be read/);
+  assert.match(partial, /Retry/);
+  assert.match(partial, /View run 101/);
 });
 
 test('Resilience unreadable says what is not claimed, and pending reads as reading', () => {

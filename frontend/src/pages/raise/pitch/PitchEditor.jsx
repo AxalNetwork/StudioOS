@@ -17,6 +17,7 @@ import { deckImagesApi } from '../../../lib/api/deckImages';
 import { ChartLibrary } from './ChartTools';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { NEW_PATH } from './newDeckModel';
+import { deckSaveFailure } from './pitchSafeErrors.js';
 import PitchPage from './PitchPage';
 import DeckToolbar from './DeckToolbar';
 import DeckBar from './DeckBar';
@@ -421,7 +422,8 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
   // D4271 (#4271): `?card=<n>` (from 1) opens on that card, and `&comments=1` with its comments, as the Review tile links them.
   const [deepLink] = useSearchParams();
   // D1558 (#3805): `card` may also be a card uid, and `&area=c1-6r2-4` (or an area id) selects that Grid area once the card is open.
-  const [sel, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const [selected, setSel] = useState(() => cardFromLink(deepLink.get('card'), cardsOf(deck)));
+  const sel = Math.min(selected, Math.max(0, cards.length - 1));
   const linkedArea = useRef(deepLink.get('area'));
   const [pickState, setPickState] = useState(NO_PICK);
   const [askLine, setAskLine] = useState(null);
@@ -716,6 +718,10 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
     if (id === 'save') { if (!readOnly && dirty) setDialog({ kind: 'save' }); return; }
     if (id === 'save_named') { if (!readOnly) setDialog({ kind: 'save', named: true }); return; }
     if (id === 'duplicate') { if (!readOnly) duplicate(sel); return; }
+    if (id === 'remove_card') {
+      if (!readOnly && card) setDialog({ kind: 'remove-card', uid: cardUid(card) });
+      return;
+    }
     if (id === 'appendix') { if (!readOnly) toggleAppendix(sel); return; }
     if (id === 'notes') { navigate(`/raise/pitch/notes${ventureQuery(project?.id)}`); return; }
     if (id === 'undo') { if (!readOnly) undo(); return; }
@@ -1011,6 +1017,18 @@ function Editor({ project, deck, model, kit, refresh, sources, charts, versions,
             onConfirm={() => { setCard(sel, r.card, { label: 'Layout' }); setPickState(NO_PICK); setDialog(null); setSheet(null); }} />
         );
       })() : null}
+      {dialog?.kind === 'remove-card' && !readOnly ? (
+        <ConfirmDialog title="Remove this card?" testId="pitch-editor-remove-card"
+          lines={['This removes the card from your draft. You can undo it before leaving the editor.']}
+          confirm="Remove card" onClose={() => setDialog(null)}
+          onConfirm={() => {
+            edit((doc) => {
+              const index = cardIndexByUid(doc.cards, dialog.uid);
+              return index < 0 ? null : { type: 'removeCard', index };
+            }, { label: 'Remove card' });
+            setPickState(NO_PICK); setDialog(null);
+          }} />
+      ) : null}
       {dialog?.kind === 'remove-block' && card ? (
         <ConfirmDialog title="Remove this block?" testId="pitch-editor-remove-dialog"
           lines={[`The ${blockLabel(card.blocks.find((b) => b.id === dialog.id))} leaves card ${sel + 1}.`, 'Nothing is saved until you save a version.']}
@@ -1087,7 +1105,7 @@ function AddBlockDialog({ deckId = null, initialFrom = null, card: given, model,
     uploadVideoAdapter(deckId, file).then((r) => {
       const v = r?.available ? r.value?.video : null;
       setVideo(v ? { status: 'ok', data: { ...v, poster_url: null, title: fields.title || '' } }
-        : { status: 'error', data: null, error: { message: r?.reason ? `The video was not added: ${r.reason}` : 'The video could not be uploaded. Nothing was added.' } });
+        : { status: 'error', data: null, error: { text: r?.reason ? `The video was not added: ${r.reason}` : 'The video could not be uploaded. Nothing was added.' } });
     });
   };
   // D1604: from a selected empty range, that range is the first size and place.
@@ -1211,7 +1229,7 @@ function AddBlockDialog({ deckId = null, initialFrom = null, card: given, model,
                 {video.status === 'loading' ? <span className={MUTED} role="status">Uploading…</span> : null}
               </>
             )}
-            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.message || (videoFrom === 'file' ? 'The video could not be uploaded.' : 'The link could not be checked.')}</span> : null}
+            {video.status === 'error' ? <span className="text-[12px] font-semibold text-axal-destructive dark:text-red-400" role="alert" data-testid="pitch-editor-video-error">{video.error?.text || (videoFrom === 'file' ? 'The video could not be uploaded.' : 'The link could not be checked.')}</span> : null}
             {video.status === 'ok' ? (
               <span className="flex items-center gap-2" data-testid="pitch-editor-video-ok">
                 {video.data.poster_url ? <img src={video.data.poster_url} alt="" className="h-12 w-20 rounded object-cover" /> : null}
@@ -1336,7 +1354,7 @@ function SaveDialog({ changes, save, onSaved, onClose, named = false, initialNam
     setBusy(true); setError(null);
     save(named ? (name.trim() || initialName) : undefined).then(
       (r) => { setBusy(false); onSaved(r); },
-      (e) => { setBusy(false); setError(e?.message || 'The deck could not be saved.'); reportError('pitch-editor:save', e); },
+      (e) => { setBusy(false); setError(deckSaveFailure(e)); reportError('pitch-editor:save', e); },
     );
   };
   return (
@@ -1385,6 +1403,7 @@ function PhoneEditor({ cards, sel, setSel, move, card, readOnly, onNotes, notesM
   return (
     <div className="flex flex-col gap-2.5" data-testid="pitch-editor-phone">
       <span className={MUTED}>{PHONE_NOTE}</span>
+      {!cards.length ? <div className={`${CARD} p-6 ${MUTED}`}>{NO_CARDS}</div> : null}
       <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
         {cards.map((c, i) => (
           <li key={i} className={`${CARD} flex min-h-[44px] items-center gap-2 px-3 ${i === sel ? 'border-axal-violet' : ''}`}>

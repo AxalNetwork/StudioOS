@@ -210,6 +210,7 @@ export default function InterviewRecord({
   const [detailRead, setDetailRead] = useState({ sessionId: null, value: undefined });
   const [receiptRead, setReceiptRead] = useState({ sessionId: null, value: undefined });
   const [summarising, setSummarising] = useState({ busy: false, error: null });
+  const [setupAction, setSetupAction] = useState({ busy: false, error: null });
   // D771 (#2097): while the summary is written, the rail is that option's.
   useRailOption(summarising.busy ? 'summarise:session' : null, 'Summarise');
   const [search, setSearch] = useState('');
@@ -354,8 +355,29 @@ export default function InterviewRecord({
                 : <p className={MUTED} data-testid="transcript-no-match">No passage holds “{search.trim()}”.</p>)}
               {session && !reviewable && (
                 <div data-testid="interview-session-not-reviewable">
-                  <p className={MUTED}>{`This session is ${statusWord(session.status).toLowerCase()}: nothing to review yet.`}</p>
-                  <Link to={`/validate/session/${encodeURIComponent(session.id)}`} className="mt-2 inline-block text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid="link-open-session">Open the session</Link>
+                  {session.setup_complete_at === null ? (
+                    <>
+                      <p className={MUTED}>Session setup did not finish. Finish it before recording, or delete it.</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-3">
+                        <Link to={`/validate/record?interview=${encodeURIComponent(id)}&project_id=${encodeURIComponent(projectId)}&setup_key=${encodeURIComponent(session.client_key)}`}
+                          className="text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid="finish-list-session-setup">Finish setup</Link>
+                        <button type="button" disabled={setupAction.busy} onClick={async () => {
+                          setSetupAction({ busy: true, error: null });
+                          try {
+                            await sessions.remove(session.id);
+                            setList((current) => current && ({ ...current, items: (current.items || []).filter((item) => String(item.id) !== String(session.id)) }));
+                            setSetupAction({ busy: false, error: null });
+                          } catch (e) { setSetupAction({ busy: false, error: e?.message || 'The unfinished session could not be deleted.' }); }
+                        }} className="text-[12.5px] font-semibold text-red-700 underline disabled:opacity-50 dark:text-red-300" data-testid="delete-list-incomplete-session">Delete</button>
+                      </div>
+                      {setupAction.error && <p role="alert" className="mt-2 text-[12.5px] font-semibold text-red-700 dark:text-red-300">{setupAction.error}</p>}
+                    </>
+                  ) : (
+                    <>
+                      <p className={MUTED}>{`This session is ${statusWord(session.status).toLowerCase()}: nothing to review yet.`}</p>
+                      <Link to={`/validate/session/${encodeURIComponent(session.id)}`} className="mt-2 inline-block text-[12.5px] font-semibold text-violet-700 underline dark:text-violet-300" data-testid="link-open-session">Open the session</Link>
+                    </>
+                  )}
                 </div>
               )}
             </>

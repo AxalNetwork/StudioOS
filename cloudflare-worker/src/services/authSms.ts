@@ -13,7 +13,7 @@
  */
 import type { Env } from '../types';
 import { encryptColumn, decryptColumn, last4 } from './columnCipher';
-import { bindingKey } from '../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
 
 const MIGRATED = new WeakMap<object, boolean>();
 async function ensureSchema(env: Env): Promise<void> {
@@ -39,17 +39,24 @@ async function ensureSchema(env: Env): Promise<void> {
     // deadline-bounded helper into seven SMS call sites to declare a column
     // this module never reads would be coupling bought for nothing.
   ];
-  for (const s of stmts) {
-    try { await env.DB.prepare(s).run(); }
-    catch (e) {
-      const msg = (e as Error).message || '';
-      if (!/duplicate column|already exists/i.test(msg)) {
-        console.warn('[authSms] schema stmt skipped:', msg);
-      }
-    }
+  // #5343 (#4568 R2-04): asked first (`runSchemaBootstrap`). `users` is at D1's
+  // 100-column limit, so the blind ALTER this replaces failed "too many columns"
+  // (not "duplicate column") on every fresh isolate, logged a warning, and the
+  // binding was marked ready anyway. A genuine failure now throws
+  // `auth_sms_schema_not_ready` and is not remembered; the caller's own error path answers it.
+  try {
+    await runSchemaBootstrap(env, stmts);
+  } catch {
+    console.error('[authSms] schema_not_ready');
+    throw new Error(AUTH_SMS_SCHEMA_NOT_READY);
   }
   MIGRATED.set(bindingKey(env), true);
 }
+
+/** #5343: what a genuinely failed bootstrap throws. */
+export const AUTH_SMS_SCHEMA_NOT_READY = 'auth_sms_schema_not_ready';
+/** Exported for #5343's runtime-DDL test. */
+export const ensureAuthSmsSchema = (env: Env): Promise<void> => ensureSchema(env);
 
 export interface SmsRow {
   phone: string;       // E.164, decrypted
