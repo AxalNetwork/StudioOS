@@ -533,10 +533,10 @@ export function doneLine(kind, who, extra = {}) {
   }[kind] || 'Saved.';
 }
 
-/** A refusal in the Worker's own sentence (the client's `e.message`), or one that says nothing changed. */
+/** A refusal in the Worker's own sentence. A 5xx/network failure has an unknown outcome until the item is read again. */
 export function refusalLine(e) {
   const said = typeof e?.message === 'string' && e.message.includes(' ') && e.message !== 'Request failed' ? e.message : null;
   if (said && e?.status && e.status < 500) return said;
-  if (e?.status >= 500 || !e?.status) return 'This could not be saved. Nothing changed. Read the item again before retrying.';
+  if (e?.status >= 500 || !e?.status) return 'The outcome could not be confirmed. Read the item again before retrying.';
   return 'This was refused. Nothing changed. Read the item again before retrying.';
 }

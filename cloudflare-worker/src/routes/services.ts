@@ -15,9 +15,10 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { offeringOwned } from '../services/profileWriteGates';
+import { isAdmin, isPartner } from './_t13t14t15_helpers';
 import {
   REQUEST_MEASURE_BASIS, REQUEST_MEASURE_NOTE, REQUEST_VALUE_NOTE,
-  requestMeasures, sumRequestMeasures, type RequestMeasures,
+  requestMeasures, sumRequestMeasures, sumQuotedValues, type RequestMeasures,
 } from '../services/serviceMeasures';
 
 const services = new Hono<{ Bindings: Env }>();
@@ -42,6 +43,8 @@ type Offering = {
   invoiced?: number;
   paid?: number;
   cancelled?: number;
+  quoted_total?: number | null;
+  unquoted?: number;
 };
 
 /**
@@ -83,6 +86,8 @@ function serialize(o: Offering): SerializedOffering {
     // All zero on the single-row reads, which do not join (#4696). There is no
     // `sold`: a request is not a sale until it is booked.
     requests: requestMeasures(o as unknown as Record<string, unknown>),
+    quoted_total: o.quoted_total ?? null,
+    unquoted: o.unquoted ?? 0,
     is_active: !!o.is_active,
     created_at: o.created_at,
     updated_at: o.updated_at,
@@ -158,7 +163,11 @@ services.get('/offerings', async (c) => {
             (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
                 AND se.status = 'paid') AS paid,
             (SELECT COUNT(*) FROM service_engagements se WHERE se.offering_id = o.id
-                AND se.status = 'cancelled') AS cancelled
+                AND se.status = 'cancelled') AS cancelled,
+            (SELECT SUM(se.quoted_price_cents) FROM service_engagements se
+                WHERE se.offering_id = o.id) AS quoted_total,
+            (SELECT COUNT(*) FROM service_engagements se
+                WHERE se.offering_id = o.id AND se.quoted_price_cents IS NULL) AS unquoted
        FROM service_offerings o WHERE ${where} ORDER BY o.created_at DESC LIMIT 200`,
   ).bind(...params).all<Offering>();
   let items: SerializedOffering[] = (rows.results || []).map(serialize);
@@ -174,24 +183,33 @@ services.get('/offerings', async (c) => {
     measures: sumRequestMeasures(items),
     measures_basis: REQUEST_MEASURE_BASIS,
     measures_note: REQUEST_MEASURE_NOTE,
-    // No historical monetary measure: a request stores no amount. Null, not 0.
-    booked_value_cents: null,
+    ...sumQuotedValues(items),
     booked_value_note: REQUEST_VALUE_NOTE,
   });
 });
 
 services.get('/offerings/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await c.env.DB.prepare('SELECT * FROM service_offerings WHERE id = ?')
     .bind(id).first<Offering>();
   if (!row) return c.json({ detail: 'Offering not found' }, 404);
+  if (!row.is_active) {
+    const companyId = await activeCompanyFor(c, user);
+    const owned = await c.env.DB.prepare(
+      `SELECT * FROM service_offerings WHERE id = ? AND owner_user_id = ?
+        AND (? IS NULL OR company_id IS NULL OR company_id = ?)`,
+    ).bind(id, user.id, companyId, companyId).first<Offering>();
+    if (!owned) return c.json({ detail: 'Offering not found' }, 404);
+    return c.json(serialize(owned));
+  }
   return c.json(serialize(row));
 });
 
 services.post('/offerings', async (c) => {
   const user = await requireAuth(c);
+  if (!isPartner(user) && !isAdmin(user)) return c.json({ detail: 'Forbidden' }, 403);
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const title = String(body?.title || '').trim();
   if (!title) return c.json({ detail: 'title required' }, 400);
@@ -268,8 +286,20 @@ services.delete('/offerings/:id', async (c) => {
   if (!Number.isFinite(id)) return c.json({ detail: 'Invalid id' }, 400);
   const row = await ensureOwnerOr404(c.env, id, user, await activeCompanyFor(c, user));
   if (!row) return c.json({ detail: 'Offering not found' }, 404);
-  await c.env.DB.prepare('DELETE FROM service_offerings WHERE id = ?').bind(id).run();
-  return c.json({ ok: true });
+  const [archived, deleted] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE service_offerings SET is_active = 0, updated_at = datetime('now')
+        WHERE id = ? AND (EXISTS (SELECT 1 FROM service_engagements WHERE offering_id = ?)
+          OR EXISTS (SELECT 1 FROM research_market_readings WHERE offering_id = ?))`,
+    ).bind(id, id, id),
+    c.env.DB.prepare(
+      `DELETE FROM service_offerings WHERE id = ?
+        AND NOT EXISTS (SELECT 1 FROM service_engagements WHERE offering_id = ?)
+        AND NOT EXISTS (SELECT 1 FROM research_market_readings WHERE offering_id = ?)`,
+    ).bind(id, id, id),
+  ]);
+  if (!archived.meta.changes && !deleted.meta.changes) return c.json({ detail: 'Offering not found' }, 404);
+  return c.json({ ok: true, archived: Boolean(archived.meta.changes) });
 });
 
 services.post('/offerings/:id/engage', async (c) => {
@@ -283,10 +313,14 @@ services.post('/offerings/:id/engage', async (c) => {
   const body: Record<string, unknown> = await c.req.json().catch(() => ({}));
   const note = body?.note ? String(body.note).slice(0, 2000) : null;
   const uid = crypto.randomUUID();
-  await c.env.DB.prepare(
-    `INSERT INTO service_engagements (uid, offering_id, requester_user_id, owner_user_id, note, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', datetime('now'), datetime('now'))`,
-  ).bind(uid, id, user.id, offering.owner_user_id, note).run();
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO service_engagements (uid, offering_id, requester_user_id, owner_user_id, note, status, created_at, updated_at, quoted_price_cents, quoted_currency)
+     SELECT ?, id, ?, owner_user_id, ?, 'pending', datetime('now'), datetime('now'),
+            COALESCE(price_cents, CAST(ROUND(price_usd * 100) AS INTEGER)),
+            CASE WHEN price_cents IS NOT NULL OR price_usd IS NOT NULL THEN 'USD' END
+       FROM service_offerings WHERE id = ? AND is_active = 1 AND owner_user_id <> ?`,
+  ).bind(uid, user.id, note, id, user.id).run();
+  if (!inserted.meta.changes) return c.json({ detail: 'Offering not available' }, 404);
   return c.json({ ok: true, uid });
 });
 

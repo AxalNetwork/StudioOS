@@ -22,7 +22,7 @@
  * array read through `json_each`.
  */
 import type { Env } from '../../types';
-import { bindingKey } from '../../util/schemaBootstrap';
+import { bindingKey, runSchemaBootstrap, tableColumns } from '../../util/schemaBootstrap';
 
 export const CARD_HASH_RE = /^[0-9a-f]{64}$/;
 
@@ -84,13 +84,9 @@ export async function ensureCardBlobSchema(env: Env): Promise<boolean> {
       json       TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`).run();
-    const cols = await env.DB.prepare('PRAGMA table_info(pitch_decks)').all<any>();
-    const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
-    if (!have.has('card_hashes')) {
-      await env.DB.prepare('ALTER TABLE pitch_decks ADD COLUMN card_hashes TEXT CHECK (card_hashes IS NULL OR json_valid(card_hashes))').run();
-    }
-    const after = await env.DB.prepare('PRAGMA table_info(pitch_decks)').all<any>();
-    const ok = ((after.results || []) as any[]).some((r) => String(r.name) === 'card_hashes');
+    // #5343: through `runSchemaBootstrap`, which reads the columns once per binding and skips the ALTER when it is there.
+    await runSchemaBootstrap(env, ['ALTER TABLE pitch_decks ADD COLUMN card_hashes TEXT CHECK (card_hashes IS NULL OR json_valid(card_hashes))']);
+    const ok = (await tableColumns(env, 'pitch_decks')).has('card_hashes');
     if (ok) READY.set(key, true);
     return ok;
   } catch (e) {

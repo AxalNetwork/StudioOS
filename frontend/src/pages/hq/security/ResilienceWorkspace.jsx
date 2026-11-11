@@ -3,7 +3,7 @@ import { Unreadable } from '../../../ui';
 import StatusBadge from './StatusBadge.jsx';
 import {
   BACKUP_RUNS_HREF, DRILL_RUNS_HREF, RUNBOOK_HREF, drillFacts, drillHeadline, drillRunHref, exactBytes, exportAge, failoverOf,
-  heartbeatState, pipeline, sizeOf, whenOf,
+  durationOf, heartbeatState, pipeline, sizeOf, stepLabel, whenOf,
 } from './resilienceModel.js';
 
 /**
@@ -17,8 +17,8 @@ import {
  *                recovery point, targets, record, next run) and the raw record
  *                behind a disclosure; the D1 export and the KV snapshot each
  *                as their own card, never a green light inferred from the other
- *   limits       KV has no restore drill (Unsupported); the drill record keeps
- *                only its latest run (Not instrumented)
+ *   limits       KV has no restore drill (Unsupported); drill history starts
+ *                with the first recorded run (D5317)
  *   failover     #5046: Unsupported, never "Not recorded": no standby exists,
  *                recovery is backup plus restore; the server's technical reason
  *                sits behind "Technical details"
@@ -171,6 +171,44 @@ export function FailoverCard({ block }) {
  * overview itself could not be read; `children` is the previous zone's full
  * detail, kept behind "How this is measured".
  */
+function DrillHistory({ history, pending, onRetry }) {
+  return (
+    <section aria-labelledby="res-history-h" className={`${CARD} flex flex-col gap-2`} data-testid="res-history">
+      <h2 id="res-history-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Drill history</h2>
+      {pending ? <StatusBadge state="pending" label="Reading drill history" /> : history?.available !== true ? (
+        <Unreadable what="The restore drill history" onRetry={onRetry} />
+      ) : (
+        <>
+          <p className="text-[12px] text-axal-muted dark:text-gray-300">
+            {history.rows.length === 0 ? 'Not recorded. No runs have been recorded in the history yet.' : 'Runs before history recording began are not recorded here.'}
+          </p>
+          {history.rows.length > 0 && <ol className="divide-y divide-axal-hairline dark:divide-gray-700">
+            {history.rows.map((run) => {
+              const failed = run.outcome === 'failed';
+              const href = drillRunHref({ available: true, run_id: run.run_id });
+              return (
+                <li key={run.id} className="flex flex-col gap-2 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <time dateTime={run.at}>{whenOf(run.at)}</time>
+                    <StatusBadge state={failed ? 'failed' : run.fresh ? 'verified' : 'stale'} />
+                  </div>
+                  <Facts rows={[
+                    ...(failed ? [['Failed step', stepLabel(run.step)], ['Exit code', run.exit_code], ['Reason', run.reason || 'Not recorded']] : []),
+                    ['Duration', durationOf(run.duration_s) || 'Not recorded'],
+                    ['Recovery point', whenOf(run.recovery_point) || 'Not recorded'],
+                  ]} />
+                  {href && <a href={href} target="_blank" rel="noreferrer" className={`${BTN} self-start`}>View run {run.run_id}</a>}
+                </li>
+              );
+            })}
+          </ol>}
+        </>
+      )}
+      <a href={DRILL_RUNS_HREF} target="_blank" rel="noreferrer" className={`${BTN} self-start`}>Open drill workflow runs →</a>
+    </section>
+  );
+}
+
 export default function ResilienceWorkspace({ block, unreadable, onRetry, children }) {
   return (
     <div className="flex flex-col gap-4" data-testid="resilience-workspace">
@@ -188,16 +226,7 @@ export default function ResilienceWorkspace({ block, unreadable, onRetry, childr
             <KvCard hb={block ? block.kv : null} />
           </div>
           {block && <FailoverCard block={block} />}
-          <section aria-labelledby="res-history-h" className={`${CARD} flex flex-col gap-2`} data-testid="res-history">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="res-history-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Drill history</h2>
-              <StatusBadge state="not_instrumented" label="Latest run only" />
-            </div>
-            <p className="text-[12px] text-axal-muted dark:text-gray-300">
-              The drill record keeps only its latest run, so earlier outcomes can&apos;t be listed here. Past runs are in the GitHub Actions log.
-            </p>
-            <a href={DRILL_RUNS_HREF} target="_blank" rel="noreferrer" className={`${BTN} self-start`}>Open drill workflow runs →</a>
-          </section>
+          <DrillHistory history={block?.drill_history} pending={!block} onRetry={onRetry} />
         </>
       )}
       {children && (

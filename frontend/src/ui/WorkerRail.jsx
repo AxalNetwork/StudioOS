@@ -26,7 +26,7 @@ import { EadwynPanel } from './EadwynPanel.jsx';
 import { Unreadable } from './Honesty';
 import { RailGroups, RailUsageExtra } from './RailGroups';
 import RailSteps from './RailSteps.jsx';
-import { FOUNDER_RECORD_OFF } from './reasonGate';
+import { FOUNDER_RECORD_OFF } from './reasonGate.js';
 import { ACCENT } from '../workspaces/shellConfig';
 import { PHONE_QUERY } from '../workspaces/lens.jsx';
 import { useViewMode } from '../contexts/ViewModeContext';

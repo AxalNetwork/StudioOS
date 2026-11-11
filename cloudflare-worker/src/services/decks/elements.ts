@@ -3,11 +3,21 @@
  * and procedural textures a card's decor draws, and the SVG sanitiser every
  * drawn element passes.
  *
- * ICONS are Lucide (`iconSet.json`, written by `scripts/gen-deck-icon-set.mjs`
- * from the installed lucide-react): 1,877 line icons under ISC, the set's
- * licence text and its Feather notice recorded with it. An icon decor item
- * carries `{ set, version, spdx }` (`ICON_LICENCE`), so the licence travels
- * with the block into every export.
+ * ICONS are Lucide, written by `scripts/gen-deck-icon-set.mjs` from the
+ * installed lucide-react: 1,877 line icons under ISC, the set's licence text
+ * and its Feather notice recorded with it. An icon decor item carries
+ * `{ set, version, spdx }` (`ICON_LICENCE`), so the licence travels with the
+ * block into every export.
+ *
+ * D4574 H3 (#4574): the set is TWO files. `iconNames.json` — the set's record,
+ * the asset path and the 1,877 NAMES — is imported here, so naming, searching
+ * and checking an icon stay synchronous and pure. The NODES each icon draws,
+ * and the licence text, are a static asset (`/deck-icons/lucide-<version>.json`)
+ * the Worker reads through its own assets binding (`iconGeometry.ts`): they
+ * were 395.5 KiB of the Worker script, its largest single input, and only two
+ * callers draw. So `iconSvg`, `decorSvg` for an icon, and `licenceText` take
+ * the loaded geometry; without it they answer null, and their caller says the
+ * set could not be read rather than showing nothing.
  *
  * SHAPES, DIVIDERS and TEXTURES are drawn here from parameters: no file, no
  * third-party art. A texture is procedural (dots, grid, diagonal, cross,
@@ -21,7 +31,7 @@
  *
  * Pure: no binding, no fetch.
  */
-import iconData from './iconSet.json';
+import iconNames from './iconNames.json';
 
 export const MAX_DECOR = 16;
 export const SEGMENTS = ['icons', 'shapes', 'dividers', 'textures'] as const;
@@ -29,10 +39,20 @@ export type Segment = typeof SEGMENTS[number];
 export const DECOR_KINDS = ['icon', 'shape', 'divider', 'texture'] as const;
 export type DecorKind = typeof DECOR_KINDS[number];
 
-type Node = [string, Record<string, string | number>];
-const SET = (iconData as any).set as { id: string; name: string; version: string; spdx: string; url: string; copyright: string; derived: string; licence_text: string };
-const ICONS = (iconData as any).icons as Record<string, Node[]>;
-const ICON_NAMES: readonly string[] = Object.freeze(Object.keys(ICONS));
+export type Node = [string, Record<string, string | number>];
+const SET = (iconNames as any).set as { id: string; name: string; version: string; spdx: string; url: string; copyright: string; derived: string };
+const ICON_NAMES: readonly string[] = Object.freeze((iconNames as any).names as string[]);
+const NAMED = new Set(ICON_NAMES);
+/** The static asset holding the nodes and the licence text (`iconGeometry.ts` reads it). */
+export const ICON_ASSET = (iconNames as any).asset as string;
+/** The set version the asset must name, so no deploy draws another version's nodes. */
+export const ICON_SET_VERSION = SET.version;
+
+/**
+ * D4574 H3: the nodes and licence text of the icon set, as `iconGeometry.ts`
+ * loads them from the asset. `null` everywhere one could not be read.
+ */
+export type IconGeometry = { nodes: Record<string, Node[]>; licence_text: string };
 
 /** What an icon decor item records: the set, its version and its licence. */
 export const ICON_LICENCE = Object.freeze({ set: SET.id, version: SET.version, spdx: SET.spdx });
@@ -40,9 +60,10 @@ export const ICON_LICENCE = Object.freeze({ set: SET.id, version: SET.version, s
 export const LICENCE_RECORD = Object.freeze({
   id: SET.id, name: SET.name, version: SET.version, spdx: SET.spdx, url: SET.url, copyright: SET.copyright, derived: SET.derived,
 });
-export const licenceText = () => SET.licence_text;
+/** The set's licence text from the loaded geometry; null when it could not be read. */
+export const licenceText = (geo: IconGeometry | null): string | null => geo?.licence_text ?? null;
 export const iconCount = () => ICON_NAMES.length;
-export const isIcon = (name: unknown): name is string => typeof name === 'string' && Object.hasOwn(ICONS, name);
+export const isIcon = (name: unknown): name is string => typeof name === 'string' && NAMED.has(name);
 
 // ── Tones ───────────────────────────────────────────────────────────────────
 // A decor item names a theme tone, never a colour: the theme's own tokens fill it.
@@ -99,8 +120,13 @@ const checked = (svg: string): string => {
 
 // ── Icons ───────────────────────────────────────────────────────────────────
 
-export function iconSvg(name: string, tone: Tone = 'ink'): string | null {
-  const nodes = ICONS[name];
+/**
+ * One icon's SVG from the loaded geometry. Null for an unknown name AND for
+ * geometry that is not loaded, so a caller that cannot read the asset says so
+ * (`routes/deck_elements.ts`) rather than drawing nothing silently.
+ */
+export function iconSvg(geo: IconGeometry | null, name: string, tone: Tone = 'ink'): string | null {
+  const nodes = geo && Object.hasOwn(geo.nodes, name) ? geo.nodes[name] : null;
   if (!nodes) return null;
   const body = nodes.map(([tag, a]) => `<${tag} ${attrs(a)}/>`).join('');
   return checked(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${VAR(tone)}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`);
@@ -177,10 +203,10 @@ export function isRef(kind: string, ref: unknown): boolean {
 }
 
 /** The SVG a decor item draws, through the sanitiser; null for an unknown item. */
-export function decorSvg(item: { kind: string; ref?: string; tone?: string; seed?: number }): string | null {
+export function decorSvg(item: { kind: string; ref?: string; tone?: string; seed?: number }, geo: IconGeometry | null = null): string | null {
   const tone = toneOf(item.tone);
   const f = VAR(tone);
-  if (item.kind === 'icon') return item.ref ? iconSvg(item.ref, tone) : null;
+  if (item.kind === 'icon') return item.ref ? iconSvg(geo, item.ref, tone) : null;
   if (!item.ref || !isRef(item.kind, item.ref)) return null;
   if (item.kind === 'shape') return svgOf('0 0 100 100', SHAPE_BODIES[item.ref].draw(f));
   if (item.kind === 'divider') return svgOf('0 0 400 20', DIVIDER_BODIES[item.ref].draw(f), 'none');

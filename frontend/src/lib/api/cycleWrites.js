@@ -139,7 +139,9 @@ export function makeCycleWrites(request) {
       founder: (projectId, body) => request(`/cycles/build/founders?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body), inlinePaywall: true }),
       founderUpdate: (projectId, id, body) => request(`/cycles/build/founders/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body), inlinePaywall: true }),
       risk: (projectId, body) => request(`/cycles/build/risks?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
-      formationStep: (projectId, body) => request(`/cycles/build/formation-steps?${q(projectId)}`, { method: 'POST', body: JSON.stringify(body) }),
+      formationStep: (projectId, body, idempotencyKey) => request(`/cycles/build/formation-steps?${q(projectId)}`, {
+        method: 'POST', body: JSON.stringify(body), headers: { 'Idempotency-Key': idempotencyKey },
+      }),
       formationStepUpdate: (projectId, id, body) => request(`/cycles/build/formation-steps/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       // A feature's must-have mark and due date (D662). The feature itself is
       // MVP scope's row: `mvpFeature` adds one, with the project in the path.

@@ -8,8 +8,9 @@
  * `createLeaveGuard({ win, navigator, confirmLeave })` closes the three doors:
  *
  *   1. A reload or a closed tab: `beforeunload`, as before.
- *   2. A link or a `navigate()`: the router's navigator (`UNSAFE_NavigationContext`) has `push`, `replace`
- *      and `go`; while the guard is on, each asks first and only then calls the original.
+ *   2. A link or a path `navigate()`: the router's navigator (`UNSAFE_NavigationContext`) has `push` and `replace`;
+ *      while the guard is on, each asks first and only then calls the original. Numeric `navigate()` uses `go` and
+ *      is guarded by the resulting `popstate`, so it is deliberately not wrapped and never asks twice.
  *   3. Back and Forward: the browser has already moved when `popstate` fires, so the guard has to take the
  *      event before the router sees it. Leaving is confirmed, then the event is passed on once
  *      (re-dispatched, marked so the gate lets it through). Staying walks the history back by the
@@ -82,7 +83,10 @@ export function createLeaveGuard({ win, navigator = null, confirmLeave, message 
 
   function wrapNavigator() {
     if (!navigator) return;
-    for (const name of ['push', 'replace', 'go']) {
+    // `go` causes a popstate, which the boot-time gate below already guards.
+    // Wrapping it here would ask once before the move and again when that
+    // popstate arrives (notably for navigate(-1)).
+    for (const name of ['push', 'replace']) {
       if (typeof navigator[name] !== 'function') continue;
       original[name] = navigator[name];
       navigator[name] = (...args) => {
