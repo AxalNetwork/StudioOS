@@ -188,8 +188,6 @@ async function call(
 }
 
 const ours = { user: OURS_USER, role: 'partner' };
-const theirs = { user: THEIRS_USER, role: 'partner' };
-const fran = { user: FOUNDER_USER, role: 'founder' };
 
 function nowPeriod(): string {
   const d = new Date();
