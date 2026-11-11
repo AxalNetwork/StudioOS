@@ -48,8 +48,8 @@ test('I4 is wired to real portfolio sources and preserves detailed tools', () =>
     'positionsList',
     'positionsAnalytics',
     'portfolioHealthList',
-    'portfolioUpdatesList',
-    'listIntroductions',
+    'portfolioUpdatesLatest',
+    'portfolioSupportList',
     'positionsKpiCompliance',
   ]) {
     assert.ok(portfolio.includes(`api.${call}`), `the canvas never calls api.${call}`);

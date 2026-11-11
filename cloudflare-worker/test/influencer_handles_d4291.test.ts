@@ -189,10 +189,10 @@ test('the public read: a live page with the disclosure and the cookie value; one
   });
   await read('/api/public/handle/kimwrites/yt', 'visitor-aaaa-1111');
   await read('/api/public/handle/kimwrites/zz', 'visitor-aaaa-1111');
-  await read('/api/public/handle/kimwrites');
-  await read('/api/public/handle/kimwrites');
+  assert.equal((await read('/api/public/handle/kimwrites')).body.state, 'live');
+  assert.equal((await read('/api/public/handle/kimwrites', 'short')).body.state, 'live');
   const visits = rows(db, 'SELECT channel, visitor_hash FROM handle_visits ORDER BY id');
-  assert.deepEqual(visits.map((v) => v.channel), ['yt', '', '', ''], 'the same visitor once a day per channel; an unknown channel is the handle; no visitor id counts each time');
+  assert.deepEqual(visits.map((v) => v.channel), ['yt', ''], 'only valid IDs count, once a day per channel; an unknown channel is the handle');
   assert.equal(visits[0].visitor_hash.length, 64);
   assert.ok(!JSON.stringify(visits).includes('visitor-aaaa'), 'the id is hashed');
   assert.deepEqual(rows(db, 'PRAGMA table_info(handle_visits)').map((c) => c.name).filter((n) => /ip|agent/i.test(n)), [], 'no IP or user agent column');

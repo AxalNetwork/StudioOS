@@ -2,6 +2,7 @@
 // (CT11a–c), Record an issuance (CT12a), Void (CT12b) and the admin correction
 // (CT12c). Fixtures follow the Worker's shapes (services/capTableRecord.ts,
 // capTableClose.ts, capTableDocumentRead.ts) and are worked out by hand.
+import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -100,7 +101,7 @@ function handlerFor(o = {}) {
     if (/\/captable\/record\/3\/issuances$/.test(url)) return o.recorded ? o.recorded(url, options) : response({ issuance: { uid: 'new' } }, 201);
     if (url.includes('/captable/record/3/closes/cl-second')) return send(CLOSE);
     if (url.includes('/captable/record/3/document-read')) return response({ draft: DRAFT });
-    if (url.includes('/captable/record/3')) return send(at.record);
+    if (url.includes('/captable/record/3')) return send(withCapabilities(at.record, o.user || OWNER, at.grants));
     if (url.includes('/captable/access/3/grants')) return send(at.grants);
     if (url.includes('/ai/rail/proposals/rp-1/decide')) return response({ ok: true });
     if (/\/cycles\/raise\/mercury\/proposals\/7\/(accept|dismiss)/.test(url)) return response({ ok: true });
