@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox.jsx';
 import BrandIcon from '../../ui/BrandIcon.jsx';
-import { api as defaultApi } from '../../lib/api.js';
+import { api as defaultApi, readRefusal } from '../../lib/api.js';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { channelsApi } from '../../lib/api/channels.js';
 import { liveRefusal } from '../../lib/activeRecording.js';
@@ -530,7 +530,7 @@ export default function RecordLightbox({
         ? await sessions.create(interview.id, { ...sessionBody(setup, botFields), client_key: setupKey(true) })
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(true) }, botFields));
       if (r?.detail === 'setup_incomplete') {
-        const error = new Error(r.message || 'This session setup did not finish. Try again.');
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
         error.code = 'setup_incomplete'; error.data = r;
         throw error;
       }
@@ -598,7 +598,7 @@ export default function RecordLightbox({
         ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: setupKey(useBot) })
         : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: setupKey(useBot) }, captureFields));
       if (r?.detail === 'setup_incomplete') {
-        const error = new Error(r.message || 'This session setup did not finish. Try again.');
+        const error = new Error(readRefusal(r).message || 'This session setup did not finish. Try again.');
         error.code = 'setup_incomplete'; error.data = r;
         throw error;
       }
