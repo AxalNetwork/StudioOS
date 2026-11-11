@@ -595,24 +595,38 @@ async function quoteTransition(c: Context<{ Bindings: Env }>, target: 'accept' |
   // Two concurrent accepts of different quotes therefore cannot both win: the
   // second claim matches nothing, and so does everything chained to it.
   const decidedAt = nowIso();
-  const results = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
-        WHERE id = ? AND status = 'submitted'
-          AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
-          AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
-    ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
-    c.env.DB.prepare(
-      `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
-        WHERE need_id = ? AND id != ? AND status = 'submitted'
-          AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
-    ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
-    c.env.DB.prepare(
-      `UPDATE founder_needs SET status='filled', updated_at=?
-        WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
-    ).bind(decidedAt, q.need_id, id, decidedAt),
-    c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
-  ]);
+  let results: unknown[];
+  try {
+    results = await c.env.DB.batch([
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='accepted', decided_at=?, updated_at=?
+          WHERE id = ? AND status = 'submitted'
+            AND NOT EXISTS (SELECT 1 FROM quotes o WHERE o.need_id = ? AND o.status = 'accepted')
+            AND EXISTS (SELECT 1 FROM founder_needs n WHERE n.id = ? AND n.status IN ('open', 'in_review'))`,
+      ).bind(decidedAt, decidedAt, id, q.need_id, q.need_id),
+      c.env.DB.prepare(
+        `UPDATE quotes SET status='rejected', decided_at=?, updated_at=?
+          WHERE need_id = ? AND id != ? AND status = 'submitted'
+            AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, decidedAt, q.need_id, id, id, decidedAt),
+      c.env.DB.prepare(
+        `UPDATE founder_needs SET status='filled', updated_at=?
+          WHERE id = ? AND EXISTS (SELECT 1 FROM quotes w WHERE w.id = ? AND w.status = 'accepted' AND w.decided_at = ?)`,
+      ).bind(decidedAt, q.need_id, id, decidedAt),
+      c.env.DB.prepare(ENGAGEMENT_FOR_ACCEPTED).bind(newUid(), decidedAt, decidedAt, id, decidedAt),
+    ]);
+  } catch (e) {
+    // D5359: the partial unique index is the last arbiter when two Workers
+    // race. Its loser is the same business outcome as a zero-row claim, not a
+    // server failure. Other batch failures still propagate and roll back.
+    if (/UNIQUE constraint failed:\s*quotes\.need_id/i.test(String((e as Error)?.message ?? e))) {
+      return c.json({
+        error: 'need_already_decided',
+        detail: 'This need already has an accepted quote, or is no longer open. Nothing was changed.',
+      }, 409);
+    }
+    throw e;
+  }
   if (!Number((results[0] as any)?.meta?.changes)) {
     // Someone else's acceptance (or a closed need) got there first.
     const now = await c.env.DB.prepare('SELECT status FROM quotes WHERE id = ?').bind(id).first<{ status: string }>();
