@@ -18,6 +18,25 @@ import { track } from '../src/services/posthog/metrics.ts';
 const n = (db: any, sql: string, ...a: unknown[]) => Number((db.prepare(sql).get(...a) as any).n);
 const sync = (app: any, env: any, who = FOUNDER) => call(app, env, who, 'POST', '/api/cycles/grow/posthog/sync', { project: P });
 
+function flaky(DB: any, matches: (sql: string) => boolean, timesToFail = 1) {
+  let left = timesToFail;
+  return {
+    prepare(sql: string) {
+      const real = DB.prepare(sql);
+      if (!matches(sql)) return real;
+      const api: any = {
+        bind(...a: any[]) { real.bind(...a); return api; },
+        all: async () => { if (left > 0) { left -= 1; throw new Error('injected failure'); } return real.all(); },
+        first: async (c?: string) => { if (left > 0) { left -= 1; throw new Error('injected failure'); } return real.first(c); },
+        run: async () => { if (left > 0) { left -= 1; throw new Error('injected failure'); } return real.run(); },
+      };
+      return api;
+    },
+    batch: (stmts: any[]) => DB.batch(stmts),
+    exec: (sql: string) => DB.exec(sql),
+  };
+}
+
 test('the Grow sync: tracked metrics and each survey\'s figures land; a feedback answer waits only for a marked question', async () => {
   const { env, fake, db } = await fixture();
   const app = appFor(fake);
@@ -55,6 +74,31 @@ test('Add as customer feedback: a marked answer lands as source customer, with n
   const fb = db.prepare('SELECT body, source, from_name, from_email, from_company FROM product_feedback').get() as any;
   assert.deepEqual({ ...fb }, { body: 'We\'d pay if it synced with our calendar.', source: 'customer', from_name: null, from_email: null, from_company: null });
   assert.match(ok.body.target_ref, /^product_feedback:/);
+});
+
+test('D5352: a survey-feedback retry after the target write reuses the proposal-keyed feedback row', async () => {
+  const { env, fake, db } = await fixture();
+  const app = appFor(fake);
+  assert.equal((await call(app, env, FOUNDER, 'PUT', `/api/cycles/validate/posthog/surveys/${SURVEY_A}/marks`, {
+    project: P, question_id: 'q1', mark: 'feedback',
+  })).status, 200);
+  await sync(app, env);
+  const proposal = db.prepare("SELECT id FROM posthog_proposals WHERE kind = 'survey_feedback'").get() as any;
+  const at = () => call(app, env, FOUNDER, 'POST', `/api/cycles/grow/posthog/proposals/${proposal.id}/accept`, { project: P });
+
+  env.DB = flaky(env.DB, (sql: string) => sql.includes('SET target_ref = ?'), 1);
+  const first = await at();
+  assert.equal(first.status, 503, JSON.stringify(first.body));
+  const target = db.prepare('SELECT id, uid FROM product_feedback').get() as any;
+  assert.equal(target.uid, `posthog-proposal-${proposal.id}`, 'the surviving target is addressable by its proposal');
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM product_feedback'), 1);
+  assert.equal((db.prepare('SELECT status FROM posthog_proposals WHERE id = ?').get(proposal.id) as any).status, 'pending');
+
+  const second = await at();
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  assert.equal(n(db, 'SELECT COUNT(*) AS n FROM product_feedback'), 1, 'the retry must not duplicate feedback');
+  const decided = db.prepare('SELECT status, target_ref FROM posthog_proposals WHERE id = ?').get(proposal.id) as any;
+  assert.deepEqual({ ...decided }, { status: 'accepted', target_ref: `product_feedback:${target.uid}` });
 });
 
 test('product retention by first-seen week lands apart from revenue retention and churn', async () => {

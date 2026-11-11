@@ -153,7 +153,7 @@ test('4. signed → renewal due → ended: the end is a recorded decision and th
   assert.equal(due.cycles, signed.cycles, 'the intermediate lane is not a term');
   // Ending is not a lane move from here.
   assert.equal((await f.call(ADVISOR, 'POST', `/me/engagements/${e.id}/advance`, { lane: 'ended' })).status, 409);
-  const ended = f.ok(await f.call(ADVISOR, 'POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', expected_cycles: due.cycles }), 'end');
+  const ended = f.ok(await f.call(ADVISOR, 'POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', end_reason: 'did_not_renew', expected_cycles: due.cycles }), 'end');
   assert.equal(ended.lane, 'ended');
   assert.equal(ended.outcome, 'ended');
   const kinds = f.ok(await f.call(ADVISOR, 'GET', `/me/engagements/${e.id}/events`), 'history').items.map((x: any) => x.kind);

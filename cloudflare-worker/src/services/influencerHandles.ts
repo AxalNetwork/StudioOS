@@ -20,7 +20,7 @@
  * (P4 adds it; null until then). A paused or ended influencer gets a neutral
  * answer with no name, no offer and no attribution.
  *
- * VISITS (D-h) are one row per handle, channel, day and visitor: the visitor is
+ * Opted-in VISITS (D-h, D5509) are one row per handle, channel, day and visitor: the visitor is
  * a client-held random id, hashed with the day and a server secret, so no IP
  * is stored and two days cannot be joined.
  */
@@ -286,9 +286,9 @@ export async function visitorHash(env: Env, visitorId: string | null | undefined
 }
 
 /**
- * `GET /api/public/handle/:handle[/:channel]`. Records one visit for a live
- * handle (and a live channel). Never throws for a bad visit write: the page
- * answers either way.
+ * `GET /api/public/handle/:handle[/:channel]`. Records a visit to a live handle
+ * only when the caller supplies a valid visitor ID. A visit write failure
+ * leaves the public read available.
  */
 export async function publicHandle(env: Env, rawHandle: string, rawChannel: string | null, visitorId: string | null, now = Date.now()) {
   const handle = String(rawHandle || '').replace(/^@/, '').toLowerCase();
@@ -319,12 +319,17 @@ export async function publicHandle(env: Env, rawHandle: string, rawChannel: stri
     // An unknown or archived channel is the handle itself: the visitor still came through it.
     channel = link ? link.channel : null;
   }
-  const day = new Date(now).toISOString().slice(0, 10);
-  try {
-    await env.DB.prepare(
-      'INSERT OR IGNORE INTO handle_visits (influencer_id, handle, channel, day, visitor_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    ).bind(m.id, handle, channel ?? '', day, await visitorHash(env, visitorId, day), sqlTime(now)).run();
-  } catch (e) { console.warn('[handles] visit not recorded', (e as Error)?.message); }
+  if (visitorId) {
+    const day = new Date(now).toISOString().slice(0, 10);
+    try {
+      const hash = await visitorHash(env, visitorId, day);
+      if (hash) {
+        await env.DB.prepare(
+          'INSERT OR IGNORE INTO handle_visits (influencer_id, handle, channel, day, visitor_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(m.id, handle, channel ?? '', day, hash, sqlTime(now)).run();
+      }
+    } catch (e) { console.warn('[handles] visit not recorded', (e as Error)?.message); }
+  }
   const { effectiveFlags } = await import('../routes/public');
   let prefs: unknown = null;
   try { prefs = m.privacy_prefs ? JSON.parse(m.privacy_prefs) : null; } catch { prefs = null; }

@@ -62,6 +62,11 @@ export function currencyCode(v) {
   return typeof v === 'string' && /^[A-Z]{3}$/.test(v) && KNOWN.has(v) ? v : null;
 }
 
+/** A currency from a human-entered unit label, with no default for unknown units. */
+export function currencyFromLabel(value) {
+  return currencyCode(typeof value === 'string' ? value.trim().toUpperCase() : value);
+}
+
 /** Decimal places of the currency's minor unit; null for anything that is not a listed currency. */
 export function exponentOf(code) {
   const c = currencyCode(code);

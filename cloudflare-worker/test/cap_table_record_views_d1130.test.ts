@@ -60,3 +60,16 @@ test('D1130 review: missing holder objects do not break a recorded instrument vi
   const own:any=recordAccessView(r,'own_position','holder:2');assert.equal(own.instruments.length,1);
   const full:any=recordAccessView(r,'full',null);assert.equal(full.instruments.at(-1).holder,'Not recorded');
 });
+
+test('D5497 access views preserve the recorded currency exponent', () => {
+  const r = fixture();
+  const original = r.instruments.rows[0];
+  r.instruments.rows = [
+    { ...original, currency: 'JPY', amount_cents: 12345 },
+    { ...original, currency: 'KWD', amount_cents: 12345, terms: { ...original.terms, cap_cents: 67890 } },
+    { ...original, currency: null, amount_cents: 12345 },
+    { ...original, currency: null, amount_cents: 12345, safe_issuance_uid: 'linked-safe' },
+  ];
+  const view: any = recordAccessView(r, 'own_position', 'holder:2');
+  assert.deepEqual(view.instruments.map((i: any) => [i.amount, i.cap]), [[12345, null], [12.345, 67.89], [123.45, null], [null, null]]);
+});

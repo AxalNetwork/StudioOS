@@ -289,3 +289,6 @@ de797bc2c5a7121c7ed9ea713a7adeaf32ad46be:cloudflare-worker/test/meet_bot_signin_
 # af4b56516d's first wording of this comment quoted that fixture and so matched
 # the same rule; its one finding is listed too.
 af4b56516d9a4bdbd3751b585de0c943cd275ab2:.gitleaksignore:generic-api-key:283
+# #5524: the old D5352 signing fixture was used by the signer and Worker
+# verifier in the in-memory test. The test now generates its key at runtime.
+e9dc6a2abdcc9ab3f8991284b74897f1c87ea8dc:cloudflare-worker/test/validate_grow_accept_idempotent_d5352.test.ts:generic-api-key:17

@@ -32,6 +32,7 @@
  * because its edits spread the entry and the inputs.
  */
 import type { Env, User } from '../types';
+import { toMajorString, toMinorSafe } from '../../../frontend/src/lib/money.js';
 import { simulate, validateInputs, type Inputs } from './captable';
 import type { SafeBasis } from './safeConversion';
 import { ensureTier } from '../middleware/requireTier';
@@ -424,20 +425,25 @@ async function recompute(env: Env, actor: User, projectId: number, base: Scenari
 
 export type SafeTerms = { amount: number; cap?: number; discount?: number };
 
-/**
- * The terms `safeEntry` stores: dollars from cents, a fraction from a
- * percentage, and no `cap` or `discount` key when none is given. Throws the
- * `HolderError` a write answers. D966's repair compares an entry with them.
- */
-export function safeTerms(a: { amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null }): SafeTerms {
-  const amount = posInt(a.amount_cents);
-  if (amount == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
-  const t: SafeTerms = { amount: amount / 100 };
-  if (a.cap_cents != null) {
-    const cap = posInt(a.cap_cents);
-    if (cap == null) throw new HolderError(400, 'cap_cents must be a positive whole number of cents');
-    t.cap = cap / 100;
+function modelDollars(value: unknown, field: 'amount_cents' | 'cap_cents', requireWhole: boolean) {
+  const minor = toMinorSafe(value);
+  if (typeof value !== 'number' || minor === null || minor === 0) {
+    throw new HolderError(400, `${field} must be a positive whole number of cents`);
   }
+  const major = Number(toMajorString(minor, 'USD'));
+  if (requireWhole && !Number.isSafeInteger(major)) {
+    throw new HolderError(400, `${field} must represent whole US dollars in the saved model`);
+  }
+  return major;
+}
+
+/** Decode historical SAFE terms for D966. New writes require whole model dollars. */
+export function safeTerms(
+  a: { amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null },
+  requireWhole = false,
+): SafeTerms {
+  const t: SafeTerms = { amount: modelDollars(a.amount_cents, 'amount_cents', requireWhole) };
+  if (a.cap_cents != null) t.cap = modelDollars(a.cap_cents, 'cap_cents', requireWhole);
   if (a.discount_pct != null) {
     if (typeof a.discount_pct !== 'number' || !(a.discount_pct >= 0 && a.discount_pct <= 90)) throw new HolderError(400, 'discount_pct must be 0..90');
     t.discount = a.discount_pct / 100;
@@ -446,7 +452,7 @@ export function safeTerms(a: { amount_cents?: number | null; cap_cents?: number 
 }
 
 function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
-  const e: Record<string, unknown> = { name, ...safeTerms(a) };
+  const e: Record<string, unknown> = { name, ...safeTerms(a, true) };
   if (a.basis != null) {
     if (a.basis !== 'pre_money' && a.basis !== 'post_money') throw new HolderError(400, 'basis must be pre_money or post_money');
     e.basis = a.basis;
@@ -595,13 +601,11 @@ export async function updateHolder(env: Env, args: UpdateHolderArgs): Promise<{ 
     const entry = safes[si];
     if (name !== undefined) entry.name = name;
     if (args.amount_cents !== undefined) {
-      const a = posInt(args.amount_cents);
-      if (a == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
-      entry.amount = a / 100;
+      entry.amount = modelDollars(args.amount_cents, 'amount_cents', true);
     }
     if (args.cap_cents !== undefined) {
       if (args.cap_cents == null) delete entry.cap;
-      else { const c = posInt(args.cap_cents); if (c == null) throw new HolderError(400, 'cap_cents must be a positive whole number of cents'); entry.cap = c / 100; }
+      else entry.cap = modelDollars(args.cap_cents, 'cap_cents', true);
     }
     if (args.discount_pct !== undefined) {
       if (args.discount_pct == null) delete entry.discount;

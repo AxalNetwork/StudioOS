@@ -69,13 +69,21 @@ export function ReferTabs({ queue }) {
   );
 }
 
+/**
+ * D5313 (#5313): Perks in the generic shell (PG03a). The shell's six core sections in its order and words, and the
+ * Perk queue module between Participation and History, carrying the count waiting for review. The paths stay
+ * literal, as every strip here is, so the reachability walk reads each one as a door.
+ */
 export function PerksTabs({ queue }) {
   return (
     <Strip label="Perks">
       <Tab to="/admin/programs/perks" end testId="programs-tab-overview">Overview</Tab>
-      <Tab to="/admin/programs/perks/how-it-runs" testId="programs-tab-how">How it runs</Tab>
-      <Tab to="/admin/programs/perks/queue" count={queue} testId="programs-tab-queue">Queue</Tab>
-      <Tab to="/admin/programs/perks/activity" testId="programs-tab-activity">Activity</Tab>
+      <Tab to="/admin/programs/perks/how-it-runs" testId="programs-tab-how">Playbook</Tab>
+      <Tab to="/admin/programs/perks/availability" testId="programs-tab-availability">Availability &amp; grants</Tab>
+      <Tab to="/admin/programs/perks/participation" testId="programs-tab-participation">Participation</Tab>
+      <Tab to="/admin/programs/perks/queue" count={queue} testId="programs-tab-queue">Perk queue</Tab>
+      <Tab to="/admin/programs/perks/activity" testId="programs-tab-activity">History</Tab>
+      <Tab to="/admin/programs/perks/settings" testId="programs-tab-settings">Settings</Tab>
     </Strip>
   );
 }

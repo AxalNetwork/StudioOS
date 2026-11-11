@@ -11,7 +11,10 @@
  * counted apart (`voidSessions`). Counted in the database: no row cap applies to
  * any total.
  *
- * THE STATE OF A LINE. Derived from the amount first, then the stored state:
+ * THE STATE OF A LINE. Derived from the inclusion, then the amount, then the
+ * stored state:
+ *   included     `included_at IS NOT NULL` (#5316, D5316: the engagement covers
+ *                it; it has no price, so no gross and no cut, and is not unpriced)
  *   unpriced     `amount_cents IS NULL` (no figure, so no gross and no cut)
  *   collected    priced and `billing_state = 'collected'`
  *   written_off  priced and `billing_state = 'written_off'`
@@ -56,7 +59,8 @@ export type LedgerLine = { sessions: number; gross_cents: number; cut_cents: num
 export async function ledgerAggregate(env: Env, advisorId: number, from: string | null, until: string | null, fallbackBps: number) {
   const t = await env.DB.prepare(
     `SELECT COUNT(*) AS sessions,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL AND b.included_at IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(CASE WHEN b.included_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS included,
             COALESCE(SUM(b.amount_cents), 0) AS gross,
             COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
                               WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
@@ -69,11 +73,11 @@ export async function ledgerAggregate(env: Env, advisorId: number, from: string 
         AND (? IS NULL OR datetime(b.created_at) >= datetime(?))
         AND (? IS NULL OR datetime(b.created_at) < datetime(?))
         AND NOT (b.status IN ('cancelled', 'no_show') AND COALESCE(b.billing_state, '') != 'collected')`
-  ).bind(fallbackBps, advisorId, from, from, until, until).first<{ sessions: number; unpriced: number; gross: number; cut: number; clients: number; priced_clients: number }>();
+  ).bind(fallbackBps, advisorId, from, from, until, until).first<{ sessions: number; unpriced: number; included: number; gross: number; cut: number; clients: number; priced_clients: number }>();
   const rows = (await env.DB.prepare(
     `SELECT b.founder_user_id AS client_user_id, MAX(u.name) AS client_name,
             COUNT(*) AS sessions,
-            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
+            COALESCE(SUM(CASE WHEN b.amount_cents IS NULL AND b.included_at IS NULL THEN 1 ELSE 0 END), 0) AS unpriced,
             COALESCE(SUM(b.amount_cents), 0) AS gross,
             COALESCE(SUM(CASE WHEN b.amount_cents IS NULL THEN 0
                               WHEN b.platform_cut_cents IS NOT NULL THEN b.platform_cut_cents
@@ -91,7 +95,8 @@ export async function ledgerAggregate(env: Env, advisorId: number, from: string 
   // #4679: what happened to the money, one database total per billing state over
   // the same population as `t`, so the states add up to the totals.
   const st = (await env.DB.prepare(
-    `SELECT CASE WHEN b.amount_cents IS NULL THEN 'unpriced'
+    `SELECT CASE WHEN b.included_at IS NOT NULL THEN 'included'
+                 WHEN b.amount_cents IS NULL THEN 'unpriced'
                  WHEN b.billing_state = 'collected' THEN 'collected'
                  WHEN b.billing_state = 'written_off' THEN 'written_off'
                  ELSE 'billed' END AS state,
@@ -126,6 +131,7 @@ export async function ledgerAggregate(env: Env, advisorId: number, from: string 
   const gross = Number(t?.gross ?? 0);
   const cut = Number(t?.cut ?? 0);
   const unpriced = Number(t?.unpriced ?? 0);
+  const included = Number(t?.included ?? 0);
   // A "client" row counts the NULL-user group too, and `COUNT(DISTINCT)` does not
   // count NULL, so the total is the larger of it and the rows actually returned.
   const listedRows = rows.slice(0, LEDGER_CLIENT_CAP);
@@ -141,11 +147,12 @@ export async function ledgerAggregate(env: Env, advisorId: number, from: string 
   }), { sessions: 0, gross_cents: 0, cut_cents: 0, unpriced: 0 } as LedgerLine);
   const overflow = rows.length > LEDGER_CLIENT_CAP;
   return {
-    totals: { sessions, unpriced, priced: sessions - unpriced, gross_cents: gross, cut_cents: cut, net_cents: gross - cut },
+    totals: { sessions, unpriced, included, priced: sessions - unpriced - included, gross_cents: gross, cut_cents: cut, net_cents: gross - cut },
     pricedClients: Number(t?.priced_clients ?? 0),
     states: {
       billed: stateOf('billed'), collected: stateOf('collected'), written_off: stateOf('written_off'),
       unpriced: Number(st.find((x) => x.state === 'unpriced')?.sessions ?? 0),
+      included: Number(st.find((x) => x.state === 'included')?.sessions ?? 0),
     },
     voidSessions: Number(v?.n ?? 0),
     clients,
@@ -163,7 +170,7 @@ export async function ledgerAggregate(env: Env, advisorId: number, from: string 
 export type LedgerAggregate = Awaited<ReturnType<typeof ledgerAggregate>>;
 
 /** The billing states the earnings overview lists, in its order. */
-export const EARNINGS_STATES = ['unpriced', 'billed', 'collected', 'written_off'] as const;
+export const EARNINGS_STATES = ['unpriced', 'billed', 'collected', 'written_off', 'included'] as const;
 
 /**
  * The earnings overview's figures, read from the same aggregate as the ledger
@@ -177,14 +184,18 @@ export function earningsOf(agg: LedgerAggregate) {
     written_off_cents: s.written_off.gross_cents,
     outstanding_cents: s.billed.gross_cents,
     unpriced_count: s.unpriced,
-    by_state: EARNINGS_STATES.map((state) => state === 'unpriced'
-      ? { state, bookings: s.unpriced, total_cents: 0 }
+    // #5316 (D5316): sessions included in an engagement. In no money figure above
+    // (they carry no price), and not unpriced either.
+    included_count: s.included,
+    by_state: EARNINGS_STATES.map((state) => state === 'unpriced' || state === 'included'
+      ? { state, bookings: s[state], total_cents: 0 }
       : { state, bookings: s[state].sessions, total_cents: s[state].gross_cents }),
     // D4704: what the figures cover, so a reader never has to guess.
     population: {
       definition: 'practice_money_v1',
       period: { from: null, until: null },
       sessions: agg.totals.sessions,
+      included_sessions: agg.totals.included,
       excluded_void_sessions: agg.voidSessions,
       complete: true,
     },

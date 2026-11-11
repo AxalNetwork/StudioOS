@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -244,6 +245,7 @@ function wideFixture() {
   db.exec(migration('438_interview_sessions.sql'));
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('440_validate_cycle_stores.sql'));
+  applyAcceptRetryKeys(db); // D5352
   db.exec(migration('447_assistant_interviews.sql'));
   db.exec(migration('453_interview_processing.sql'));
   db.exec(migration('459_cycle_activity_convention.sql'));

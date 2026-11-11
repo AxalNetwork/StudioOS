@@ -96,9 +96,11 @@ test.describe('the integrated editor', () => {
     await openEditor(page, m.matrix[0].projectId);
     await page.getByTestId('pitch-editor-block-b1').click();
     await page.getByTestId('pitch-editor-ask-area').click();
-    await expect(page.getByTestId('pitch-areas-generate')).toBeVisible();
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('pitch-areas')).toHaveScreenshot('area-lightbox.png');
+    const dialog = page.getByTestId('pitch-areas');
+    // The quote and the rail model can arrive after the dialog first renders.
+    await expect(dialog.getByTestId('pitch-areas-generate')).toBeEnabled();
+    await expect(dialog.getByTestId(/pitch-areas-row-.+-model/)).toHaveText(/ · set in the AIRail$/);
+    await expect(dialog).toHaveScreenshot('area-lightbox.png');
   });
 
   test('the toolbar: ⋯ (DeckMoreMenu) and the deck\'s Ask', async ({ page, request }) => {

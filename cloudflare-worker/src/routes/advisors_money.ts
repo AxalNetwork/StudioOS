@@ -18,7 +18,7 @@ export { ledgerAggregate, type LedgerLine };
 import { PayoutAccountNotReady, SettlementDisabled, chargeSession, FeeSnapshotMissing, connectLink, ensurePayoutAccount, loadPayoutAccount, refreshAccount } from '../services/advisorConnect';
 import { ensurePaymentsCustomer } from './payments';
 import {
-  type BookingRow, advisorMoney, bookingDto, parsePriceCents, requireMyAdvisor,
+  type BookingRow, advisorMoney, bookingDto, parsePriceCents, requireMyAdvisor, requireOwnEngagement,
 } from '../services/advisorPractice';
 
 const advisors = new Hono<{ Bindings: Env }>();
@@ -28,6 +28,13 @@ const advisors = new Hono<{ Bindings: Env }>();
 // 205 — What a session was worth. Recording only; no money moves.
 // ---------------------------------------------------------------------------
 const BILLING_STATES = ['unpriced', 'billed', 'collected', 'written_off'];
+/**
+ * #5316 (D5316): the states this route accepts. `included` is not a value of the
+ * `billing_state` column (205's CHECK cannot take a fifth one): it is recorded
+ * in `included_at` / `included_by_user_id` / `included_engagement_id`, and every
+ * advisor read reports it as `billing_state: 'included'`.
+ */
+const WRITABLE_BILLING_STATES = [...BILLING_STATES, 'included'];
 
 /**
  * Price a session, or record what happened to that money.
@@ -55,6 +62,57 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
       }>();
     if (!row || row.advisor_id !== m.id) return c.json({ detail: 'Booking not found' }, 404);
     const body = await c.req.json().catch(() => ({} as any));
+    const includedAt = row.included_at ?? null;
+
+    // #5316 (D5316): INCLUDED IN AN ENGAGEMENT, a recorded state of its own.
+    if (body.billing_state != null && !WRITABLE_BILLING_STATES.includes(String(body.billing_state).trim())) {
+      return c.json({ detail: 'billing_state must be one of: unpriced, billed, collected, written_off, included' }, 400);
+    }
+    if (body.billing_state != null && String(body.billing_state).trim() === 'included') {
+      // No price: the engagement's fee covers the session, so there is no figure
+      // for a billed, collected or outstanding total to count.
+      if ('amount_cents' in body && parsePriceCents(body.amount_cents) != null) {
+        return c.json({ detail: 'A session included in an engagement has no price of its own.', code: 'included_has_no_price' }, 400);
+      }
+      // A priced line keeps its stamped amount, rate and cut (#4713): including
+      // it would restate them. Clear the price first (a settled one cannot be).
+      if (row.amount_cents != null || row.billing_state !== 'unpriced') {
+        return c.json({
+          detail: 'This session has a price. Clear it first; a session included in an engagement is not billed.',
+          code: 'priced_line',
+        }, 409);
+      }
+      let engagementId: number | null = includedAt ? (row.included_engagement_id ?? null) : null;
+      if ('engagement_id' in body) {
+        engagementId = body.engagement_id == null || body.engagement_id === ''
+          ? null
+          : (await requireOwnEngagement(c, m.id, Number(body.engagement_id))).id;
+      }
+      // The first record stands (when, and who); naming an engagement updates the link only.
+      const now = nowIso();
+      const res: any = await c.env.DB.prepare(
+        `UPDATE advisor_bookings
+            SET included_at = ?, included_by_user_id = ?, included_engagement_id = ?, updated_at = ?
+          WHERE id = ? AND billing_state = 'unpriced' AND amount_cents IS NULL AND included_at IS ?`
+      ).bind(
+        includedAt ?? now, includedAt ? (row.included_by_user_id ?? null) : Number(user.id), engagementId, now,
+        row.id, includedAt,
+      ).run();
+      if (Number(res?.meta?.changes ?? 0) !== 1) {
+        return c.json({ detail: 'This session changed while you were editing it. Reload and try again.', code: 'booking_changed' }, 409);
+      }
+      const fresh = await c.env.DB.prepare('SELECT * FROM advisor_bookings WHERE id = ?')
+        .bind(row.id).first<BookingRow & { amount_cents: number | null; billing_state: string }>();
+      return c.json(bookingDto(fresh!, advisorMoney(fresh!)));
+    }
+    // Leaving the included state is said out loud: a bare amount on an included
+    // session is refused rather than read as "it is billed now".
+    if (includedAt && body.billing_state == null) {
+      return c.json({
+        detail: 'This session is recorded as included in an engagement. Send billing_state to change that.',
+        code: 'included_line',
+      }, 409);
+    }
 
     const stored = row.amount_cents == null ? null : Number(row.amount_cents);
     const amount_cents = 'amount_cents' in body ? parsePriceCents(body.amount_cents) : stored;
@@ -133,14 +191,17 @@ advisors.patch('/me/bookings/:id/billing', async (c) => {
     // the same batch, after the guarded update, and inserts only if that update
     // changed the row, so a refused or raced write leaves no event.
     const audited = (pricing || repricing) && stored != null && amount_cents !== stored;
+    // #5316 (D5316): any other state clears an included record, in the same
+    // UPDATE, and the compare includes it.
     const update = c.env.DB.prepare(
       `UPDATE advisor_bookings
           SET amount_cents = ?, billing_state = ?,
-              platform_cut_cents = ?, take_rate_bps = ?, updated_at = ?
-        WHERE id = ? AND billing_state = ? AND amount_cents IS ?`
+              platform_cut_cents = ?, take_rate_bps = ?,
+              included_at = NULL, included_by_user_id = NULL, included_engagement_id = NULL, updated_at = ?
+        WHERE id = ? AND billing_state = ? AND amount_cents IS ? AND included_at IS ?`
     ).bind(
       amount_cents, billing_state, cut, bps, nowIso(),
-      row.id, row.billing_state, stored,
+      row.id, row.billing_state, stored, includedAt,
     );
     const writes = [update];
     if (audited) {
@@ -637,7 +698,8 @@ advisors.get('/me/ledger', async (c) => {
                 b.topic AS topic, b.status AS status, b.created_at AS created_at,
                 s.starts_at AS session_at,
                 b.amount_cents AS amount_cents, b.billing_state AS billing_state,
-                b.take_rate_bps AS take_rate_bps, b.platform_cut_cents AS platform_cut_cents
+                b.take_rate_bps AS take_rate_bps, b.platform_cut_cents AS platform_cut_cents,
+                b.included_at AS included_at, b.included_engagement_id AS included_engagement_id
            FROM advisor_bookings b
            LEFT JOIN users u ON u.id = b.founder_user_id
            LEFT JOIN advisor_office_hour_slots s ON s.id = b.slot_id
@@ -684,7 +746,8 @@ advisors.get('/me/ledger', async (c) => {
       const items = rows.slice(0, LINES_CAP).map((r: any) => {
         const amount = r.amount_cents == null ? null : Number(r.amount_cents);
         const fee = r.platform_cut_cents == null ? null : Number(r.platform_cut_cents);
-        const state = amount == null ? 'unpriced' : String(r.billing_state || 'billed');
+        // #5316 (D5316): included first, as the aggregate classifies it.
+        const state = r.included_at ? 'included' : amount == null ? 'unpriced' : String(r.billing_state || 'billed');
         return {
           id: Number(r.id),
           client_user_id: r.client_user_id == null ? null : Number(r.client_user_id),
@@ -701,6 +764,7 @@ advisors.get('/me/ledger', async (c) => {
           take_rate_bps: r.take_rate_bps == null ? null : Number(r.take_rate_bps),
           platform_fee_cents: fee,
           net_cents: amount != null && fee != null ? amount - fee : null,
+          included_engagement_id: r.included_at && r.included_engagement_id != null ? Number(r.included_engagement_id) : null,
         };
       });
       lines = {
@@ -718,6 +782,9 @@ advisors.get('/me/ledger', async (c) => {
       collected: agg.states.collected,
       written_off: agg.states.written_off,
       unpriced: { sessions: agg.states.unpriced },
+      // #5316 (D5316): sessions the engagement covers. No figure: they are in no
+      // money total, and counted here so the page can say so.
+      included: { sessions: agg.states.included },
       refunds_owed: refundsRead ? {
         sessions: refundsFor(false).length,
         amount_cents: refundsFor(false).reduce((n, r) => n + r.cents, 0),
@@ -754,6 +821,8 @@ advisors.get('/me/ledger', async (c) => {
         // the sessions nobody priced would be a smaller number presented as a
         // complete one.
         unpriced_sessions: totals.unpriced,
+        // #5316 (D5316): included in an engagement — neither priced nor unpriced.
+        included_sessions: totals.included,
         // The money actually received: collected lines only, net of the cut.
         received_cents: states.collected.net_cents,
       },
@@ -1045,6 +1114,7 @@ advisors.get('/me/tax-summary', async (c) => {
       sessions: totals.sessions,
       priced_sessions: totals.priced,
       unpriced_sessions: totals.unpriced,
+      included_sessions: totals.included,
       clients: agg.pricedClients,
       completeness: { basis: 'Every booking created in the year, summed in the database. No row cap applies.', sessions: totals.sessions },
       basis: 'Calendar year in UTC, by the date each session was booked.',
@@ -1052,7 +1122,8 @@ advisors.get('/me/tax-summary', async (c) => {
         is_tax_form: false,
         note: 'A summary of what this platform recorded. It is not an IRS Form 1099, '
           + 'no tax document is issued by Axal, and this is not tax advice. '
-          + 'Sessions with no price recorded are counted separately and are not in these totals.',
+          + 'Sessions with no price recorded, and sessions included in an engagement, are counted '
+          + 'separately and are not in these totals.',
       },
       settlement: settlementMode(c.env),
     });
