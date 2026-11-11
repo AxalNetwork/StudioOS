@@ -291,7 +291,7 @@ export async function pushLicenceToBranch(
  * Never throws, like the push itself (D111). A database without the migration
  * loses the retry, not the push.
  */
-async function recordPushOutcome(
+export async function recordPushOutcome(
   env: Env, licenceId: number, result: LicencePushResult, at: string, revision: number | null,
 ): Promise<void> {
   try {

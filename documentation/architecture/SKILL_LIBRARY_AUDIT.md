@@ -92,13 +92,10 @@ reads the skill lists. The library test checks it for committed sources only.
   tags. The checked-in seed is migration `090_seed_skills_values_taxonomy.sql`.
 - The eight axes are `RADAR_AXES` (`skillsTaxonomySchema.ts:32-41`); a tag's
   axis is its `category_slug` (`skillLinks.ts:124-127`).
-- **Two definitions of a skill's "area and level"** disagree:
-  - the library list and seed use the **first** tag's category and the first
-    tag's level (`skillLibrarySeed.ts:69-73`, `admin_hq_skills.ts:194`);
-  - the HQ store list uses the first tag that maps to an axis and the
-    **highest** level of any tag (`admin_hq_skills.ts:104-108`, `:176`).
-  - On today's 182 sources these differ on one skill (`case-study-draft`).
-    This is a display inconsistency, not a validation defect.
+- **Resolved by D5334:** the library source view, seed and HQ store list use
+  one exported rule: the first tag whose category maps to a radar axis, and
+  that tag's own level. A source-wide regression compares all three paths;
+  `case-study-draft` mutation-checks the former highest-level inconsistency.
 
 ## 6. Evaluation
 
@@ -125,16 +122,15 @@ Findings:
 2. **Phrase checks are substring checks.** `"37"` passes on "370"; a phrase in
    a hypothetical sentence passes. The judge has no numeric, structural or
    evidence assertion (#4531 scope).
-3. **A seeded starter skill is evaluated twice after publish.** The 12 starter
-   slugs are also library sources, so a seeded starter has the same case as a
-   live `agent_skill_cases` row and as the `starter` key; `casesOf` returns
-   both (`skillEval.ts:156-167`). Each counts once on the board.
-4. **The regression query is not version-scoped.** The "before" read
-   (`skillEval.ts:190-192`) takes the latest non-`not_run` result for the case
-   and model across all versions, so a v2 fail after a v1 pass alerts as a
-   regression of v2. The board (`skillEval.ts:427-434`) counts a regression
-   only within the current version. Whether a cross-version alert is wanted is
-   **unclear**; the two are inconsistent.
+3. **Resolved by D5334:** published evaluation runs once per distinct case
+   input/expectation content. A live copy suppresses the shipped starter run;
+   a differently named copy is still the same content, while a changed input
+   or expectation remains a separate run. Historical rows stay immutable and
+   the board folds current duplicate keys to one content/model unit.
+4. **Resolved by D5334:** the alert's prior-result read is scoped to the same
+   skill version, case and model, matching the board. A v1 pass followed by a
+   v2 fail is visible in `GET /:uid/evals/compare`, but is not called a v2
+   pass-to-fail alert. A v2 pass followed by a v2 fail still alerts once.
 5. **Library case names are not distinct.** Every seeded case is named
    `"<slug>: golden case"`, and the seed treats a same-named case as present
    (`skillLibrarySeed.ts:111-113`). A source with two cases would seed one.
@@ -257,10 +253,10 @@ Existing suites (run from the repo root with the Worker loader):
 `team_skills_d1612`, `team_agent_skills_d1612`, `skill_run_cost_d4121`,
 `skills_sdk_adapter_4555`; `node scripts/build-skill-library.mjs --check`.
 
-Missing regressions: field-specific missing-data (finding 1); substring
-numbers (finding 2); starter double-count (finding 3); cross-version
-regression (finding 4); duplicate case names on multi-case sources (finding
-5); case record keys checked at runtime against the skill's tools.
+Missing regressions at the audit date: field-specific missing-data (finding
+1); substring numbers (finding 2); duplicate case names on multi-case sources
+(finding 5); case record keys checked at runtime against the skill's tools.
+Findings 3 and 4 now have D5334 regressions.
 
 ## 12. Gaps for Sessions 02–10
 

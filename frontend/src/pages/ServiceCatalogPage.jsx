@@ -317,7 +317,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     } catch (e) { setError(e.message); }
   }
   async function remove(o) {
-    if (!window.confirm(`Delete "${o.title}"? If any engagements reference it, it will be unlisted instead.`)) return;
+    if (!window.confirm(`Remove "${o.title}"? If it has service requests or market readings, it will be unlisted and those records will be kept. Otherwise it will be deleted.`)) return;
     try { await api.deleteServiceOffering(o.id); load(); } catch (e) { setError(e.message); }
   }
 
