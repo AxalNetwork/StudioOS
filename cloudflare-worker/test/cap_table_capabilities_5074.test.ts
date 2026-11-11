@@ -135,9 +135,9 @@ test('a co-founder is refused the owner\'s writes with owner_records, as before'
   assert.match(r.text, /owner_records/);
 });
 
-test('an investor, a non-member, an ordinary admin and a Super Admin read no map, and every write is refused', async () => {
+test('an investor, unrelated partner, other founder and Super Admin are refused; an ordinary admin may make a reasoned correction', async () => {
   const f = await fresher();
-  for (const who of [INVESTOR, OTHER, SUPER]) {
+  for (const who of [INVESTOR, PARTNER, OTHER, SUPER]) {
     const read = await call(f, who, '/record/10');
     assert.ok([403, 404].includes(read.status), `${who}: read ${read.status}`);
     assert.equal(read.body?.capabilities, undefined, `${who}: no map on a refusal`);
