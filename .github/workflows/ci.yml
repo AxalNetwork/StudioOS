@@ -45,6 +45,10 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -66,6 +70,10 @@ jobs:
         working-directory: cloudflare-worker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -150,8 +158,8 @@ jobs:
     # real hang still stops here.
     timeout-minutes: 40
     strategy:
-      # Every part reports, so one red part does not hide another.
-      fail-fast: false
+      # Queue entries cannot land after a failure. PRs and pushes report every part.
+      fail-fast: ${{ github.event_name == 'merge_group' }}
       matrix:
         part:
           - frontend-1-of-2
@@ -165,6 +173,10 @@ jobs:
           - rest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -195,6 +207,10 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}
 
   gate:
@@ -319,6 +335,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
