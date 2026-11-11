@@ -92,6 +92,8 @@ const deliverable = (over = {}) => ({
   // #4684: the latest sent version's recipient, which a nudge reaches; null until something is sent.
   recipient_email: null,
   state: 'not_started', due_date: null, manual_status: null, version_count: 1,
+  // #5316 (D5316): the unsent version marked ready to send, or null.
+  ready_version: null,
   latest_version: version({ sent_at: ['sent', 'opened'].includes(over.state) ? '2026-10-01T10:00:00Z' : null, opened_at: over.state === 'opened' ? '2026-10-01T11:00:00Z' : null }), versions: [version()],
   created_at: '2026-10-01T09:00:00.000Z', updated_at: '2026-10-01T09:00:00.000Z', ...over,
 });
@@ -327,7 +329,7 @@ test('A2: the canvas rule — no price, not bookable — in the body, the switch
   assert.equal(sessionTypeBody({ name: '', mode: 'free' }).error, 'A session type needs a name.');
   assert.equal(sessionTypeBody({ name: 'X', mode: 'free', duration: '0' }).error, 'Length is whole minutes, from 1 to 1440.');
   assert.deepEqual(parseAmount('12.345'), { error: 'Enter an amount like 150 or 150.50' });
-  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.5', bookable: true, note: '' });
+  assert.deepEqual(sessionTypeForm(type({ price_cents: 28050 })), { name: 'Strategy session', duration: '60', mode: 'price', amount: '280.50', bookable: true, note: '' });
 });
 
 test('A2: the table — switch disabled where the rule forbids it, the contradiction flagged, bookings Not recorded', () => {

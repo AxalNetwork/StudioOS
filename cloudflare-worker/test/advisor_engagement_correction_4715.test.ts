@@ -120,7 +120,7 @@ test('a correction made from a stale view writes nothing', async () => {
 test('an ended engagement is corrected the same way: a reason, and a record', async () => {
   const f = fixture();
   const e = await f.sign();
-  const ended = await f.call('POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', expected_cycles: e.cycles });
+  const ended = await f.call('POST', `/me/engagements/${e.id}/renewal`, { decision: 'ended', end_reason: 'did_not_renew', expected_cycles: e.cycles });
   assert.equal(ended.status, 200, JSON.stringify(ended.body));
   assert.equal((await f.call('PATCH', `/me/engagements/${e.id}`, { scope_label: 'Monthly review' })).status, 409);
   const fixed = await f.call('PATCH', `/me/engagements/${e.id}`, { scope_label: 'Monthly review', correction_reason: 'Synthetic: wrong label' });

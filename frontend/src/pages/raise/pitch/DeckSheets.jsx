@@ -20,6 +20,7 @@ import { GO_TO_CARD, checkCounts, toReview } from './figuresModel';
 import { movedNotice } from './deckReflow';
 import { deckBrandKitApi } from '../../../lib/api/deckBrandKit';
 import { deckBrandLocksApi } from '../../../lib/api/deckBrandLocks';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { ADMINS_ONLY, LOCKS_FAILED, LOCK_ROWS, lockFor } from './brandTemplateModel';
 
 /**
@@ -296,7 +297,7 @@ export function BrandLocks({ projectId, locks, onChanged }) {
   const toggle = async (part, locked) => {
     setBusy(part); setLine('');
     try { await deckBrandLocksApi.setLock(projectId, part, locked); onChanged?.(); }
-    catch (e) { setLine(e?.data?.message || e?.message || 'The lock could not be changed. Nothing changed.'); }
+    catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The lock could not be changed. Nothing changed.', scope: 'raise:pitch:brand-lock' })); }
     finally { setBusy(null); }
   };
   return (
@@ -339,7 +340,7 @@ function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
   const save = async () => {
     setBusy('save'); setLine('');
     try { await deckBrandKitApi.save(projectId, kitBodyOf(draft)); setLine('Brand kit saved.'); kit.retry?.(); }
-    catch (e) { setLine(e?.data?.message || e?.message || 'The brand kit could not be saved. Nothing was changed.'); }
+    catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The brand kit could not be saved. Nothing was changed.', scope: 'raise:pitch:brand-kit' })); }
     finally { setBusy(null); }
   };
   const apply = async () => {
@@ -348,7 +349,7 @@ function DeckKitFields({ projectId, deckId, kit, readOnly, dirty, onApplied }) {
       const r = await deckBrandKitApi.applyBrand(deckId);
       setLine(r?.adjustments?.length ? r.adjustments.join(' ') : 'Brand applied to every card.');
       onApplied?.(r);
-    } catch (e) { setLine(e?.data?.message || e?.message || 'The brand could not be applied. Nothing was changed.'); }
+    } catch (e) { setLine(userFacingRaiseError(e, { fallback: 'The brand could not be applied. Nothing was changed.', scope: 'raise:pitch:brand-apply' })); }
     finally { setBusy(null); }
   };
   const swatch = (c) => (HEX_RE.test(c) ? { background: c } : undefined);

@@ -4311,6 +4311,9 @@ export const api = {
   requestAdvisorProofConsent: (id, data) =>
     request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // #5316 (D5316): `billing_state: 'included'` (with an optional `engagement_id`) records a session as included
+  // in an engagement: no price, in no billed or outstanding total. Refused on a priced line (409 `priced_line`);
+  // an included line leaves that state only when `billing_state` is sent (409 `included_line` otherwise).
   updateMyAdvisorBookingBilling: (id, data) =>
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
@@ -4385,6 +4388,8 @@ export const api = {
   // here rather than through `advance`, so the loss lands in the denominator.
   // D4695: `data.expected_cycles` is the cycle count the board showed, i.e. the term being decided. The same
   // decision sent twice is one cycle (the answer says `replayed`); a term that moved on is a 409 `cycles_changed`.
+  // #5316 (D5316): ending needs `data.end_reason`, 'did_not_renew' or 'other' (400 `end_reason_required`
+  // otherwise); the engagement then reads it back as `end_reason`, null on one ended before it was asked.
   recordMyAdvisorEngagementRenewal: (id, data) =>
     request(`/advisors/me/engagements/${id}/renewal`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -4404,6 +4409,13 @@ export const api = {
   // would sit in Unopened forever and bias the median.
   sendMyAdvisorDeliverableVersion: (id, version) =>
     request(`/advisors/me/deliverables/${id}/versions/${version}/send`, { method: 'POST' }),
+  // #5316 (D5316): mark a version ready to send, or take the mark off. NEITHER SENDS ANYTHING; the send
+  // clears the mark. A sent version is a 409 `already_sent`; one with no content a 422 `empty_version`.
+  // Each answers the version with `ready_at`, `ready_by_user_id` and `ready_by_name`.
+  markMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'POST' }),
+  clearMyAdvisorDeliverableVersionReady: (id, version) =>
+    request(`/advisors/me/deliverables/${id}/versions/${version}/ready`, { method: 'DELETE' }),
 
   // Migration 240 — the three things that decide what the calendar contains.
   // A price here is what the advisor ASKS FOR; nothing in this group charges
@@ -4569,7 +4581,7 @@ export const api = {
 
   // `is_published` on each item is DERIVED from its consent rows, never stored.
   // There is no method to set it, and that absence is the feature.
-  listPartnerProof: () => request('/partner/offers/proof'),
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
   createPartnerProof: (data) =>
     request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
   updatePartnerProof: (id, data) =>

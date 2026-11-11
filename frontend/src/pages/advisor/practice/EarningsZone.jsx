@@ -1,3 +1,4 @@
+import { toMajorString } from '../../../lib/money.js';
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Lightbox, Pill } from '../../../ui';
@@ -109,7 +110,8 @@ function lineCells(line) {
     billing: <BillingPill state={line.billing_state} />,
     collected: line.collected_cents != null
       ? money(line.collected_cents)
-      : <Unrecorded>{line.billing_state === 'unpriced' ? 'Not recorded' : 'Not collected'}</Unrecorded>,
+      : <Unrecorded>{line.billing_state === 'unpriced' ? 'Not recorded'
+        : line.billing_state === 'included' ? 'Included in an engagement' : 'Not collected'}</Unrecorded>,
     rate: rate ?? <Unrecorded>{line.amount_cents == null ? 'Not recorded' : 'Not recorded · priced before rates were stamped'}</Unrecorded>,
     fee: money(line.platform_fee_cents) ?? <Unrecorded />,
     net: money(line.net_cents) ?? <Unrecorded />,
@@ -278,7 +280,7 @@ export default function EarningsZone() {
     // 0 — the CSV must not assert a price, rate or fee nobody recorded.
     const rows = lines?.items || [];
     const cell = (v) => (v == null ? '' : `"${String(v).replace(/"/g, '""')}"`);
-    const cents = (v) => (v == null ? '' : (Number(v) / 100).toFixed(2));
+    const cents = (v) => v == null ? '' : toMajorString(v, L?.currency) ?? '';
     const out = [
       ['Client', 'Session', 'Date', 'Price', 'Billing state', 'Recorded collected', 'Platform rate', 'Platform fee', 'Net'].join(','),
       ...rows.map((r) => [
@@ -301,7 +303,7 @@ export default function EarningsZone() {
     a.href = url; a.download = `axal-earnings-${window_.key || 'custom'}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-  }, [lines, totals, window_]);
+  }, [lines, totals, window_, L?.currency]);
 
   const downloadTaxSummary = useCallback(async () => {
     setExportNote(null);
@@ -310,7 +312,7 @@ export default function EarningsZone() {
       // reader's chosen window are different spans.
       const year = Number(String(window_.key || window_.from || '').slice(0, 4)) || new Date().getFullYear();
       const s = await api.getMyAdvisorTaxSummary(year);
-      const cents = (v) => (v == null ? '' : (Number(v) / 100).toFixed(2));
+      const cents = (v) => v == null ? '' : toMajorString(v, s.currency) ?? '';
       const out = [
         ['Field', 'Value'].join(','),
         ['Year', s.year].join(','),
@@ -362,6 +364,7 @@ export default function EarningsZone() {
         `outstanding, billed and not marked collected ${money(st?.billed?.gross_cents) ?? 'not recorded'}`,
         `written off ${money(st?.written_off?.gross_cents) ?? 'not recorded'}`,
         `${totals?.priced_sessions ?? 'an unknown number of'} priced sessions, ${totals?.unpriced_sessions ?? 'an unknown number'} with no price recorded`,
+        `${totals?.included_sessions ?? 0} sessions included in an engagement, which carry no price and are in no money figure`,
         'money reaching the advisor is recorded only as a paid payout, never inferred from collected',
       ];
       const res = await api.aiWorkspaceExplain({ workspace: 'Practice', zone: 'Earnings', coverage });

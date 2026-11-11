@@ -10,6 +10,10 @@
  *                                    `run_cost: null` (Not recorded until #4536 records cost by executed version)
  *   GET  /library                    D4225: the "From Axal" library files, each with its area, level, check and whether it is in the store
  *   POST /library/seed               D4225: { reason } — every library skill not in the store becomes a draft with its golden cases
+ *   GET  /library/reconcile          D5335: READ ONLY. The generated library against the store's HQ skills (D4532 §3) →
+ *                                    { report_version, scope: 'hq', read_at, totals: { <class>: n }, skills: [{ slug, class,
+ *                                    disposition, source_hash, persisted_hash, published_version }], manifest: [persisted, hashes only] };
+ *                                    audited (`agent_skill_library_reconciled`, the totals only)
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
@@ -85,6 +89,7 @@ import { ROLES } from '../services/agents/catalogue';
 import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
+import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
 
 const ROLE_LABEL = new Map(ROLES.map((r) => [r.key, r.name]));
 
@@ -291,6 +296,18 @@ adminHqSkills.post('/library/seed', async (c) => {
   if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
   const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
   return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
+});
+
+// D5335 (#5335): the read-only preflight D4532 §3 names. It hashes the HQ drafts and live cases and returns hashes,
+// identities and classes, never their text; company skills are outside `persistedManifest`. It repairs nothing.
+adminHqSkills.get('/library/reconcile', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const tax = await taxonomyMaps(c.env);
+  const persisted = await persistedManifest(c.env);
+  const source = await libraryManifest(new Set(tax.category.keys()), SKILL_LIBRARY);
+  const report = reconcileReport(reconcile(source, persisted), persisted);
+  await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_library_reconciled', { scope: 'hq', skills: report.skills.length, totals: report.totals });
+  return c.json({ report_version: report.report_version, scope: report.scope, read_at: new Date().toISOString(), totals: report.totals, skills: report.skills, manifest: report.manifest });
 });
 
 adminHqSkills.get('/:uid', async (c) => {

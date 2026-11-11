@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Sheet from '../../../ui/Sheet.jsx';
 import { pptxImport } from './deckV2Adapter';
 import { deckLayoutsApi } from '../../../lib/api/deckLayouts';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import {
   TEMPLATE_DROP, TEMPLATE_PRIVACY, TEMPLATE_READING, TEMPLATE_SAVE, TEMPLATE_TITLE,
   areaRange, countsLine, fileProblem, fontLine, placedOf, unplacedOf,
@@ -55,7 +56,7 @@ export default function TemplateImport({ projectId, onClose, onSaved }) {
       setStep('saved');
       setLine(`${r?.saved ?? layouts.length} ${layouts.length === 1 ? 'layout' : 'layouts'} saved for this venture.`);
       onSaved?.(r);
-    } catch (e) { setLine(e?.data?.message || e?.message || 'Your layouts could not be saved. Nothing was saved.'); }
+    } catch (e) { setLine(userFacingRaiseError(e, { fallback: 'Your layouts could not be saved. Nothing was saved.', scope: 'raise:pitch:template-import' })); }
     finally { setBusy(false); }
   };
 

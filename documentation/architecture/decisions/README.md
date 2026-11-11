@@ -67,10 +67,13 @@ and citations by number keep working.
 | `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
 | `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
+| `D5358.md` | Practice Sessions confirms price changes and clears, preserves status-only updates, and handles billing refusals. |
 | `D5331.md` | Distribution Calendar Repurpose proposes one post per target channel and accepts it as a manual plan with linked draft copy. |
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
+| `D5366.md` | #5366: company project writes pass the company-seat gate while #5329 retains project-scope authority. |
 | `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
 | `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
 | `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |

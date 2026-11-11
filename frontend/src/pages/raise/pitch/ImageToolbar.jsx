@@ -3,6 +3,7 @@ import { FIELD, GHOST, INK, MUTED } from './AssistParts';
 import { ALT_HELP, FIT_OPTIONS, placedLine } from './imageModel';
 import { COMING_LATER, CROP_WORDS as CROP_LINES, FILTERS, FILTER_WORDS, ZOOM_MIN_W, panTo, rectOf, zoomTo } from './imageLook';
 import { TOOL_OF_LABEL, toolCostLine, toolRunnable } from './imageToolsModel';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
 const CROPS = [[0, 0], [50, 0], [100, 0], [0, 50], [50, 50], [100, 50], [0, 100], [50, 100], [100, 100]];
 const CROP_WORDS = ['Top left', 'Top', 'Top right', 'Left', 'Centre', 'Right', 'Bottom left', 'Bottom', 'Bottom right'];
@@ -35,14 +36,14 @@ export default function ImageToolbar({ block, image, onPatch, onReplace, onUploa
     if (!tools) return;
     setPress({ tool: id, quote: null, busy: true, error: null });
     Promise.resolve(tools.quote(id)).then((quote) => setPress({ tool: id, quote, busy: false, error: null }),
-      (e) => setPress({ tool: id, quote: null, busy: false, error: e?.message || 'The price could not be read. Nothing was run.' }));
+      (e) => setPress({ tool: id, quote: null, busy: false, error: userFacingRaiseError(e, { fallback: 'The price could not be read. Nothing was run.', scope: 'raise:pitch:image-tool-quote' }) }));
   };
   const runTool = () => {
     if (!press || !toolRunnable(press.quote)) return;
     const id = press.tool;
     setPress({ ...press, busy: true, error: null });
     Promise.resolve(tools.run(id)).then(() => setPress(null),
-      (e) => setPress((p) => ({ ...(p || { tool: id }), busy: false, error: e?.message || 'Nothing was run.' })));
+      (e) => setPress((p) => ({ ...(p || { tool: id }), busy: false, error: userFacingRaiseError(e, { fallback: 'Nothing was run.', scope: 'raise:pitch:image-tool' }) })));
   };
   const toggle = (t) => setTool((x) => (x === t ? null : t));
   const crop = block.crop || { x: 50, y: 50 };

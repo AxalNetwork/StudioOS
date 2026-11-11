@@ -129,6 +129,94 @@ const OPTIONS = [{ key: BLOCK_OPTION, label: 'Find a free afternoon' }];
 const decides = (m) => m.calls.filter((c) => /\/decide$/.test(c.path));
 const blocks = (m) => m.calls.filter((c) => c.path === '/api/advisors/me/slots/block');
 
+const billingPath = '/api/advisors/me/bookings/35/billing';
+const billingWrites = (m) => m.calls.filter(c => c.method === 'PATCH' && c.path === billingPath).map(c => c.body);
+async function openBilling(state = 'billed', refusal = null, missingFee = false) {
+  const m = await mount(h(SessionsZone), c => {
+    if (c.path === billingPath) return refusal ? json({ code: refusal, detail: 'Private server detail' }, 409) : json({});
+    if (c.path === '/api/advisors/me/bookings') return json({ items: [{
+      id: 35, status: 'confirmed', topic: 'Billing fixture', amount_cents: 30000, billing_state: state,
+      platform_cut_cents: missingFee ? null : 4500, take_rate_bps: missingFee ? null : 1500,
+    }] });
+    return worker()(c);
+  });
+  try {
+    await m.press(m.button('Change', m.by('billing-pr4-35')));
+    return m;
+  } catch (error) { await m.close(); throw error; }
+}
+
+test('billing status alone leaves the stored price and fee snapshot alone', async () => {
+  const m = await openBilling();
+  try {
+    await m.change('session-billing-state', 'collected');
+    await m.submit('session-billing-editor');
+    assert.deepEqual(billingWrites(m), [{ billing_state: 'collected' }]);
+  } finally { await m.close(); }
+});
+
+test('changing a stored price requires confirmation, and cancel writes nothing', async () => {
+  const m = await openBilling();
+  try {
+    await m.change('session-billing-amount', '325');
+    await m.submit('session-billing-editor');
+    assert.match(m.text(), /Stored price: \$300.*today’s rate/);
+    assert.deepEqual(billingWrites(m), []);
+    await m.press(m.button('Cancel price change'));
+    assert.deepEqual(billingWrites(m), []);
+    await m.submit('session-billing-editor');
+    await m.press(m.button('Confirm price'));
+    assert.deepEqual(billingWrites(m), [{ amount_cents: 32500, billing_state: 'billed', reprice: true }]);
+  } finally { await m.close(); }
+});
+
+test('clearing is confirmed and settled prices cannot be cleared', async () => {
+  const m = await openBilling();
+  try {
+    await m.press(m.button('Clear the price'));
+    assert.deepEqual(billingWrites(m), []);
+    await m.press(m.button('Confirm clear'));
+    assert.deepEqual(billingWrites(m), [{ amount_cents: null, billing_state: 'unpriced', reprice: true }]);
+  } finally { await m.close(); }
+  for (const state of ['collected', 'written_off']) {
+    const settled = await openBilling(state);
+    try {
+      assert.equal(settled.button('Clear the price'), undefined);
+      assert.equal(settled.props(settled.by('session-billing-amount')).disabled, true);
+      assert.match(settled.text(), /price cannot be changed or cleared/);
+    } finally { await settled.close(); }
+  }
+});
+
+test('billing refusals use fixed messages, and a changed booking is re-read', async () => {
+  for (const [code, message] of [
+    ['reprice_required', /Confirm the new price/],
+    ['settled_price', /price cannot be changed or cleared/],
+    ['booking_changed', /Review the refreshed record/],
+    ['fee_snapshot_missing', /fee details are missing/],
+  ]) {
+    const m = await openBilling('billed', code);
+    try {
+      const reads = () => m.calls.filter(c => c.path === '/api/advisors/me/bookings').length;
+      const before = reads();
+      await m.submit('session-billing-editor');
+      assert.match(m.text(), message);
+      assert.doesNotMatch(m.text(), /Private server detail/);
+      if (code === 'booking_changed') assert.ok(reads() > before);
+    } finally { await m.close(); }
+  }
+});
+
+test('a missing fee snapshot can be restored by confirming the stored price', async () => {
+  const m = await openBilling('billed', null, true);
+  try {
+    await m.press(m.button('Confirm the current price'));
+    assert.deepEqual(billingWrites(m), []);
+    await m.press(m.button('Confirm price'));
+    assert.deepEqual(billingWrites(m), [{ amount_cents: 30000, billing_state: 'billed', reprice: true }]);
+  } finally { await m.close(); }
+});
+
 // ── 1. Accept leads to the Block form, and decides only after Block wrote ────
 
 test('Accept on a Block card decides nothing; Block writes, and only then the card is decided', async () => {

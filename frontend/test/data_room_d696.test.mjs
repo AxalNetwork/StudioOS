@@ -102,6 +102,8 @@ for (const [what, add] of [
     const view = await mounted('/raise/data-room?project_id=3', (u) => (u.includes('/auth/me') ? FOUNDER
       : u.includes('/cycles/raise/modules/data-room') ? moduleRead(add) : {}));
     try {
+      // Wait for the asserted link, bounded, not a fixed number of ticks: the header's other reads (D5330's
+      // Working here) can land first under load.
       await view.waitFor(() => view.by('records-add').length > 0, 'the loaded Data room renders its Upload action');
       assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/data-room')), 'the module read is made');
       assert.deepEqual(view.by('cycle-module').length, 1);
