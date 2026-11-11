@@ -1,3 +1,4 @@
+import { centsToInput } from '../../../lib/moneyInput.js';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
@@ -722,7 +723,7 @@ function RulesBody({ rules, read: readState, onSaved }) {
 
 function BillingEditor({ booking, onSaved }) {
   const [amount, setAmount] = useState(
-    booking.amount_cents == null ? '' : String(Number(booking.amount_cents) / 100),
+    centsToInput(booking.amount_cents),
   );
   const [state, setState] = useState(
     booking.billing_state === 'unpriced' ? 'billed' : (booking.billing_state || 'billed'),

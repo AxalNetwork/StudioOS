@@ -11,6 +11,8 @@
  * thousands mark or a mistyped decimal, so it is refused. Anything else is refused with a sentence, never guessed. All
  * arithmetic is on digit strings, so no float rounds a cent.
  */
+import { parseMinor, toMajorString } from './money.js';
+
 const GROUPED = /^\d{1,3}([.,\s]\d{3})+$/;
 
 export function amountToCents(input) {
@@ -46,16 +48,14 @@ export function amountToCents(input) {
     if (!GROUPED.test(raw) && !/^\d+$/.test(raw)) return bad;
     whole = raw.replace(/\s/g, '');
   }
-  const cents = Number(whole) * 100 + Number(frac.padEnd(2, '0'));
-  if (!Number.isSafeInteger(cents) || cents > 100_000_000_00) return { error: 'That amount is too large.' };
-  return { cents };
+  const amount = parseMinor(frac ? `${whole}.${frac}` : whole, 'USD');
+  if (!amount.ok || amount.minor > 100_000_000_00) return { error: 'That amount is too large.' };
+  return { cents: amount.minor };
 }
 
 /** Cents to a plain editable amount: 12345 → "123.45", 500000 → "5000". Never a float. */
 export function centsToInput(cents) {
   if (cents == null || cents === '' || !Number.isFinite(Number(cents))) return '';
   const n = Math.round(Number(cents));
-  const whole = Math.trunc(Math.abs(n) / 100);
-  const frac = String(Math.abs(n) % 100).padStart(2, '0');
-  return `${n < 0 ? '-' : ''}${whole}${frac === '00' ? '' : `.${frac}`}`;
+  return toMajorString(n, 'USD')?.replace(/\.00$/, '') ?? '';
 }
