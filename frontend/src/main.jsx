@@ -11,6 +11,9 @@ import { readAttempts, recordAttempt, reloadCarryingCount } from './lib/reloadGu
 import { isCapturing, whenIdle } from './lib/captureGuard';
 import { reportError } from './lib/log';
 import { installLeaveGate } from './lib/leaveGuard.js';
+import { observeReferralConsent } from './lib/referralRef.js';
+
+observeReferralConsent();
 
 // Task #37 — tell the un-bundled boot watchdog (index.html) that the entry
 // module actually executed, so it won't trigger a recovery reload. Also strip
