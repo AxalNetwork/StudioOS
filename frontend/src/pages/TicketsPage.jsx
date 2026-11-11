@@ -566,7 +566,7 @@ function TicketForm({ isAdmin, role }) {
             For vulnerabilities, use the <Link to="/trust/disclosure" className="font-semibold underline">private disclosure guidance</Link> or a <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className="font-semibold underline">private security advisory</a> instead.
           </div>
 
-          {submitError && <StateNote tone="red" role="alert">{submitError}</StateNote>
+          {submitError && <StateNote tone="red" role="alert">{submitError}</StateNote>}
 
           <div className="flex justify-end gap-2">
             <Link to="/help/tickets" className={SECONDARY}>Cancel</Link>
