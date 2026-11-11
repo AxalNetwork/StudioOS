@@ -15,17 +15,19 @@ preceded by the read that shows what it will touch.
 **Staging.** There is no staging Worker yet. `[env.preview]` in `wrangler.toml`
 has placeholder ids and no CI deploys it, and `branch-provision.yml` has never
 run. Until one of them is live, each step is marked with how it was verified,
-and **none is marked "tested on staging"**. The offline guard
-(`cloudflare-worker/test/deck_grid_runbook_3792.test.ts`) checks that every
-route, table, state and limit this page names is still in the code, so the page
-fails the build when it drifts.
+and **none is marked "tested on staging"**. Two guards read this page.
+`cloudflare-worker/test/deck_grid_runbook_3792.test.ts` checks that every
+route, table, state and limit named here is still in the code.
+`cloudflare-worker/test/deck_grid_runbook_d1547.test.ts` runs every SQL
+block below on the migrated schema, in the situation it is written for.
+The page fails the build when either drifts.
 
 | # | Procedure | Route today | Verified |
 | --- | --- | --- | --- |
 | 1 | Switch off a model | yes, HQ page and `PUT` | code read; guard test. Not on staging |
-| 2 | Refund a batch | no batch route; a member adjustment | code read; guard test. Not on staging |
+| 2 | Refund a batch | `POST /api/ai-budget/deck-batches/:uid/refund`, or a member adjustment | code read; guard test. Not on staging |
 | 3 | Unstick a batch | no repair route; SQL and the DLQ | code read; guard test. Not on staging |
-| 4 | Purge an image, incl. DMCA | no admin purge route; SQL, R2 and the cache | code read; guard test. Not on staging |
+| 4 | Purge an image, incl. DMCA | HQ takedown route; SQL, R2 and the cache if the object remains | code read; guard test. Not on staging |
 
 ---
 
@@ -39,7 +41,7 @@ Super Admin on HQ's deployment only (a branch's Super Admin is 403).
 
 **Steps.**
 1. Open **HQ › Decks › AI models** (`/admin/platform/decks/models`), find the
-   model, switch it off and give a reason (10 to 500 characters). Or call
+   model, switch it off and give a reason (10 to 500 characters). The note members see is optional and up to 500 characters. Or call
    `PUT /api/admin/ai/element-models` with
    `{ "model_id": "<id>", "enabled": false, "reason": "<why>", "note": "<what members see, optional>" }`.
 2. Check: `GET /api/admin/ai/element-models` shows it off, and a deck's
@@ -54,8 +56,8 @@ Super Admin on HQ's deployment only (a branch's Super Admin is 403).
   switched off mid-run. Watch the batch (procedure 3) after switching off a
   model that is in use.
 
-**Refusals.** 400 `unknown_model`, `invalid_enabled`, `invalid_plan_min` or
-`reason_required`. 409 `model_required` for `@cf/meta/llama-guard-3-8b`: the
+**Refusals.** 400 `unknown_model`, `invalid_enabled`, `invalid_plan_min`,
+`invalid_note` or `reason_required`. 409 `model_required` for `@cf/meta/llama-guard-3-8b`: the
 guard cannot be switched off.
 
 **Turn it back on.** The same `PUT` with `"enabled": true` and a reason. There
@@ -91,8 +93,11 @@ SELECT b.uid, b.deck_id, b.state, b.quote_microusd, b.charged_microusd, b.settle
        r.status AS hold_status, r.user_id
   FROM deck_area_batches b
   LEFT JOIN ai_budget_reservations r ON r.uid = b.reservation_uid
- WHERE b.uid = '<batch uid>';
-SELECT id, model, charged_microusd, created_at FROM ai_usage_logs WHERE reservation_uid = '<reservation uid>';
+ WHERE b.uid = :batch_uid;
+```
+
+```sql
+SELECT id, model, charged_microusd, created_at FROM ai_usage_logs WHERE reservation_uid = :reservation_uid;
 ```
 
 **Steps, by what the hold says.**
@@ -133,7 +138,7 @@ not here.
   10-minute slices and re-arms after a second. Its list of runs is the storage
   key `active`.
 - **`queue`**: a `deck_gen_slice` message on `studioos-job-queue` runs a
-  5-minute slice and sends the next, up to 500 slices. At the cap it logs
+  5-minute slice and sends the next, up to `MAX_SLICES` (500) slices, and up to 500 slices in all. At the cap it logs
   `[deck-gen-queue] slice cap reached` and sends nothing more. A message that
   fails three times goes to `studioos-job-queue-dlq`, mirrored to
   `cf_dlq_mirror`.
@@ -141,9 +146,9 @@ not here.
 **What "stuck" means.** A run in `queued`, `running` or `cancelling` that
 nothing drives any more: the DO lost it from `active`, its slice went to the
 DLQ, or it reached the slice cap. One active run per deck is enforced by an
-index, so **a stuck run also blocks its deck** from a new one. There is no lease
-or heartbeat on a run (D1536 lists one as not built); the hold's five-minute TTL
-(`HOLD_TTL_MS`, renewed at each step) is the nearest thing.
+index, so **a stuck run also blocks its deck** from a new one (`409 deck_busy`). There is no lease
+or heartbeat on a run (D1536 lists one as not built); the hold expires 5 minutes after it was last extended (the five-minute TTL,
+`HOLD_TTL_MS`, renewed at each step) and that is the nearest thing.
 
 **The sweep (D4374).** The daily cleanup (`runCleanupJobs` in
 `models/jobs.ts`) runs `sweepStuckBatches` (`services/decks/batchSweep.ts`).
@@ -178,10 +183,32 @@ SELECT b.uid, b.deck_id, b.state, b.runtime, b.created_at, b.started_at, r.statu
          AND datetime(s.started_at) >= datetime('now', '-30 minutes'));
 ```
 
+A run that is still active and was created more than 30 minutes ago is the
+row the acceptance fixture settles. It is a candidate, not the sweep's verdict:
+```sql
+SELECT uid, deck_id, state, runtime, created_by, created_at, started_at FROM deck_area_batches WHERE state IN ('queued', 'running', 'cancelling') AND created_at < datetime('now', '-30 minutes') ORDER BY created_at;
+```
+
+A step left `running` with an answer, and one with none:
+```sql
+SELECT s.seq, s.state, s.started_at, (SELECT COUNT(*) FROM ai_usage_logs u WHERE u.reservation_uid = b.reservation_uid AND u.record_ref = 'deckstep:' || s.batch_uid || ':' || s.seq AND u.refusal IS NULL) AS answered FROM deck_area_batch_steps s JOIN deck_area_batches b ON b.uid = s.batch_uid WHERE s.batch_uid = :batch_uid AND s.state = 'running';
+```
+
 **Steps.**
 1. **The owner can Stop it**: `POST /api/decks/areas/batches/:uid/cancel`. Only
    the run's owner may (another account is 403 `not_your_run`). Ask them first:
    it settles the hold at once; otherwise the daily sweep does.
+   A run with a step still `running` stays `cancelling`, because finish waits
+   for that step. Settle the orphan the way `rebuild` does after a crash, then
+   ask for Stop again. A step whose model answered becomes `done`, at what it
+   charged and capped at its quote. A step with no answer goes back to `waiting`.
+   Nothing is charged twice, and this SQL does not settle the hold:
+   ```sql
+   UPDATE deck_area_batch_steps SET state = 'done', charged_microusd = MIN(quote_microusd, (SELECT COALESCE(SUM(u.charged_microusd), 0) FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq)), ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state = 'running' AND EXISTS (SELECT 1 FROM ai_usage_logs u JOIN deck_area_batches b ON b.reservation_uid = u.reservation_uid WHERE b.uid = deck_area_batch_steps.batch_uid AND u.record_ref = 'deckstep:' || deck_area_batch_steps.batch_uid || ':' || deck_area_batch_steps.seq AND u.refusal IS NULL);
+   ```
+   ```sql
+   UPDATE deck_area_batch_steps SET state = 'waiting', started_at = NULL WHERE batch_uid = :batch_uid AND state = 'running';
+   ```
 2. **A queue run in the DLQ**: `GET /api/infra/dlq` lists it, and
    `POST /api/infra/dlq/:id/retry?source=cf|d1` sends it again (admin). Retry
    once; a second failure is a bug to file, not to retry.
@@ -191,9 +218,15 @@ SELECT b.uid, b.deck_id, b.state, b.runtime, b.created_at, b.started_at, r.statu
    trigger, and only `settleAiReservation` does it right.
    - If the hold is already `refunded` (it expired), marking the run `failed`
      is bookkeeping only, and frees the deck:
+     Run the answered-step statement above first, so finished steps keep
+     their charge on the run's own record, then stop the rest and close the run.
+     The hold is left to expire: within 5 minutes of its last extension the
+     member's next budget read releases it at zero.
      ```sql
-     UPDATE deck_area_batches SET state = 'failed'
-      WHERE uid = '<batch uid>' AND state IN ('queued', 'running', 'cancelling');
+     UPDATE deck_area_batch_steps SET state = 'stopped', ended_at = datetime('now') WHERE batch_uid = :batch_uid AND state IN ('waiting', 'running');
+     ```
+     ```sql
+     UPDATE deck_area_batches SET state = 'failed', charged_microusd = (SELECT COALESCE(SUM(charged_microusd), 0) FROM deck_area_batch_steps WHERE batch_uid = :batch_uid), settled_at = datetime('now') WHERE uid = :batch_uid AND state IN ('queued', 'running', 'cancelling');
      ```
      Then check the steps that ran: they may have charged while the hold says
      refunded. Any charge in `ai_usage_logs` for this hold is a charge the
@@ -212,7 +245,8 @@ new one.
 
 **What exists.**
 - An image is a `deck_images` row and one R2 object on the `FILES` binding,
-  key `deck-images/<project>/<uid>.<ext>`.
+  bucket `studioos-files`, key `deck-images/<project>/<uid>.<ext>`
+  (`studioos-files/<r2_key>`).
 - `GET /api/decks/images/:uid/file` serves a **kept** image publicly with
   `cache-control: public, max-age=31536000, immutable`, and any other state
   `private, no-store` (a discarded one is 404). The URL never changes and is not
@@ -244,6 +278,33 @@ new one.
   (D706). Until counsel finishes it, a takedown notice goes to the owner first;
   this page does not decide whether a notice is valid.
 
+**Find the image, the decks that name it, and a copy of the same bytes.**
+The uid is the 36-character id in `/api/decks/images/<uid>/file`.
+```sql
+SELECT uid, project_id, card_uid, source, model, state, r2_key, mime, sha256, created_at FROM deck_images WHERE uid = :image_uid;
+```
+```sql
+SELECT d.id AS deck_id, d.project_id FROM pitch_decks d JOIN deck_images i ON i.project_id = d.project_id WHERE i.uid = :image_uid AND (instr(COALESCE(d.slides, ''), i.uid) > 0 OR instr(COALESCE(d.theme_json, ''), i.uid) > 0);
+```
+```sql
+SELECT 'proposal' AS store, COUNT(*) AS n FROM pitch_deck_proposals p JOIN deck_images i ON i.project_id = p.project_id WHERE i.uid = :image_uid AND instr(COALESCE(p.slides, ''), i.uid) > 0 UNION ALL SELECT 'derivative', COUNT(*) FROM deck_derivatives v JOIN deck_images i ON i.project_id = v.project_id WHERE i.uid = :image_uid AND instr(COALESCE(v.slides, ''), i.uid) > 0 UNION ALL SELECT 'card draft', COUNT(*) FROM pitch_deck_cards c JOIN pitch_decks d ON d.id = c.deck_id JOIN deck_images i ON i.project_id = d.project_id WHERE i.uid = :image_uid AND instr(c.json, i.uid) > 0;
+```
+```sql
+SELECT uid, project_id, state, parent_uid FROM deck_images WHERE (sha256 = :sha256 AND uid <> :image_uid) OR parent_uid = :image_uid;
+```
+Setting the row `discarded` makes `GET /api/decks/images/:uid/file` answer 404
+before it reads R2. That is the file route's rule. The HQ takedown below is
+the procedure to use: it also deletes the object, marks the row and tells the
+venture. The discard write is what the acceptance fixture runs, and what you
+use only if the takedown route cannot be reached:
+```sql
+UPDATE deck_images SET state = 'discarded', discarded_at = datetime('now') WHERE uid = :image_uid;
+```
+While the R2 object still exists, counsel can undo that one write:
+```sql
+UPDATE deck_images SET state = 'kept', discarded_at = NULL WHERE uid = :image_uid AND state = 'discarded';
+```
+
 **Steps (owner-approved takedown, or an image that must go).**
 1. Record the notice on a private issue, never in a public comment: it names
    a person and a work. Note the image uid, the deck, the venture and who
@@ -256,7 +317,7 @@ new one.
    then record the key, as the sweep would:
    ```sql
    INSERT INTO deck_r2_tombstones (key, project_id, bytes, reason)
-   VALUES ('deck-images/<project>/<uid>.<ext>', <project>, NULL, 'discarded');
+   VALUES ('deck-images/1/00000000-0000-4000-8000-000000000001.png', 1, NULL, 'discarded');
    ```
    The table only takes `discarded` or `unkept_proposal` as a reason; the
    takedown's own reason is on the row (`taken_down_reason`) and the private

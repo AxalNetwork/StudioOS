@@ -19,6 +19,12 @@ import type { Env } from '../types';
 import type { User } from '../types';
 import { getCurrentUser, requireAuth } from '../auth';
 import { EVENT_COVER, coverAsk, coverRunOptions, drawCover, quoteCover, readCover } from '../services/coverDraws';
+import {
+  COVER_ALT_MAX, MAX_COVER_BYTES, UPLOAD_MESSAGES, VARIANTS_PER_DRAW, brandColours, coverUploadAsk, drawVariants,
+  focalAsk, quoteVariants, readCoverUpload, rectsAsk, storeCoverUpload, variantsRunOptions,
+} from '../services/eventCovers';
+import { QUOTE_TTL_MS, quoteHolds, quoteUidOf, type QuotePlan } from '../services/decks/areas';
+import { runHash } from '../services/decks/runQuotes';
 import { logAdminAction } from '../services/adminAudit';
 import { agendaLocation, registrationEligibility, registrationRulesFromStore, AudienceSegmentsUnreadable } from '../services/eventOrganiser';
 import { notify } from '../services/notify';
@@ -669,6 +675,38 @@ events.patch('/:id', async (c) => {
     sets.push('topics_json = ?'); binds.push(JSON.stringify(body.topics));
   }
   str('title'); str('summary'); str('description'); str('cover_url');
+  // #5309 (D5309, D3724 §gaps 8 and 11): the cover's own fields. The upload and
+  // the draw both only PROPOSE a cover; this Save is what writes one. `cover_alt`
+  // is cleared with null and never with '' — an empty string would read as "this
+  // image needs no description", which no cover of an event's does.
+  if ('cover_alt' in body) {
+    const alt = body.cover_alt == null ? null : String(body.cover_alt).trim();
+    if (alt !== null && (!alt || alt.length > COVER_ALT_MAX)) return refuse(c, 400, { code: alt ? 'alt_too_long' : 'alt_required', message: alt ? UPLOAD_MESSAGES.alt_too_long : UPLOAD_MESSAGES.alt_required });
+    sets.push('cover_alt = ?'); binds.push(alt);
+  }
+  if ('cover_source' in body) {
+    const source = body.cover_source == null ? null : String(body.cover_source);
+    if (source !== null && source !== 'uploaded' && source !== 'generated') return refuse(c, 400, { code: 'bad_cover_source', message: 'A cover is either uploaded or generated.' });
+    sets.push('cover_source = ?'); binds.push(source);
+  }
+  if ('cover_focal' in body) {
+    if (body.cover_focal == null) { sets.push('cover_focal_json = ?'); binds.push(null); }
+    else {
+      const focal = focalAsk(body.cover_focal);
+      if (!focal.ok) return refuse(c, 400, { code: focal.code, message: focal.message });
+      sets.push('cover_focal_json = ?'); binds.push(JSON.stringify(focal.focal));
+    }
+  }
+  if ('cover_crops' in body) {
+    if (body.cover_crops == null) { sets.push('cover_crops_json = ?'); binds.push(null); }
+    else {
+      // The upload already checked each crop's shape against the real image;
+      // this Save carries no image, so it checks the rectangles only.
+      const crops = rectsAsk(body.cover_crops);
+      if (!crops.ok) return refuse(c, 400, { code: crops.code, message: crops.message });
+      sets.push('cover_crops_json = ?'); binds.push(JSON.stringify(crops.crops));
+    }
+  }
   str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
   if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }
   if ('visibility' in body && EVENT_VISIBILITIES.includes(body.visibility)) { sets.push('visibility = ?'); binds.push(body.visibility); }
@@ -1652,6 +1690,109 @@ events.post('/:id/cover/draw', async (c) => {
   return c.json({ ...r, key: undefined, url: new URL(`/api/events/${g.id}/cover/${r.filename}`, c.req.url).toString() });
 });
 
+// ── #5309 (D5309, D3724 §gaps 8 to 11): the uploaded cover, and four variants ─
+//
+// UPLOAD. One multipart press: the image, its alt text, its focal point and the
+// three crops. Everything is checked before a byte is stored (`coverUploadAsk`),
+// and the bytes themselves decide the type and the size — never the browser's
+// claim. The answer PROPOSES a cover; the member's own Save (`PATCH /:id`)
+// writes `cover_url`, `cover_alt`, `cover_source`, the focal point and the
+// crops, so nothing is placed without the member's accept.
+//
+// VARIANTS. One quote covers four draws and their checks; the balance covers
+// the whole figure or nothing runs. The quote's uid keys each draw, so the same
+// press retried replays and charges nothing again (#3846). "More like this one"
+// is this press with the chosen variant's own prompt.
+events.post('/:id/cover/upload', async (c) => {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  if (!(c.req.header('content-type') || '').toLowerCase().includes('multipart/form-data')) {
+    return refuse(c, 400, { code: 'multipart_required', message: UPLOAD_MESSAGES.multipart_required });
+  }
+  let form: FormData;
+  try { form = await c.req.formData(); } catch { return refuse(c, 400, { code: 'file_required', message: UPLOAD_MESSAGES.file_required }); }
+  const file = form.get('file') as unknown as { type?: string; size?: number; arrayBuffer?: () => Promise<ArrayBuffer> } | null;
+  if (!file || typeof file !== 'object' || typeof file.arrayBuffer !== 'function') {
+    return refuse(c, 400, { code: 'file_required', message: UPLOAD_MESSAGES.file_required });
+  }
+  if (typeof file.size === 'number' && file.size > MAX_COVER_BYTES) {
+    return refuse(c, 413, { code: 'file_too_large', message: UPLOAD_MESSAGES.file_too_large });
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const ask = coverUploadAsk({
+    file, bytes,
+    alt: form.get('alt'),
+    focal: form.get('focal'),
+    crops: form.get('crops'),
+  });
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const stored = await storeCoverUpload(c.env, coverPrefix(g.id), ask, Number(g.user.id) || 0);
+  if (!stored.ok) return refuse(c, stored.status, { code: stored.code, message: stored.message });
+  return c.json({
+    filename: stored.filename,
+    url: new URL(`/api/events/${g.id}/cover/${stored.filename}`, c.req.url).toString(),
+    alt: ask.alt,
+    focal: ask.focal,
+    crops: ask.crops,
+    image: { width: ask.width, height: ask.height, ratio: ask.width / ask.height, content_type: ask.mime },
+    source: 'uploaded',
+    saved: false,
+  }, 201);
+});
+
+/** The quote plan four variants are bound to: the model, the prompt and the member, for ten minutes. */
+async function variantsPlan(userId: number, id: number, opts: Parameters<typeof quoteVariants>[1], model: string, microusd: number): Promise<QuotePlan> {
+  return { cls: 'event_cover_variants', areas: [{
+    card_uid: 'member:' + userId, area_id: 'event:' + id, element: 'image', model, refusal: null,
+    payload: { instruction_sha256: await runHash(opts) }, lines: [{ quote_microusd: microusd }],
+  }] };
+}
+
+async function variantsPress(c: any, quoteOnly: boolean) {
+  const g = await coverGate(c);
+  if (g instanceof Response) return g;
+  const body = await c.req.json().catch(() => ({} as any));
+  const ask = coverAsk(body);
+  if (!ask.ok) return refuse(c, ask.status, { code: ask.code, message: ask.message });
+  const event = await loadEvent(c.env, g.id);
+  // §gap 10: the venture's own palette, when one is recorded. Never a guess.
+  const brand = await brandColours(c.env, event?.project_id);
+  const userId = Number(g.user.id) || 0;
+  const opts = variantsRunOptions(userId, ask.prompt, brand.colours);
+  const q = await quoteVariants(c.env, opts);
+  if (!q.ok) return refuse(c, q.status, { code: q.code, message: q.message });
+  const now = Date.now();
+  if (quoteOnly) {
+    const expires = now + QUOTE_TTL_MS;
+    return c.json({
+      ...q,
+      brand_colours: brand.colours,
+      brand_colours_recorded: brand.recorded,
+      quote_uid: await quoteUidOf(await variantsPlan(userId, g.id, opts, q.model, q.hold_microusd), expires),
+      expires_at: new Date(expires).toISOString(),
+    });
+  }
+  const quoteUid = typeof body?.quote_uid === 'string' ? body.quote_uid : '';
+  if (!(await quoteHolds(quoteUid, await variantsPlan(userId, g.id, opts, q.model, q.hold_microusd), now))) {
+    return refuse(c, 409, { code: 'quote_stale', message: 'This price has expired. Get a new quote.' });
+  }
+  const drawn = await drawVariants(c.env, opts, coverPrefix(g.id), quoteUid);
+  if (!drawn.ok) return refuse(c, drawn.status, { code: drawn.code, message: drawn.message });
+  return c.json({
+    variants: drawn.variants.map((v) => ({ ...v, url: new URL(`/api/events/${g.id}/cover/${v.filename}`, c.req.url).toString() })),
+    refused: drawn.refused,
+    asked: VARIANTS_PER_DRAW,
+    model: drawn.model,
+    brand_colours: brand.colours,
+    brand_colours_recorded: brand.recorded,
+    source: 'generated',
+    saved: false,
+  });
+}
+
+events.post('/:id/cover/variants/quote', (c) => variantsPress(c, true));
+events.post('/:id/cover/variants', (c) => variantsPress(c, false));
+
 // The stored cover: anyone who may see the event (a published one, to anyone).
 events.get('/:id/cover/:filename', async (c) => {
   const id = intParam(c.req.param('id'));
@@ -1663,7 +1804,11 @@ events.get('/:id/cover/:filename', async (c) => {
     const u = await getCurrentUser(c).catch(() => null);
     if (!u || !(await canViewEvent(c.env, event, u))) return c.json({ error: 'not_found' }, 404);
   }
-  const cover = await readCover(c.env, coverPrefix(id), String(c.req.param('filename') || ''));
+  const filename = String(c.req.param('filename') || '');
+  // #5309: a drawn cover (`cover-<uuid>`) and an uploaded one (`upload-<uuid>`)
+  // share this prefix and this gate; each name pattern reads only its own files.
+  const cover = await readCover(c.env, coverPrefix(id), filename)
+    || await readCoverUpload(c.env, coverPrefix(id), filename);
   if (!cover) return c.json({ error: 'not_found' }, 404);
   return new Response(cover.body, { headers: { 'content-type': cover.mime, 'cache-control': published ? 'public, max-age=86400' : 'private, no-store', 'x-content-type-options': 'nosniff' } });
 });

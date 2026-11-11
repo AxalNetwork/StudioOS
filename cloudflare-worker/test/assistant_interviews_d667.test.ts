@@ -19,6 +19,7 @@
  *     --test cloudflare-worker/test/assistant_interviews_d667.test.ts
  */
 import test from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
@@ -93,6 +94,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '452_record_session_setup.sql', '202611071550_session_setup_complete.sql', '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  applyAcceptRetryKeys(db); // D5352
   applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D754 (#1893): deleteSession also deletes the session's chat consents and frees
   // the chat that pointed at it: 449's thread table, then 488.
