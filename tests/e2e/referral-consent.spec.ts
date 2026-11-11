@@ -29,6 +29,18 @@ async function expectNoReferralIdentifiers(page: Page) {
 
 test('referral pages and signup work before consent and after rejection', async ({ page }) => {
   const measurements = await mockReferralApi(page);
+  // This flow uses a synthetic verification token and a mocked signup API.
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'turnstile', {
+      value: {
+        render(_element: HTMLElement, options: { callback: (token: string) => void }) {
+          queueMicrotask(() => options.callback('synthetic-test-token'));
+          return 'synthetic-widget';
+        },
+        remove() {},
+      },
+    });
+  });
   await page.goto('/register?ref=FIXTURECODE');
   await expect(page.getByRole('button', { name: 'Reject all' })).toBeVisible();
   await expectNoReferralIdentifiers(page);
