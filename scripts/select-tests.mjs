@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, globSync } from '
 import { resolve, dirname, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { select, score, report, ALWAYS } from './lib/selectTests.mjs';
+import { select, score, report, ALWAYS, newestMainArtifact } from './lib/selectTests.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const json = (path) => { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; } };
@@ -51,6 +51,10 @@ function recordsIn(dir) {
 }
 
 export function main(argv) {
+  if (argv[0] === '--main-artifact') {
+    console.log(JSON.stringify(newestMainArtifact(json(argv[1]).artifacts, json(argv[2])) || {}));
+    return;
+  }
   const value = (key, fallback) => { const i = argv.indexOf(key); return i < 0 ? fallback : argv[i + 1]; };
   if (argv.includes('--report')) {
     console.log(JSON.stringify(report(recordsIn(value('--report', '.')).filter((r) => r.kind === 'selection-shadow')), null, 2));

@@ -1,7 +1,7 @@
 // D5610: read dependencies, directory membership, conservative fallbacks and honest scoring.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { select, score, report, FAN_IN_MAX, STALE_COMMITS, ALWAYS } from './selectTests.mjs';
+import { select, score, report, FAN_IN_MAX, STALE_COMMITS, ALWAYS, newestMainArtifact } from './selectTests.mjs';
 const now = Date.parse('2026-11-11T12:00:00Z');
 const tests = Array.from({ length: 100 }, (_, i) => `test/${i}.test.mjs`);
 const fixture = () => ({ changed: [], deps: { generatedAt: '2026-11-11T11:00:00Z', tests: Object.fromEntries(tests.map((t) => [t, { files: [], directories: [] }])) }, tests, meta: { now, ageCommits: 0 } });
@@ -75,4 +75,11 @@ test('D5608 producer fields include reads, resolved modules, sqlite and both pro
   for (const path of ['x.sql', 'module.ts', 'test.db', 'present.sql', 'missing.sql']) assert.deepEqual(select({ ...f, changed: [path] }).files, [tests[0]]);
   f.deps.tests[tests[0]].probes.misses = null;
   assert.equal(select(f).mode, 'full');
+});
+
+
+test('merged queue artifacts remain eligible when main verification skips its own trace run', () => {
+  const artifacts = [{id:1,name:'test-deps-old',created_at:'2026-11-11T10:00:00Z',workflow_run:{head_sha:'old',head_branch:'main'}}, {id:2,name:'test-deps-new',created_at:'2026-11-11T11:00:00Z',workflow_run:{head_sha:'merged',head_branch:'gh-readonly-queue/main/pr-1'}}, {id:3,name:'test-deps-pr',created_at:'2026-11-11T12:00:00Z',workflow_run:{head_sha:'unmerged'}}];
+  assert.equal(newestMainArtifact(artifacts,[{sha:'old'},{sha:'merged'}]).id, 2);
+  assert.equal(newestMainArtifact(artifacts,[]), null);
 });

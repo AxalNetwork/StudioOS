@@ -257,7 +257,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          gh api "repos/$REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main" and (.name | startswith("test-deps-")))] | sort_by(.created_at) | reverse | .[0] // {}' > "$RUNNER_TEMP/trace-artifact.json"
+          gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json"
+          gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/trace-candidates.json"
+          node scripts/select-tests.mjs --main-artifact "$RUNNER_TEMP/trace-candidates.json" "$RUNNER_TEMP/main-commits.json" > "$RUNNER_TEMP/trace-artifact.json"
           artifact=$(node -p "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/trace-artifact.json')).id || ''")
           if [ -n "$artifact" ]; then
             gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/deps.zip"

@@ -74,3 +74,10 @@ export function report(records) {
     gate: scored.length >= 300 && scored.every((r) => r.misses.length === 0) ? 'backtest-required' : 'not-met',
   };
 }
+
+// A verified queue SHA can already be main even though its artifact still names a queue branch.
+export function newestMainArtifact(artifacts, commits) {
+  const main = new Set(commits.map((c) => c.sha));
+  return artifacts.filter((a) => !a.expired && a.name?.startsWith('test-deps-') && Number.isSafeInteger(a.id) && a.id > 0 && main.has(a.workflow_run?.head_sha))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id)[0] || null;
+}
