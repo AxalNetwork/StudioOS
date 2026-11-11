@@ -4,6 +4,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
@@ -14,7 +15,7 @@ import { loadSchema } from './_schema_once.mjs';
 
 const USER = 1;
 const PROJECT = 7;
-const JWT_SECRET = 'synthetic-d5352-fixture-secret';
+const JWT_SECRET = randomBytes(32).toString('hex');
 const count = (db: any, table: string) => Number((db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as any).n);
 
 function flaky(DB: any, matches: (sql: string) => boolean, timesToFail = 1) {
