@@ -1,11 +1,12 @@
 name: D1 migrations
 
 # Operator workflow for the production D1 ledger — the same runner
-# (`scripts/migrate-d1.mjs`) that `npm run deploy`'s predeploy hook uses, run
+# (`scripts/migrate-d1.mjs`) that the production release workflow uses, run
 # from CI so it does not depend on whose workstation holds wrangler
 # credentials. Every mode prints a read-only plan first and again afterwards.
 #
 #   dry-run             read the live ledger, print the plan, write nothing
+#   baseline            baseline an existing empty tracking ledger
 #   adopt-and-baseline  a `schema_migrations` of the wrong shape is renamed to
 #                       `schema_migrations_legacy` (rows kept), then the
 #                       one-time baseline runs. Read the "marked" list it
@@ -31,12 +32,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'dry-run | adopt-and-baseline | verify-marked | apply'
+        description: 'dry-run | baseline | adopt-and-baseline | verify-marked | apply'
         required: true
         default: dry-run
         type: choice
         options:
           - dry-run
+          - baseline
           - adopt-and-baseline
           - verify-marked
           - apply
@@ -49,20 +51,20 @@ on:
 permissions:
   contents: read
 
-# One migration run at a time. The deploy workflow's own migration step is in
-# its own group; do not dispatch this while a deploy is in flight.
-concurrency:
-  group: d1-migrate-${{ inputs.branch || 'production' }}
-  cancel-in-progress: false
-
 jobs:
   migrate:
     name: ${{ inputs.mode }} against ${{ inputs.branch && format('studioos-{0}', inputs.branch) || 'studioos-db' }}
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      group: ${{ inputs.mode == 'dry-run' && format('d1-read-{0}', github.run_id) || (inputs.branch && 'studioos-branch-rollout' || 'studioos-production-release') }}
+      queue: max
+      cancel-in-progress: false
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       # THE BRANCH CODE IS UNTRUSTED INPUT AND NEVER REACHES A `run:` SCRIPT AS
       # TEXT. `${{ }}` in a run block is substituted before the shell parses the
       # line, so a dispatched value carrying `;` would run as a command with
@@ -73,6 +75,9 @@ jobs:
       BRANCH: ${{ inputs.branch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -81,6 +86,9 @@ jobs:
           cache-dependency-path: cloudflare-worker/package-lock.json
 
       - name: Preflight — required secrets are set
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           MISSING=()
           if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then MISSING+=("CLOUDFLARE_API_TOKEN"); fi
@@ -89,6 +97,12 @@ jobs:
             echo "::error::Required repo secret(s) are missing or empty: ${MISSING[*]}"
             exit 1
           fi
+
+      - name: Recheck the production migration candidate under the release lock
+        if: inputs.branch == '' && inputs.mode != 'dry-run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
 
       # The runner shells out to `npx wrangler` from cloudflare-worker/, so the
       # worker's own pinned wrangler is the one that runs.
@@ -122,27 +136,88 @@ jobs:
         run: node scripts/gen-branch-wrangler.mjs "$BRANCH"
 
       - name: A branch database is never baselined
-        if: inputs.branch != '' && inputs.mode == 'adopt-and-baseline'
+        if: inputs.branch != '' && (inputs.mode == 'adopt-and-baseline' || inputs.mode == 'baseline')
         run: |
-          echo "::error::adopt-and-baseline is production-only. A branch database is built from"
+          echo "::error::Baseline modes are production-only. A branch database is built from"
           echo "::error::the baseline by branch-provision.yml; it has no legacy ledger to adopt."
           exit 1
 
       - name: Plan before (read-only)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/migrate-d1.mjs $TARGET_ARGS --dry-run
+
+      - name: Check production queues before manual D1 writes
+        if: inputs.branch == '' && inputs.mode != 'dry-run'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-evidence"
+          node scripts/check-production-queues.mjs "$GITHUB_SHA" | tee "$RUNNER_TEMP/release-evidence/queues.json"
+
+      - name: Build the manual D1 candidate SPA
+        if: inputs.branch == '' && inputs.mode != 'dry-run'
+        run: npm ci --prefix frontend && npm run build
+
+      - name: Check Worker startup before manual D1 writes
+        if: inputs.branch == '' && inputs.mode != 'dry-run'
+        run: bash scripts/prepare-production-worker.sh "$GITHUB_SHA" "$RUNNER_TEMP/release-evidence"
+
+      - name: Confirm the manual D1 candidate is still admitted
+        if: inputs.branch == '' && inputs.mode != 'dry-run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git diff --quiet HEAD --
+          node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once | tee "$RUNNER_TEMP/release-evidence/final-admission.json"
+
+      - name: Baseline the production ledger
+        if: inputs.mode == 'baseline'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/migrate-d1.mjs $TARGET_ARGS --baseline
 
       - name: Adopt the legacy ledger and baseline
         if: inputs.mode == 'adopt-and-baseline'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/migrate-d1.mjs $TARGET_ARGS --adopt-legacy-ledger --baseline
 
       - name: Verify marked rows against the live schema
         if: inputs.mode == 'verify-marked'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/migrate-d1.mjs $TARGET_ARGS --verify-marked
 
       - name: Apply pending migrations
         if: inputs.mode == 'apply'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/migrate-d1.mjs $TARGET_ARGS
 
       - name: Plan after (read-only)
         if: inputs.mode != 'dry-run'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/migrate-d1.mjs $TARGET_ARGS --dry-run
+
+      - name: Retain manual D1 release preflight evidence
+        if: always() && inputs.branch == '' && inputs.mode != 'dry-run'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-d1-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/release-evidence/**
+            !${{ runner.temp }}/release-evidence/worker.bundle
+          if-no-files-found: warn
+          retention-days: 14

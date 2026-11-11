@@ -66,6 +66,8 @@ represents a bug that reached production once:
 | `plan-persona-prices.mjs` | D1430: offline Advisor/Operating Partner price requests on `plan_group`; missing products are `product_needed`. Same private `--catalog` export and audited action format as the Founder/Investor planners. |
 | `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
 | `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
+| `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
+| `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 
 ## The one rule that needed a linter
 

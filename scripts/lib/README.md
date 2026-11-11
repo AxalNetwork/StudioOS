@@ -41,6 +41,7 @@ can be read to find out what a rule actually is.
 | `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
 | `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
 | `workerStartup.test.mjs` | D5532: startup budget, profile accounting and Wrangler bundle identity fixtures. |
+| `productionAdmission.test.mjs` | D5501: trust, failure and supersession fixtures and mutation ordering in the release workflows. |
 
 ## Tests
 
