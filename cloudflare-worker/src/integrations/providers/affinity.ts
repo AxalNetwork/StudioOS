@@ -8,6 +8,7 @@
 import { type IntegrationRow } from '../registry';
 import { decryptCredentials, type CredentialBlob } from '../secrets';
 import type { Env, User } from '../../types';
+import { runSystemMove } from '../../services/dealTransitions';
 
 const AFF_API = 'https://api.affinity.co';
 
@@ -138,12 +139,10 @@ export async function importAffinityList(
           } catch { /* non-fatal — keep default */ }
         }
         const existing = await env.DB.prepare(
-          'SELECT id FROM deals WHERE hubspot_deal_id = ? LIMIT 1',
-        ).bind(externalId).first<{ id: number }>();
+          'SELECT id, status, stage_changed_at FROM deals WHERE hubspot_deal_id = ? LIMIT 1',
+        ).bind(externalId).first<{ id: number; status: string; stage_changed_at: string | null }>();
         if (existing) {
-          await env.DB.prepare(
-            'UPDATE deals SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          ).bind(mapped, existing.id).run();
+          await runSystemMove(env, { dealId: existing.id, to: mapped, source: 'affinity' });
         } else {
           // deals.project_id is NOT NULL — find-or-create a placeholder
           // project per Affinity entry (keyed by entity name).

@@ -17,7 +17,8 @@
  *
  * The library format: frontmatter `name` (the slug), `description`, `roles`,
  * `tools`, `output`, `taxonomy: {<skills.slug>: <level>}` and `version`, then
- * numbered steps. The first taxonomy tag is the skill's area and level.
+ * numbered steps. Its primary area and level come from the first taxonomy tag
+ * that maps to a radar axis, using that tag's own level.
  */
 import type { Env } from '../../types';
 import { ROLES } from './catalogue';
@@ -71,11 +72,13 @@ export function readLibrarySkill(md: string): Record<string, unknown> | null {
   return { slug: front.name, name: nameOfSlug(front.name), purpose: front.description, steps, tools, output_kind: front.output, tags, roles };
 }
 
-/** The skill's area and level: its first taxonomy tag's category and level. */
+/** The skill's area and level: the first tag on a radar axis, and that tag's own level. */
 export function areaOf(tags: ReadonlyArray<{ slug: string; level: string }>, categoryOf: (slug: string) => string | null) {
-  const first = tags[0];
-  const area = first ? categoryOf(first.slug) : null;
-  return { area: area && RADAR_AXES.some((a) => a.slug === area) ? area : null, level: first?.level ?? null };
+  for (const tag of tags) {
+    const area = categoryOf(tag.slug);
+    if (area && RADAR_AXES.some((axis) => axis.slug === area)) return { area, level: tag.level };
+  }
+  return { area: null, level: null };
 }
 
 export type SeedLine = { slug: string; outcome: 'created' | 'cases_added' | 'present' | 'refused'; code?: string; message?: string; cases?: number };

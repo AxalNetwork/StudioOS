@@ -1445,7 +1445,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
   // D4487: new campaigns are full pages; a campaign uid is a sheet over its list.
   if (distribution) {
     if (distributionTab === 'overview' && projectStatus === 'ready') body = <><InboxNeedsYou reading={inboxUnread} search={q} /><SequenceNeedsYou projectId={projectId} search={q} />{body}</>;
-    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} />;
+    if (distributionTab === 'calendar' && projectStatus === 'ready') body = <CalendarTab projectId={projectId} key={projectId} aiOff={!fillsOn} />;
     if (distributionTab === 'channels' && projectStatus === 'ready') body = <ChannelsTab projectId={projectId} refresh={reload} onChanged={() => setReload((n) => n + 1)} fillFor={fillFor} />;
     if (distributionTab === 'prospects' && projectStatus === 'ready') body = <ProspectsPage key={projectId} projectId={projectId} />;
     if (distributionTab === 'inbox' && projectStatus === 'ready') body = <InboxTab projectId={projectId} DraftIntent={DistributionAskIntent} onUnreadChange={inboxUnread.acceptRead} />;

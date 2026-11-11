@@ -2862,6 +2862,15 @@ export default {
             if (!r.available) console.warn('[cron] licence push retry', r.reason);
             else if (r.tried) console.info(`[cron] licence push retry tried=${r.tried} ok=${r.ok} failed=${r.failed}`);
           } catch (e) { taskFailed('licence push retry', e); }
+          // D5361 — incomplete termination consequences use the same five-minute
+          // lease as a manual resume, so a crashed request no longer waits for
+          // an operator and a racing clock cannot repeat an event or notice.
+          try {
+            const { resumeIncompleteLicenceTerminations } = await import('./routes/admin_licences_lifecycle');
+            const r = await resumeIncompleteLicenceTerminations(env, now);
+            if (!r.available) console.warn('[cron] licence termination resume', r.reason);
+            else if (r.tried || r.skipped) console.info(`[cron] licence termination resume tried=${r.tried} complete=${r.complete} incomplete=${r.incomplete} skipped=${r.skipped}`);
+          } catch (e) { taskFailed('licence termination resume', e); }
           // D4805 — notices written with a program decision that did not land are sent again; a retry only sends.
           try {
             const { retryOutbox } = await import('./services/programOutbox');
