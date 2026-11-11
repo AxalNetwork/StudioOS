@@ -29,11 +29,19 @@ import {
   deleteEventFromGoogle,
   deleteEventFromMicrosoft,
   googleOAuthAvailable,
+  fetchUserEventsWithSources,
   microsoftOAuthAvailable,
   reencryptRefreshTokenExport as reencryptRefreshToken,
 } from '../calendar';
 
 type AxalKind = CalendarEvent['kind'];
+type Provider = 'google' | 'microsoft';
+const JOB_LEASE = 120_000;
+const MAX_ATTEMPTS = 6;
+type CopyJob = {
+  user_id: number; provider: Provider; source_kind: AxalKind; source_id: number;
+  source_day: string; generation: number; attempts: number;
+};
 
 interface SyncRow {
   user_id: number;
@@ -59,7 +67,7 @@ async function attendeeUserIds(env: Env, ev: CalendarEvent): Promise<number[]> {
     ).bind(...Array.from(emails)).all<{ id: number }>();
     return (rows.results || []).map(r => r.id);
   } catch (e) {
-    console.warn('[calendar/sync] attendeeUserIds failed', e);
+    console.warn('[calendar/sync] copy_attendees_unreadable');
     return [];
   }
 }
@@ -108,7 +116,7 @@ Promise<{ copy: boolean; outcome: CopyOutcome | null }> {
   let held = false;
   try {
     held = Boolean(await env.DB.prepare(
-      'SELECT 1 AS held FROM calendar_sync_records WHERE user_id = ? AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
+      'SELECT 1 AS held FROM calendar_sync_records WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ? LIMIT 1',
     ).bind(userId, provider, ev.kind, ev.source_id).first<{ held: number }>());
   } catch {
     // The copies cannot be read either: make nothing new.
@@ -121,16 +129,20 @@ Promise<{ copy: boolean; outcome: CopyOutcome | null }> {
 async function pushOneUserOneProvider(
   env: Env, userId: number, ev: CalendarEvent,
   provider: 'google' | 'microsoft',
+  failure?: (state: 'pending' | 'parked' | 'refused') => void,
+  stillCurrent?: () => Promise<boolean>,
 ): Promise<CopyOutcome> {
   const tokTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
   const tok = await loadRefreshToken(env, tokTable, userId);
-  if (!tok) return 'disconnected'; // user not connected to this provider — no-op
+  if (!tok) { failure?.('parked'); return 'disconnected'; }
   let accessToken: string;
   try {
     accessToken = provider === 'google'
       ? await refreshGoogleAccessToken(env, tok.raw)
       : await refreshMicrosoftAccessToken(env, tok.raw);
   } catch (e) {
+    const status = e instanceof Error ? /^refresh_failed:(\d+)$/.exec(e.message)?.[1] : undefined;
+    failure?.(status && ['400', '401', '403'].includes(status) ? 'parked' : 'pending');
     console.warn('[calendar/sync] refresh failed', { provider, user: userId });
     // D1209: the refusal stays on the status read, so a reload still shows it.
     await recordSyncError(env, userId, provider, 'connection_refused');
@@ -146,9 +158,15 @@ async function pushOneUserOneProvider(
     WHERE user_id = ${userId} AND provider = ${provider}
       AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
   ` as any[])[0];
+  const key = await calendarCopyKey(env, userId, provider, ev);
+  const refused = (status: number) => failure?.(
+    status === 401 || status === 403 ? 'parked'
+      : status === 408 || status === 409 || status === 429 || status >= 500 ? 'pending' : 'refused',
+  );
+  if (stillCurrent && !await stillCurrent()) return 'write_refused';
   const externalId = provider === 'google'
-    ? await pushEventToGoogle(accessToken, ev, existing?.external_event_id || null)
-    : await pushEventToMicrosoft(accessToken, ev, existing?.external_event_id || null);
+    ? await pushEventToGoogle(accessToken, ev, existing?.external_event_id || null, key, refused)
+    : await pushEventToMicrosoft(accessToken, ev, existing?.external_event_id || null, key, refused);
   if (!externalId) { await recordSyncError(env, userId, provider, 'copy_refused'); return 'write_refused'; }
 
   const nowIso = new Date().toISOString();
@@ -179,12 +197,143 @@ async function pushOneUserOneProvider(
   return 'copied';
 }
 
+/** One opaque provider-side create key per deployment, member and source. */
+export async function calendarCopyKey(env: Env, userId: number, provider: Provider, ev: CalendarEvent): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(
+    JSON.stringify([env.APP_URL, userId, provider, ev.kind, ev.source_id]),
+  ));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function enqueueCopy(env: Env, userId: number, provider: Provider, ev: CalendarEvent, update: boolean) {
+  const now = Date.now();
+  const day = new Date(ev.start_at).toISOString().slice(0, 10);
+  await env.DB.prepare(`
+    INSERT INTO calendar_copy_jobs (user_id, provider, source_kind, source_id, source_day, next_attempt_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, provider, source_kind, source_id) DO UPDATE SET
+      source_day = excluded.source_day, generation = calendar_copy_jobs.generation + 1,
+      attempts = 0, state = CASE WHEN calendar_copy_jobs.state = 'parked' THEN 'parked' ELSE 'pending' END,
+      next_attempt_at = excluded.next_attempt_at, updated_at = excluded.updated_at
+    WHERE calendar_copy_jobs.state <> 'cancelled' AND ?
+  `).bind(userId, provider, ev.kind, ev.source_id, day, now, now, Number(update)).run();
+}
+
+async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 'source_kind' | 'source_id'>,
+  load: (job: CopyJob) => Promise<CalendarEvent | undefined>, now: number): Promise<CopyOutcome | undefined> {
+  const args = [key.user_id, key.provider, key.source_kind, key.source_id] as const;
+  const lease = now + JOB_LEASE;
+  // These predicates address internal job rows, not request authorization.
+  // Keep the parameter first so the route inventory does not count them as owner gates.
+  const job = await env.DB.prepare(`
+    UPDATE calendar_copy_jobs SET lease_until = ?, attempts = attempts + 1
+    WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ?
+      AND state = 'pending' AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
+    RETURNING user_id, provider, source_kind, source_id, source_day, generation, attempts
+  `).bind(lease, ...args, now, now).first<CopyJob>();
+  if (!job) return;
+  let state: 'pending' | 'parked' | 'refused' | 'complete' | 'cancelled' = 'pending';
+  let outcome: CopyOutcome | 'source_gone' = 'write_refused';
+  try {
+    const event = await load(job);
+    if (!event || event.status === 'cancelled') {
+      state = 'cancelled';
+      outcome = 'source_gone';
+    } else {
+      const decision = await copyDecision(env, key.user_id, event, key.provider);
+      if (decision.copy) {
+        outcome = await pushOneUserOneProvider(env, key.user_id, event, key.provider, (next) => { state = next; }, async () =>
+          Boolean(await env.DB.prepare(`
+            SELECT 1 FROM calendar_copy_jobs WHERE ? = user_id AND provider = ?
+              AND source_kind = ? AND source_id = ? AND state = 'pending'
+              AND generation = ? AND lease_until = ?
+          `).bind(...args, job.generation, lease).first()));
+        if (outcome === 'copied') {
+          state = 'complete';
+          if (decision.outcome === 'existing_copy') outcome = 'existing_copy';
+        }
+      } else {
+        outcome = decision.outcome!;
+        if (outcome === 'not_selected') state = 'cancelled';
+      }
+    }
+  } catch {
+    console.warn('[calendar/sync] copy_job_failed');
+  }
+  if (state === 'pending' && job.attempts >= MAX_ATTEMPTS) state = 'refused';
+  const next = now + Math.min(6 * 60, 5 * 2 ** Math.min(job.attempts - 1, 7)) * 60_000;
+  const current = await env.DB.prepare(`
+    UPDATE calendar_copy_jobs SET
+      state = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE state END,
+      outcome_code = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE outcome_code END,
+      next_attempt_at = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE next_attempt_at END,
+      updated_at = ?, lease_until = NULL
+    WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ? AND lease_until = ?
+    RETURNING state
+  `).bind(job.generation, state, job.generation, outcome, job.generation, next, now, ...args, lease).first<{ state: string }>();
+  if (outcome === 'copied' || outcome === 'existing_copy') {
+    const latest = current ?? await env.DB.prepare(`
+      SELECT state FROM calendar_copy_jobs WHERE ? = user_id AND provider = ? AND source_kind = ? AND source_id = ?
+    `).bind(...args).first<{ state: string }>();
+    if (latest?.state === 'cancelled') {
+      await onAxalSessionCancelled(env, key.source_kind, key.source_id, { userId: key.user_id, provider: key.provider });
+    }
+  }
+  return outcome === 'source_gone' ? undefined : outcome;
+}
+
+/** The cron reads only due jobs and rehydrates the source through its personal Calendar reader. */
+export async function retryCalendarCopies(env: Env, clock = Date.now): Promise<number> {
+  const now = clock();
+  const { results } = await env.DB.prepare(`
+    SELECT user_id, provider, source_kind, source_id FROM calendar_copy_jobs
+    WHERE state = 'pending' AND next_attempt_at <= ? AND (lease_until IS NULL OR lease_until <= ?)
+    ORDER BY next_attempt_at LIMIT 20
+  `).bind(now, now).all<CopyJob>();
+  for (const key of results) {
+    await runCopyJob(env, key, async (job) => {
+      let readerId = job.user_id;
+      let day = job.source_day;
+      // The wellbeing mirror belongs to the booker. The expert may read it
+      // for this copy only while they are still a party to the live booking.
+      if (job.source_kind === 'expert_booking') {
+        const booking = await env.DB.prepare(`
+          SELECT b.user_id, b.scheduled_at FROM expert_bookings b JOIN experts e ON e.id = b.expert_id
+          WHERE b.id = ? AND b.status = 'confirmed' AND (b.user_id = ? OR e.user_id = ?)
+        `).bind(job.source_id, job.user_id, job.user_id).first<{ user_id: number; scheduled_at: string }>();
+        if (!booking) return;
+        readerId = booking.user_id;
+        day = new Date(booking.scheduled_at).toISOString().slice(0, 10);
+      }
+      const start = Date.parse(day);
+      const { events, sources } = await fetchUserEventsWithSources(env, readerId, '',
+        day, new Date(start + 86_400_000).toISOString().slice(0, 10), [job.source_kind]);
+      if (sources.length !== 1 || !sources[0].ok || sources[0].truncated) throw new Error('calendar_source_unreadable');
+      return events.find((event) => event.kind === job.source_kind && event.source_id === job.source_id);
+    }, clock());
+  }
+  return results.length;
+}
+
+/** A saved reconnection is the signal to resume credential-blocked jobs. */
+export async function resumeCalendarCopies(env: Env, userId: number, provider: Provider): Promise<void> {
+  try {
+    const now = Date.now();
+    await env.DB.prepare(`
+      UPDATE calendar_copy_jobs SET state = 'pending', generation = generation + 1,
+        next_attempt_at = ?, updated_at = ?, attempts = 0
+      WHERE user_id = ? AND provider = ? AND state = 'parked'
+    `).bind(now, now, userId, provider).run();
+  } catch { console.warn('[calendar/sync] copy_resume_failed'); }
+}
+
 /**
  * Push an Axal session to every connected attendee's external calendar.
  * Idempotent — re-running updates the same external event via PATCH.
  */
-export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise<SyncReport> {
+export async function onAxalSessionCreated(env: Env, ev: CalendarEvent, update = false): Promise<SyncReport> {
   const report: SyncReport = [];
+  if (ev.read_only || ev.kind === 'calendly_event' || ev.status === 'cancelled') return report;
   try {
     const userIds = await attendeeUserIds(env, ev);
     if (userIds.length === 0) return report;
@@ -200,20 +349,27 @@ export async function onAxalSessionCreated(env: Env, ev: CalendarEvent): Promise
         report.push({ userId: uid, provider, outcome: decided.outcome! });
         return;
       }
-      const outcome = await pushOneUserOneProvider(env, uid, ev, provider);
-      report.push({ userId: uid, provider, outcome: decided.outcome === 'existing_copy' && outcome === 'copied' ? 'existing_copy' : outcome });
+      const table = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
+      if (!await loadRefreshToken(env, table, uid)) {
+        report.push({ userId: uid, provider, outcome: 'disconnected' });
+        return;
+      }
+      await enqueueCopy(env, uid, provider, ev, update);
+      const outcome = await runCopyJob(env, { user_id: uid, provider, source_kind: ev.kind, source_id: ev.source_id },
+        async () => ev, Date.now());
+      if (outcome) report.push({ userId: uid, provider, outcome });
     };
     await Promise.all(userIds.flatMap(uid => [
       googleOn ? push(uid, 'google') : Promise.resolve(),
       msOn    ? push(uid, 'microsoft') : Promise.resolve(),
     ]));
-  } catch (e) {
-    console.warn('[calendar/sync] onAxalSessionCreated failed', e);
+  } catch {
+    console.warn('[calendar/sync] copy_hook_failed');
   }
   return report;
 }
 
-export const onAxalSessionUpdated = onAxalSessionCreated;
+export const onAxalSessionUpdated = (env: Env, ev: CalendarEvent) => onAxalSessionCreated(env, ev, true);
 
 /**
  * Remove an Axal session from every external calendar it was pushed to.
@@ -224,6 +380,14 @@ export async function onAxalSessionCancelled(
   env: Env, kind: AxalKind, sourceId: number,
   copy?: { userId: number; provider: 'google' | 'microsoft' },
 ): Promise<void> {
+  try {
+    await env.DB.prepare(`
+      UPDATE calendar_copy_jobs SET state = 'cancelled', generation = generation + 1,
+        outcome_code = 'source_gone', updated_at = ?
+      WHERE source_kind = ? AND source_id = ? AND (? IS NULL OR ? = user_id) AND (? IS NULL OR ? = provider)
+    `).bind(Date.now(), kind, sourceId, copy?.userId ?? null, copy?.userId ?? null,
+      copy?.provider ?? null, copy?.provider ?? null).run();
+  } catch { console.warn('[calendar/sync] copy_cancel_failed'); }
   try {
     const sql = getSQL(env);
     const rows = await sql`

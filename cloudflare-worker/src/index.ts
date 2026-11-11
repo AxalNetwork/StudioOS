@@ -2453,6 +2453,13 @@ export default {
         }
         if (now.getUTCMinutes() % 5 === 2) {
           try {
+            const { retryCalendarCopies } = await import('./services/calendar/sync');
+            const tried = await retryCalendarCopies(env);
+            if (tried) cronSummary.push(`calendar copy retries tried=${tried}`);
+          } catch {
+            taskFailed('calendar copy retry', 'calendar_copy_retry_failed');
+          }
+          try {
             const { runChannelSweeps } = await import('./services/channels/jobs');
             await runChannelSweeps(env, now);
             // Assigned chats that gained messages and went quiet are

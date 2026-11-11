@@ -2048,6 +2048,8 @@ calendar.get('/google/callback', async (c) => {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;
     }
+    const { resumeCalendarCopies } = await import('../services/calendar/sync');
+    await resumeCalendarCopies(c.env, userId, 'google');
     return successRedirect(c.env, 'google', returnTo, extra);
   } catch (e: any) {
     const msg = String(e?.message || e);
@@ -2202,6 +2204,8 @@ calendar.get('/microsoft/callback', async (c) => {
         await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'microsoft'`;
       }
     }
+    const { resumeCalendarCopies } = await import('../services/calendar/sync');
+    await resumeCalendarCopies(c.env, userId, 'microsoft');
     return successRedirect(c.env, 'microsoft', returnTo);
   } catch (e: any) {
     const msg = String(e?.message || e);
