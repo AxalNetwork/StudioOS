@@ -18,10 +18,11 @@
  * `access_token_ct` / `refresh_token_ct` columns.
  */
 import type { Env } from '../types';
+import twitterText from 'twitter-text';
 
-const AUTH_BASE = 'https://twitter.com/i/oauth2/authorize';
-const TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
-const API_BASE = 'https://api.twitter.com/2';
+const AUTH_BASE = 'https://x.com/i/oauth2/authorize';
+const API_BASE = 'https://api.x.com/2';
+const TOKEN_URL = `${API_BASE}/oauth2/token`;
 const MEDIA_UPLOAD_URL = 'https://api.x.com/2/media/upload';
 
 // In-isolate circuit breakers are isolated by the account whose token is in use.
@@ -146,13 +147,17 @@ function basicAuth(clientId: string, clientSecret: string): string {
   return 'Basic ' + btoa(`${clientId}:${clientSecret}`);
 }
 
-export async function exchangeCodeForToken(env: Env, opts: {
+export interface XAppCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
+export async function exchangeCodeForToken(app: XAppCredentials, opts: {
   code: string;
   redirectUri: string;
   codeVerifier: string;
 }): Promise<XTokenResponse> {
-  const clientId = env.X_CLIENT_ID;
-  const clientSecret = env.X_CLIENT_SECRET;
+  const { clientId, clientSecret } = app;
   if (!clientId || !clientSecret) throw new XConfigMissing();
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -170,17 +175,15 @@ export async function exchangeCodeForToken(env: Env, opts: {
     body: body.toString(),
   });
   if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new XError('x_oauth_exchange_failed', `Token exchange failed: ${res.status} ${t.slice(0, 200)}`, {
+    throw new XError('x_oauth_exchange_failed', `Token exchange failed: ${res.status}`, {
       status: res.status,
     });
   }
   return (await res.json()) as XTokenResponse;
 }
 
-export async function refreshAccessToken(env: Env, refreshToken: string): Promise<XTokenResponse> {
-  const clientId = env.X_CLIENT_ID;
-  const clientSecret = env.X_CLIENT_SECRET;
+export async function refreshAccessToken(app: XAppCredentials, refreshToken: string): Promise<XTokenResponse> {
+  const { clientId, clientSecret } = app;
   if (!clientId || !clientSecret) throw new XConfigMissing();
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -196,12 +199,25 @@ export async function refreshAccessToken(env: Env, refreshToken: string): Promis
     body: body.toString(),
   });
   if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new XError('x_oauth_refresh_failed', `Token refresh failed: ${res.status} ${t.slice(0, 200)}`, {
+    throw new XError('x_oauth_refresh_failed', `Token refresh failed: ${res.status}`, {
       status: res.status,
     });
   }
   return (await res.json()) as XTokenResponse;
+}
+
+export async function revokeToken(app: XAppCredentials, token: string): Promise<void> {
+  const { clientId, clientSecret } = app;
+  if (!clientId || !clientSecret) throw new XConfigMissing();
+  const res = await fetch(`${API_BASE}/oauth2/revoke`, {
+    method: 'POST',
+    headers: { authorization: basicAuth(clientId, clientSecret) },
+    body: new URLSearchParams({ token, client_id: clientId }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    throw new XError('x_oauth_revoke_failed', `Token revocation failed: ${res.status}`, { status: res.status });
+  }
 }
 
 // ---------- Authenticated API helpers ----------
@@ -220,6 +236,7 @@ function parseRetryAfter(res: Response): number {
 }
 
 async function authJsonCall<T>(opts: {
+  emptyResponse?: boolean;
   method: 'GET' | 'POST' | 'DELETE';
   url: string;
   accessToken: string;
@@ -239,9 +256,9 @@ async function authJsonCall<T>(opts: {
       body: opts.json ? JSON.stringify(opts.json) : undefined,
       signal: opts.signal,
     });
-  } catch (e) {
+  } catch {
     recordFailure(opts.accountId);
-    throw new XError('x_network', `X network error: ${(e as Error).message}`);
+    throw new XError('x_network', 'Could not reach X.');
   }
   if (res.status === 429) {
     recordFailure(opts.accountId);
@@ -265,9 +282,10 @@ async function authJsonCall<T>(opts: {
     let code = 'x_api_error';
     if (/duplicate/i.test(t)) code = 'x_duplicate_content';
     else if (/forbidden/i.test(t)) code = 'x_forbidden';
-    throw new XError(code, `X ${res.status}: ${t.slice(0, 200)}`, { status: res.status });
+    throw new XError(code, `X rejected the request (${res.status}).`, { status: res.status });
   }
   recordSuccess(opts.accountId);
+  if (opts.emptyResponse) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -308,6 +326,35 @@ export interface XMeResponse {
   data: { id: string; name: string; username: string };
 }
 
+export function getXAudience(accessToken: string, accountId: string | number) {
+  return authJsonCall<{ data: XMeResponse['data'] & { public_metrics: { followers_count: number } } }>({
+    method: 'GET',
+    url: `${API_BASE}/users/me?user.fields=public_metrics`,
+    accessToken,
+    accountId,
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
+export function getXPostMetrics(accessToken: string, accountId: string | number, userId: string, cursor?: string) {
+  const query = new URLSearchParams({ 'tweet.fields': 'public_metrics,created_at', max_results: '10' });
+  if (cursor) query.set('pagination_token', cursor);
+  return authJsonCall<{
+    data?: Array<{
+      id: string;
+      created_at: string;
+      public_metrics: { impression_count?: number; like_count: number; reply_count: number; retweet_count: number; quote_count: number };
+    }>;
+    meta?: { next_token?: string };
+  }>({
+    method: 'GET',
+    url: `${API_BASE}/users/${encodeURIComponent(userId)}/tweets?${query}`,
+    accessToken,
+    accountId,
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
 export async function getMe(accessToken: string, accountId: string | number): Promise<XMeResponse> {
   return authJsonCall<XMeResponse>({
     method: 'GET',
@@ -322,6 +369,18 @@ export async function getMe(accessToken: string, accountId: string | number): Pr
 export interface MediaUploadResult {
   media_id_string: string;
   size: number;
+}
+
+export async function setMediaAltText(accessToken: string, accountId: string | number, mediaId: string, text: string): Promise<void> {
+  await authJsonCall<void>({
+    method: 'POST',
+    url: `${API_BASE}/media/metadata`,
+    accessToken,
+    accountId,
+    json: { id: mediaId, metadata: { alt_text: { text } } },
+    signal: AbortSignal.timeout(15_000),
+    emptyResponse: true,
+  });
 }
 
 function base64(bytes: Uint8Array): string {
@@ -346,9 +405,9 @@ export async function uploadMedia(opts: {
       headers: { authorization: `Bearer ${opts.accessToken}`, 'content-type': 'application/json' },
       body: JSON.stringify({ media: base64(opts.bytes), media_category: 'tweet_image' }),
     });
-  } catch (e) {
+  } catch {
     recordFailure(opts.accountId);
-    throw new XError('x_network', `X media network error: ${(e as Error).message}`);
+    throw new XError('x_network', 'Could not reach X for media upload.');
   }
   if (res.status === 429) {
     recordFailure(opts.accountId);
@@ -360,8 +419,7 @@ export async function uploadMedia(opts: {
     throw new XError('x_upstream', `X media upstream ${res.status}`, { status: res.status });
   }
   if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new XError('x_media_error', `X media upload failed: ${res.status} ${t.slice(0, 200)}`, { status: res.status });
+    throw new XError('x_media_error', `X media upload failed: ${res.status}`, { status: res.status });
   }
   recordSuccess(opts.accountId);
   const body = await res.json() as { data?: { id?: string; size?: number }; media_id_string?: string; size?: number };
@@ -378,12 +436,11 @@ export async function uploadMedia(opts: {
  * use a conservative code-point count which is always ≥ the weighted count,
  * so 280 here will never undercount the real X limit.
  */
-export function tweetLength(text: string): number {
-  // Count by code-points, not UTF-16 units, so 4-byte emoji aren't double-counted.
-  let n = 0;
-  for (const _ of text) n++;
-  return n;
+export function weightedLength(text: string): number {
+  return twitterText.parseTweet(text).weightedLength;
 }
+
+export const tweetLength = weightedLength;
 
 /**
  * Split a long body into ≤280-char tweets, breaking on whitespace where
