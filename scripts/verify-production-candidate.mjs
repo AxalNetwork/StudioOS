@@ -34,7 +34,7 @@ async function checkWorkflow(get, candidate, file, contexts) {
     const matches = jobs.filter(job => job.name === context);
     if (matches.length > 1) return { ...evidence, state: 'untrusted', context };
     const job = matches[0];
-    if (!job) return { ...evidence, state: run.status === 'completed' ? 'incomplete' : 'pending', context };
+    if (!job) return { ...evidence, state: 'missing', context };
     if (!Number.isSafeInteger(job.id) || job.id <= 0 || job.run_id !== id || job.run_attempt !== attempt || job.head_sha !== candidate || job.head_branch !== 'main') {
       return { ...evidence, state: 'untrusted', context };
     }
@@ -53,7 +53,7 @@ export async function verifyCandidate(candidate, get) {
   }
   if (tip.object.sha !== candidate) return { candidate, status: 'superseded', main: tip.object.sha };
   const checks = await Promise.all(Object.entries(workflows).map(([file, contexts]) => checkWorkflow(get, candidate, file, contexts)));
-  const terminal = checks.find(check => ['untrusted', 'failed', 'incomplete'].includes(check.state));
+  const terminal = checks.find(check => ['untrusted', 'failed'].includes(check.state));
   return { candidate, status: terminal ? 'blocked' : checks.every(check => check.state === 'verified') ? 'verified' : 'waiting', checks };
 }
 
@@ -78,7 +78,7 @@ async function main(candidate, mode) {
     try { report = await verifyCandidate(candidate, get); }
     catch { report = { candidate, status: 'unreadable' }; }
     if (!['waiting', 'unreadable'].includes(report.status) || Date.now() >= deadline) break;
-    await delay(30_000);
+    await delay(60_000);
   } while (Date.now() < deadline);
   console.log(JSON.stringify(report));
   if (report.status !== 'verified') process.exitCode = 1;

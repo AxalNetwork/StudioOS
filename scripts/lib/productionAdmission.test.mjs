@@ -15,7 +15,7 @@ const contexts = {
   'gitleaks.yml': ['scan'],
 };
 
-function actions({ candidate = a, main = candidate, runChange = {}, jobChange = {}, missing = false, olderRun = false, onRead } = {}) {
+function actions({ candidate = a, main = candidate, runChange = {}, jobChange = {}, missing = false, missingJob = false, olderRun = false, onRead } = {}) {
   const files = Object.keys(contexts);
   return async path => {
     onRead?.(path);
@@ -33,7 +33,7 @@ function actions({ candidate = a, main = candidate, runChange = {}, jobChange = 
     const id = Number(rawId), attempt = Number(rawAttempt);
     if (attempt !== 2) throw new Error('Expected current attempt');
     return { jobs: contexts[files[id - 11]].map((name, i) => ({ id: id * 10 + i, name, run_id: id, run_attempt: 2,
-      head_sha: candidate, head_branch: 'main', status: 'completed', conclusion: 'success', ...(id === 11 && i === 0 ? jobChange : {}) })) };
+      head_sha: candidate, head_branch: 'main', status: 'completed', conclusion: 'success', ...(id === 11 && i === 0 ? jobChange : {}) })).filter((_, i) => !(missingJob && id === 11 && i === 0)) };
   };
 }
 
@@ -53,11 +53,12 @@ test('only the six checks from their trusted push workflows admit a candidate', 
   const result = await verifyCandidate(a, actions());
   assert.deepEqual([result.status, result.checks.flatMap(x => x.checks.map(y => y.context))], ['verified', Object.values(contexts).flat()]);
   assert.deepEqual(await rehearse(), ['migrate', 'publish', 'smoke']);
+  assert.equal((await verifyCandidate(a, actions({ missingJob: true }))).status, 'waiting');
 });
 
 test('missing, pending, failed, cancelled, skipped and wrong-identity results write and publish nothing', async () => {
   const denied = [
-    { missing: true }, { runChange: { status: 'in_progress' }, jobChange: { status: 'queued' } },
+    { missing: true }, { missingJob: true }, { runChange: { status: 'in_progress' }, jobChange: { status: 'queued' } },
     { jobChange: { conclusion: 'failure' }, olderRun: true }, { jobChange: { conclusion: 'cancelled' } },
     { jobChange: { conclusion: 'skipped' } }, { jobChange: { head_sha: b } }, { jobChange: { run_attempt: 1 } },
     { runChange: { event: 'pull_request' } }, { runChange: { event: 'merge_group', head_sha: b } },
