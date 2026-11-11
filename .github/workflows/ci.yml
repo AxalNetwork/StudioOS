@@ -589,15 +589,9 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+      - name: Test the PyPI retry policy
+        run: python -m unittest discover -s scripts -p test_pip_audit_gate.py
       - name: Install pip-audit
         run: python -m pip install --upgrade pip pip-audit
       - name: pip-audit (audit requirements.txt only)
-        # Audit the pinned requirements file directly instead of the full
-        # environment. This avoids `setuptools (X.Y.Z.post0)` style errors
-        # from environment-injected post-release builds that aren't on PyPI.
-        run: |
-          if [ -f requirements.txt ]; then
-            pip-audit --strict --ignore-vuln PYSEC-2022-42969 -r requirements.txt
-          else
-            echo "no requirements.txt found, skipping"
-          fi
+        run: python scripts/pip_audit_gate.py
