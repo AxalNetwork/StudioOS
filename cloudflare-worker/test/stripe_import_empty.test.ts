@@ -143,10 +143,10 @@ function withStubbedStripe(
   };
 }
 
-function activeSub(id: string, customer: string, unitAmountCents: number) {
+function activeSub(id: string, customer: string, unitAmountCents: number, currency = 'usd') {
   return {
     id, status: 'active', customer, created: Math.floor(Date.now() / 1000), canceled_at: null,
-    items: { data: [{ quantity: 1, price: { unit_amount: unitAmountCents, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] },
+    items: { data: [{ quantity: 1, price: { unit_amount: unitAmountCents, currency, recurring: { interval: 'month', interval_count: 1 } } }] },
   };
 }
 
@@ -154,6 +154,18 @@ function snapshotCount(db: InstanceType<typeof DatabaseSync>): number {
   const r = db.prepare("SELECT COUNT(*) AS c FROM project_metrics WHERE source = 'stripe'").get() as { c: number };
   return Number(r.c);
 }
+
+test('mixed Stripe currencies cannot write a USD snapshot', withStubbedStripe(
+  { active: [activeSub('sub_usd', 'cus_1', 1234), activeSub('sub_jpy', 'cus_2', 500, 'jpy')] },
+  async () => {
+    const db = freshDb();
+    const env = makeEnv(db);
+    await seedStripeIntegration(env, db);
+    const result = await syncStripeForUser(env, USER_ID, PROJECT_ID);
+    assert.deepEqual(result, { ok: false, imported: 0, detail: 'stripe_mrr_currency_unsupported' });
+    assert.equal(snapshotCount(db), 0);
+  },
+));
 
 // ───────────────────────────────────────────────────────────────────────────
 

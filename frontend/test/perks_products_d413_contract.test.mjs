@@ -202,7 +202,7 @@ test('Performance draws the canvas’s four tiles and four funnel steps from the
   assert.match(PERF, /\{ k: 'Opened the detail', n: s\.views,/);
   assert.match(PERF, /\{ k: 'Claimed', n: s\.claims,/);
   assert.match(PERF, /\{ k: 'Redeemed with you', n: s\.redeemed,/);
-  assert.match(PERF, /api\.perkStats\(uid\), api\.perkClaimsForListing\(uid\)/);
+  assert.match(PERF, /api\.perkStats\(uid\), api\.perkClaimsForListing\(uid, page\)/);
 });
 
 test('the partner marks claims redeemed and raises the cap on this panel', () => {

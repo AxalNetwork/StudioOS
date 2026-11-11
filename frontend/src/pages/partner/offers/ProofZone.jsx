@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
+import OfferPages from '../../../ui/OfferPages.jsx';
 import {
   // `StatCard` went with the three tiles it drew: the strip is the artboard's
   // own composition now, and `ProofTile` below is the tile that carries the
@@ -421,14 +422,23 @@ export default function PartnerProofZone() {
   const [asking, setAsking] = useState(false);
   const [newItem, setNewItem] = useState({ title: '', kind: 'case_study', detail: '', outcome_note: '' });
   const [view, setView] = useState('all');
+  const currentPage = useRef(1);
+  const request = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (page = currentPage.current) => {
+    const generation = ++request.current;
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
-      const r = await api.listPartnerProof();
+      let r = await api.listPartnerProof(page);
+      if (page > 1 && r?.page_size && Array.isArray(r?.items) && r.items.length === 0) {
+        r = await api.listPartnerProof(Math.max(1, Math.ceil(r.total / r.page_size)));
+      }
+      if (generation !== request.current) return false;
+      currentPage.current = r?.page ?? 1;
       setState({ loading: false, error: '', data: r || {} });
       return true;
     } catch (e) {
+      if (generation !== request.current) return false;
       setState({ loading: false, error: e?.message || 'The proof record did not load.', data: null });
       return false;
     }
@@ -616,6 +626,9 @@ export default function PartnerProofZone() {
               exactly that reason, and repeating the artboard's note would have
               the strip promise a page that does not exist. The note says what
               published means here instead. */}
+          {(d?.has_more || d?.page > 1) && (
+            <p className="text-sm text-axal-muted">Published counts all proof. The other figures and filters apply to this page.</p>
+          )}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <ProofTile
               label="Published"
@@ -679,7 +692,7 @@ export default function PartnerProofZone() {
                 claim than "none of it is in this state". */}
             {items.length > 0 && visible.length === 0 && (
               <p className="mb-3 text-[12px] text-axal-muted">
-                No item is in this state. {items.length} recorded in total.
+                No item on this page is in this state. {d?.total ?? items.length} recorded in total.
               </p>
             )}
             <div className="space-y-3">
@@ -709,6 +722,7 @@ export default function PartnerProofZone() {
                 />
               ))}
             </div>
+            <OfferPages label="Proof" result={d} busy={busy || state.loading} onPage={load} />
           </Section>
 
           {asking && (

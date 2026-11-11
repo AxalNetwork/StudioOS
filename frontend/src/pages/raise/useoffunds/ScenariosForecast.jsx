@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { currencyCode, toMajorString } from '../../../lib/money.js';
 import { Link, useNavigate } from 'react-router-dom';
 import { api as legacyApi } from '../../../lib/api';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
@@ -262,11 +263,15 @@ function NewScenarioDialog({ projectId, base, onClose, onDone, api }) {
 }
 
 function EditScenarioDialog({ projectId, scenario, onClose, onDone, api }) {
+  const currency = currencyCode(String(scenario.currency ?? '').toUpperCase());
+  const recordedRaise = toMajorString(scenario.amount_to_raise_cents, currency);
   const [f, setF] = useState({
-    name: scenario.name || '', raise: scenario.amount_to_raise_cents == null ? '' : String(scenario.amount_to_raise_cents / 100), target: String(scenario.target_runway_months ?? 18),
+    name: scenario.name || '', raise: recordedRaise ?? '', target: String(scenario.target_runway_months ?? 18),
     shares: Object.fromEntries(SECTIONS.map((s) => [s.key, String(scenario.lines?.find((l) => l.category_key === s.key)?.share_pct ?? '')])),
   });
-  const out = scenarioBody(f);
+  const out = scenario.amount_to_raise_cents != null && recordedRaise == null
+    ? { error: 'The recorded raise cannot be edited with this currency.' }
+    : scenarioBody(f, currency);
   const w = useWrite(onDone);
   return (
     <Dialog label="Edit scenario" title={`Edit ${scenario.name}`} testId="uof-edit-scenario" onClose={onClose} busy={w.busy} error={w.error || out.error || ''} goLabel="Save scenario" disabled={!!out.error} onReview={w.stale ? w.reviewLatest : undefined}
@@ -275,7 +280,7 @@ function EditScenarioDialog({ projectId, scenario, onClose, onDone, api }) {
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Name<input className={FIELD} value={f.name} maxLength={120} onChange={(e) => setF((x) => ({ ...x, name: e.target.value }))} data-testid="uof-edit-scenario-name" /></label>
         <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Raise (US dollars)<input className={`${FIELD} ${MONO}`} inputMode="decimal" value={f.raise} onChange={(e) => setF((x) => ({ ...x, raise: e.target.value }))} data-testid="uof-edit-scenario-raise" /></label>
+          <label className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Raise ({currency ?? 'currency unavailable'})<input className={`${FIELD} ${MONO}`} inputMode="decimal" value={f.raise} onChange={(e) => setF((x) => ({ ...x, raise: e.target.value }))} data-testid="uof-edit-scenario-raise" /></label>
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-axal-ink dark:text-gray-200">Target runway (months)<input className={`${FIELD} ${MONO}`} inputMode="numeric" value={f.target} onChange={(e) => setF((x) => ({ ...x, target: e.target.value }))} /></label>
         </div>
         <fieldset className="m-0 grid grid-cols-2 gap-2 border-0 p-0 sm:grid-cols-5">
@@ -354,9 +359,9 @@ export function Scenarios({ projectId, search = '', api = useOfFundsApi }) {
               {isOpen ? (
                 <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-2 dark:border-gray-800" data-testid="uof-scenario-detail">
                   <span className={EYEBROW}>Allocation</span>
-                  {c.split.map((x) => <div key={x.key} className="flex justify-between text-[12px]"><span>{x.label}</span><span className={MONO}>{x.share == null ? NOT_RECORDED : `${x.share}%${s.amount_to_raise_cents != null ? ` · ${money(Math.round((s.amount_to_raise_cents * x.share) / 100), s.currency)}` : ''}`}</span></div>)}
+                  {c.split.map((x) => <div key={x.key} className="flex justify-between text-[12px]"><span>{x.label}</span><span className={MONO}>{x.share == null ? NOT_RECORDED : `${x.share}%${s.amount_to_raise_cents != null ? ` · ${money(Math.round((s.amount_to_raise_cents * x.share) / 100), s.currency ?? null)}` : ''}`}</span></div>)}
                   <span className={`${EYEBROW} mt-1`}>Milestones</span>
-                  {(s.milestones || []).length ? s.milestones.map((m) => <div key={m.id} className="flex justify-between gap-2 text-[12px]"><span>{m.label}</span><span className={MONO}>{m.cost_cents == null ? 'Not costed' : money(m.cost_cents, s.currency)}</span></div>)
+                  {(s.milestones || []).length ? s.milestones.map((m) => <div key={m.id} className="flex justify-between gap-2 text-[12px]"><span>{m.label}</span><span className={MONO}>{m.cost_cents == null ? 'Not costed' : money(m.cost_cents, s.currency ?? null)}</span></div>)
                     : <span className={`text-[12px] ${MUTED}`}>No milestones in this scenario yet.</span>}
                 </div>
               ) : null}
@@ -417,6 +422,8 @@ export function Compare({ projectId, search = '', api = useOfFundsApi }) {
   const d = read.data;
   const t = d ? compareTable(d) : null;
   const paths = d ? cashPaths(d) : [];
+  const cashCurrencies = new Set(paths.filter((p) => p.points).map((p) => currencyCode(p.currency?.toUpperCase())));
+  const showCashChart = cashCurrencies.size <= 1 && !cashCurrencies.has(null);
   const funded = d ? fundedBySection(d) : [];
   return (
     <div className="flex flex-col gap-3" data-testid="uof-compare">
@@ -447,11 +454,11 @@ export function Compare({ projectId, search = '', api = useOfFundsApi }) {
       ) : null}
       {d ? (
         <div className="grid gap-3 lg:grid-cols-2">
-          <Card title="Cash paths" testId="uof-compare-cash" meta={<span className="flex items-center gap-2"><Source source="Modelled" /><ChartToggle id="uof-cmp-cash" view={view} onChange={setView} /></span>}>
-            {view === 'table' ? (
+          <Card title="Cash paths" testId="uof-compare-cash" meta={<span className="flex items-center gap-2"><Source source="Modelled" />{showCashChart ? <ChartToggle id="uof-cmp-cash" view={view} onChange={setView} /> : null}</span>}>
+            {!showCashChart || view === 'table' ? (
               <div className="max-h-64 overflow-auto"><table className="w-full border-collapse text-left text-[12px]" data-testid="uof-compare-cash-table">
                 <thead><tr><th className={`px-2 py-1 ${EYEBROW}`}>Month</th>{paths.map((p) => <th key={p.id} className={`px-2 py-1 ${EYEBROW}`}>{p.name}</th>)}</tr></thead>
-                <tbody>{(paths.find((p) => p.points)?.points || []).map((q, i) => <tr key={q.month}><td className={`px-2 py-1 ${MONO}`}>{q.month}</td>{paths.map((p) => <td key={p.id} className={`px-2 py-1 ${MONO}`}>{p.points?.[i] ? money(p.points[i].cents, p.currency) : '—'}</td>)}</tr>)}</tbody>
+                <tbody>{(paths.find((p) => p.points)?.points || []).map((q, i) => <tr key={q.month}><td className={`px-2 py-1 ${MONO}`}>{q.month}</td>{paths.map((p) => <td key={p.id} className={`px-2 py-1 ${MONO}`}>{p.points?.[i] ? money(p.points[i].cents, p.currency ?? null) : '—'}</td>)}</tr>)}</tbody>
               </table></div>
             ) : <MultiLine paths={paths} label={cashSentence(paths)} testId="uof-compare-cash-chart" />}
             <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-[11.5px]">{paths.map((p, i) => <li key={p.id} className="inline-flex items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-full ${DOT_FILL[i % DOT_FILL.length]}`} />{p.name}{p.points ? '' : ` · ${NOT_RECORDED}`}</li>)}</ul>

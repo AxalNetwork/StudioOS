@@ -805,7 +805,8 @@ test('PD15: an admin compares but has no Restore; a refused restore says so in t
     await m.press(m.by('pitch-studio-compare-39'));
     await m.press(m.by('pitch-compare-restore'));
     await m.press(m.by('pitch-compare-restore-run'));
-    assert.equal(m.text().includes('forbidden'), true);
+    // D5070 (#5376): a 403 reads as the approved forbidden sentence, never the raw word.
+    assert.equal(m.text().includes('You do not have access to do that on this venture.'), true);
     assert.ok(m.by('pitch-compare-restore-dialog'), 'the dialog stays open with the refusal');
   } finally { await m.unmount(); }
 });

@@ -41,8 +41,6 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // is written once and shared by every entry it covers rather than restated per
 // label. (`/funds/calls` shared one too, until D371 built its ledger.)
 const NO_LEDGER_LINES = 'the operational ledger has its own fund and period controls below; LP accounts receive summaries, and only the assigned administrator or an admin may read journal lines';
-const NO_EXTRACTION_LAYER =
-  'the update feed returns submitted values and narratives, never the extraction proposal behind them or the rules that would produce one';
 // `/network/relationships`. Going cold reads `partner_interactions` (the log's
 // MAX). LPs stay unbuilt: an LP register is a fund record, not a relationship.
 const NO_LP_RELATIONSHIP =
@@ -194,13 +192,8 @@ export const INVESTOR_ZONE_FILTERS = {
   'portfolio/updates': [
     { canvas: 'This period', key: 'period' },
     { canvas: 'Overdue', key: 'overdue' },
-    // D496 (#1023): built up to the owner's line. No extraction layer exists,
-    // and whether one should (AI proposals, a check of the founder-entered
-    // fields, or nothing) is question 6 on #1023.
-    { canvas: 'Parse review', unbuilt: NO_EXTRACTION_LAYER, hover: 'Parsing updates is not decided yet: no extraction runs, so there is nothing to review.' },
-    // `Rules` WAS `NO_EXTRACTION_LAYER` TOO, and that reason is true about the
-    // rules which would produce an extraction — but it is not the only rule set
-    // in play. `portfolio_kpi_definitions` stores the KPIs companies are held
+    // `Rules` was previously disabled for want of an extraction layer, but
+    // `portfolio_kpi_definitions` stores the KPIs companies are held
     // to, with the wording, the cadence and whether each is required, and
     // `GET /positions/kpi-compliance` has been returning it as `kpi_set` on
     // every load of this page. The chip was marked unbuilt over data already in

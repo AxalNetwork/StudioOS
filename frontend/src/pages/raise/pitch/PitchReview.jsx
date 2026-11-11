@@ -10,6 +10,7 @@ import {
   NO_REVIEWS, REVIEW_COLUMNS, REVIEW_READ_ONLY, SCORE_NOT_RETURNED, UPLOAD_LINE, isReviewReadOnly, mayRunReview,
   costLabel, estimateOf, historyRows, lastRunLine, latestReview, notReviewedLine, pointerLabel, ranAt, reviewSentence,
 } from './reviewModel';
+import { reviewFailure } from './pitchSafeErrors.js';
 
 /**
  * D900 (#2679, part 6 of #2434) — the studio's Review tab (PD14) at
@@ -84,7 +85,7 @@ export default function PitchReview({ reads, readOnly }) {
     } catch (e) {
       reportError('pitch-studio:review-run', e);
       if (isReviewReadOnly(e)) { setConfirm(false); setRefused(true); return; }
-      setFailed(e?.message || 'The review could not be run. Nothing was saved. Try again.');
+      setFailed(reviewFailure(e));
     } finally {
       setBusy(false);
     }

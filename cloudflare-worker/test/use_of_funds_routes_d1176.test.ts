@@ -219,6 +219,14 @@ test('D1176 round precedence is approved current call, active record, plan; ever
   f.db.exec("UPDATE round_calls SET counsel_approved_hash=NULL");r=(await call(f,'GET','/plan')).body.round;assert.equal(r.chosen.value,150000);assert.equal(r.chosen.source,'Typed');
   f.db.exec("UPDATE raise_rounds SET status='closed'");r=(await call(f,'GET','/plan')).body.round;assert.equal(r.chosen.value,120000);
 });
+test('D5496 a legacy round target uses the recorded currency exponent', async () => {
+  const f = fixture();
+  f.db.exec("INSERT INTO raise_rounds(id,uid,project_id,name,target_amount,currency) VALUES(1,'round-one',1,'Seed',1234,'JPY')");
+  const response = await call(f, 'GET', '/plan');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.round.chosen.value, 1234);
+  assert.equal(response.body.round.chosen.currency, 'jpy');
+});
 test('D1176 measured runway is founder Mercury, then connector metrics, then Typed; forecast never substitutes and Mercury is private',async()=>{
   const f=fixture();mercury(f);
   f.db.exec("INSERT INTO project_metrics(project_id,cash_balance,net_burn,snapshot_date,source) VALUES(1,1000,100,'2026-10-01','stripe'),(1,1500,100,'2026-10-25',NULL),(1,55555,1,'2026-10-26','mercury'); INSERT INTO financial_models(project_id,assumptions_json,computed_json) VALUES(1,'{}','{\"runway_months\":77}');");

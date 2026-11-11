@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { deckScriptApi } from '../../../lib/api/deckScript';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { teleprompterHref } from './teleprompterModel';
 import { NEW_PATH } from './newDeckModel';
 import {
@@ -60,7 +61,7 @@ function writeFrom(projectId, next) {
   try { localStorage.setItem(STORE(projectId), JSON.stringify(next)); } catch { /* a per-browser hint only */ }
 }
 const newKey = () => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `script-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-const failureOf = (e, dflt) => e?.data?.message || (typeof e?.data?.error === 'string' && !/^[a-z_]+$/.test(e.data.error) ? e.data.error : null) || dflt;
+const failureOf = (e, dflt) => userFacingRaiseError(e, { fallback: dflt, scope: 'raise:pitch:script' });
 
 function Group({ label, options, value, onPick, testId, disabled }) {
   return (

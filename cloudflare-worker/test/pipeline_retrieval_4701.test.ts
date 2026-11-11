@@ -223,8 +223,10 @@ test('retainer totals are over all 230 retainers, and pages are gap-free in the 
     ret.run(i, `r-${i}`, i, 'retainer', 'monthly', 10_000, 10, `2027-01-${String((i % 28) + 1).padStart(2, '0')}`);
   }
   // Engagement 231 has no retainer: it sorts after every retainer.
-  db.prepare("INSERT INTO quotes (id, uid, need_id, partner_id, price, deliverables, status) VALUES (231,'q-231',1,2,1,'d','accepted')").run();
-  eng.run(231, 'e-231', 1, 231, PARTNER_ID, 5, 9, 1000, stamp(231));
+  // D5359 (#5359): a need has at most one accepted quote, so quote 231 gets its own need.
+  db.prepare("INSERT INTO founder_needs (id, uid, project_id, founder_id, category, title, description, created_at) VALUES (231,'n-231',9,5,'engineering','Need 231','desc',?)").run(stamp(231));
+  db.prepare("INSERT INTO quotes (id, uid, need_id, partner_id, price, deliverables, status) VALUES (231,'q-231',231,2,1,'d','accepted')").run();
+  eng.run(231, 'e-231', 231, 231, PARTNER_ID, 5, 9, 1000, stamp(231));
   const ids: number[] = [];
   let cursor: string | null = null; let pages = 0; let first: any = null;
   do {

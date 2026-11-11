@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import Sheet from '../../../ui/Sheet.jsx';
 import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { comments as commentsAdapter } from './deckV2Adapter';
 import { LATER } from './deckV2Model';
 import {
@@ -34,7 +35,7 @@ const FIELD = 'w-full rounded-[9px] border border-axal-hairline bg-white px-3 py
 const SELECT = 'min-h-[32px] rounded-[8px] border border-axal-hairline bg-white px-2 text-[12px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const ALERT = 'rounded-[10px] bg-red-50 px-3 py-2 text-[12.5px] font-semibold text-axal-destructive dark:bg-red-950/40 dark:text-red-300';
 
-const failed = (e, fallback) => (typeof e?.message === 'string' && e.message) || fallback;
+const failed = (e, fallback) => userFacingRaiseError(e, { fallback, scope: 'raise:pitch:comments' });
 
 /** A text box with the @-mention people listbox under it. Posts only on Post. */
 function Composer({ people, me, placeholder, onPost, testId }) {

@@ -17,7 +17,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDatabase, removeMigratedDatabases } from './_storage_schema.ts';
-import { onAxalSessionCreated } from '../src/services/calendar/sync.ts';
+import { onAxalSessionCreated, onAxalSessionCancelled, onAxalSessionUpdated, resumeCalendarCopies, retryCalendarCopies } from '../src/services/calendar/sync.ts';
 import { SYNC_ERRORS, readSyncError } from '../src/services/calendar/syncState.ts';
 import { readCopyTarget } from '../src/services/calendar/prefs.ts';
 
@@ -69,6 +69,117 @@ function fixture({ unreadable = [] as string[] } = {}) {
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+test('5207: concurrent delivery, lost create replies, mapped updates, reconnect and cancellation', async () => {
+  const f = fixture();
+  const original = globalThis.fetch;
+  const copies = new Map<string, string>();
+  const posts: string[] = [];
+  const patches: string[] = [];
+  let refreshStatus = 200;
+  let failCreate = true;
+  const future = () => Date.now() + 86_400_000;
+  try {
+    f.db.prepare(`INSERT INTO founder_checkins
+      (id, uid, title, start_at, duration_min, status, founder_user_id)
+      VALUES (41, 'checkin-41', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+    globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
+      const url = new URL(input);
+      const google = url.hostname === 'www.googleapis.com';
+      if (url.hostname === 'oauth2.googleapis.com' || url.hostname === 'login.microsoftonline.com') {
+        return json({ access_token: 'synthetic-access' }, refreshStatus);
+      }
+      assert.ok(google || url.hostname === 'graph.microsoft.com');
+      if (init.method === 'POST') {
+        const payload = JSON.parse(String(init.body));
+        const key = google ? payload.id : payload.transactionId;
+        assert.match(key, /^[a-f0-9]{64}$/);
+        posts.push(key);
+        const existing = copies.get(key);
+        if (existing) return google ? json({}, 409) : json({ id: existing }, 201);
+        const id = google ? key : 'microsoft-mapped';
+        copies.set(key, id);
+        if (failCreate) throw new Error('synthetic reply lost after commit');
+        return json({ id }, 201);
+      }
+      const id = url.pathname.split('/').at(-1)!;
+      if (init.method === 'PATCH') {
+        patches.push(id);
+        return json({ id });
+      }
+      if (init.method === 'DELETE') return new Response(null, { status: 204 });
+      throw new Error('unexpected provider request');
+    }) as typeof fetch;
+
+    await Promise.all([onAxalSessionCreated(f.env, SESSION), onAxalSessionCreated(f.env, SESSION)]);
+    assert.equal(posts.length, 2);
+    assert.equal(copies.size, 2);
+    assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM calendar_copy_jobs WHERE state='pending'").get() as any).n, 2);
+    failCreate = false;
+    await retryCalendarCopies(f.env, future);
+    assert.deepEqual(posts.slice(2).sort(), posts.slice(0, 2).sort());
+    assert.equal(copies.size, 2);
+    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM calendar_sync_records').get() as any).n, 2);
+
+    refreshStatus = 401;
+    await onAxalSessionUpdated(f.env, SESSION);
+    assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM calendar_copy_jobs WHERE state='parked'").get() as any).n, 2);
+    assert.equal(await retryCalendarCopies(f.env, future), 0);
+    refreshStatus = 200;
+    await resumeCalendarCopies(f.env, 1, 'microsoft');
+    const patchesBefore = patches.length;
+    await retryCalendarCopies(f.env, future);
+    assert.deepEqual(patches.slice(patchesBefore), ['microsoft-mapped']);
+    assert.equal(posts.length, 4);
+
+    await resumeCalendarCopies(f.env, 1, 'google');
+    await onAxalSessionCancelled(f.env, SESSION.kind, SESSION.source_id);
+    assert.equal(await retryCalendarCopies(f.env, future), 0);
+    await onAxalSessionCreated(f.env, SESSION);
+    assert.equal(posts.length, 4);
+    assert.equal((f.db.prepare('SELECT COUNT(*) AS n FROM calendar_sync_records').get() as any).n, 0);
+
+    const second = { ...SESSION, source_id: 42 };
+    f.db.prepare(`INSERT INTO founder_checkins
+      (id, uid, title, start_at, duration_min, status, founder_user_id)
+      VALUES (42, 'checkin-42', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+    setTarget(f, 'none');
+    await onAxalSessionCreated(f.env, second);
+    assert.equal(f.db.prepare('SELECT 1 FROM calendar_copy_jobs WHERE source_id=42').get(), undefined);
+    assert.equal(posts.length, 4);
+    f.db.exec("UPDATE calendar_settings SET copy_target='google' WHERE user_id=1");
+    refreshStatus = 503;
+    await onAxalSessionCreated(f.env, second);
+    assert.equal((f.db.prepare('SELECT state FROM calendar_copy_jobs WHERE source_id=42').get() as any).state, 'pending');
+    f.db.exec("UPDATE founder_checkins SET status='cancelled' WHERE id=42");
+    refreshStatus = 200;
+    await retryCalendarCopies(f.env, future);
+    assert.equal((f.db.prepare('SELECT state FROM calendar_copy_jobs WHERE source_id=42').get() as any).state, 'cancelled');
+    assert.equal(posts.length, 4);
+
+    // UPDATE RETURNING reports the post-update attempt count in SQLite.
+    const third = { ...SESSION, source_id: 43 };
+    f.db.prepare(`INSERT INTO founder_checkins
+      (id, uid, title, start_at, duration_min, status, founder_user_id)
+      VALUES (43, 'checkin-43', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+    refreshStatus = 503;
+    await onAxalSessionCreated(f.env, third);
+    const attempt = () => f.db.prepare(
+      'SELECT attempts, state, next_attempt_at, updated_at FROM calendar_copy_jobs WHERE source_id=43',
+    ).get() as { attempts: number; state: string; next_attempt_at: number; updated_at: number };
+    for (let n = 1; n <= 6; n++) {
+      const job = attempt();
+      assert.equal(job.attempts, n);
+      assert.equal(job.state, n === 6 ? 'refused' : 'pending');
+      assert.equal(job.next_attempt_at - job.updated_at, 300_000 * 2 ** (n - 1));
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at - 1), 0);
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at), n === 6 ? 0 : 1);
+    }
+  } finally {
+    globalThis.fetch = original;
+    f.close();
+  }
+});
 
 /** Counts what each provider was asked to do; `writeFails` makes the create itself refuse. */
 function stubProviders({ writeFails = false } = {}) {

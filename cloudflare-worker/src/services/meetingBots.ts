@@ -84,6 +84,8 @@ export function botView(run: BotRun) {
 export function botEnabled(env: Env) { return env.MEETING_BOT === 'on' || env.MEETING_BOT === 'canary'; }
 export function botConfigured(env: Env, platform?: BotPlatform) {
   if (!botEnabled(env) || !env.MEETING_BOT_RUN || (env.MEETING_BOT_SECRET?.length ?? 0)<32) return false;
+  // D1451 (#5297): Teams has its own switch, off unless exactly 'on', until the bot's Teams page driver is measured.
+  if (platform === 'teams' && env.MEETING_BOT_TEAMS !== 'on') return false;
   if (env.MEETING_BOT_RUNTIME) return true;
   if (!env.MEETING_BOT_CONTAINER) return false;
   try { runtimeOrigin(env); } catch { return false; }

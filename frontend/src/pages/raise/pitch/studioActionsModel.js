@@ -15,6 +15,7 @@
 
 import { deckReadinessState } from '../../../lib/deckReadiness.js';
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { refusalOf } from './newDeckModel.js';
 
 export const SPINOUT_METHOD = 'axal_spinout_demoday';
@@ -47,7 +48,7 @@ export function draftRefusal(e, newPath) {
   if (e?.status === 409 || code === 'no_method_id') return { message: DRAFT_NO_TEMPLATE, link: { href: newPath, text: 'New deck ›' }, topUp: null };
   if (e?.status === 402 && (code === 'PAYWALL_PREMIUM_METHOD' || code === 'paywall')) return { message: DRAFT_PLAN, link: { href: '/pricing', text: 'Plans ›' }, topUp: null };
   const r = refusalOf(e) || {};
-  return { message: e?.message ? `${DRAFT_FAILED} ${e.message}` : DRAFT_FAILED, link: r.link || null, topUp: r.topUp || null };
+  return { message: userFacingRaiseError(e, { fallback: DRAFT_FAILED, scope: 'raise:pitch:draft' }), link: r.link || null, topUp: r.topUp || null };
 }
 
 /** Where a fill's proposal is reviewed: New deck's step 4, on this venture. */

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import Sheet from '../../../ui/Sheet.jsx';
 import { deckVoiceApi } from '../../../lib/api/deckVoice.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import {
   ACCEPT, ACCEPTED, DISCARD, DISCARDED, MAKE, NOT_SAVED, NO_SCRIPT, SAVE_FIRST, VOICE_LABEL, VOICE_LINE, VOICE_TITLE, hasScript, quoteLine,
 } from './voiceModel';
@@ -19,7 +20,7 @@ const PRIMARY = `${BTN} bg-axal-violet text-white hover:bg-axal-violet-deep`;
 const SECONDARY = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
 const MUTED = 'm-0 text-[12.5px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const INK = 'm-0 text-[12.5px] leading-[1.45] text-axal-ink dark:text-gray-100';
-const why = (e) => (typeof e?.message === 'string' && e.message ? e.message : 'Something went wrong. Nothing was saved.');
+const why = (e) => userFacingRaiseError(e, { fallback: 'Something went wrong. Nothing was saved.', scope: 'raise:pitch:voice' });
 
 export function AiVoiceTag() {
   return <span className="inline-flex items-center rounded-full bg-axal-lavender px-2 py-0.5 text-[11px] font-bold text-axal-violet dark:bg-violet-950/40 dark:text-violet-300" data-testid="ai-voice-label">{VOICE_LABEL}</span>;

@@ -3473,17 +3473,17 @@ export const api = {
   // on the catalogue response is load-bearing: it lets the page say "no credit
   // allowance is set up" instead of "not enough credits", which are very
   // different things to tell someone with a zero balance.
-  perksCatalog: () => request('/perks'),
+  perksCatalog: (page = 1) => request(page === 1 ? '/perks' : `/perks?page=${encodeURIComponent(page)}`),
   perk: (uid) => request(`/perks/${encodeURIComponent(uid)}`),
   perkClaim: (uid) => request(`/perks/${encodeURIComponent(uid)}/claim`, { method: 'POST' }),
-  perksMine: () => request('/perks/mine'),
-  perkSubmissions: () => request('/perks/partner'),
+  perksMine: (page = 1, ledgerPage = 1) => request(page === 1 && ledgerPage === 1 ? '/perks/mine' : `/perks/mine?page=${encodeURIComponent(page)}&ledger_page=${encodeURIComponent(ledgerPage)}`),
+  perkSubmissions: (page = 1) => request(page === 1 ? '/perks/partner' : `/perks/partner?page=${encodeURIComponent(page)}`),
   perkSubmit: (data) => request('/perks/partner', { method: 'POST', body: JSON.stringify(data || {}) }),
   perkUpdate: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
   perkStats: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/stats`),
   // D412 — the partner's claims list and mark-redeemed, and the founder's rating.
-  perkClaimsForListing: (uid) => request(`/perks/partner/${encodeURIComponent(uid)}/claims`),
+  perkClaimsForListing: (uid, page = 1) => request(`/perks/partner/${encodeURIComponent(uid)}/claims${page === 1 ? '' : `?page=${encodeURIComponent(page)}`}`),
   perkRedeem: (uid, data) =>
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
@@ -3493,7 +3493,7 @@ export const api = {
     const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
     return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
   },
-  perkReviewQueue: () => request('/perks/admin/queue'),
+  perkReviewQueue: (page = 1) => request(page === 1 ? '/perks/admin/queue' : `/perks/admin/queue?page=${encodeURIComponent(page)}`),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
   // D4806: Feature and Stop featuring are their own operation on a live listing, with the revision reviewed.
@@ -4559,7 +4559,7 @@ export const api = {
   // Every engagement with the surface it names, for the attribution form. An
   // engagement naming none is listed rather than hidden — it is what the
   // unattributed count is counting.
-  listPartnerAttribution: () => request('/partner/offers/attribution'),
+  listPartnerAttribution: (page = 1) => request(page === 1 ? '/partner/offers/attribution' : `/partner/offers/attribution?page=${encodeURIComponent(page)}`),
   setPartnerEngagementSource: (engagementId, data) =>
     request(`/partner/offers/engagements/${engagementId}/source`, {
       method: 'PUT', body: JSON.stringify(data),
@@ -4569,7 +4569,7 @@ export const api = {
 
   // `is_published` on each item is DERIVED from its consent rows, never stored.
   // There is no method to set it, and that absence is the feature.
-  listPartnerProof: () => request('/partner/offers/proof'),
+  listPartnerProof: (page = 1) => request(page === 1 ? '/partner/offers/proof' : `/partner/offers/proof?page=${encodeURIComponent(page)}`),
   createPartnerProof: (data) =>
     request('/partner/offers/proof', { method: 'POST', body: JSON.stringify(data) }),
   updatePartnerProof: (id, data) =>

@@ -15,7 +15,7 @@
  */
 import type { Env, User } from '../../types';
 import { canAccessProject, isProjectManager } from '../projectAccess';
-import { canEdit } from '../companyAccess';
+import { companyWriteDenial } from '../companyAccess';
 import { isAdmin } from '../../routes/_t13t14t15_helpers';
 import { roleOf, type Rules } from './catalogue';
 
@@ -65,7 +65,7 @@ export async function canRead(env: Env, s: Scope, user: User): Promise<boolean> 
 }
 
 export async function canManage(env: Env, s: Scope, user: User): Promise<boolean> {
-  if (s.kind === 'company') return canEdit(env, { id: s.id }, user);
+  if (s.kind === 'company') return (await companyWriteDenial(env, { id: s.id }, user, !!user.support_session)) == null;
   return isProjectManager(user, s);
 }
 

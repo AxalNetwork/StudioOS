@@ -71,7 +71,7 @@ test('simultaneous expired-token callers refresh an X account once and share the
       VALUES (73, 'fixture-hq', ?, ?, '2000-01-01T00:00:00.000Z', 1)`).run(accessTokenCt, refreshTokenCt);
     const stale = await env.DB.prepare('SELECT id, access_token_ct, refresh_token_ct, expires_at FROM x_accounts WHERE id = ?').bind(73).first();
     globalThis.fetch = (async (input: any, init?: RequestInit) => {
-      assert.equal(String(input), 'https://api.twitter.com/2/oauth2/token');
+      assert.equal(String(input), 'https://api.x.com/2/oauth2/token');
       calls += 1;
       const body = new URLSearchParams(String(init?.body));
       assert.equal(body.get('refresh_token'), 'old-refresh');

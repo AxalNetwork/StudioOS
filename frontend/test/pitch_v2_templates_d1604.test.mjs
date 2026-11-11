@@ -201,7 +201,8 @@ test('the gallery\'s refusal is the shared RefusalLine, and Gallery / Yours are 
     await m.press(m.by('pitch-templates-tile-tpl_hq_pencil_margins'));
     await m.press(m.by('pitch-templates-use'));
     await m.press(m.by('pitch-templates-confirm'));
-    assert.match(m.text(m.by('pitch-templates-refusal')), /^Only the venture's founders can start its deck\./);
+    // D5070 (#5376): `forbidden` is a taxonomy code, so it reads in the taxonomy's words.
+    assert.match(m.text(m.by('pitch-templates-refusal')), /^You do not have access to do that on this venture\./);
   } finally { await m.close(); }
 });
 

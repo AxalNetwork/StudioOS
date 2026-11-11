@@ -5,6 +5,7 @@ import { deckCommentsApi } from '../../../lib/api/deckComments.js';
 import { deckFiguresApi } from '../../../lib/api/deckFigures.js';
 import { deckCheckApi } from '../../../lib/api/deckCheck.js';
 import { reportError } from '../../../lib/log';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { asList, currentVersion } from './pitchStudioModel';
 import {
   APPROVAL_UNREAD, COMMENTS_ADMIN, COMMENTS_UNREAD, FIGURES_UNREAD, FIGURE_COLUMNS, FILTERS, NO_FIGURES, NO_THREADS,
@@ -108,7 +109,7 @@ function CommentsInbox({ deckId, slides, projectId }) {
       const next = res?.comment;
       if (next) setRead((s) => ({ ...s, data: { ...s.data, comments: (s.data?.comments || []).map((c) => (c.uid === next.uid ? next : c)) } }));
       else reload();
-    } catch (e) { setNotice({ uid, text: e?.message || 'That could not be saved. Try again.' }); }
+    } catch (e) { setNotice({ uid, text: userFacingRaiseError(e, { fallback: 'That could not be saved. Try again.', scope: 'raise:pitch:review-tile' }) }); }
     finally { setBusy(null); }
   };
 
