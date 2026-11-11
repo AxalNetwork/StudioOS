@@ -107,6 +107,13 @@ function PlanCard({ card, onCheckout }) {
             {card.unit && <span className="axp-price-u">{card.unit}</span>}
           </div>
           <div className="axp-price-note">{card.note}</div>
+          {card.allowanceComparison && (
+            <p className="axp-small" data-testid={`pricing-ai-interval-${card.id}`}>
+              Included AI allowance per month: {card.allowanceComparison.monthly} with monthly billing;
+              {' '}{card.allowanceComparison.yearly} with yearly billing.
+              {card.allowanceComparison.differs && ' The annual subscription discount also reduces the monthly included AI allowance.'}
+            </p>
+          )}
         </>
       ) : (
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
@@ -550,6 +557,9 @@ export function PricingBody({ user = null }) {
               ))}
             </div>
             {built.saving && <span className="axp-save">{built.saving}</span>}
+            <span className="axp-small" data-testid="pricing-billing-allowance-note">
+              Compare each plan's monthly AI allowance below; yearly billing can change the included amount. Full annual charges are shown on the cards.
+            </span>
           </div>
         )}
       </section>
