@@ -12,10 +12,13 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase } from '../../lib/absence';
+import { currencyFromLabel } from '../../lib/money';
 import { companyHref } from '../cycles/reportingModel';
 import PortfolioReports from './PortfolioReports';
 
-const money = (value) => value == null || !Number.isFinite(Number(value)) ? 'Unavailable' : `$${Math.round(Number(value)).toLocaleString()}`;
+const money = (value, currency = 'USD') => value == null || value === '' || !Number.isFinite(Number(value))
+  ? 'Unavailable'
+  : Number(value).toLocaleString('en-US', { style: 'currency', currency, minimumFractionDigits: 0 });
 const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
 const dateLabel = (value) => {
   const at = value ? new Date(value) : null;
@@ -32,12 +35,14 @@ const unitFor = (key, units) => units?.get(key) || (/month|runway/i.test(key) ? 
   : /headcount|customer|employee|user|account/i.test(key) ? 'count'
     : /pct|percent|margin|retention|churn/i.test(key) ? '%'
       : /cash|burn|revenue|arr|mrr/i.test(key) ? 'USD' : null);
-const kpiValue = (key, value, units) => {
+export const kpiValue = (key, value, units) => {
+  if (value == null || (typeof value === 'string' && value.trim() === '')) return 'Not recorded';
   const numeric = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '') ? Number(value) : Number.NaN;
   if (!Number.isFinite(numeric)) return String(value);
   const unit = unitFor(key, units);
-  if (/^(usd|money|currency)$/i.test(unit || '')) return money(numeric);
-  if (unit === '%') return `${numeric.toLocaleString()}%`;
+  const currency = currencyFromLabel(unit);
+  if (currency) return money(numeric, currency);
+  if (/^(%|pct|percent)$/i.test(unit || '')) return `${numeric.toLocaleString()}%`;
   if (unit === 'months') return `${numeric.toLocaleString()} ${numeric === 1 ? 'month' : 'months'}`;
   return numeric.toLocaleString();
 };
@@ -58,7 +63,7 @@ export default function InvestorPortfolioUpdates() {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
       const positionsResult = await api.positionsList();
-      const optional = await Promise.allSettled([api.portfolioUpdatesList(), api.positionsKpiCompliance(), api.portfolioHealthList({}), api.portfolioChases()]);
+      const optional = await Promise.allSettled([api.portfolioUpdatesLatest(), api.positionsKpiCompliance(), api.portfolioHealthList({}), api.portfolioChases()]);
       setChases(optional[3].status === 'fulfilled' ? list(optional[3].value, 'items') : 'error');
       setState({
         loading: false, error: '',
@@ -86,7 +91,7 @@ export default function InvestorPortfolioUpdates() {
     return state.positions.map((position) => {
       const compliance = complianceByProject.get(String(position.project_id)) || null;
       const update = latestByProject.get(String(position.project_id)) || null;
-      const current = state.unavailable.compliance ? null : Boolean(compliance?.reported);
+      const current = compliance ? Boolean(compliance.reported) : null;
       return { ...position, compliance, health: healthByProject.get(String(position.project_id)) || null, update, current, arrived: current === true && update ? update.submitted_at || update.updated_at : null, status: state.unavailable.updates ? 'Unavailable' : current === false ? 'Not reported' : update ? 'Received' : 'Not recorded' };
     });
   }, [state]);

@@ -8,10 +8,10 @@
  *       200 { state: 'unavailable' }               a paused or ended influencer: no name, offer or attribution
  *       404 { state: 'unknown' }
  *
- * A live read records one visit (`handle_visits`) per handle, channel, day and
- * visitor; the visitor is the `X-Axal-Visitor` header's client-held id, hashed
- * with the day. No IP is stored. `ref` is the first-touch cookie value the page
- * sets (`h:<handle>[:<channel>]`).
+ * A live read with a valid `X-Axal-Visitor` header can record one visit per
+ * handle, channel, day and visitor. The page supplies the header only with
+ * Analytics consent, and the Worker hashes the ID with the day. `ref` is the
+ * Marketing-consented first-touch value (`h:<handle>[:<channel>]`).
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';

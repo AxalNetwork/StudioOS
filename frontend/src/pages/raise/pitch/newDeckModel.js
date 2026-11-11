@@ -138,7 +138,16 @@ export function startOptions(versions = [], methods = []) {
   return [
     { kind: 'blank', id: 'blank', label: 'Blank' },
     ...versions.filter((v) => v?.id != null).map((v) => ({ kind: 'version', id: v.id, label: `Past version v${v.version ?? '?'}` })),
-    ...methods.filter((m) => m?.id).map((m) => ({ kind: 'template', id: m.id, label: m.label || m.id, locked: Boolean(m.locked) })),
+    ...methods.filter((m) => m?.id).map((m) => ({
+      kind: 'template',
+      id: m.id,
+      label: m.label || m.id,
+      templateKey: m.key || m.id,
+      locked: Boolean(m.locked),
+      slide_count: m.slide_count ?? null,
+      best_for: m.best_for ?? null,
+      category: m.category ?? null,
+    })),
   ];
 }
 
