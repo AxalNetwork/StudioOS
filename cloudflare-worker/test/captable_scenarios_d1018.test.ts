@@ -316,6 +316,21 @@ async function worked(f: any, opts: { preferredTransfer?: boolean } = {}) {
   return { common, pref, pool, safe, note };
 }
 
+test('D5497 Today models JPY as major units and keeps USD model instruments out of JPY proposals', async () => {
+  const f = fresh();
+  saveModel(f);
+  assert.equal((await call(f, OWNER, '/record/10/currency', 'PUT', { currency: 'JPY' })).status, 200);
+  await worked(f);
+  const r = await call(f, OWNER, '/scenarios/by-project/10/today');
+  assert.equal(r.status, 200, r.text);
+  const safe = r.body.today.inputs.safes.find((s: any) => s.name === 'Early Angel');
+  assert.deepEqual([safe.amount, safe.cap], [2_500_000, 500_000_000]);
+  const fund = r.body.today.inputs.start.holders.find((h: any) => h.name === 'Fund One');
+  assert.equal(fund.preference, 250_000);
+  assert.ok(r.body.offer.rows.every((row: any) => row.kind === 'founding'));
+  assert.match(r.body.offer.currency_note, /US dollars/);
+});
+
 test('Today: nothing recorded says so; the model is "Cap table · model" and its rows are offered, never written', async () => {
   const f = fresh();
   saveModel(f);
