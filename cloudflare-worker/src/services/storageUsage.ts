@@ -31,7 +31,7 @@ import { storagePlan, storagePlanKey } from './storagePlans';
 
 export type StorageAreaKey =
   | 'data_room' | 'diligence_files' | 'research_library' | 'interview_recordings'
-  | 'data_room_versions' | 'session_audio' | 'deck_reviews' | 'deck_rehearsals' | 'deck_recordings' | 'validate_evidence' | 'build_proofs'
+  | 'data_room_versions' | 'session_audio' | 'grow_voice_notes' | 'deck_reviews' | 'deck_rehearsals' | 'deck_recordings' | 'validate_evidence' | 'build_proofs'
   | 'grow_minutes' | 'brand_files' | 'csv_imports' | 'articles';
 export type StorageKindKey = 'data_room' | 'documents' | 'recordings' | 'decks_exports' | 'brand' | 'other';
 export type StorageState = 'ok' | 'near_80' | 'near_95' | 'full' | 'over' | 'no_allowance';
@@ -139,6 +139,26 @@ const AREAS: ReadonlyArray<Def> = [
       COUNT(DISTINCT CASE WHEN c.size_bytes IS NULL THEN s.id END) AS unknown_size_files
       FROM ` + VENTURE_OWNERS + ` JOIN interview_sessions s ON s.project_id = vo.project_id
       JOIN interview_session_chunks c ON c.session_id = s.id GROUP BY vo.user_id` },
+  // D5332 (#5332): Distribution sequence voice notes. The upload guard already
+  // counts these bytes; the usage read must use the same stored row. A key with
+  // no recorded size is one unknown-size file, never zero bytes.
+  { key: 'grow_voice_notes', kind: 'recordings', scope: 'company',
+    groups: `SELECT s.project_id AS project_id, COUNT(*) AS files, SUM(st.recording_bytes) AS bytes,
+      SUM(CASE WHEN st.recording_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM json_each(?) own JOIN outreach_sequences s ON s.project_id = own.value
+      JOIN outreach_steps st ON st.sequence_id = s.id
+      WHERE st.recording_asset IS NOT NULL AND TRIM(st.recording_asset) <> '' GROUP BY s.project_id`,
+    largest: `SELECT s.name || ' · voice note ' || st.position AS name, NULL AS version, st.recording_bytes AS bytes,
+      st.updated_at AS added_at, s.project_id AS project_id, CAST(st.id AS TEXT) AS ref
+      FROM json_each(?) own JOIN outreach_sequences s ON s.project_id = own.value
+      JOIN outreach_steps st ON st.sequence_id = s.id
+      WHERE st.recording_asset IS NOT NULL AND TRIM(st.recording_asset) <> '' AND st.recording_bytes IS NOT NULL
+      ORDER BY st.recording_bytes DESC, st.id DESC LIMIT 10`,
+    owners: `SELECT vo.user_id AS user_id, COUNT(*) AS files, SUM(st.recording_bytes) AS bytes,
+      SUM(CASE WHEN st.recording_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
+      FROM ` + VENTURE_OWNERS + ` JOIN outreach_sequences s ON s.project_id = vo.project_id
+      JOIN outreach_steps st ON st.sequence_id = s.id
+      WHERE st.recording_asset IS NOT NULL AND TRIM(st.recording_asset) <> '' GROUP BY vo.user_id` },
   // A deck review counts while its upload is kept (`raw_retained`). Its
   // `project_id` comes from the uploader's form, unchecked, so it never moves
   // the file to another member's plan: it only names the caller's own venture.
@@ -585,7 +605,7 @@ export async function readStorageUsage(env: Env, user: User) {
 
 /**
  * D1170 — the bytes one member's plan holds, for the upload guard: the same
- * thirteen areas and the same attribution as `readStorageUsage`, without the
+ * same areas and attribution as `readStorageUsage`, without the
  * largest files. `null` when any area or the ventures cannot be read, so the
  * guard never weighs an upload against a partial sum.
  */

@@ -63,7 +63,7 @@ test('D1604: no Fill control on the Decks tab, for a writer or a reader; the fil
   assert.equal(proposalHref('/raise/pitch/new', '', 55), '/raise/pitch/new?proposal=55');
   // A refused fill names its fix.
   assert.deepEqual(draftRefusal({ status: 409 }, '/raise/pitch/new?project_id=7').link, { href: '/raise/pitch/new?project_id=7', text: 'New deck ›' });
-  assert.equal(draftRefusal({ status: 500, message: 'Synthetic outage.' }).message, 'The draft did not run. Nothing changed. Synthetic outage.');
+  assert.equal(draftRefusal({ status: 500, message: 'Synthetic outage.' }).message, 'The draft did not run. Nothing changed.');
 });
 
 /* ------------------------------------------------------------------ *

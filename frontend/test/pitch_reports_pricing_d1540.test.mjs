@@ -106,7 +106,8 @@ test('a result already reported reads as reported; another refusal shows the Wor
       await m.press(m.by(`pitch-area-result-${key}-report-send`));
     }
     assert.ok(m.by('pitch-area-result-b2-reported'));
-    assert.match(m.text(m.by('pitch-area-result-b3-report-error')), /That result is not one of yours\./);
+    // D5070 (#5376): `not_found` is a taxonomy code, so it reads in the taxonomy's words.
+    assert.match(m.text(m.by('pitch-area-result-b3-report-error')), /That could not be found\. It may have been removed\./);
   } finally { await m.close(); }
 });
 

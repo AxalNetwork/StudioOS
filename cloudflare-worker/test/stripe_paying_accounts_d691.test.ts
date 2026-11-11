@@ -75,7 +75,7 @@ function stubStripe(customers: number) {
     const data = u.searchParams.get('status') === 'active'
       ? Array.from({ length: customers }, (_, i) => ({
         id: `sub_${i}`, customer: `cus_${i}`, status: 'active', created: 1, canceled_at: null,
-        items: { data: [{ quantity: 1, price: { unit_amount: 5000, recurring: { interval: 'month', interval_count: 1 } } }] },
+        items: { data: [{ quantity: 1, price: { unit_amount: 5000, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } } }] },
       }))
       : [];
     return new Response(JSON.stringify({ object: 'list', data, has_more: false }), { status: 200, headers: { 'Content-Type': 'application/json' } });

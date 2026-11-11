@@ -83,6 +83,7 @@ The canvases are `design/canvases/integrated/Cycle Overview.dc.html` and its two
 | `publish/` | D1321 (#3482, part 3 of #2400): Publish to… (the sheet, its confirm and result) and "Published outside", the second list on the Reporting desk's History, over part 1's `publishApi` (D1319); `publishModel.js` holds the rules and words. Only the confirm the founder presses sends |
 | `ventureQuery.js` | D5074 (#5074): the canonical venture context's pure rules: `ventureRef` (which venture `?project_id=`, legacy `?project=` or a project UID names), `ventureSearch` / `canonicalVentureSearch` (the one `?project_id=N` form), `legacyVentureRedirect` (the canonical address, query and hash kept) and `resolveVenture` / `ventureOf` (`{ projectId, projectUid, project, company }`). |
 | `VentureContext.jsx` | D5074 (#5074): `VentureProvider`, which `CycleRoute` puts around its page with the venture `useProject` resolved, and `useVenture()`, the one way a tool asks for `projectId`, `projectUid`, the record and the company; the record is read from the projects list only once a tool asks. |
+| `progressiveList.js` | D5076 (#5076): progressive complexity on Build's six module pages: `listStage` (zero / few / many; list controls from `LIST_CONTROLS_FROM` = 10), each module's zero-state copy and dominant action (`PROGRESSIVE`), the few-records count. `CycleModulePage` and `PhoneModulePage` draw by it. |
 
 ## Rules
 

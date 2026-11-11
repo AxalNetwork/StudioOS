@@ -66,13 +66,15 @@ export const CAPTION_SPEAKER = 'data-speaker-name';
 
 export type TeamsLinkKind = 'work' | 'free';
 
-const WORK_HOST = 'teams.microsoft.com';
+/** D1451 (#5297): the work hosts. `teams.cloud.microsoft` is the newer address of the same work or school meeting. */
+const WORK_HOSTS = new Set(['teams.microsoft.com', 'teams.cloud.microsoft']);
 const FREE_HOST = 'teams.live.com';
 
 /**
  * The link the bot opens, or null when it is not a Teams meeting link (the
  * bot reports `link_invalid` without opening anything):
- *   - work or school: https://teams.microsoft.com/l/meetup-join/… or /meet/…
+ *   - work or school: https://teams.microsoft.com/l/meetup-join/… or /meet/…,
+ *     and the same paths on https://teams.cloud.microsoft (D1451)
  *   - Teams free (personal): https://teams.live.com/meet/…
  * Its own query (a passcode `p`, the tenant context) is kept as given, and
  * `launchAgent=join_only` asks the launcher to join in the browser rather
@@ -88,7 +90,7 @@ export function teamsJoinUrl(raw: string): { url: string; kind: TeamsLinkKind } 
   if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
   const host = u.hostname.toLowerCase();
   let kind: TeamsLinkKind | null = null;
-  if (host === WORK_HOST && /^\/(l\/meetup-join|meet)\/[^/]+/.test(u.pathname)) kind = 'work';
+  if (WORK_HOSTS.has(host) && /^\/(l\/meetup-join|meet)\/[^/]+/.test(u.pathname)) kind = 'work';
   if (host === FREE_HOST && /^\/meet\/[^/]+/.test(u.pathname)) kind = 'free';
   if (!kind) return null;
   u.searchParams.set('launchAgent', 'join_only');

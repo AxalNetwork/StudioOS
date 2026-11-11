@@ -13,6 +13,8 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 
 // We mock global fetch BEFORE importing the service so the module
 // captures our stub.
@@ -31,6 +33,9 @@ let fetchResponder: (url: string, init: any) => Response = () =>
 
 // Minimal in-memory "DB" + sql tag.
 function makeStubEnv() {
+  const jobs = new DatabaseSync(':memory:');
+  jobs.exec('CREATE TABLE users(id INTEGER PRIMARY KEY); INSERT INTO users VALUES (1), (2)');
+  jobs.exec(readFileSync(new URL('../sql/migrations/202611101741_5207_calendar_copy_jobs.sql', import.meta.url), 'utf8'));
   const tables: Record<string, any[]> = {
     users: [{ id: 1, email: 'organizer@axal.vc', name: 'Org' },
             { id: 2, email: 'mentee@axal.vc',   name: 'Men' }],
@@ -43,6 +48,7 @@ function makeStubEnv() {
       ? strings
       : strings.reduce((acc, s, i) => acc + s + (i < params.length ? `:${i}` : ''), '');
     const lower = src.toLowerCase();
+    if (lower.includes('calendar_copy_jobs')) return jobs.prepare(src).all(...params);
     if (/select id from users where lower\(email\) in/.test(lower)) {
       const emails = params.map(String).map(s => s.toLowerCase());
       return tables.users.filter(u => emails.includes(u.email.toLowerCase())).map(u => ({ id: u.id }));

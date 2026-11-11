@@ -49,7 +49,7 @@ import {
 } from './_t13t14t15_helpers';
 import type { ReadTracking } from './_partner_workspace_helpers';
 import {
-  currentMonthlyCents, daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
   periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
   requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
 } from './_partner_workspace_helpers';
@@ -325,7 +325,7 @@ partnerDelivery.get('/board', async (c) => {
       const bl = allBl.filter((b: any) => !b.cleared_at);
       const dl = dlByEng.get(id) || [];
       const proj = retainerProjection(
-        e.retainer_id ? e : null,
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
         e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
         now,
       );
@@ -336,7 +336,7 @@ partnerDelivery.get('/board', async (c) => {
       const hrs = (hrByEng.get(id) || [])
         .filter((h: any) => inPeriod.includes(String(h.period)))
         .reduce((a: number, h: any) => a + (Number(h.hours) || 0), 0);
-      const recurring = currentMonthlyCents(e.retainer_id ? e : null, now);
+      const recurring = proj.retainer?.current_monthly_cents ?? null;
       const h = healthFor({
         milestones: ms.map((m: any) => ({ due_at: m.due_at, completed_at: m.completed_at })),
         openBlockers: bl.map((b: any) => ({ side: b.side })),
@@ -566,7 +566,7 @@ partnerDelivery.get('/health', async (c) => {
       // The same projection Pipeline · Retainers returns: cadence-aware period,
       // ended retainers excluded.
       const proj = retainerProjection(
-        e.retainer_id ? e : null,
+        e.retainer_id ? { ...e, engagement_status: e.status } : null,
         e.retainer_id ? (usageByRetainer.get(Number(e.retainer_id)) || []) : [],
         now,
       );

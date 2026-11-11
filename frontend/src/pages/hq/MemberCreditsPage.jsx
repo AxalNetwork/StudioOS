@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { memberCreditsApi } from '../../lib/api/memberCredits.js';
+import OfferPages from '../../ui/OfferPages.jsx';
 import { reportError } from '../../lib/log';
 import { Card, Unrecorded } from '../../ui';
 import {
@@ -133,7 +134,7 @@ export function LedgerTable({ read, onRetry }) {
               <button type="button" className={ghost} disabled={at.page >= at.pages} onClick={() => setPage(at.page + 1)}>Next</button>
             </div>
           ) : null}
-          {read.data?.truncated ? <p className="mt-2 text-[11.5px] text-axal-muted">The latest 500 lines are listed; the balance counts every line.</p> : null}
+          {(read.data?.has_more || read.data?.page > 1) ? <p className="mt-2 text-[11.5px] text-axal-muted">Search and filters apply to the loaded entries. The balance counts every line.</p> : null}
         </>
       )}
     </Card>
@@ -154,15 +155,16 @@ export default function MemberCreditsPage() {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [adjusting, setAdjusting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [ledgerPage, setLedgerPage] = useState(1);
   const load = useCallback(() => {
     let live = true;
     setRead((r) => ({ status: 'loading', data: r.data }));
-    memberCreditsApi.read(userId).then((data) => { if (live) setRead({ status: 'ready', data }); }, (e) => {
+    memberCreditsApi.read(userId, ledgerPage).then((data) => { if (live) setRead({ status: 'ready', data }); }, (e) => {
       reportError('MemberCredits:read', e);
       if (live) setRead({ status: e?.status === 404 ? 'not_found' : 'unreadable', data: null });
     });
     return () => { live = false; };
-  }, [userId]);
+  }, [userId, ledgerPage]);
   useEffect(() => load(), [load]);
   const name = read.data?.member?.name || read.data?.member?.email || (read.status === 'ready' ? `Account #${userId}` : 'Member');
   return (
@@ -188,7 +190,8 @@ export default function MemberCreditsPage() {
             <AdjustForm userId={Number(userId)} onCancel={() => setAdjusting(false)}
               onDone={(res) => { setAdjusting(false); setNotice(`Recorded ${changeText(res?.delta)} credits. The balance is now ${res?.balance}.`); load(); }} />
           ) : null}
-          <LedgerTable read={read} onRetry={load} />
+          <LedgerTable key={ledgerPage} read={read} onRetry={load} />
+          <OfferPages label="Ledger history" result={read.data} busy={read.status === 'loading'} onPage={setLedgerPage} />
         </>
       )}
     </div>

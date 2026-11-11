@@ -179,6 +179,7 @@ function DrillHistory({ history, pending, onRetry }) {
         <Unreadable what="The restore drill history" onRetry={onRetry} />
       ) : (
         <>
+          {history.partial && <Unreadable what="Some restore drill records" onRetry={onRetry} />}
           <p className="text-[12px] text-axal-muted dark:text-gray-300">
             {history.rows.length === 0 ? 'Not recorded. No runs have been recorded in the history yet.' : 'Runs before history recording began are not recorded here.'}
           </p>

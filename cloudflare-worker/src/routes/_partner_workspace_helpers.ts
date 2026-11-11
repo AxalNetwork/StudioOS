@@ -494,7 +494,7 @@ export const CADENCE_MONTHS: Readonly<Record<string, number>> = Object.freeze({
 /** Months in a cadence, or null for a cadence this rule does not know. */
 export function cadenceMonths(cadence: string | null | undefined): number | null {
   const m = CADENCE_MONTHS[String(cadence ?? '').trim().toLowerCase()];
-  return m === undefined ? null : m;
+  return typeof m === 'number' ? m : null;
 }
 
 /**
@@ -517,13 +517,15 @@ export function retainerPeriodFor(cadence: string | null | undefined, now: Date 
  * not keep money on the books.
  */
 export function isRetainerActive(
-  retainer: { ended_at?: string | null } | null | undefined,
+  retainer: Pick<RetainerRow, 'ended_at' | 'engagement_status' | 'cancelled_at'> | null | undefined,
   now: Date = new Date(),
 ): boolean {
   if (!retainer) return false;
+  if (retainer.cancelled_at || retainer.engagement_status === 'cancelled') return false;
   const raw = retainer.ended_at;
   if (raw === null || raw === undefined || String(raw).trim() === '') return true;
-  const t = Date.parse(String(raw).trim().replace(' ', 'T'));
+  const stamp = String(raw).trim().replace(' ', 'T');
+  const t = Date.parse(stamp.includes('T') && !/(?:Z|[+-]\d\d:?\d\d)$/i.test(stamp) ? `${stamp}Z` : stamp);
   if (!Number.isFinite(t)) return false;
   return t > now.getTime();
 }
@@ -538,8 +540,9 @@ export function monthlyAmountCents(
 ): number | null {
   if (!retainer || retainer.amount_cents === null || retainer.amount_cents === undefined) return null;
   const months = cadenceMonths(retainer.cadence);
-  if (months === null) return null;
-  return Math.round(Number(retainer.amount_cents) / months);
+  const amount = Number(retainer.amount_cents);
+  if (months === null || !Number.isFinite(amount)) return null;
+  return Math.round(amount / months);
 }
 
 /**
@@ -548,7 +551,7 @@ export function monthlyAmountCents(
  * nothing to what is recurring now). Sum these; skip the nulls.
  */
 export function currentMonthlyCents(
-  retainer: { cadence?: string | null; amount_cents?: number | null; ended_at?: string | null } | null | undefined,
+  retainer: RetainerRow | null | undefined,
   now: Date = new Date(),
 ): number | null {
   if (!isRetainerActive(retainer, now)) return null;
@@ -556,6 +559,8 @@ export function currentMonthlyCents(
 }
 
 export interface RetainerRow {
+  engagement_status?: string | null;
+  cancelled_at?: string | null;
   retainer_id?: number | null;
   retainer_uid?: string | null;
   shape?: string | null;
@@ -613,6 +618,7 @@ export function retainerProjection(
   const retainedHours = row.retained_hours === null || row.retained_hours === undefined
     ? null : Number(row.retained_hours);
   const active = isRetainerActive(row, now);
+  const monthly = monthlyAmountCents(row);
   const thisPeriod = usage.find((u) => u.period === period) || null;
   const measured = utilisationFor({ retained_hours: retainedHours }, thisPeriod);
   const util: Utilisation = active ? measured : {
@@ -632,8 +638,9 @@ export function retainerProjection(
       ended_at: row.ended_at ?? null,
       days_to_renewal: row.renews_at ? -(daysBetween(row.renews_at) ?? 0) : null,
       active,
-      monthly_amount_cents: monthlyAmountCents(row),
-      current_monthly_cents: currentMonthlyCents(row, now),
+      monthly_amount_cents: monthly,
+      monthly_cents: monthly,
+      current_monthly_cents: active ? monthly : null,
     },
     current_period: period,
     usage,

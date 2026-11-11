@@ -70,6 +70,7 @@ test('the zones follow the Worker\'s rules for open and active, and the studio b
   assert.equal([...neg.matchAll(/negotiation\.open \?\?/g)].length, 3, 'the open list, the stalled count and the ball-with-us count');
   const ret = read('../src/pages/partner/pipeline/RetainersZone.jsx');
   assert.match(ret, /r\.retainer\.active \?\? !r\.retainer\.ended_at/);
+  assert.match(ret, /r\.retainer\?\.active === false \? null : r\.retainer\?\.monthly_amount_cents/);
   const page = read('../src/pages/PipelinePage.jsx');
   assert.equal([...page.matchAll(/filter\(\(\[k\]\) => !k\.startsWith\('_'\)\)/g)].length, 2, 'both metric chip lists skip the formula key');
 });

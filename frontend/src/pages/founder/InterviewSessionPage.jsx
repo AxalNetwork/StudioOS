@@ -497,6 +497,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const failure = life && !recordingOther ? failureView(life, { botFailure: bot ? botView({ bot }).failure : null, processingError: data.processing?.error || null }) : null;
   const interviewId = interview?.id ?? session.interview_id ?? null;
   const retryHref = interviewId != null ? `/validate/record?interview=${encodeURIComponent(interviewId)}&project_id=${encodeURIComponent(session.project_id)}` : null;
+  const setupIncomplete = session.setup_complete_at === null;
+  const setupHref = retryHref && session.client_key
+    ? `${retryHref}&setup_key=${encodeURIComponent(session.client_key)}`
+    : retryHref;
   const runAgain = async () => {
     setRetry({ busy: true, error: null });
     try { await api.process(session.id); setRetry({ busy: false, error: null }); await load(); loadReceipt(); }
@@ -555,6 +559,17 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
       <main className="min-w-0 space-y-4">
         <nav className="flex items-center gap-2 text-[12px]"><Link to={`/validate/customer-research?project_id=${session.project_id}`} className="text-axal-muted underline dark:text-gray-400">Customer research</Link><AssistantBadge session={session} /><ChannelOriginBadge session={session} /></nav>
         {error && <p role="alert" className="text-[13px] font-semibold text-red-700 dark:text-red-400">{error}</p>}
+        {setupIncomplete && (
+          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950/30" data-testid="session-setup-incomplete">
+            <h2 className="m-0 text-[16px] font-bold">Session setup did not finish</h2>
+            <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-300">Nothing can be recorded, uploaded or sent to a meeting until setup finishes.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {setupHref && <Link to={setupHref} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12.5px] font-bold text-white hover:bg-violet-800" data-testid="finish-session-setup">Finish setup</Link>}
+              <button type="button" onClick={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }}
+                className="rounded-md border border-red-300 px-3 py-1.5 text-[12.5px] font-bold text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300" data-testid="delete-incomplete-session">Delete</button>
+            </div>
+          </section>
+        )}
         {data.channel_consent?.required && (
           <ChatConsentLine consent={data.channel_consent} name={intervieweeName} provider={session.submitted_via}
             onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
@@ -563,8 +578,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         {life && <SessionStepper view={life} />}
         {botSession && botRead?.bot !== null && <ParticipantsTimeline participants={botParticipants} bot={botRead?.bot || null} segments={segments} />}
         {failure && <SessionFailure failure={failure} details={failureDetails} onRetry={runAgain} retrying={retry.busy} error={retry.error} retryHref={retryHref} />}
-        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
-        {session.status === 'draft' && !botSession && (waiting
+        {!setupIncomplete && botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} onRead={setBotRead} onParticipants={setBotParticipants} hideFailure hideParticipants />}
+        {!setupIncomplete && session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (
