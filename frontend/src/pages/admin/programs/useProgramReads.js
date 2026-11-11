@@ -204,7 +204,8 @@ export function usePerksReads(tab) {
   const inReview = useRead('perks:in-review', 'in-review', tick, true,
     () => api.adminPerkListings({ status: 'in_review', sort: 'oldest', limit: 1, offset: 0 }).then(paged('The listings in review')));
   const perks = useRead('perks', 'perks', tick, tab === 'overview', readPerks);
-  const claims = useRead('perks:claims', 'claims', tick, tab === 'overview', () => api.adminPerkClaims(12));
+  // D5313: Participation counts the same claims Overview does, in the same window.
+  const claims = useRead('perks:claims', 'claims', tick, tab === 'overview' || tab === 'participation', () => api.adminPerkClaims(12));
   return { inReview, perks, claims, reload };
 }
 

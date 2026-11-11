@@ -113,7 +113,9 @@ test('the login-e2e job runs the D722 spec against the preview it just deployed,
   assert.match(wf, /outputs:\n\s+url: \$\{\{ steps\.deploy\.outputs\.url \}\}/, 'the deploy job must expose its URL as an output');
   assert.match(job, /PLAYWRIGHT_BASE_URL: \$\{\{ needs\.deploy\.outputs\.url \}\}/, 'the spec must run against this PR\'s preview');
   assert.match(job, /playwright test tests\/e2e\/google_popup_signin\.spec\.js/);
-  assert.match(job, /test:e2e:install/, 'Playwright needs its browser installed');
+  assert.match(job, /^\s+PLAYWRIGHT_CHANNEL: chrome$/m, 'the preview uses Chrome from the runner image');
+  assert.match(at('frontend/playwright.config.js'), /channel: process\.env\.PLAYWRIGHT_CHANNEL\b/);
+  assert.doesNotMatch(job, /test:e2e:install|playwright install --with-deps/, 'preview setup must not depend on Ubuntu mirrors');
   assert.match(job, /permissions:\n\s+contents: read\n/, 'the job reads the repository and nothing more');
   assert.doesNotMatch(job, /secrets\./, 'the e2e job must hold no secret: the spec stubs every Google route');
   assert.doesNotMatch(job, /wrangler/, 'the e2e job deploys nothing');

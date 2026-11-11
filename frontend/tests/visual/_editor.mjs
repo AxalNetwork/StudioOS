@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { expect } from '@playwright/test';
+import { CONSENT_VERSION } from '../../src/lib/cookieConsent.js';
 
 const FONTS = fileURLToPath(new URL('./fonts/', import.meta.url));
 const PAPER = fileURLToPath(new URL('../../../cloudflare-worker/src/templates/legal/paper/', import.meta.url));
@@ -49,14 +50,14 @@ export async function manifest(request) {
 export async function prepare(page, request) {
   const m = await manifest(request);
   await page.clock.setFixedTime(NOW);
-  await page.addInitScript(({ token, user }) => {
+  await page.addInitScript(({ token, user, consentVersion }) => {
     try {
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
       // The cookie banner, decided (essential only), so it never covers the editor (lib/cookieConsent.js).
-      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: 1, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
+      localStorage.setItem('axal_cookie_consent_v1', JSON.stringify({ version: consentVersion, decided: true, updatedAt: '2026-10-20T00:00:00Z', categories: { essential: true } }));
     } catch { /* storage off: the spec fails on sign-in, loudly */ }
-  }, { token: m.token, user: m.user });
+  }, { token: m.token, user: m.user, consentVersion: CONSENT_VERSION });
   await page.route((url) => url.hostname !== '127.0.0.1', async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ status: 200, contentType: 'text/css', body: FONT_CSS });

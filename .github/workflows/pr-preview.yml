@@ -13,7 +13,7 @@ name: PR preview
 # not available to forks — and never for Dependabot. After the deploy, the
 # `login-e2e` job runs frontend/tests/e2e/google_popup_signin.spec.js (D722)
 # and frontend/tests/e2e/integrations.spec.js (D753, #1992) against that
-# preview in Playwright's Chromium; both stub every /api/* call they make.
+# preview in Chrome through Playwright; both stub every /api/* call they make.
 #
 # Why not Workers preview URLs or Workers Builds: Cloudflare generates none
 # for a Worker that implements a Durable Object, and `studioos` implements
@@ -131,15 +131,12 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.url != ''
     runs-on: ubuntu-latest
-    # Chromium's system libraries come from apt. On a slow Ubuntu mirror that
-    # download alone used the whole 15 minutes (run 40508033042, still fetching
-    # when the job was cancelled) while the two specs themselves finish in
-    # under a minute. 30 leaves room for a slow mirror.
     timeout-minutes: 30
     permissions:
       contents: read
     env:
       PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.url }}
+      PLAYWRIGHT_CHANNEL: chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -152,8 +149,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Install Chromium for Playwright
-        run: npm --prefix frontend run test:e2e:install
+      # The hosted runner includes Chrome and its system libraries.
+      - name: Check the runner's Chrome installation
+        run: google-chrome --version
 
       # A brand-new workers.dev URL can answer a few seconds after the deploy
       # reports success; wait for /login rather than fail the first test on it.

@@ -108,7 +108,9 @@ const listing = (uid, status, o = {}) => ({
 
 test('the tabs: Activity on the four pages only where part 1 fills it, and no page has a Terms tab', () => {
   const labels = Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)]));
-  for (const k of ['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']) assert.equal(labels[k].at(-1), 'Activity', k);
+  for (const k of ['mentor-cohorts', 'refer-and-earn', 'learning']) assert.equal(labels[k].at(-1), 'Activity', k);
+  // D5313 (#5313): Perks runs in the generic shell, where the same /activity address is History, before Settings.
+  assert.equal(PAGES.perks.tabs.find((t) => t.path === '/admin/programs/perks/activity').label, 'History');
   // D963 (#2796): part 10 adds Activity to Referral partners and Investor cohort access; AI-native Venture is one page.
   for (const k of ['referral-partners', 'investor-cohorts']) assert.equal(labels[k].at(-1), 'Activity', k);
   assert.deepEqual(labels['ai-native-venture'], []);

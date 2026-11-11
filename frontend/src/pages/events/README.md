@@ -49,9 +49,20 @@ continuation, independent provider retries and a fresh cancellation check on
 delivery. Its queue contract is in `cloudflare-worker/src/services/queueWorker.ts`
 and `cloudflare-worker/src/models/jobs.ts`; no new schema or binding is needed.
 
-D3724 (#3724) adds "Recommended for you" and the editor's cover step. `RecommendedRow.jsx` draws the row on Upcoming and Discover, with Why this?, Not for me and Tune. Its rules and words live in the pure `recommendationsModel.js`. Every read and write it needs goes through `recommendationsAdapter.js`, which calls D1487's and D1488's routes through `eventRecommendationsApi` (#4738) and answers `{ available, value }` or the Worker's refusal, never `e.message`. When a read is refused or fails, the row draws today's Suggested card under one line saying why. Explain keeps its quote's `quote_uid` and sends it back; an expired quote shows a new price rather than retrying. `EventCoverStep.jsx` is NE2's Upload or Generate, with its checks and prompt in `eventCoverModel.js`. Generate hands the prompt to #3935's `CoverDrawPress`. Upload and four variants wait on Part E. D3724 lists every gap.
+D3724 (#3724) adds "Recommended for you" and the editor's cover step. `RecommendedRow.jsx` draws the row on Upcoming and Discover, with Why this?, Not for me and Tune. Its rules and words live in the pure `recommendationsModel.js`. Every read and write it needs goes through `recommendationsAdapter.js`, which calls D1487's and D1488's routes through `eventRecommendationsApi` (#4738) and answers `{ available, value }` or the Worker's refusal, never `e.message`. When a read is refused or fails, the row draws today's Suggested card under one line saying why. Explain keeps its quote's `quote_uid` and sends it back; an expired quote shows a new price rather than retrying. `EventCoverStep.jsx` is NE2's Upload or Generate, with its checks and prompt in `eventCoverModel.js`. Generate hands the prompt to #3935's `CoverDrawPress`. D3724 lists every gap.
 D1491 (#3725) adds `EventSyndicationPanel.jsx`: saved public drafts choose channel
 accounts and preview copy without sending; a separate Save channels writes the
 choices. On an approved event its button explicitly posts additions. Manage and
 the admin desk read listing state, Retry, Withdraw, and Not recorded registration
 counts from the same Worker read.
+
+D5309 (#5309, D3724 §gaps 8 to 11, Part E) switches the cover step's two
+remaining presses on. `EventCoverVariants.jsx` is the four-variant press: one
+quote for all four draws, then the grid, with Regenerate, "More like this one"
+and "Use this one"; nothing is placed until the member chooses. The upload tab
+takes alt text (required) and a focal point, and `eventCoverModel.js`'s
+`cropRect` and `cropsFromFocal` derive NE2's three crops from that point and the
+image's own aspect, so one press records all three. Both go through
+`recommendationsAdapter.js` to `frontend/src/lib/api/eventCovers.js`. A cover
+with nothing recorded about it reads as "not recorded", never as a blank image
+or a 0.
