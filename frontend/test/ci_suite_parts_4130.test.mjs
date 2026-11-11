@@ -5,7 +5,7 @@ import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { partsOf, testCommand, suiteFiles, buildPlan, validatePlan, SHARDS, REST } from '../../scripts/test-drift-parts.mjs';
+import { partsOf, testCommand, suiteFiles, buildPlan, validatePlan, timingsOf, SHARDS, REST } from '../../scripts/test-drift-parts.mjs';
 import { assertExactOnce } from '../../scripts/lib/shardPlan.mjs';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
@@ -74,4 +74,11 @@ test('both workflow matrices consume only generated names and the gate requires 
   assert.match(alerts, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
   assert.match(alerts, /--plan test-timings\.json --without-rest/);
   assert.ok(Buffer.byteLength(JSON.stringify(plan.parts.map((p) => p.name)), 'utf16le') < 1024, 'names alone are far below the 1 MB job-output limit');
+});
+
+
+test('D5608 timing metadata is unpacked before duration planning', () => {
+  assert.deepEqual(timingsOf({ sha: 'abc', node: 'v22', tests: { 'a.test.mjs': { wallMs: 120, exitCode: 0 }, 'b.test.ts': { wallMs: 400, exitCode: 1 } }, untraced: [] }), { 'a.test.mjs': 120, 'b.test.ts': 400 });
+  assert.deepEqual(timingsOf({ 'a.test.mjs': 10 }), { 'a.test.mjs': 10 });
+  for (const input of [null, [], { tests: [] }]) assert.throws(() => timingsOf(input), /invalid/);
 });

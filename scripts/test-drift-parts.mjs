@@ -97,6 +97,14 @@ export function validatePlan(plan, scripts, root = process.cwd()) {
   return expected.map((p) => p.script ? { ...p, commands: [plannedCommand(scripts[p.script], plan.parts.find((q) => q.name === p.name).files)] } : p);
 }
 
+/** #5608's artifact keeps metadata outside the per-test timing map. */
+export function timingsOf(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('invalid timings artifact');
+  if (!Object.hasOwn(input, 'tests')) return input;
+  if (!input.tests || typeof input.tests !== 'object' || Array.isArray(input.tests)) throw new Error('invalid timing tests');
+  return Object.fromEntries(Object.entries(input.tests).map(([file, row]) => [file, row.wallMs]));
+}
+
 function main(argv) {
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
   const { scripts } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
@@ -105,7 +113,11 @@ function main(argv) {
   if (arg === '--plan') {
     // A missing timings artifact means equal weights; malformed data is a failed plan.
     let timings = {};
-    try { timings = JSON.parse(readFileSync(resolve(root, argv[1]), 'utf8')); }
+    try {
+      const input = JSON.parse(readFileSync(resolve(root, argv[1]), 'utf8'));
+      // #5608 emits commit metadata plus per-test wallMs/exitCode.
+      timings = timingsOf(input);
+    }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     const plan = buildPlan(scripts, timings, root);
     writeFileSync(resolve(root, 'suite-plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
