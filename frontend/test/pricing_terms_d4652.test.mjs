@@ -37,7 +37,7 @@ test('public wording clearly separates free AI access from funded allowance and 
   assert.match(AI_BAND.text,/Free plans include no funded AI allowance/);
   assert.match(AI_BAND.text,/Purchased tokens remain separate/);
   const faqs = new Map(FAQ);
-  for(const q of ['What happens if I choose yearly billing?','When does my subscription renew or stop?','What if I downgrade, cancel or a payment fails?','What currency and taxes will I pay?','What about AI allowance resets and tokens?'])assert.ok(faqs.get(q),q);
+  for(const q of ['How does annual billing affect my AI allowance?','When does my subscription renew or stop?','What if I downgrade, cancel or a payment fails?','What currency and taxes will I pay?','What about AI allowance resets and tokens?'])assert.ok(faqs.get(q),q);
   assert.match(faqs.get('How do refunds work?'),/applicable law/);
 });
 
