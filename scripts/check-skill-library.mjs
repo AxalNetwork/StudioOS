@@ -6,9 +6,11 @@
  *   node --experimental-strip-types --no-warnings \
  *     --import ./cloudflare-worker/test/_ts-loader.mjs scripts/check-skill-library.mjs
  *       [--json <path>]        also write the machine-readable summary there
- *       [--persisted <path>]   reconcile with a persisted manifest (a JSON array that
+ *       [--persisted <path>]   reconcile with a persisted manifest: a JSON array that
  *                              `persistedManifest()` produced from a local or test D1,
- *                              or from a separately authorized read-only preflight)
+ *                              or the JSON of the read-only preflight
+ *                              GET /api/admin/ai-agents/skills/library/reconcile
+ *                              (D5335; its `manifest` is that array)
  *
  * It reads the repository only. It never writes the generated module (it runs
  * the generator's own `render()` and compares), never seeds, never publishes,
@@ -25,7 +27,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { libraryEntries, render } from './build-skill-library.mjs';
-import { checkSourceCatalogue, reconcile, summary } from '../cloudflare-worker/src/services/agents/skillCatalogue.ts';
+import { checkSourceCatalogue, persistedFromJson, reconcile, summary } from '../cloudflare-worker/src/services/agents/skillCatalogue.ts';
 import { SKILL_LIBRARY } from '../cloudflare-worker/src/services/agents/skillLibrary.generated.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,7 +58,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     definitions, cases, scenarios, generated: SKILL_LIBRARY, generatedFresh, taxonomy: taxonomyFromSeed(readFileSync(TAXONOMY_SQL, 'utf8')),
   });
   const persistedPath = arg('--persisted');
-  const lines = persistedPath ? reconcile(manifest, JSON.parse(readFileSync(persistedPath, 'utf8'))) : null;
+  let persisted = null;
+  if (persistedPath) {
+    try { persisted = persistedFromJson(JSON.parse(readFileSync(persistedPath, 'utf8'))); } catch (e) {
+      console.error(`✖ check-skill-library: --persisted ${persistedPath}: ${e.message}`); process.exit(1);
+    }
+  }
+  const lines = persisted ? reconcile(manifest, persisted) : null;
   const out = summary(findings, manifest, lines, coverage);
   const jsonPath = arg('--json');
   if (jsonPath) writeFileSync(jsonPath, `${JSON.stringify(out, null, 2)}\n`);
