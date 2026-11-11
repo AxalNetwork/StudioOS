@@ -8,8 +8,13 @@ generated file, D1 row, permission, publication or production setting.
 - **Deployment basis:** not verified in this session. This session had no
   production credentials and made no production reads. A merge to `main`
   ships through `.github/workflows/cloudflare-worker-deploy.yml`, but whether
-  a given commit is live, and what rows D1 holds, are **unknown** here. Where
+  a given commit is live, and what rows D1 held, were not read by this audit. Where
   this document says "present", it means present in the repository.
+- **Deployed catalogue (D5335, #5335):** the store side is measured by the
+  read-only route `GET /api/admin/ai-agents/skills/library/reconcile`. Its
+  first production totals are **pending** until a Super Admin opens that route
+  once on production after the deploy and pastes the class totals on #5335.
+  §10 holds them, under "First production result".
 - **Companion contract:** `SKILL_LIBRARY_CONTRACT.md` (#4530) is the v1 source
   and golden-case contract. This audit does not restate it; it checks the code
   against it.
@@ -170,6 +175,7 @@ mounted through `_registry.ts:80`):
 | `GET /` | 124 | `adminHqSkillsApi.list` |
 | `GET /library` | 187 | **missing** |
 | `POST /library/seed` | 204 | **missing** |
+| `GET /library/reconcile` (D5335, read only) | — | none by design; the screen is #4956 |
 | `GET /:uid` | 213 | `get` |
 | `GET /:uid/diff` | 252 | `diff` |
 | `POST /:uid/review`, `/approve`, `/request-changes` | 272, 324, 325 | `requestReview`, `approve`, `requestChanges` |
@@ -243,6 +249,37 @@ The persisted half needs a read of drafts and cases, which is user content in
 the sense of AGENTS.md. Ordinary CI must use local or synthetic D1 fixtures;
 a production comparison is a separately authorized, read-only run.
 
+### The read-only preflight (D5335, #5335)
+
+`GET /api/admin/ai-agents/skills/library/reconcile` is that run. It is Super
+Admin only and reads HQ scope only. It returns hashes, identities, classes and
+totals, never draft or case text, and repairs nothing. Its JSON is also a valid
+`check-skill-library.mjs --persisted` manifest. Route shape:
+`route-map/sections/0808-hq-skill-library-reconcile-d5335.md`.
+
+#### First production result
+
+<!-- D5335: fill in from the totals the Super Admin pastes on #5335 after the first production run. Totals and date only, never content. -->
+
+| Read at (UTC) | exact | source_only | persisted_only | content_drift | case_drift | missing_case | duplicate_identity | invalid_reference |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **pending** — the route's first production run (owner step on #5335) | — | — | — | — | — | — | — | — |
+
+#### Each non-exact class: D4532's disposition and its follow-up
+
+Nothing here is repaired by the route or by #5335. A count above zero is acted
+on through the route named in the table, by a person.
+
+| Class | D4532 disposition | Follow-up |
+| --- | --- | --- |
+| `source_only` | seed | The existing Super Admin action `POST /library/seed` (D4225), which adds each skill as a draft with its cases. No new issue is needed. |
+| `persisted_only` | report | None needed. The row is kept, never deleted or renamed. A Super Admin decides whether to retire it through `POST /:uid/retire`. |
+| `content_drift` | report | A Super Admin compares the draft against its source (`GET /:uid/diff`). Either the source changes in a PR through the CI gate, or the draft gets a reviewed edit (`PATCH /api/teams/skills/:uid`). The screen that lists the drifted skills is #4956. |
+| `case_drift` | report | The seed run on a draft adds a source case whose identity no live case has (D5336). A changed case goes through the reviewed `PUT /:uid/cases`. A historical case is never edited. The screen is #4956. |
+| `missing_case` | report | Same route as `case_drift`: `PUT /:uid/cases`, or the seed on a draft. The skill is below the publish bar until then. The screen is #4956. |
+| `duplicate_identity` | fail | None needed while the count is 0. D1's unique index (`759_agent_skills.sql:48`) cannot hold two HQ rows of one slug, and the CI gate fails two sources of one. A count above 0 means a new issue for the owner. |
+| `invalid_reference` | fail | On production this means the store's taxonomy no longer has a tag that the files use. The fix is a PR to the source or the taxonomy, through the CI gate. None needed while the count is 0. |
+
 ## 11. Tests
 
 Existing suites (run from the repo root with the Worker loader):
@@ -267,7 +304,7 @@ Findings 3 and 4 now have D5334 regressions.
 | Numeric, structural, evidence assertions | missing | #4531 |
 | Model-judged rubric | missing | #4531, after deterministic assertions |
 | CI command with per-file errors and a summary | partial (tests and `--check` exist) | #4532 |
-| Source ↔ D1 reconciliation | missing (contract above) | #4532 |
+| Source ↔ D1 reconciliation | present: #4532 (CI, `--persisted`), D5335 (read-only production route); first totals pending | owner step on #5335 |
 | Stable case ids, multi-case sources | missing; built by D5336 (#5336) | #4532 / #4588 |
 | Release evidence | unclear | #4533 |
 | Campaign traversal past 20 skills | present (D4668) | — |

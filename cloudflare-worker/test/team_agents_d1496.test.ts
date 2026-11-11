@@ -85,8 +85,8 @@ function app() {
   a.route('/api/teams', teamAgents);
   return a;
 }
-async function call(w: W, who: number, method: string, path: string, body?: unknown) {
-  const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+async function call(w: W, who: number, method: string, path: string, body?: unknown, claims: Record<string, unknown> = {}) {
+  const jwt = await new SignJWT({ user_id: who, ...claims }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(w.env.JWT_SECRET));
   const r = await app().request(`/api/teams${path}`, { method, headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body) }, w.env);
@@ -181,6 +181,16 @@ test('the gates: stranger 403, member refused every write, advisor refused, free
   assert.equal((await call(w, FREE_EDITOR, 'GET', `${CO}/agents`)).body.plan_ok, false);
   assert.equal((await call(w, EDITOR, 'GET', `${CO}/agents`)).body.plan_ok, true);
   assert.equal((await call(w, EDITOR, 'GET', '/company/no-such/agents')).status, 404);
+});
+
+test('D5366: company agent management needs an editing company seat and support never manages', async () => {
+  const w = world();
+  assert.deepEqual([(await call(w, ADMIN, 'POST', `${CO}/agents`, cfo())).status, (await call(w, ADMIN, 'GET', `${CO}/agents`)).body.can_manage], [403, false], 'HQ reads but does not manage without a seat');
+  const supportList = await call(w, EDITOR, 'GET', `${CO}/agents`, undefined, { impersonated_by: ADMIN });
+  const supportWrite = await call(w, EDITOR, 'POST', `${CO}/agents`, cfo(), { impersonated_by: ADMIN });
+  assert.deepEqual([supportList.status, supportList.body.can_manage, supportWrite.status, supportWrite.body.error], [200, false, 403, 'not_manager']);
+  w.db.prepare("INSERT INTO user_company_links (uid, user_id, company_id, role_in_company) VALUES ('l-admin', ?, 1, 'Admin')").run(ADMIN);
+  assert.equal((await call(w, ADMIN, 'POST', `${CO}/agents`, cfo({ role_key: 'cto' }))).status, 201, 'a platform admin acting through an Admin seat keeps company-member rights');
 });
 
 test.todo('a company editor manages agents on a project inside the company once #3697 part 2 gives isProjectManager its company branch (https://github.com/AxalNetwork/StudioOS/issues/3697)');

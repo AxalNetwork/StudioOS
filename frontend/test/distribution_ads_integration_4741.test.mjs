@@ -42,7 +42,13 @@ async function mountedAds(Component) {
   let m;
   try {
     m = await mountContracts(h(AuthProvider, null, h(RailPageProvider, { role: 'founder' }, h(Component, { cycle: 'grow', slug: 'distribution', tab: 'ads' }))), '/grow/distribution/ads?project_id=7', { id: 1, role: 'founder' });
-    await m.flush(); await m.flush();
+    // The lazy tab and its mocked reads can finish on different turns under CI load.
+    const deadline = performance.now() + 2_000;
+    let screen = m.text();
+    while (!/Budget planner · Launch push|Coming in this module soon/.test(screen) && performance.now() < deadline) {
+      await m.flush();
+      screen = m.text();
+    }
     assert.match(m.text(), /Budget planner · Launch push/);
     assert.match(m.text(), /Google Search/);
     assert.doesNotMatch(m.text(), /Coming in this module soon/);

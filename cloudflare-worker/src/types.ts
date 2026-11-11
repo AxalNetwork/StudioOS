@@ -497,6 +497,8 @@ export interface Env {
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
   MEETING_BOT?: string;
+  // D1451 (#5297): a var, not a secret. Only 'on' lets the bot take a Teams link; missing or anything else is off.
+  MEETING_BOT_TEAMS?: string;
   MEETING_BOT_SECRET?: string;
   // #3708: the bot host's deployed commit, set by meeting-bot-deploy.yml; read only by the owner's diagnostic.
   MEETING_BOT_VERSION?: string;
@@ -729,6 +731,8 @@ export interface User {
   // Spin-Out Lab membership (getCurrentUser does SELECT *, so the row carries
   // it). Lab members may edit their OWN project regardless of account role.
   spinout_lab_active?: number | null;
+  /** Request-local, non-enumerable marker copied from an impersonation JWT. */
+  support_session?: boolean;
   // Migration 199 — the franchisor's elevation on `role: 'admin'`. NOT a
   // column: `users` is at D1's 100-column ceiling, so the elevation is a row
   // in `super_admins` and `auth.ts hydrateSuperAdmin` copies it here. Optional

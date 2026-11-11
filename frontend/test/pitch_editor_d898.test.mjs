@@ -229,7 +229,8 @@ test('a refused save shows the Worker\'s sentence and keeps the changes', async 
     await m.type(m.by('pitch-editor-notes'), 'Synthetic note');
     await m.press(m.by('pitch-editor-save'));
     await m.press(m.by('pitch-editor-save-run'));
-    assert.match(m.text(m.by('pitch-editor-save-error')), /it overlaps another block/);
+    // D5070 (#5376): an error with no Worker code is never shown raw; the approved sentence is.
+    assert.match(m.text(m.by('pitch-editor-save-error')), /The deck could not be saved\./);
     assert.ok(m.by('pitch-editor-save-dialog'), 'the dialog stays open');
     assert.match(m.text(m.by('pitch-editor-save-state')), /Unsaved changes/);
   } finally { await m.unmount(); }
@@ -307,7 +308,8 @@ test('Add a block: a video link is checked with the Worker before it is placed; 
     assert.equal(m.pr(m.by('pitch-editor-add-run')).disabled, true, 'nothing to add before the check');
     await m.type(m.by('pitch-editor-video-url'), 'https://example.com/v.mp4');
     await m.press(m.by('pitch-editor-video-check'));
-    assert.match(m.text(m.by('pitch-editor-video-error')), /YouTube or Vimeo/);
+    // D5070 (#5376): an error with no Worker code is never shown raw; the approved sentence is.
+    assert.match(m.text(m.by('pitch-editor-video-error')), /The link could not be checked\./);
     await m.type(m.by('pitch-editor-video-url'), 'https://youtu.be/AbCdEfGhIjK');
     await m.press(m.by('pitch-editor-video-check'));
     assert.match(m.text(m.by('pitch-editor-video-ok')), /Synthetic demo · YouTube/);

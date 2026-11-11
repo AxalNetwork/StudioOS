@@ -266,7 +266,8 @@ test('several areas (D1512): the batch\'s areas share one quote and one run; a h
     assert.equal(start[0][2].quote_uid, `q1.${'a'.repeat(32)}`, 'the run is held to the quote the dialog drew');
     // A 3-variant batch: each variant labelled by its model and cost; the failed one says so, the others stay acceptable.
     assert.match(m.text(node(m, 'pitch-area-result-b2~1-pill')), /Synthetic M · variant 1 · 1\.2 s/);
-    assert.match(m.text(node(m, 'pitch-area-result-b2~2-refused')), /You were charged only for what ran/);
+    // D5070 (#5376): a variant's failure carries no HTTP status, so its text is not shown; the fallback is.
+    assert.match(m.text(node(m, 'pitch-area-result-b2~2-refused')), /That did not work\. Nothing was changed\./);
     assert.match(m.text(node(m, 'pitch-area-result-b2~3-after')), /Synthetic b2 after 3/);
     await m.press(node(m, 'pitch-area-results-accept-all'));
     assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c.slice(1)), [['u-b1', 'accept']]);
@@ -389,7 +390,8 @@ test('Accept all stops at the first proposal it cannot place, and says why', asy
     await m.press(node(m, 'pitch-areas-generate'));
     await m.press(node(m, 'pitch-area-results-accept-all'));
     assert.deepEqual(m.calls.filter((c) => c[0] === 'proposals.decide').map((c) => c[1]), ['u-b1'], 'the second waits');
-    assert.match(m.text(node(m, 'pitch-area-result-b1-error')), /no longer open/);
+    // D5070 (#5376): a code-less 409 reads as the conflict sentence.
+    assert.match(m.text(node(m, 'pitch-area-result-b1-error')), /That conflicts with what is already recorded\./);
     assert.match(m.text(node(m, 'pitch-editor-block-b2')), /Synthetic body words/, 'nothing placed past the stop');
     assert.ok(m.by('pitch-area-result-b2-accept'), 'still waiting for its own Accept');
     assert.equal(m.calls.filter((c) => c[0] === 'areas.accept').length, 0, 'the batch\'s area is not accepted past the stop');

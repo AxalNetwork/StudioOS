@@ -68,6 +68,7 @@ import { programRefusal } from '../services/programEnforcement';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
+import { offerPage, offerPageResult } from '../util/offerPages';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { logAdminAction } from '../services/adminAudit';
 import { perkClaimsCounts } from '../services/perkClaims';
@@ -420,6 +421,9 @@ const LISTING_SELECT = `SELECT p.*,
 r.get('/mine', async (c) => {
   try {
     const user = await requireAuth(c);
+    const page = offerPage(c.req.query('page'));
+    const ledgerPage = offerPage(c.req.query('ledger_page'));
+    if (!page || !ledgerPage) return c.json({ detail: 'Invalid page' }, 400);
     const claims = await c.env.DB.prepare(
       `SELECT pc.uid, pc.credits_spent, pc.claimed_price_cents, pc.kind_at_claim,
               pc.code, pc.redeem_url, pc.status, pc.expires_at, pc.redeemed_at,
@@ -429,9 +433,9 @@ r.get('/mine', async (c) => {
          FROM perk_claims pc
          JOIN perks p ON p.id = pc.perk_id
         WHERE pc.user_id = ?
-        ORDER BY pc.created_at DESC
-        LIMIT 200`,
-    ).bind(user.id).all<any>();
+        ORDER BY pc.created_at DESC, pc.id DESC
+        LIMIT ? OFFSET ?`,
+    ).bind(user.id, page.limit, page.offset).all<any>();
     const today = todayIso();
     // D540 — each line carries the rule it was paid under, and a grant says
     // whether it was later revoked, so the page can show why and from what.
@@ -441,8 +445,22 @@ r.get('/mine', async (c) => {
                        WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
                          AND r.source_ref = 'revoke:' || l.id) AS revoked
          FROM perk_credit_ledger l WHERE l.user_id = ?
-        ORDER BY l.created_at DESC, l.id DESC LIMIT 200`,
-    ).bind(user.id).all<any>();
+        ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+    ).bind(user.id, ledgerPage.limit, ledgerPage.offset).all<any>();
+    const ledgerResult = offerPageResult(ledger.results || [], ledgerPage);
+    const balance = await balanceOf(c.env, user.id);
+    const firstLine = ledgerResult.items[0];
+    const newer = ledgerPage.page > 1 && firstLine ? await c.env.DB.prepare(
+      `SELECT COALESCE(SUM(delta), 0) AS n FROM perk_credit_ledger
+        WHERE user_id = ? AND (created_at > ? OR (created_at = ? AND id > ?))`,
+    ).bind(user.id, firstLine.created_at, firstLine.created_at, firstLine.id).first<{ n: number }>() : null;
+    const totals = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS claimed, COALESCE(SUM(pc.credits_spent), 0) AS credits_spent,
+              COALESCE(SUM(CASE WHEN pc.status = 'issued'
+                AND julianday(substr(pc.expires_at, 1, 10)) - julianday(?) BETWEEN 0 AND ?
+                THEN 1 ELSE 0 END), 0) AS expiring
+         FROM perk_claims pc JOIN perks p ON p.id = pc.perk_id WHERE pc.user_id = ?`,
+    ).bind(today, PERK_EXPIRING_WITHIN_DAYS, user.id).first<{ claimed: number; credits_spent: number; expiring: number }>();
     const items = (claims.results || []).map((x: any) => {
       const daysLeft = claimDaysLeft(x, today);
       return {
@@ -457,8 +475,11 @@ r.get('/mine', async (c) => {
       };
     });
     return c.json({
-      items,
-      ledger: (ledger.results || []).map((l: any) => ({
+      ...offerPageResult(items, page),
+      ledger_page: ledgerResult.page,
+      ledger_has_more: ledgerResult.has_more,
+      ledger_balance: balance - Number(newer?.n ?? 0),
+      ledger: ledgerResult.items.map((l: any) => ({
         ...l,
         revoked: l.kind === 'grant' && Number(l.revoked) === 1,
         reason: ledgerReason(l),
@@ -466,14 +487,13 @@ r.get('/mine', async (c) => {
       })),
       // D540 — 1 credit = US$1 of perk value (#1101).
       credit_usd_cents: CREDIT_USD_CENTS,
-      balance: await balanceOf(c.env, user.id),
+      balance,
       allowance_configured: await allowanceConfigured(c.env),
-      // The three My perks tiles (D413). Over every claim returned, never a
-      // filtered view; `credits_spent` sums what each claim recorded spending.
+      // The three My perks tiles (D413) cover the entire claim population.
       stats: {
-        claimed: items.length,
-        credits_spent: items.reduce((a: number, x: any) => a + Number(x.credits_spent), 0),
-        expiring: items.filter((x: any) => x.expiring).length,
+        claimed: Number(totals?.claimed ?? 0),
+        credits_spent: Number(totals?.credits_spent ?? 0),
+        expiring: Number(totals?.expiring ?? 0),
         expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
       },
       // What the canvas draws around a claim that nothing does yet, with the
@@ -488,6 +508,8 @@ r.get('/mine', async (c) => {
 r.get('/partner', async (c) => {
   try {
     const user = await partnerOnly(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     // "What does MY agency offer" — a claim about a firm, so it narrows. The
     // catalogue below is a marketplace and deliberately does not.
     const companyId = await activeCompanyFor(c, user);
@@ -496,15 +518,15 @@ r.get('/partner', async (c) => {
           `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
                   (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p WHERE p.partner_user_id = ?
-            ORDER BY p.created_at DESC LIMIT 200`,
-        ).bind(user.id)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+        ).bind(user.id, page.limit, page.offset)
       : c.env.DB.prepare(
           `SELECT p.*, (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
                   (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
              FROM perks p
             WHERE p.partner_user_id = ? AND (p.company_id = ? OR p.company_id IS NULL)
-            ORDER BY p.created_at DESC LIMIT 200`,
-        ).bind(user.id, companyId)
+            ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+        ).bind(user.id, companyId, page.limit, page.offset)
     ).all<any>();
     // `lifecycle` IS SERVED, NEVER COMPUTED ON THE PAGE. The window lives in
     // one constant above; a copy of it in the zone is how the strip and the
@@ -521,7 +543,7 @@ r.get('/partner', async (c) => {
         : null,
     }));
     return c.json({
-      items,
+      ...offerPageResult(items, page),
       expiring_within_days: PERK_EXPIRING_WITHIN_DAYS,
       // D413 — the canvas's "What review looks at" panel lists four criteria.
       // None of them is written down anywhere a reviewer reads or this route
@@ -697,13 +719,15 @@ r.get('/partner/:uid/claims', async (c) => {
     const user = await partnerOnly(c);
     const perk = await myPerk(c.env, c.req.param('uid'), user.id, await activeCompanyFor(c, user));
     if (!perk) return c.json({ error: 'not_found' }, 404);
+    const page = offerPage(c.req.query('page'), 500);
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT uid, status, expires_at, redeemed_at, created_at
-         FROM perk_claims WHERE perk_id = ? ORDER BY created_at DESC LIMIT 500`,
-    ).bind(perk.id).all<any>();
+         FROM perk_claims WHERE perk_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    ).bind(perk.id, page.limit, page.offset).all<any>();
     const today = todayIso();
     return c.json({
-      items: (rows.results || []).map((x: any) => ({ ...x, state: claimState(x, today) })),
+      ...offerPageResult((rows.results || []).map((x: any) => ({ ...x, state: claimState(x, today) })), page),
       absent: { founder: 'Who made each claim is not shown: no founder has consented to share their company with a partner, and nothing records that consent yet.' },
     });
   } catch (e) { return mapError(c, e); }
@@ -808,13 +832,15 @@ r.get('/admin/listings', async (c) => {
 r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT p.*, u.email AS partner_email
          FROM perks p LEFT JOIN users u ON u.id = p.partner_user_id
         WHERE p.status = 'in_review'
-        ORDER BY p.created_at ASC LIMIT 200`,
-    ).all<any>();
-    return c.json({ items: rows.results || [] });
+        ORDER BY p.created_at ASC, p.id ASC LIMIT ? OFFSET ?`,
+    ).bind(page.limit, page.offset).all<any>();
+    return c.json(offerPageResult(rows.results || [], page));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -862,6 +888,8 @@ r.get('/admin/credits/summary', async (c) => {
 r.get('/admin/credits/:userId', async (c) => {
   try {
     await requireSuperAdmin(c);
+    const page = offerPage(c.req.query('page'), 500);
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const userId = intOrNull(c.req.param('userId'));
     if (!userId || userId <= 0) return refuse(c, 400, { code: 'invalid_user', message: 'Name the account by its user id.' });
     const member = await c.env.DB.prepare('SELECT id, name, email, role FROM users WHERE id = ?')
@@ -873,14 +901,17 @@ r.get('/admin/credits/:userId', async (c) => {
                        WHERE r.user_id = l.user_id AND r.kind = 'admin_adjust'
                          AND r.source_ref = 'revoke:' || l.id) AS revoked
          FROM perk_credit_ledger l WHERE l.user_id = ?
-        ORDER BY l.created_at DESC, l.id DESC LIMIT 500`,
-    ).bind(userId).all<any>();
-    const lines = (ledger.results || []).map((x: any) => ({ ...x, revoked: Number(x.revoked) === 1 }));
+        ORDER BY l.created_at DESC, l.id DESC LIMIT ? OFFSET ?`,
+    ).bind(userId, page.limit, page.offset).all<any>();
+    const result = offerPageResult((ledger.results || []).map((x: any) => ({ ...x, revoked: Number(x.revoked) === 1 })), page);
     return c.json({
       member: { id: member.id, name: member.name ?? null, email: member.email ?? null, role: member.role ?? null },
       balance: await balanceOf(c.env, userId),
-      ledger: lines,
-      truncated: lines.length === 500,
+      ledger: result.items,
+      page: result.page,
+      page_size: result.page_size,
+      has_more: result.has_more,
+      truncated: result.has_more,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -991,14 +1022,16 @@ r.post('/admin/:uid/feature', async (c) => {
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     // A listing past its end date is not on the shelf, whatever its status
     // says: it could not be claimed (D412), so it is not offered.
     const today = todayIso();
     const rows = await c.env.DB.prepare(
       `${LISTING_SELECT}
         WHERE p.status = 'live' AND (p.ends_at IS NULL OR p.ends_at >= ?)
-        ORDER BY p.featured DESC, p.created_at DESC LIMIT 200`,
-    ).bind(today).all<PerkRow>();
+        ORDER BY p.featured DESC, p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+    ).bind(today, page.limit, page.offset).all<PerkRow>();
     const perks = rows.results || [];
     const balance = await balanceOf(c.env, user.id);
     const claimed = await c.env.DB.prepare(
@@ -1006,11 +1039,11 @@ r.get('/', async (c) => {
     ).bind(user.id).all<{ perk_id: number }>();
     const mine = new Set((claimed.results || []).map((x) => x.perk_id));
     return c.json({
-      items: perks.map((p) => ({
+      ...offerPageResult(perks.map((p) => ({
         ...publicPerk(p, today),
         claimed: mine.has(p.id),
         ...affordability(p, user, balance, today),
-      })),
+      })), page),
       balance,
       // Whether THIS account may claim at all, and why not, once for the page
       // rather than per card.
@@ -1019,7 +1052,7 @@ r.get('/', async (c) => {
       // The page needs this to tell "you have spent your credits" apart from
       // "credits are not a thing on this account yet".
       allowance_configured: await allowanceConfigured(c.env),
-      categories: [...new Set(perks.map((p) => p.category))].sort(),
+      categories: [...new Set(perks.slice(0, page.size).map((p) => p.category))].sort(),
     });
   } catch (e) { return mapError(c, e); }
 });

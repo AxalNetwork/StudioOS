@@ -292,14 +292,12 @@ test('utilisation is the artboard’s bar, capped, and quarterly is divided by t
   // QUARTERLY IS NOT MONTHLY. Dividing is the difference between MRR and a
   // figure three times too big for every quarterly line — and the row and the
   // total have to divide the same way or the column will not add up.
-  // D4693: the division the Pipeline prints lives in `monthlyCents`. The route calls it
-  // for the row, and the whole-book total (#4701) adds that same monthly figure.
-  assert.ok(/Math\.round\(cents \/ 3\)/.test(raw('cloudflare-worker/src/services/partnerPipelineRules.ts')) && /monthlyCents\(/.test(worker),
-    'the worker stopped converting a quarterly amount to a monthly one');
-  assert.ok(/monthly_cents = monthly/.test(worker) && !/\/ 3\b/.test(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:')),
-    'the retainers route divides by three itself instead of calling the shared rule');
-  assert.ok(/Math\.round\(Number\(r\.retainer\.amount_cents\) \/ 3\)/.test(inst),
-    'the ledger row stopped converting a quarterly amount to a monthly one');
+  assert.match(worker, /const proj = retainerProjection\(/,
+    'the ledger uses the same projection as Delivery');
+  assert.doesNotMatch(between(worker, "partnerPipeline.get('/retainers'", 'mrr_basis:'), /\/ 3\b/);
+  assert.match(inst, /r\.retainer\?\.active === false \? null : r\.retainer\?\.monthly_amount_cents/,
+    'the ledger row uses the Worker amount and leaves ended amounts absent');
+  assert.doesNotMatch(inst, /amount_cents\)\s*\/|cadence === 'quarterly'/);
   assert.ok(flat(zone).includes('Quarterly amounts are divided by three'),
     'the stated limits stopped saying how a quarterly retainer is counted');
   assert.ok(flat(zone).includes('nothing is annualised, because a renewal date is not a commitment to renew'),

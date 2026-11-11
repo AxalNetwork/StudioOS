@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import OfferPages from '../../../ui/OfferPages.jsx';
 import {
   // `StatCard` went with the four tiles it drew: the strip is the artboard's
   // own composition now, and `VisTile` below is the tile that can render `Not
@@ -156,19 +157,21 @@ export default function PartnerVisibilityZone() {
   const [state, setState] = useState({ loading: true, error: '', data: null, attribution: null });
   const [adding, setAdding] = useState(false);
   const [newSurface, setNewSurface] = useState({ name: '', kind: 'directory' });
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
       const [v, a] = await Promise.all([
         api.getPartnerVisibility(),
-        api.listPartnerAttribution(),
+        api.listPartnerAttribution(page),
       ]);
       setState({
         loading: false,
         error: '',
         data: v || {},
         attribution: Array.isArray(a?.items) ? a.items : [],
+        attributionPage: a,
       });
       return true;
     } catch (e) {
@@ -180,7 +183,7 @@ export default function PartnerVisibilityZone() {
       });
       return false;
     }
-  }, []);
+  }, [page]);
   useEffect(() => { load(); }, [load]);
 
   // #4688: one write mechanism. A failed write keeps its form and offers Retry;
@@ -502,6 +505,7 @@ export default function PartnerVisibilityZone() {
                 "Saved." under an unrelated engagement row — a message about a
                 write that did not happen there. */}
             <WriteNote note={String(note?.scope || '').startsWith('attr:') && !note.refreshFailed ? note : null} busy={busy} />
+            <OfferPages label="Attribution" result={state.attributionPage} busy={busy || state.loading} onPage={setPage} />
           </Section>
 
           <StatedLimit title="What this zone does not claim">

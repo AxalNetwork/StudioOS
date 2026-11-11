@@ -377,7 +377,10 @@ export async function getCurrentUser(c: Context<{ Bindings: Env }>): Promise<Use
     p.then((u) => { if (!u) drop(); }, drop);
   }
   const u = await pending;
-  return u ? { ...u, licences: u.licences ? [...u.licences] : u.licences } : null;
+  if (!u) return null;
+  const copy = { ...u, licences: u.licences ? [...u.licences] : u.licences };
+  Object.defineProperty(copy, 'support_session', { value: !!u.support_session, enumerable: false });
+  return copy;
 }
 
 async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User | null> {
@@ -390,6 +393,10 @@ async function resolveCurrentUser(c: Context<{ Bindings: Env }>): Promise<User |
     await sql.end();
     if (users.length === 0 || !users[0].is_active) return null;
     const u = users[0];
+    // D5366: service-level write gates do not receive Hono's Context. Carry
+    // the selected JWT's support-session fact on the request-local caller,
+    // non-enumerably so spreading a user into a response cannot expose it.
+    Object.defineProperty(u, 'support_session', { value: !!payload.impersonated_by, enumerable: false });
     let licenceReads = requestLicences.get(c);
     if (!licenceReads) { licenceReads = new Map(); requestLicences.set(c, licenceReads); }
     if (!licenceReads.has(u.id)) {
