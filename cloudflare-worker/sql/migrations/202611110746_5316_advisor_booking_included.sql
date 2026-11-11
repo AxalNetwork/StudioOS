@@ -1,0 +1,33 @@
+-- #5316 (D5316): a session recorded as included in an engagement.
+--
+-- A booking's billing state is unpriced, billed, collected or written off, and
+-- Free is a recorded $0 (a priced line). The Practice v2 canvas (D4874,
+-- "Backend required") draws a third kind: a session the engagement's fee
+-- already covers, which is neither unpriced (nobody forgot to price it) nor
+-- billed at $0 (no line was billed). This is that fact.
+--
+--   included_at              when the advisor recorded the session as
+--                            included, or NULL.
+--   included_by_user_id      the account that recorded it.
+--   included_engagement_id   the engagement it is included in, when one was
+--                            named; NULL means none was named.
+--
+-- WHY NOT A FIFTH `billing_state` VALUE. Migration 205 put a CHECK on
+-- `billing_state` in its ALTER (unpriced, billed, collected, written_off), and
+-- SQLite cannot change a column's CHECK without rebuilding `advisor_bookings`.
+-- So the state is recorded here, and the Worker reads a booking with
+-- `included_at` set as `billing_state: 'included'`. An included booking has
+-- no amount, no rate and no cut (`PATCH /me/bookings/:id/billing` refuses a
+-- price on one and refuses to include a priced one), so it is in no billed,
+-- collected, written-off or outstanding total, and is counted on its own.
+--
+-- FROZEN TERMS ARE UNTOUCHED (#4713). Only an unpriced line can be included;
+-- a priced line keeps its stamped amount, rate and cut, and a settled one
+-- cannot have its price cleared, so nothing priced is restated by this.
+--
+-- NOT BACK-FILLED. No existing booking is included, whatever its offer said:
+-- a session type marked "included" is what was advertised, not a record of
+-- how this session was settled.
+ALTER TABLE advisor_bookings ADD COLUMN included_at TEXT;
+ALTER TABLE advisor_bookings ADD COLUMN included_by_user_id INTEGER REFERENCES users(id);
+ALTER TABLE advisor_bookings ADD COLUMN included_engagement_id INTEGER REFERENCES advisor_engagements(id);
