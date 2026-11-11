@@ -42,8 +42,29 @@ import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
 import { ndaChoiceInput } from '../services/dataRoomNda';
+import { companyWriteDenial, denialBody, isSupportSession } from '../services/companyAccess';
 
 const projects = new Hono<{ Bindings: Env }>();
+
+/**
+ * D5366 — every mutation of an existing company project first crosses the
+ * company's write boundary. The route's existing owner/member/admin rule still
+ * decides what that permitted company member may do; this layer only prevents
+ * HQ-without-a-seat and support-session writes from reaching any project path.
+ * Standalone projects keep D889 unchanged.
+ */
+projects.use('*', async (c, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method.toUpperCase())) return next();
+  const match = c.req.path.match(/\/projects\/([1-9][0-9]{0,15})(?:\/|$)/);
+  if (!match) return next();
+  const project = await c.env.DB.prepare('SELECT id, company_id FROM projects WHERE id = ?')
+    .bind(Number(match[1])).first<{ id: number; company_id: number | null }>();
+  if (!project || project.company_id == null) return next();
+  const user = await requireAuth(c);
+  const denial = await companyWriteDenial(c.env, { id: project.company_id }, user, await isSupportSession(c));
+  if (denial) return c.json(denialBody(denial), 403);
+  return next();
+});
 
 // Task #2 — lazy bootstrap for the `data_room_url` + `data_room_nda_required`
 // columns on `projects`. Mirrors the pattern used by Task #14's
@@ -535,6 +556,33 @@ async function createProjectHandler(c: any) {
   if (!name) return c.json({ error: 'Project name is required' }, 400);
   const sql = getSQL(c.env);
 
+  // D5366: creating a project in a company is a company write too. Resolve
+  // the scope before creating a founder or project, so a refusal writes
+  // nothing. A standalone project keeps D889 unchanged.
+  let createCompanyId = await resolveActiveCompany(
+    c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (data && 'company_id' in data) {
+    if (data.company_id === null) createCompanyId = null;
+    else {
+      const wanted = Number(data.company_id);
+      const own = Number.isSafeInteger(wanted) && wanted > 0
+        ? await c.env.DB.prepare(
+          `SELECT cp.id FROM company_profiles cp
+            WHERE cp.id = ? AND cp.archived_at IS NULL
+              AND (? = 'admin' OR EXISTS (
+                SELECT 1 FROM user_company_links l WHERE l.company_id = cp.id AND l.user_id = ?
+              ))`,
+        ).bind(wanted, user.role, user.id).first() as { id: number } | null
+        : null;
+      if (!own) { await sql.end(); return refuse(c, 404, { code: 'company_not_found', message: 'You do not belong to that company.' }); }
+      createCompanyId = Number(own.id);
+    }
+  }
+  if (createCompanyId != null) {
+    const denial = await companyWriteDenial(c.env, { id: createCompanyId }, user, await isSupportSession(c));
+    if (denial) { await sql.end(); return c.json(denialBody(denial), 403); }
+  }
+
   // D1135 — free-tier project cap (1). Counts non-trashed projects owned by the
   // founder regardless of status. Bypass roles never hit the cap.
   //
@@ -576,25 +624,6 @@ async function createProjectHandler(c: any) {
   // while nothing new ever belonged to a company. A creator with no company
   // selected still records NULL, which is the honest answer rather than a guess
   // at their primary.
-  let createCompanyId = await resolveActiveCompany(
-    c.env, user as any, c.req.header(ACTIVE_COMPANY_HEADER));
-  // D1415: an explicit `company_id` in the body wins over the header. `null`
-  // makes the project standalone even while a company is selected; a number
-  // must be a live company the caller belongs to.
-  if (data && 'company_id' in data) {
-    if (data.company_id === null) createCompanyId = null;
-    else {
-      const wanted = Number(data.company_id);
-      const own = Number.isSafeInteger(wanted) && wanted > 0
-        ? await c.env.DB.prepare(
-          `SELECT cp.id FROM company_profiles cp JOIN user_company_links l ON l.company_id = cp.id
-            WHERE cp.id = ? AND l.user_id = ? AND cp.archived_at IS NULL`,
-        ).bind(wanted, user.id).first() as { id: number } | null
-        : null;
-      if (!own) { await sql.end(); return refuse(c, 404, { code: 'company_not_found', message: 'You do not belong to that company.' }); }
-      createCompanyId = Number(own.id);
-    }
-  }
   // D1415: an optional slug, unique in the project's scope; else one made from the name.
   let projectSlug: string | null;
   if (data && data.slug !== undefined && data.slug !== null) {
@@ -692,6 +721,15 @@ projects.post('/submit', async (c) => {
   }
   const b = result.breakdown;
 
+  // D5366: decide the company boundary before the intake creates its founder
+  // or project rows. A standalone intake is unchanged.
+  const submitCompanyId = await resolveActiveCompany(
+    c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (submitCompanyId != null) {
+    const denial = await companyWriteDenial(c.env, { id: submitCompanyId }, submitUser, await isSupportSession(c));
+    if (denial) return c.json(denialBody(denial), 403);
+  }
+
   const sql = getSQL(c.env);
 
   const existingFounders = await sql`SELECT id FROM founders WHERE email = ${data.founder_email}`;
@@ -703,8 +741,6 @@ projects.post('/submit', async (c) => {
     founderId = f.id;
   }
 
-  const submitCompanyId = await resolveActiveCompany(
-    c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
   const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp ?? null}, ${data.funding_needed ?? null}, ${useOfFunds}) RETURNING *`;
 
   // Snapshot the scoring inputs so the nightly audit + admin queue can
@@ -1455,12 +1491,15 @@ projects.get('/:id/members', async (c) => {
   if (!Number.isFinite(id)) return c.json({ error: 'Invalid project id' }, 400);
   await ensureProjectMembershipSchema(c.env);
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${id} AND deleted_at IS NULL`;
+  const rows = await sql`SELECT id, founder_id, company_id FROM projects WHERE id = ${id} AND deleted_at IS NULL`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   await sql.end();
 
-  const manager = isProjectManager(user, project);
+  const companyDenial = project.company_id == null
+    ? null
+    : await companyWriteDenial(c.env, { id: Number(project.company_id) }, user, await isSupportSession(c));
+  const manager = companyDenial == null && isProjectManager(user, project);
   let canView = manager;
   if (!canView && !holdsOnlyLicence(user, 'investor')) {
     canView = await canAccessProject(c.env, user, project, { write: false });
@@ -1489,12 +1528,13 @@ projects.get('/:id/members', async (c) => {
     // Caller's effective edit rights, so the UI can show "Edit Project" to
     // co-founders/owner/managers and hide it from advisors/investors.
     const myRole = await getProjectMembershipRole(c.env, id, user.id);
-    const canEdit = manager || myRole === 'owner' || myRole === 'cofounder';
+    const canEdit = companyDenial == null && (manager || myRole === 'owner' || myRole === 'cofounder');
     return c.json({
       members,
       invitations,
       can_manage: manager,
       can_edit: canEdit,
+      write_reason: companyDenial?.reason ?? null,
       my_role: myRole,
       locked: manager ? gate.locked : false,
       gate_reason: manager ? gate.reason : null,
@@ -1815,6 +1855,13 @@ projects.post('/invitations/accept', async (c) => {
     if (invs.length === 0) return c.json({ detail: 'Invitation not found' }, 404);
     const inv = invs[0];
     if (inv.status !== 'pending') return c.json({ detail: 'This invitation is no longer valid', code: inv.status }, 410);
+    const prows = await sql`SELECT id, founder_id, company_id FROM projects WHERE id = ${inv.project_id} AND deleted_at IS NULL`;
+    if (prows.length === 0) return c.json({ detail: 'Project no longer exists' }, 404);
+    const project = prows[0];
+    if (project.company_id != null) {
+      const denial = await companyWriteDenial(c.env, { id: Number(project.company_id) }, user, await isSupportSession(c));
+      if (denial) return c.json(denialBody(denial), 403);
+    }
     // Expiry check (datetime() string comparison — both sides same format).
     const exp = await sql`SELECT CASE WHEN ${inv.expires_at} IS NOT NULL AND ${inv.expires_at} < datetime('now') THEN 1 ELSE 0 END AS expired`;
     if (exp.length && Number(exp[0].expired) === 1) {
@@ -1830,9 +1877,6 @@ projects.post('/invitations/accept', async (c) => {
       return c.json({ detail: 'This invitation was issued to a different email address' }, 403);
     }
 
-    const prows = await sql`SELECT id, founder_id FROM projects WHERE id = ${inv.project_id} AND deleted_at IS NULL`;
-    if (prows.length === 0) return c.json({ detail: 'Project no longer exists' }, 404);
-    const project = prows[0];
     // Owner accepting their own invite is a no-op (they already own it).
     if (project.founder_id != null && !!user.founder_id && Number(user.founder_id) === Number(project.founder_id)) {
       await sql`UPDATE project_member_invitations SET status='accepted', accepted_by_user_id=${user.id}, accepted_at=datetime('now'), updated_at=datetime('now') WHERE id = ${inv.id}`;

@@ -83,6 +83,23 @@ export const SHAPE_LABEL = {
 export const OUTCOME_LABEL = { active: 'Active', renewed: 'Renewed', ended: 'Ended' };
 export const OUTCOME_TONE = { active: 'neutral', renewed: 'ok', ended: 'neutral' };
 
+/**
+ * #5316 (D5316): why a signed engagement ended, as the Worker stores it. The two
+ * answers the Practice v2 canvas draws; the Worker requires one when a signed
+ * engagement is ended.
+ */
+export const END_REASON_LABEL = { did_not_renew: 'Did not renew', other: 'Ended for another reason' };
+
+/**
+ * The reason line for one engagement: a label for a recorded reason, `null` for
+ * an engagement that has not ended, and "Not recorded" for one that ended
+ * before the reason was asked. Never a guessed reason.
+ */
+export function endReasonLabel(e) {
+  if (!e || e.outcome !== 'ended') return null;
+  return END_REASON_LABEL[e.end_reason] || 'Not recorded';
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**

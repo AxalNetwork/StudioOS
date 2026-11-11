@@ -190,11 +190,14 @@ test('a venture moves only to a company its owner belongs to, never to an archiv
 
   await call(db, env, ADA, 'POST', '/api/company/co-north/archive');
   assert.equal((await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: NORTH })).body.code, 'archived');
-  const out = await call(db, env, EVE, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
-  assert.deepEqual([out.status, out.body.company_id], [200, null], 'an admin may take it out of its company');
+  const hq = await call(db, env, EVE, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
+  assert.equal(hq.status, 403, 'a platform admin without a seat cannot move it');
+  assert.equal((db.prepare('SELECT company_id FROM projects WHERE id = ?').get(VENTURE) as any).company_id, SOUTH);
+  const out = await call(db, env, ADA, 'POST', `/api/projects/${VENTURE}/move`, { company_id: null });
+  assert.deepEqual([out.status, out.body.company_id], [200, null], 'the owner with an editing seat can move it out');
   assert.deepEqual(events(db).filter((e) => e.kind === 'project_move').map((e) => [e.project_id, e.company_id, e.actor_user_id, JSON.parse(e.before_json), JSON.parse(e.after_json)]), [
     [VENTURE, SOUTH, ADA, { company_id: NORTH }, { company_id: SOUTH }],
-    [VENTURE, SOUTH, EVE, { company_id: SOUTH }, { company_id: null }],
+    [VENTURE, SOUTH, ADA, { company_id: SOUTH }, { company_id: null }],
   ]);
 });
 
