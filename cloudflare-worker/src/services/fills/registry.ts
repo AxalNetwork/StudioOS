@@ -589,6 +589,7 @@ const competitorScan: FillKind = {
         // they did not ask for. The manual form offers the same choice and
         // defaults the same way.
         crawl: false,
+        sourceProposalId: ctx.proposalId ?? null,
       },
     );
     await logCycleWrite(ctx.env, { projectId: ctx.projectId, userId: Number(ctx.user.id), cycle: 'validate',
@@ -722,12 +723,24 @@ const feedbackTheme: FillKind = {
     // Re-checked on accept: the theme must still be one of the venture's, and the
     // row still unthemed, or the proposal no longer restates anything on file.
     if (!(await venturesThemes(ctx.env, ctx.projectId)).includes(theme)) throw new Error('That theme no longer exists');
-    const row = await ctx.env.DB.prepare('SELECT id, theme FROM product_feedback WHERE uid = ? AND project_id = ?')
-      .bind(uid, ctx.projectId).first<{ id: number; theme: string | null }>();
+    const row = await ctx.env.DB.prepare(
+      'SELECT id, theme, theme_source_proposal_id FROM product_feedback WHERE uid = ? AND project_id = ?',
+    ).bind(uid, ctx.projectId).first<{ id: number; theme: string | null; theme_source_proposal_id: number | null }>();
     if (!row) throw new Error('That feedback no longer exists');
-    if (row.theme && row.theme.trim()) throw new Error('That feedback already has a theme');
+    if (row.theme && row.theme.trim()) {
+      if (row.theme === theme && row.theme_source_proposal_id === ctx.proposalId) {
+        return {
+          written: `${shortBody(payload.body)} → ${row.theme}`,
+          target: { table: 'product_feedback', rowId: Number(row.id), column: 'theme' },
+          result: { kind: 'feedback_theme', uid, theme: row.theme },
+        };
+      }
+      throw new Error('That feedback already has a theme');
+    }
     // `setFeedbackTheme` — the writer Change theme calls, writing what `PATCH /feedback/:uid` writes for a theme.
-    const written = await setFeedbackTheme(ctx.env, ctx.projectId, uid, theme, Number(ctx.user.id));
+    const written = await setFeedbackTheme(
+      ctx.env, ctx.projectId, uid, theme, Number(ctx.user.id), ctx.proposalId ?? null,
+    );
     return {
       written: `${shortBody(payload.body)} → ${String(written.theme)}`,
       target: { table: 'product_feedback', rowId: Number(row.id), column: 'theme' },

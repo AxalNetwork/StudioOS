@@ -103,7 +103,9 @@ registerAcceptor({
     if (!answer.trim()) throw new AcceptRefused(409, 'answer_missing', 'This answer has no words to add as feedback.');
     try {
       // `source 'customer'`; no name, email or company is ever sent.
-      const out = await addFeedback(env, ctx.projectId, { id: ctx.userId } as any, { body: answer, source: 'customer' });
+      const out = await addFeedback(
+        env, ctx.projectId, { id: ctx.userId } as any, { body: answer, source: 'customer' }, { sourceProposalId: row.id },
+      );
       return { target_ref: `product_feedback:${out.uid}` };
     } catch (e) {
       const sentence = (e as { sentence?: string; message?: string })?.sentence ?? (e as Error)?.message;
