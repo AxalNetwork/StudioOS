@@ -158,3 +158,7 @@ D1165 (#3072, PR #3230): the form/lightbox workflow keeps all focused checks,
 guards, the root build and full drift. Its job has the same 60-minute bound as
 the main CI gate: the prior 30-minute limit cancelled a run during final lint.
 No trigger, permission, secret or check changes.
+
+`release-rehearsal.yml` (D5501) checks release admission fixtures and profiles
+its exact Worker candidate on a disposable Linux runner using isolated workerd.
+It uses synthetic queue responses and has no production credentials.
