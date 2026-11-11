@@ -249,6 +249,8 @@ advisor CTA and stored search-result URLs after redirect retirement (#4415).
 
 `ai_gateway_slice_4556.test.ts` (D4556) runs one third-party model through AI Gateway on a stubbed binding over the real AI budget migrations: every switch, config, task, data-class and Advisor refusal makes no call, success settles once from the exact reported usage, missing usage is never zero, retries honour `retry-after` within a bound, a timeout is unknown completion and is not retried, payload logging is off on every call, and no Advisor module can import the provider path.
 
+`upstream_lease_d5338.test.ts` (D5338) drives the shared upstream lease in the real `AiGovernor` class over a storage map that outlives the instance (`_ai_governor_fixture.ts`): several tenants and two products on one quota, a restart, an eviction and a deploy, an expired, late or duplicate release, a missing or failing binding, bounded waiting, retries counted against the same lease, a timeout keeping its slot as completion unknown, one charge per execution, and the publications caller passing the lease.
+
 `lab_admission_evidence_4657.test.ts` (D4657) runs the Lab's real routes and services on `_storage_schema.ts`'s migrated template. It covers:
 - `/start` refusing an account that was never admitted, a sanctioned one, a graduate and one whose cohort opens later;
 - an explicit legacy enrollment;

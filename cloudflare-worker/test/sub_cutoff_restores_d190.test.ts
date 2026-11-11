@@ -68,6 +68,7 @@ const SQL_DIR = resolve(HERE, '../sql');
 const MIGRATIONS = resolve(SQL_DIR, 'migrations');
 const JWT_SECRET = 'd190-test-secret-at-least-32-bytes-long!!';
 const M278 = '278_sub_cutoff_restores.sql';
+const M4680 = '202611101748_4680_service_request_history.sql';
 
 const migrationNames = () =>
   readdirSync(MIGRATIONS).filter((n) => /^\d+_.*\.sql$/.test(n)).sort(compareMigrations);
@@ -199,7 +200,7 @@ const RESTORED: Array<[string, string]> = [
 
 for (const [table, migration] of RESTORED) {
   test(`${table} exists on a fresh build after 278, in ${migration}'s exact shape`, () => {
-    const after = shapeOf(freshDb(), table);
+    const after = shapeOf(freshDb([M4680]), table);
     assert.ok(after.length > 0,
       `${table} is absent from a fresh build even with 278 applied. Migration 278 is the only `
       + `thing standing between ${migration}'s declaration and every database, so if it is `
@@ -209,7 +210,7 @@ for (const [table, migration] of RESTORED) {
       + 'type, a default or a NOT NULL gives the reader a column it did not ask for — D188\'s '
       + 'rule, and the reason this compares pragma_table_info rather than source text.');
 
-    const before = shapeOf(freshDb([M278]), table);
+    const before = shapeOf(freshDb([M278, M4680]), table);
     assert.equal(before.length, 0,
       `${table} is on a fresh build WITHOUT 278, so this test proves nothing about 278. Either `
       + 'the baseline gained it — in which case 278\'s entry is redundant and should come out — '
@@ -390,7 +391,7 @@ test('founder_risk_pulls: recording a pull 500s without 278, and round-trips wit
 test('service_engagements: an offering\'s sold count errors without 278, and counts with it', async () => {
   const tok = await tokenFor(2, 'founder', 'buyer@axal.vc');
 
-  const dbBefore = freshDb([M278]);
+  const dbBefore = freshDb([M278, M4680]);
   seed(dbBefore);
   const before = mount(dbBefore, '/api/services', services);
   const b = await before('/offerings', tok, {});
