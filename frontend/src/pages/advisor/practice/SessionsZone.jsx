@@ -3,7 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Card } from '../../../ui';
 import { api } from '../../../lib/api';
 import { railProposalsApi } from '../../../lib/api/railProposals.js';
-import { BLOCK_QUERY_KEYS, BLOCK_WHOLE_DAYS, parseBlockQuery } from '../../../ui/sessionsBlockHandoff.js';
+import {
+  BLOCK_EXACT_SCOPE, BLOCK_QUERY_KEYS, blockWallInstant, blockWallRange, parseBlockQuery,
+} from '../../../ui/sessionsBlockHandoff.js';
 import { buildIcs, downloadIcs } from '../../../lib/ics';
 import {
   Field, NothingYet, Pill, SaveNote, StatedLimit, Unrecorded, ZoneBody, ZoneHeading,
@@ -114,7 +116,10 @@ const EMPTY_RULES = Object.freeze({
 });
 
 /** D1424 / D1596: the Block form's shape, closed. Never null (a ZoneBody child reads it on first render). */
-const CLOSED_BLOCK = Object.freeze({ open: false, from: '', until: '', reason: '', error: '', proposal: '' });
+const CLOSED_BLOCK = Object.freeze({
+  open: false, from: '', startTime: '', until: '', endTime: '', reason: '', error: '', proposal: '',
+  sourceFrom: '', sourceUntil: '', timezone: '',
+});
 
 export default function SessionsZone() {
   const [view, setView] = useState('two_weeks');
@@ -219,9 +224,9 @@ export default function SessionsZone() {
 
   // D1424 (#3700) and D1596 (#3869): "Block a date range" opens this page's
   // own Block form instead of three `window.prompt`s. It is where a Block
-  // card accepted in the Ask panel puts its dates (#4737, D1596 §4): the panel
-  // sends the advisor here with the card's uid and dates in the address, this
-  // page fills the form from them and takes them out of the address, and the
+  // card accepted in the Ask panel puts its exact range here (D5364): the panel
+  // sends the advisor here with the card's uid and instants in the address,
+  // this page fills date/time inputs in their zone and takes the keys out, and the
   // proposal is decided (`railProposalsApi.decide`) only after `POST
   // /api/advisors/me/slots/block` succeeds. Cancelling leaves the card
   // waiting in Ask. Nothing is blocked until the advisor presses Block. The
@@ -232,13 +237,27 @@ export default function SessionsZone() {
     const handoff = parseBlockQuery(searchParams);
     if (!handoff) return;
     setBlockNote(null);
-    setBlockForm({ ...CLOSED_BLOCK, open: true, from: handoff.from, until: handoff.until, proposal: handoff.uid });
+    setBlockForm({
+      ...CLOSED_BLOCK,
+      open: true,
+      from: handoff.exact ? '' : handoff.from,
+      until: handoff.exact ? '' : handoff.until,
+      proposal: handoff.uid,
+      sourceFrom: handoff.exact ? handoff.from : '',
+      sourceUntil: handoff.exact ? handoff.until : '',
+    });
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       BLOCK_QUERY_KEYS.forEach((k) => next.delete(k));
       return next;
     }, { replace: true });
   }, [searchParams, setSearchParams]);
+  useEffect(() => {
+    if (!blockForm.open || !blockForm.sourceFrom || blockForm.timezone || rulesRead === 'loading') return;
+    const timezone = rules?.timezone || 'UTC';
+    const wall = blockWallRange({ from: blockForm.sourceFrom, until: blockForm.sourceUntil }, timezone);
+    setBlockForm((form) => ({ ...form, ...wall, timezone }));
+  }, [blockForm.open, blockForm.sourceFrom, blockForm.sourceUntil, blockForm.timezone, rules?.timezone, rulesRead]);
   const blockFromRef = useRef(null);
   const blockRange = useCallback(() => {
     setBlockNote(null);
@@ -248,13 +267,33 @@ export default function SessionsZone() {
 
   const submitBlock = useCallback(async (event) => {
     event?.preventDefault?.();
-    const { from, until, reason, proposal } = blockForm;
+    const { from, startTime, until, endTime, reason, proposal } = blockForm;
     if (!from || !until) { setBlockForm((f) => ({ ...f, error: 'Choose the first day and the day after the last.' })); return; }
-    if (until <= from) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
+    if (!!startTime !== !!endTime) { setBlockForm((f) => ({ ...f, error: 'Choose both a start time and an end time, or leave both empty for whole days.' })); return; }
+    let fromInstant;
+    let untilInstant;
+    try {
+      if (startTime && endTime) {
+        const timezone = blockForm.timezone || rules?.timezone || 'UTC';
+        const original = blockForm.sourceFrom && blockForm.sourceUntil
+          ? blockWallRange({ from: blockForm.sourceFrom, until: blockForm.sourceUntil }, timezone) : null;
+        const unchanged = original && original.from === from && original.startTime === startTime
+          && original.until === until && original.endTime === endTime;
+        fromInstant = unchanged ? blockForm.sourceFrom : blockWallInstant(from, startTime, timezone);
+        untilInstant = unchanged ? blockForm.sourceUntil : blockWallInstant(until, endTime, timezone);
+      } else {
+        fromInstant = `${from}T00:00:00.000Z`;
+        untilInstant = `${until}T00:00:00.000Z`;
+      }
+    } catch (e) {
+      setBlockForm((f) => ({ ...f, error: e?.message || 'Choose a valid range.' }));
+      return;
+    }
+    if (Date.parse(untilInstant) <= Date.parse(fromInstant)) { setBlockForm((f) => ({ ...f, error: 'The end comes after the start.' })); return; }
     setBlocking(true); setBlockNote(null);
     try {
       const res = await api.blockMyAdvisorSlotRange({
-        from: `${from}T00:00:00.000Z`, until: `${until}T00:00:00.000Z`, reason: reason || '',
+        from: fromInstant, until: untilInstant, reason: reason || '',
       });
       // THE SKIPPED COUNT IS REPORTED, NEVER SWALLOWED. A booked hour cannot be
       // blocked — someone holds it — and an advisor who asked for a fortnight
@@ -277,7 +316,7 @@ export default function SessionsZone() {
     } catch (e) {
       setBlockNote({ ok: false, text: e?.message || 'Nothing was blocked.' });
     } finally { setBlocking(false); }
-  }, [blockForm, loadSlots, view]);
+  }, [blockForm, loadSlots, rules?.timezone, view]);
 
   const exportCalendar = useCallback(() => {
     // Built from rows already on screen, so nothing leaves the browser and no
@@ -323,17 +362,25 @@ export default function SessionsZone() {
 
       {blockForm.open && (
         <Card padding="lg">
-          <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="advisor-block-form">
-            {blockForm.proposal ? (
-              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-3" data-testid="advisor-block-from-ask">{BLOCK_WHOLE_DAYS}</p>
+          <form onSubmit={submitBlock} className="grid grid-cols-1 gap-3 sm:grid-cols-4" data-testid="advisor-block-form">
+            {blockForm.proposal && blockForm.sourceFrom ? (
+              <p className="m-0 text-[12.5px] leading-relaxed text-axal-muted sm:col-span-4" data-testid="advisor-block-from-ask">{BLOCK_EXACT_SCOPE}</p>
             ) : null}
             <Field label="From">
               <input ref={blockFromRef} type="date" className={inputClass} value={blockForm.from} data-testid="advisor-block-from"
                 onChange={(e) => setBlockForm({ ...blockForm, from: e.target.value, error: '' })} />
             </Field>
-            <Field label="Until" hint="The day after the last one blocked.">
+            <Field label="Start time" hint={`Optional · ${blockForm.timezone || rules?.timezone || 'UTC'}`}>
+              <input type="time" className={inputClass} value={blockForm.startTime} data-testid="advisor-block-start-time"
+                onChange={(e) => setBlockForm({ ...blockForm, startTime: e.target.value, sourceFrom: '', sourceUntil: '', error: '' })} />
+            </Field>
+            <Field label="Until" hint={blockForm.endTime ? 'The ending date.' : 'The day after the last whole day.'}>
               <input type="date" className={inputClass} value={blockForm.until} data-testid="advisor-block-until"
                 onChange={(e) => setBlockForm({ ...blockForm, until: e.target.value, error: '' })} />
+            </Field>
+            <Field label="End time" hint={`Optional · ${blockForm.timezone || rules?.timezone || 'UTC'}`}>
+              <input type="time" className={inputClass} value={blockForm.endTime} data-testid="advisor-block-end-time"
+                onChange={(e) => setBlockForm({ ...blockForm, endTime: e.target.value, sourceFrom: '', sourceUntil: '', error: '' })} />
             </Field>
             <Field label="Why" hint="Optional, and private to you.">
               <input className={inputClass} value={blockForm.reason}

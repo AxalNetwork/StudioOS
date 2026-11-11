@@ -196,7 +196,7 @@ export async function seedObligations(
   env: Env,
   userId: number,
   role: string,
-  opts: { pruneStaleForRole?: boolean } = {},
+  opts: { pruneStaleForRole?: boolean; failOnError?: boolean } = {},
 ): Promise<{ inserted: number; pruned: number }> {
   await ensureTrustSchema(env);
   // D4472: seed/prune the union, so a founder grant never waives a held
@@ -206,7 +206,11 @@ export async function seedObligations(
     const primary = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first<{ role: string }>();
     licences = await heldLicences(env.DB, { id: userId, role: primary?.role || role });
   }
-  catch (error) { console.warn('[trust] licences unreadable', error); licences = [role]; }
+  catch (error) {
+    console.warn('[trust] licences unreadable', error);
+    if (opts.failOnError) throw error;
+    licences = [role];
+  }
   const roles = licences.length ? licences : [role];
   const byKey = new Map<string, ObligationDef>();
   for (const held of roles) for (const def of obligationsForRole(held)) {
@@ -249,7 +253,10 @@ export async function seedObligations(
             AND obligation_key = 'kyc_v1'
             AND status <> 'waived'`,
       ).bind(userId).run();
-    } catch (e) { console.error('[trust] kyc_v1 legacy waive failed', e); }
+    } catch (e) {
+      console.error('[trust] kyc_v1 legacy waive failed', e);
+      if (opts.failOnError) throw e;
+    }
   }
   let inserted = 0;
   for (const d of defs) {
@@ -274,6 +281,7 @@ export async function seedObligations(
       if (r?.id) inserted += 1;
     } catch (e) {
       console.error('[trust] seed insert failed', d.key, e);
+      if (opts.failOnError) throw e;
     }
   }
   let pruned = 0;
@@ -294,7 +302,10 @@ export async function seedObligations(
           pruned += 1;
         }
       }
-    } catch (e) { console.error('[trust] prune failed', e); }
+    } catch (e) {
+      console.error('[trust] prune failed', e);
+      if (opts.failOnError) throw e;
+    }
   }
   return { inserted, pruned };
 }

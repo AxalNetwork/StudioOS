@@ -7,7 +7,7 @@ import { getRail, listRail, proposeRail, type RailProposal } from './railProposa
 export const DISTRIBUTION_PAGE = 'Founder · Grow · Distribution';
 export const DISTRIBUTION_OPTION = 'draft:distribution';
 export const DISTRIBUTION_MAX_TOKENS = 8192;
-export const DRAFT_KINDS = ['post', 'subject_line', 'newsletter', 'outreach_email', 'reply', 'ad_creative', 'campaign_fields', 'sequence'] as const;
+export const DRAFT_KINDS = ['post', 'subject_line', 'newsletter', 'outreach_email', 'reply', 'ad_creative', 'campaign_fields', 'sequence', 'repurpose'] as const;
 /** D4493: a proposed outreach sequence is email steps only; Accept saves it as a draft sequence, never active. */
 export const SEQUENCE_MAX_STEPS = 5;
 /** The rail row the retired 'Draft a sequence' band moved with (its models and job); proposals stay filed under DISTRIBUTION_OPTION. */
@@ -20,7 +20,7 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_TEXT = 2000;
 export type DraftKind = typeof DRAFT_KINDS[number];
 export type DraftRequest = { kind: DraftKind; channel_uid?: string; placement?: string; field?: string; context?: string };
-export type DistributionRequest = { project: number; contact_uid?: string; campaign_uid: string | null; target: 'form' | 'campaign'; kinds: DraftRequest[]; sources: string[] };
+export type DistributionRequest = { project: number; contact_uid?: string; piece_uid?: string; campaign_uid: string | null; target: 'form' | 'campaign'; kinds: DraftRequest[]; sources: string[] };
 type Campaign = { id: number; uid: string; project_id: number; name: string; goal: string; status: string; segment_id: number | null; archived_at: string | null };
 export class DistributionRefused extends Error {
   readonly status: 400 | 403 | 404 | 409 | 503;
@@ -57,7 +57,14 @@ export function distributionRequest(body: Record<string, unknown>): Distribution
   if (!Array.isArray(body.sources) || !body.sources.length || body.sources.some(s => !(DRAFT_SOURCES as readonly unknown[]).includes(s))) return reject(400, 'invalid_sources', 'Choose recorded sources for these drafts.');
   const contact = body.contact_uid;
   if (contact !== undefined && (typeof contact !== 'string' || !ID.test(contact) || target !== 'form' || kinds.some(k => k.kind !== 'reply' || k.context !== undefined) || !body.sources.includes('distribution'))) return reject(400, 'invalid_contact', 'Choose a prospect thread for a reply draft.');
-  return { project, ...(contact === undefined ? {} : { contact_uid: contact as string }), campaign_uid, target, kinds, sources: [...new Set(body.sources as string[])] };
+  const piece = body.piece_uid;
+  const repurpose = kinds.some(k => k.kind === 'repurpose');
+  if (repurpose || piece !== undefined) {
+    if (typeof piece !== 'string' || !ID.test(piece) || target !== 'form' || campaign_uid || contact !== undefined ||
+        !kinds.every(k => k.kind === 'repurpose' && k.channel_uid) || new Set(kinds.map(k => k.channel_uid)).size !== kinds.length ||
+        !body.sources.includes('distribution')) return reject(400, 'invalid_repurpose', 'Choose one planned piece and distinct target channels.');
+  }
+  return { project, ...(contact === undefined ? {} : { contact_uid: contact as string }), ...(typeof piece === 'string' ? { piece_uid: piece } : {}), campaign_uid, target, kinds, sources: [...new Set(body.sources as string[])] };
 }
 
 export async function distributionAccess(env: Env, user: User, project: number, campaignUid?: string | null) {
@@ -74,6 +81,19 @@ export async function distributionContext(env: Env, input: DistributionRequest, 
   const sources: { key: string; label: string; count: number }[] = [];
   const segmentIds = new Set<number>();
   let threadCount = 0;
+  if (input.piece_uid) {
+    const piece = await env.DB.prepare(`SELECT i.title, g.uid AS channel_uid,
+      (SELECT json_extract(d.body_json, '$.text') FROM publish_drafts d
+        WHERE d.calendar_item_id = i.id AND d.project_id = i.project_id AND d.module = 'distribution'
+        AND d.status = 'draft' AND d.author_user_id = ? AND d.team_only_included = 0
+        ORDER BY d.id DESC LIMIT 1) AS copy
+      FROM content_calendar_items i LEFT JOIN growth_channels g ON g.id = i.channel_id AND g.project_id = i.project_id
+      WHERE i.uid = ? AND i.project_id = ? AND (i.status = 'planned' OR i.source = 'notion') AND i.planned_on IS NOT NULL`)
+      .bind(user?.id ?? null, input.piece_uid, input.project).first<{ title: string; channel_uid: string | null; copy: string | null }>();
+    if (!piece) return reject(404, 'not_found', 'Planned piece not found.');
+    if (input.kinds.some(k => k.channel_uid === piece.channel_uid)) return reject(400, 'invalid_channel', 'Choose a different channel from the original piece.');
+    material.planned_piece = { title: piece.title, copy: typeof piece.copy === 'string' ? piece.copy.slice(0, MAX_TEXT) : null };
+  }
   if (input.contact_uid) {
     if (!user) return reject(403, 'thread_required', 'Open this prospect thread before drafting.');
     const inbox = await loadInbox(env, user, input.project, input.contact_uid);
@@ -139,7 +159,7 @@ export function distributionOutput(raw: string, input: DistributionRequest, segm
       return { ...kind, values: v };
     }
     if (d.values !== undefined || !text(d.text)) return reject(503, 'draft_unreadable', 'Eadwyn’s draft could not be read. Try again.');
-    return { ...kind, text: String(d.text).trim() };
+    return { ...kind, kind: kind.kind === 'repurpose' ? 'post' as const : kind.kind, text: String(d.text).trim() };
   });
 }
 
@@ -151,7 +171,8 @@ export function validSequenceValues(v: unknown): v is { name: string; steps: { s
 }
 type DraftPayload = Record<string, unknown> & { version: number; project: number; campaign_uid: string | null; target: 'form' | 'campaign'; kind: DraftKind; text?: string; values?: Record<string, unknown> };
 export function validDistributionPayload(v: unknown): v is DraftPayload {
-  if (!object(v) || !only(v, ['version', 'project', 'campaign_uid', 'target', 'kind', 'channel_uid', 'placement', 'creative_field', 'text', 'values', 'sources']) || v.version !== 1 || !Number.isSafeInteger(v.project) || Number(v.project) < 1 || !DRAFT_KINDS.includes(v.kind as DraftKind) || !['form', 'campaign'].includes(String(v.target))) return false;
+  if (!object(v) || !only(v, ['version', 'project', 'campaign_uid', 'target', 'kind', 'channel_uid', 'placement', 'creative_field', 'text', 'values', 'sources', 'piece_uid']) || v.version !== 1 || !Number.isSafeInteger(v.project) || Number(v.project) < 1 || v.kind === 'repurpose' || !DRAFT_KINDS.includes(v.kind as DraftKind) || !['form', 'campaign'].includes(String(v.target))) return false;
+  if (v.piece_uid !== undefined && (typeof v.piece_uid !== 'string' || !ID.test(v.piece_uid) || v.kind !== 'post' || v.target !== 'form' || v.campaign_uid !== null || !v.channel_uid)) return false;
   if (v.campaign_uid !== null && (typeof v.campaign_uid !== 'string' || !ID.test(v.campaign_uid))) return false;
   if (v.target === 'campaign' && !v.campaign_uid) return false;
   if (v.channel_uid !== undefined && (typeof v.channel_uid !== 'string' || !ID.test(v.channel_uid))) return false;
@@ -169,7 +190,7 @@ export async function storeDistributionDrafts(env: Env, user: User, input: Distr
   for (const draft of drafts) {
     const data = { ...draft };
     const field = data.field; delete data.field; delete data.context;
-    const payload = { ...data, ...(field ? { creative_field: field } : {}), version: 1, project: input.project, campaign_uid: input.campaign_uid, target: input.target, sources };
+    const payload = { ...data, ...(field ? { creative_field: field } : {}), ...(input.piece_uid ? { piece_uid: input.piece_uid } : {}), version: 1, project: input.project, campaign_uid: input.campaign_uid, target: input.target, sources };
     if (!validDistributionPayload(payload)) return reject(503, 'draft_unreadable', 'Eadwyn’s draft could not be read. Try again.');
     proposals.push(await proposeRail(env, { userId: user.id, page: DISTRIBUTION_PAGE, option: DISTRIBUTION_OPTION, record: record(input.project), kind: 'draft', payload, model, usageLogId }));
   }
@@ -215,8 +236,23 @@ export async function decideDistribution(env: Env, user: User, project: number, 
       .bind(i + 1, st.wait_days, st.subject.trim(), st.body.trim(), seq, project, uid, user.id)));
   }
   const creative = decision !== 'discard' && payload.kind === 'ad_creative' && payload.target === 'campaign';
-  const gate = creative ? " AND EXISTS (SELECT 1 FROM grow_campaigns WHERE uid = ? AND project_id = ? AND archived_at IS NULL AND status != 'ended')" : '';
-  const gateArgs = creative ? [payload.campaign_uid, project] : [];
+  const repurpose = decision !== 'discard' && typeof payload.piece_uid === 'string';
+  const gate = creative ? " AND EXISTS (SELECT 1 FROM grow_campaigns WHERE uid = ? AND project_id = ? AND archived_at IS NULL AND status != 'ended')"
+    : repurpose ? " AND EXISTS (SELECT 1 FROM content_calendar_items i JOIN growth_channels g ON g.project_id = i.project_id WHERE i.uid = ? AND i.project_id = ? AND g.uid = ? AND i.channel_id IS NOT g.id AND i.planned_on IS NOT NULL AND (i.status = 'planned' OR i.source = 'notion'))" : '';
+  const gateArgs = creative ? [payload.campaign_uid, project] : repurpose ? [payload.piece_uid, project, payload.channel_uid] : [];
+  if (repurpose) {
+    const piece = crypto.randomUUID().replace(/-/g, '');
+    statements.push(env.DB.prepare(`INSERT INTO content_calendar_items (uid, project_id, channel_id, title, planned_on, status, source, created_by, updated_by)
+      SELECT ?, i.project_id, g.id, i.title, i.planned_on, 'planned', 'manual', ?, ?
+      FROM content_calendar_items i JOIN growth_channels g ON g.project_id = i.project_id
+      WHERE i.uid = ? AND i.project_id = ? AND g.uid = ? AND i.channel_id IS NOT g.id AND i.planned_on IS NOT NULL
+      AND (i.status = 'planned' OR i.source = 'notion')
+      AND EXISTS (SELECT 1 FROM ai_rail_proposals WHERE uid = ? AND user_id = ? AND status = 'proposed')`)
+      .bind(piece, user.id, user.id, ...gateArgs, uid, user.id));
+    statements.push(env.DB.prepare(`INSERT INTO publish_drafts (uid, project_id, module, author_user_id, calendar_item_id, origin, rail_proposal_uid, body_json)
+      SELECT ?, project_id, 'distribution', ?, id, 'eadwyn', ?, ? FROM content_calendar_items WHERE uid = ? AND project_id = ?`)
+      .bind(crypto.randomUUID().replace(/-/g, ''), user.id, uid, JSON.stringify({ text: payload.text, per_destination: {} }), piece, project));
+  }
   if (creative) {
     if (!campaign || campaign.status === 'ended') return reject(409, 'campaign_closed', 'Ended campaigns cannot change creatives.');
     // Same creative store as D4483. Every write and the decision share a transaction and open-row predicate.
@@ -226,6 +262,8 @@ export async function decideDistribution(env: Env, user: User, project: number, 
   statements.push(env.DB.prepare("INSERT INTO activity_logs (project_id, user_id, action, details) SELECT ?, ?, 'distribution.proposal_decided', ? WHERE EXISTS (SELECT 1 FROM ai_rail_proposals WHERE uid = ? AND user_id = ? AND status = 'proposed')" + gate).bind(project, user.id, JSON.stringify({ proposal: uid, decision }), uid, user.id, ...gateArgs));
   statements.push(env.DB.prepare("UPDATE ai_rail_proposals SET status = ?, decided_payload_json = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE uid = ? AND user_id = ? AND status = 'proposed'" + gate).bind(status, decision === 'edit' ? JSON.stringify(payload) : null, uid, user.id, ...gateArgs));
   const result = await env.DB.batch(statements);
-  if (!result[result.length - 1].meta?.changes) return reject(409, 'not_open', 'That proposal has already been decided.');
+  if (!result[result.length - 1].meta?.changes) return reject(409, 'not_open', repurpose
+    ? 'This proposal is already decided or its source piece or target channel is no longer available.'
+    : 'That proposal has already been decided.');
   return (await getRail(env, user.id, uid))!;
 }

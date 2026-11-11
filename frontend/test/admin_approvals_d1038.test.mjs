@@ -787,8 +787,8 @@ test('every decision says what changes, who is told and what is recorded; reason
   assert.match(doneLine('tester_remove', 'Eva', { places_ended: 2 }), /2 open program places ended/);
   assert.deepEqual(['https://example.com/post', 'http://example.com', 'https://u:p@example.com', 'not a url', `https://e.com/${'a'.repeat(500)}`].map(publishUrlOk), [true, false, false, false, false]);
   assert.equal(refusalLine(Object.assign(new Error('Gus’s email is not verified, so they cannot be told.'), { status: 409 })), 'Gus’s email is not verified, so they cannot be told.');
-  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /Nothing changed/);
-  assert.match(refusalLine(new Error('Network down')), /Nothing changed/, 'no status is never shown as saved');
+  assert.match(refusalLine(Object.assign(new Error('Internal'), { status: 503 })), /outcome could not be confirmed/i);
+  assert.match(refusalLine(new Error('Network down')), /outcome could not be confirmed/i, 'no status never claims that a possibly committed write changed nothing');
 });
 
 test('the boards read every page: testers to a thousand, experts to a thousand, and say when they stopped (D1046)', async () => {
