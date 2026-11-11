@@ -72,6 +72,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci
+      - name: Build the generated modules (D5612)
+        run: node ../scripts/build-generated.mjs
       - name: TypeScript check
         # --no-install: fail loudly if `npm ci` didn't install the local
         # typescript, instead of silently fetching the unrelated `tsc` package.
@@ -322,6 +324,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Run drift checker
         run: node scripts/check-api-drift.mjs
 

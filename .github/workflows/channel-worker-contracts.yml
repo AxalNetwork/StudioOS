@@ -39,6 +39,8 @@ jobs:
         run: |
           npm ci
           npm ci --prefix frontend
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Reply and UI contracts
         run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/interview_channels_d684.test.mjs frontend/test/interview_channels_ui_d684.test.mjs
       - name: Foundation contracts

@@ -37,6 +37,8 @@ jobs:
           npm ci --no-audit --no-fund
           npm ci --prefix frontend --no-audit --no-fund
           npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Record and persona contracts with mutation restoration
         run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_page_d696.test.mjs frontend/test/persona_pdf_d696.test.mjs
       - name: Folder, decision and dark-mode guards

@@ -27,6 +27,14 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { buildGenerated } from './build-generated.mjs';
+
+// D5612 (#5612): a part runs `node --test` and `tsc` directly, so no npm
+// `pretest:*` hook builds the generated modules first; this does, once.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && process.argv[2] !== '--list') {
+  const generated = buildGenerated();
+  if (generated !== 0) process.exit(generated);
+}
 
 /** How many shards each long test script is cut into. */
 export const SHARDS = Object.freeze({

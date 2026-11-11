@@ -35,6 +35,8 @@ jobs:
           npm ci --no-audit --no-fund
           npm ci --prefix frontend --no-audit --no-fund
           npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Form, page, modal and mutation contracts
         run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/add_lightbox_d695.test.mjs frontend/test/lightbox_d685.test.mjs
       - name: Folder, decision and dark-mode guards

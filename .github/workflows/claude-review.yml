@@ -70,6 +70,8 @@ jobs:
           node-version: '22'
       - name: Install the pinned SDK
         run: npm ci --prefix scripts/claude-review --ignore-scripts --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Test the reviewer
         run: node --test scripts/lib/claudeReview.test.mjs scripts/claude-review/review.test.mjs
 
