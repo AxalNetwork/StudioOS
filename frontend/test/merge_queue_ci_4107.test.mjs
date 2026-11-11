@@ -156,7 +156,7 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   // The parts run unless that lookup found a run — including when it failed.
   const suite = all.find((j) => j.id === 'suite');
   assert.equal(suite.if, "${{ !cancelled() && needs.verified.outputs.run == '' }}");
-  assert.match(suite.body.join('\n'), /fail-fast: false/);
+  assert.match(suite.body.join('\n'), /fail-fast: \$\{\{ github\.event_name == 'merge_group' \}\}/);
 });
 
 test('the diffing gates compare against the queue entry\'s base, never the PR\'s, under merge_group', () => {
