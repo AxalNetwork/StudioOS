@@ -27,6 +27,7 @@ import { UPLOAD_MESSAGES, VARIANTS_PER_DRAW, cropsAsk, imageSize, rectsAsk } fro
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
 
 const JWT_SECRET = 'synthetic-5309-only-not-a-real-credential'.repeat(2);
@@ -149,7 +150,9 @@ async function upload(f: F, who: number | null, parts: { bytes?: Uint8Array; typ
   if (parts.focal !== undefined) form.append('focal', typeof parts.focal === 'string' ? parts.focal : JSON.stringify(parts.focal));
   form.append('crops', typeof parts.crops === 'string' ? parts.crops : JSON.stringify(parts.crops ?? CROPS_16_9));
   const headers: Record<string, string> = who ? { Authorization: `Bearer ${await token(who)}` } : {};
-  const res = await f.app.request(ORIGIN + '/api/events/1/cover/upload', { method: 'POST', headers, body: form }, f.env);
+  // The storage guard refuses by THROWING a Response, which production answers
+  // through `withThrownResponses` in `index.ts`; this press goes through it too.
+  const res = await withThrownResponses(() => f.app.request(ORIGIN + '/api/events/1/cover/upload', { method: 'POST', headers, body: form }, f.env));
   return { status: res.status, body: await res.json() as any };
 }
 
@@ -251,6 +254,22 @@ test('the upload refuses the type, the size, the alt text, the focal point and a
     assert.equal(r.body.error, 'multipart_required');
     assert.equal(g.r2.size, 0);
   } finally { g.close(); }
+});
+
+test('D1170: the upload is weighed against the uploader\'s plan, and a full plan stores nothing', async () => {
+  const f = await fixture();
+  try {
+    // One stored research document far larger than any allowance this repo holds.
+    f.db.prepare("INSERT INTO research_documents(uid, owner_user_id, title, r2_key, size_bytes) VALUES ('r-huge', ?, 'Huge', 'research/huge', ?)")
+      .run(HOST, 10 * 1024 ** 4);
+    const full = await upload(f, HOST);
+    assert.equal(full.status, 413, JSON.stringify(full.body));
+    assert.equal(full.body.error, 'storage_full');
+    assert.match(full.body.message, /Nothing was saved/);
+    assert.equal(f.r2.size, 0, 'a full plan stores nothing');
+    // The same press from a staff account passes: staff have no allowance (D1167).
+    assert.equal((await upload(f, ADMIN)).status, 201);
+  } finally { f.close(); }
 });
 
 test('only the host or an admin uploads a cover', async () => {

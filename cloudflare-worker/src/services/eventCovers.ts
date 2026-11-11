@@ -26,6 +26,7 @@ import type { Env } from '../types';
 import { run, type RunOptions } from './aiRouter';
 import { EVENT_COVER, coverRunOptions, drawCover, quoteCover, type CoverDrawn, type CoverQuote, type CoverRefusal } from './coverDraws';
 import { deckBrandKitFor } from './decks/brandKit';
+import { assertStorageRoom } from './storageRoom';
 import type { PostDrawDeps } from './ai/postDraw';
 import { MAX_DRAW_PROMPT_CHARS } from './ai/shapes';
 
@@ -206,9 +207,21 @@ export function coverUploadAsk(fields: { file?: { type?: string; size?: number }
 
 export const UPLOAD_FILENAME = /^upload-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|jpg)$/;
 
-/** Store one uploaded cover under `prefix`. Answers its filename, or why nothing was stored. */
+/**
+ * Store one uploaded cover under `prefix`. Answers its filename, or why nothing
+ * was stored.
+ *
+ * D1170 (D1169 §2): this is a MEMBER'S OWN FILE, unlike the drawn cover beside
+ * it (`coverDraws.ts`, generated), so `assertStorageRoom` weighs it against the
+ * uploader's plan before a byte lands, and refuses with the one `storage_full`
+ * Response every member upload answers with. The bytes are not yet a measured
+ * D1169 area — no table records a cover's size — so nothing is noted as landed:
+ * `noteStorageLanded` would announce a crossing of a total these bytes are not
+ * in. A member who is already full still cannot add covers.
+ */
 export async function storeCoverUpload(env: Env, prefix: string, ask: CoverUploadAsk, userId: number): Promise<{ ok: true; filename: string } | CoverRefusal> {
   if (!env.FILES) return refusal(503, 'storage_unavailable');
+  await assertStorageRoom(env, { userId }, ask.bytes.length, { id: userId });
   const filename = `upload-${crypto.randomUUID()}.${ask.mime === 'image/png' ? 'png' : 'jpg'}`;
   try {
     await env.FILES.put(`${prefix}${filename}`, ask.bytes, {
