@@ -58,6 +58,8 @@ type VersionRow = {
   sent_at: string | null; opened_at: string | null; signed_off_at: string | null;
   // #4684: who it was sent to and who recorded each receipt, each written once.
   recipient_user_id?: number | null; opened_by_user_id?: number | null; signed_off_by_user_id?: number | null;
+  // #5316 (D5316): the advisor's "ready to send" mark, cleared by the send.
+  ready_at?: string | null; ready_by_user_id?: number | null;
   created_at: string; updated_at: string;
 };
 
@@ -87,12 +89,27 @@ function versionDto(r: VersionRow): any {
  * #4684: the advisor's view of a version adds who it was sent to. The client's
  * own read keeps `versionDto`: it never needs another account's name.
  */
-function sentVersionDto(r: VersionRow & { recipient_name?: string | null }): any {
+function sentVersionDto(r: VersionRow & { recipient_name?: string | null; ready_by_name?: string | null }): any {
   return {
     ...versionDto(r),
     recipient_user_id: r.recipient_user_id ?? null,
     recipient_name: r.recipient_user_id == null ? null : (r.recipient_name ?? null),
+    // #5316 (D5316): marked ready to send, by whom and when; null until marked,
+    // and null again once sent. The advisor's own fact: `versionDto`, which the
+    // client reads, never carries it.
+    ready_at: r.ready_at ?? null,
+    ready_by_user_id: r.ready_at ? (r.ready_by_user_id ?? null) : null,
+    ready_by_name: r.ready_at && r.ready_by_user_id != null ? (r.ready_by_name ?? null) : null,
   };
+}
+
+/**
+ * #5316 (D5316): the version a deliverable is waiting to send, or null. Only an
+ * UNSENT version marked ready counts; the highest such version if several are.
+ */
+export function readyVersion(versions: Pick<VersionRow, 'version' | 'sent_at' | 'ready_at'>[]): number | null {
+  const ready = versions.filter((v) => v.ready_at && !v.sent_at).map((v) => Number(v.version));
+  return ready.length ? Math.max(...ready) : null;
 }
 
 /**
@@ -152,13 +169,15 @@ advisors.get('/me/deliverables', async (c) => {
       // #4684: each sent version names the account it went to, which may not be
       // the engagement's client today: a relink moves nothing already sent.
       c.env.DB.prepare(
-        `SELECT v.*, r.name AS recipient_name, r.email AS recipient_email
+        `SELECT v.*, r.name AS recipient_name, r.email AS recipient_email,
+                k.name AS ready_by_name
            FROM advisor_deliverable_versions v
            JOIN advisor_deliverables d ON d.id = v.deliverable_id
            LEFT JOIN users r ON r.id = v.recipient_user_id
+           LEFT JOIN users k ON k.id = v.ready_by_user_id
           WHERE d.advisor_id = ?
           ORDER BY v.deliverable_id, v.version DESC`
-      ).bind(m.id).all<VersionRow & { recipient_name?: string | null; recipient_email?: string | null }>(),
+      ).bind(m.id).all<VersionRow & { recipient_name?: string | null; recipient_email?: string | null; ready_by_name?: string | null }>(),
     ]);
 
     const byDeliverable = new Map<number, VersionRow[]>();
@@ -182,6 +201,9 @@ advisors.get('/me/deliverables', async (c) => {
         client_user_name: d.client_user_name ?? null,
         client_user_email: d.client_user_email ?? null,
         state: deliverableState(vs),
+        // #5316 (D5316): the unsent version marked ready to send, or null. Beside
+        // `state`, not in it: a deliverable can be opened at v1 and ready at v2.
+        ready_version: readyVersion(vs),
         version_count: vs.length,
         latest_version: latest ? sentVersionDto(latest) : null,
         versions: vs.map(sentVersionDto),
@@ -225,6 +247,8 @@ advisors.get('/me/deliverables', async (c) => {
         unopened: unopened.length,
         opened: items.filter((i) => i.state === 'opened').length,
         drafts: items.filter((i) => i.state === 'not_started').length,
+        // #5316 (D5316): work products with a version marked ready and not yet sent.
+        ready: items.filter((i) => i.ready_version != null).length,
         // Null, never 0. Nothing opened yet is not "opened instantly" (D56/D68).
         median_to_open_hours: medianHours == null ? null : Math.round(medianHours * 10) / 10,
         never_opened: neverOpened.length,
@@ -404,6 +428,8 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     }
 
     const now = nowIso();
+    // #5316 (D5316): the send clears the "ready to send" mark in the same UPDATE,
+    // so a sent version is never also waiting to be sent.
     // #4684: THE RECIPIENT IS FIXED HERE, in the same UPDATE as `sent_at`. The
     // client routes authorise against it, never against the engagement's current
     // client, so a later relink can neither take this version from the person it
@@ -411,7 +437,8 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     // two concurrent sends one send.
     await ensureAdvisorStoresSchema(c.env);
     const sent: any = await c.env.DB.prepare(
-      `UPDATE advisor_deliverable_versions SET sent_at = ?, recipient_user_id = ?, updated_at = ?
+      `UPDATE advisor_deliverable_versions SET sent_at = ?, recipient_user_id = ?,
+              ready_at = NULL, ready_by_user_id = NULL, updated_at = ?
         WHERE id = ? AND sent_at IS NULL`
     ).bind(now, client.id, now, v.id).run();
     if (!sent.meta?.changes) return c.json({ detail: 'That version has already been sent' }, 409);
@@ -420,6 +447,80 @@ advisors.post('/me/deliverables/:id/versions/:version/send', async (c) => {
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_deliverable_versions WHERE id = ?')
       .bind(v.id).first<VersionRow>();
     return c.json(versionDto(fresh!));
+  } catch (e) { return mapError(c, e); }
+});
+
+/**
+ * #5316 (D5316) — POST /me/deliverables/:id/versions/:version/ready marks a
+ * version ready to send; DELETE on the same path takes the mark off.
+ *
+ * MARKING SENDS NOTHING. It stamps `ready_at` and `ready_by_user_id` and touches
+ * no other column: no recipient, no `sent_at`, no message. The send clears the
+ * mark. A version already sent cannot be marked (409 `already_sent`), and one
+ * with no content cannot be either (422 `empty_version`, the send's own rule):
+ * ready means it could be sent as it stands.
+ *
+ * The first mark stands: marking again answers the version as it is, with the
+ * original stamp and the account that made it.
+ */
+async function ownVersion(c: Context<{ Bindings: Env }>, advisorId: number) {
+  const row = await requireOwnDeliverable(c, advisorId, Number(c.req.param('id')));
+  const v = await c.env.DB.prepare(
+    'SELECT * FROM advisor_deliverable_versions WHERE deliverable_id = ? AND version = ?'
+  ).bind(row.id, Number(c.req.param('version'))).first<VersionRow>();
+  if (!v) throw c.json({ detail: 'Version not found' }, 404);
+  return { row, v };
+}
+const readVersionDto = async (c: Context<{ Bindings: Env }>, id: number) => sentVersionDto((await c.env.DB.prepare(
+  `SELECT v.*, r.name AS recipient_name, k.name AS ready_by_name
+     FROM advisor_deliverable_versions v
+     LEFT JOIN users r ON r.id = v.recipient_user_id
+     LEFT JOIN users k ON k.id = v.ready_by_user_id
+    WHERE v.id = ?`
+).bind(id).first<VersionRow & { recipient_name?: string | null; ready_by_name?: string | null }>())!);
+const ALREADY_SENT = { detail: 'That version has already been sent, so it is not waiting to be sent.', code: 'already_sent' };
+
+advisors.post('/me/deliverables/:id/versions/:version/ready', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const { row, v } = await ownVersion(c, m.id);
+    if (v.sent_at) return c.json(ALREADY_SENT, 409);
+    if (!v.link_url || !isHttpsLink(v.link_url)) {
+      return c.json({ detail: 'This version has no content to send, so it cannot be ready. Add a version with a link.', code: 'empty_version' }, 422);
+    }
+    const now = nowIso();
+    const marked: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET ready_at = ?, ready_by_user_id = ?, updated_at = ?
+        WHERE id = ? AND sent_at IS NULL AND ready_at IS NULL`
+    ).bind(now, user.id, now, v.id).run();
+    if (marked.meta?.changes) {
+      await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?').bind(now, row.id).run();
+    } else {
+      // Either it was already marked (the first mark stands) or it was sent in between.
+      const cur = await c.env.DB.prepare('SELECT sent_at FROM advisor_deliverable_versions WHERE id = ?')
+        .bind(v.id).first<{ sent_at: string | null }>();
+      if (cur?.sent_at) return c.json(ALREADY_SENT, 409);
+    }
+    return c.json(await readVersionDto(c, v.id));
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/deliverables/:id/versions/:version/ready', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const { row, v } = await ownVersion(c, m.id);
+    if (v.sent_at) return c.json(ALREADY_SENT, 409);
+    const now = nowIso();
+    const cleared: any = await c.env.DB.prepare(
+      `UPDATE advisor_deliverable_versions SET ready_at = NULL, ready_by_user_id = NULL, updated_at = ?
+        WHERE id = ? AND sent_at IS NULL AND ready_at IS NOT NULL`
+    ).bind(now, v.id).run();
+    if (cleared.meta?.changes) {
+      await c.env.DB.prepare('UPDATE advisor_deliverables SET updated_at = ? WHERE id = ?').bind(now, row.id).run();
+    }
+    return c.json(await readVersionDto(c, v.id));
   } catch (e) { return mapError(c, e); }
 });
 

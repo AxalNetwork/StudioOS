@@ -375,14 +375,20 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  * What "Recorded billed" is built from, in the canvas's words: "From 12 priced
  * sessions · 1 session has no recorded price." Null when there are no totals —
  * a sentence about nothing would be a claim.
+ *
+ * #5316 (D5316): sessions recorded as included in an engagement are named here
+ * too. They are in no money figure (the engagement's fee covers them) and are
+ * not unpriced, so the line says where they went rather than dropping them.
  */
 export function pricedBasis(totals) {
   if (!totals || totals.priced_sessions == null) return null;
   const priced = Number(totals.priced_sessions);
   const unpriced = Number(totals.unpriced_sessions || 0);
-  const head = `From ${plural(priced, 'priced session', 'priced sessions')}`;
-  if (!unpriced) return `${head}.`;
-  return `${head} · ${plural(unpriced, 'session has', 'sessions have')} no recorded price.`;
+  const included = Number(totals.included_sessions || 0);
+  const parts = [`From ${plural(priced, 'priced session', 'priced sessions')}`];
+  if (unpriced) parts.push(`${plural(unpriced, 'session has', 'sessions have')} no recorded price`);
+  if (included) parts.push(`${plural(included, 'session', 'sessions')} included in an engagement, not billed`);
+  return `${parts.join(' · ')}.`;
 }
 
 /**
@@ -448,6 +454,8 @@ export const BILLING_STATE = {
   billed: { label: 'Billed', tone: 'warn', mark: '◐' },
   collected: { label: 'Collected', tone: 'ok', mark: '●' },
   written_off: { label: 'Written off', tone: 'danger', mark: '✕' },
+  // #5316 (D5316): covered by the engagement's fee; no price, in no money total.
+  included: { label: 'Included', tone: 'neutral', mark: '◇' },
 };
 
 /** A stored rate as a percent, or null when the line has none of its own. */

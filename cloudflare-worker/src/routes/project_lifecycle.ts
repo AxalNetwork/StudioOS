@@ -31,19 +31,23 @@ import { afterMove, sponsorsLeft } from '../services/agents/transfer';
 import { ownerUserId, projectMoveStatements } from '../services/projectMove';
 import { checkSlug, slugHolder, retireSlug, projectPath } from '../services/slugs';
 import { refuse } from '../util/refusal';
-import { archivedById, archivedRefusal, isArchived } from '../services/companyAccess';
+import { archivedById, archivedRefusal, companyWriteDenial, denialBody, isArchived, isSupportSession } from '../services/companyAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
 type ProjectRow = { id: number; founder_id: number | null; company_id: number | null; slug: string | null };
 
-async function managedProject(env: Env, raw: string, user: User): Promise<{ project: ProjectRow } | { status: 400 | 403 | 404; detail: string }> {
+async function managedProject(env: Env, raw: string, user: User, support: boolean): Promise<{ project: ProjectRow } | { status: 400 | 403 | 404; body: Record<string, unknown> }> {
   const id = Number(raw);
-  if (!Number.isSafeInteger(id) || id <= 0) return { status: 400, detail: 'Invalid project id' };
+  if (!Number.isSafeInteger(id) || id <= 0) return { status: 400, body: { detail: 'Invalid project id' } };
   const project = await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(id).first<ProjectRow>();
-  if (!project) return { status: 404, detail: 'Project not found' };
-  if (!isProjectManager(user, project)) return { status: 403, detail: 'Only the venture\'s owner can do this' };
+  if (!project) return { status: 404, body: { detail: 'Project not found' } };
+  if (project.company_id != null) {
+    const denial = await companyWriteDenial(env, { id: project.company_id }, user, support);
+    if (denial) return { status: 403, body: denialBody(denial) };
+  }
+  if (!isProjectManager(user, project)) return { status: 403, body: { detail: 'Only the venture\'s owner can do this' } };
   return { project };
 }
 
@@ -55,8 +59,8 @@ async function belongs(env: Env, userId: number, companyId: number): Promise<boo
 
 r.post('/:id/move', async (c) => {
   const user = await requireAuth(c);
-  const g = await managedProject(c.env, c.req.param('id'), user);
-  if ('status' in g) return c.json({ detail: g.detail }, g.status);
+  const g = await managedProject(c.env, c.req.param('id'), user, await isSupportSession(c));
+  if ('status' in g) return c.json(g.body, g.status);
   const body = await c.req.json().catch(() => ({} as any));
   if (!body || !('company_id' in body)) return c.json({ detail: 'company_id is required (null takes the venture out of its company)' }, 400);
   const to = body.company_id === null ? null : Number(body.company_id);
@@ -104,8 +108,8 @@ const SLUG_MESSAGES: Record<string, string> = {
 // retired in the same batch and keeps resolving to this project.
 r.put('/:id/slug', async (c) => {
   const user = await requireAuth(c);
-  const g = await managedProject(c.env, c.req.param('id'), user);
-  if ('status' in g) return c.json({ detail: g.detail }, g.status);
+  const g = await managedProject(c.env, c.req.param('id'), user, await isSupportSession(c));
+  if ('status' in g) return c.json(g.body, g.status);
   const body = (await c.req.json().catch(() => ({}))) as { slug?: unknown };
   const s = checkSlug(body.slug);
   if (!s.ok) return refuse(c, 400, { code: s.code, message: SLUG_MESSAGES[s.code] });
@@ -130,8 +134,8 @@ r.put('/:id/slug', async (c) => {
 
 r.post('/:id/transfer', async (c) => {
   const user = await requireAuth(c);
-  const g = await managedProject(c.env, c.req.param('id'), user);
-  if ('status' in g) return c.json({ detail: g.detail }, g.status);
+  const g = await managedProject(c.env, c.req.param('id'), user, await isSupportSession(c));
+  if ('status' in g) return c.json(g.body, g.status);
   const body = await c.req.json().catch(() => ({} as any));
   const targetId = Number(body?.user_id);
   if (!Number.isSafeInteger(targetId) || targetId <= 0) return c.json({ detail: 'user_id is required' }, 400);
