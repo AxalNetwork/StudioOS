@@ -72,12 +72,15 @@ const STATE_LABEL = {
   billed: 'Billed',
   collected: 'Collected',
   written_off: 'Written off',
+  // #5316 (D5316): recorded as included in an engagement; no price of its own.
+  included: 'Included',
 };
 const STATE_TONE = {
   unpriced: 'neutral',
   billed: 'warn',
   collected: 'ok',
   written_off: 'danger',
+  included: 'neutral',
 };
 // `unpriced` is absent from the picker on purpose: it is where a session
 // STARTS, not somewhere an advisor moves one. Clearing the amount is how you
@@ -347,7 +350,8 @@ export default function SessionsZone() {
     () => bookings.items.filter((b) => ['completed', 'confirmed'].includes(b.status)),
     [bookings.items],
   );
-  const unpriced = billable.filter((b) => b.amount_cents == null).length;
+  // #5316 (D5316): a session included in an engagement has no price and is not unpriced.
+  const unpriced = billable.filter((b) => b.amount_cents == null && b.billing_state !== 'included').length;
 
   return (
     <div className="space-y-4">
@@ -736,7 +740,7 @@ function BillingEditor({ booking, onSaved, onChanged }) {
     centsToInput(booking.amount_cents),
   );
   const [state, setState] = useState(
-    booking.billing_state === 'unpriced' ? 'billed' : (booking.billing_state || 'billed'),
+    ['unpriced', 'included'].includes(booking.billing_state) ? 'billed' : (booking.billing_state || 'billed'),
   );
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);

@@ -15,7 +15,8 @@ import { partnerZoneFilters } from '../../../workspaces/partnerZoneFilters';
 import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
-import { useMutations, useZoneRead, signature } from './useZoneMutations';
+import { useMutations, useZoneRead, signature, failureNote, stated } from './useZoneMutations';
+import { DeliveryNote } from './deliveryEdits';
 import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEngagementFocus } from './engagementFocus';
 
 /**
@@ -167,7 +168,7 @@ function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSav
             <button type="button" className={`${ghostButtonClass} ml-auto text-red-700 dark:text-red-300`}
               aria-disabled={busy || undefined} onClick={() => { if (!busy) onDelete(row); }}>Delete</button>
           </div>
-          <SaveNote note={note?.scope === `dl:${row.id}` ? note : null} />
+          <DeliveryNote note={note?.scope === `dl:${row.id}` ? note : null} />
         </div>
       )}
     </div>
@@ -224,11 +225,19 @@ export default function PartnerDeliverablesZone() {
     const r = await runMutation(key, fn);
     if (r.skipped) return false;
     if (!r.ok) {
-      setNote({ ok: false, text: r.error?.message || 'That did not save.', scope });
+      // #5314 part 3: a write that read an older version changed nothing; the
+      // note offers Reload (theirs) or Keep my edits (this one, at the version
+      // that is there now). `fn.after` refreshes an editor's own list.
+      setNote(failureNote(r.error, {
+        scope, fallback: 'That did not save.',
+        reload: () => { setNote(null); load(); fn.after?.(); },
+        retry: (now) => act(key, Object.assign(() => fn(now), { after: fn.after, retried: true }), ok, scope),
+      }));
       return false;
     }
     setNote({ ok: true, text: ok, scope });
     load();
+    if (fn.retried) fn.after?.();
     return true;
   }, [runMutation, load]);
 
@@ -544,15 +553,16 @@ export default function PartnerDeliverablesZone() {
                 note={note}
                 onSave={(r, draft) => act(
                   `save:${r.id}`,
-                  () => api.updatePartnerDeliverable(r.id, {
+                  (rev) => api.updatePartnerDeliverable(r.id, {
                     title: draft.title, version: draft.version,
                     link_url: draft.link_url, sent_at: draft.sent_at || null,
+                    expected_revision: stated(rev, r.revision),
                   }),
                   'Saved.', `dl:${r.id}`,
                 )}
                 onDelete={(r) => act(
                   `delete:${r.id}`,
-                  () => api.deletePartnerDeliverable(r.id),
+                  (rev) => api.deletePartnerDeliverable(r.id, stated(rev, r.revision)),
                   'Deleted.', `dl:${r.id}`,
                 )}
               />

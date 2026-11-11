@@ -30,6 +30,7 @@ export * from './api/adminLegalReviews.js';
 export * from './api/adminLicenceHistory.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
+export * from './api/adminMfaPolicy.js';
 export * from './api/adminNetwork.js';
 export * from './api/adminPartnerFirms.js';
 export * from './api/adminPayments.js';

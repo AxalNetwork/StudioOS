@@ -20,6 +20,8 @@ the owner's canvas (`design/incoming/HQ AI Agents Page.dc.html`, boards SA0–SA
 | `CohortCard.jsx` | D4423: Super Admin cohort membership, add by founder email and remove; no feature switch changes. |
 | `provenanceModel.js` | #5346 (D4575): one run's provenance (`GET /runs/:uid/provenance`) as labelled rows for the run detail's Provenance panel in `Operations.jsx`; an unavailable field is "Not recorded" with its reason, never 0. |
 
+| `Operations.jsx` | D4522: live Super Admin Overview, Runs, Spend, Audit and policy reads, with reason-gated pause/resume and retryable reads. Independent of team-agent rollout. |
+
 ## Rules
 
 - **Every request needs a Worker route.** The panel reads and writes under `/api/admin/ai-agents` (H1–H5) and the engine halt at `/api/admin/agents/halt`. A new control adds its client method and its route in the same PR.
