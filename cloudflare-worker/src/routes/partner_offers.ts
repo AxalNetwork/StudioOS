@@ -43,6 +43,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getCurrentUser, requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
+import { offerPage, offerPageResult } from '../util/offerPages';
 import {
   CODE_MAX_ATTEMPTS, CODE_TTL_MS, CODES_PER_HOUR, LINK_TTL_MS, emailOf, maskEmail, newCode,
   proofClaimJson, proofClaimSha256, proofCodeHash, proofConsentMailer, proofConsentState,
@@ -244,8 +245,12 @@ partnerOffers.delete('/surfaces/:id', async (c) => {
     const { partnerId } = await actingPartner(c);
     const id = Number(c.req.param('id'));
     await ownSurface(c.env, partnerId, id);
-    await c.env.DB.prepare('DELETE FROM engagement_sources WHERE surface_id = ?').bind(id).run();
-    await c.env.DB.prepare('DELETE FROM partner_surfaces WHERE id = ?').bind(id).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        'DELETE FROM engagement_sources WHERE surface_id IN (SELECT id FROM partner_surfaces WHERE id = ? AND partner_id = ?)',
+      ).bind(id, partnerId),
+      c.env.DB.prepare('DELETE FROM partner_surfaces WHERE id = ? AND partner_id = ?').bind(id, partnerId),
+    ]);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -302,6 +307,8 @@ partnerOffers.delete('/engagements/:engagementId/source', async (c) => {
 partnerOffers.get('/attribution', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
+    const page = offerPage(c.req.query('page'));
+    if (!page) return c.json({ detail: 'Invalid page' }, 400);
     const rows = await c.env.DB.prepare(
       `SELECT e.id AS engagement_id, e.uid AS engagement_uid, e.status, e.price,
               n.title AS need_title, f.name AS founder_name,
@@ -312,11 +319,10 @@ partnerOffers.get('/attribution', async (c) => {
          LEFT JOIN engagement_sources es ON es.engagement_id = e.id
          LEFT JOIN partner_surfaces s ON s.id = es.surface_id
         WHERE e.partner_id = ?
-        ORDER BY es.id IS NOT NULL, e.created_at DESC
-        LIMIT 200`,
-    ).bind(partnerId).all<any>();
-    return c.json({
-      items: (rows.results || []).map((r: any) => ({
+        ORDER BY es.id IS NOT NULL, e.created_at DESC, e.id DESC
+        LIMIT ? OFFSET ?`,
+    ).bind(partnerId, page.limit, page.offset).all<any>();
+    return c.json(offerPageResult((rows.results || []).map((r: any) => ({
         engagement_id: Number(r.engagement_id),
         engagement_uid: r.engagement_uid,
         status: r.status,
@@ -325,8 +331,7 @@ partnerOffers.get('/attribution', async (c) => {
         founder_name: r.founder_name ?? null,
         surface_id: r.surface_id ? Number(r.surface_id) : null,
         surface_name: r.surface_name ?? null,
-      })),
-    });
+      })), page));
   } catch (e) { return mapError(c, e); }
 });
 
@@ -589,12 +594,18 @@ partnerOffers.delete('/proof/:id', async (c) => {
     // is a record of a decision about nothing, and it would keep a person's
     // name and email in the store after the thing they agreed to had been
     // removed. The event history stays: it holds no name or address.
-    await c.env.DB.prepare(
-      'DELETE FROM partner_proof_consent_codes WHERE consent_id IN (SELECT id FROM partner_proof_consents WHERE proof_item_id = ?)',
-    ).bind(id).run();
-    await c.env.DB.prepare('DELETE FROM partner_proof_consents WHERE proof_item_id = ?')
-      .bind(id).run();
-    await c.env.DB.prepare('DELETE FROM partner_proof_items WHERE id = ?').bind(id).run();
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `DELETE FROM partner_proof_consent_codes WHERE consent_id IN (
+           SELECT k.id FROM partner_proof_consents k JOIN partner_proof_items p ON p.id = k.proof_item_id
+            WHERE p.id = ? AND p.partner_id = ?
+         )`,
+      ).bind(id, partnerId),
+      c.env.DB.prepare(
+        'DELETE FROM partner_proof_consents WHERE proof_item_id IN (SELECT id FROM partner_proof_items WHERE id = ? AND partner_id = ?)',
+      ).bind(id, partnerId),
+      c.env.DB.prepare('DELETE FROM partner_proof_items WHERE id = ? AND partner_id = ?').bind(id, partnerId),
+    ]);
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });

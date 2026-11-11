@@ -745,18 +745,27 @@ export async function createProgramme(env: Env, owner: Owner, actor: number, bod
 export async function editProgramme(env: Env, owner: Owner, actor: number, uid: string, body: any) {
   const p = await ownProgramme(env, owner, uid);
   const input = programmeInput(body, true);
-  const keys = Object.keys(input);
+  const keys = COLUMNS.filter((key) => Object.hasOwn(input, key));
   if (keys.length === 0) throw refuse(400, 'invalid_request', 'Nothing to change.');
+  merged(p, input); // Validate the resulting date ranges before the write.
+  const datePairs = [['opens_at', 'closes_at'], ['testing_starts', 'testing_ends']] as const;
+  const checkedDates = datePairs.filter((pair) => pair.some((key) => Object.hasOwn(input, key))).flat();
+  const dateGuard = checkedDates.map((key) => ` AND ${key} IS ?`).join('');
   const ok = await changed(env, [
     env.DB.prepare(
-      `UPDATE testing_programmes SET product_name = ?, logo_key = ?, summary = ?, tester_tasks = ?, time_needed = ?,
-         opens_at = ?, closes_at = ?, testing_starts = ?, testing_ends = ?, places = ?, eligible_roles = ?, questions = ?,
+      `UPDATE testing_programmes SET ${keys.map((key) => `${key} = ?`).join(', ')},
          status = 'draft', updated_at = datetime('now')
-       WHERE id = ? AND status IN ('draft', 'rejected')`,
-    ).bind(...merged(p, input), p.id),
+       WHERE id = ? AND status IN ('draft', 'rejected')${dateGuard}`,
+    ).bind(...keys.map((key) => input[key]), p.id, ...checkedDates.map((key) => p[key] ?? null)),
     eventAfter(env, p.id, null, actor, 'edited', { fields: keys }),
   ]);
-  if (!ok) throw refuse(409, 'not_editable', 'Only a draft can be edited.');
+  if (!ok) {
+    const latest = await ownProgramme(env, owner, uid);
+    if (['draft', 'rejected'].includes(latest.status)) {
+      throw refuse(409, 'dates_changed', 'The programme dates changed. Reload and try again.');
+    }
+    throw refuse(409, 'not_editable', 'Only a draft can be edited.');
+  }
   return programmeDto(await ownProgramme(env, owner, uid));
 }
 
@@ -899,11 +908,23 @@ export async function apply(env: Env, user: { id: number; role: string }, uid: s
   const ok = await changed(env, [
     env.DB.prepare(
       `INSERT OR IGNORE INTO testing_applications (uid, programme_id, user_id, answers, availability, consent_email_at, consent_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(appUid, p.id, user.id, JSON.stringify(answers), availability, consent ? now : null, consent ? CONSENT_VERSION : null),
+       SELECT ?, p.id, ?, ?, ?, ?, ? FROM testing_programmes p
+       WHERE p.id = ? AND p.status = 'open'
+         AND (p.opens_at IS NULL OR julianday(p.opens_at) <= julianday('now'))
+         AND (p.closes_at IS NULL OR julianday(p.closes_at) > julianday('now'))
+         AND p.eligible_roles IS ? AND p.questions IS ?
+         AND (SELECT COUNT(*) FROM testing_applications a WHERE a.programme_id = p.id AND a.status = 'picked') < p.places
+         AND EXISTS (SELECT 1 FROM product_testers WHERE user_id = ? AND status = 'active')`,
+    ).bind(appUid, user.id, JSON.stringify(answers), availability, consent ? now : null, consent ? CONSENT_VERSION : null,
+      p.id, p.eligible_roles, p.questions, user.id),
     eventAfter(env, p.id, appUid, user.id, 'applied', { consent_email: consent }),
   ]);
-  if (!ok) throw refuse(409, 'already_applied', 'You have already applied to this programme.');
+  if (!ok) {
+    const prior = await env.DB.prepare('SELECT id FROM testing_applications WHERE programme_id = ? AND user_id = ?')
+      .bind(p.id, user.id).first();
+    if (prior) throw refuse(409, 'already_applied', 'You have already applied to this programme.');
+    throw refuse(409, 'programme_changed', 'The programme or your eligibility changed. Reload and try again.');
+  }
   await tell(env, user.id, 'testing_applied', `You applied to test ${p.product_name}`,
     `${p.owner_name || 'The team'} will let you know if you are picked.`, { programme_uid: uid, application_uid: appUid });
   return (await myApplications(env, user.id)).find((a) => a.uid === appUid);
