@@ -213,6 +213,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
       lead: i > 0 ? `Everything in ${specs[i - 1].name}, plus:` : '',
       feats: spec.feats.slice(), offered, price: null, unit: '', note: '', yearlyMissing: false,
       button: { label: '', to: null, disabled: false },
+      selection: spec.free ? { plan: spec.storage, interval: null } : null,
     };
     if (spec.free) {
       card.price = spec.id === 'free' && spec.name === 'Free' ? 'Free' : '$0';
@@ -222,6 +223,7 @@ export function planCards(read, specs, { billing = 'monthly', held = null, signe
       card.note = 'Pricing agreed with Axal VC';
     } else if (offered) {
       const shown = yearly && year ? year : month ?? year;
+      card.selection = { plan: planKeyOfSpec(spec), interval: shown.interval === 'year' ? 'yearly' : 'monthly' };
       if (shown.interval === 'year') {
         card.price = usd(Math.round(shown.unit_amount / 12));
         card.note = `${usd(shown.unit_amount)} billed yearly`;

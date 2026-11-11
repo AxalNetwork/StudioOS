@@ -19,6 +19,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import SitePage from '../components/site/SitePage';
 import { usePageMeta } from '../lib/seo';
+import { track } from '../lib/funnel';
 import { api } from '../lib/api';
 import { publicPricingApi } from '../lib/api/publicPricing';
 import { useViewMode } from '../contexts/ViewModeContext';
@@ -89,7 +90,7 @@ function Tabs({ tab, onPick }) {
   );
 }
 
-function PlanCard({ card, onCheckout }) {
+function PlanCard({ card, onCheckout, onSelect }) {
   const D = useContext(Face);
   const cls = `axp-card${card.highlight ? ' is-hi' : ''}${card.current ? ' is-current' : ''}`;
   return (
@@ -119,9 +120,9 @@ function PlanCard({ card, onCheckout }) {
         <div className="axp-notoffered"><span className="axp-pill axp-pill-dash">Not offered yet</span></div>
       )}
       {card.button.checkout && !card.button.disabled ? (
-        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => onCheckout(card)} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
+        <button type="button" className={`axp-btn${card.highlight ? ' is-primary' : ''}`} onClick={() => { onSelect(card); onCheckout(card); }} data-testid={`pricing-checkout-${card.id}`}>{card.button.label}</button>
       ) : card.button.to && !card.button.disabled ? (
-        <Link to={card.button.to} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
+        <Link to={card.button.to} onClick={card.button.to.split('?')[0] === '/register' ? () => onSelect(card) : undefined} className={`axp-btn${card.highlight ? ' is-primary' : ''}`}>{card.button.label}</Link>
       ) : (
         <button type="button" className="axp-btn" disabled>{card.button.label}</button>
       )}
@@ -464,6 +465,12 @@ export function PricingBody({ user = null }) {
   const role = useViewMode()?.shellRole ?? null;
   const tab = initialTab(location.search, user ? role : null);
   const [billing, setBilling] = useState('monthly');
+  useEffect(() => {
+    if (tab !== 'models') track('pricing_view', { audience: tab, plan: null, interval: billing });
+  }, [tab, billing]);
+  const selectPlan = (card) => {
+    if (card.selection?.plan) track('pricing_plan_selected', { audience: tab, ...card.selection });
+  };
   // D1048 (#2451): the card whose checkout sheet is open, over this page; no route change.
   const [checkout, setCheckout] = useState(null);
   // D1287: Add tokens and a pack's Buy open the sheet's pack mode in place, on that pack.
@@ -572,7 +579,7 @@ export function PricingBody({ user = null }) {
           {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
           {ready && (
             <div className={`axp-grid axp-grid-${built.cards.length}`}>
-              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} />)}
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} onCheckout={setCheckout} onSelect={selectPlan} />)}
             </div>
           )}
           {ready && tab === 'investor' && (
