@@ -1,7 +1,7 @@
 /** D5618: signatures, cancellation safety, duplicate/retry/restart behavior, kill switch and durable fencing. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac, generateKeyPairSync, createPublicKey, verify } from 'node:crypto';
+import { createHmac, randomBytes, generateKeyPairSync, createPublicKey, verify } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -38,11 +38,12 @@ function request(payload: unknown, signature?: string) {
 }
 const payload={action:'destroyed',reason:'invalidated',repository:{full_name:repo},merge_group:{head_sha:sha,head_ref:event.headRef}};
 test('missing/bad/modified signatures enqueue nothing; valid raw signature enqueues minimal payload',async()=>{
- const queued:Delivery[]=[];const env={REPOSITORY:repo,WEBHOOK_SECRET:'test-secret',EVENTS:{send:async(v:Delivery)=>{queued.push(v);}}} as unknown as Env;
+ const secret=randomBytes(32).toString('hex');
+ const queued:Delivery[]=[];const env={REPOSITORY:repo,WEBHOOK_SECRET:secret,EVENTS:{send:async(v:Delivery)=>{queued.push(v);}}} as unknown as Env;
  assert.equal((await webhook(request(payload),env)).status,401);
  assert.equal((await webhook(request(payload,'sha256='+'0'.repeat(64)),env)).status,401);
  assert.equal(queued.length,0);
- const signature='sha256='+createHmac('sha256','test-secret').update(JSON.stringify(payload)).digest('hex');
+ const signature='sha256='+createHmac('sha256',secret).update(JSON.stringify(payload)).digest('hex');
  assert.equal((await webhook(request({...payload,reason:'dequeued'},signature),env)).status,401);
  assert.equal((await webhook(request(payload,signature),env)).status,200);
  assert.equal(queued.length,1);assert.equal(queued[0].headSha,sha);assert.equal('repository' in queued[0],false);
