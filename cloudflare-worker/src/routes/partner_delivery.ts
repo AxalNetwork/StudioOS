@@ -48,8 +48,8 @@ import {
 import type { ReadTracking } from './_partner_workspace_helpers';
 import {
   daysBetween, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
-  periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
-  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
+  periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
+  requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, weeklyFromMonthly, WEEKS_PER_MONTH,
 } from './_partner_workspace_helpers';
 import { logActorAct } from '../services/actorLog';
 import { statusReportAccess } from '../services/statusReportAccess';
@@ -1206,10 +1206,11 @@ async function requireOwnHolder(env: Env, partnerId: number, userId: number) {
 partnerDelivery.get('/capacity', async (c) => {
   try {
     const { partnerId } = await actingPartner(c);
-    // THE TIME BASIS (#4690). Hours are logged per MONTH (`YYYY-MM`); a cap is
-    // stated per WEEK. They are never compared as written: the cap is scaled to
-    // the days in the month the hours cover (`periodCapHours`). A period that is
-    // not a month is refused, not silently compared against the wrong cap.
+    // ONE BASIS: HOURS A WEEK (#5314 part 4). Hours are logged per MONTH
+    // (`YYYY-MM`); a cap is stated per WEEK. Every hour figure is converted to
+    // hours a week (`weeklyFromMonthly`, × 12 ÷ 52) and compared with the cap
+    // as stated. The monthly figures stay in the response, labelled. A period
+    // that is not a month is refused, not converted with the wrong factor.
     const periodArg = c.req.query('period');
     const parsedPeriod = parsePeriod(periodArg || currentPeriod(), 'monthly');
     if ('error' in parsedPeriod) return c.json({ detail: parsedPeriod.error }, 400);
@@ -1341,16 +1342,21 @@ partnerDelivery.get('/capacity', async (c) => {
     const totalOf = (p: any) => (p.hours_recorded ? p.hours : 0) + (p.internal_hours ?? 0);
     const measured = (p: any) => p.hours_recorded || p.internal_hours !== null;
     const capOf = (p: any) => personCap.get(p.user_id)?.hours ?? firmCap;
-    // The weekly cap restated for the period the hours cover.
-    const periodCapOf = (p: any) => periodCapHours(capOf(p), period);
+    // The month's total as hours a week — the figure compared with the cap.
+    const weeklyTotalOf = (p: any) => (measured(p) ? weeklyFromMonthly(totalOf(p)) : null);
     const overOf = (p: any) => {
-      const cap = periodCapOf(p);
+      const cap = capOf(p);
       // OVER-COMMITTED NEEDS BOTH SIDES. Unrecorded hours are not zero hours,
       // so a person nobody logged against is not under cap either — they are
       // unmeasured, and this stays null for them.
       if (cap === null || !measured(p)) return null;
-      return totalOf(p) > cap;
+      return (weeklyTotalOf(p) as number) > cap;
     };
+    const everyone = [...people.values()];
+    const internalStated = (internal.results || []).length > 0;
+    const projectTotal = everyone.reduce((a, p) => a + p.project_hours, 0);
+    const seatTotal = everyone.reduce((a, p) => a + p.seat_hours, 0);
+    const internalTotal = internalStated ? everyone.reduce((a, p) => a + (p.internal_hours ?? 0), 0) : null;
 
     return c.json({
       period,
@@ -1371,6 +1377,13 @@ partnerDelivery.get('/capacity', async (c) => {
           internal_hours: p.internal_hours,
           internal_note: p.internal_note,
           total_hours: measured(p) ? totalOf(p) : null,
+          // THE SAME COLUMNS AS HOURS A WEEK (#5314 part 4), null where the
+          // monthly figure is null. These are what the page draws and what
+          // `over_committed` compares with the cap.
+          project_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.project_hours) : null,
+          seat_hours_per_week: p.hours_recorded ? weeklyFromMonthly(p.seat_hours) : null,
+          internal_hours_per_week: weeklyFromMonthly(p.internal_hours),
+          total_hours_per_week: weeklyTotalOf(p),
           live_seats: p.live_seats,
           revoked_seats: p.revoked_seats,
           // WHERE THE SEAT IS, not just how many. A seat register that counted
@@ -1382,11 +1395,9 @@ partnerDelivery.get('/capacity', async (c) => {
           // none — and none is not zero. A person with no cap is not over any
           // threshold, because there is no threshold.
           cap_hours: capOf(p),
-          // `cap_hours` is PER WEEK (as stated). `period_cap_hours` is the same
-          // cap over this response's period, the figure `total_hours` and
-          // `over_committed` are compared with.
+          // `cap_hours` is PER WEEK, as stated, and is compared as stated with
+          // `total_hours_per_week`.
           cap_unit: 'hours_per_week',
-          period_cap_hours: periodCapOf(p),
           cap_source: personCap.has(p.user_id) ? 'person' : (firmCap === null ? null : 'firm'),
           cap_note: personCap.get(p.user_id)?.note ?? firmCapNote,
           over_committed: overOf(p),
@@ -1414,14 +1425,14 @@ partnerDelivery.get('/capacity', async (c) => {
       // whatever THIS firm wrote down, and until they write one there is no
       // threshold to be over.
       cap_hours: firmCap,
-      // THE UNITS, stated so no reader has to guess: hours here are per
-      // calendar month, the cap is per week, and the comparison uses the cap
-      // over `period_days / 7` weeks.
+      // THE UNITS, stated so no reader has to guess (#5314 part 4): capacity is
+      // read in hours a week. The cap is per week as stated; every `*_per_week`
+      // figure is the month's hours × 12 ÷ 52; the unsuffixed hour fields are
+      // the monthly totals as logged (`hours_unit`).
+      basis: 'hours_per_week',
+      weeks_per_month: Math.round(WEEKS_PER_MONTH * 100) / 100,
       cap_unit: 'hours_per_week',
       hours_unit: 'hours_per_month',
-      period_days: daysInPeriod(period),
-      period_weeks: daysInPeriod(period) === null ? null : Math.round((daysInPeriod(period)! / 7) * 100) / 100,
-      period_cap_hours: periodCapHours(firmCap, period),
       cap_source: firmCap === null ? null : 'firm',
       cap_note: firmCap === null
         // D4822: the canvas's state for an unconfigured firm, in product words, with what setting one unlocks.
@@ -1433,14 +1444,15 @@ partnerDelivery.get('/capacity', async (c) => {
       // THE STRIP'S THREE HOUR TILES, summed over the whole roster rather than
       // over whatever the chips left visible — a firm's project hours do not
       // change because the reader narrowed to seat-holders.
-      project_hours_total: [...people.values()].reduce((a, p) => a + p.project_hours, 0),
-      seat_hours_total: [...people.values()].reduce((a, p) => a + p.seat_hours, 0),
+      project_hours_total: projectTotal,
+      seat_hours_total: seatTotal,
+      project_hours_total_per_week: weeklyFromMonthly(projectTotal),
+      seat_hours_total_per_week: weeklyFromMonthly(seatTotal),
       // NULL, NOT ZERO, when nobody has stated any internal time. Summing
       // absent rows to zero would tell a firm its people spend no time on the
       // firm, which is the one thing that is certainly false.
-      internal_hours_total: (internal.results || []).length === 0
-        ? null
-        : [...people.values()].reduce((a, p) => a + (p.internal_hours ?? 0), 0),
+      internal_hours_total: internalTotal,
+      internal_hours_total_per_week: weeklyFromMonthly(internalTotal),
       live_seats: (seats.results || []).filter((s: any) => !s.revoked_at).length,
       // THE SAME SEAT STATE the Board and Health return per engagement (#4690),
       // from the same helper over the whole collection of that engagement's

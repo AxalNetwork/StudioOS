@@ -189,9 +189,9 @@ test('the instrument is the artboard’s six columns, at its own grid', () => {
   // AND NEITHER TURNS AN UNMEASURED PERSON INTO A ZERO. Nobody logging hours
   // for someone is not the same as their having done no work, and the two hour
   // columns must keep that apart the way the Internal one does.
-  assert.match(cells[2], /p\.project_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cells[2], /p\.project_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'a person with no hours logged now reads as zero project hours');
-  assert.match(cells[3], /p\.seat_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cells[3], /p\.seat_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'a person with no hours logged now reads as zero seat hours');
 });
 
@@ -220,12 +220,12 @@ test('a total with no internal hours behind it is marked a floor', () => {
     'the total no longer says when it is only part of a week');
   // NULL IS DRAWN ABSENT, never as zero: a week assembled from nothing is not a
   // week of no work.
-  assert.match(totalCell, /p\.total_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(totalCell, /p\.total_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'an unmeasured person now reads as zero hours');
   assert.ok(/p\.over_committed === true/.test(totalCell),
     'the Over pill no longer requires an explicit true — null would light it');
   // The internal column keeps the same distinction on its own.
-  assert.match(cellsOf(INST)[4], /p\.internal_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cellsOf(INST)[4], /p\.internal_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'unstated internal hours now read as zero');
 
   // AND THE WORKER MAKES THE SAME DISTINCTION, so the page is not carrying it

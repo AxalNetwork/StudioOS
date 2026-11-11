@@ -29,7 +29,7 @@ import partnerDelivery from '../src/routes/partner_delivery.ts';
 import partnerPipeline from '../src/routes/partner_pipeline.ts';
 import {
   cadenceMonths, currentMonthlyCents, daysInPeriod, isRetainerActive, monthlyAmountCents,
-  periodCapHours, periodMonths, readTrackingFor, retainerPeriodFor, retainerProjection, seatStateFor,
+  periodMonths, readTrackingFor, retainerPeriodFor, retainerProjection, seatStateFor, weeklyFromMonthly,
 } from '../src/routes/_partner_workspace_helpers.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -243,42 +243,71 @@ test('retainer periods follow the cadence, and the boundaries agree with their l
   assert.deepEqual(periodMonths('nonsense'), []);
 });
 
-test('a weekly cap is scaled to the days of the month the hours cover', () => {
+test('a period names its month\'s days', () => {
   assert.equal(daysInPeriod('2026-02'), 28);
   assert.equal(daysInPeriod('2028-02'), 29, 'a leap February');
   assert.equal(daysInPeriod('2026-12'), 31);
   assert.equal(daysInPeriod('2026-04'), 30);
   assert.equal(daysInPeriod('2026-13'), null);
-  assert.equal(periodCapHours(40, '2026-02'), 160);
-  assert.equal(periodCapHours(40, '2028-02'), 165.71);
-  assert.equal(periodCapHours(40, '2026-12'), 177.14);
-  assert.equal(periodCapHours(null, '2026-12'), null, 'no cap is not a zero cap');
-  assert.equal(periodCapHours(40, 'bad'), null);
 });
 
-test('monthly hours are compared with the weekly cap over the SAME period, not with the weekly number', async () => {
+// #5314 part 4 (owner, 2026-11-11): ONE BASIS, HOURS A WEEK. A month's hours
+// convert at 52 weeks over 12 months; the cap is compared as stated. It
+// replaced #4690's per-month scaling, under which the same 170 h read over in
+// February and under in December.
+test('#5314 a month of hours converts to hours a week at 12/52, and nothing unrecorded becomes zero', () => {
+  assert.equal(weeklyFromMonthly(52), 12);
+  assert.equal(weeklyFromMonthly(173.33), 40);
+  assert.equal(weeklyFromMonthly(170), 39.23);
+  assert.equal(weeklyFromMonthly(0), 0, 'a recorded zero stays a zero');
+  assert.equal(weeklyFromMonthly(null), null, 'no hours is not zero hours a week');
+  assert.equal(weeklyFromMonthly(undefined), null);
+});
+
+test('#5314 capacity is compared on one basis, hours a week, the same in every month', async () => {
   const db = freshDb();
   const e = env(db);
   await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 });
-  // 170 h: over February's 160 h and under December's 177.14 h. Compared
-  // directly with 40 it would be over in both.
+  // 170 h a month is 39.23 h a week: under a 40 h cap in February AND in
+  // December. 180 h is 41.54 h a week: over in both.
   await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/2026-02`, ours, { hours: 170 });
-  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/2026-12`, ours, { hours: 170 });
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/2026-12`, ours, { hours: 180 });
 
   const feb = (await call(e, 'GET', '/capacity?period=2026-02', ours)).body;
-  assert.equal(feb.cap_hours, 40, 'the stated weekly cap is still returned as stated');
+  assert.equal(feb.basis, 'hours_per_week');
+  assert.equal(feb.cap_hours, 40, 'the stated weekly cap is returned and compared as stated');
   assert.equal(feb.cap_unit, 'hours_per_week');
-  assert.equal(feb.hours_unit, 'hours_per_month');
-  assert.equal(feb.period_days, 28);
-  assert.equal(feb.period_cap_hours, 160);
-  assert.equal(feb.people[0].period_cap_hours, 160);
-  assert.equal(feb.people[0].over_committed, true);
-  assert.equal(feb.over_committed_count, 1);
+  assert.equal(feb.hours_unit, 'hours_per_month', 'the raw monthly figures stay, labelled');
+  assert.equal(feb.weeks_per_month, 4.33);
+  assert.equal('period_cap_hours' in feb, false, 'the per-month cap is gone: one basis');
+  const sam = feb.people[0];
+  assert.equal(sam.total_hours, 170);
+  assert.equal(sam.total_hours_per_week, 39.23);
+  assert.equal(sam.project_hours_per_week, 39.23);
+  assert.equal(sam.seat_hours_per_week, 0);
+  assert.equal(sam.internal_hours_per_week, null, 'internal hours nobody stated are not zero');
+  assert.equal(sam.over_committed, false);
+  assert.equal(feb.over_committed_count, 0);
+  assert.equal(feb.project_hours_total_per_week, 39.23);
+  assert.equal(feb.internal_hours_total_per_week, null);
 
   const dec = (await call(e, 'GET', '/capacity?period=2026-12', ours)).body;
-  assert.equal(dec.period_cap_hours, 177.14);
-  assert.equal(dec.people[0].over_committed, false, 'monthly hours were compared with a weekly number');
-  assert.equal(dec.over_committed_count, 0);
+  assert.equal(dec.people[0].total_hours_per_week, 41.54);
+  assert.equal(dec.people[0].over_committed, true);
+  assert.equal(dec.over_committed_count, 1);
+});
+
+test('#5314 a missing limit reads Not recorded on the weekly basis, never a zero cap', async () => {
+  const db = freshDb();
+  const e = env(db);
+  await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/hours/${OUR_STAFF}/2026-02`, ours, { hours: 400 });
+  const r = (await call(e, 'GET', '/capacity?period=2026-02', ours)).body;
+  assert.equal(r.basis, 'hours_per_week');
+  assert.equal(r.cap_hours, null);
+  assert.equal(r.people[0].cap_hours, null);
+  assert.equal(r.people[0].total_hours_per_week, 92.31, 'the hours are still converted');
+  assert.equal(r.people[0].over_committed, null, 'no cap: nobody is over anything');
+  assert.equal(r.over_committed_count, null);
 });
 
 test('a capacity period that is not a month is refused, not compared with the wrong cap', async () => {

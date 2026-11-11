@@ -214,7 +214,7 @@ export default function PartnerCapacityZone() {
     return people;
   })();
 
-  const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total'], rows: visible, cells: (p) => [p.name, p.live_seats, p.project_hours, p.seat_hours, p.internal_hours, p.total_hours] } });
+  const rowActions = partnerZoneActions('delivery/capacity', { view: { header: ['Person', 'Seats held', 'Project h/wk', 'Seat h/wk', 'Internal h/wk', 'Total h/wk'], rows: visible, cells: (p) => [p.name, p.live_seats, p.project_hours_per_week, p.seat_hours_per_week, p.internal_hours_per_week, p.total_hours_per_week] } });
 
   // NOT AN EARLY RETURN ANY MORE. This was
   //   `if (isNoPartnerProfile(state.error)) return <UnlinkedZone … />;`
@@ -350,7 +350,7 @@ export default function PartnerCapacityZone() {
             <p className="mt-2 text-[11.5px] leading-relaxed text-axal-muted">
               {d?.cap_hours == null
                 ? d?.cap_note
-                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. Hours are logged by month, so each month is compared with the cap over its own days (${d.period}: ${d.period_cap_hours} h). A person with their own number overrides it.`}
+                : `Firm default: ${d.cap_hours} h a week${d.cap_note ? ` — ${d.cap_note}` : ''}. A person with their own number overrides it.`}
             </p>
             <SaveNote note={note?.scope === 'cap' ? note : null} />
           </Section>
@@ -530,10 +530,11 @@ export default function PartnerCapacityZone() {
             )}
           />
 
-          {/* D4822: the time basis, impossible to misread. Hours are monthly totals; limits are hours a week. */}
+          {/* #5314 part 4: ONE BASIS. Every figure here is hours a week, the unit limits are set in;
+              a month's logged hours are converted by the Worker at 52 weeks over 12 months. */}
           <p className="text-[14px] font-semibold text-axal-ink dark:text-gray-100" data-testid="capacity-basis">
-            {periodWords ? `${periodWords} · monthly totals` : 'Monthly totals'}
-            <span className="font-normal text-axal-muted"> · limits are hours a week, compared over the month’s days</span>
+            {periodWords ? `${periodWords} · hours a week` : 'Hours a week'}
+            <span className="font-normal text-axal-muted"> · the month’s logged hours averaged over its weeks</span>
           </p>
           {limitsUnset && (
             <div className="rounded-lg border border-axal-hairline bg-white p-4 dark:border-gray-700 dark:bg-gray-900" data-testid="capacity-limits-unset">
@@ -564,13 +565,15 @@ export default function PartnerCapacityZone() {
             />
             <CapTile
               label="Project hours"
-              value={`${d?.project_hours_total ?? 0} h`}
-              note={`this period · ${d?.period || '—'}`}
+              value={`${d?.project_hours_total_per_week} h/wk`}
+              nr={d?.project_hours_total_per_week == null}
+              note={`a week, this period · ${d?.period || '—'}`}
             />
             <CapTile
               label="Seat hours"
-              value={`${d?.seat_hours_total ?? 0} h`}
-              note="inside client systems"
+              value={`${d?.seat_hours_total_per_week} h/wk`}
+              nr={d?.seat_hours_total_per_week == null}
+              note="a week, inside client systems"
             />
           </div>
 
@@ -579,7 +582,7 @@ export default function PartnerCapacityZone() {
             title="People"
             meta={d?.cap_hours == null
               ? 'No cap stated · seat hours counted, not estimated'
-              : `Cap ${d.cap_hours} h a week = ${d.period_cap_hours} h in ${d.period} · seat hours counted, not estimated`}
+              : `Cap ${d.cap_hours} h a week · seat hours counted, not estimated`}
             cols="1.1fr 1.6fr .8fr .8fr .8fr 1.1fr"
             head={['Person', 'Seats held', 'Project h', 'Seat h', 'Internal h', 'Total']}
             rows={visible.map((p) => {
@@ -609,29 +612,29 @@ export default function PartnerCapacityZone() {
                   // ZERO IS AN ANSWER HERE AND ABSENCE IS NOT. The hours book
                   // exists, so nothing logged against this person reads as
                   // unmeasured rather than as a person who did no work.
-                  p.project_hours == null ? { nr: true } : { text: `${p.project_hours} h` },
-                  p.seat_hours == null ? { nr: true } : { text: `${p.seat_hours} h` },
+                  p.project_hours_per_week == null ? { nr: true } : { text: `${p.project_hours_per_week} h` },
+                  p.seat_hours_per_week == null ? { nr: true } : { text: `${p.seat_hours_per_week} h` },
                   // INTERNAL HOURS ARE STATED OR THEY ARE ABSENT. No book
                   // records unbilled time by default, so an absent row means
                   // nobody said — never zero.
-                  p.internal_hours == null
+                  p.internal_hours_per_week == null
                     ? { nr: true }
-                    : { text: `${p.internal_hours} h`, sub: p.internal_note || undefined },
-                  // THE TOTAL IS THE MONTH, and it says so when it is only part
-                  // of one. Against a stated cap it reads `N of C h` where C is
-                  // the weekly cap over THIS month's days (the figure the
-                  // Worker compared with), and carries `Over`; with no cap it
-                  // is a number and says there is nothing to be over.
-                  p.total_hours == null
+                    : { text: `${p.internal_hours_per_week} h`, sub: p.internal_note || undefined },
+                  // THE TOTAL IS A WEEK, on the cap's own basis (#5314 part 4),
+                  // and says so when it is only part of one. Against a stated
+                  // cap it reads `N of C h` — the two figures the Worker
+                  // compared — and carries `Over`; with no cap it is a number
+                  // and says there is nothing to be over.
+                  p.total_hours_per_week == null
                     ? { nr: true }
                     : {
-                      text: p.period_cap_hours == null
-                        ? `${p.total_hours} h`
-                        : `${p.total_hours} of ${p.period_cap_hours} h`,
+                      text: p.cap_hours == null
+                        ? `${p.total_hours_per_week} h`
+                        : `${p.total_hours_per_week} of ${p.cap_hours} h`,
                       ...(p.over_committed === true ? { pill: 'Over', pillTone: 'danger' } : {}),
-                      sub: p.internal_hours == null
+                      sub: p.internal_hours_per_week == null
                         ? 'internal hours not stated — a floor, not a measurement'
-                        : (p.period_cap_hours == null ? 'no cap stated' : `${p.cap_hours} h a week over ${d?.period_days} days`),
+                        : (p.cap_hours == null ? 'no cap stated' : `${p.total_hours} h logged in ${d?.period}`),
                     },
                 ],
               };

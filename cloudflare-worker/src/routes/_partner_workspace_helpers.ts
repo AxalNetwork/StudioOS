@@ -603,26 +603,29 @@ export function retainerProjection(
 }
 
 // ---------------------------------------------------------------------------
-// Capacity time basis (#4690)
+// Capacity time basis (#4690; one weekly basis since #5314 part 4)
 // ---------------------------------------------------------------------------
 
 /**
- * THE TIME BASIS. Hours are LOGGED per calendar month (`YYYY-MM`); a cap is
- * STATED per week (`weekly_hours`). They are different units over different
- * periods and are never compared as written. The cap is scaled to the period
- * the hours cover: weekly_hours × days in the month ÷ 7. Rounded to 2 places
- * HERE, so the figure the page shows is the figure the comparison used.
+ * THE TIME BASIS (#5314 part 4, owner's call 2026-11-11). Hours are LOGGED per
+ * calendar month (`YYYY-MM`); a cap is STATED per week (`weekly_hours`).
+ * Capacity is read on ONE basis, hours a week: a month's hours are converted
+ * with 52 weeks over 12 months (hours × 12 ÷ 52), the same factor every month,
+ * so the same hours never read over in February and under in December. Rounded
+ * to 2 places HERE, so the figure the page shows is the figure the comparison
+ * used. Unrecorded stays null: no hours is not zero hours a week.
  */
+export const WEEKS_PER_MONTH = 52 / 12;
+
+export function weeklyFromMonthly(monthlyHours: number | null | undefined): number | null {
+  if (monthlyHours === null || monthlyHours === undefined || !Number.isFinite(Number(monthlyHours))) return null;
+  return Math.round(Number(monthlyHours) * 12 / 52 * 100) / 100;
+}
+
 export function daysInPeriod(period: string): number | null {
   const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(period));
   if (!m) return null;
   return new Date(Date.UTC(Number(m[1]), Number(m[2]), 0)).getUTCDate();
-}
-
-export function periodCapHours(weeklyHours: number | null, period: string): number | null {
-  const days = daysInPeriod(period);
-  if (weeklyHours === null || weeklyHours === undefined || days === null) return null;
-  return Math.round(Number(weeklyHours) * days / 7 * 100) / 100;
 }
 
 // ---------------------------------------------------------------------------
