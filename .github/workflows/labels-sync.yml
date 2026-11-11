@@ -23,6 +23,7 @@ on:
     branches: [main]
     paths:
       - .github/labels.yml
+      - .github/labels-retired.yml
   workflow_dispatch:
 
 permissions:
@@ -42,6 +43,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - name: Normalize case-only label names before creating canonical labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          yq -o=json '.' .github/labels-retired.yml > /tmp/retired-labels.json
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const gh = args => execFileSync('gh', args, { encoding: 'utf8' });
+          const live = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/' + process.env.GH_REPO + '/labels?per_page=100'])).flat();
+          for (const [old, canonical] of Object.entries(JSON.parse(readFileSync('/tmp/retired-labels.json')))) {
+            if (old.toLowerCase() !== canonical.toLowerCase()) continue;
+            if (live.some(l => l.name === old)) gh(['api', '--method', 'PATCH', 'repos/' + process.env.GH_REPO + '/labels/' + encodeURIComponent(old), '-f', 'name=' + canonical]);
+          }
+          JS
       - name: Create or update each label in .github/labels.yml
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,3 +91,18 @@ jobs:
             echo "synced: ${names[i]}"
           done
           echo "$count labels in step with $LABELS_FILE"
+      - name: Move retired labels to declared canonical labels without deleting labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const gh = args => execFileSync('gh', args, { encoding: 'utf8' });
+          for (const [old, canonical] of Object.entries(JSON.parse(readFileSync('/tmp/retired-labels.json')))) {
+            if (old.toLowerCase() === canonical.toLowerCase()) continue;
+            const pages = JSON.parse(gh(['api', '--paginate', '--slurp', 'repos/' + process.env.GH_REPO + '/issues?state=all&per_page=100&labels=' + encodeURIComponent(old)]));
+            for (const issue of pages.flat()) gh(['issue', 'edit', String(issue.number), '--add-label', canonical, '--remove-label', old]);
+          }
+          JS
