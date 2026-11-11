@@ -43,6 +43,7 @@ jobs:
           fi
           {
             printf '## Landing policy (advisory)\n\n'
+            printf 'Base SHA: `%s`\n\n' "$BASE_SHA"
             printf 'Head SHA: `%s`\n\n' "$HEAD_SHA"
             printf 'LANDING_AUTO: `%s`\n\n' "$LANDING_AUTO"
             printf '    %s\n' "$result"

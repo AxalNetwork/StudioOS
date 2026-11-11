@@ -90,4 +90,5 @@ test('shadow workflow checks out and executes the base only with read permission
   assert.match(instructions, /gh pr ready/);
   assert.match(instructions, /gh pr merge --auto --squash/);
   assert.match(instructions, /owner lands T2/);
+  assert.match(instructions, /PR did not edit\n   `\.github\/workflows\/landing-policy\.yml`/);
 });

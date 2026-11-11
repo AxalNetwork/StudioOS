@@ -53,7 +53,8 @@ because only Session 1 makes a task ready.
    and 6 and #5500 are in effect, an agent may queue T0/T1 only when all
    required checks are green and the `landing policy` summary reports T0 or
    T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
-   the target still requires the merge queue. Then run
+   the target still requires the merge queue and that the PR did not edit
+   `.github/workflows/landing-policy.yml`. Then run
    `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
    Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
    the queue if queued before pushing changes. Wait for a new eligible report.
