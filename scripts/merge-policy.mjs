@@ -10,6 +10,7 @@ const SENSITIVE = /(?:^|\/)(?:\.github|scripts|merge-control|attached_assets)(?:
 const SENSITIVE_NAME = /auth|session|permissions?|tenan(?:t|cy)|billing|money|payment|stripe|entitlement|pricing|subscription|cap.?table|fund.?fee|remittance|valuation|sign.?in|mfa|oauth|access.?control|legal.?template/i;
 const LEAF_UI = /^frontend\/src\/(?:components|icons|styles)\//;
 const ORDINARY = /^(?:cloudflare-worker\/src\/(?:routes|services)|backend\/app\/(?:api\/routes|services)|frontend\/src\/(?:routes|services|pages))\//;
+const LINK_MODES = new Set(['120000', '160000']);
 const BASELINE = /(?:^|\/)scripts\/baselines\/|[-_.](?:baseline|ledger)\.json$/i;
 const RESTRICTED_TEST = /(?:\.\s*|\b)(?:skip|todo|only)\s*(?:\(|:\s*(?!false\b))/;
 const TIMEOUT = /(?:\b[\w-]*timeout[\w-]*\b)/i;
@@ -49,7 +50,7 @@ export function classify(files) {
   };
 
   if (!files.length) record('T2', 'No changed files were available for classification.');
-  for (const { path, status, previousPath, patch = '' } of files) {
+  for (const { path, status, previousPath, mode, patch = '' } of files) {
     const code = status[0];
     const [level, rule] = pathPolicy(path, code);
     record(level, `${level}: ${rule}: ${path}`);
@@ -68,7 +69,8 @@ export function classify(files) {
     if (path === 'scripts/test-drift-parts.mjs' && /\bSHARDS\b/.test(patch)) {
       record('T2', `Suite shard declaration changed: ${path}`);
     }
-    if (/^(?:new file mode|new mode) (?:120000|160000)$/m.test(patch)) record('T2', `Link or submodule introduced: ${path}`);
+    if (LINK_MODES.has(mode)) record('T2', `Link or submodule present: ${path}`);
+    if (/^Binary files .* differ$/m.test(patch)) record('T2', `Binary content changed: ${path}`);
     if (TIMEOUT.test(added) || TIMEOUT.test(removed)) record('T2', `Timeout changed: ${path}`);
     if (test && RESTRICTED_TEST.test(added)) record('T2', `Test skip, todo or only added: ${path}`);
     if (test && [TEST_CALL, ASSERTION].some((pattern) =>
@@ -90,16 +92,18 @@ export function changedFiles(base, head) {
   const bases = git('merge-base', '--all', base, head).trim().split('\n');
   if (bases.length !== 1) throw new Error('The pull request has no unique merge base.');
   const args = ['--no-ext-diff', '--no-textconv', '--find-renames', bases[0], head];
-  const entries = git('diff', '--name-status', '-z', ...args, '--').split('\0');
+  const entries = git('diff', '--raw', '--no-abbrev', '-z', ...args, '--').split('\0');
   const files = [];
   for (let i = 0; i < entries.length - 1;) {
-    const status = entries[i++];
+    const header = /^:[0-7]{6} ([0-7]{6}) [a-f0-9]{40} [a-f0-9]{40} ([A-Z][0-9]*)$/.exec(entries[i++]);
+    if (!header) throw new Error('Invalid raw Git diff entry.');
+    const [, mode, status] = header;
     const previousPath = /^[RC]/.test(status) ? entries[i++] : undefined;
     const path = entries[i++];
     const paths = previousPath ? [previousPath, path] : [path];
     // Three context lines keep a changed shard value tied to its declaration.
     const patch = git('--literal-pathspecs', 'diff', '--unified=3', ...args, '--', ...paths);
-    files.push({ path, status, previousPath, patch });
+    files.push({ path, status, previousPath, mode, patch });
   }
   return files;
 }

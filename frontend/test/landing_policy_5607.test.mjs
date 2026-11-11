@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -25,7 +25,9 @@ test('landing policy selects the most restrictive tier', () => {
   assert.equal(classify([file('unclassified/new.sh')]).tier, 'T2');
   assert.equal(classify([file('cloudflare-worker/src/routes/teamBilling.ts')]).tier, 'T2');
   assert.equal(classify([file('frontend/test/_custom-loader.mjs', 'A')]).tier, 'T2');
-  assert.equal(classify([file('documentation/link.md', 'A', 'new file mode 120000')]).tier, 'T2');
+  const link = { ...file('documentation/link.md', 'A'), mode: '120000' };
+  assert.equal(classify([link]).tier, 'T2');
+  assert.equal(classify([file('documentation/blob.md', 'A', 'Binary files /dev/null and b/documentation/blob.md differ')]).tier, 'T2');
   assert.equal(classify([file('documentation/reference.md', 'R100', '', 'scripts/sensitive.mjs')]).tier, 'T2');
   assert.equal(classify([]).tier, 'T2');
 });
@@ -76,6 +78,13 @@ test('the Git diff adapter keeps previous paths and literal filenames', (t) => {
   assert.equal(files[0].previousPath, 'scripts/risk.mjs');
   assert.equal(files[0].path, 'documentation/renamed [x].md');
   assert.equal(classify(files).tier, 'T2');
+  const beforeLink = git('rev-parse', 'HEAD');
+  symlinkSync('renamed [x].md', 'documentation/link.md');
+  git('add', 'documentation/link.md');
+  git('commit', '-qm', 'add link');
+  const link = changedFiles(beforeLink, git('rev-parse', 'HEAD'));
+  assert.equal(link[0].mode, '120000');
+  assert.match(classify(link).reasons.join('\n'), /Link or submodule present/);
 });
 
 test('shadow workflow checks out and executes the base only with read permission', () => {
