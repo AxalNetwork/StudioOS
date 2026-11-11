@@ -141,11 +141,13 @@ function ProjectSettingsCard({ uid, companyName, child, onMoved }) {
   const [moving, setMoving] = useState(false);
   const team = members.status === 'ready' && Array.isArray(members.value?.members) ? members.value.members.length : null;
   const manage = members.status === 'ready' && !!members.value?.can_manage;
+  const canEdit = members.status === 'ready' && !!members.value?.can_edit;
+  const readOnlyReason = members.status === 'ready' ? members.value?.write_reason : null;
   const teamTo = companyProjectTeamPath(uid, id);
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-4">
       <PCard title={`${child.name} · settings`} testId="company-project-settings"
-        aside={<Link to={`/projects/${encodeURIComponent(id)}`} className={LINK}>Edit</Link>}>
+        aside={canEdit ? <Link to={`/projects/${encodeURIComponent(id)}`} className={LINK} data-testid="company-project-edit">Edit</Link> : null}>
         {project.status === 'loading' && !project.value ? <Reading /> : project.status !== 'ready' ? <Failed what="This project" onRetry={reread} testId="company-project-unread" /> : (
           <FactList testId="company-project-facts" rows={[
             ['Name', <Fact key="n" fact={valueFact(project.value.name)} />],
@@ -160,6 +162,10 @@ function ProjectSettingsCard({ uid, companyName, child, onMoved }) {
                   : <span key="a" className={MUTED} data-testid="company-project-agents-off">{agents.out?.reason || 'AI agents aren’t switched on yet.'}</span>],
           ]} />
         )}
+        {members.status === 'ready' && !canEdit ? <p className={`m-0 mt-3 ${MUTED}`} data-testid="company-project-read-only">{readOnlyReason === 'support_session'
+          ? 'A support session can read this project but cannot change it.'
+          : readOnlyReason === 'hq_access' ? 'HQ reads this project. Its company members make the changes here.'
+            : 'Only an authorised project editor can change this project.'}</p> : null}
       </PCard>
       {manage ? (
         <PCard title="Move" testId="company-project-move">
