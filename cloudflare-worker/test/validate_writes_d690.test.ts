@@ -18,6 +18,7 @@
  *     --test cloudflare-worker/test/validate_writes_d690.test.ts
  */
 import { test } from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -72,6 +73,7 @@ function fixture(opts: { fk?: boolean } = {}) {
   db.exec(sqlOf('255_hypothesis_verdict_history.sql'));
   db.exec(sqlOf('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(sqlOf('440_validate_cycle_stores.sql'));
+  applyAcceptRetryKeys(db); // D5352
   addColumnsFrom(db,sqlOf('605_member_file_sizes.sql'),'demand_signals');
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(sqlOf('459_cycle_activity_convention.sql'));

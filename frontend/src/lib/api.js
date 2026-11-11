@@ -4988,6 +4988,7 @@ export const api = {
 
   // ---------- Cap Table / Ownership (Support) ----------
   positionsList: () => request('/positions'),
+  portfolioUpdatesLatest: () => request('/portfolio-updates/latest'),
   // Canvas IP1's `Mark history`. Every marking event across the accessible
   // book in one call — the per-project read already returned this history, but
   // looping it for a list page would be an N+1.
@@ -5007,7 +5008,7 @@ export const api = {
   // one anti-joined against `portfolio_positions` server-side, so "no support"
   // is two stored sets compared rather than the ledger's silence read as an
   // answer.
-  portfolioSupportList: () => request('/portfolio-support'),
+  portfolioSupportList: (params = {}) => request(`/portfolio-support${Object.keys(params).length ? `?${new URLSearchParams(params)}` : ''}`),
   // Logging is open to an investor for a company already in their book, not
   // admin-only like the valuation writes: a ledger the workers cannot write to
   // stays empty, which is the state IP3 existed in.

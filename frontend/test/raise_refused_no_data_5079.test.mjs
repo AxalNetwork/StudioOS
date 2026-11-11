@@ -21,6 +21,7 @@
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/raise_refused_no_data_5079.test.mjs
  */
+import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -74,7 +75,7 @@ function handlerFor(o = {}) {
   const send = (v) => (typeof v === 'number' ? response({ detail: 'That is not yours to read.' }, v) : response(v));
   return (url) => {
     if (url.includes('/auth/me')) return response(at.user);
-    if (url.includes('/captable/record/')) return send(at.record);
+    if (url.includes('/captable/record/')) return send(withCapabilities(at.record, at.user, null));
     if (url.includes('/data-room/')) return send(at.room);
     if (url.includes('/contacts/raise-prospects')) return send(at.prospects);
     if (url.includes('/commitments')) return send(at.commitments);

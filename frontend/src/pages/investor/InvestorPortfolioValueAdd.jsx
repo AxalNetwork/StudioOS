@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkerRail } from '../../ui';
 import ZoneHeader from '../../workspaces/ZoneHeader';
 import { ZonePrimaryScope } from '../../workspaces/ZoneActions';
@@ -54,18 +54,20 @@ const dateLabel = (value) => (value ? new Date(value).toLocaleDateString('en-US'
  * why the route returns `entries_without_hours` beside the sum instead of
  * folding the unmeasured entries in at zero.
  */
-const hoursLabel = (value) => (value == null ? 'Not recorded' : `${Number(value) % 1 === 0 ? Number(value) : Number(value).toFixed(1)} h`);
+const hoursLabel = (value) => (value == null ? 'Not recorded' : `${Number(value).toLocaleString('en-US', { maximumFractionDigits: 12 })} h`);
 
 const EMPTY = {
   entries: [], companies: [], untouched: [],
   totals: {
-    delivered: 0, promised: 0, withdrawn: 0, hours_recorded: 0,
+    delivered: 0, promised: 0, withdrawn: 0, entries: 0, hours_recorded: 0,
     entries_without_hours: 0, companies_in_book: 0, companies_supported: 0,
   },
 };
 
 export default function InvestorPortfolioValueAdd() {
   const [filter, setFilter] = useState('all');
+  const [offset, setOffset] = useState(0);
+  const generation = useRef(0);
   const [state, setState] = useState({ loading: true, error: '', data: EMPTY });
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState('');
@@ -83,19 +85,29 @@ export default function InvestorPortfolioValueAdd() {
   const [history, setHistory] = useState(null);
 
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const result = await api.portfolioSupportList();
+      const params = {};
+      if (offset) params.offset = offset;
+      if (filter === 'outstanding' || filter === 'delivered') params.state = filter === 'outstanding' ? 'promised' : 'delivered';
+      const result = await api.portfolioSupportList(params);
+      if (request !== generation.current) return;
+      if (offset && result?.entries?.length === 0) {
+        setOffset(Math.max(0, offset - (result.page?.limit || offset)));
+        return;
+      }
       setState({ loading: false, error: '', data: { ...EMPTY, ...result, totals: { ...EMPTY.totals, ...(result?.totals || {}) } } });
     } catch (error) {
+      if (request !== generation.current) return;
       // An unreadable ledger is not an empty one. The page says which it is
       // rather than drawing the empty state over a failed read.
       setState({ loading: false, error: error?.message || 'The support ledger could not be read.', data: EMPTY });
     }
-  }, []);
+  }, [filter, offset]);
   useEffect(() => { load(); }, [load]);
 
-  const { entries, companies, untouched, totals } = state.data;
+  const { entries, companies, untouched, totals, page } = state.data;
   // `company` is a VIEW, not a row predicate — the rollup rather than a
   // narrower set of entries. The other three read `state` directly.
   const byCompany = filter === 'company';
@@ -108,7 +120,8 @@ export default function InvestorPortfolioValueAdd() {
   const logSupport = useCallback(() => {
     setForm((current) => (current ? null : { project_uid: '', kind: 'intro', state: 'promised', hours: '', summary: '', outcome: '', error: '' }));
   }, []);
-  const byCompanyView = useCallback(() => { setFilter('company'); }, []);
+  const changeFilter = useCallback((next) => { setOffset(0); setFilter(next); }, []);
+  const byCompanyView = useCallback(() => { changeFilter('company'); }, [changeFilter]);
 
   // D1595 (#3868) / D1424 (#3700): Ask on Log support's "What happened". The
   // Add form's parent is the chosen company's project id; nothing is read
@@ -217,9 +230,10 @@ export default function InvestorPortfolioValueAdd() {
   };
 
   const unreadable = Boolean(state.error);
-  const hours = totals.entries_without_hours > 0 && totals.hours_recorded === 0
+  const totalsUnreadable = unreadable || state.data.page_state === 'unreadable';
+  const hours = totals.entries > 0 && totals.entries_without_hours === totals.entries
     ? 'Not recorded'
-    : `${totals.hours_recorded} h`;
+    : hoursLabel(totals.hours_recorded);
 
   return <ZonePrimaryScope><div className="i4-shell ip3-shell"><main className="i4-portfolio ip3-value-add" data-testid="investor-portfolio-value-add">
     <ZoneHeader bucketPath="/portfolio" title="Value-add desk" intro="Support ledger — introductions, hours and outcomes per company."
@@ -227,7 +241,7 @@ export default function InvestorPortfolioValueAdd() {
     <ZoneToolbar
       role="investor"
       className="mb-3"
-      filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: setFilter })}
+      filters={investorZoneFilters('portfolio/value-add', { value: filter, onChange: changeFilter })}
       actions={investorZoneActions('portfolio/value-add', {
         handlers: { logSupport, byCompany: byCompanyView },
         view: {
@@ -246,15 +260,24 @@ export default function InvestorPortfolioValueAdd() {
     </div>}
     {state.loading ? <Skeleton /> : <>
       <section className="i4-stats">
-        <Stat label="Delivered" value={unreadable ? 'Unavailable' : totals.delivered} note={unreadable ? 'Ledger unreadable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
-        <Stat label="Hours logged" value={unreadable ? 'Unavailable' : hours} note={unreadable ? 'Ledger unreadable' : totals.entries_without_hours === 0 ? (entries.length ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
-        <Stat label="Outstanding" value={unreadable ? 'Unavailable' : totals.promised} note={unreadable ? 'Ledger unreadable' : 'Promised and not yet delivered'} />
-        <Stat label="No support at all" value={unreadable ? 'Unavailable' : untouched.length} note={unreadable ? 'Ledger unreadable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
+        <Stat label="Delivered" value={totalsUnreadable ? 'Unavailable' : totals.delivered} note={totalsUnreadable ? 'Ledger totals unavailable' : `${totals.companies_supported} of ${totals.companies_in_book} ${totals.companies_in_book === 1 ? 'company' : 'companies'} in the book`} />
+        <Stat label="Hours logged" value={totalsUnreadable ? 'Unavailable' : hours} note={totalsUnreadable ? 'Ledger totals unavailable' : totals.entries_without_hours === 0 ? (totals.entries ? 'Every entry carries an hour count' : 'No entry is recorded yet') : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hours and ${totals.entries_without_hours === 1 ? 'is' : 'are'} not counted`} />
+        <Stat label="Outstanding" value={totalsUnreadable ? 'Unavailable' : totals.promised} note={totalsUnreadable ? 'Ledger totals unavailable' : 'Promised and not yet delivered'} />
+        <Stat label="No support at all" value={totalsUnreadable ? 'Unavailable' : untouched.length} note={totalsUnreadable ? 'Ledger totals unavailable' : untouched.length ? untouched.map((x) => x.name).join(', ') : 'Every company in the book has an entry'} />
       </section>
       {form && <LogForm form={form} setForm={setForm} companies={companies} onSubmit={submit} busy={busy === 'log'} onCancel={logSupport} fill={fill} />}
       {byCompany
         ? <PerCompany companies={companies} unreadable={unreadable} />
         : <section className="i4-card i4-positions ip3-ledger"><div className="i4-section-head"><div><h2>Support ledger</h2><p>{filter === 'outstanding' ? 'Promised entries, still open' : filter === 'delivered' ? 'Delivered entries' : `${visible.length} of ${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'}`}</p></div><span>Promised entries stay visible until delivered or withdrawn</span></div><Ledger rows={visible} filter={filter} unreadable={unreadable} onMove={move} busy={busy} history={history} onHistory={openHistory} noticeFor={notice?.entryUid || null} /><p className="i4-seam-note"><span>Evidence boundary</span> Every row here was written by a person recording their own work. Introductions requested through the quota, dealroom membership and calendar activity are access, not support, and none of them is read into this ledger.</p></section>}
+      {!byCompany && !totalsUnreadable && page && (page.offset > 0 || page.next_offset != null) && (
+        <nav aria-label="Support ledger pages" className="flex flex-wrap items-center gap-3 py-2 text-sm">
+          <button type="button" className="underline disabled:opacity-40" disabled={!page.offset || Boolean(busy)}
+            onClick={() => setOffset(Math.max(0, page.offset - page.limit))}>Previous</button>
+          <span aria-live="polite">{page.offset + 1}–{page.offset + entries.length} of {page.matching_total ?? page.total} matching entries</span>
+          <button type="button" className="underline disabled:opacity-40" disabled={page.next_offset == null || Boolean(busy)}
+            onClick={() => setOffset(page.next_offset)}>Next</button>
+        </nav>
+      )}
       {/* The artboard's band. Its foot read "Feeds the LP reporting pack." —
           false: accepting a draft stamps `accepted_at` and nothing else, and
           no LP report reads this store, so the foot now says what happens. */}
@@ -270,7 +293,7 @@ export default function InvestorPortfolioValueAdd() {
       />
       <footer className="i4-boundary">Investor workspace · the ledger is restricted to this investor’s accessible portfolio.</footer>
     </>}
-  </main><ValueAddRail totals={totals} entries={entries} unreadable={unreadable} /></div></ZonePrimaryScope>;
+  </main><ValueAddRail totals={totals} unreadable={totalsUnreadable} /></div></ZonePrimaryScope>;
 }
 
 /**
@@ -362,7 +385,7 @@ function LogForm({ form, setForm, companies, onSubmit, busy, onCancel, fill = nu
 
 function Stat({ label, value, note }) { return <article className="i4-stat ip3-stat"><div><span>{label}</span><b>{value}</b><small>{note}</small></div></article>; }
 function Skeleton() { return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /></div>; }
-function ValueAddRail({ totals, entries, unreadable }) {
+function ValueAddRail({ totals, unreadable }) {
   return (
     <WorkerRail
       workspace="Portfolio"
@@ -371,7 +394,7 @@ function ValueAddRail({ totals, entries, unreadable }) {
       stance="Support ledger"
       note="Recorded support work, written by the people who did it. Introductions requested through the quota, dealroom membership and calendar activity are never relabelled as value-add."
       coverage={[
-        unreadable ? 'Support ledger unreadable' : `${entries.length} recorded ${entries.length === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
+        unreadable ? 'Support ledger unreadable' : `${totals.entries} recorded ${totals.entries === 1 ? 'entry' : 'entries'} across ${totals.companies_in_book} accessible ${totals.companies_in_book === 1 ? 'company' : 'companies'}`,
         unreadable ? 'Hours unavailable' : `${totals.entries_without_hours} ${totals.entries_without_hours === 1 ? 'entry carries' : 'entries carry'} no hour count`,
       ]}
       unavailable={[
