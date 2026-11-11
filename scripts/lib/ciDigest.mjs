@@ -3,6 +3,12 @@ import { createHash } from 'node:crypto';
 import { safeJobName, safeGithubUrl, VERDICTS } from './ciClassify.mjs';
 export const MARKER = '<!-- studioos-ci-digest:v1 -->';
 const cut = value => String(value ?? '').slice(0, 300);
+function detailText(detail) {
+  const names = (Array.isArray(detail.testNames) ? detail.testNames : []).join(', ').slice(0, 80);
+  const repro = cut(detail.repro).slice(0, 100);
+  const prefix = `Tests: ${names || '(not recorded)'}\nRepro: ${repro || '(not recorded)'}\nExcerpt: `;
+  return prefix + cut(detail.excerpt).slice(0, Math.max(0, 300 - prefix.length));
+}
 function jobUrl(value) {
   if (typeof value !== 'string') return null;
   const match = /^(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+)(\/job\/\d+)?$/.exec(value);
@@ -18,7 +24,7 @@ export function digest({ classification, jobs = [], artifact = null, headSha, at
     const step = safeJobName(job.steps?.find(s => ['failure','timed_out'].includes(s.conclusion))?.name) || '(step unavailable)';
     return { name, step, url: jobUrl(job.html_url), id: typeof detail?.id === 'string' && /^[\w:./-]{1,200}$/.test(detail.id) ? detail.id : name,
       flaky: attempts.some(a => a.headSha === headSha && a.jobs?.some(j => j.name === job.name && j.conclusion === 'success')),
-      detail: detail ? cut([...(Array.isArray(detail.testNames) ? detail.testNames : []), detail.excerpt ?? '', detail.repro ?? ''].join('\n')) : null };
+      detail: detail ? detailText(detail) : null };
   });
   const fingerprint = createHash('sha256').update(JSON.stringify([classification.verdict, [...new Set(failures.map(f => f.id))].sort()])).digest('hex');
   const inherited = ['inherited_main_failure','infra_failure'].includes(classification.verdict);

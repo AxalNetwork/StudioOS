@@ -28,7 +28,7 @@ test('fingerprint ignores job order and run ids, uses sorted artifact ids and ch
 });
 test('5000-character backtick detail remains fenced, truncated, and cannot escape metadata',()=>{
  const d=fixture('pr_failure',{artifact:{failures:[{job:jobs[0].name,testNames:['a test'],excerpt:'```\n<script>@name\n'+'x'.repeat(5000),repro:'node test'}]}});
- assert.equal(d.failures[0].detail.length,300);
+ assert.equal(d.failures[0].detail.length,300);assert.match(d.failures[0].detail,/Repro: node test/);
  const text=render(d);assert.match(text,/````text\n/);assert.match(text,/\n````/);assert.ok(text.length<1700);
  assert.equal(JSON.parse(/```json\n([\s\S]+?)\n```/.exec(text)[1]).headSha,headSha);
 });
