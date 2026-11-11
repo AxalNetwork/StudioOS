@@ -35,6 +35,8 @@ also exercises a `project_id` deep link.
 | `learning_lesson_integration_4478.test.mjs` | D4478: routed completion headers, empty reading ledes, shared saving state, route refusals and no Learning assistant mounts. |
 | `learning_lesson_footer_4478.test.mjs` | D4478: lesson position, completion reasons, live offline/reconnect queue, source changes, refused progress writes and empty reading. |
 | `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
+| `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
+| `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
 
 ## Conventions
 
