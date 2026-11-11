@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { toMajorString } from '../../../lib/money.js';
 import { Link } from 'react-router-dom';
 import { useOfFundsApi } from '../../../lib/api/useOfFunds';
 import { Lightbox } from '../../../ui';
@@ -230,7 +231,7 @@ export const REVIEWED = 'Showing the latest plan. Your change was not saved; mak
 export function EditSplitDialog({ projectId, base, viewer, onClose, onSaved, api = useOfFundsApi }) {
   const start = Object.fromEntries(SECTIONS.map((s) => [s.key, String(base?.lines?.find((l) => l.category_key === s.key)?.share_pct ?? '')]));
   const [shares, setShares] = useState(start);
-  const [amount, setAmount] = useState(base?.amount_to_raise_cents != null ? String(base.amount_to_raise_cents / 100) : '');
+  const [amount, setAmount] = useState(toMajorString(base?.amount_to_raise_cents, 'USD') ?? '');
   const [target, setTarget] = useState(base?.target_runway_months ?? 18);
   const [custom, setCustom] = useState(![18, 24].includes(Number(base?.target_runway_months ?? 18)));
   const [busy, setBusy] = useState(false);
@@ -383,7 +384,8 @@ export function EditHireDialog({ projectId, hire, onClose, onSaved, api = useOfF
 /** UF13d: the plan, the round and the cap-table scenario then read the same raise. Only a recorded size is offered. */
 export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOfFundsApi }) {
   const base = plan?.base?.value;
-  const options = roundSourceRows(plan).filter((r) => r.cents != null);
+  const baseCurrency = (base?.currency ?? 'usd').toLowerCase();
+  const options = roundSourceRows(plan).filter((r) => r.cents != null && r.currency?.toLowerCase() === baseCurrency);
   const [pick, setPick] = useState(options.find((o) => o.chosen)?.key ?? options[0]?.key ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -406,7 +408,7 @@ export function RoundSizeDialog({ projectId, plan, onClose, onSaved, api = useOf
             <input type="radio" name="round" checked={pick === o.key} onChange={() => setPick(o.key)} className="mt-1" />
             <span><span className={`${MONO} font-bold`}>{o.raise}</span> · {o.label} · <span className={MUTED}>{o.source}</span></span>
           </label>
-        )) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No recorded round size to choose from.</p>}
+        )) : <p className={`m-0 text-[12.5px] ${MUTED}`}>No recorded round size in {baseCurrency.toUpperCase()}.</p>}
         <p className={`m-0 text-[12px] ${MUTED}`}>Choosing a size changes this plan’s raise. Your split keeps its shares.</p>
         {error ? <p role="alert" className="m-0 text-[12.5px] font-semibold text-red-700 dark:text-red-300" data-testid="uof-round-error">{error}</p> : null}
         {stale ? <ReviewLatest onReview={() => onSaved(REVIEWED)} /> : null}

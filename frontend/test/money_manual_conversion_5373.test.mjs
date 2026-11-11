@@ -204,15 +204,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/subscriptionPlans.ts": 1,
     "cloudflare-worker/src/services/captable.ts": 1,
   } },
-  { kind: 'pending', reason: "Use of Funds money paths (scenario and hire amounts carry a currency column). Owned by #5375, which edits these files; migrating them here would collide. Named in D5373 as a follow-up.", files: {
-    "frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx": 1,
-    "frontend/src/pages/raise/useoffunds/scenariosForecastModel.js": 5,
-    "frontend/src/pages/raise/useoffunds/useOfFundsModel.js": 3,
-    "cloudflare-worker/src/services/useOfFunds/legacy.ts": 2,
-    "cloudflare-worker/src/services/useOfFunds/read.ts": 1,
-    "cloudflare-worker/src/services/useOfFunds/store.ts": 4,
-  } },
   { kind: 'pending', reason: "Cap table instruments and the cap-table model: an instrument carries its own currency, but the saved model and the access record are in whole major units. Named in D5373 as a follow-up.", files: {
     "frontend/src/pages/raise/captable/instrumentsModel.js": 1,
     "frontend/src/pages/raise/captable/overviewModel.js": 2,
@@ -282,6 +273,13 @@ test('every pending file is named in the decision file, so the follow-up list is
 
 test('the surfaces D5373 migrated whole are off the allow-list and use the money layer (checkout, payModel and wellbeing keep USD-only lines, so they are listed and tested in money_surfaces_5373)', () => {
   const migrated = [
+    'frontend/src/pages/raise/useoffunds/ScenariosForecast.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/UseOfFundsParts.jsx:toMajorString',
+    'frontend/src/pages/raise/useoffunds/scenariosForecastModel.js:parseMinor',
+    'frontend/src/pages/raise/useoffunds/useOfFundsModel.js:formatMinorOrCount',
+    'cloudflare-worker/src/services/useOfFunds/legacy.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/read.ts:majorToMinor',
+    'cloudflare-worker/src/services/useOfFunds/store.ts:toMajorString',
     'frontend/src/lib/partnerEarnings.js:formatMinor',
     'frontend/src/pages/events/myEventsModel.js:formatMinorOrCount',
     'frontend/src/pages/events/eventDrawersModel.js:formatMinorOrCount',
