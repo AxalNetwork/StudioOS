@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
-import { api, adminMfaPolicyApi } from '../../lib/api';
+import { api } from '../../lib/api';
+import { adminMfaPolicyApi } from '../../lib/api/adminMfaPolicy';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { reportError } from '../../lib/log';
