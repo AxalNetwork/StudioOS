@@ -49,6 +49,8 @@ export type BookingRow = {
   // #4702: the advisor's answer, kept apart from what happened to the session.
   advisor_decision?: 'accepted' | 'declined' | null; advisor_decided_at?: string | null;
   cancelled_by?: 'advisor' | 'client' | 'admin' | 'system' | null;
+  // #5316 (D5316): recorded as included in an engagement (read as billing_state 'included').
+  included_at?: string | null; included_by_user_id?: number | null; included_engagement_id?: number | null;
 };
 /**
  * D4715 (#4715) — the offer a booking is made on, copied from its session type
@@ -122,6 +124,7 @@ export function bookingDto(b: BookingRow, extras: any = {}): any {
 export function advisorMoney(b: Partial<BookingRow>): {
   amount_cents: number | null; billing_state: string;
   platform_cut_cents: number | null; take_rate_bps: number | null; net_cents: number | null;
+  included_at: string | null; included_by_user_id: number | null; included_engagement_id: number | null;
 } {
   const gross = b.amount_cents ?? null;
   // 241 — THE STORED CUT, NOT A RECOMPUTED ONE. `platform_cut_cents` is what
@@ -132,10 +135,15 @@ export function advisorMoney(b: Partial<BookingRow>): {
   const cut = (b as any).platform_cut_cents ?? null;
   return {
     amount_cents: gross,
-    billing_state: b.billing_state ?? 'unpriced',
+    // #5316 (D5316): an included session is its own state. It is stored beside
+    // `billing_state` (whose CHECK cannot take a fifth value) and read as one.
+    billing_state: b.included_at ? 'included' : (b.billing_state ?? 'unpriced'),
     platform_cut_cents: cut,
     take_rate_bps: (b as any).take_rate_bps ?? null,
     net_cents: gross != null && cut != null ? gross - cut : null,
+    included_at: b.included_at ?? null,
+    included_by_user_id: b.included_at ? (b.included_by_user_id ?? null) : null,
+    included_engagement_id: b.included_at ? (b.included_engagement_id ?? null) : null,
   };
 }
 /** #4715: the policy's eligibility and ownership checks (services/advisorAccess.ts). */

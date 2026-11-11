@@ -4311,6 +4311,9 @@ export const api = {
   requestAdvisorProofConsent: (id, data) =>
     request(`/advisors/me/proof/${id}/consent-request`, { method: 'POST', body: JSON.stringify(data) }),
 
+  // #5316 (D5316): `billing_state: 'included'` (with an optional `engagement_id`) records a session as included
+  // in an engagement: no price, in no billed or outstanding total. Refused on a priced line (409 `priced_line`);
+  // an included line leaves that state only when `billing_state` is sent (409 `included_line` otherwise).
   updateMyAdvisorBookingBilling: (id, data) =>
     request(`/advisors/me/bookings/${id}/billing`, { method: 'PATCH', body: JSON.stringify(data) }),
   getMyAdvisorEarnings: () => request('/advisors/me/earnings'),
