@@ -4,7 +4,8 @@ import {
   ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Handshake,
   Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
-import { api, clientDeliverablesApi } from '../lib/api';
+import { api } from '../lib/api';
+import { clientDeliverablesApi } from '../lib/api/clientDeliverables.js';
 import { bpsPercent } from '../lib/bps';
 import ZoneActions from '../workspaces/ZoneActions';
 import { useEscapeClose } from '../components/useEscapeClose';
