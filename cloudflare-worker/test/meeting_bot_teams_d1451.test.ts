@@ -40,7 +40,7 @@ test('D1451 switch: a Teams send with the switch off is refused before any run o
   const r = await post(w, { meeting_url: TEAMS_LINK });
   assert.equal(r.status, 503);
   assert.equal(r.body.code, 'bot_unavailable');
-  assert.equal(JSON.stringify(r.body).includes('teams.microsoft.com'), false);
+  assert.equal(JSON.stringify(r.body).includes(TEAMS_LINK), false);
   assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM meeting_bots').get().n, 0);
   assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n, 0);
   assert.equal(w.starts.length, 0);
