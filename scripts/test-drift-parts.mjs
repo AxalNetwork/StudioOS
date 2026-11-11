@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, globSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { planParts, assertExactOnce } from './lib/shardPlan.mjs';
+import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
 
 /** How many shards each long test script is cut into. */
 export const SHARDS = Object.freeze({
@@ -107,6 +107,12 @@ export function timingsOf(input) {
 }
 
 function main(argv) {
+  if (argv[0] === '--main-artifact') {
+    const artifacts = JSON.parse(readFileSync(argv[1], 'utf8')).artifacts;
+    const commits = JSON.parse(readFileSync(argv[2], 'utf8'));
+    console.log(newestMainArtifact(artifacts, commits)?.id || '');
+    return 0;
+  }
   const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
   const { scripts } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
   const parts = partsOf(scripts);

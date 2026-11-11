@@ -108,7 +108,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          artifact=$(gh api "repos/$REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.expired == false and .workflow_run.head_branch == "main" and (.name | startswith("test-deps-")))] | sort_by(.created_at) | reverse | .[0].id // empty' || true)
+          artifact=''
+          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
+            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
+          fi
           if [ -n "$artifact" ]; then
             if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
               unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true

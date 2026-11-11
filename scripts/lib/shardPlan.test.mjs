@@ -1,7 +1,7 @@
 // D5609: skew, unknown weights, deterministic bytes and coverage failures.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planParts, assertExactOnce } from './shardPlan.mjs';
+import { planParts, assertExactOnce, newestMainArtifact } from './shardPlan.mjs';
 
 test('longest first balances a skewed suite within ten percent of the mean', () => {
   const files = Array.from({ length: 120 }, (_, i) => `test/${String(i).padStart(3, '0')}.test.mjs`);
@@ -31,4 +31,12 @@ test('coverage rejects dropped, repeated, extra and duplicate input files', () =
   assert.throws(() => assertExactOnce([{ files: ['b'] }], ['a']), /extra file: b/);
   assert.throws(() => planParts({ files: ['a', 'a'], parts: 2 }), /duplicate input/);
   for (const parts of [0, -1, 1.5]) assert.throws(() => planParts({ files: [], parts }), /positive integer/);
+});
+
+
+test('newest main artifact includes merged queue SHAs and excludes newer unmerged PRs', () => {
+  const row = (id, sha, branch) => ({ id, name: 'test-deps-sha', expired: false, created_at: `2026-11-11T12:0${id}:00Z`, workflow_run: { head_sha: sha, head_branch: branch } });
+  const artifacts = [row(1, 'old', 'main'), row(2, 'merged', 'gh-readonly-queue/main/pr-1'), row(3, 'unmerged', 'feature')];
+  assert.equal(newestMainArtifact(artifacts, [{sha:'old'}, {sha:'merged'}]).id, 2);
+  assert.equal(newestMainArtifact(artifacts, []), null);
 });
