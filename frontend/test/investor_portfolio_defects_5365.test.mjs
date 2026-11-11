@@ -48,16 +48,42 @@ test('optional Overview failures label their figures Unavailable rather than zer
   try {
     const words = view.text();
     assert.match(words, /TVPI · grossUnavailableAnalytics source unavailable/);
-    assert.match(words, /IntroductionsIntroduction records unavailableUnavailable/);
+    assert.match(words, /Support deliveredSupport totals unavailableUnavailable/);
     assert.match(words, /Portfolio healthHealth source unavailableUnavailable/);
     assert.doesNotMatch(words, /0 currently healthy|0 recorded · 0 accepted/);
+  } finally { await view.close(); }
+});
+
+test('the overview uses the reporting population and full support totals independently of displayed records', async () => {
+  const view = await mount(InvestorPortfolioCanvas, ({ path }) => {
+    if (path === '/api/positions') return json({ items: [{ project_id: 7, project: { name: 'Northwind' }, total_invested: 0 }] });
+    if (path === '/api/positions/analytics') return json({ nav: 1234.56, as_of: '2026-09-30' });
+    if (path === '/api/positions/kpi-compliance') return json({
+      population: { period: '2026-Q3' }, reported_count: 1, total_count: 2,
+      companies: [{ project_id: 7, reported: true }, { project_id: 8, reported: false }],
+      kpi_set: [{ kpi_key: 'headcount', unit: 'count' }, { kpi_key: 'revenue', unit: 'EUR' }],
+    });
+    if (path === '/api/portfolio-updates/latest') return json({
+      items: [{ project_id: 7, title: 'Latest visible update', kpis: { headcount: 0, revenue: 12.34, runway: null } }],
+    });
+    if (path === '/api/portfolio-support') return json({
+      entries: [], totals: { delivered: 412, companies_supported: 2, companies_in_book: 3 },
+    });
+    return json({});
+  });
+  try {
+    const words = view.text();
+    assert.match(words, /NAV · grossUSD\s1,234\.56/);
+    assert.match(words, /1 of 2 portfolio companies reported for 2026-Q3/);
+    assert.match(words, /Latest visible update.*Headcount0.*Revenue€12\.34.*RunwayNot recorded/);
+    assert.match(words, /Support delivered2 of 3 companies in the support ledger412/);
   } finally { await view.close(); }
 });
 
 test('the mounted Updates inbox formats each KPI by its unit', async () => {
   const view = await mount(InvestorPortfolioUpdates, ({ path }) => {
     if (path === '/api/positions') return json({ items: [{ project_id: 7, project: { uid: 'northwind', name: 'Northwind' } }] });
-    if (path === '/api/portfolio-updates') return json({ items: [{ project_id: 7, title: 'October', submitted_at: '2026-11-01T10:00:00Z', kpis: { customers: 41, runway_months: 22, headcount: 31, revenue: 9000 } }] });
+    if (path === '/api/portfolio-updates/latest') return json({ items: [{ project_id: 7, title: 'October', submitted_at: '2026-11-01T10:00:00Z', kpis: { customers: 41, runway_months: 22, headcount: 31, revenue: 9000 } }] });
     if (path === '/api/positions/kpi-compliance') return json({ cadence: 'quarterly', companies: [{ project_id: 7, reported: true }], kpi_set: [{ kpi_key: 'headcount', unit: 'count' }, { kpi_key: 'revenue', unit: 'USD' }] });
     if (path === '/api/portfolio/health') return json({ items: [], totals: {} });
     if (path === '/api/portfolio/chases') return json({ items: [] });

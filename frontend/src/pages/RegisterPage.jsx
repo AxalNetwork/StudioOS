@@ -9,7 +9,8 @@ import useForcedLightTheme from '../hooks/useForcedLightTheme';
 import { loadTurnstile } from '../lib/turnstile';
 import AxalLogo from '../components/AxalLogo';
 import AuthShell, { AuthCard } from '../components/auth/AuthShell';
-import { normaliseRef, readRefCookie } from '../lib/referralRef';
+import { registrationRef } from '../lib/referralRef';
+import { subscribe as subscribeConsent } from '../lib/cookieConsent';
 import { planIntentFrom } from '../lib/planIntent';
 import { LANES, LANE_ROLE, MEMBERSHIP_STEPS, REGISTER_ACTIONS, registerHeading } from '../lib/registerCopy';
 import { RegistrationPlanBlock } from '../components/auth/RegistrationPlan';
@@ -84,11 +85,6 @@ export default function RegisterPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // D4289 P2 (#4291): `?ref` first, then the first-touch cookie (a handle's `h:jane`, or a code), so a
-    // visitor who arrived through a link and came back later still signs up attributed. A handle is never
-    // upper-cased into a code.
-    const r = params.get('ref') || readRefCookie();
-    if (r) setRefCode(normaliseRef(r) || r.toUpperCase());
     const l = params.get('lane');
     if (l && LANES.includes(l)) {
       setLane(l);
@@ -120,6 +116,12 @@ export default function RegisterPage() {
     // Task #2 — funnel: register page reached. Attribution (utm/ref/lane/
     // invite) is captured inside the tracker from its own URL allowlist.
     track('register_view');
+  }, []);
+
+  useEffect(() => {
+    const update = () => setRefCode(registrationRef(window.location.search));
+    update();
+    return subscribeConsent(update);
   }, []);
 
   // Task #2 — funnel: first interaction with the form (typed into any field).
@@ -243,7 +245,7 @@ export default function RegisterPage() {
       let purpose = 'signup';
       if (!(TURNSTILE_SITE_KEY && turnstileFailed)) {
         try {
-          await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, defer_email: true, role: laneRole, product: productIntent || undefined });
+          await api.register({ ...form, turnstileToken, ref_code: registrationRef(window.location.search) || undefined, defer_email: true, role: laneRole, product: productIntent || undefined });
         } catch (e) {
           // Keyed on the code, not the sentence (D258): a copy edit to the
           // Worker's wording must not turn every returning member's sign-in
@@ -280,7 +282,7 @@ export default function RegisterPage() {
       // and unlocked by `/api/profiling/save` (auth-bound). Register sends
       // the verification email immediately and jumps straight to the
       // "Check Your Email" step; the chatbot runs after the user logs in.
-      const res = await api.register({ ...form, turnstileToken, ref_code: refCode || undefined, role: laneRole, product: productIntent || undefined });
+      const res = await api.register({ ...form, turnstileToken, ref_code: registrationRef(window.location.search) || undefined, role: laneRole, product: productIntent || undefined });
       // Task #2 — funnel: email_sent:false is the audit's silent-drop-off
       // signal (provider outage / misconfig) — alert threshold documented in
       // documentation/architecture/ANALYTICS_FUNNEL.md.

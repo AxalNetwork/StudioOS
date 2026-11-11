@@ -65,3 +65,16 @@ to the owner's canvases: `design/incoming/Companies Projects Page.dc.html` and
 - **A failed or missing read is said, never drawn as none.** A cycle list the
   Worker could not read is "could not be read"; a failed memberships read is
   Unreadable, not "you belong to none".
+
+D4966 (#5312) rebuilds Company settings › General to the v2 canvas, frontend
+only. `CompanyGeneralFields.jsx` holds the parts the canvas adds, each pure and
+reading nothing: `CurrencyCombobox` (the ISO list searched by code or by name,
+"Not recorded" always offered, no guessed default), `UrlField` (Open, and what
+will be stored when it differs from what was typed), `DescriptionField`,
+`FieldFrame` (one field's label, hint, help, error and the changed-field edge),
+`ProblemSummary` (every bad field, each a link to it) and `PublicPreview` (the
+Worker's `PUBLIC_FIELDS` only, marked when it includes unsaved changes).
+`generalFormModel.js` gains the four intent groups, `previewOf`, `railStatus`'s
+twelve save states, `fieldProblems` (of which `problemOf` is the first) and the
+currency and URL helpers. The save machinery is unchanged: #4960 to #4964 own
+it.

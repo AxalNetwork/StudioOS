@@ -305,7 +305,7 @@ Findings 3 and 4 now have D5334 regressions.
 | Model-judged rubric | missing | #4531, after deterministic assertions |
 | CI command with per-file errors and a summary | partial (tests and `--check` exist) | #4532 |
 | Source ↔ D1 reconciliation | present: #4532 (CI, `--persisted`), D5335 (read-only production route); first totals pending | owner step on #5335 |
-| Stable case ids, multi-case sources | missing; built by D5336 (#5336) | #4532 / #4588 |
+| Stable case ids, multi-case sources | present (D5336, #5336) | — |
 | Release evidence | unclear | #4533 |
 | Campaign traversal past 20 skills | present (D4668) | — |
 | Frontend: library list, seed, published evals, campaigns | missing client methods | a UI session |
