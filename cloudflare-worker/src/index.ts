@@ -507,7 +507,7 @@ import { leaseHolderValue, recordLeaseHeldFire, writeCronRunHistory } from './ut
 import { branchOf, assertBranchAppUrl } from './util/branch';
 // D110 — one table of which thrown sentence is which status, shared with
 // `routes/_t13t14t15_helpers.ts`'s `mapError`. The two used to disagree.
-import { ADMIN_FROZEN, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
+import { ADMIN_FROZEN, ADMIN_MFA_REQUIRED, AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, adminFrozenBody, adminMfaRequiredBody, branchSuspendedBody, stepUpRefusalBody } from './util/authErrors';
 import { BRANCH_SUSPENDED } from './util/branch';
 import { enqueueReembedChunks } from './util/reembedSweep';
 import { rebuildUsersRoleCheckForInvestor, rebuildUsersRoleCheckForAdvisor } from './util/usersRoleRebuild';
@@ -1894,6 +1894,8 @@ app.onError((err: any, c) => {
   // reason the step-up carries its TTL: the status alone leaves the holder with
   // nothing to act on.
   if (msg === ADMIN_FROZEN) return c.json(adminFrozenBody(err), 423);
+  // D5249 — enrol-first: the body names where to enrol.
+  if (msg === ADMIN_MFA_REQUIRED) return c.json(adminMfaRequiredBody(), 403);
   // D142 — the branch twin. Without this line the gate's 423 fell through to
   // the table below and shipped as `{detail}` alone, which no client can key
   // on; `api.js` keys strictly on `code`.
