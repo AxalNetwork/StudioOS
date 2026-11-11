@@ -37,7 +37,7 @@ const r = new Hono<{ Bindings: Env }>();
 
 type ProjectRow = { id: number; founder_id: number | null; company_id: number | null; slug: string | null };
 
-async function managedProject(env: Env, raw: string, user: User, support: boolean): Promise<{ project: ProjectRow } | { status: 400 | 403 | 404; body: Record<string, unknown> }> {
+async function managedProject(env: Env, raw: string, user: User, support: boolean, ownerOnly = false): Promise<{ project: ProjectRow } | { status: 400 | 403 | 404; body: Record<string, unknown> }> {
   const id = Number(raw);
   if (!Number.isSafeInteger(id) || id <= 0) return { status: 400, body: { detail: 'Invalid project id' } };
   const project = await env.DB.prepare('SELECT id, founder_id, company_id, slug FROM projects WHERE id = ? AND deleted_at IS NULL')
@@ -47,7 +47,9 @@ async function managedProject(env: Env, raw: string, user: User, support: boolea
     const denial = await companyWriteDenial(env, { id: project.company_id }, user, support);
     if (denial) return { status: 403, body: denialBody(denial) };
   }
-  if (!isProjectManager(user, project)) return { status: 403, body: { detail: 'Only the venture\'s owner can do this' } };
+  if (support || ((ownerOnly || project.company_id == null) && !isProjectManager(user, project))) {
+    return { status: 403, body: { detail: 'Only the venture\'s owner can do this' } };
+  }
   return { project };
 }
 
@@ -134,7 +136,7 @@ r.put('/:id/slug', async (c) => {
 
 r.post('/:id/transfer', async (c) => {
   const user = await requireAuth(c);
-  const g = await managedProject(c.env, c.req.param('id'), user, await isSupportSession(c));
+  const g = await managedProject(c.env, c.req.param('id'), user, await isSupportSession(c), true);
   if ('status' in g) return c.json(g.body, g.status);
   const body = await c.req.json().catch(() => ({} as any));
   const targetId = Number(body?.user_id);

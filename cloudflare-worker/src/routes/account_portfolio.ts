@@ -26,6 +26,8 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, mapError } from './_t13t14t15_helpers';
 import { ensureProjectMembershipSchema } from '../services/projectAccess';
+import { companyWriteDenial, isSupportSession, linkCanEdit } from '../services/companyAccess';
+import { holdsLicence } from '../services/accountLicences';
 import { refuse } from '../util/refusal';
 import { companyPath, projectPath } from '../services/slugs';
 
@@ -193,6 +195,16 @@ r.get('/account/settings-scope', async (c) => {
     }
 
     if (company) {
+      const authority = project ? {
+        my_authority: (await companyWriteDenial(c.env, company, user, await isSupportSession(c))) === null
+          ? 'company_editor'
+          : holdsLicence(user, 'founder') && user.founder_id != null && project.founder_id === user.founder_id
+            ? 'project_owner' : 'project_member',
+        company_editors: (await c.env.DB.prepare(
+          'SELECT u.name, l.role_in_company, l.is_primary_admin FROM user_company_links l JOIN users u ON u.id = l.user_id WHERE l.company_id = ? ORDER BY u.name, u.id',
+        ).bind(company.id).all<{ name: string | null; role_in_company: string; is_primary_admin: number }>()).results
+          .filter((link) => link.name && linkCanEdit(link)).map(({ name }) => ({ name })),
+      } : {};
       const list = await rows(c.env, 'The company\'s projects',
         'SELECT id, uid, name, slug, company_id, founder_id FROM projects WHERE company_id = ? AND deleted_at IS NULL ORDER BY name, id', [company.id]);
       const base = companyPath(company);
@@ -202,6 +214,7 @@ r.get('/account/settings-scope', async (c) => {
         tabs[i] = { ...tabs[i], available: false, reason: list.reason, children: [] };
       }
       return c.json({
+        ...authority,
         scope: project ? 'company_project' : 'company',
         label: 'Company settings',
         company: { uid: company.uid, name: company.company_name, slug: company.slug, path: base, archived: company.archived_at != null },

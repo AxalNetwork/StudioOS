@@ -124,7 +124,7 @@ test('the members read returns the server capability and denial reason used by t
     [HQ, {}, false, false, 'hq_access'],
     [OWNER, support, false, false, 'support_session'],
     [HQ_SEATED, {}, true, true, null],
-    [COFOUNDER, {}, false, true, null],
+    [COFOUNDER, {}, true, true, null], // D5329: the Founder seat now confers roster authority.
     [PLAIN, {}, false, false, 'not_an_editor'],
   ] as const;
   for (const [who, claims, canManage, canEdit, reason] of expected) {
