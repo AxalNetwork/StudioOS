@@ -30,9 +30,9 @@ test('landing order prefers ready, fewer changed files, then issue number', () =
 test('renders the supplied clean verdict and escapes paths, mentions and titles', () => {
   const ps = [pr(1, [path]), pr(2,[path])];
   const result = pairs(ps); result[0].verdict = 'no';
-  result[0].paths.push({ path:'[x]`|@name<script>\n',class:'path' });
+  result[0].paths.push({ path:'[x]`|@name<SCRIPT>\n',class:'path' });
   const text = render(ps[0],result);
-  assert.match(text,/textual conflict: no/); assert.doesNotMatch(text,/textual conflict: yes|@name|<script>|\[x\]/);
+  assert.match(text,/textual conflict: no/); assert.doesNotMatch(text,/textual conflict: yes|@name|<script>|\[x\]/i);
   assert.match(text,/&#64;name/); assert.match(summary(result),/#1 → #2/);
   assert.equal(escape('a|b'), 'a&#124;b');
 });
