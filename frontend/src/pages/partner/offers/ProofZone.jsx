@@ -430,7 +430,7 @@ export default function PartnerProofZone() {
     setState((s) => ({ ...s, loading: true, error: '' }));
     try {
       let r = await api.listPartnerProof(page);
-      if (page > 1 && r?.page_size && r.items?.length === 0) {
+      if (page > 1 && r?.page_size && Array.isArray(r?.items) && r.items.length === 0) {
         r = await api.listPartnerProof(Math.max(1, Math.ceil(r.total / r.page_size)));
       }
       if (generation !== request.current) return false;
