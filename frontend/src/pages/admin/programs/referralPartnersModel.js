@@ -1,7 +1,7 @@
 import { parseStamp } from '../../../ui/parseStamp.js';
 import { NONE_CLAIM, NOT_READ_YET, NOT_RECORDED, HQ_READS_MONEY, isFailed, isLoading, isReady } from './programsModel.js';
 import { refusalSentence } from './programPagesModel.js';
-import { formatMinorOrCount, parseMinor, toMajorString } from '../../../lib/money.js';
+import { exponentOf, formatMinorOrCount, parseMinor, toMajorString } from '../../../lib/money.js';
 
 /**
  * D963 (#2796, Programs part 10) — Referral partners (PG7) and Custom terms
@@ -209,6 +209,10 @@ export function commissionChart(read, currency = null) {
   const currencies = currenciesOf(c);
   if (!currencies.length) return { ...base, state: 'unrecorded', word: 'None yet', reason: 'No commission was accrued or paid in the last 12 months.', currencies };
   const cur = currencies.includes(currency) ? currency : currencies[0];
+  // D5373: the chart plots major units at the currency's own decimals (JPY none, KWD three). A currency the layer does not
+  // list is not plotted at a guessed factor; the table names the stored count.
+  const exp = exponentOf(cur);
+  if (exp === null) return { ...base, state: 'unreadable', reason: `The commission could not be charted: "${cur}" is not a currency we can price in. ${NONE_CLAIM}`, currencies };
   const months = monthsFrom(read.data.months_from);
   const pick = (list) => months.map((mo) => (list || []).filter((x) => x.month === mo && x.currency === cur).reduce((t, x) => t + (Number(x.cents) || 0), 0));
   const accrued = pick(c.accrued);
@@ -219,7 +223,7 @@ export function commissionChart(read, currency = null) {
     ...base, state: 'ready', currency: cur, currencies,
     chart: {
       type: 'lines', labels,
-      series: [{ label: 'Accrued', tone: 'violet', values: accrued.map((x) => x / 100) }, { label: 'Paid', tone: 'sky', dash: true, values: paid.map((x) => x / 100) }],
+      series: [{ label: 'Accrued', tone: 'violet', values: accrued.map((x) => x / 10 ** exp) }, { label: 'Paid', tone: 'sky', dash: true, values: paid.map((x) => x / 10 ** exp) }],
       table: { head: ['Month', `Accrued (${cur})`, `Paid (${cur})`], rows: months.map((mo, i) => [mo, money(accrued[i], cur), money(paid[i], cur)]) },
     },
     axis: cur,

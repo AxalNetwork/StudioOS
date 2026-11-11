@@ -664,6 +664,9 @@ function InvoiceDocument({ engagementId, isPartner, onChanged }) {
   }, [engagementId]);
   useEffect(load, [load]);
 
+  // D5373: an engagement invoice is in US dollars by contract: a quote carries no currency (`quotes.price` is REAL
+  // dollars) and the one route that issues an invoice passes none, so `engagement_invoices.currency` is its USD default.
+  // Two decimals are the dollar's own.
   const fmt = (cents) => {
     const n = Number(cents);
     if (!Number.isFinite(n)) return '—';

@@ -12,6 +12,7 @@
  */
 import { dealMoney } from '../../components/deals/dealMoney';
 import { isSuperAdminUser } from '../../lib/shellRole';
+import { majorToMinor } from '../../lib/money.js';
 
 export const VIEWERS = Object.freeze([
   { key: 'you', label: 'You' },
@@ -232,8 +233,12 @@ export function gateLine(gate) {
   return { held: false, text: null };
 }
 
-/** A commitment's dollars as the wire's whole cents, or null when no amount is recorded. */
-export function wireCents(row) {
+/**
+ * A commitment's amount (a legacy REAL column in major units of the deal's currency) as the wire's whole minor units, or
+ * null when no amount is recorded. D5373: at the deal currency's own decimals, so 5,000 yen is 5000 and 12.345 dinars is
+ * 12345; a currency the layer does not list gives null, never a figure at a guessed factor.
+ */
+export function wireCents(row, currency = 'USD') {
   const a = amountOf(row);
-  return a == null || a <= 0 ? null : Math.round(a * 100);
+  return a == null || a <= 0 ? null : majorToMinor(a, currency);
 }

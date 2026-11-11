@@ -17,7 +17,7 @@ import { proposalHref } from './historyModel';
 import {
   AS_OF_NONE, COFOUNDER_LINE, EMPTY_LINE, EMPTY_TITLE, EXPLORER_LINE, EXPLORER_TITLE, FD_LEGEND, MODEL_LINE, MODEL_TITLE,
   OTHER_LINE, OTHER_TITLE, PLANS_PATH, PLAN_LINE, SAVE_BLOCKED, UNREADABLE_LINE,
-  asOf, bars, byClass, cartaChip, harbourChip, holderCards, instruments, needsYou, proposalsFromModel, tiles, whoOwns,
+  asOf, bars, byClass, cartaChip, harbourChip, holderCards, instruments, modelMoneyNote, needsYou, proposalsFromModel, tiles, whoOwns,
 } from './overviewModel';
 import { raiseReadState, raiseToolRefusal, userFacingRaiseError } from '../../../lib/raiseErrors.js';
 
@@ -418,8 +418,8 @@ function Reading() {
   );
 }
 
-function FromModel({ projectId, scenario, onClose, onDone }) {
-  const list = proposalsFromModel(scenario);
+function FromModel({ projectId, scenario, currency, onClose, onDone }) {
+  const list = proposalsFromModel(scenario, currency);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const run = async () => {
@@ -434,6 +434,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
     }
   };
   const founders = list.filter((b) => b.kind === 'founding').length;
+  const moneyNote = modelMoneyNote(scenario, currency);
   return (
     <Lightbox label="Record them from the model" title="Record them from the model?" width={540} onClose={() => !busy && onClose()} testId="captable-from-model" phone="sheet"
       footer={(
@@ -448,6 +449,7 @@ function FromModel({ projectId, scenario, onClose, onDone }) {
             ? `${founders} founder${founders === 1 ? '' : 's'}' shares and ${list.length - founders} SAFE${list.length - founders === 1 ? '' : 's'} or note${list.length - founders === 1 ? '' : 's'} from your saved model become proposals, with the figures the model holds.`
             : 'Your saved model holds no founder or SAFE to propose.'}
         </p>
+        {moneyNote ? <p className={`m-0 ${MUTED}`} data-testid="captable-from-model-currency">{moneyNote}</p> : null}
         <p className={`m-0 ${MUTED}`}>Nothing counts until you record each one in Needs you, where you add its class, date and document. You and your co-founders see the proposals; nobody else does.</p>
         {error ? <p role="alert" className="m-0 font-semibold text-red-700 dark:text-red-400" data-testid="captable-from-model-error">{error}</p> : null}
       </div>
@@ -587,7 +589,7 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
         <ProposalDrawer projectId={projectId} id={open.id} role={role} record={{ ...record, retry }} onClose={closeDrawer} onDone={leave} />
       ) : null}
       {rowDialogs}
-      {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
+      {fromModel ? <FromModel projectId={projectId} scenario={compare.data?.canonical} currency={record.data?.currency?.code} onClose={() => setFromModel(false)} onDone={() => { setFromModel(false); retry(); }} /> : null}
       {holderDrawer}
     </div>
   );

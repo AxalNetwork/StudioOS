@@ -186,9 +186,11 @@ function acceptedTerms(payloadJson: string | null): SafeTerms | null {
   const payload = parseObject(payloadJson);
   if (!payload) return null;
   try {
+    // D5373: the pre-#2629 Accept divided by 100 for every venture, in whatever currency; this repair reproduces what
+    // that Accept stored and nothing else, so it reads at two decimals (USD) whatever the venture's currency is now.
     return safeTerms({
       amount_cents: payload.amount_cents, cap_cents: payload.cap_cents ?? null, discount_pct: payload.discount_pct ?? null,
-    } as Parameters<typeof safeTerms>[0]);
+    } as Parameters<typeof safeTerms>[0], 'USD');
   } catch (e) {
     if (e instanceof HolderError) return null;
     throw e;

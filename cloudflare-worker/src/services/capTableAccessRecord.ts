@@ -1,8 +1,20 @@
 /** D1130: venture grants and links read recorded issuances, never scenarios or proposals. */
 import type { AccessLevel } from './captableShare';
 import type { readRecord } from './capTableRecord';
+import { DEFAULT_CURRENCY } from './capTableRecord';
+import { exponentOf } from '../../../frontend/src/lib/money.js';
 type RecordRead = Awaited<ReturnType<typeof readRecord>>;
 type Holder = { holder_id: number | null; name: string | null };
+/**
+ * D5373: a recorded count of minor units as the whole-major figure the access view has always carried (an amount of
+ * 12,345 cents is 123.45; 5,000 yen is 5000; 1,250 thousandths of a dinar is 1.25). It reads the currency's OWN
+ * decimals. A currency the layer does not list is not read at all: the amount is null (not recorded), never a figure
+ * divided by a guessed factor.
+ */
+export function majorOf(minor: number | null | undefined, currency: string | null | undefined): number | null {
+  const exp = exponentOf(typeof currency === 'string' ? currency.toUpperCase() : currency);
+  return minor == null || exp === null ? null : minor / 10 ** exp;
+}
 const key = (h: Holder) => h.holder_id != null ? `holder:${h.holder_id}` : `name:${String(h.name).trim().toLowerCase()}`;
 
 /** Old name grants remain valid only when they resolve to exactly one recorded identity. */
@@ -38,8 +50,10 @@ export function recordAccessView(record: RecordRead, level: Exclude<AccessLevel,
     ...(selected && h.identity === key(selected) ? { mine: true } : {}) });
   const mine = (h: Holder | null | undefined) => h != null && selected != null && key(h) === key(selected);
   const instrument = (i: RecordRead['instruments']['rows'][number]) => ({
-    instrument: i.kind, amount: i.amount_cents == null ? null : i.amount_cents / 100,
-    currency: i.currency, cap: i.terms.cap_cents == null ? null : i.terms.cap_cents / 100,
+    // The instrument's own currency; one with none recorded is the venture's (as the Overview reads it), and a venture
+    // with no row reads DEFAULT_CURRENCY.
+    instrument: i.kind, amount: majorOf(i.amount_cents, i.currency ?? record.currency?.code ?? DEFAULT_CURRENCY),
+    currency: i.currency, cap: majorOf(i.terms.cap_cents, i.currency ?? record.currency?.code ?? DEFAULT_CURRENCY),
     discount: i.terms.discount_bps == null ? null : i.terms.discount_bps / 10000,
     basis: i.terms.basis, issue_date: i.issued_on,
   });

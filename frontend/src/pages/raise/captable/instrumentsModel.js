@@ -24,6 +24,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { exponentOf } from '../../../lib/money.js';
 import { documentWord } from './historyModel.js';
 import { BASIS_CHECK, day, dollars, money, shares } from './capTableModel.js';
 
@@ -85,6 +86,7 @@ export function recordInstruments(record) {
     const cur = r.currency || code;
     return {
       uid: r.uid,
+      currency: cur,
       holder: String(r.holder?.name || '').trim() || NOT_RECORDED,
       kind: note ? 'note' : 'safe',
       type: note ? 'Convertible note' : 'SAFE',
@@ -262,7 +264,10 @@ export function instrumentView(inst, { today = null, sim = null } = {}) {
   let steps = null;
   if (c) {
     const lines = [];
-    const cap = num(t.cap_cents) > 0 ? t.cap_cents / 100 : null;
+    // D5373: the cap in whole major units of the instrument's own currency (JPY has no minor unit, KWD has three); a
+    // currency the layer does not list reads no cap rather than one at a guessed factor.
+    const exp = exponentOf(String(inst.currency || 'USD').toUpperCase());
+    const cap = num(t.cap_cents) > 0 && exp !== null ? t.cap_cents / 10 ** exp : null;
     if (num(c.cap_price) != null && cap != null) lines.push(`Cap price = ${dollars(cap)} ÷ ${shares(Math.round(cap / c.cap_price))} shares = ${price(c.cap_price)}`);
     if (num(c.discount_price) != null) lines.push(`Discount price = ${price(c.round_price)} × (1 − ${inst.discount}) = ${price(c.discount_price)}`);
     const won = c.binding === 'cap' ? 'cap' : c.binding === 'discount' ? 'discount' : 'round price';
