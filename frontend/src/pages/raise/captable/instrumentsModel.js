@@ -26,7 +26,7 @@
 import { NOT_RECORDED } from '../../../lib/absence.js';
 import { exponentOf } from '../../../lib/money.js';
 import { documentWord } from './historyModel.js';
-import { BASIS_CHECK, day, dollars, money, shares } from './capTableModel.js';
+import { BASIS_CHECK, day, dollars, money, shares, symbolOf } from './capTableModel.js';
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
@@ -55,11 +55,11 @@ export const instrumentHref = (uid, search = '') => `/raise/cap-table/instrument
 /** "15%" from basis points; missing is "Not recorded", never 0%. */
 const bpsWord = (bps) => (num(bps) == null ? NOT_RECORDED : `${Math.round(bps) / 100}%`);
 
-/** A price per share, to the cent, or to four places under ten cents. */
-export function price(v) {
+/** A price per share, to the cent, or to four places under ten cents, in the venture's currency (D5373: "$" for USD, else the code). */
+export function price(v, currency = 'USD') {
   const n = num(v);
   if (n == null) return NOT_RECORDED;
-  return `$${n.toFixed(n < 0.1 ? 4 : 2)}`;
+  return `${symbolOf(currency)}${n.toFixed(n < 0.1 ? 4 : 2)}`;
 }
 
 function basisOf(terms) {
@@ -158,6 +158,7 @@ const toNumber = (v) => {
  * scenario's first round goes as the scenario holds it.
  */
 export function convertBody(mode, form, { today = null, scenario = null } = {}) {
+  const currency = today?.currency ?? 'USD';
   if (mode === 'scenario') {
     const round = scenario?.inputs?.rounds?.[0];
     if (!round) return { body: null, sentence: 'That scenario plans no round, so nothing converts in it.' };
@@ -171,24 +172,24 @@ export function convertBody(mode, form, { today = null, scenario = null } = {}) 
   if (!(raise > 0)) return { body: null, sentence: 'The amount raised is a number above zero.' };
   const total = todayShares(today);
   if (total == null) return { body: null, sentence: 'Today’s share count could not be read, so no round can be priced from it.' };
-  return { body: { rounds: [{ name: 'Next round', pre_money: p * total, investment: raise }] }, sentence: null, label: price(p) };
+  return { body: { rounds: [{ name: 'Next round', pre_money: p * total, investment: raise }] }, sentence: null, label: price(p, currency) };
 }
 
 /** Which price won, in a sentence (CT3's sub-line under the conversion price). */
-export function bindingLine(c) {
+export function bindingLine(c, currency = 'USD') {
   if (!c) return NOT_RECORDED;
   const cap = num(c.cap_price);
   const disc = num(c.discount_price);
   const round = num(c.round_price);
   if (c.binding === 'cap' && cap != null) {
-    if (disc != null) return `Cap price ${price(cap)} beats the discount price ${price(disc)}: cap wins`;
-    if (round != null && cap > round) return `Cap price ${price(cap)} is above the round price ${price(round)}, and still applies: no discount is recorded`;
-    return `Cap price ${price(cap)} beats the round price ${price(round)}: cap wins`;
+    if (disc != null) return `Cap price ${price(cap, currency)} beats the discount price ${price(disc, currency)}: cap wins`;
+    if (round != null && cap > round) return `Cap price ${price(cap, currency)} is above the round price ${price(round, currency)}, and still applies: no discount is recorded`;
+    return `Cap price ${price(cap, currency)} beats the round price ${price(round, currency)}: cap wins`;
   }
   if (c.binding === 'discount' && disc != null) {
-    return cap != null ? `Discount price ${price(disc)} beats the cap price ${price(cap)}: discount wins` : `Discount price ${price(disc)} beats the round price ${price(round)}: discount wins`;
+    return cap != null ? `Discount price ${price(disc, currency)} beats the cap price ${price(cap, currency)}: discount wins` : `Discount price ${price(disc, currency)} beats the round price ${price(round, currency)}: discount wins`;
   }
-  return `The round price ${price(round)} applies`;
+  return `The round price ${price(round, currency)} applies`;
 }
 
 /** Pairs each conversion with its instrument by holder name, in order, as the engine names them. */
@@ -209,6 +210,7 @@ function conversionsByInstrument(instruments, conversions) {
 export function convertView(sim, instruments, label) {
   const round = sim?.result?.rounds?.[0];
   if (!round) return null;
+  const currency = sim?.currency ?? 'USD';
   const outstanding = instruments.filter((i) => i.status === 'outstanding');
   const paired = conversionsByInstrument(outstanding, round.conversions);
   const skipped = new Map((sim.not_modelled || []).map((n) => [n.uid, n]));
@@ -218,8 +220,8 @@ export function convertView(sim, instruments, label) {
     return {
       uid: i.uid, holder: i.holder, amount: i.amount,
       converted: !!c,
-      price: c ? price(c.price_per_share) : null,
-      binding: c ? bindingLine(c) : null,
+      price: c ? price(c.price_per_share, currency) : null,
+      binding: c ? bindingLine(c, currency) : null,
       shares: c ? num(c.shares) : null,
       sharesWord: c ? shares(c.shares) : null,
       pctAfter: c ? `${Number(c.pct_after_round).toFixed(2)}%` : null,
@@ -231,7 +233,7 @@ export function convertView(sim, instruments, label) {
   const max = most ? most.shares : 0;
   return {
     title: `As converted at ${label}`,
-    roundPrice: price(round.price_per_share),
+    roundPrice: price(round.price_per_share, currency),
     rows,
     bars: rows.map((r) => ({ uid: r.uid, label: `${r.holder} · ${r.amount}`, value: r.converted ? r.sharesWord : CANNOT_CONVERT_BAR, width: r.converted && max ? `${((r.shares / max) * 100).toFixed(1)}%` : '0', hairline: !r.converted, tip: r.converted ? null : r.reason })),
     lead: most ? `${most.holder} converts into the most shares at ${most.price}.` : 'Nothing converts in this round.',
@@ -246,6 +248,7 @@ export function convertView(sim, instruments, label) {
 export function instrumentView(inst, { today = null, sim = null } = {}) {
   if (!inst) return null;
   const r = inst.raw;
+  const currency = inst.currency || 'USD';
   const t = r.terms || {};
   const doc = inst.document;
   const sub = `${inst.source}${doc ? ` · ${doc}` : ''}`;
@@ -268,12 +271,12 @@ export function instrumentView(inst, { today = null, sim = null } = {}) {
     // currency the layer does not list reads no cap rather than one at a guessed factor.
     const exp = exponentOf(String(inst.currency || 'USD').toUpperCase());
     const cap = num(t.cap_cents) > 0 && exp !== null ? t.cap_cents / 10 ** exp : null;
-    if (num(c.cap_price) != null && cap != null) lines.push(`Cap price = ${dollars(cap)} ÷ ${shares(Math.round(cap / c.cap_price))} shares = ${price(c.cap_price)}`);
-    if (num(c.discount_price) != null) lines.push(`Discount price = ${price(c.round_price)} × (1 − ${inst.discount}) = ${price(c.discount_price)}`);
+    if (num(c.cap_price) != null && cap != null) lines.push(`Cap price = ${dollars(cap, currency)} ÷ ${shares(Math.round(cap / c.cap_price))} shares = ${price(c.cap_price, currency)}`);
+    if (num(c.discount_price) != null) lines.push(`Discount price = ${price(c.round_price, currency)} × (1 − ${inst.discount}) = ${price(c.discount_price, currency)}`);
     const won = c.binding === 'cap' ? 'cap' : c.binding === 'discount' ? 'discount' : 'round price';
     lines.push(`${c.binding === 'none' ? 'No cap or discount applies' : 'Lower price wins'}: ${won} → ${shares(c.shares)} shares → ${Number(c.pct_after_round).toFixed(2)}% after the round`);
     const interest = inst.kind === 'note' && num(c.accrued_interest) > 0
-      ? `Accrued interest converts too: ${dollars(c.amount)} + ${dollars(c.accrued_interest)} interest = ${dollars(c.converting_amount)} converts.`
+      ? `Accrued interest converts too: ${dollars(c.amount, currency)} + ${dollars(c.accrued_interest, currency)} interest = ${dollars(c.converting_amount, currency)} converts.`
       : null;
     steps = { lines, interest };
   }
@@ -285,7 +288,7 @@ export function instrumentView(inst, { today = null, sim = null } = {}) {
     mfn = {
       note: 'MFN: yes. If a later SAFE has better terms, this holder may take them.',
       later: read ? read.later.map((l) => ({
-        line: `${l.name} · ${l.cap == null ? 'cap not recorded' : `cap ${dollars(l.cap)}`}`,
+        line: `${l.name} · ${l.cap == null ? 'cap not recorded' : `cap ${dollars(l.cap, currency)}`}`,
         verdict: l.cap == null ? NOT_RECORDED : l.verdict === 'better_cap' ? 'Better cap' : 'No change',
       })) : null,
     };

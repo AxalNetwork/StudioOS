@@ -21,6 +21,7 @@ import { recordAccessView, majorOf } from '../src/services/capTableAccessRecord.
 import { startFromRecord, offerFromModel } from '../src/services/capTableToday.ts';
 import { addHolder, updateHolder, saveScenario, safeTerms, majorUnits, HolderError } from '../src/services/capTableWrites.ts';
 import { dollarsToCents } from '../src/services/capRelReads.ts';
+import { money } from '../src/services/mail/blocks.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -240,4 +241,14 @@ test('a legacy major-unit column becomes the currency\'s own minor units', () =>
   assert.equal(dollarsToCents(1234.56), 123456, 'no currency is USD, as before');
   assert.equal(dollarsToCents(5000, 'XYZ'), null, 'a currency we cannot price in is not guessed');
   for (const v of [null, undefined, '', -1, Number.NaN, 1e14, 'twelve']) assert.equal(dollarsToCents(v, 'JPY'), null, String(v));
+});
+
+// ───────────────────────────────────────────────────── the mail block's committed total (capital relationships)
+
+test('the raise_status mail block writes a commitment total at the round currency\'s own decimals', () => {
+  assert.equal(money(123456, 'USD'), '$1,234', 'USD is whole dollars, as before');
+  assert.equal(money(123456, 'EUR'), 'EUR 1,234');
+  assert.equal(money(500000, 'JPY'), 'JPY 500,000', 'five hundred thousand yen, not "JPY 5,000"');
+  assert.equal(money(12345000, 'KWD'), 'KWD 12,345', 'a dinar is thousandths');
+  assert.equal(money(5000, 'XYZ'), '5,000 minor units (currency "XYZ" is not one we can price in)');
 });

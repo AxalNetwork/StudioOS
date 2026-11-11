@@ -10,7 +10,8 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { day, pct, shares } from './capTableModel.js';
+import { day, pct, shares, symbolOf } from './capTableModel.js';
+import { exponentOf } from '../../../lib/money.js';
 
 export const LEVELS = ['none', 'own_position', 'summary', 'investor', 'full'];
 export const LEVEL_WORDS = { none: 'None', own_position: 'Own position', summary: 'Summary', investor: 'Investor', full: 'Full' };
@@ -168,12 +169,22 @@ const ledgerRow = (h) => ({
 });
 const GROUP = { founder: 'Founder', preferred: 'Investor', safe: 'Investor', option_pool: 'Option pool', common: 'Common' };
 
+/**
+ * D5373: a whole-major-unit amount at its currency's own decimals, as the access view has always shown it ("100.00" for a
+ * two-decimal currency): JPY none ("5,000"), KWD three ("1.250"). A currency the layer does not list, or none, shows the
+ * number as stored (no decimals guessed); the Worker sends no amount at all for one it cannot price.
+ */
+export const amountIn = (n, currency) => {
+  const exp = exponentOf(typeof currency === 'string' ? currency.toUpperCase() : currency);
+  return exp === null ? String(n) : new Intl.NumberFormat('en-US', { minimumFractionDigits: exp, maximumFractionDigits: exp }).format(n);
+};
+
 const instrumentRow = (i) => ({
   holder: i.holder || null,
   type: i.instrument === 'note' ? 'Convertible note' : 'SAFE',
   basis: i.basis === 'post_money' ? 'Post-money' : i.basis === 'pre_money' ? 'Pre-money' : NOT_RECORDED,
   signed: day(i.issue_date),
-  amount: typeof i.amount === 'number' ? `${i.currency || 'Currency not recorded'} ${new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(i.amount)}` : NOT_RECORDED,
+  amount: typeof i.amount === 'number' ? `${i.currency || 'Currency not recorded'} ${amountIn(i.amount, i.currency)}` : NOT_RECORDED,
 });
 
 /**
@@ -205,7 +216,7 @@ export function sharedView(read) {
     name: v.scenario_name || null,
     instruments: (v.instruments || []).map(instrumentRow),
     rows: (Array.isArray(ledger) ? ledger : []).map(ledgerRow),
-    rounds: rounds.map((r) => ({ name: String(r?.name || 'Round'), price: typeof r?.price_per_share === 'number' ? `$${r.price_per_share.toFixed(2)} a share` : NOT_RECORDED })),
+    rounds: rounds.map((r) => ({ name: String(r?.name || 'Round'), price: typeof r?.price_per_share === 'number' ? `${symbolOf(v.currency)}${r.price_per_share.toFixed(2)} a share` : NOT_RECORDED })),
     disclosure: v.disclosure || null,
   };
 }

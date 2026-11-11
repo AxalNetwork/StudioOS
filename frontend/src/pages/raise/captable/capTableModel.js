@@ -33,7 +33,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { formatMinorOrCount } from '../../../lib/money.js';
+import { exponentOf, formatMinorOrCount } from '../../../lib/money.js';
 
 export const SLUG = 'cap-table';
 export const HOME_PATH = `/raise/${SLUG}`;
@@ -94,11 +94,31 @@ export const tabHref = (tab, search = '') => `${HOME_PATH}${tab.path}${tabSearch
 
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-/** "$500,000" from whole dollars (the model's unit). Missing is "Not recorded", never $0. */
-export function dollars(v) {
+/**
+ * D5373: the currency code a cap-table figure is shown in: a bare code, a read's `{ code }`, or USD (the venture default
+ * when none is recorded). Upper-cased, as `money()` reads it.
+ */
+export function codeOf(currency) {
+  const c = currency && typeof currency === 'object' ? currency.code : currency;
+  return String(c || 'USD').toUpperCase();
+}
+
+/** The mark that goes before an amount: "$" for USD, the code and a space for any other currency (as the option pool does). */
+export const symbolOf = (currency) => { const c = codeOf(currency); return c === 'USD' ? '$' : `${c} `; };
+
+/**
+ * "$500,000" from whole major units (the model's unit), in the venture's currency (D5373): USD prints exactly as it
+ * always did; any other code prints "EUR 5,000", "JPY 5,000", "KWD 1.25" at that currency's own decimals (JPY none, KWD
+ * up to three, else up to two). The value is already whole major units, so nothing is converted here. A code the layer
+ * does not list prints the number as stored beside the code, with no decimals guessed. Missing is "Not recorded", never 0.
+ */
+export function dollars(v, currency = 'USD') {
   const n = num(v);
   if (n == null) return NOT_RECORDED;
-  return `$${n.toLocaleString('en-US', { maximumFractionDigits: n % 1 ? 2 : 0 })}`;
+  const code = codeOf(currency);
+  const exp = exponentOf(code);
+  if (exp === null) return `${code} ${n}`;
+  return `${symbolOf(code)}${n.toLocaleString('en-US', { maximumFractionDigits: n % 1 ? exp : 0 })}`;
 }
 
 /** An amount in the currency's smallest unit (SAFE issuances), in its own currency. */
@@ -137,6 +157,7 @@ export function harbour(read) {
     state: String(st.state || 'none'),
     reason: st.reason || NOT_RECORDED,
     expires: day(st.expires_on),
+    // A 409A valuation is a US tax valuation: `valuations_409a` has no currency column, so the FMV is US dollars by contract.
     fmv: c && num(c.fmv_per_share) != null ? `$${c.fmv_per_share.toFixed(2)}` : NOT_RECORDED,
     provider: c?.provider || NOT_RECORDED,
     valued: day(c?.valuation_date),
@@ -155,7 +176,7 @@ export function foundersAfter(result) {
 }
 
 /** One scenario card (CT6), every figure Modelled. The saved model is "Cap table · model" (CT19b). */
-export function scenarioCard(s, { model = false } = {}) {
+export function scenarioCard(s, { model = false, currency = 'USD' } = {}) {
   const round = s?.inputs?.rounds?.[0];
   const after = foundersAfter(s?.result);
   return {
@@ -165,7 +186,7 @@ export function scenarioCard(s, { model = false } = {}) {
     // D1024: where the scenario starts — the record (D1018's `start`), or a model typed by hand.
     start: model ? 'Your saved model' : s?.inputs?.start ? 'Starts from Today' : 'Starts from your model',
     round: round
-      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money)} · raise ${dollars(round.investment)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
+      ? `${String(round.name || 'Round').trim()} · pre-money ${dollars(round.pre_money, currency)} · raise ${dollars(round.investment, currency)}${num(round.post_round_pool_pct) != null ? ` · pool ${round.post_round_pool_pct}% post` : ''}`
       : 'No round is planned.',
     founders: after == null ? NOT_RECORDED : pct(after),
     changed: day(s?.updated_at),
@@ -174,11 +195,11 @@ export function scenarioCard(s, { model = false } = {}) {
 }
 
 /** The compare read as cards: the model first, then the variants, newest first as the Worker sends them. */
-export function scenarioCards(read) {
+export function scenarioCards(read, currency = 'USD') {
   if (!read) return [];
   const out = [];
-  if (read.canonical) out.push(scenarioCard(read.canonical, { model: true }));
-  for (const v of Array.isArray(read.variants) ? read.variants : []) out.push(scenarioCard(v));
+  if (read.canonical) out.push(scenarioCard(read.canonical, { model: true, currency }));
+  for (const v of Array.isArray(read.variants) ? read.variants : []) out.push(scenarioCard(v, { currency }));
   return out;
 }
 

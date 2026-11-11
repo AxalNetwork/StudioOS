@@ -28,9 +28,9 @@ const capLine = (code, capCents, capPrice) => {
 };
 
 test('the instrument drawer works the cap out in the instrument\'s own major units', () => {
-  assert.equal(capLine('JPY', 5000, 100), 'Cap price = $5,000 ÷ 50 shares = $100.00', '5,000 yen is 5,000, not 50');
-  assert.equal(capLine('KWD', 1250, 0.25), 'Cap price = $1.25 ÷ 5 shares = $0.25', '1.250 KWD is 1.25, not 12.5');
-  assert.equal(capLine('EUR', 500000, 100), 'Cap price = $5,000 ÷ 50 shares = $100.00');
+  assert.equal(capLine('JPY', 5000, 100), 'Cap price = JPY 5,000 ÷ 50 shares = JPY 100.00', '5,000 yen is 5,000, not 50');
+  assert.equal(capLine('KWD', 1250, 0.25), 'Cap price = KWD 1.25 ÷ 5 shares = KWD 0.25', '1.250 KWD is 1.25, not 12.5');
+  assert.equal(capLine('EUR', 500000, 100), 'Cap price = EUR 5,000 ÷ 50 shares = EUR 100.00');
   assert.equal(capLine('USD', 500000, 100), 'Cap price = $5,000 ÷ 50 shares = $100.00');
   // A currency the layer does not list reads no cap step at a guessed factor.
   assert.doesNotMatch(capLine('XYZ', 500000, 100), /^Cap price/, 'no cap line for a currency we cannot price in');

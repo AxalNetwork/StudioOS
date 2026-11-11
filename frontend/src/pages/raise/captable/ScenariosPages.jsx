@@ -11,7 +11,7 @@ import CapTableDialog, { useWrite } from './CapTableDialog';
 import { Tag } from './CapTableTag';
 import { VariantEditor } from './ScenarioModelEditor';
 import { PLAN_LINE } from './overviewModel';
-import { dollars, tabSearch } from './capTableModel';
+import { codeOf, dollars, tabSearch } from './capTableModel';
 import {
   ASSUMPTIONS_FALLBACK, COMPARE, READ_SOURCE, GROUPS, MAX_COMPARE, MAX_EXITS, MODEL_LOCKED, READ_ONLY, SAVED, SCENARIOS_PATH,
   attachRead, attachedRead, beforeAfter, todayPrice, compareExits, compareHref, compareIds, compareRows, dialogCopy, exitTable,
@@ -208,7 +208,7 @@ export function ScenariosList({ projectId, reload, retry, search }) {
   const { plan, writes } = useWrites(projectId);
   const [picked, setPicked] = useState([]);
   const [creating, setCreating] = useState(false);
-  const cards = read.status === 'ready' ? scenarioCards(read.data) : [];
+  const cards = read.status === 'ready' ? scenarioCards(read.data, codeOf(today.status === 'ready' ? today.data?.currency : null)) : [];
   const start = read.status === 'ready' ? newScenarioInputs(today.status === 'ready' ? today.data : null, read.data?.canonical) : null;
   const create = async (name) => {
     const made = await capTableScenariosApi.create(projectId, { name, inputs: start.inputs });
@@ -284,7 +284,7 @@ function useRun(projectId, request) {
   return run;
 }
 
-function TodayEditor({ draft, setDraft, instruments }) {
+function TodayEditor({ draft, setDraft, instruments, currency }) {
   const putRound = (k, field) => (e) => setDraft((d) => ({ ...d, rounds: d.rounds.map((r, j) => (j === k ? { ...r, [field]: e.target.value } : r)) }));
   return (
     <div className="flex flex-col gap-3" data-testid="captable-scenario-inputs">
@@ -321,7 +321,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
             <label key={x.name} className={`flex items-center gap-2 text-[12.5px] ${INK}`}>
               <input type="checkbox" checked={!draft.holdOut.includes(x.name)} data-testid="captable-scenario-converts"
                 onChange={() => setDraft((d) => ({ ...d, holdOut: d.holdOut.includes(x.name) ? d.holdOut.filter((n) => n !== x.name) : [...d.holdOut, x.name] }))} />
-              {x.name} · <span className={MONO}>{dollars(x.amount)}</span>
+              {x.name} · <span className={MONO}>{dollars(x.amount, currency)}</span>
             </label>
           ))}
       </div>
@@ -347,7 +347,7 @@ function TodayEditor({ draft, setDraft, instruments }) {
   );
 }
 
-function ResultsBlocks({ run, onRecord, today }) {
+function ResultsBlocks({ run, onRecord, today, currency }) {
   if (run.status === 'idle') return null;
   if (run.status === 'invalid' || run.status === 'refused') {
     return (
@@ -359,8 +359,8 @@ function ResultsBlocks({ run, onRecord, today }) {
   if (!run.data) return <Skeleton testId="captable-scenario-run-loading" />;
   const result = run.data.result || {};
   if (result.errors) return <ul className="m-0 text-[12.5px] text-red-700 dark:text-red-400" data-testid="captable-scenario-run-errors">{result.errors.map((m) => <li key={m}>{m}</li>)}</ul>;
-  const rows = beforeAfter(result, todayPrice(today, onRecord));
-  const events = roundEvents(result);
+  const rows = beforeAfter(result, todayPrice(today, onRecord, currency), currency);
+  const events = roundEvents(result, currency);
   const notes = [...engineNotes(result), ...notModelled(run.data)];
   return (
     <>
@@ -400,7 +400,7 @@ function ResultsBlocks({ run, onRecord, today }) {
 }
 
 /** The exit waterfall (CT9) of one run: the table at a chosen exit, the step chart, and Eadwyn's order of payment. */
-function WaterfallBlocks({ result, assumptions, attached, canAttach, onAttach }) {
+function WaterfallBlocks({ result, assumptions, attached, canAttach, onAttach, currency }) {
   const list = waterfallsOf(result);
   const [at, setAt] = useState(0);
   if (!list.length) {
@@ -408,17 +408,17 @@ function WaterfallBlocks({ result, assumptions, attached, canAttach, onAttach })
   }
   const pick = list[Math.min(at, list.length - 1)];
   const ledger = result?.rounds?.length ? result.rounds[result.rounds.length - 1].ledger : result?.founding;
-  const table = waterfallTable(pick.wf, ledger);
+  const table = waterfallTable(pick.wf, ledger, currency);
   const steps = shareSteps(result);
-  const read = paymentReadBack(pick.wf);
+  const read = paymentReadBack(pick.wf, currency);
   const assume = `Assumptions: ${assumptions.join(' ')}`;
   return (
     <>
-      <Block title={`Exit waterfall · ${dollars(pick.exit)} exit`} tags={<Tag kind="modelled" />} testId="captable-waterfall" foot={table ? `${table.foot} ${assume}` : assume}
+      <Block title={`Exit waterfall · ${dollars(pick.exit, currency)} exit`} tags={<Tag kind="modelled" />} testId="captable-waterfall" foot={table ? `${table.foot} ${assume}` : assume}
         aside={list.length > 1 ? (
           <label className={`flex items-center gap-2 text-[12px] ${MUTED}`}>Exit
             <select className={`${INPUT} w-auto`} value={Math.min(at, list.length - 1)} onChange={(e) => setAt(Number(e.target.value))} data-testid="captable-waterfall-exit">
-              {list.map((w, i) => <option key={w.exit} value={i}>{dollars(w.exit)}</option>)}
+              {list.map((w, i) => <option key={w.exit} value={i}>{dollars(w.exit, currency)}</option>)}
             </select>
           </label>
         ) : null}>
@@ -444,12 +444,12 @@ function WaterfallBlocks({ result, assumptions, attached, canAttach, onAttach })
           )}
       </Block>
       <ChartBlock title="Share of the exit, by group" testId="captable-steps"
-        alt={`The share of each exit that founders, investors and employees take, at ${steps.columns.map((c) => dollars(c.exit)).join(', ')}.${steps.points.length ? ` ${steps.points.map((p) => `${p.holder} converts above ${short(p.at)}`).join('; ')}.` : ''}`}
+        alt={`The share of each exit that founders, investors and employees take, at ${steps.columns.map((c) => dollars(c.exit, currency)).join(', ')}.${steps.points.length ? ` ${steps.points.map((p) => `${p.holder} converts above ${short(p.at, currency)}`).join('; ')}.` : ''}`}
         legend={GROUPS.slice(0, 3).map((g) => ({ label: g.label, tone: g.tone }))}
-        table={{ head: ['Exit', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: steps.columns.map((c) => [dollars(c.exit), ...(c.shares ? [c.shares.founders, c.shares.investors, c.shares.people].map((v) => `${v.toFixed(2)}%`) : ['not recorded', 'not recorded', 'not recorded'])]) }}
-        foot={steps.paidInFull != null ? `Exit value on a log scale. Up to ${short(steps.paidInFull)}, investors take everything as preferences.` : 'Exit value on a log scale.'}>
-        <ExitSteps columns={steps.columns.map((c) => ({ exit: c.exit, label: short(c.exit), parts: c.shares ? [{ value: c.shares.founders, tone: 'violet' }, { value: c.shares.investors, tone: 'sky' }, { value: c.shares.people, tone: 'muted' }] : null }))}
-          markers={[...(steps.paidInFull != null ? [{ at: steps.paidInFull, label: `Preferences paid in full at ${short(steps.paidInFull)}` }] : []), ...steps.points.map((p) => ({ at: p.at, label: `${p.holder} converts above ${short(p.at)}` }))]} />
+        table={{ head: ['Exit', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: steps.columns.map((c) => [dollars(c.exit, currency), ...(c.shares ? [c.shares.founders, c.shares.investors, c.shares.people].map((v) => `${v.toFixed(2)}%`) : ['not recorded', 'not recorded', 'not recorded'])]) }}
+        foot={steps.paidInFull != null ? `Exit value on a log scale. Up to ${short(steps.paidInFull, currency)}, investors take everything as preferences.` : 'Exit value on a log scale.'}>
+        <ExitSteps columns={steps.columns.map((c) => ({ exit: c.exit, label: short(c.exit, currency), parts: c.shares ? [{ value: c.shares.founders, tone: 'violet' }, { value: c.shares.investors, tone: 'sky' }, { value: c.shares.people, tone: 'muted' }] : null }))}
+          markers={[...(steps.paidInFull != null ? [{ at: steps.paidInFull, label: `Preferences paid in full at ${short(steps.paidInFull, currency)}` }] : []), ...steps.points.map((p) => ({ at: p.at, label: `${p.holder} converts above ${short(p.at, currency)}` }))]} />
       </ChartBlock>
       <EadwynBand read={read} attached={attached} canAttach={canAttach} onAttach={() => onAttach(read)} testId="captable-ead-payment" />
     </>
@@ -461,6 +461,8 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
   const [own, setOwn] = useState(0);
   const read = useRead(readScenario, uid, `${reload}-${own}`);
   const today = useRead(readToday, projectId, reload);
+  // D5373: the venture's currency, from Today's read (always sent), for every figure on the page.
+  const currency = codeOf(today.status === 'ready' ? today.data?.currency : null);
   const { plan, writes } = useWrites(projectId);
   const scenario = read.status === 'ready' ? read.data : null;
   const model = scenario && !scenario.is_variant;
@@ -545,7 +547,7 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                     : today_
                       ? (today.status === 'ready'
                         ? (today.data?.today?.available
-                          ? <TodayEditor draft={draft} setDraft={edit} instruments={instruments} />
+                          ? <TodayEditor draft={draft} setDraft={edit} instruments={instruments} currency={currency} />
                           : <p className={AMBER} data-testid="captable-scenario-no-today">{today.data?.today?.sentence || 'Nothing is recorded yet.'} This scenario starts from Today, so it cannot be run until the record holds shares.</p>)
                         : <ReadState read={today} what="Today, from the record" claim="This scenario’s inputs are kept." onRetry={retry} testId="captable-scenario-today">{null}</ReadState>)
                       : <VariantEditor draft={draft} setDraft={edit} onSave={save} saving={saving} errors={saveErrors} saved={saved} naming={false} />}
@@ -566,11 +568,11 @@ export function ScenarioPage({ projectId, uid, search, reload, retry }) {
                 ) : null}
               </Block>
               <div className="flex min-w-0 flex-col gap-3.5">
-                <ResultsBlocks run={run} onRecord={today_} today={today} />
+                <ResultsBlocks run={run} onRecord={today_} today={today} currency={currency} />
                 {run.status === 'ready' && run.data?.result && !run.data.result.errors ? (
                   <>
-                    <EadwynBand read={roundReadBack(run.data.result)} attached={!!attachedRead(scenario.inputs, 'round')} canAttach={writes && !model} onAttach={() => attach(roundReadBack(run.data.result))} testId="captable-ead-round" />
-                    <WaterfallBlocks result={run.data.result} assumptions={assumptions} attached={!!attachedRead(scenario.inputs, 'payment')} canAttach={writes && !model} onAttach={attach} />
+                    <EadwynBand read={roundReadBack(run.data.result, currency)} attached={!!attachedRead(scenario.inputs, 'round')} canAttach={writes && !model} onAttach={() => attach(roundReadBack(run.data.result, currency))} testId="captable-ead-round" />
+                    <WaterfallBlocks currency={currency} result={run.data.result} assumptions={assumptions} attached={!!attachedRead(scenario.inputs, 'payment')} canAttach={writes && !model} onAttach={attach} />
                   </>
                 ) : null}
               </div>
@@ -621,7 +623,7 @@ function useCompareRuns(projectId, scenarios) {
 }
 
 /** CT23c: the compare table one scenario per card, and that scenario's exit waterfall as a table. */
-function PhoneCompare({ rows, cols, exits, todayError, assumptions }) {
+function PhoneCompare({ rows, cols, exits, todayError, assumptions, currency }) {
   const cards = swipeCards(rows, cols);
   const [at, setAt] = useState(0);
   const track = useRef(null);
@@ -636,7 +638,7 @@ function PhoneCompare({ rows, cols, exits, todayError, assumptions }) {
     const el = e.currentTarget;
     if (el?.clientWidth) setAt(Math.round(el.scrollLeft / el.clientWidth));
   };
-  const table = exitTable(cols[here], exits);
+  const table = exitTable(cols[here], exits, currency);
   const pager = cards.length > 1 ? (
     <span className="flex items-center gap-1">
       <button type="button" className={BTN} onClick={() => go(here - 1)} disabled={here === 0} aria-label="Previous scenario" data-testid="captable-compare-prev">‹</button>
@@ -692,16 +694,17 @@ function PhoneCompare({ rows, cols, exits, todayError, assumptions }) {
 
 function CompareBody({ projectId, scenarios, today, search, writes, onAttached }) {
   const { runs, exits } = useCompareRuns(projectId, scenarios);
+  const currency = codeOf(today.status === 'ready' ? today.data?.currency : null);
   const [attaching, setAttaching] = useState(null);
   const phone = usePhoneWidth();
   const todayResult = today.status === 'ready' && today.data?.today?.available ? today.data.today.result : null;
   const cols = scenarios.map((s, k) => ({ name: s.is_variant ? s.name : 'Cap table · model', short: shortName(s.is_variant ? s.name : 'Model'), fromToday: fromToday(s), result: runs[k]?.result || null, status: runs[k]?.status || 'loading' }));
-  const rows = compareRows(todayResult, cols, todayPrice(today, true));
+  const rows = compareRows(todayResult, cols, todayPrice(today, true, currency), currency);
   const panels = founderPanels(cols);
-  const exitsDrawn = exitPanels(cols, exits);
+  const exitsDrawn = exitPanels(cols, exits, currency);
   const assumptions = today.status === 'ready' && Array.isArray(today.data?.assumptions) ? today.data.assumptions : ASSUMPTIONS_FALLBACK;
   const first = scenarios[0];
-  const firstRead = runs[0]?.status === 'ready' ? roundReadBack(runs[0].result) : null;
+  const firstRead = runs[0]?.status === 'ready' ? roundReadBack(runs[0].result, currency) : null;
   const head = ['', todayResult ? '┊ Today · on record' : '┊ Today · nothing recorded', ...cols.map((c) => c.name)];
   const readBack = (
     <>
@@ -718,7 +721,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
   if (phone) {
     return (
       <>
-        <PhoneCompare rows={rows} cols={cols} exits={exits} todayError={today.status === 'error'} assumptions={assumptions} />
+        <PhoneCompare rows={rows} cols={cols} exits={exits} todayError={today.status === 'error'} assumptions={assumptions} currency={currency} />
         {readBack}
       </>
     );
@@ -727,7 +730,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
     <>
       <Block title="Scenarios compared" tags={<><Tag kind="record" /><Tag kind="modelled" /></>} testId="captable-compare-table-block"
         aside={<Link className={`${LINK} text-[12px]`} to={`${SCENARIOS_PATH}${search}`} data-testid="captable-compare-change">Change the selection</Link>}
-        foot={`The Today column is the record. The ${cols.length === 1 ? 'scenario column is' : `${cols.length} scenario columns are`} Modelled.${exits.length ? ` Each is run at the same exits: ${exits.map(dollars).join(', ')}.` : ''}`}>
+        foot={`The Today column is the record. The ${cols.length === 1 ? 'scenario column is' : `${cols.length} scenario columns are`} Modelled.${exits.length ? ` Each is run at the same exits: ${exits.map((v) => dollars(v, currency)).join(', ')}.` : ''}`}>
         {today.status === 'error' ? <Unreadable what="Today, from the record" claim="The scenarios still draw." /> : null}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse" data-testid="captable-compare-table">
@@ -761,9 +764,9 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
           )}
       </ChartBlock>
       <ChartBlock title="Exit waterfall" testId="captable-compare-exits"
-        alt={exitsDrawn.map((e) => `At a ${dollars(e.exit)} exit: ${e.rows.map((r) => (r.by ? `${r.label}, founders ${short(r.by.founders)}` : `${r.label} not calculated`)).join('; ')}`).join('. ')}
+        alt={exitsDrawn.map((e) => `At a ${dollars(e.exit, currency)} exit: ${e.rows.map((r) => (r.by ? `${r.label}, founders ${short(r.by.founders, currency)}` : `${r.label} not calculated`)).join('; ')}`).join('. ')}
         legend={GROUPS.slice(0, 3).map((g) => ({ label: g.label, tone: g.tone }))}
-        table={{ head: ['Exit · scenario', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: exitsDrawn.flatMap((e) => e.rows.map((r) => [`${dollars(e.exit)} · ${r.label}`, ...(r.by ? [r.by.founders, r.by.investors, r.by.people].map(dollars) : ['not recorded', 'not recorded', 'not recorded'])])) }}
+        table={{ head: ['Exit · scenario', ...GROUPS.slice(0, 3).map((g) => g.label)], rows: exitsDrawn.flatMap((e) => e.rows.map((r) => [`${dollars(e.exit, currency)} · ${r.label}`, ...(r.by ? [r.by.founders, r.by.investors, r.by.people].map((v) => dollars(v, currency)) : ['not recorded', 'not recorded', 'not recorded'])])) }}
         foot={`Assumptions: ${assumptions.join(' ')} Over each bar, F is what founders take.`}>
         {exits.length === 0
           ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="captable-compare-no-exits">None of these scenarios sets an exit value, so no waterfall is drawn.</p>
@@ -771,7 +774,7 @@ function CompareBody({ projectId, scenarios, today, search, writes, onAttached }
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {exitsDrawn.map((e) => (
                 <div key={e.exit} className="flex min-w-0 flex-col gap-1" data-testid="captable-compare-exit">
-                  <span className={`text-[12px] font-bold ${INK}`}>{dollars(e.exit)} exit</span>
+                  <span className={`text-[12px] font-bold ${INK}`}>{dollars(e.exit, currency)} exit</span>
                   <Columns rows={e.rows} height={200} />
                 </div>
               ))}
