@@ -6,7 +6,7 @@ the generic route wrapper once a canvas has graduated.
 
 - `FromMercury.jsx` (D840 part 4, #2349) is the "From Mercury" part of
   Deals · Commit and Closing, Fund · Calls, Accounting and Reporting, and
-  Portfolio's line saying Mercury feeds nothing there. Facts are shown;
+  Portfolio's member-facing bank-data boundary. Facts are shown;
   proposals have Accept and Dismiss, and nothing is written without Accept.
 - `ProofOfFunds.jsx` (D752, #1891) is the investor's "Show Axal you can fund
   this": `useProofTargets`, `ProofDoor`, `ProofOfFundsSheet` and
@@ -61,7 +61,10 @@ the generic route wrapper once a canvas has graduated.
   Calls, LPs and Reporting zones all use it.
 - `InvestorPortfolioCanvas.jsx` is the investor branch rendered inside
   `PortfolioWorkspace.jsx`, the shared portfolio route both founder and
-  investor land on.
+  investor land on. D5365 (#5365) keeps failed or partial reads visibly
+  unavailable instead of rendering an empty or zero-valued book. The same
+  decision formats update KPIs by their stored unit, formats alert dates for
+  members, and removes internal roadmap copy from Portfolio screens.
 - `InvestorNetworkWorkspace.jsx` owns `/network` for the investor role,
   parallel to `FounderNetworkDesk` in `../founder/` — same route, role-branched
   in `App.jsx` ahead of the founder ternary.

@@ -28,6 +28,12 @@ const daysSince = (value) => {
   const at = new Date(value).getTime();
   return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 86400000)) : null;
 };
+const readableDate = (value) => {
+  const at = value ? new Date(value) : null;
+  if (!at || !Number.isFinite(at.getTime())) return 'date unavailable';
+  return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+};
+export const reportedLine = (prefix, value, age = daysSince(value)) => `${prefix} ${readableDate(value)}${age == null ? '' : ` · ${age}d ago`}`;
 const healthLabel = (badge) => badge === 'red' ? 'Red' : badge === 'yellow' ? 'Amber' : badge === 'green' ? 'Green' : 'Not recorded';
 const healthRank = (row) => row.health?.badge === 'red' ? 0 : row.health?.badge === 'yellow' ? 1 : row.marked_down ? 2 : row.overdue ? 3 : row.health?.badge === 'green' ? 4 : 5;
 
@@ -54,7 +60,7 @@ export default function InvestorPortfolioPositions() {
         unavailable: { analytics: optional[0].status === 'rejected', health: optional[1].status === 'rejected', updates: optional[2].status === 'rejected' },
       });
     } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: error?.message || 'The positions book could not be loaded.' }));
+      setState((current) => ({ ...current, loading: false, error: true }));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -129,7 +135,7 @@ export default function InvestorPortfolioPositions() {
       filters={investorZoneFilters('portfolio/positions', { value: filter, onChange: setFilter })}
       actions={investorZoneActions('portfolio/positions', { handlers: { markHistory }, view: { header: ['Company', 'Stage', 'Invested', 'FMV', 'Multiple', 'Mark basis'], rows, cells: (r) => [r.project?.name, r.project?.stage, r.total_invested, r.fmv, r.multiple, r.mark_basis] } })}
     />
-    {state.error && <div className="i4-error" data-testid="status-investor-positions-error"><span>{String(state.error).toLowerCase() === 'not found' ? 'Position source unavailable in local development. No empty portfolio claim is being made.' : state.error}</span><button type="button" onClick={load}>Retry</button></div>}
+    {state.error && <div className="i4-error" data-testid="status-investor-positions-error"><span>The positions book could not be read.</span><button type="button" onClick={load}>Retry</button></div>}
     {anyPartial && !state.loading && <div className="i4-partial" data-testid="status-investor-positions-partial">Some supporting portfolio sources are unavailable. Affected metrics and cells are labelled rather than treated as zero.</div>}
     {state.loading ? <Skeleton /> : !state.error && <>{filter === 'stage' && <div className="ip1-filters"><label>Stage<select value={stage} onChange={(event) => setStage(event.target.value)}><option value="all">All recorded stages</option>{stages.map((item) => <option key={item} value={item}>{title(item)}</option>)}</select></label></div>}
       <section className="i4-stats"><Stat label="Invested" value={money(invested)} note="Recorded cost basis, including follow-ons" /><Stat label="Current FMV" value={money(carryingValue)} note={latestMark ? `Latest mark in book: ${latestMark}` : rows.length ? 'Unmarked positions carried at cost' : 'No positions recorded'} /><Stat label="TVPI · gross" value={state.unavailable.analytics ? 'Unavailable' : ratio(state.analytics?.tvpi)} note={state.unavailable.analytics ? 'Analytics source unavailable' : `DPI ${ratio(state.analytics?.dpi)} · gross of fees and carry`} /><Stat label="Needs attention" value={attentionPartial ? `≥ ${needsAttention}` : needsAttention} note={state.unavailable.health ? 'Health source unavailable' : `${red} red, ${amber} amber`} /></section>
@@ -162,7 +168,7 @@ export default function InvestorPortfolioPositions() {
         empty="A narrative built from the marking events themselves — which company, on what date, on what basis — rather than from portfolio-wide momentum the record does not show."
         nothingToDraft="No marking event is recorded against an accessible position, so there is no move to explain."
       />
-      <section className="i4-card ip1-unavailable"><div className="i4-section-head"><div><h2>What this book will not do</h2><p>Read-only, and specific about which writes are elsewhere</p></div></div><strong>Every valuation and ownership write is an admin action.</strong><p>A mark is appended by an admin against a position, and a follow-on is a new round on that position — both are recorded through the governed write path, not from this book. This page reads them: the history below carries each mark with the date it speaks for, the event behind it and the basis it was arrived at on, because a round-priced mark and a GP estimate must not look alike.</p></section>
+      <section className="i4-card ip1-unavailable"><div className="i4-section-head"><div><h2>About this read-only book</h2><p>Valuation and ownership changes are recorded through governed workflows</p></div></div><strong>Every valuation and ownership change keeps its source.</strong><p>This book shows each mark with its effective date, the event behind it and the recorded basis. New marks and follow-on rounds are added through the authorised investment workflow, so a priced round and an estimate remain visibly different.</p></section>
       {state.analytics?.unmarked_position_count > 0 && <div className="i4-coverage">{state.analytics.unmarked_position_count} of {state.analytics.position_count} positions have no valuation mark and are carried at cost{state.analytics.mark_coverage != null ? ` · ${Math.round(state.analytics.mark_coverage * 100)}% mark coverage` : ''}.</div>}
       {/* D840 (#2349): Mercury feeds nothing in Portfolio, and the page says so. */}
       <FromMercury section="portfolio" />
@@ -322,7 +328,7 @@ function AlertsSection({ rows, unavailable }) {
       hits: unavailable.updates ? null : rows.filter((row) => {
         const runway = Number(row.lastUpdateObj?.kpis?.runway_months);
         return Number.isFinite(runway) && runway < 6;
-      }).map((row) => ({ row, value: `${Number(row.lastUpdateObj.kpis.runway_months)}mo`, why: `Reported ${row.lastUpdate || 'recently'}` })),
+      }).map((row) => ({ row, value: `${Number(row.lastUpdateObj.kpis.runway_months)}mo`, why: reportedLine('Reported', row.lastUpdate, row.updateDays) })),
       clear: 'Every position’s latest update reports more than six months of runway, or none reports one.',
     },
     {
@@ -330,7 +336,7 @@ function AlertsSection({ rows, unavailable }) {
       name: 'Update overdue 30 days',
       rule: 'days since last update ≥ 30',
       unavailable: unavailable.updates,
-      hits: unavailable.updates ? null : rows.filter((row) => row.overdue).map((row) => ({ row, value: `${row.updateDays}d`, why: `Last reported ${row.lastUpdate}` })),
+      hits: unavailable.updates ? null : rows.filter((row) => row.overdue).map((row) => ({ row, value: `${row.updateDays}d overdue`, why: reportedLine('Last reported', row.lastUpdate, row.updateDays) })),
       clear: 'Every position has an update inside 30 days.',
     },
     {
