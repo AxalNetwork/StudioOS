@@ -1,0 +1,12 @@
+{
+  "GET /api/engagements/:id/invoice": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/engagements/:id/invoice/paid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

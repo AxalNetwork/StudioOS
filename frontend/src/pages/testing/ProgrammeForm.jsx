@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { MAX_QUESTIONS, ROLE_OPTIONS, formFrom, formToPayload, refusalText } from './programmeModel';
 
 /**
@@ -35,10 +35,12 @@ export function logoProblem(file) {
 
 export default function ProgrammeForm({ programme = null, onSave, onCancel, saveLabel = 'Save draft', classes = {}, logo = false }) {
   const [form, setForm] = useState(() => formFrom(programme));
+  const logoId = useId();
   const [logoFile, setLogoFile] = useState(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const logoError = logo ? logoProblem(logoFile) : null;
   const input = classes.input || baseInput;
   const button = classes.button || baseButton;
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -55,7 +57,7 @@ export default function ProgrammeForm({ programme = null, onSave, onCancel, save
     const out = formToPayload(form);
     if (out.error) { setError(out.error); return; }
     const bad = logo ? logoProblem(logoFile) : null;
-    if (bad) { setError(bad); return; }
+    if (bad) { setError(null); return; }
     setBusy(true);
     setError(null);
     try {
@@ -88,13 +90,15 @@ export default function ProgrammeForm({ programme = null, onSave, onCancel, save
       {text('product_name', 'Product')}
       {logo && (
         <div className="block" data-testid="programme-logo">
-          <span className={label}>Logo · square, PNG or SVG</span>
-          <input type="file" accept="image/png,image/svg+xml,.png,.svg" className={input}
-            onChange={(e) => { const file = e.target.files?.[0] || null; setLogoFile(file); setRemoveLogo(false); setError(logoProblem(file)); }}
+          <label htmlFor={logoId} className={label}>Logo · square, PNG or SVG</label>
+          <input id={logoId} type="file" accept="image/png,image/svg+xml,.png,.svg" className={input}
+            aria-invalid={!!logoError} aria-describedby={`${logoId}-hint${logoError ? ` ${logoId}-error` : ''}`}
+            onChange={(e) => { const file = e.target.files?.[0] || null; setLogoFile(file); setRemoveLogo(false); setError(null); }}
             data-testid="programme-logo-file" />
-          <span className="mt-1 block text-[11px] text-axal-faint">
+          <span id={`${logoId}-hint`} className="mt-1 block text-[12px] text-axal-faint">
             {logoFile ? `${logoFile.name} is uploaded when you save.` : programme?.logo_key && !removeLogo ? 'This program has a logo. Choose a file to replace it.' : 'At most 256 KB. Without one, the program shows its first letter.'}
           </span>
+          {logoError && <p id={`${logoId}-error`} role="alert" className="mt-1 text-[12px] font-semibold text-red-700 dark:text-red-300">{logoError}</p>}
           {programme?.logo_key && !logoFile && !removeLogo
             ? <button type="button" className={`${ghost} mt-1`} onClick={() => setRemoveLogo(true)} data-testid="programme-logo-remove">Remove the logo</button>
             : null}

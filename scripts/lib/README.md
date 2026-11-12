@@ -42,6 +42,14 @@ can be read to find out what a rule actually is.
 | `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
 | `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
 | `landingThroughput.mjs` | D5623: native/batch capacity arithmetic, binary-bisection cost and strict 14-day decision trigger; `landingThroughput.test.mjs` checks arithmetic, evidence and table parity. |
+| `workerStartup.test.mjs` | D5532: startup budget, profile accounting and Wrangler bundle identity fixtures. |
+| `productionAdmission.test.mjs` | D5501: trust, failure and supersession fixtures and mutation ordering in the release workflows. |
+| `selectTests.mjs` | D5610: conservative affected-test selection, honest shadow scoring and aggregate reporting; tests in `selectTests.test.mjs`. |
+| `fixtures/` | Evidence-backed replay inputs; no invented historical results. |
+| `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
+| `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
+| `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
+| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
 
 ## Tests
 
