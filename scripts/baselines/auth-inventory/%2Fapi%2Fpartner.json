@@ -64,6 +64,11 @@
     "kind": "unclassified",
     "state": "unreviewed"
   },
+  "GET /api/partner/delivery/engagements/:engagementId/reviews": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
   "GET /api/partner/offers/proof-consents/:token/claim": {
     "review": "no_gate_found",
     "kind": "link_token",
