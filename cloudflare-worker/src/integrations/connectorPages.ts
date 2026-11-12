@@ -202,6 +202,21 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  tiktok: {
+    tagline: 'Connect your TikTok account with read-only access.',
+    long_description: ['Sign in with TikTok to grant access to your basic profile, audience counts and public videos. This release connects your account. Grow imports come later.'],
+    tools: [],
+    never_does: ['StudioOS does not upload videos or post to TikTok.'],
+    prompts: [],
+    prompts_reason: notRead('TikTok'),
+    made_by: AXAL,
+    service: { name: 'TikTok', href: 'https://www.tiktok.com' },
+    sign_in: { kind: 'oauth', label: 'Sign in with TikTok', key_help_href: null },
+    endpoints: { sign_in: 'https://www.tiktok.com/v2/auth/authorize/', api: 'https://open.tiktokapis.com' },
+    added: '2026-11',
+    links: { ...NO_LINKS, developer_docs: 'https://developers.tiktok.com/docs/en/login-kit-web' },
+    verified_on: null,
+  },
   lovable: {
     tagline: 'Works without signing in. Launch links and app links for your venture.',
     long_description: [
@@ -885,7 +900,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build', 'Hosting', 'Analytics', 'Marketing', 'Social',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

@@ -23,6 +23,12 @@ const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.t
 const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
 const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
 const byId = (root, id) => walk(root).find((n) => props(n)['data-testid'] === id);
+// A datetime-local input has no offset. Type the browser's local wall time
+// for the UTC instant the preview and API should receive.
+const localInput = (utc) => {
+  const date = new Date(utc);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
 
 /* Invented articles across Europe's clock change (Sun 25 Oct 2026, 01:00 UTC). */
 const ITEMS = [
@@ -158,13 +164,13 @@ test('ART8 mounted: Move… opens the dialog first, then sends the schedule call
     assert.ok(byId(w.container, 'calendar-schedule'));
     assert.match(text(byId(w.container, 'calendar-schedule-now')), /08:00 UTC · Mon 26 Oct 2026/);
     const input = byId(w.container, 'calendar-schedule-input');
-    await act(async () => props(input).onChange({ target: { value: '2026-10-26T08:00' } }));
+    await act(async () => props(input).onChange({ target: { value: localInput('2026-10-26T08:00:00Z') } }));
     assert.match(text(byId(w.container, 'calendar-schedule-others')), /“\[Same minute\]” at 08:00/);
     await act(async () => props(input).onChange({ target: { value: '2026-10-20T09:00' } }));
     // Mutation checked: let a past time through → Schedule is pressable for yesterday.
     assert.match(text(byId(w.container, 'calendar-schedule-problem')), /in the future/);
     assert.equal(props(byId(w.container, 'calendar-schedule-confirm')).disabled, true);
-    await act(async () => props(input).onChange({ target: { value: '2026-10-30T11:00' } }));
+    await act(async () => props(input).onChange({ target: { value: localInput('2026-10-30T11:00:00Z') } }));
     assert.equal(props(byId(w.container, 'calendar-schedule-confirm')).disabled, false);
     assert.match(text(byId(w.container, 'calendar-schedule-utc')), /11:00 UTC · Fri 30 Oct 2026/);
     await click(byId(w.container, 'calendar-schedule-confirm'));

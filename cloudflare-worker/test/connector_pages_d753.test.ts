@@ -306,6 +306,7 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
 });
 
 const ADDED: Record<string, string | null> = {
+  tiktok: '2026-11',
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10', notion: '2026-10', vercel: '2026-10', posthog: '2026-10', beehiiv: '2026-11',
@@ -346,6 +347,7 @@ const constant = (src: string, name: string) => {
   return src.slice(start, src.indexOf("'", start));
 };
 const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null; api: string | null }> = {
+  tiktok: { file: 'integrations/tiktokOAuth.ts', sign_in: ['AUTHORIZE', ''], api: 'API' },
   hubspot: { file: 'integrations/providers/hubspot.ts', sign_in: ['HS_AUTH', '/oauth/authorize'], api: 'HS_API' },
   calendly: { file: 'integrations/providers/calendly.ts', sign_in: ['CL_AUTH', '/oauth/authorize'], api: 'CL_API' },
   salesforce: { file: 'integrations/providers/salesforce.ts', sign_in: ['PROD_HOST', '/services/oauth2/authorize'], api: null },

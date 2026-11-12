@@ -1,0 +1,28 @@
+name: Cloudflare notification heartbeat
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: vars.CF_HEARTBEAT_ENABLED == 'true' && (github.event_name == 'schedule' || github.actor == 'guillaumelauzier')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    concurrency:
+      group: cloudflare-notification-heartbeat
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - run: node scripts/cloudflare-heartbeat-5671.mjs
+        env:
+          CF_STATUS_URL: ${{ vars.CF_STATUS_URL }}
+          CF_OBSERVER_SECRET: ${{ secrets.CF_OBSERVER_SECRET }}
+          CF_HEARTBEAT_MAINTENANCE: ${{ vars.CF_HEARTBEAT_MAINTENANCE }}

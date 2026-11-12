@@ -156,8 +156,11 @@ test('D4225: every area of the taxonomy has at least ten skills, by the area of 
   for (const [a, n] of count) assert.ok(n >= 10, `${a}: only ${n} skills`);
 });
 
-test('D4225: the generated library module is current with these files', async () => {
-  const { render } = await import('../../scripts/build-skill-library.mjs');
+test('D4225/D5612: the generated library module is deterministic, untracked, and the build this run imports', async () => {
+  const { libraryEntries, render, skillLibraryProblems } = await import('../../scripts/build-skill-library.mjs');
+  // D5612: built before every test by scripts/build-generated.mjs, never committed.
+  assert.deepEqual(skillLibraryProblems(), []);
+  assert.equal(render(libraryEntries(undefined, { reversed: true })), render(), 'two renders of the same files differ');
   const now = readFileSync(new URL('../src/services/agents/skillLibrary.generated.ts', import.meta.url), 'utf8');
-  assert.equal(now, render(), 'stale: run node scripts/build-skill-library.mjs');
+  assert.equal(now, render(), 'not the current build: run node scripts/build-generated.mjs');
 });

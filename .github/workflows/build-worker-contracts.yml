@@ -38,6 +38,8 @@ jobs:
       # Separate output keeps these contracts readable through the GitHub
       # connector; the full drift job's log exceeds its returned log size.
       # This supplements, and does not replace, the root build and full suite.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Connector contract
         if: hashFiles('cloudflare-worker/test/build_connectors_d686.test.ts') != ''
         run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/build_connectors_d686.test.ts

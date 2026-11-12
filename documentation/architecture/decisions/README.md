@@ -101,5 +101,7 @@ and citations by number keep working.
 | `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
 | `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
 | `D5670.md` | Cloudflare source coverage, ownership and staged acceptance. |
+| `D5671.md` | Authenticated Cloudflare delivery and explicit route isolation. |
+| `D5672.md` | Existing platform signals and conservative incident attribution. |
 | `D5680.md` | Restricted operational security triage without public disclosure. |
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |

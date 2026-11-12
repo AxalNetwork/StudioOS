@@ -608,6 +608,7 @@ export const PROVIDER_LABEL = {
   carta: 'Carta',
   github: 'GitHub',
   vercel: 'Vercel',
+  tiktok: 'TikTok',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

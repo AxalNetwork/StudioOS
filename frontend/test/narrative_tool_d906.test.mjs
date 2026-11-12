@@ -74,8 +74,15 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');
   // The test DOM keeps no attributes, so each node's React props are read instead.
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
+  async function waitForText(value) {
+    const deadline = performance.now() + 5_000;
+    while (!text(container).includes(value) && performance.now() < deadline) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    }
+    assert.ok(text(container).includes(value), `The narrative did not show "${value}"`);
+  }
   return {
-    requests, flush, text: () => text(container),
+    requests, flush, waitForText, text: () => text(container),
     testIds: () => nodes().map((n) => props(n)['data-testid']).filter(Boolean),
     hrefs: () => nodes().filter((n) => String(n.tagName).toUpperCase() === 'A').map((n) => props(n).href),
     async close() { await act(async () => root.unmount()); Object.assign(globalThis, previous); restore(); },
@@ -142,6 +149,7 @@ test('compare lines up two versions section by section and marks what changed', 
 test('Check reads the saved versions and the newest version\'s check (D912), never a record called "check"', async () => {
   const view = await mounted('/raise/investor-narrative/check?project_id=3');
   try {
+    await view.waitForText('Nothing compared yet.');
     assert.ok(view.requests.some((u) => u.includes('/cycles/raise/modules/investor-narrative/form-options?project=3')), 'the saved versions');
     assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/4/check?project=3')), 'the newest version\'s check');
     assert.ok(!view.requests.some((u) => u.includes('/records/check')), 'a tab word is never read as a record');

@@ -91,9 +91,11 @@ export const mount: RouteMount = { path: '/api/decks', router: deckQuotes, befor
 export const mount: RouteMount[] = [{ path: '/api/a', router: a }, { path: '/api/b', router: b }];
 ```
 
-then run `node scripts/build-route-registry.mjs`, which checks every
-descriptor and rewrites `_registry.ts` (generated, committed; Workers cannot
-list a folder at runtime). Write `path` as a string literal and `router` and
+and nothing else: `node scripts/build-route-registry.mjs` checks every
+descriptor and writes `_registry.ts` (generated, because Workers cannot list
+a folder at runtime; gitignored and never committed, D5612 —
+`scripts/build-generated.mjs` writes it before every build, typecheck and
+test). Write `path` as a string literal and `router` and
 each `before` entry as identifiers: the drift check reads them statically.
 
 Where it mounts:

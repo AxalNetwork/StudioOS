@@ -157,6 +157,9 @@ jobs:
       - name: Verify the pinned Chromium
         run: test -x "$PW_CHROMIUM_PATH" && "$PW_CHROMIUM_PATH" --version | grep -F '141.0.7390.37'
 
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+
       # A brand-new workers.dev URL can answer a few seconds after the deploy
       # reports success; wait for /login rather than fail the first test on it.
       - name: Wait for the preview to answer

@@ -179,7 +179,11 @@ test('D755 guards: aiTokens.js never calls the balance "credits", and holds no 1
 test('CR7 shared-model mutations: current packs and the central purchase destination win, restored in both directions', async () => {
   const original = read('lib/aiTokens.js');
   let n = 0;
-  const load = async source => import('data:text/javascript;base64,' + Buffer.from(source + '\n// instance ' + n++).toString('base64'));
+  const noticesUrl = new URL('../src/lib/notices.js', import.meta.url).href;
+  const load = async source => {
+    const resolved = source.replace("from './notices.js'", `from ${JSON.stringify(noticesUrl)}`);
+    return import('data:text/javascript;base64,' + Buffer.from(resolved + '\n// instance ' + n++).toString('base64'));
+  };
   const check = model => {
     assert.equal(model.ADD_TOKENS_PATH, '/pricing?for=models#add-tokens');
     assert.equal(model.aiTokenState({data:{...CR2_READY,configured:false,product:null}}),'ready');

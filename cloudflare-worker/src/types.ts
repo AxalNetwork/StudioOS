@@ -1,4 +1,7 @@
 export interface Env {
+  TIKTOK_APP_APPROVED?: string;
+  TIKTOK_CLIENT_KEY?: string;
+  TIKTOK_CLIENT_SECRET?: string;
   // D666 (#1496): the StudioOS MCP server and its OAuth provider. Off unless
   // "true"; with it off every MCP and OAuth path answers 404 and the provider
   // is never built. OAUTH_KV holds clients, grants, tokens and parked consent

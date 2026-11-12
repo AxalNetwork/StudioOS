@@ -49,6 +49,7 @@ set -euo pipefail
 
 log() { echo "[dr-second-copy] $*"; }
 die() { local rc="$1"; shift; log "FATAL: $*"; exit "$rc"; }
+file_bytes() { wc -c < "$1" | tr -d '[:space:]'; }
 
 [[ "${1:-}" == "upload" && $# -eq 3 ]] || die 1 "usage: dr-second-copy.sh upload <backup.sql> <manifest.json>"
 SQL="$2"; MANIFEST="$3"
@@ -81,7 +82,7 @@ trap 'rm -rf "${TMP}"' EXIT
 age -r "${RECIPIENT}" -o "${TMP}/backup.sql.age" "${SQL}" || die 2 "encryption failed"
 CT_SHA=$(sha256sum "${TMP}/backup.sql.age" | cut -d' ' -f1)
 CT_B64=$(openssl dgst -sha256 -binary "${TMP}/backup.sql.age" | base64)
-CT_SIZE=$(stat -c%s "${TMP}/backup.sql.age")
+CT_SIZE=$(file_bytes "${TMP}/backup.sql.age")
 
 # 2. The copy manifest.
 jq --arg sha "${CT_SHA}" --argjson size "${CT_SIZE}" --arg recipient "${RECIPIENT}" \
@@ -100,7 +101,7 @@ put_once() {
   if s3 put-object --bucket "${BUCKET}" --key "${key}" --body "${file}" --content-type "${type}" \
        --if-none-match '*' --checksum-algorithm SHA256 --checksum-sha256 "${b64}" \
        --metadata "sha256=${sha},export-sha256=${EXPORT_SHA}" > "${TMP}/put.json" 2> "${TMP}/put.err"; then
-    log "stored ${key} ($(stat -c%s "${file}") bytes, sha256 ${sha})"
+    log "stored ${key} ($(file_bytes "${file}") bytes, sha256 ${sha})"
     return 0
   fi
   if grep -qE 'PreconditionFailed|\(412\)' "${TMP}/put.err"; then

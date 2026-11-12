@@ -94,6 +94,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 . "${REPO_ROOT}/scripts/dr-restore-lib.sh"
 
 log() { echo "[dr-drill] $*"; }
+utc_epoch() { jq -ner --arg stamp "$1" '$stamp | fromdateiso8601'; }
 
 # D5317: independent objects preserve overlapping runs. Invert the epoch so
 # the bucket's ascending key order starts with the newest run.
@@ -201,10 +202,10 @@ on_exit() {
   write_marker "$rc"
   # D4558: a passing run that missed a target still pages; the marker says which.
   if [[ $rc -eq 0 ]]; then
-    local now_s age_s
+    local now_s age_s recovery_s
     now_s=$(date -u +%s)
-    if [[ -n "${RECOVERY_POINT}" ]]; then
-      age_s=$(( STARTED_EPOCH - $(date -u -d "${RECOVERY_POINT}" +%s) ))
+    if [[ -n "${RECOVERY_POINT}" ]] && recovery_s=$(utc_epoch "${RECOVERY_POINT}"); then
+      age_s=$(( STARTED_EPOCH - recovery_s ))
       [[ "${age_s}" -le "${RPO_TARGET_S}" ]] || page "rpo_target_missed: the restored recovery point was ${age_s} s old (target ${RPO_TARGET_S} s)"
     fi
     [[ $(( now_s - STARTED_EPOCH )) -le "${RTO_TARGET_S}" ]] || page "rto_target_missed: the drill took $(( now_s - STARTED_EPOCH )) s (target ${RTO_TARGET_S} s)"
@@ -254,7 +255,12 @@ if [[ "${SOURCE}" == "primary" ]]; then
       log "FATAL: the independent copy is enabled and has no heartbeat: $(head -c 300 "${TMP}/indep.err" 2>/dev/null)"
       exit 1
     fi
-    INDEP_AGE_H=$(( ( $(date -u +%s) - $(date -u -d "${INDEP_AT}" +%s) ) / 3600 ))
+    if ! INDEP_EPOCH=$(utc_epoch "${INDEP_AT}" 2>/dev/null); then
+      FAIL_REASON="independent_copy_missing"
+      log "FATAL: the independent copy heartbeat has no valid UTC recovery point"
+      exit 1
+    fi
+    INDEP_AGE_H=$(( ( $(date -u +%s) - INDEP_EPOCH ) / 3600 ))
     if [[ "${INDEP_AGE_H}" -gt "${MAX_AGE_HOURS}" ]]; then
       FAIL_REASON="independent_copy_stale"
       log "FATAL: the independent copy's newest recovery point is ${INDEP_AGE_H} h old (limit ${MAX_AGE_HOURS} h)"
