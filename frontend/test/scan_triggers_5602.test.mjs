@@ -81,6 +81,7 @@ function workflowChecks(codeql, semgrep) {
     assert.match(text, /group: scan-main-findings\n      cancel-in-progress: false/, name);
     assert.match(text, /actions: read\n      issues: write/, name);
     assert.match(text, /retention-days: 90/, name);
+    assert.equal((text.match(/include-hidden-files: true/g) || []).length, 2, 'snapshot and state folders both begin with a dot');
   }
   assert.match(semgrep, /group: semgrep-\$\{\{ github.event_name \}\}-\$\{\{ github.ref \}\}\n  cancel-in-progress: \$\{\{ github.event_name == 'pull_request' \}\}/);
 }

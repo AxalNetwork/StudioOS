@@ -213,6 +213,7 @@ jobs:
           name: scan-fingerprints-semgrep
           path: .scan-fingerprints/semgrep.json
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 90
 
   findings:
@@ -250,6 +251,7 @@ jobs:
           name: scan-state-semgrep
           path: .scan-state/state.json
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 90
       - name: Reconcile one main scan alert
         env:

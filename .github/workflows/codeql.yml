@@ -147,6 +147,7 @@ jobs:
           name: scan-fingerprints-codeql-${{ matrix.language }}
           path: .scan-fingerprints/${{ matrix.language }}.json
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 90
 
   findings:
@@ -184,6 +185,7 @@ jobs:
           name: scan-state-codeql
           path: .scan-state/state.json
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 90
       - name: Reconcile one main scan alert
         env:
