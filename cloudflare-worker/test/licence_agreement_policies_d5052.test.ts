@@ -61,6 +61,8 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const s of BUILT) { try { db.exec(s); } catch { /* a view or trigger naming an object replayed later */ } }
   db.exec(SEED);
+  db.prepare(`INSERT INTO program_packages (uid, package_key, version, name, status, base_annual_fee_cents, effective_from, created_at)
+    VALUES ('example-core-v1', 'core_network', 1, 'Core Network', 'active', 100, '2026-01-01', '2026-01-01T00:00:00Z')`).run();
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(SUPER, 'admin', 'Sue Super', 'sue@example.test');
   u.run(SIGNER, 'partner', 'Lee Licensee', 'lee@example.test');
