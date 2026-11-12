@@ -289,6 +289,66 @@ jobs:
   # reads this run's jobs, main's latest CI run and the red-main alert, and
   # cannot fail (continue-on-error; the script exits 0).
   # -------------------------------------------------------------------------
+  selection-shadow:
+    name: selection (shadow)
+    needs: suite
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read newest main dependency trace
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json"
+          gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/trace-candidates.json"
+          node scripts/select-tests.mjs --main-artifact "$RUNNER_TEMP/trace-candidates.json" "$RUNNER_TEMP/main-commits.json" > "$RUNNER_TEMP/trace-artifact.json"
+          artifact=$(node -p "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/trace-artifact.json')).id || ''")
+          if [ -n "$artifact" ]; then
+            gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/deps.zip"
+            unzip -j "$RUNNER_TEMP/deps.zip" test-deps.json -d .
+            created=$(node -p "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/trace-artifact.json')).created_at || ''")
+            echo "TRACE_CREATED_AT=$created" >> "$GITHUB_ENV"
+          fi
+      - name: Read machine-readable CI failures
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ci-failures-*
+          path: ci-failures
+      - name: Record the shadow decision
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node scripts/select-tests.mjs || true
+          if [ ! -s selection-shadow.json ]; then
+            echo '{"kind":"selection-shadow","version":1,"mode":"full","reason":"shadow-setup-failed","scoring":"unscored","misses":null,"failing":null}' > selection-shadow.json
+          fi
+          exit 0
+      - name: Keep one shadow record
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: selection-shadow-${{ github.run_id }}
+          path: selection-shadow.json
+          if-no-files-found: error
+          retention-days: 30
+
   classify:
     name: why CI failed (D5398)
     needs: suite

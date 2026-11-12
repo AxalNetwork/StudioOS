@@ -41,6 +41,8 @@ can be read to find out what a rule actually is.
 | `spaChunks.mjs` | Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI runs. |
 | `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
 | `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
+| `selectTests.mjs` | D5610: conservative affected-test selection, honest shadow scoring and aggregate reporting; tests in `selectTests.test.mjs`. |
+| `fixtures/` | Evidence-backed replay inputs; no invented historical results. |
 | `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
 | `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
 | `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
