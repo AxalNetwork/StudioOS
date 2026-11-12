@@ -227,7 +227,7 @@ test('D5317: retention prunes only older drill history objects after recording t
     result: ['drill-d1.json', 'drill-d1-history/unrelated.json', ...keys].reverse().map((key) => ({ key })),
   }) });
   assert.equal(r.status, 0, r.out);
-  assert.deepEqual(r.calls.filter((c) => c[0] === 'r2' && c[2] === 'delete').map((c) => c[3]), [`studioos-backups/${keys[12]}`]);
+  assert.deepEqual(r.calls.filter((c) => c[0] === 'r2' && c[2] === 'delete').map((c) => c[3]), [`studioos-backups/${keys[12]}`], r.out);
 });
 
 test('D263 drill: a failed restore exits 2, writes a failed marker naming the step, and still deletes the throwaway database', () => {

@@ -268,6 +268,11 @@ export const DEPLOY_WORKFLOWS = [
     deploys: 'the private studioos-meeting-bot Worker and its runtime image, independently of HQ and branches',
   },
   {
+    file: 'merge-control-deploy.yml',
+    trigger: 'on Merge Control changes in a push to main, or by hand from main; owner deployment gate required',
+    deploys: 'the independent studioos-merge-control Worker, its repository coordinator and Queue consumer',
+  },
+  {
     file: 'pr-preview.yml',
     trigger: 'on each pull request',
     deploys: 'a preview Worker per pull request, serving the SPA with no bindings',
@@ -287,15 +292,10 @@ export const BRANCH_DEPLOYED_BY = 'cloudflare-worker-deploy.yml';
 /** The workflow that deployed a branch the first time, and refuses to again. */
 export const BRANCH_PROVISIONED_BY = 'branch-provision.yml';
 
-/**
- * THE CANVAS SAID "GITHUB ACTIONS IS THE ONLY THING THAT DEPLOYS". It is not:
- * the root `npm run deploy` deploys HQ from a checkout, running its pending
- * migrations first through the `predeploy` hook (CLAUDE.md, fact 1). The test
- * holds this sentence to the root package.json's two scripts.
- */
+/** D5501: the operator command dispatches the same verified main release. */
 export const DEPLOY_BY_HAND =
-  'From a checkout, the root npm run deploy applies HQ\'s pending migrations and then deploys HQ, '
-  + 'as the push-to-main job does. Nothing deploys a branch by hand.';
+  'From a checkout, the root npm run deploy dispatches the verified main release for HQ, '
+  + 'including preflight, migrations and publication. Nothing deploys a branch by hand.';
 
 /**
  * THE CANVAS SAID "NO SCREEN WRITES TO CLOUDFLARE DIRECTLY". Three do: each

@@ -5,8 +5,9 @@
 // src/routes/_registry.ts, and index.ts attaches that list before its first
 // `app.route(...)`. This file holds four things:
 //
-//   1. the committed registry is exactly what the generator writes, and every
-//      descriptor is sound (the staleness check `npm run test:drift` runs);
+//   1. every descriptor is sound, the generator is deterministic, git does not
+//      track the registry (D5612: it is built before every test, never
+//      committed), and the registry this run imports is what it writes;
 //   2. on the real Worker, the order-sensitive deck routers still mount just
 //      above `decks`, and votes.ts still mounts last;
 //   3. the earlier router's path wins on a real request through the whole
@@ -26,8 +27,9 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import { execFileSync } from 'node:child_process';
 import {
-  REGISTRY_REL, mountModules, parseMount, registeredMounts, registryProblems, renderRegistry,
+  REGISTRY_REL, buildRegistry, mountModules, parseMount, registeredMounts, registryProblems, renderRegistry,
 } from '../../scripts/lib/routeRegistry.mjs';
 import { attachRouteRegistry, planMounts } from '../src/util/routeRegistry.ts';
 import { makeD1 } from './_d1_sqlite.mjs';
@@ -63,10 +65,11 @@ function workerMounts() {
   return calls.filter((c) => c.app === app);
 }
 
-test('the committed registry is exactly what the generator writes, and every descriptor is sound', () => {
-  assert.deepEqual(registryProblems(ROOT), [], 'run: node scripts/build-route-registry.mjs');
+test('every descriptor is sound, the registry is deterministic and untracked, and the built one is what the generator writes', () => {
+  assert.deepEqual(registryProblems(ROOT), [], 'see the problems; the registry itself is built by node scripts/build-generated.mjs');
   const mods = mountModules(ROOT);
-  assert.equal(readFileSync(resolve(ROOT, REGISTRY_REL), 'utf8'), renderRegistry(mods.map((m: any) => m.file)));
+  assert.equal(buildRegistry(ROOT, { reversed: true }), buildRegistry(ROOT), 'two renders of the same routes differ');
+  assert.equal(readFileSync(resolve(ROOT, REGISTRY_REL), 'utf8'), renderRegistry(mods.map((m: any) => m.file)), 'the registry this run imports is not the current build: run node scripts/build-generated.mjs');
   // The proof modules this issue migrated are registered, and the runtime list matches the files.
   for (const f of ['deck_quotes', 'deck_reports', 'deck_stage_norms', 'votes']) {
     assert.ok(mods.some((m: any) => m.file === f), `${f}.ts is not registered`);
@@ -241,7 +244,7 @@ const R = 'cloudflare-worker/src/routes';
 const INDEX = "import legacy from './routes/legacy';\nconst app = new Hono();\napp.route('/api/l', legacy);\n";
 const LEGACY = "import { Hono } from 'hono';\nconst legacy = new Hono();\nexport default legacy;\n";
 
-test('the generator refuses a stale registry, an unknown `before`, a router mounted twice, a cycle and an unreadable descriptor', (t) => {
+test('the generator refuses a tracked registry, an unknown `before`, a router mounted twice, a cycle and an unreadable descriptor', (t) => {
   const good = {
     'cloudflare-worker/src/index.ts': INDEX,
     [`${R}/legacy.ts`]: LEGACY,
@@ -251,9 +254,23 @@ test('the generator refuses a stale registry, an unknown `before`, a router moun
   t.after(() => rmSync(ok, { recursive: true, force: true }));
   assert.deepEqual(registryProblems(ok), []);
 
-  const stale = tree(good, renderRegistry([]));
-  t.after(() => rmSync(stale, { recursive: true, force: true }));
-  assert.deepEqual(registryProblems(stale), [`${REGISTRY_REL} is stale — run: node scripts/build-route-registry.mjs`]);
+  // D5612: no registry on disk is sound (it is built, not committed), whatever an old one said;
+  // a registry git tracks is not.
+  const unbuilt = tree(good);
+  t.after(() => rmSync(unbuilt, { recursive: true, force: true }));
+  assert.deepEqual(registryProblems(unbuilt), []);
+  // A new route module is one new file: the built registry mounts it, with no edit to index.ts or any list.
+  writeFileSync(join(unbuilt, `${R}/gadgets.ts`), "import { Hono } from 'hono';\nconst gadgets = new Hono();\nexport default gadgets;\nexport const mount: RouteMount = { path: '/api/gadgets', router: gadgets };\n");
+  assert.deepEqual(registryProblems(unbuilt), []);
+  assert.equal(buildRegistry(unbuilt), renderRegistry(['gadgets', 'widgets']));
+  assert.deepEqual(registeredMounts(unbuilt).map((m: any) => m.path), ['/api/gadgets', '/api/l']);
+  const tracked = tree(good, renderRegistry([]));
+  t.after(() => rmSync(tracked, { recursive: true, force: true }));
+  assert.deepEqual(registryProblems(tracked), [], 'outside a git work tree nothing is tracked');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: tracked, stdio: 'ignore' });
+  git('init', '-q');
+  git('add', '-f', REGISTRY_REL);
+  assert.deepEqual(registryProblems(tracked), [`${REGISTRY_REL} is tracked by git; it is generated and never committed (D5612) — run: git rm --cached ${REGISTRY_REL}`]);
 
   const unknown = tree({ ...good, [`${R}/widgets.ts`]: good[`${R}/widgets.ts`].replace("import legacy from './legacy';\n", "import ghost from './ghost';\n").replace('before: [legacy]', 'before: [ghost]') }, renderRegistry(['widgets']));
   t.after(() => rmSync(unknown, { recursive: true, force: true }));

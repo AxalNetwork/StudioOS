@@ -47,10 +47,35 @@ export function draftFrom(response, asked) {
   };
 }
 
-/** The save call for a draft: its own engagement and period in the URL and in the body. */
+/**
+ * The save call for a draft: its own engagement and period in the URL and in the body.
+ *
+ * #5314 part 2: `blocked` is sent only when the caller states it. The Worker
+ * leaves an omitted section as it was, and records a present one (an empty
+ * one included, as "nothing blocked") — so a save that never showed the
+ * section cannot write one.
+ */
 export function saveRequest(draft, fields) {
-  return [draft.engagement_id, draft.period, {
+  const body = {
     engagement_id: draft.engagement_id, period: draft.period,
     shipped: fields.shipped, next_up: fields.next_up,
-  }];
+  };
+  if (Object.prototype.hasOwnProperty.call(fields, 'blocked')) {
+    const t = String(fields.blocked ?? '').trim();
+    body.blocked = t === '' ? null : t;
+  }
+  return [draft.engagement_id, draft.period, body];
+}
+
+/**
+ * #5314 part 2: what a saved report's Blocked section says. `recorded` false
+ * is "Not recorded" (a report saved before the section existed); a recorded
+ * section with no words is the firm stating nothing is blocked.
+ */
+export function blockedLine(report) {
+  if (!report || !report.blocked_recorded) {
+    return { kind: 'not_recorded', text: 'Not recorded', note: report?.blocked_state_note || null };
+  }
+  if (!report.blocked) return { kind: 'none', text: 'Nothing blocked', note: null };
+  return { kind: 'written', text: report.blocked, note: null };
 }

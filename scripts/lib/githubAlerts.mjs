@@ -18,12 +18,14 @@
  */
 
 import { infraFingerprint } from './ciClassify.mjs';
+import { SCAN_ALERT_TITLE } from './scanScope.mjs';
 
 export const ALERT_KINDS = Object.freeze({
   'main-red': { title: '[alert] main is red', label: 'main CI' },
   'review-blocked': { title: '[alert] the PR reviewer is not reviewing', label: 'PR reviewer' },
   queue: { title: '[alert] the Actions queue is backed up', label: 'Actions queue' },
   'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
+  scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
   // D5398: the nightly future-clock run is stateful too. It used to post on every failing night and keep no issue,
   // so a date-bound test was announced again each night and nothing said when it was fixed.
   'future-clock': { title: '[alert] future-clock tests failing', label: 'Future-clock tests' },
@@ -126,8 +128,9 @@ export function message(kind, action, facts = {}) {
   if (kind === 'queue-stalled') {
     return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
   }
+  if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
   if (kind === 'future-clock') {
-    const text = facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
+    const text = Number.isSafeInteger(facts.failedCount) ? `:alarm_clock: *${facts.failedCount} verified test failures with the clock ${facts.days} days ahead.*${run}` : facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
     return `${text}${issue}`;
   }
   return '';

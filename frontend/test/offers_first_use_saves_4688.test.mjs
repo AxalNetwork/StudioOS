@@ -131,13 +131,15 @@ const journeys = {
 
   async failedSaveRetainsThenRetrySucceeds(cfg, Zone) {
     const failures = [
-      httpError(400, 'Name is required'),
-      httpError(403, 'Your account cannot write here'),
-      httpError(409, 'That already exists'),
-      new TypeError('Failed to fetch'),
-      httpError(500, 'Internal error'),
+      [httpError(400, 'Unscoped validation detail'), 'Check the fields and try again.'],
+      [Object.assign(httpError(422, 'Give a shorter name.'), { field: 'name' }), 'Give a shorter name.'],
+      [httpError(401, 'Arbitrary session detail'), 'Sign in again before saving.'],
+      [httpError(403, 'Arbitrary access detail'), 'Your account cannot make this change.'],
+      [httpError(409, 'Arbitrary conflict detail'), 'This conflicts with a newer change. Your entries are kept.'],
+      [new TypeError('Arbitrary network detail'), 'Axal could not be reached. Check your connection and try again.'],
+      [Object.assign(httpError(500, 'Arbitrary private server detail'), { field: 'name' }), 'Axal could not save this right now. Try again.'],
     ];
-    for (const failure of failures) {
+    for (const [failure, expected] of failures) {
       await withZone(cfg, Zone, async (m, s) => {
         await m.click(cfg.emptyAction);
         await fillAll(cfg, m);
@@ -147,7 +149,8 @@ const journeys = {
         assert.equal(s.creates.length, 1);
         assert.ok(m.editor(cfg.editorId), `${failure.message}: the editor stays open`);
         assert.deepEqual(typed(cfg, m), entered, `${failure.message}: every field is kept`);
-        assert.ok(m.textIn(cfg.editorId).includes(failure.message), `${failure.message}: the error is shown beside the form`);
+        assert.ok(m.textIn(cfg.editorId).includes(expected), `${failure.message}: the error is shown beside the form`);
+        if (expected !== failure.message) assert.ok(!m.text().includes(failure.message), 'arbitrary response text stays out of the zone');
         assert.ok(m.has('Retry'), 'Retry is offered');
         assert.equal(s.rows.length, 0, 'nothing persisted');
         await m.click('Retry');
@@ -225,7 +228,8 @@ const journeys = {
       assert.equal(s.updates.length, 1);
       assert.equal(m.value(cfg.edit.field), cfg.edit.value, 'the edit is kept');
       assert.ok(m.has(cfg.edit.save), 'the row editor stays open');
-      assert.ok(m.text().includes('Server error'), 'the error is shown');
+      assert.ok(m.text().includes('Axal could not save this right now. Try again.'), 'the fixed server sentence is shown');
+      assert.ok(!m.text().includes('Server error'), 'raw server text is hidden');
       await m.click('Retry');
       await m.flush();
       assert.equal(s.updates.length, 2);
@@ -251,6 +255,8 @@ for (const [name, cfg] of Object.entries(ZONES)) {
 // ---- mutation check: break the source, a journey must fail -------------------
 
 const HOOK_MUTATIONS = {
+  'raw failure text leaks': [['text: writeFailureText(e, failed)', 'text: e?.message || failed']],
+  'server errors are mistaken for field validation': [['if (status === 400 || status === 422)', 'if (status === 400 || status === 422 || status >= 500)']],
   'helper swallows the error': [['await write();', 'await write().catch(() => {});']],
   'success cleanup runs on failure': [['      setBusy(false);\n      return { ok: false };', '      onSaved?.();\n      setBusy(false);\n      return { ok: false };']],
   'cleanup runs before persistence is confirmed': [['    try {\n      await write();', '    try { onSaved?.(); } catch { /* x */ }\n    try {\n      await write();']],

@@ -1,0 +1,37 @@
+{
+  "DELETE /api/needs/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/needs/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/needs/:id/quotes": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/needs/inquiries": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "PATCH /api/needs/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/needs/:id/rfp": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/needs/inquiries": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  }
+}

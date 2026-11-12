@@ -37,6 +37,8 @@ jobs:
           cache-dependency-path: cloudflare-worker/package-lock.json
       - name: Install Worker dependencies
         run: npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Binding parity and branch isolation
         run: |
           node scripts/check-wrangler-binding-parity.mjs

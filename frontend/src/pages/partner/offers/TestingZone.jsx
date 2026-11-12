@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { partnerTestingApi } from '../../../lib/api/productTesting';
 import { makeZoneActions } from '../../../workspaces/zoneActionBuilder';
 import { makeZoneFilters } from '../../../workspaces/zoneFilterBuilder';
@@ -7,6 +7,7 @@ import {
   ZoneBody, NothingYet, StatedLimit, ZoneHeading, Pill, SlideOver, NoPartnerProfile, isNoPartnerProfile,
   buttonClass, inputClass, ghostButtonClass,
 } from '../kit';
+import { WriteNote, writeFailureText } from './useGuardedWrite';
 import ProgrammeForm from '../../testing/ProgrammeForm';
 import ProgrammeApplicants from '../../testing/ProgrammeApplicants';
 import {
@@ -68,6 +69,24 @@ export default function TestingZone({ api = partnerTestingApi }) {
   const [note, setNote] = useState(null);
   const [busy, setBusy] = useState(null);
   const [view, setView] = useState('all');
+  const [logoJobs, setLogoJobs] = useState({});
+  const logoBusy = useRef(new Set());
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  const focusAfterRead = useRef(null);
+  const newButtonRef = useRef(null);
+  const bodyRef = useRef(null);
+  const logoNodes = useRef(new Map());
+  const programmeNodes = useRef(new Map());
+
+  useEffect(() => {
+    const target = focusAfterRead.current;
+    if (!target || panel.mode !== null || (state.loading && target.kind !== 'logo')) return;
+    const preferred = target.kind === 'logo' ? logoNodes.current.get(target.uid)
+      : target.kind === 'programme' ? programmeNodes.current.get(target.uid) : newButtonRef.current;
+    const node = preferred || newButtonRef.current || bodyRef.current;
+    if (node?.isConnected) { node.focus(); focusAfterRead.current = null; }
+  }, [state.loading, state.error, panel.mode, logoJobs]);
 
   const load = useCallback(() => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -80,11 +99,46 @@ export default function TestingZone({ api = partnerTestingApi }) {
 
   const close = useCallback(() => setPanel(CLOSED), []);
 
-  async function save(payload) {
+  // D4836: a persisted programme and its logo are separate writes. Retry holds the saved uid and file.
+  async function writeLogo(job) {
+    if (logoBusy.current.has(job.uid)) return false;
+    logoBusy.current.add(job.uid);
+    setLogoJobs((jobs) => ({ ...jobs, [job.uid]: { ...job, busy: true, error: null } }));
+    try {
+      if (job.file) await api.uploadLogo(job.uid, job.file);
+      else await api.removeLogo(job.uid);
+      setLogoJobs((jobs) => { const next = { ...jobs }; delete next[job.uid]; return next; });
+      return true;
+    } catch (e) {
+      setLogoJobs((jobs) => ({ ...jobs, [job.uid]: { ...job, busy: false, error: writeFailureText(e) } }));
+      return false;
+    } finally { logoBusy.current.delete(job.uid); }
+  }
+
+  async function retryLogo(job) {
+    if (await writeLogo(job)) {
+      if (panelRef.current.mode === null) focusAfterRead.current = { kind: 'programme', uid: job.uid };
+      setNote(`${job.title} is saved. Its logo ${job.file ? 'was uploaded' : 'was removed'}.`);
+      await load();
+    }
+  }
+
+  async function save(payload, logo) {
     const editing = panel.mode === 'edit';
     const r = editing ? await api.edit(panel.programme.uid, payload) : await api.create(payload);
-    setNote(`${r?.programme?.product_name || payload.product_name} is saved as a draft. Submit it for HQ approval when it is ready.`);
-    setPanel(CLOSED);
+    const uid = r?.programme?.uid || (editing ? panel.programme.uid : null);
+    const title = r?.programme?.product_name || payload.product_name;
+    // Nothing after persistence throws back into the programme form, which would invite a duplicate create.
+    setNote(`${title} is saved as a draft. Submit it for HQ approval when it is ready.`);
+    let logoFailed = false;
+    if (logo?.file || logo?.remove) {
+      if (uid) logoFailed = !await writeLogo({ uid, title, file: logo.file, remove: logo.remove });
+      else setNote(`${title} is saved, but its logo could not be updated. Reload the list before editing its logo.`);
+    }
+    if (panelRef.current === panel) {
+      focusAfterRead.current = logoFailed ? { kind: 'logo', uid } : { kind: 'new' };
+      setPanel(CLOSED);
+    }
     await load();
   }
 
@@ -116,7 +170,7 @@ export default function TestingZone({ api = partnerTestingApi }) {
     },
   });
   const newButton = (
-    <button type="button" className={buttonClass} onClick={openNew}
+    <button ref={newButtonRef} type="button" className={buttonClass} onClick={openNew}
       data-testid="testing-new-programme">
       New programme
     </button>
@@ -130,6 +184,17 @@ export default function TestingZone({ api = partnerTestingApi }) {
         filters={unlinked ? [] : testingFilters('offers/testing', { value: view, onChange: setView })}
         actions={rowActions}
       />
+      {Object.values(logoJobs).map((job) => (
+        <div key={job.uid} ref={(node) => { if (node) logoNodes.current.set(job.uid, node); else logoNodes.current.delete(job.uid); }}
+          tabIndex={-1} role="group" aria-label={`${job.title} logo result`} aria-busy={job.busy} data-testid={`testing-logo-status-${job.uid}`}>
+          <WriteNote busy={job.busy} note={{
+            ok: !job.error,
+            text: job.error ? `${job.title} is saved. Its logo was not ${job.file ? 'uploaded' : 'removed'}. ${job.error}` : `${job.title} is saved. Updating its logo…`,
+            retry: () => retryLogo(job),
+          }} />
+        </div>
+      ))}
+      <div ref={bodyRef} tabIndex={-1} role="region" aria-label="Testing programmes">
       <ZoneBody
         loading={state.loading}
         error={unlinked ? null : state.error}
@@ -159,7 +224,7 @@ export default function TestingZone({ api = partnerTestingApi }) {
               <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-[.09em] text-axal-faint">{g.label} · {(g.items || []).length}</h3>
               <ul className="space-y-2">
                 {(g.items || []).map((p) => (
-                  <li key={p.uid} className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800" data-testid={`testing-programme-${p.uid}`}>
+                  <li key={p.uid} ref={(node) => { if (node) programmeNodes.current.set(p.uid, node); else programmeNodes.current.delete(p.uid); }} tabIndex={-1} className="rounded-xl border border-axal-hairline p-3 dark:border-gray-800" data-testid={`testing-programme-${p.uid}`}>
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -195,10 +260,10 @@ export default function TestingZone({ api = partnerTestingApi }) {
           ))}
         </div>
       </ZoneBody>
+      </div>
       <StatedLimit title="What this zone does not show">
-        No applicant&rsquo;s email address: testers hear from you through Axal VC Mail, which sends to the testers
-        you picked who agreed to be emailed. No delivery or open figures, which Mail does not track. A logo cannot be
-        uploaded here yet.
+        Applicant email addresses are kept private. Picked testers receive email through Axal VC Mail only after they agree.
+        Delivery and open figures are not recorded.
       </StatedLimit>
       <SlideOver
         open={panel.mode === 'new' || panel.mode === 'edit'}
@@ -209,7 +274,7 @@ export default function TestingZone({ api = partnerTestingApi }) {
       >
         {(panel.mode === 'new' || panel.mode === 'edit') && (
           <ProgrammeForm programme={panel.mode === 'edit' ? panel.programme : null} onSave={save} onCancel={close}
-            classes={FORM_CLASSES} />
+            classes={FORM_CLASSES} logo />
         )}
       </SlideOver>
       <SlideOver open={panel.mode === 'open'} onClose={close} title={panel.programme?.product_name || ''} subtitle="Applicants">

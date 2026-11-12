@@ -119,3 +119,5 @@ detail that names the visible session enables review actions. `sessionPlayer.js`
 also discards and revokes audio that finishes loading after a session switch.
 
 D4619 (#4619): `useFounderCycleReads.js` is the founder Studio's per-cycle overview read, out of `FounderStudioHome.jsx`. Each answer is kept and committed under the full venture + cycle key, so a late answer for another venture is dropped and A → B → A asks again for A. A `project_id` the member cannot open settles as an unavailable venture (`unavailableProject` in `founderStudioModel.js`), and `FounderStudioBody.jsx` says so; the first venture is chosen only when no ID was supplied.
+
+`GrowOverviewLink.jsx` is the project-aware return to the Grow overview from Focus, Customers, Talent, Partnerships and Launch (#4862).

@@ -48,6 +48,8 @@ export interface PostResult {
   reason?: 'no_token' | 'no_channel' | 'deduped' | 'slack_error' | 'network';
   /** Raw Slack `error` field when reason='slack_error'. */
   slack_error?: string;
+  status?: number;
+  retry_after_seconds?: number;
 }
 
 export interface PostArgs {
@@ -144,6 +146,15 @@ export async function postToChannel(env: Env, args: PostArgs): Promise<PostResul
     return { ok: false, reason: 'deduped' };
   }
 
+  const result = await postSlackMessage(token, channelId, args);
+  if (result.ok) recordDedupe(dKey, dedupeMs);
+  else console.warn('[slackBus] delivery failed', args.channel, result.reason, result.status);
+  return result;
+}
+
+/** Transport for a destination resolved by trusted server configuration. */
+export async function postSlackMessage(token: string, channelId: string,
+  args: Pick<PostArgs, 'text' | 'blocks' | 'thread_ts'>, signal?: AbortSignal): Promise<PostResult> {
   const payload: Record<string, unknown> = {
     channel: channelId,
     text: args.text,
@@ -154,6 +165,7 @@ export async function postToChannel(env: Env, args: PostArgs): Promise<PostResul
   try {
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
+      redirect: 'error', signal,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json; charset=utf-8',
@@ -162,20 +174,16 @@ export async function postToChannel(env: Env, args: PostArgs): Promise<PostResul
     });
     // Slack always returns 200 with { ok: false, error: '...' } on logical errors.
     if (!res.ok) {
-      console.warn('[slackBus] http error', res.status, args.channel);
-      return { ok: false, reason: 'network' };
+      const retry = res.headers.get('retry-after');
+      return { ok: false, reason: 'network', status: res.status,
+        ...(res.status === 429 && retry && /^\d{1,7}$/.test(retry) ? { retry_after_seconds: Number(retry) } : {}) };
     }
     const json = await res.json().catch(() => ({})) as { ok?: boolean; ts?: string; channel?: string; error?: string };
     if (!json.ok) {
-      console.warn('[slackBus] slack rejected', json.error, args.channel);
       return { ok: false, reason: 'slack_error', slack_error: json.error };
     }
-    // Only record dedupe after Slack confirms delivery — a transient
-    // failure must not suppress a legitimate retry.
-    recordDedupe(dKey, dedupeMs);
     return { ok: true, ts: json.ts, channel: json.channel };
-  } catch (e) {
-    console.warn('[slackBus] network failure', (e as Error).message);
+  } catch {
     return { ok: false, reason: 'network' };
   }
 }

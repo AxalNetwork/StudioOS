@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node ../scripts/build-generated.mjs",
     "dev": "vite",
+    "prebuild": "node ../scripts/build-generated.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",

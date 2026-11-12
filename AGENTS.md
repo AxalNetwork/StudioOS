@@ -55,9 +55,18 @@ because only Session 1 makes a task ready.
    pick, so that one letter answers it. When only part of the task waits,
    build the rest: that PR says `Part of #<issue>` instead of
    `Closes #<issue>`, so the issue stays open for the part that waits.
-5. **Finish.** Fix CI and review comments until everything is green. Never
-   merge, never mark a PR ready for review, and never push to `main` or to
-   another slot's branch. The owner merges.
+5. **Finish.** Fix CI and review comments until everything is green. The
+   owner lands T2 and any PR without an eligible report. After #5605 rows 3
+   and 6 and #5500 are in effect, an agent may queue T0/T1 only when all
+   required checks are green and the `landing policy` summary reports T0 or
+   T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
+   the target still requires the merge queue and that the PR did not edit
+   `.github/workflows/landing-policy.yml`. Then run
+   `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
+   Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
+   the queue if queued before pushing changes. Wait for a new eligible report.
+   Never use `--admin`, push to `main` or another slot's branch, or approve
+   your own PR (#5569).
 
 ### STATUS
 
@@ -85,7 +94,7 @@ Each STATUS state goes with one label, and you change both at the same time:
 | `READY_FOR_REVIEW` | `state:review` |
 | `DONE` | none: the issue closes when its PR merges |
 
-The slot posts `DONE` once, after the owner merges the PR. If the slot has
+The slot posts `DONE` once, after the PR merges. If the slot has
 moved on by then, Session 1 posts it when it confirms the deploy.
 
 ### Owner answers
@@ -311,16 +320,20 @@ documents it indexes.
   there first. `backend/` (FastAPI) is never deployed. Never add a method to
   `frontend/src/lib/api.js`, or to a module under `frontend/src/lib/api/`,
   without a mounted Worker route. A new API domain goes in its own module
-  there (D527), and `node scripts/build-api-index.mjs` lists it in the
-  generated `frontend/src/lib/apiModules.generated.js`; `api.js` is not edited.
+  there (D527); the generated `frontend/src/lib/apiModules.generated.js` lists
+  it with no edit from you, and `api.js` is not edited.
 - **New modules register themselves (#4105).** A new Worker router is one file,
   `cloudflare-worker/src/routes/<name>.ts`, exporting `mount` (`{ path, router,
-  before? }`), plus `node scripts/build-route-registry.mjs`, which rewrites the
-  generated `routes/_registry.ts`; never add an `app.route(...)` to
-  `index.ts`. A new route area is one file, `frontend/src/routes/<area>.jsx`,
-  which `App.jsx` collects by itself. Commit the generated files; `npm run
-  test:drift` fails while either is stale. If two branches both add a line to
-  a generated file, rerun its script instead of resolving the conflict by hand.
+  before? }`); the generated `routes/_registry.ts` picks it up. Never add an
+  `app.route(...)` to `index.ts`. A new route area is one file,
+  `frontend/src/routes/<area>.jsx`, which `App.jsx` collects by itself.
+  **Never commit the generated files** (D5612): `routes/_registry.ts`,
+  `frontend/src/lib/apiModules.generated.js` and
+  `services/agents/skillLibrary.generated.ts` are gitignored, and `node
+  scripts/build-generated.mjs` writes them before every build, typecheck and
+  test (the `npm run build`, `dev`, `test:*` and `lint` hooks run it; run it
+  yourself before a bare `tsc` or `node --test`). Each generator's `--check`
+  fails if one is tracked again.
 - **Migrations.** A migration is a new file under
   `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<issue>_<slug>.sql`
   by the UTC minute you write it and your issue's number (D4106, D5398: two PRs
@@ -351,6 +364,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy

@@ -73,7 +73,7 @@ test('the future-clock alert is one issue: open on the first failure, quiet whil
   assert.equal(transition(null, true), 'none', 'no log is unknown, never recovered');
   assert.match(message('future-clock', 'open', { days: 7, failures: { names: ['a test'], more: 0 }, issueUrl: 'https://i' }), /a test[\s\S]*<https:\/\/i\|issue>/);
   const cli = read('scripts/github-alerts.mjs');
-  assert.match(cli, /const active = tap\.trim\(\) \? failures\.names\.length \+ failures\.more > 0 : null;/);
+  assert.match(cli, /const active = evidence\.active;/);
   assert.match(cli, /return apply\('future-clock', active,/);
 });
 

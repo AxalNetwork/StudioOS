@@ -25,7 +25,7 @@ import type { AgreementKind } from './programAgreements';
 export const MERGE_NAMESPACES = ['licence', 'package', 'program', 'grant', 'terms', 'signer', 'entity', 'agreement'] as const;
 export type MergeNamespace = typeof MERGE_NAMESPACES[number];
 
-/** The four Axal VC packages a package agreement can name (#5021 builds their store; until then, these keys). */
+/** Legacy display names for agreements issued before the package catalogue, with no saved merge values. */
 export const PACKAGES: Array<{ key: string; name: string }> = [
   { key: 'core_network', name: 'Core Network' },
   { key: 'talent_learning', name: 'Talent & Learning' },
@@ -90,6 +90,7 @@ export type MergeInput = {
   grant: Record<string, unknown> | null;
   program_key: string | null;
   package_key: string | null;
+  package_name: string | null;
   package_version: number | null;
   signer: { name: string | null; email: string | null } | null;
   agreement: { kind: AgreementKind; prepared_on: string };
@@ -126,7 +127,7 @@ export function agreementMergeValues(i: MergeInput): Record<string, string | nul
   }
   if (i.package_key) {
     out['package.key'] = i.package_key;
-    out['package.name'] = packageOf(i.package_key)?.name ?? null;
+    out['package.name'] = i.package_name;
     out['package.version'] = i.package_version == null ? null : String(i.package_version);
   }
   out['agreement.kind'] = i.agreement.kind;

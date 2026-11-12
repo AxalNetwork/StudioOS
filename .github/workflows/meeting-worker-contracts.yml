@@ -28,6 +28,8 @@ jobs:
           cache: npm
           cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Reliability and mutation contracts
         run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/meeting_reliability_d684.test.ts
       - name: Existing meeting and attach contracts

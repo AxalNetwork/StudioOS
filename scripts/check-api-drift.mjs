@@ -8,8 +8,10 @@
  * route modules that mount themselves through `routes/_registry.ts`, #4105)
  * and fails on drift. It also fails when the generated re-export index
  * (`frontend/src/lib/apiModules.generated.js`, #4105) does not name exactly
- * the modules on disk, in alphabetical order, or is stale, and when `api.js`
- * does not re-export it with its one line.
+ * the modules on disk, in alphabetical order, when its generator is not
+ * deterministic or git tracks it (D5612: it is built before every build and
+ * test, never committed), and when `api.js` does not re-export it with its
+ * one line.
  *
  * Why static and not curl-based?
  * - The production worker runs on Cloudflare; we don't always have a deployed
@@ -63,14 +65,11 @@ import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative } from 'node:path';
 import {
-  API_MODULES_DIR_REL,
+  apiIndexProblems,
   apiJsProblems,
   classifyCalls,
   clientSources,
   extractClientCalls,
-  listModules,
-  readApiIndex,
-  reexportProblems,
 } from './lib/apiModules.mjs';
 import { registeredMounts } from './lib/routeRegistry.mjs';
 
@@ -332,7 +331,7 @@ function findEnvelopeViolations() {
 const sources = clientSources(ROOT);
 const reexport = [
   ...apiJsProblems(sources[0].src),
-  ...reexportProblems(readApiIndex(ROOT), listModules(resolve(ROOT, API_MODULES_DIR_REL))),
+  ...apiIndexProblems(ROOT),
 ];
 const { routes, mounts, unresolved } = buildRouteTable();
 const calls = sources.flatMap(({ src }) => extractClientCalls(src));

@@ -24,6 +24,7 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['list']] : 'list',
   use: {
     baseURL: BASE_URL || 'http://localhost:5173',
+    ...(process.env.PW_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PW_CHROMIUM_PATH } } : {}),
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
