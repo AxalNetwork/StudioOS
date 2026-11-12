@@ -32,6 +32,7 @@
  */
 
 import { eventLabel, outcomeState } from './eventsModel.js';
+import { toUtcInstant } from '../../../lib/notices.js';
 
 const fmt = (n) => Number(n).toLocaleString();
 const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
@@ -39,7 +40,7 @@ const isNum = (v) => v !== null && v !== undefined && Number.isFinite(Number(v))
 
 /** "14:30 UTC" from an ISO stamp, or null. */
 export function clockOf(iso) {
-  const t = Date.parse(iso || '');
+  const t = Date.parse(toUtcInstant(iso) ?? '');
   if (!Number.isFinite(t)) return null;
   return `${new Date(t).toISOString().slice(11, 16)} UTC`;
 }

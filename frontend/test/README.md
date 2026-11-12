@@ -192,4 +192,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `health_alert_repair_5663.test.mjs` | D5663: health episode concurrency, crash/retry and future-clock evidence regressions. |
 | `engineering_events_5664.test.mjs` | D5664: signed metadata ingress, immutable attempts, capped REST reconciliation and Workers SQLite restart. |
 | `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
+| `cloudflare_delivery_5671.test.mjs` | D5671: authenticated source, isolation, replay, paging, sharing and Workers restart. |
+| `platform_policy_5672.test.mjs` | D5672: sensor states, denominator, persistence prerequisites and episode recovery. |
 | `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |

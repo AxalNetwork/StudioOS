@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "issue": 5670,
+  "activation": "disabled",
+  "routes": {
+    "health": "private internal Cloudflare health",
+    "activity": "private internal Cloudflare activity",
+    "preview": "private internal Cloudflare preview",
+    "releases": "existing #5667 release thread"
+  },
+  "account": {
+    "webhooksEligible": true,
+    "registeredWebhooks": 0,
+    "issueAutomations": 0,
+    "existingPolicies": [
+      {
+        "type": "image_resizing_notification",
+        "enabled": true
+      }
+    ],
+    "sqlMonitors": "dashboard verification required"
+  },
+  "services": [
+    {
+      "script": "studioos",
+      "environment": "prod",
+      "logs": true,
+      "traces": true,
+      "tailConsumers": 1
+    },
+    {
+      "script": "studioos-meeting-bot",
+      "environment": "prod",
+      "observability": "not explicitly returned",
+      "tailConsumers": 0
+    },
+    {
+      "script": "studioos-meeting-bot-preview",
+      "environment": "preview",
+      "observability": "not explicitly returned",
+      "tailConsumers": 0
+    },
+    {
+      "script": "studioos-tail",
+      "environment": "prod",
+      "logs": true,
+      "traces": false,
+      "tailConsumers": 0
+    }
+  ],
+  "families": [
+    {
+      "family": "destinations",
+      "issue": 5671,
+      "state": "acceptance pending",
+      "owner": "platform-operations"
+    },
+    {
+      "family": "runtime-cron-queues-workflow",
+      "issue": 5672,
+      "state": "acceptance pending",
+      "owner": "platform-on-call"
+    },
+    {
+      "family": "versions-deployment-rollback",
+      "issue": 5673,
+      "state": "acceptance pending",
+      "owner": "release-engineering"
+    },
+    {
+      "family": "meeting-recording",
+      "issue": 5674,
+      "state": "acceptance pending",
+      "owner": "meeting-owner"
+    },
+    {
+      "family": "preview-callback-isolation",
+      "issue": 5675,
+      "state": "acceptance pending",
+      "owner": "preview-owner"
+    },
+    {
+      "family": "archive-freshness",
+      "issue": 5676,
+      "state": "acceptance pending",
+      "owner": "storage-owner"
+    }
+  ],
+  "requiredEvidence": [
+    "provider-originated preview firing and recovery",
+    "private audience and responder grants",
+    "native acknowledgement separately from Slack receipt",
+    "production canary per family",
+    "outage/replay and per-route mute/rollback",
+    "retention and independent heartbeat fallback"
+  ],
+  "observedDate": "2026-11-12",
+  "queueSnapshot": {
+    "studioos-job-queue": 0,
+    "studioos-agent-queue": 0,
+    "studioos-job-queue-dlq": 0,
+    "studioos-agent-queue-dlq": 0,
+    "interpretation": "idle snapshot only; historical dead letters and service health are not inferred"
+  }
+}

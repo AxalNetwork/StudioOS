@@ -63,7 +63,8 @@ test('2. on the local D1 every Build read answers exactly as on node:sqlite, and
  * 100 records after the fix; before it the two pages read 558 and 684 and the overview 1,408.
  */
 const BUDGET: Array<[string, number]> = [
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1307],
+  // #5291: 1307 → 1308, the connector pages read (connectorPages.ts) now carries TikTok.
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1308],
   [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 307],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
   [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 308],
