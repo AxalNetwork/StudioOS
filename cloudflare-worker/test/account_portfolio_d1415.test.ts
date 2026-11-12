@@ -146,9 +146,7 @@ test('POST /api/projects: company_id null is standalone even with a company sele
   assert.equal(refused.body.error, 'company_not_found');
   assert.equal((db.prepare("SELECT COUNT(*) n FROM projects WHERE name = 'Wrong Home'").get() as any).n, 0, 'nothing created');
 
-  const withoutSeat = await call(env, ADA, 'POST', '/api/projects', { name: 'Placed', company_id: SOUTH }, header);
-  assert.deepEqual([withoutSeat.status, withoutSeat.body.code], [403, 'not_an_editor']);
-  db.prepare("UPDATE user_company_links SET role_in_company = 'Admin' WHERE company_id = ? AND user_id = ?").run(SOUTH, ADA);
+  // D5525 (owner decision A): a plain Member seat may create a project in its company.
   const placed = await call(env, ADA, 'POST', '/api/projects', { name: 'Placed', company_id: SOUTH }, header);
   assert.equal(placed.status, 201, placed.text);
   assert.equal(placed.body.company_id, SOUTH, 'an explicit company the caller belongs to wins over the header');

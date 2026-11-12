@@ -26,7 +26,7 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, future-clock]
+        options: [main-red, queue, queue-stalled, future-clock]
         default: queue
 
 permissions: {}
@@ -36,6 +36,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  queue-stalled:
+    name: Merge queue stalled
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue-stalled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-alerts-queue-stalled
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue-stalled
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+
   main-red:
     name: main is red
     if: >-
@@ -86,7 +113,54 @@ jobs:
           QUEUE_ALERT_QUEUED: ${{ vars.QUEUE_ALERT_QUEUED }}
           QUEUE_ALERT_OLDEST_MIN: ${{ vars.QUEUE_ALERT_OLDEST_MIN }}
 
+  future-clock-plan:
+    name: suite plan
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Newest main timing artifact, or equal weights
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact=''
+          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
+            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
+          fi
+          if [ -n "$artifact" ]; then
+            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
+              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
+            fi
+          fi
+          if [ ! -f test-timings.json ]; then
+            echo "::notice::No main timings artifact available; using equal weights."
+          fi
+      - name: Generate the exact-once plan
+        id: plan
+        run: |
+          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json --without-rest)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+
   future-clock-part:
+    needs: future-clock-plan
     name: future clock (${{ matrix.part }})
     if: >-
       (github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
@@ -98,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [frontend-1-of-2, frontend-2-of-2, worker-1-of-6, worker-2-of-6, worker-3-of-6, worker-4-of-6, worker-5-of-6, worker-6-of-6]
+        part: ${{ fromJSON(needs.future-clock-plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -111,6 +185,9 @@ jobs:
             frontend/package-lock.json
             cloudflare-worker/package-lock.json
             package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: suite-plan
       - name: Install frontend deps
         working-directory: frontend
         run: npm ci
@@ -140,7 +217,7 @@ jobs:
           export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1
           export NODE_OPTIONS="--import=$GITHUB_WORKSPACE/scripts/future-clock.mjs"
           node scripts/future-clock-check.mjs
-          node scripts/test-drift-parts.mjs ${{ matrix.part }} > "$RUNNER_TEMP/future-clock.tap" 2>&1 || true
+          node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json > "$RUNNER_TEMP/future-clock.tap" 2>&1 || true
           grep -E '^\s*not ok ' "$RUNNER_TEMP/future-clock.tap" | head -50 || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

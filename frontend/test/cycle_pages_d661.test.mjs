@@ -29,6 +29,7 @@ import { MODULES, OVERVIEWS, card, figure, records, slugOf } from './_cycle_fixt
 import { MODULES as LIVE_MODULES } from '../src/pages/cycles/modules.js';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
 import { ventureRef } from '../src/pages/cycles/ventureQuery.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const html = (el, entry = '/validate') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -174,7 +175,7 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   for (const l of own) assert.match(l, /\?project_id=7$/, l);
   const mod = html(h(CycleModulePage, { cycle: 'validate', slug: slugOf(MODULES.validate[0]), cards: OVERVIEWS.validate.cards, data: { card: OVERVIEWS.validate.cards[0] }, search: '?project_id=7' }));
   for (const m of navOf(mod).matchAll(/href="([^"]+)"/g)) assert.match(m[1], /\?project_id=7$/, m[1]);
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D5074: the address is parsed by the shared helper, which reads `?project=` (and a UID) as well as `?project_id=`.
   assert.match(route, /const ref = ventureRef\(searchParams\);/, "the read's own `?project=` links pick the venture too");
   assert.equal(ventureRef('?project=7')?.id, 7, "the read's own `?project=` links pick the venture too");
@@ -207,7 +208,7 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
   assert.match(text(list), /Key-person cover set up Done · typed/);
   assert.match(text(list), /Board meeting cadence agreed Not done/);
   assert.equal(html(h(DurabilityChecklist, { items: null })), '', 'nothing to list draws nothing');
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D686 §5.1: Share an update opens at /grow/update over the page; a sent
   // update replaces that address with its own page, so Back never reopens it.
   assert.match(route, /path: 'update',\s*Mount: GrowMount,\s*action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
@@ -223,7 +224,7 @@ test('GROW: money in a chart reads in dollars, the checklist says what ticked it
 });
 
 test('BUILD: the one way to create a startup survives, next links keep the venture, and single-part stacks share a scale', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // `/build?new=1` is the only address for creating a startup (sixteen links,
   // the Command Palette's among them). The Build cycle page carries the form.
   assert.match(route, /creates: true,/);
@@ -268,7 +269,7 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   // Every module with a form, and no other, offers Add from it.
   assert.deepEqual(Object.entries(FORMS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/fundraising-readiness', 'raise/investor-narrative', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery', 'validate/verdict']);
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
   // D914 (#2698): an admin reading the Investor narrative is offered no Add.
   assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
@@ -316,7 +317,7 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   // Every module with an Edit form, and the page wiring. D686 §5.4 adds Operating systems' connector mapping.
   assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /rowAction=\{!narrativeAdmin && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
   // D4630: the key names the venture too, so a venture change remounts the form.
   assert.match(route, /<FormLightbox key=\{`edit-\$\{projectId\}-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);

@@ -42,7 +42,7 @@ import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
 import { ndaChoiceInput } from '../services/dataRoomNda';
-import { companyWriteDenial, denialBody, isSupportSession } from '../services/companyAccess';
+import { companyCreateDenial, companyWriteDenial, denialBody, isSupportSession } from '../services/companyAccess';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -579,7 +579,8 @@ async function createProjectHandler(c: any) {
     }
   }
   if (createCompanyId != null) {
-    const denial = await companyWriteDenial(c.env, { id: createCompanyId }, user, await isSupportSession(c));
+    // D5525: a project is created by any seat; only support and HQ without a seat are refused.
+    const denial = await companyCreateDenial(c.env, { id: createCompanyId }, user, await isSupportSession(c));
     if (denial) { await sql.end(); return c.json(denialBody(denial), 403); }
   }
 
@@ -726,7 +727,8 @@ projects.post('/submit', async (c) => {
   const submitCompanyId = await resolveActiveCompany(
     c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
   if (submitCompanyId != null) {
-    const denial = await companyWriteDenial(c.env, { id: submitCompanyId }, submitUser, await isSupportSession(c));
+    // D5525: a project is created by any seat; only support and HQ without a seat are refused.
+    const denial = await companyCreateDenial(c.env, { id: submitCompanyId }, submitUser, await isSupportSession(c));
     if (denial) return c.json(denialBody(denial), 403);
   }
 

@@ -12,8 +12,8 @@ in one format, so no person has to relay it.
 
 ## Slots
 
-Work belongs to a slot, not to a session. There are thirty slots, `S01`
-to `S30`. Each has a label, `slot:SNN`, and its queue is the open issues that
+Work belongs to a slot, not to a session. There are thirty-seven standard slots, `S01`
+to `S37`. Each has a label, `slot:SNN`, and its queue is the open issues that
 carry it. Session 1 is slot `S01` and orchestrates: it writes the tasks and
 answers STATUS comments on the same thread.
 
@@ -35,8 +35,15 @@ because only Session 1 makes a task ready.
 1. **Pull.** Take the oldest open issue labelled with your slot and
    `state:ready`, one task at a time. Over the REST API that is
    `GET /repos/AxalNetwork/StudioOS/issues?labels=slot:SNN,state:ready&state=open&sort=created&direction=asc`.
-2. **Claim.** Swap `state:ready` for `state:in-progress` and post a STATUS
-   comment.
+2. **Claim.** Run `node scripts/claim.mjs claim <issue> --slot <SLOT> --agent
+   <AGENT> --session <SESSION>` to create the atomic `claim/<issue>` ref.
+   Exit 0 won; exit 3 means another holder: leave it alone. Renew before the
+   24-hour TTL with `renew` and the same identity. On exit 4 (HTTP 403), fall
+   back to the label claim and say so in STATUS. Then swap `state:ready` for
+   `state:in-progress` and post a STATUS comment. Release with `release` and
+   the same identity on DONE or hand-back; never delete another holder's ref.
+   An expired ref remains held until its holder releases it or the owner
+   explicitly hands it back. The reaper only comments.
 3. **Work.** Branch `agent/<agent>/<issue>-<slug>` from the latest `main`. If
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains
@@ -48,9 +55,18 @@ because only Session 1 makes a task ready.
    pick, so that one letter answers it. When only part of the task waits,
    build the rest: that PR says `Part of #<issue>` instead of
    `Closes #<issue>`, so the issue stays open for the part that waits.
-5. **Finish.** Fix CI and review comments until everything is green. Never
-   merge, never mark a PR ready for review, and never push to `main` or to
-   another slot's branch. The owner merges.
+5. **Finish.** Fix CI and review comments until everything is green. The
+   owner lands T2 and any PR without an eligible report. After #5605 rows 3
+   and 6 and #5500 are in effect, an agent may queue T0/T1 only when all
+   required checks are green and the `landing policy` summary reports T0 or
+   T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
+   the target still requires the merge queue and that the PR did not edit
+   `.github/workflows/landing-policy.yml`. Then run
+   `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
+   Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
+   the queue if queued before pushing changes. Wait for a new eligible report.
+   Never use `--admin`, push to `main` or another slot's branch, or approve
+   your own PR (#5569).
 
 ### STATUS
 
@@ -78,7 +94,7 @@ Each STATUS state goes with one label, and you change both at the same time:
 | `READY_FOR_REVIEW` | `state:review` |
 | `DONE` | none: the issue closes when its PR merges |
 
-The slot posts `DONE` once, after the owner merges the PR. If the slot has
+The slot posts `DONE` once, after the PR merges. If the slot has
 moved on by then, Session 1 posts it when it confirms the deploy.
 
 ### Owner answers
@@ -184,7 +200,8 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
    inherited failure.** Merge `main` only for your own conflict, or once main
    is green again and your PR needs a fresh run.
 4. **Never re-run a failed workflow for an inherited failure.** The gate
-   job's summary says which it is (`scripts/ci-classify.mjs`):
+   job's summary and the CI failure digest comment say which it is
+   (`scripts/ci-classify.mjs`, `<!-- studioos-ci-digest:v1 -->`):
    - `inherited_main_failure`: every failed part is red on main too. Do
      nothing to the PR.
    - `pr_failure`: at least one part is yours. Fix it.
@@ -206,6 +223,8 @@ applies to everything that is not a fix for a PR's own failure:
 
 The alert clears only once the queue is well below its thresholds, so wait for
 it to close.
+
+- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
 
 ### CHANGELOG.md is Session 1's
 
@@ -341,6 +360,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy

@@ -19,6 +19,7 @@
  * The branch push's outcome comes back on its own (`pushed`), apart from HQ's
  * commit (`committed: true`).
  */
+import { runDecision } from '../services/decisionBatch';
 import { Hono, type Context } from 'hono';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import type { Env } from '../types';
@@ -248,10 +249,10 @@ r.post('/:uid/pricing/apply', async (c) => {
     const decisionUid = crypto.randomUUID();
     const reviewOn = input.pricing_review_on ?? addYear(input.effective_from);
     const full: ApplyInput = { ...input, accepted: plan.plan.accepted as Values };
-    const results = await c.env.DB.batch(applyStatements(c.env, {
+    const commit = await runDecision(c.env, applyStatements(c.env, {
       licence, snap, input: full, plan: plan.plan, actor: actorOf(admin), decisionUid, now, contractUid: contract?.uid ?? null, reviewOn,
     }));
-    if (Number(results?.[1]?.meta?.changes ?? 0) !== 1) {
+    if (commit.lost) {
       const fresh = await byUid(c.env, licence.uid);
       return refuse(c, 409, {
         code: 'terms_conflict',
