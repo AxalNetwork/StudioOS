@@ -75,6 +75,7 @@ and citations by number keep working.
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
 | `D5352.md` | #5352: proposal-keyed retries for the remaining Validate/Grow target writers. |
 | `D5366.md` | #5366: company project writes pass the company-seat gate while #5329 retains project-scope authority. |
+| `D5525.md` | #5525: a company Member may still create a project in its company; creation refuses only support sessions and HQ access without a seat. |
 | `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
 | `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
 | `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |
@@ -90,3 +91,4 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 
 | `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
+| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |

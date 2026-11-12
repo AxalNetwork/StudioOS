@@ -185,3 +185,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
 
 | `health_alert_repair_5663.test.mjs` | D5663: health episode concurrency, crash/retry and future-clock evidence regressions. |
+| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |

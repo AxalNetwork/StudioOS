@@ -14,6 +14,8 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 function fixture() {
   const { DB, db } = makeD1('');
   addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
+  // #5654: install the production decision CHECK used by profile/logo batches.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/202611071200_program_grant_revisions.sql', import.meta.url), 'utf8'), 'decision_guard'));
   for (const name of ['users', 'founders', 'company_profiles', 'user_company_links', 'projects', 'deals', 'activity_logs', 'project_member_invitations']) db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
   db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/515_newsletter_lists.sql', import.meta.url), 'utf8'), 'email_suppressions'));
   // D1137 (#3017): a rename writes its membership event in the same batch (migration 597).

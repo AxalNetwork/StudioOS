@@ -42,3 +42,5 @@ files say how to act on it.
 Name the system and the action in the title. Give secret and variable names
 only: no value belongs in a runbook, in the repo or in an issue. Add a row here
 and a link in `documentation/README.md`.
+
+| `ENGINEERING_SLACK_5665.md` | D5665: destination kill switches, canary and uncertain-send recovery. |

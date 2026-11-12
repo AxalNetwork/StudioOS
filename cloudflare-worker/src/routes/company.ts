@@ -7,6 +7,7 @@
  *   detail   -> members + private fields (member emails masked unless viewer is
  *               a member of this company or platform admin).
  */
+import { runDecision, decisionGuard, clearGuard } from '../services/decisionBatch';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, generateToken, selectJwt } from '../auth';
@@ -390,6 +391,7 @@ export const VERSION_CONFLICT_MESSAGE = 'Someone else saved changes to this comp
 /** 409 with the current company, for an editor to reconcile against. */
 async function versionConflict(c: any, companyId: number, user: User) {
   const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(companyId).first() as Company | null;
+  if (fresh && isArchived(fresh)) return archivedRefusal(c);
   const company = fresh ? await detailDto(c.env, fresh, user, await isSupportSession(c)) : null;
   return refuse(c, 409, {
     code: 'version_conflict', message: VERSION_CONFLICT_MESSAGE,
@@ -472,6 +474,12 @@ async function planGeneralUpdate(c: any, company: Company, user: User, input: un
   return { values, current };
 }
 
+/** #5654/#5655: dependant audit writes run only after this request wins its row update. */
+async function companyDecision(env: Env, statements: D1PreparedStatement[]): Promise<D1Result[]> {
+  const result = await runDecision(env, [statements[0], decisionGuard(env), ...statements.slice(1), clearGuard(env)]);
+  return result.lost ? [] : result.results;
+}
+
 /** The one UPDATE for a plan's values (and, from the settings save, the server-built logo). Conditioned on the version this request read. */
 function generalUpdate(env: Env, company: Company, values: Record<string, any>, current: number, stamp: string) {
   const sets: string[] = []; const params: any[] = [];
@@ -480,7 +488,7 @@ function generalUpdate(env: Env, company: Company, values: Record<string, any>, 
   }
   sets.push('updated_at = ?', 'profile_version = profile_version + 1');
   params.push(stamp, company.id, current);
-  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ? AND profile_version = ?`).bind(...params);
+  return env.DB.prepare(`UPDATE company_profiles SET ${sets.join(', ')} WHERE id = ? AND profile_version = ? AND archived_at IS NULL`).bind(...params);
 }
 
 /** The update plus the events conditioned on THIS update having matched (the new version and this stamp). */
@@ -512,8 +520,8 @@ r.patch('/company/:uid', async (c) => {
     if (plan instanceof Response) return plan;
     if (Object.keys(plan.values).length) {
       const commit = generalCommit(c.env, company, user, plan.values, plan.current);
-      const results = await c.env.DB.batch([commit.update, ...commit.events]);
-      if (!(Number((results[0] as any)?.meta?.changes) > 0)) return versionConflict(c, company.id, user);
+      const outcome = await runDecision(c.env, [commit.update, decisionGuard(c.env), ...commit.events, clearGuard(c.env)]);
+      if (outcome.lost) return versionConflict(c, company.id, user);
     }
     const fresh = await c.env.DB.prepare('SELECT * FROM company_profiles WHERE id = ?').bind(company.id).first<Company>();
     return c.json(await detailDto(c.env, fresh!, user, await isSupportSession(c)));
@@ -665,8 +673,8 @@ r.post('/company/:uid/logo', async (c) => {
     let results: D1Result[];
     const stamp = nowIso();
     try {
-      results = await c.env.DB.batch([
-        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?')
+      results = await companyDecision(c.env, [
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = ?, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ? AND archived_at IS NULL')
           .bind(logoUrlFor(company.uid, token, check.kind), stamp, company.id, current),
         membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: 'stored' } }),
       ]);
@@ -695,8 +703,8 @@ r.delete('/company/:uid/logo', async (c) => {
     if (previous && !store) return storageUnconfigured(c);
     if (company.logo_url != null) {
       const stamp = nowIso();
-      const results = await c.env.DB.batch([
-        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ?').bind(stamp, company.id, current),
+      const results = await companyDecision(c.env, [
+        c.env.DB.prepare('UPDATE company_profiles SET logo_url = NULL, updated_at = ?, profile_version = profile_version + 1 WHERE id = ? AND profile_version = ? AND archived_at IS NULL').bind(stamp, company.id, current),
         membershipEvent(c.env, { kind: 'logo_change', companyId: company.id, actorUserId: user.id, onlyIfProfile: { version: current + 1, updatedAt: stamp }, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }),
       ]);
       // #4963: another General write landed first; nothing was removed (the object stays with the row that names it).
@@ -799,7 +807,7 @@ r.post('/company/:uid/settings', async (c) => {
       else if (action === 'remove' && company.logo_url != null) events.push(membershipEvent(c.env, { kind: 'logo_change', ...commit.when, before: { logo: logoKind(company.uid, company.logo_url) }, after: { logo: null } }));
       let results;
       try {
-        results = await c.env.DB.batch([commit.update, ...events]);
+        results = await companyDecision(c.env, [commit.update, ...events]);
       } catch (e) {
         if (upload && store) await dropStoredLogo(store, upload.key);
         throw e;
