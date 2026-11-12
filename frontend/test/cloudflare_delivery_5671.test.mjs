@@ -16,7 +16,9 @@ test('auth, account and registered policy are required before durable acceptance
  let accepted=[];const request=(body=payload(),auth=secret)=>new Request('https://fixture/cf',{method:'POST',headers:{'cf-webhook-auth':auth,'content-type':'application/json'},body:JSON.stringify(body)}),options={secret,config,now:()=>now,accept:e=>accepted.push(e)};
  assert.equal((await receiveCloudflare(request(payload(),'wrong'),options)).status,401);assert.equal(accepted.length,0);
  assert.equal((await receiveCloudflare(request({...payload(),account_id:'d'.repeat(32)}),options)).status,422);
- assert.equal((await receiveCloudflare(request({text:'provider Save and Test'}),options)).status,422);
+ const probe=await receiveCloudflare(request({text:'provider Save and Test'}),options);assert.equal(probe.status,200);assert.deepEqual(await probe.json(),{accepted:false,probe:true});assert.equal(accepted.length,0);
+ assert.equal((await receiveCloudflare(request({text:'provider Save and Test'},'wrong'),options)).status,401);
+ assert.equal((await receiveCloudflare(request({text:'probe',data:{raw:'private'}}),options)).status,422);
  assert.equal((await receiveCloudflare(request(),options)).status,202);assert.equal(accepted.length,1);assert.doesNotMatch(JSON.stringify(accepted),/channel|transcript|private\.example|token/);
  assert.equal((await receiveCloudflare(request(),{...options,accept:()=>{throw Error('disk')}})).status,503);
  assert.equal((await receiveCloudflare(request({...payload(),text:'x'.repeat(65000)}),options)).status,413);

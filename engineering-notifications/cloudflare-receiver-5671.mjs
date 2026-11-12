@@ -25,7 +25,10 @@ export async function receiveCloudflare(request,{secret,config,accept,now=Date.n
   const reader=request.body?.getReader();if(!reader)return new Response('missing payload',{status:400});
   const chunks=[];let size=0;for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>64000){await reader.cancel();return new Response('payload too large',{status:413})}chunks.push(value)}
   const bytes=new Uint8Array(size);let at=0;for(const value of chunks){bytes.set(value,at);at+=value.length}
-  let event;try{event=await normalizeCloudflare(JSON.parse(new TextDecoder().decode(bytes)),config,now())}catch{return new Response('unregistered or invalid notification',{status:422})}
+  let payload;try{payload=JSON.parse(new TextDecoder().decode(bytes))}catch{return new Response('invalid notification',{status:422})}
+  // Cloudflare Save and Test has only text: acknowledge connectivity without enqueueing or claiming Slack delivery.
+  if(payload&&Object.keys(payload).length===1&&typeof payload.text==='string'&&payload.text.length<=1024)return Response.json({accepted:false,probe:true});
+  let event;try{event=await normalizeCloudflare(payload,config,now())}catch{return new Response('unregistered or invalid notification',{status:422})}
   // Queue acceptance is not a Slack receipt. Fail visibly when durable acceptance fails.
   try{await accept(event)}catch{return new Response('durable delivery unavailable',{status:503})}
   return Response.json({accepted:true,key:event.key},{status:202});

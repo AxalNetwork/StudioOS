@@ -80,6 +80,9 @@ Seven, each because a tool or a convention expects to find it there:
   root (or `.github/`) and nowhere else
 - `CHANGELOG.md` — conventional root location
 
+Cloudflare delivery configuration, canary and rollback:
+[`CLOUDFLARE_DELIVERY_5671.md`](operations/CLOUDFLARE_DELIVERY_5671.md).
+
 `frontend/test/repo_layout.test.mjs` fails the build if an eighth appears, so
 the root cannot quietly refill with the 38 files this folder was created to
 hold.
