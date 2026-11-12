@@ -60,3 +60,5 @@ Full walkthrough + auth-error troubleshooting:
 
 Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
 to Axal VC Management LLC for operation.
+
+D5676: `cloudflare-archive-observer/` is the independent disabled metadata observer for `cloudflare-worker-tail/`; no raw archive body enters notification receipts.
