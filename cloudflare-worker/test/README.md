@@ -291,3 +291,5 @@ D5673: `cloudflare_sources_5673.test.ts` covers paginated provider metadata, rea
 
 D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary loss and guard mutations.
 D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.
+
+D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback, host replay/cleanup and promotion guards without a customer meeting.
