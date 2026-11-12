@@ -163,21 +163,34 @@ test('the guard flags a job with no generate step, and passes one with it', () =
 });
 
 
-test('the form job retains its contracts and generation; the required sharded CI owns full-suite coverage', () => {
-  const form = REAL.find(([file]) => file === 'form-lightbox-contracts.yml')[1];
+test('focused contract jobs retain generation and contracts; the required sharded CI owns full-suite coverage', () => {
   const ci = REAL.find(([file]) => file === 'ci.yml')[1];
-  const check = (formSource, ciSource) => {
-    const job = jobsOf(formSource).find(j => j.job === 'contracts');
-    assert.ok(job);
-    const commands = job.steps.map(s => s.run).join('\n');
-    for (const file of ['add_lightbox_d695.test.mjs', 'lightbox_d685.test.mjs']) assert.ok(commands.includes(file), file);
-    assert.deepEqual(ungenerated([['form-lightbox-contracts.yml', formSource]]), []);
-    assert.doesNotMatch(commands, /npm\s+run\s+test:drift\b/, 'the serial duplicate suite times out; required sharded coverage stays in CI');
-    assert.match(ciSource, /name: test:drift \(full suite\)/);
-    assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
-  };
-  check(form, ci);
-  assert.throws(() => check(form.replace('run: npm run build', 'run: npm run test:drift'), ci));
-  assert.throws(() => check(form.replace('frontend/test/add_lightbox_d695.test.mjs', ''), ci));
-  assert.throws(() => check(form, ci.replace('name: test:drift (full suite)', 'name: incomplete suite')));
+  for (const [workflow, contracts] of [
+    ['form-lightbox-contracts.yml', ['add_lightbox_d695.test.mjs', 'lightbox_d685.test.mjs']],
+    ['record-page-contracts.yml', ['record_page_d696.test.mjs', 'persona_pdf_d696.test.mjs']],
+  ]) {
+    const source = REAL.find(([file]) => file === workflow)[1];
+    const check = (contractSource, ciSource) => {
+      const job = jobsOf(contractSource).find(j => j.job === 'contracts');
+      assert.ok(job, workflow);
+      const commands = job.steps.map(s => s.run).join('\n');
+      for (const file of contracts) assert.ok(commands.includes(file), `${workflow}: ${file}`);
+      assert.deepEqual(ungenerated([[workflow, contractSource]]), []);
+      assert.match(commands, /check-folder-docs\.mjs/);
+      assert.match(commands, /check-decision-ids\.mjs/);
+      assert.match(commands, /check-dark-mode\.mjs/);
+      assert.match(commands, /npm\s+run\s+build\b/);
+      assert.doesNotMatch(commands, /npm\s+run\s+test:drift\b/, 'the serial duplicate suite times out; required sharded coverage stays in CI');
+      assert.match(ciSource, /name: test:drift \(full suite\)/);
+      assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
+    };
+    check(source, ci);
+    assert.throws(() => check(`${source}      - run: npm run test:drift\n`, ci));
+    assert.throws(() => check(source.replace(`frontend/test/${contracts[0]}`, ''), ci));
+    for (const command of ['check-folder-docs', 'check-decision-ids', 'check-dark-mode']) {
+      assert.throws(() => check(source.replace(`node scripts/${command}.mjs`, 'true'), ci));
+    }
+    assert.throws(() => check(source.replace('run: npm run build', 'run: true'), ci));
+    assert.throws(() => check(source, ci.replace('name: test:drift (full suite)', 'name: incomplete suite')));
+  }
 });
