@@ -184,3 +184,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 `pipeline_accessibility_4705.test.mjs` checks native studio deal entry, shared creation-sheet semantics, associated fields, fixed failure copy, retained drafts and a synthetic API-call baseline (D4705).
 `delivery_stale_writes_4710.test.mjs` mounts all four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a stale Mark sent never claims success or retries on reload (D4710).
 | `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
+
+| `engineering_events_5664.test.mjs` | D5664: signed metadata ingress, immutable attempts, capped REST reconciliation and Workers SQLite restart. |
+| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
