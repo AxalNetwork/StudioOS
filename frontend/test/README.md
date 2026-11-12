@@ -194,5 +194,6 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
 | `cloudflare_delivery_5671.test.mjs` | D5671: authenticated source, isolation, replay, paging, sharing and Workers restart. |
 | `platform_policy_5672.test.mjs` | D5672: sensor states, denominator, persistence prerequisites and episode recovery. |
+| `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
 | `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
