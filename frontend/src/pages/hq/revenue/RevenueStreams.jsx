@@ -44,7 +44,7 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
       sub="Contracted, invoiced and collected kept apart · native currency"
       testId="hq-revenue-streams-section"
     >
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className={TABLE}>
           <caption className="sr-only">Revenue by stream, {periodLabel(period)}, native currency</caption>
           <thead>
@@ -124,7 +124,7 @@ export function RevenueStreams({ summary, periodStatements, period, onWhy }) {
               <tr>
                 <td className={TD}><b>Revenue-share statements</b></td>
                 <td className={`${TD} ${NUM}`}>{na}</td>
-                <td className={`${TD} ${NUM}`} colSpan={2}><Figure figure={{ state: 'not_recorded', text: null }} absentLabel={`None drawn for ${periodLabel(period)}`} /></td>
+                <td className={`${TD} ${NUM}`} colSpan={2}><Figure figure={{ state: 'not_recorded', text: null }} absentLabel={periodLabel(period) ? `No ${periodLabel(period)} statements yet` : 'No statements yet'} /></td>
                 <td className={`${TD} ${NUM}`}>{na}</td><td className={`${TD} ${NUM}`}>{na}</td>
                 <td className={TD}><CoverageMark state="not_recorded" label="Drawing held" /> <Why source="statements" onOpen={onWhy} /></td>
               </tr>

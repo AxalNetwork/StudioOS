@@ -98,13 +98,18 @@ export function ReceivablesSection({ statements, licenceUid, onOpen, onRetry, on
 
           {rows.length === 0 && (
             <p className="mb-3 text-[13px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-statements-empty">
-              No statement has been drawn{licenceUid ? ' for this subsidiary' : ''}.
+              No statements yet{licenceUid ? ' for this subsidiary' : ''}
+            </p>
+          )}
+          {rows.length > 0 && shown.length === 0 && (
+            <p className="mb-3 text-[13px] text-axal-muted dark:text-gray-400" data-testid="hq-revenue-statements-none-shown">
+              No {STATUS[filter]?.word.toLowerCase()} statements
             </p>
           )}
 
           {shown.length > 0 && (
             <>
-              <div className="hidden overflow-x-auto lg:block">
+              <div className="relative hidden overflow-x-auto lg:block">
                 <table className={TABLE}>
                   <caption className="px-3 pb-2 text-left font-mono text-[12px] font-bold uppercase tracking-[.05em] text-axal-muted dark:text-gray-400">
                     {shown.length} of {rows.length} shown · disputed first
