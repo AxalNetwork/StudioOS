@@ -90,3 +90,5 @@ and citations by number keep working.
 - [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
 
 - [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
+
+- [D5675](D5675.md) — Isolated synthetic preview callback, normal promotion gate and urgent rollback handling (#5675).

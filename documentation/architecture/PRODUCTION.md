@@ -244,6 +244,10 @@ A grant older than a raised session floor is also refused on every tool call (`g
 
 ---
 
+D5673: the disabled Cloudflare metadata reconciler requires a separately scoped `CF_OBSERVER_READ_TOKEN` (Workers Scripts Read) and `CF_SOURCE_POLL=on` only after owner approval; never reuse the script-edit token. Neither is provisioned by its source PR.
+
+D5675: the preview bot canary requires a distinct `MEETING_BOT_PREVIEW_SECRET` on the preview host and in the protected deploy workflow. It derives separate operator/callback/receipt keys and is never a production bot secret. Configure the host's `PREVIEW_CANARY_ORIGIN`, explicit preview audience and enable flag only after #5671's private preview route is verified. The workflow uses `MEETING_BOT_PREVIEW_ORIGIN` and `MEETING_BOT_PREVIEW_ROUTE_VERIFIED` owner variables. Missing values stop normal promotion. Keep all values out of issues and logs; see D5675 for first activation and emergency rollback. No secret or flag was changed by this implementation.
+
 ## 5. Post-deploy checklist
 
 - [ ] `curl https://axal.vc/api/health` returns `{ "status": "ok", ... }` with
