@@ -42,6 +42,7 @@ export * from './api/adminStorage.js';
 export * from './api/adminSubAccounts.js';
 export * from './api/advisorCohortFounder.js';
 export * from './api/advisorCohortGuidance.js';
+export * from './api/advisorProfileDraft.js';
 export * from './api/advisorProof.js';
 export * from './api/advisorServices.js';
 export * from './api/agentEngine.js';
