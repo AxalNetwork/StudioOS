@@ -47,7 +47,7 @@ function fixture() {
     CREATE TABLE advisor_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, slot_id INTEGER NOT NULL,
       advisor_id INTEGER NOT NULL, founder_user_id INTEGER NOT NULL, topic TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'pending',
       cancel_reason TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
-  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611041822_account_licences']) db.exec(migration(m));
+  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication', '202611041822_account_licences']) db.exec(migration(m));
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADA, 'advisor', 1, 'Ada', 'ada@example.com');
   u.run(FOUNDER, 'founder', null, 'Fran', 'fran@example.com');
@@ -362,4 +362,38 @@ test('public profiles show only deliberately published claims with current confi
   assert.equal((await publicProof()).length, 1);
   assert.deepEqual((await call(env, 'PATCH', publication, ada, { published: false })).body, { id: item.id, published: false });
   assert.deepEqual(await publicProof(), []);
+});
+
+test('only published services appear publicly and hiding is reversible', async () => {
+  const { env, db } = fixture();
+  const create = await call(env, 'POST', '/me/services', ada, {
+    title: 'Portfolio workshop', currency: 'EUR', price_cents: 2150,
+  });
+  assert.equal(create.status, 200);
+  assert.deepEqual([create.body.is_active, create.body.publication_state], [true, 'draft']);
+  const path = `/me/services/${create.body.id}`;
+  const publicServices = async () => {
+    const result = await call(env, 'GET', '/adv-1', null);
+    assert.equal(result.status, 200, JSON.stringify(result.body));
+    return result.body.services;
+  };
+  const setState = (publication_state: string) => call(env, 'PATCH', path, ada, { publication_state });
+  assert.deepEqual(await publicServices(), []);
+  assert.equal((await setState('bookable')).body.error, 'invalid_publication_state');
+  assert.equal((await setState('published')).body.publication_state, 'published');
+  const [published] = await publicServices();
+  assert.deepEqual(published, {
+    uid: create.body.uid, title: 'Portfolio workshop', kind: 'fixed', duration_note: null,
+    price_cents: 2150, currency: 'EUR', scope: null,
+  });
+  assert.equal((await setState('hidden')).body.publication_state, 'hidden');
+  assert.deepEqual(await publicServices(), []);
+  const list = await call(env, 'GET', '/me/services', ada);
+  assert.deepEqual(list.body.publication_counts, { draft: 0, published: 0, hidden: 1 });
+  assert.deepEqual([list.body.items[0].publication_state, list.body.items[0].is_active], ['hidden', false]);
+  assert.equal((await setState('published')).body.uid, create.body.uid);
+  assert.deepEqual(await publicServices(), [published]);
+  await call(env, 'PATCH', path, ada, { is_active: false });
+  assert.deepEqual(await publicServices(), []);
+  assert.equal(db.prepare('SELECT publication_state FROM advisor_services WHERE id = ?').get(create.body.id)?.publication_state, 'hidden');
 });
