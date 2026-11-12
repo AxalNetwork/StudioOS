@@ -9,7 +9,7 @@
  */
 import { readFileSync, writeFileSync, globSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
 
@@ -143,9 +143,15 @@ function main(argv) {
     console.error(`test-drift-parts: unknown part "${arg}". Parts: ${parts.map((p) => p.name).join(', ')}`);
     return 2;
   }
+  const env = { ...process.env };
+  if (env.TEST_TRACE_DIR) {
+    const tracer = pathToFileURL(resolve(root, 'scripts/ci/test-tracer.mjs')).href;
+    env.NODE_OPTIONS = [env.NODE_OPTIONS, `--import=${tracer}`].filter(Boolean).join(' ');
+    env.TEST_TRACE_ROOT = root;
+  }
   for (const cmd of part.commands) {
     console.log(`\n> ${cmd}\n`);
-    const r = spawnSync('sh', ['-c', cmd], { cwd: root, stdio: 'inherit' });
+    const r = spawnSync('sh', ['-c', cmd], { cwd: root, stdio: 'inherit', env });
     if (r.status !== 0) {
       console.error(`test-drift-parts: "${cmd}" exited ${r.status ?? r.signal}`);
       return r.status || 1;

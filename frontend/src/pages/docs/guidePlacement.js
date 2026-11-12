@@ -138,6 +138,7 @@ export const GUIDE_PLACEMENT = {
   "integrations/identity": {"area": "account", "surface": "/account/connectors", "appliesTo": null},
   "account/settings-overview": {"area": "account", "surface": "/account", "appliesTo": null},
   "account/tiers": {"area": "account", "surface": "/account/billing", "appliesTo": ["founder"]},
+  "account/balances": {"area": "account", "surface": "/account/billing", "appliesTo": null},
   "account/investor-billing": {"area": "account", "surface": "/account/billing", "appliesTo": ["investor"]},
   "account/paywalls": {"area": "account", "surface": "/account/billing", "appliesTo": null},
   "account/notifications": {"area": "account", "surface": "/account/notifications", "appliesTo": null},

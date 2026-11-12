@@ -64,6 +64,7 @@ with the ones ahead of it is taken out of the queue with the reason.
 | api ↔ worker drift | `ci.yml` | runs |
 | applied migrations unchanged | `migration-immutability.yml` | diffs against `merge_group.base_sha` |
 | scan | `gitleaks.yml` | scans `merge_group.base_sha..head_sha` |
+| `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes | hourly and manual | `contents: read`, `issues: write`, `pull-requests: write` |
 | `claims-reaper.yml` | D5617: comments once per expired atomic task claim, never deletes refs | hourly and manual | `contents: read`, `issues: write` |
 
 Only these three workflows listen for `merge_group`. Nothing else runs in the

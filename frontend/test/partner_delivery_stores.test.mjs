@@ -175,7 +175,7 @@ test('consent is a state that can be withdrawn, not a flag that can vanish', () 
 //
 // A named ledger rather than a count, and it refuses a STALE entry too: a line
 // that no longer points at two real files is a line nobody can check, which is
-// the rule `scripts/sql-prepare-baseline.json` states for its own.
+// the rule `scripts/baselines/sql-prepare/` states for its own.
 const KNOWN_DUPLICATE_NUMBERS = {
   '011': ['011_sms_2fa.sql', '011_subscription_tiers.sql'],
   '068': ['068_news_articles.sql', '068_x_twitter.sql'],

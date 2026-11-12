@@ -13,6 +13,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { BESIDE_WAITLIST, MARK_LINE, ValidateDemandPosthog, ValidateExperimentsPosthog, experimentLines } from '../src/pages/cycles/ValidatePosthog.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const LINK = { linked: true, active: true, mine: true, uid: 'int-fixture' };
@@ -125,7 +126,7 @@ test('a teammate reads the figures but never links, accepts or marks', async () 
 });
 
 test('wiring: Experiments and Demand mount their PostHog parts; the client reaches the sync and marks routes', () => {
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const route = cycleRouteText();
   assert.match(route, /<ValidateDemandPosthog projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<ValidateExperimentsPosthog projectId=\{ctx\.projectId\}/);
   const client = readFileSync(new URL('../src/lib/api/posthog.js', import.meta.url), 'utf8');

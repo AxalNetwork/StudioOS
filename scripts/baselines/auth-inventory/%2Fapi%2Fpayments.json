@@ -1,0 +1,12 @@
+{
+  "DELETE /api/payments/methods/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/payments/config": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

@@ -245,7 +245,10 @@ function handlerFor(o = {}) {
   return (url, options = {}) => {
     if (/\/captable\/record\/3\/proposals\/[^/]+\/(accept|dismiss)/.test(url)) return o.decide ? o.decide(url, options) : response({ issuance: {} });
     if (/\/captable\/record\/3\/proposals$/.test(url)) return o.propose ? o.propose(url, options) : response({ issuance: {} }, 201);
-    if (url.includes('/captable/record/3')) return send(withCapabilities(at.record, at.user, at.grants));
+    if (url.includes('/captable/record/3')) {
+      if (o.recordCode) return response({ error: o.recordCode }, at.record);
+      return send(withCapabilities(at.record, at.user, at.grants));
+    }
     if (url.includes('/compare')) return send(at.compare);
     if (url.includes('/captable/409a/')) return send(at.v409a);
     if (url.includes('/captable/access/3/grants')) return send(at.grants);
@@ -416,6 +419,20 @@ test('CT20–CT22: reading, a failed record read that offers no Save, a failed 4
     assert.ok(explorer.by('captable-explorer'));
     assert.ok(!explorer.requests.some(([u]) => u.includes('/captable/record/')), 'nothing is read for an Explorer');
   } finally { await explorer.close(); }
+});
+
+test('a scoped admin refusal points to the reasoned support view', async () => {
+  const admin = await mounted('/raise/cap-table?project_id=3', {
+    user: { ...OWNER, role: 'admin' }, record: 403, recordCode: 'scoped_cap_table_required',
+  });
+  try {
+    const refusal = admin.text(admin.by('captable-other-company'));
+    assert.match(refusal, /Admin access requires a support reason/);
+    assert.match(refusal, /The founder will see your reason/);
+    assert.doesNotMatch(refusal, /Switch company|another company/);
+    assert.ok(admin.by('captable-other-company-support'));
+    assert.ok(!admin.by('captable-who-owns'));
+  } finally { await admin.close(); }
 });
 
 test('CT2: the holder drawer at /raise/cap-table/h-<n>, its reads each answering alone', async () => {
