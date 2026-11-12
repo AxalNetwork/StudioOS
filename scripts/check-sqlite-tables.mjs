@@ -142,7 +142,10 @@ const REF = /\b(?:FROM|JOIN|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE(?:\s+OR\s+\w+)?
 
 /** Physical references, excluding CTE aliases declared by this SQL statement. */
 export function referencedTables(sql) {
-  const clean = stripSqlLiterals(sql);
+  // UPDATE OF in a trigger header names columns. Keep scanning the body
+  // for real UPDATE targets.
+  const clean = stripSqlLiterals(sql)
+    .replace(/\b(?:BEFORE|AFTER|INSTEAD\s+OF)\s+UPDATE\s+OF\s+[^;]+?\s+ON\s+/gi, ' ');
   // The boundary belongs to WITH, not the comma after a closing parenthesis.
   // SQLite also permits an explicit column list before AS (VALUES CTEs), and
   // a [NOT] MATERIALIZED hint after it (D5318).
