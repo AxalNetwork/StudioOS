@@ -351,7 +351,8 @@ jobs:
           trusted="$RUNNER_TEMP/fast-guards"
           mkdir -p "$trusted"
           guards=(scripts/migration-immutability-gate.mjs scripts/lib/migrationImmutability.mjs
-            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs)
+            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs
+            scripts/lib/generatedOutput.mjs)
           git archive "$BASE_SHA" "${guards[@]}" | tar -x -C "$trusted"
           ln -s "$GITHUB_WORKSPACE/frontend" "$trusted/frontend"
           ln -s "$GITHUB_WORKSPACE/cloudflare-worker" "$trusted/cloudflare-worker"
