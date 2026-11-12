@@ -461,6 +461,24 @@ test('a project under a company is forwarded to Company settings › Projects, a
   } finally { await w.close(); }
 });
 
+test('the project Team draws company authority and editor names from settings scope', async () => {
+  const handle = worker({
+    'GET /api/account/settings-scope': () => response({
+      scope: 'company_project', company: { uid: 'nw1', name: 'Northwind' },
+      project: { id: 5, name: 'Atlas' }, my_authority: 'company_editor',
+      company_editors: [{ name: 'Eve Editor' }],
+    }),
+    'GET /api/projects/5': () => response({ error: 'forbidden' }, 403),
+  });
+  const v = await mount('/account/companies/nw1/settings/projects/5/team', '/account/companies/:uid/settings/projects/:id/team', h(TeamAgentsPage, { form: 'company_project' }), { handle });
+  try {
+    assert.match(v.text(), /Managed under Northwind's authority/);
+    assert.match(v.text(), /You manage this project through Northwind/);
+    assert.match(v.text(), /Company editors with access.*Eve Editor/);
+    assert.equal(v.keys().includes('GET /api/projects/5'), false);
+  } finally { await v.close(); }
+});
+
 test('Project settings › General: standalone offers Move under a company, only to companies you edit; no Legal', async () => {
   const companies = [
     { id: 9, uid: 'nw1', company_name: '[Northwind Labs]', my_role: 'Owner', is_primary_admin: true },
