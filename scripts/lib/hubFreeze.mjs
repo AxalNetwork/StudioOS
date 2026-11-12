@@ -228,10 +228,12 @@ export function registrations(src) {
   const masked = maskSource(src);
   const names = new Set();
   const routers = [...masked.code.matchAll(/\b(?:const|let)\s+([\w$]+)\s*=\s*new\s+Hono\b/g)].map((m) => m[1]);
+  // One fixed pattern, filtered by receiver name: no regex is built from source text.
+  const calls = [...masked.code.matchAll(/(?<![\w$.])([\w$]+)\s*\.\s*([a-z]+)\s*\(/g)];
   for (const r of routers) {
-    const re = new RegExp(`(?<![\\w$.])${r.replace(/\$/g, '\\$')}\\s*\\.\\s*([a-z]+)\\s*\\(`, 'g');
-    for (const m of masked.code.matchAll(re)) {
-      const verb = m[1];
+    for (const m of calls) {
+      if (m[1] !== r) continue;
+      const verb = m[2];
       if (!VERBS.has(verb)) continue;
       const args = callArgs(masked, m.index + m[0].length - 1);
       const method = verb.toUpperCase();
