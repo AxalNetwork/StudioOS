@@ -10,9 +10,13 @@
  * Mounted at /api/lp-reports. Added to STUDIO_PREFIXES so founders get a 402;
  * admin/investor bypass the studio gate and are further narrowed here.
  *
- * The same investor may be a GP (authoring reports) and an LP (of a different
- * fund), so on reads an author always sees their own reports (any status) in
- * addition to the LP-scoped published set.
+ * The same investor may be a GP (of one fund) and an LP (of a different
+ * fund). D4636 part 2: on reads, the funds a caller runs are the operating
+ * gate's scope (`fundManageScope`, what `requireFundGp` would let them
+ * operate), not the reports they once authored, so a changed relationship
+ * applies to the next read. A fund they run shows every report, drafts
+ * included, as the whole row; a fund they are an LP of shows its published
+ * reports in the LP projection (`lpView`).
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -20,7 +24,7 @@ import { requireAuth, canViewLpData } from '../auth';
 import { isAdmin, isInvestor, mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
-import { requireFundGp } from '../services/fundGpAccess';
+import { requireFundGp, fundManageScope } from '../services/fundGpAccess';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -68,13 +72,32 @@ async function visibleFundIds(env: Env, user: User): Promise<number[] | 'all'> {
   return (rows.results || []).map((row) => Number(row.fund_id));
 }
 
+/**
+ * D4636 part 2: the funds whose reports this caller reads as their manager —
+ * every fund for an admin, else the operating gate's scope. Evaluated on every
+ * request, so a GP who no longer runs the fund (reassigned, below the tier, or
+ * under another active company) reads it as an LP or not at all.
+ */
+async function managedFundIds(c: any, user: User): Promise<number[]> {
+  const scope = await fundManageScope(c, user, 'f');
+  const rows = await c.env.DB.prepare(`SELECT f.id FROM vc_funds f WHERE ${scope.sql}`)
+    .bind(...scope.binds).all();
+  return ((rows.results || []) as Array<{ id: number }>).map((row) => Number(row.id));
+}
+
+/** The LP projection: the published report, without who on the GP side drafted it. */
+function lpView(report: any): any {
+  const { created_by: _author, ...rest } = report;
+  return rest;
+}
+
 function num(v: any): number | null {
   if (v === undefined || v === null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 
-// GET /api/lp-reports — admin: all; investor: published reports for own funds
+// GET /api/lp-reports — admin: all; a fund's GP (operating gate): its reports; an LP: published reports of their funds
 r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
@@ -83,12 +106,16 @@ r.get('/', async (c) => {
     const visible = await visibleFundIds(c.env, user);
     let where = '1=1';
     const params: any[] = [];
+    const managed = visible === 'all' ? null : new Set(await managedFundIds(c, user));
     if (visible !== 'all') {
-      // Non-admin: own authored reports (any status) OR published reports for
-      // funds they are an LP of. Lets an investor GP see their own drafts while
-      // still scoping LPs to published reports for their funds only.
-      const clauses: string[] = ['created_by = ?'];
-      params.push(user.id);
+      // Non-admin (D4636 part 2): every report of a fund they run now, OR the
+      // published reports of funds they are an LP of. Authorship alone no
+      // longer reads a report: the relationship is evaluated on this request.
+      const clauses: string[] = ['1=0'];
+      if (managed && managed.size > 0) {
+        clauses.push(`fund_id IN (${[...managed].map(() => '?').join(',')})`);
+        params.push(...managed);
+      }
       if (visible.length > 0) {
         clauses.push(`(fund_id IN (${visible.map(() => '?').join(',')}) AND status = 'published')`);
         params.push(...visible);
@@ -100,7 +127,10 @@ r.get('/', async (c) => {
       `SELECT * FROM lp_reports WHERE ${where} ORDER BY period DESC, updated_at DESC LIMIT 500`
     ).bind(...params).all<ReportRow>();
     const items: any[] = [];
-    for (const x of (rows.results || []) as ReportRow[]) items.push(await dto(c.env, x));
+    for (const x of (rows.results || []) as ReportRow[]) {
+      const full = await dto(c.env, x);
+      items.push(managed === null || managed.has(Number(x.fund_id)) ? full : lpView(full));
+    }
     return c.json({ items });
   } catch (e) { return mapError(c, e); }
 });
@@ -144,8 +174,9 @@ r.get('/:uid', async (c) => {
     const x = await c.env.DB.prepare('SELECT * FROM lp_reports WHERE uid = ?').bind(c.req.param('uid')).first<ReportRow>();
     if (!x) return c.json({ detail: 'Not found' }, 404);
     if (!isAdmin(user)) {
-      const isAuthor = x.created_by != null && Number(x.created_by) === Number(user.id);
-      if (!isAuthor) {
+      // D4636 part 2: the manager arm is the operating gate's scope, as on the list.
+      const manages = (await managedFundIds(c, user)).includes(Number(x.fund_id));
+      if (!manages) {
         if (x.status !== 'published') return c.json({ detail: 'Not found' }, 404);
         // Same predicate as the list above — a report reachable in one and
         // refused in the other is the drift this consolidation removes.
@@ -155,6 +186,7 @@ r.get('/:uid', async (c) => {
           `SELECT 1 FROM limited_partners lp WHERE lp.fund_id = ? AND ${scope.sql} LIMIT 1`,
         ).bind(x.fund_id, ...scope.binds).first();
         if (!lp) return c.json({ detail: 'Forbidden' }, 403);
+        return c.json(lpView(await dto(c.env, x)));
       }
     }
     return c.json(await dto(c.env, x));
