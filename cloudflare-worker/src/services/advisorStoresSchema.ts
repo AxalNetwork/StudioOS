@@ -258,7 +258,7 @@ const TABLES = [
    BEGIN
      SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
    END`,
-  `CREATE TRIGGERIF NOT EXISTS advisor_proof_withdrawal_unpublishes
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_withdrawal_unpublishes
    AFTER UPDATE OF consent_given, withdrawn_at ON advisor_proof_consents
    WHEN NEW.consent_given <> 1 OR COALESCE(NEW.withdrawn_at, '') <> ''
    BEGIN

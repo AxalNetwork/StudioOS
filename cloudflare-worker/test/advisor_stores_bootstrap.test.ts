@@ -123,6 +123,8 @@ test('the bootstrap produces the same schema the migrations do', async () => {
   await ensureAdvisorStoresSchema({ DB: makeD1(healed) } as any);
 
   assert.deepEqual(tables(healed), tables(migrated), 'same tables');
+  assert.ok(healed.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'advisor_proof_withdrawal_unpublishes'").get(),
+    'bootstrapping installs the same withdrawal protection as the migration');
   for (const t of ['advisors', 'advisor_bookings', 'advisor_services',
                    'advisor_proof_items', 'advisor_proof_consents', 'advisor_proof_consent_codes', 'advisor_proof_consent_events',
                    'advisor_cohort_assignments',
