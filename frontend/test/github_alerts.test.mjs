@@ -112,8 +112,8 @@ test('the workflow wires each alert, and the reviewer alert sits in claude-revie
   assert.match(review, /node scripts\/github-alerts\.mjs review-blocked/);
 });
 
-test('an alert never fails its run: the CLI catches and exits 0', () => {
+test('a trusted reporter fails visibly without changing the watched run', () => {
   const r = spawnSync(process.execPath, [resolve(root, 'scripts/github-alerts.mjs'), 'nonsense'], { env: { ...process.env, GITHUB_TOKEN: '', SLACK_GITHUB_WEBHOOK_URL: '' }, encoding: 'utf8' });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /::warning::github-alerts: unknown mode/);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /::error::github-alerts observation or persistence unavailable/);
 });
