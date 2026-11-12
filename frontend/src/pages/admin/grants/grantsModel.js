@@ -46,6 +46,8 @@ export function viewOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === REQUESTS_PATH) return { view: 'requests' };
   if (p === DEFAULTS_PATH) return { view: 'defaults' };
+  // D5059 (#5059): Program access by user licence.
+  if (p === `${GRANTS_PATH}/holders`) return { view: 'holders' };
   const m = p.match(/^\/admin\/licences\/programs\/studio\/([^/]+)$/);
   if (m) return { view: 'studio', uid: decodeURIComponent(m[1]) };
   return { view: 'grid' };

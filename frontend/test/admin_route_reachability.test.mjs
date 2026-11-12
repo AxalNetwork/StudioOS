@@ -346,6 +346,9 @@ const COMPOSED = new Map([
   ['frontend/src/pages/admin/grants/ProgramGrants.jsx', [
     'frontend/src/pages/admin/grants/GridView.jsx',
     'frontend/src/pages/admin/grants/RequestsView.jsx',
+    // D5059 (#5059): the User licences tab holds the doors to one user licence
+    // (`/admin/licences/programs/licence/:uid`).
+    'frontend/src/pages/admin/grants/EntitlementViews.jsx',
   ]],
   // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
   // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
