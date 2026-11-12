@@ -288,3 +288,5 @@ D5065 (#5065): `build_systems_states_d5065.test.ts` holds Operating Systems to o
 D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter-end default, `frontend/src/lib/reportingPeriod.js`, to the Worker — to `portfolioMetrics.ts`'s `completedPeriod` for which quarter and to `fundReportBuild.ts`'s `lastClosedQuarter` for its last day — every month across a leap year and two year boundaries, so the page cannot drift from either. It also holds the civil-date behaviour, because the old default read a local midnight and printed its UTC instant, which is the day before the quarter end for every reader east of UTC.
 
 D5673: `cloudflare_sources_5673.test.ts` covers paginated provider metadata, real SQLite replay/CAS and protected source reads.
+
+D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary loss and guard mutations.

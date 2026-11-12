@@ -244,6 +244,8 @@ A grant older than a raised session floor is also refused on every tool call (`g
 
 ---
 
+D5676: the disabled independent archive observer needs separate writer (`ARCHIVE_OBSERVER_SECRET`), owned producer (`ARCHIVE_PRODUCER_SECRET`) and external read (`ARCHIVE_READER_SECRET`) keys. The tail and site receive only their matching private service bindings/role keys after owner preflight; the observer holds only its dedicated metadata DB and approved archive access. Flags remain off, and no values/resources are provisioned by the source change. Never send observer telemetry through studioos or attach a tail consumer to the observer. See D5676 for cadence, fallback, retention and rollback.
+
 ## 5. Post-deploy checklist
 
 - [ ] `curl https://axal.vc/api/health` returns `{ "status": "ok", ... }` with

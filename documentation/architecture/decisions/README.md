@@ -88,3 +88,5 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 
 - [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
+
+- [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
