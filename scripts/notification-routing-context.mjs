@@ -25,6 +25,10 @@ export function readOnlyGithub({ token, fetchImpl = fetch }) {
     if (!token || !/^\/repos\/[\w.-]+\/[\w.-]+\//.test(path) || /[\r\n]/.test(path)) throw new Error('read_scope_unavailable');
     const response = await fetchImpl(`https://api.github.com${path}`, { method: 'GET', headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'user-agent': 'studioos-routing-observer' }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
     if (!response.ok || response.headers.get('x-ratelimit-remaining') === '0') { const error = new Error('read_scope_unavailable'); error.code = response.status === 404 ? 'resource_absent' : 'scope_unreadable'; throw error; }
-    return response.json();
+    const reader = response.body?.getReader(); if (!reader) throw new Error('read_scope_unavailable');
+    const chunks = []; let size = 0;
+    for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > 2_000_000) { await reader.cancel(); throw new Error('read_scope_unavailable'); } chunks.push(value); }
+    const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return JSON.parse(new TextDecoder().decode(bytes));
   };
 }

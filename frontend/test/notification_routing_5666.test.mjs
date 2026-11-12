@@ -112,3 +112,16 @@ test('stale heads and review commit SHAs stay activity only; SQLite decision/sta
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM routing_decisions').get().n, 1);
   } finally { db.close(); }
 });
+
+test('unreadable ownership scope becomes S01 triage and an explicit review mapping targets the reviewer', () => {
+  assert.equal(ownership({ issues: [{ number: 7, labels: [], unreadable: true }], pr, now }).kind, 'triage');
+  assert.equal(ownership({ issues, claims: [{ issue: 7, unreadable: true }], pr, now }).kind, 'triage');
+  const r = routeObservation({ ...input(event('requested', { family: 'work', kind: 'pull_request', action: 'review_requested', reviewers: ['reviewer'] })), allowMentions: true, mentionMap: { 'github:reviewer': 'UREVIEWER', 'slot:S18': 'UAUTHOR' } });
+  assert.equal(r.policy.mentionKey, 'github:reviewer'); assert.deepEqual(r.policy.githubReviewers, ['reviewer']);
+});
+
+test('authoritative reviewer snapshots open one material request and unchanged targets do not repeat it', () => {
+  const e = event('open', { family: 'work', kind: 'pull_request', action: 'open', reviewers: ['reviewer'] });
+  const first = routeObservation(input(e)); assert.equal(first.policy.material, true); assert.equal(first.evidence.nextStep, 'read_review_request');
+  const same = routeObservation({ ...input(event('open', { family: 'work', kind: 'pull_request', action: 'labeled', reviewers: ['reviewer'] })), previous: first.state }); assert.equal(same.policy.material, false);
+});

@@ -56,13 +56,17 @@ export function routeObservation({ event, pr = null, issues = [], claims = [], r
   const olderAttempt = event.family === 'ci' && priorCI && id(event.ids?.run) && id(event.ids?.attempt) && (BigInt(event.ids.run) < BigInt(priorCI.run) || event.ids.run === priorCI.run && BigInt(event.ids.attempt) < BigInt(priorCI.attempt));
   const old = olderAttempt || observedHead && observedHead !== head || previous && Number.isFinite(policy.revision) && policy.revision < previous.revision;
   evidence.stale = Boolean(old);
-  const state = { head, revision: Math.max(previous?.revision || 0, Number.isFinite(policy.revision) ? policy.revision : 0), root, threadExists: previous?.threadExists || false, fingerprint: previousCurrent?.fingerprint || null, disposition: previousCurrent?.disposition || 'routine', owner: owner.key, actionType: previousCurrent?.actionType || null, lastCI: priorCI || null, closed: pr.merged === true || pr.state === 'closed' };
+  const state = { head, revision: Math.max(previous?.revision || 0, Number.isFinite(policy.revision) ? policy.revision : 0), root, threadExists: previous?.threadExists || false, fingerprint: previousCurrent?.fingerprint || null, disposition: previousCurrent?.disposition || 'routine', owner: owner.key, actionType: previousCurrent?.actionType || null, lastCI: priorCI || null, reviewRequest: previousCurrent?.reviewRequest || null, closed: pr.merged === true || pr.state === 'closed' };
   if (old) return { policy, evidence, state: previous || state };
   policy.subject = subject;
   const reflect = disposition => { policy.role = 'prs'; policy.disposition = disposition; policy.material = true; state.threadExists = true; state.disposition = disposition; };
   if (state.closed) { if (state.threadExists) reflect('routine'); evidence.nextStep = pr.merged ? 'observe_landed_sha_and_deploy_separately' : 'closed_without_merge'; return { policy, evidence, state }; }
-  if (['review_requested', 'ready_for_review', 'changes_requested', 'owner_decision_required'].includes(event.action) || event.state === 'changes_requested') {
-    reflect('action'); state.actionType = 'review'; policy.githubReviewers = (event.reviewers || pr.requested_reviewers?.map(r => r.login) || []).map(login).filter(Boolean); evidence.nextStep = event.state === 'changes_requested' || event.action === 'changes_requested' ? 'read_requested_changes' : 'read_review_request';
+  if (['review_requested', 'ready_for_review', 'changes_requested', 'owner_decision_required'].includes(event.action) || event.state === 'changes_requested' || event.kind === 'pull_request' && pr.draft !== true && event.reviewers?.length > 0) {
+    const targets = (event.reviewers || pr.requested_reviewers?.map(r => r.login) || []).map(login).filter(Boolean).sort();
+    const request = JSON.stringify([head, event.state === 'changes_requested' || event.action === 'changes_requested' ? 'changes' : 'review', targets]);
+    const duplicateRequest = previousCurrent?.actionType === 'review' && previousCurrent.disposition === 'action' && previousCurrent.reviewRequest === request && previousCurrent.owner === owner.key;
+    if (!duplicateRequest) reflect('action'); else { policy.role = 'prs'; policy.disposition = 'action'; }
+    state.reviewRequest = request; state.actionType = 'review'; policy.githubReviewers = (event.reviewers || pr.requested_reviewers?.map(r => r.login) || []).map(login).filter(Boolean); evidence.nextStep = event.state === 'changes_requested' || event.action === 'changes_requested' ? 'read_requested_changes' : 'read_review_request';
   } else if (event.kind === 'merge_group' || queue) {
     const group = sha(queue?.groupSha), mapped = queue?.prs?.map(id).filter(Boolean) || [];
     evidence.groupSha = group;
