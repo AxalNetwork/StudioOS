@@ -14,6 +14,7 @@ function check(source = script, route = true, mountedFactory = 'makeRecords') {
     put('scripts/check-api-drift.mjs', source);
     put('scripts/lib/apiModules.mjs', readFileSync('scripts/lib/apiModules.mjs', 'utf8'));
     put('scripts/lib/routeRegistry.mjs', readFileSync('scripts/lib/routeRegistry.mjs', 'utf8'));
+    put('scripts/lib/generatedOutput.mjs', readFileSync('scripts/lib/generatedOutput.mjs', 'utf8')); // D5612
     put('scripts/api-drift-baseline.json', readFileSync('scripts/api-drift-baseline.json', 'utf8'));
     put('frontend/src/lib/api.js', "export const api = { record: () => request(`/cycles/${cycle}/modules/${slug}/records/${id}`) };\nexport * from './apiModules.generated.js';\n");
     // #4105: the module re-export block is generated beside api.js; this tree has no module.

@@ -75,6 +75,12 @@ function readLedgerBuilds(p) {
   }
 }
 
+// 0. D5612 (#5612): the route registry, the API index and the skill library
+// are generated, not committed. Vite bundles the API index, and the deploy and
+// PR preview bundle the Worker (registry, skill library) right after this
+// build, so they are written here first. `frontend`'s `prebuild` runs it too.
+execSync('node scripts/build-generated.mjs', { cwd: root, stdio: 'inherit' });
+
 // 1. Snapshot the pre-build assets — they must survive Vite's emptyOutDir wipe.
 const prevFiles = listAssetFiles(assetsDir);
 const restoredLedger = readLedgerBuilds(ledgerPath);

@@ -8,7 +8,7 @@
  *   3. Seed, fresh store: a golden case and five scenarios are six live cases; a second run adds nothing.
  *   4. Seed, a store seeded before this change: only the missing cases are added, no existing row changes.
  *   5. Coverage: one scenario followed from file to module to row; every scenario present at each stage.
- *   6. Gate: each new rule on a targeted fixture, duplicate identities, a stale module, the case cap.
+ *   6. Gate: each new rule on a targeted fixture, duplicate identities, an unsound module (D5612), the case cap.
  *   7. Reconciliation classes with multi-case sources; a changed revision is a new case, never an edit.
  *
  * Every record is made up; no model runs (model_evaluation: not_run).
@@ -19,7 +19,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { makeD1 } from './_d1_sqlite.mjs';
@@ -31,8 +32,8 @@ import { checkSourceCatalogue, persistedManifest, reconcile, summary, type Findi
 import { checkLibrary, seedLibrary } from '../src/services/agents/skillLibrarySeed.ts';
 import { scenarioCase as tsScenarioCase, type Pack } from '../src/services/agents/skillScenarios.ts';
 import { SKILL_LIBRARY, type LibraryEntry } from '../src/services/agents/skillLibrary.generated.ts';
-import { libraryEntries, render, scenarioCase as mjsScenarioCase } from '../../scripts/build-skill-library.mjs';
-import { readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
+import { SKILL_LIBRARY_REL, libraryEntries, render, scenarioCase as mjsScenarioCase, skillLibraryProblems } from '../../scripts/build-skill-library.mjs';
+import { generatedSound, readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
 const TAXONOMY = taxonomyFromSeed(sql('migrations/090_seed_skills_values_taxonomy.sql'));
@@ -99,7 +100,7 @@ test('identity: a scenario is case_id + revision; a v1 golden case keeps <slug>#
 });
 
 test('identity: every committed golden case keeps the identity D4532 gave it', async () => {
-  const { manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
+  const { manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedSound: true, taxonomy: TAXONOMY });
   for (const e of SKILL_LIBRARY) {
     const k = checkCase({ name: goldenName(e.slug), input: e.cases[0].input, expect: e.cases[0].expect });
     assert.ok(k.ok);
@@ -110,8 +111,10 @@ test('identity: every committed golden case keeps the identity D4532 gave it', a
 
 // ── 2. Generator ────────────────────────────────────────────────────────────
 
-test('generator: the committed module is the script\'s output, golden case first, then every scenario under its own name', () => {
-  assert.equal(readFileSync(GENERATED, 'utf8'), render(libraryEntries()), 'the generated module is stale; run node scripts/build-skill-library.mjs');
+test('generator: the built module is the script\'s output, golden case first, then every scenario under its own name', () => {
+  // D5612: the module is built before every test, never committed — its generator is deterministic and git does not track it.
+  assert.deepEqual(skillLibraryProblems(), []);
+  assert.equal(readFileSync(GENERATED, 'utf8'), render(libraryEntries()), 'the module this run imports is not the current build; run node scripts/build-generated.mjs');
   for (const e of SKILL_LIBRARY) assert.deepEqual(e.cases[0], JSON.parse(REAL.cases[`${e.slug}.json`]), `${e.slug}: golden case first, as committed`);
   for (const p of PACKS) {
     const e = entry(p.skill);
@@ -174,7 +177,7 @@ test('seed: a store seeded before this change gains only the missing cases; no e
   assert.equal(added.length, scenarioCount);
   assert.ok(added.every((r) => r.source_case_id && Number.isInteger(r.source_revision)));
   // And the store now matches the source exactly, under identity and content.
-  const { manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
+  const { manifest } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedSound: true, taxonomy: TAXONOMY });
   const rec = reconcile(manifest, await persistedManifest(w.env));
   assert.deepEqual([...new Set(rec.map((l) => l.class))], ['exact']);
   const again = sha(caseRows(w));
@@ -224,9 +227,9 @@ test('coverage: one scenario followed from its file to the module to a row with 
 const SLUG = 'contract-clause-extraction';
 const ONE = { definitions: { [`${SLUG}.md`]: REAL.definitions[`${SLUG}.md`] }, cases: { [`${SLUG}.json`]: REAL.cases[`${SLUG}.json`] } };
 const PACK = JSON.parse(REAL.scenarios[`${SLUG}.json`]) as Pack;
-async function gate(pack: unknown, over: { cases?: Record<string, string>; fresh?: boolean } = {}) {
+async function gate(pack: unknown, over: { cases?: Record<string, string>; sound?: boolean } = {}) {
   const scenarios = { [`${SLUG}.json`]: typeof pack === 'string' ? pack : JSON.stringify(pack) };
-  return checkSourceCatalogue({ ...ONE, ...(over.cases ? { cases: over.cases } : {}), scenarios, generated: [{ slug: SLUG, skill_md: ONE.definitions[`${SLUG}.md`], cases: [] }], generatedFresh: over.fresh ?? true, taxonomy: TAXONOMY });
+  return checkSourceCatalogue({ ...ONE, ...(over.cases ? { cases: over.cases } : {}), scenarios, generated: [{ slug: SLUG, skill_md: ONE.definitions[`${SLUG}.md`], cases: [] }], generatedSound: over.sound ?? true, taxonomy: TAXONOMY });
 }
 const errs = (f: Finding[]) => f.filter((x) => x.level === 'error');
 const mutate = (patch: (p: Pack) => void) => { const p = structuredClone(PACK); patch(p); return p; };
@@ -258,7 +261,7 @@ test('gate: the unmutated pack is clean, and each scenario rule fails its target
   }
 });
 
-test('gate: two cases with one identity fail; a stale generated module fails', async () => {
+test('gate: two cases with one identity fail; an unsound generated module fails', async () => {
   // A golden case file that claims a scenario's identity.
   const golden = { ...JSON.parse(REAL.cases[`${SLUG}.json`]), case_id: PACK.scenarios[0].case_id, revision: PACK.scenarios[0].revision };
   const dup = await gate(PACK, { cases: { [`${SLUG}.json`]: JSON.stringify(golden) } });
@@ -266,15 +269,26 @@ test('gate: two cases with one identity fail; a stale generated module fails', a
   // The reconciliation fails on it too.
   assert.deepEqual(reconcile(dup.manifest, []).map((l) => [l.class, l.disposition]), [['duplicate_identity', 'fail']]);
 
-  // A scenario changed without rebuilding the module: the generator's own render differs, so the gate says stale.
-  const dir = mkdtempSync(join(tmpdir(), 'skill-5336-'));
-  cpSync(SKILLS, dir, { recursive: true });
+  // D5612: a module git tracks is unsound, whatever its bytes; so is one that is not this run's build of the files.
+  const root = mkdtempSync(join(tmpdir(), 'skill-5336-'));
+  const skills = join(root, 'cloudflare-worker/src/services/agents/skills');
+  mkdirSync(skills, { recursive: true });
+  cpSync(SKILLS, skills, { recursive: true });
+  const built = render(libraryEntries(skills));
+  writeFileSync(join(root, SKILL_LIBRARY_REL), built);
+  assert.equal(generatedSound(root, built), true, 'built and untracked');
+  execFileSync('git', ['init', '-q'], { cwd: root, stdio: 'ignore' });
+  assert.equal(generatedSound(root, built), true, 'in a work tree, still untracked');
+  execFileSync('git', ['add', '-f', SKILL_LIBRARY_REL], { cwd: root, stdio: 'ignore' });
+  const tracked = generatedSound(root, built);
+  assert.equal(tracked, false, 'git add -f');
+  assert.deepEqual(errs((await gate(PACK, { sound: tracked })).findings).map((f) => f.rule), ['generated_unsound']);
+  execFileSync('git', ['rm', '-q', '--cached', SKILL_LIBRARY_REL], { cwd: root, stdio: 'ignore' });
   const changed = mutate((p) => { p.scenarios[0].revision = 2; });
-  writeFileSync(join(dir, 'scenarios', `${SLUG}.json`), JSON.stringify(changed, null, 2));
-  const fresh = readFileSync(GENERATED, 'utf8') === render(libraryEntries(dir));
-  assert.equal(fresh, false);
-  const stale = await gate(changed, { fresh });
-  assert.deepEqual(errs(stale.findings).map((f) => f.rule), ['generated_stale']);
+  writeFileSync(join(skills, 'scenarios', `${SLUG}.json`), JSON.stringify(changed, null, 2));
+  const sound = generatedSound(root, built);
+  assert.equal(sound, false, 'a scenario changed after the build');
+  assert.deepEqual(errs((await gate(changed, { sound })).findings).map((f) => f.rule), ['generated_unsound']);
 });
 
 test('gate: the cap holds the golden case plus ten scenarios, and fails a skill whose sources exceed it', async () => {
@@ -306,7 +320,7 @@ test('gate: the cap holds the golden case plus ten scenarios, and fails a skill 
 });
 
 test('gate: the summary reports scenario coverage per skill apart from executions, and never a model result', async () => {
-  const { findings, manifest, coverage } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
+  const { findings, manifest, coverage } = await checkSourceCatalogue({ ...REAL, generated: SKILL_LIBRARY, generatedSound: true, taxonomy: TAXONOMY });
   const s = summary(findings, manifest, null, coverage);
   assert.equal(s.ok, true);
   assert.equal(s.model_evaluation.status, 'not_run');
@@ -333,7 +347,7 @@ test('reconciliation: every class holds with multi-case sources; a changed revis
     definitions: Object.fromEntries(three.map((e) => [`${e.slug}.md`, e.skill_md])),
     cases: Object.fromEntries(three.map((e) => [`${e.slug}.json`, REAL.cases[`${e.slug}.json`]])),
     scenarios: { ...Object.fromEntries(multi.map((e) => [`${e.slug}.json`, REAL.scenarios[`${e.slug}.json`]])), ...packs },
-    generated: three, generatedFresh: true, taxonomy: TAXONOMY,
+    generated: three, generatedSound: true, taxonomy: TAXONOMY,
   });
   const [a, b] = multi.map((e) => e.slug);
   let lines = reconcile((await src()).manifest, await persistedManifest(w.env));

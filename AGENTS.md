@@ -320,16 +320,20 @@ documents it indexes.
   there first. `backend/` (FastAPI) is never deployed. Never add a method to
   `frontend/src/lib/api.js`, or to a module under `frontend/src/lib/api/`,
   without a mounted Worker route. A new API domain goes in its own module
-  there (D527), and `node scripts/build-api-index.mjs` lists it in the
-  generated `frontend/src/lib/apiModules.generated.js`; `api.js` is not edited.
+  there (D527); the generated `frontend/src/lib/apiModules.generated.js` lists
+  it with no edit from you, and `api.js` is not edited.
 - **New modules register themselves (#4105).** A new Worker router is one file,
   `cloudflare-worker/src/routes/<name>.ts`, exporting `mount` (`{ path, router,
-  before? }`), plus `node scripts/build-route-registry.mjs`, which rewrites the
-  generated `routes/_registry.ts`; never add an `app.route(...)` to
-  `index.ts`. A new route area is one file, `frontend/src/routes/<area>.jsx`,
-  which `App.jsx` collects by itself. Commit the generated files; `npm run
-  test:drift` fails while either is stale. If two branches both add a line to
-  a generated file, rerun its script instead of resolving the conflict by hand.
+  before? }`); the generated `routes/_registry.ts` picks it up. Never add an
+  `app.route(...)` to `index.ts`. A new route area is one file,
+  `frontend/src/routes/<area>.jsx`, which `App.jsx` collects by itself.
+  **Never commit the generated files** (D5612): `routes/_registry.ts`,
+  `frontend/src/lib/apiModules.generated.js` and
+  `services/agents/skillLibrary.generated.ts` are gitignored, and `node
+  scripts/build-generated.mjs` writes them before every build, typecheck and
+  test (the `npm run build`, `dev`, `test:*` and `lint` hooks run it; run it
+  yourself before a bare `tsc` or `node --test`). Each generator's `--check`
+  fails if one is tracked again.
 - **Migrations.** A migration is a new file under
   `cloudflare-worker/sql/migrations/`, named `YYYYMMDDHHMM_<issue>_<slug>.sql`
   by the UTC minute you write it and your issue's number (D4106, D5398: two PRs
