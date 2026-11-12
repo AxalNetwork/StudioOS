@@ -62,6 +62,7 @@ export async function reconcileCfScript(input:{script:CfScript;now:number;readAp
     }
     if(!deployments.some(d=>d.id===head.id))deployments.push(head);
     deployments.sort((a,b)=>time(a.created_on)-time(b.created_on)||a.id.localeCompare(b.id));
+    const orderKnown=new Set(deployments.map(d=>d.created_on)).size===deployments.length;
     const seenVersions=new Set<string>();let previousVersions:string[]=[];
     for(const d of deployments){
       if(!Array.isArray(d.versions)||!d.versions.length||d.versions.length>10||d.versions.some(v=>!UUID.test(v.version_id)||!Number.isFinite(v.percentage)||v.percentage<0||v.percentage>100)
@@ -69,11 +70,12 @@ export async function reconcileCfScript(input:{script:CfScript;now:number;readAp
       const github=await input.attribution?.(script,d.id)??null;
       if(time(d.created_on)>cursor.through_ms)for(const id of cursor.active_versions)seenVersions.add(id);
       const serving=d.versions.filter(v=>v.percentage>0).map(v=>v.version_id);
-      const oldReturn=serving.length===1&&seenVersions.has(serving[0])&&previousVersions.length>0&&!previousVersions.includes(serving[0]);
+      const oldReturn=orderKnown&&serving.length===1&&seenVersions.has(serving[0])&&previousVersions.length>0&&!previousVersions.includes(serving[0]);
       const code=d.source==='rollback'||oldReturn?'rollback':github?'traffic_changed':'unattributed';
       out.push(await receipt(['deploy',d.id],{code,occurred_ms:time(d.created_on),source:source(d.source),github,versions:d.versions.map(v=>({id:v.version_id,weight:v.percentage}))}));
       activeId=d.id;activeVersions=serving.sort();previousVersions=serving;for(const id of serving)seenVersions.add(id);
     }
+    if(!orderKnown)out.push(await receipt(['ordering-gap',cursor.revision],{component:'coverage',state:'unknown',code:'history_gap'}));
     for(const v of versions)out.push(await receipt(['version',v.id],{code:'version_uploaded',occurred_ms:time(v.metadata.created_on),source:source(v.metadata.source),versions:[{id:v.id,weight:null}]}));
     const finalHead=await readApi(`/workers/scripts/${script}/deployments`,{page:1,per_page:1});
     if((finalHead.result as any)?.deployments?.[0]?.id!==head.id)throw Error('cf_snapshot_changed');
