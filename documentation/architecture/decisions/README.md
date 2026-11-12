@@ -91,3 +91,4 @@ and citations by number keep working.
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
 
 | `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
+| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
