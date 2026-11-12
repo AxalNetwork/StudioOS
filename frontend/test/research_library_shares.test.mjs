@@ -100,13 +100,13 @@ test('a client’s document draws no control that could not act on it', () => {
   // either would be the dead control this repo refuses everywhere else — and
   // here it would also read as an offer to delete someone else's file.
   const card = LIBRARY.slice(LIBRARY.indexOf('title="Library"'));
-  assert.match(card, /d\.source !== 'client' && \(/,
+  assert.match(card, /d\.source !== 'client' && d\.read_only !== true && \(/,
     'the row controls are no longer gated on provenance');
-  const gated = card.slice(card.indexOf("d.source !== 'client' && ("));
+  const gated = card.slice(card.indexOf("d.source !== 'client' && d.read_only !== true && ("));
   assert.match(gated, /Re-index/, 'Re-index is drawn outside the ownership gate');
   assert.match(gated, /Remove/, 'Remove is drawn outside the ownership gate');
   // Open is NOT gated: reading is the whole reason the document is there.
-  const beforeGate = card.slice(0, card.indexOf("d.source !== 'client' && ("));
+  const beforeGate = card.slice(0, card.indexOf("d.source !== 'client' && d.read_only !== true && ("));
   assert.match(beforeGate, /Open/, 'Open has been gated too, leaving a listed file unreadable');
 });
 
@@ -136,7 +136,7 @@ test('the ops row’s Re-index acts on what Ask cannot read, and says so when th
   assert.match(LIBRARY, /const stale = reindexTargets\(items\);/,
     'the re-index op no longer selects the documents Ask cannot read');
   assert.match(read('frontend/src/pages/research/libraryIndexing.js'),
-    /d\.source !== 'client'\s*&& d\.index_state !== 'indexed' && d\.index_state !== 'pending'/);
+    /canIndex\(d\)\s*&& d\.in_ask !== true && d\.index_state !== 'pending'/);
   // Bounded at the block's own close, not at the next `return (` — there is an
   // earlier one in this file and the slice came back empty, which passes a
   // `doesNotMatch` and fails a `match` for a reason that has nothing to do with

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pill, inputClass, buttonClass, ghostButtonClass, formatDay } from '../kit';
+import { Pill, inputClass, buttonClass, ghostButtonClass, formatDay, SaveNote } from '../kit';
 import { NotRecorded } from '../../../workspaces/canvasKit';
 
 /**
@@ -16,6 +16,26 @@ import { NotRecorded } from '../../../workspaces/canvasKit';
  */
 
 export const NO_HOURS_REASON = 'No entry for this month. Not the same as 0.';
+
+/**
+ * #5314 part 3 (D4822) — the conflict state. A Delivery write that read an
+ * older version changed nothing; the note says so and offers the two ways out:
+ * Reload (see their version, drop this edit) or Keep my edits (save this one
+ * over theirs, at the version that is there now). Any other note is a SaveNote.
+ */
+export function DeliveryNote({ note, testid }) {
+  return (
+    <>
+      <SaveNote note={note} testid={testid} />
+      {note?.conflict ? (
+        <div className="mt-1 flex flex-wrap gap-2" data-testid="delivery-conflict">
+          <button type="button" className={ghostButtonClass} onClick={note.conflict.reload}>Reload</button>
+          <button type="button" className={buttonClass} onClick={note.conflict.keep}>Keep my edits</button>
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 /** One blocker, with Clear (or Reopen) and Delete as separate actions. */
 export function BlockerRow({ b, busy = false, onClear, onReopen, onDelete }) {

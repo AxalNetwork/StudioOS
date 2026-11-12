@@ -24,6 +24,10 @@ const STATEMENTS: string[] = [
      summary            TEXT,
      description        TEXT,
      cover_url          TEXT,
+     cover_alt          TEXT, -- #5309, migration 202611110745_5309: what the cover shows
+     cover_source       TEXT, -- 'uploaded' | 'generated'; NULL is "not recorded"
+     cover_focal_json   TEXT, -- {"x":0..1,"y":0..1}
+     cover_crops_json   TEXT, -- {"card":{x,y,w,h},"social":{…},"square":{…}}
      topics_json        TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array'),
      starts_at          TEXT NOT NULL,
      ends_at            TEXT,
@@ -172,7 +176,14 @@ export async function ensureEventsSchema(env: Env): Promise<boolean> {
       }
     }
     // #5343: through `runSchemaBootstrap`, which skips the ALTER when the column is there.
-    await runSchemaBootstrap(env, ["ALTER TABLE events ADD COLUMN topics_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array')"]);
+    await runSchemaBootstrap(env, [
+      "ALTER TABLE events ADD COLUMN topics_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(topics_json) AND json_type(topics_json) = 'array')",
+      // #5309: a dev database whose `events` predates the cover columns gets them here, as production's migration adds them.
+      'ALTER TABLE events ADD COLUMN cover_alt TEXT',
+      'ALTER TABLE events ADD COLUMN cover_source TEXT',
+      'ALTER TABLE events ADD COLUMN cover_focal_json TEXT',
+      'ALTER TABLE events ADD COLUMN cover_crops_json TEXT',
+    ]);
     READY.set(bindingKey(env), true);
     return true;
   } catch (e) {

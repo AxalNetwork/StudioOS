@@ -175,8 +175,9 @@ function drill(env = {}) {
   env = { MANIFEST_JSON: manifestFor(env.BACKUP_SQL || 'CREATE TABLE users(id);'), ...env };
   const dir = mkdtempSync(join(tmpdir(), 'd263-'));
   fakeWrangler(dir);
-  // Real curl consumes the header passed through --header @-. Drain stdin
-  // before exiting so the writer cannot race the fake and hit SIGPIPE.
+  // Real curl reads the `--header @-` the drill pipes in. A fake that exits
+  // without reading it races the writer into SIGPIPE, and under pipefail the
+  // retention list then reads as unreadable (the D5317 test failed under load).
   writeFileSync(join(dir, 'curl'), '#!/bin/sh\ncat >/dev/null\nprintf "%s" "$HISTORY_LIST"\n', { mode: 0o755 });
   writeFileSync(join(dir, 'calls.log'), '');
   const r = spawnSync('bash', [SCRIPT], {
