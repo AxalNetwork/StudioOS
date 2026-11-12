@@ -268,6 +268,11 @@ export const DEPLOY_WORKFLOWS = [
     deploys: 'the private studioos-meeting-bot Worker and its runtime image, independently of HQ and branches',
   },
   {
+    file: 'merge-control-deploy.yml',
+    trigger: 'on Merge Control changes in a push to main, or by hand from main; owner deployment gate required',
+    deploys: 'the independent studioos-merge-control Worker, its repository coordinator and Queue consumer',
+  },
+  {
     file: 'pr-preview.yml',
     trigger: 'on each pull request',
     deploys: 'a preview Worker per pull request, serving the SPA with no bindings',
