@@ -12,8 +12,10 @@
  * for `main-red` and `queue`), GITHUB_REPOSITORY, and SLACK_GITHUB_WEBHOOK_URL. Without the
  * webhook, the issue is still opened or closed and the job warns; the trusted reporter fails visibly on unreadable evidence without changing the watched result.
  */
-import { QUEUE_DEFAULTS, mainState, queueStallState, queueState, reviewState } from './lib/githubAlerts.mjs';
+import { ALERT_KINDS, QUEUE_DEFAULTS, mainState, queueStallState, queueState, reviewState } from './lib/githubAlerts.mjs';
 import { safeGithubUrl } from './lib/ciClassify.mjs';
+import { readFileSync } from 'node:fs';
+import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 import { createHealthMonitor } from './health-alert-episodes.mjs';
 import { webhookDelivery } from './health-alert-transport.mjs';
 import { futureClockReport } from './future-clock-report.mjs';
@@ -54,6 +56,29 @@ const runSource = (runId, attempt = 1) => {
 async function main() {
   const mode = process.argv[2];
   if (!env.GITHUB_TOKEN) throw new Error('github_token_missing');
+  if (mode === 'scan') {
+    const facts = scanFacts(JSON.parse(readFileSync(env.SCAN_FACTS_FILE, 'utf8')));
+    if (!facts.baseline) return console.log('scan: no known baseline; no alert transition');
+    // Separate scanners share one issue. Their short report jobs are serialized;
+    // resolving one scanner cannot close the other's outstanding findings.
+    let issue = null;
+    for (let page = 1; page <= 100; page++) {
+      const rows = await gh(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+      if (!Array.isArray(rows)) throw new Error('Unreadable scan alert inventory');
+      issue = rows.find(row => !row.pull_request && row.title === ALERT_KINDS.scan.title);
+      if (issue || rows.length < 100) break;
+      if (page === 100) throw new Error('Scan alert inventory cap reached');
+    }
+    const states = issue ? readScanAlert(issue.body) : {};
+    states[facts.scanner] = facts;
+    const active = Object.values(states).some(state => Object.keys(state.counts).length > 0);
+    if (!active && !issue) return;
+    const body = scanAlertBody(states);
+    if (!issue) return gh(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS.scan.title, body }) });
+    if (body !== issue.body) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    if (!active) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
+    return;
+  }
   monitor = createHealthMonitor({ api: gh, repo, deliver: webhookDelivery({ url: env.SLACK_GITHUB_WEBHOOK_URL }), log: value => console.log(JSON.stringify(value)) });
   if (mode === 'queue-stalled') {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&status=completed&per_page=30`);
@@ -104,7 +129,7 @@ async function main() {
     if (!evidence.complete) process.exitCode = 1;
     return apply('future-clock', active, { days: 7, failedCount: evidence.failed, runUrl: env.RUN_URL }, runSource(env.GITHUB_RUN_ID, env.GITHUB_RUN_ATTEMPT));
   }
-  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled or future-clock`);
+  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock or scan`);
 }
 
 main().catch(() => {

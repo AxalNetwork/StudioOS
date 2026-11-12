@@ -94,6 +94,7 @@ and citations by number keep working.
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
+| `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
 | `D5666.md` | Observational session attribution and persistent PR/incident routing. |
 | `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
 | `D5664.md` | Independent signed metadata capture, immutable ledger and explicit source gaps. |

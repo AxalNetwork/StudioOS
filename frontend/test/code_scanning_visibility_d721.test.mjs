@@ -75,8 +75,8 @@ function ask(answer, rc = 0) {
 
 test('codeql.yml and semgrep.yml carry the same visibility job, and their scans need it', () => {
   assert.equal(job(SEMGREP, 'visibility'), job(CODEQL, 'visibility'), 'the two visibility jobs must stay identical');
-  assert.match(job(CODEQL, 'analyze'), /^ {4}needs: visibility$/m);
-  assert.match(job(SEMGREP, 'scan'), /^ {4}needs: visibility$/m);
+  assert.match(job(CODEQL, 'analyze'), /^ {4}needs: \[scope, visibility\]$/m);
+  assert.match(job(SEMGREP, 'scan'), /^ {4}needs: \[scope, visibility\]$/m);
   assert.match(job(CODEQL, 'visibility'), /^ {6}upload: \$\{\{ steps\.ask\.outputs\.upload \}\}$/m);
 });
 
