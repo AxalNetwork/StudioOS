@@ -175,7 +175,7 @@ test('registration shows the selected plan, how it is charged and the full yearl
     assert.match(m.props(m.by('register-plan-change')).href || '', /pricing\?for=founder/, 'the plan can be changed');
     const steps = ['account', 'profile', 'checkout', 'spinout'].map((k) => text(m.by(`register-step-${k}`)));
     assert.match(steps[0], /free\. No payment is taken on this page/);
-    assert.match(steps[1], /Checkout asks you to choose it first/);
+    assert.match(steps[1], /Membership review.*enables your profile after you sign the agreement.*buy a plan for that profile once it is enabled/);
     assert.match(steps[2], /Payment starts only when you confirm on Stripe.s secure page.*Billed yearly/);
     assert.match(steps[3], /Optional: apply to the Spin-Out Lab.*separate application.*not part of any plan/);
   } finally { await m.close(); }

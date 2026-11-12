@@ -11,6 +11,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import ContentCalendar, { CONTENT_STATUS, contentBody, plannedLabel } from '../src/pages/cycles/ContentCalendar.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -123,7 +124,7 @@ test('an unreadable calendar says so with Try again; nothing is drawn without th
 });
 
 test('the wiring: the card and From Notion on Distribution, From Notion on Product improvement; dialogs in-page, dark mode', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /<CalendarWeek projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<FromNotion section="grow" projectId=\{ctx\.projectId\} module="distribution" \/>/);
   // D1608 (#3731): PostHog's part sits beside From Notion on Product improvement.

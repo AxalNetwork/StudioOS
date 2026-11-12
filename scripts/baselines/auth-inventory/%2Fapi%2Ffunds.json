@@ -1,0 +1,7 @@
+{
+  "POST /api/funds/lps/:lpId/sign-lpa": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

@@ -55,9 +55,18 @@ because only Session 1 makes a task ready.
    pick, so that one letter answers it. When only part of the task waits,
    build the rest: that PR says `Part of #<issue>` instead of
    `Closes #<issue>`, so the issue stays open for the part that waits.
-5. **Finish.** Fix CI and review comments until everything is green. Never
-   merge, never mark a PR ready for review, and never push to `main` or to
-   another slot's branch. The owner merges.
+5. **Finish.** Fix CI and review comments until everything is green. The
+   owner lands T2 and any PR without an eligible report. After #5605 rows 3
+   and 6 and #5500 are in effect, an agent may queue T0/T1 only when all
+   required checks are green and the `landing policy` summary reports T0 or
+   T1 and `LANDING_AUTO: true` for the exact current PR head SHA. Confirm
+   the target still requires the merge queue and that the PR did not edit
+   `.github/workflows/landing-policy.yml`. Then run
+   `gh pr ready`, then `gh pr merge --auto --squash --match-head-commit <sha>`.
+   Disable auto-merge with `gh pr merge --disable-auto` and remove the PR from
+   the queue if queued before pushing changes. Wait for a new eligible report.
+   Never use `--admin`, push to `main` or another slot's branch, or approve
+   your own PR (#5569).
 
 ### STATUS
 
@@ -85,7 +94,7 @@ Each STATUS state goes with one label, and you change both at the same time:
 | `READY_FOR_REVIEW` | `state:review` |
 | `DONE` | none: the issue closes when its PR merges |
 
-The slot posts `DONE` once, after the owner merges the PR. If the slot has
+The slot posts `DONE` once, after the PR merges. If the slot has
 moved on by then, Session 1 posts it when it confirms the deploy.
 
 ### Owner answers
@@ -351,6 +360,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy
