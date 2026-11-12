@@ -83,5 +83,8 @@ and citations by number keep working.
 | `D5535.md` | Verify production queues before release mutations. |
 | `D5532.md` | Measure production-shaped Worker startup and bind diagnostics to the release artifact. |
 | `D5501.md` | Gate production D1 and Worker publication on the exact verified main candidate. |
+| `D4710.md` | Mounted Delivery stale-edit/stale-send verification of merged revision handling; remaining 6/6 handoff scope. |
+| `D4580.md` | Grow auth browser evidence, accessible malformed-input fixes and remaining live-account verification. |
+| `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
 | `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |

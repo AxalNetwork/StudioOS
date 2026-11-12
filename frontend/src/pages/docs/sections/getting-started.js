@@ -149,10 +149,10 @@ export default {
       id: 'help-and-shortcuts',
       title: 'Getting help & keyboard shortcuts',
       overview:
-        "Need a hand? Open the Personal Advisor on the Studio page — it knows your startups and can answer questions or file a tracked support ticket for you right from the chat. Power users can press Ctrl/Cmd-K from anywhere to open a search bar that jumps to pages, recent activity, and documentation in one place.",
+        "Need a hand? Open Eadwyn in the product to ask questions and reach the right workflow. Eadwyn does not receive blanket access to private startup records: the context available depends on the connected surface, your current company, permissions and any records explicitly shared. Ctrl/Cmd-K opens the navigation search.",
       howto: [
-        'Go to the Studio page and use the Personal Advisor to ask a question or get unstuck.',
-        'Click "Open a ticket" in the Personal Advisor header to file a tracked support ticket — the advisor confirms it inline and links you to the Help Center.',
+        'Open Eadwyn from the supported product surface and check which company, record or connected source is currently in scope.',
+        'For tracked support, use Help → Your tickets; do not include private records or security vulnerabilities in ordinary tickets.',
         'Press Ctrl/Cmd-K to open the command palette from any page.',
         'Start typing — results group by pages, recent activity, doc anchors, and quick actions; Enter jumps to the highlighted result, Esc closes the palette.',
       ],
@@ -162,7 +162,7 @@ export default {
       ],
       pitfalls: [
         'The palette searches documentation by title and content — niche features are easier to find by their docs anchor than by guessing the page name.',
-        'Quiet hours and notification preferences are managed in Account — the Personal Advisor and Help Center are for questions and tickets.',
+        'Eadwyn can help with supported workflows, but an action that changes a record still follows that surface’s authorization and review controls.',
       ],
       related: [
         { label: 'Notifications', href: '#account/notifications' },
@@ -175,7 +175,7 @@ export default {
       overview:
         "Anyone — including visitors who haven't signed up yet — can compare subscription tiers and book a demo. These pages live on the public site and link straight into sign-up when a visitor is ready.",
       howto: [
-        'Open /pricing to compare Free, Growth, and Studio tiers side-by-side.',
+        'Open /pricing?for=founder to compare Free, Validate + Build and Raise + Grow. The prices and AI inclusions come from the live catalogue.',
         'Open /demo to book a walkthrough with the studio team.',
         'Share any of these links externally — they require no account.',
       ],
@@ -194,21 +194,21 @@ export default {
     },
     {
       id: 'personal-advisor',
-      title: 'Personal Advisor',
+      title: 'Eadwyn — AI assistant',
       overview:
-        "The Personal Advisor is a chat-style helper on your dashboard that asks the right next question for your persona, links you to the matching tool, and drops you straight into the docs page that explains it. It does not give legal, tax, or investment advice.",
+        "Eadwyn helps navigate supported Axal VC tasks and offers contextual assistance. Its available data depends on the specific surface, active company, connected permissions and the records shared with it; it is not a general grant to read every startup or private note. It does not give legal, tax or investment advice.",
       howto: [
-        'Open your dashboard — the Advisor sits where the persona tile used to be.',
-        'Pick one of the suggested questions, or type your own.',
-        'Follow the “Open this tool” or “Read more” links the Advisor surfaces.',
+        'Open Eadwyn in the available product surface and confirm the company or data context before sharing anything.',
+        'Choose a suggested task or ask a question; inspect what Eadwyn proposes before acting on a record.',
+        'Use the links to the relevant product page or Help guide and review any requested write or external action on its own confirmation screen.',
       ],
       tips: [
-        'The Advisor’s opening questions change with your persona — switch in Settings to see a different bank.',
-        'Use the Advisor as a roadmap: the suggested questions are usually the next thing worth doing.',
+        'Assistant access and connected accounts can be inspected and revoked from the applicable account and connector controls.',
+        'Use Account → Usage → AI tokens to check the allowance or balance for billable AI tasks.',
       ],
       pitfalls: [
-        'The Advisor is a guide, not a decision-maker — always cross-check legal and tax steps with the partner attorney or your accountant.',
-        'It does not see your private startup data; it suggests features based on persona, not on your numbers.',
+        'Eadwyn is not an independent decision-maker; verify important outputs with a qualified professional.',
+        'Do not assume Eadwyn can see all private data or none: access is surface- and permission-specific; always review the current scope.',
       ],
       related: [
         { label: 'Personas', href: '#getting-started/personas' },

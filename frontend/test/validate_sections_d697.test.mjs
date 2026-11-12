@@ -19,6 +19,7 @@ import { InterviewsSection, PainThemesSection, HypothesesSection, historyNotes }
 import { adaptModule, adaptRecords } from '../src/pages/cycles/adapters/index.js';
 import { RECORDS, TITLES } from '../src/pages/cycles/adapters/validate.js';
 import { cellView } from '../src/pages/cycles/cycleModel.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
@@ -219,7 +220,7 @@ test('2: New theme is drawn only once its form is registered; no parts.unthemed 
   const without = ssr(h(PainThemesSection, { parts: PAIN_PARTS, onExport: noop, onAssign: noop }));
   assert.doesNotMatch(without, /New theme/);
   // CycleRoute passes the address only while formFor finds the form (#1656's PR 2 registers it).
-  assert.match(read('pages/cycles/CycleRoute.jsx'), /newThemeHref=\{formFor\('validate', 'problem-discovery'\) \? `\/validate\/problem-discovery\/new\?project_id=\$\{encodeURIComponent\(ctx\.projectId\)\}` : null\}/);
+  assert.match(cycleRouteText(), /newThemeHref=\{formFor\('validate', 'problem-discovery'\) \? `\/validate\/problem-discovery\/new\?project_id=\$\{encodeURIComponent\(ctx\.projectId\)\}` : null\}/);
   const { unthemed, unthemed_total, ...rest } = PAIN_PARTS;
   const noPanel = ssr(h(PainThemesSection, { parts: rest, onExport: noop, onAssign: noop }));
   assert.doesNotMatch(noPanel, /Unthemed quotes/);
@@ -354,7 +355,7 @@ test('3: with New hypothesis registered (#1656 PR 2b) the section draws no inter
   assert.match(interim, /New hypothesis/);
   const registered = ssr(h(HypothesesSection, { parts: HYP_PARTS, query: { filter: {} }, openDialog: noop, onLoadLinkLists: noop, onLink: noop }));
   assert.doesNotMatch(registered, /New hypothesis/);
-  assert.match(read('pages/cycles/CycleRoute.jsx'), /onNewHypothesis=\{formFor\('validate', 'experiments'\) \? undefined : /);
+  assert.match(cycleRouteText(), /onNewHypothesis=\{formFor\('validate', 'experiments'\) \? undefined : /);
 });
 
 // ---------------------------------------------------------------------------
