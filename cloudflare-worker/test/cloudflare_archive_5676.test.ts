@@ -2,7 +2,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
 import { d1Over } from './_d1_sqlite.mjs';
-import { writeArchiveBatch,postArchiveNotice } from '../../cloudflare-worker-tail/src/archive.ts';
+import { writeArchiveBatch } from '../../cloudflare-worker-tail/src/archive.ts';
 import tail from '../../cloudflare-worker-tail/src/index.ts';
 import { archiveMac,type ArchiveNotice } from '../../cloudflare-worker-tail/src/protocol.ts';
 import { recordArchiveNotice,expectArchiveMarker,checkArchiveHealth } from '../../cloudflare-archive-observer/src/health.ts';
