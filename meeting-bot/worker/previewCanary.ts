@@ -1,5 +1,5 @@
 /** D5675: preview-only authenticated synthetic startup/callback gate on the existing preview host/namespace; no customer meeting or site database. */
-import { signRequest } from '../src/callback';
+import { signRequest } from '../src/callback.ts';
 export type CanaryEnv={CF_BOT_AUDIENCE?:string;PREVIEW_CANARY_ENABLED?:string;PREVIEW_CANARY_ORIGIN?:string;MEETING_BOT_PREVIEW_SECRET?:string;
   MEETING_BOT_VERSION?:string;MEETING_BOT_CONTAINER?:DurableObjectNamespace};
 export type CanaryJob={version:1;audience:'preview';script:'studioos-meeting-bot-preview';id:string;nonce:string;revision:string;created_ms:number;op:'run'|'callback'};

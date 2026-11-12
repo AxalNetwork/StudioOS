@@ -1,6 +1,7 @@
 /** D5675: provider-free signed preview callback, existing host lifecycle, promotion refusal and synthetic cleanup. No cloud resources or messages. */
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';import assert from 'node:assert/strict';
-import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
+import { mkdtempSync,readFileSync,writeFileSync,rmSync,existsSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
 import { preparePreviewCanary,previewIngress,previewKey,verifyPreviewRequest,validPreviewReceipt,previewPromotionEligible,reconcilePreviewCanaryAlarm,type CanaryJob } from '../../meeting-bot/worker/previewCanary.ts';
 import { MeetingBotContainer } from '../../meeting-bot/worker/container.ts';
 import { signRequest } from '../../meeting-bot/src/callback.ts';import { runPreviewCallback } from '../../meeting-bot/src/previewCanary.ts';
@@ -64,14 +65,16 @@ test('guest callback has no production/redirect fallback and cannot manufacture 
 
 test('normal deployment must pass preview before production; failure artifact is sanitized and rollback has no automatic bypass',()=>{
  const w=readFileSync(new URL('../../.github/workflows/meeting-bot-deploy.yml',import.meta.url),'utf8');
- assert.ok(w.indexOf('--env preview')<w.indexOf('scripts/verify-meeting-bot-preview.mjs'));assert.ok(w.indexOf('scripts/verify-meeting-bot-preview.mjs')<w.indexOf('--env ""'));
+ const verify=w.lastIndexOf('run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs');
+ assert.ok(w.indexOf('--env preview')<verify);assert.ok(verify<w.indexOf('--env ""'));
  assert.doesNotMatch(w,/continue-on-error|skip.canary|bypass/i);assert.match(w,/MEETING_BOT_PREVIEW_ROUTE_VERIFIED/);
+ assert.ok(w.indexOf('verify-meeting-bot-preview.mjs --preflight')<w.indexOf('--env preview'));assert.match(w,/--var \"PREVIEW_CANARY_ENABLED:on\"/);assert.match(w,/--var \"PREVIEW_CANARY_ORIGIN:\$\{MEETING_BOT_PREVIEW_ORIGIN\}\"/);
  const cli=readFileSync(new URL('../../scripts/verify-meeting-bot-preview.mjs',import.meta.url),'utf8');assert.match(cli,/previewPromotionEligible/);assert.doesNotMatch(cli,/hooks.slack|chat.postMessage|meeting_url|attendee/);
 });
 
 test('mutations: audience, signature, callback persistence and stop acknowledgement each protect promotion',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'cf-preview-5675-'));let source=readFileSync(new URL('../../meeting-bot/worker/previewCanary.ts',import.meta.url),'utf8');
- source=source.replace("'../src/callback'",JSON.stringify(new URL('../../meeting-bot/src/callback.ts',import.meta.url).href));
+ source=source.replace("'../src/callback.ts'",JSON.stringify(new URL('../../meeting-bot/src/callback.ts',import.meta.url).href));
  const changes:[string,string,string,(m:any)=>Promise<void>][]=[
  ['audience',"env.CF_BOT_AUDIENCE!=='preview'",'false',async m=>{const request=await signed(job());assert.equal(await m.verifyPreviewRequest(request,{...env(),CF_BOT_AUDIENCE:'prod'}),null);}],
  ['signature',"return await crypto.subtle.verify('HMAC',key,bytes,enc.encode(`v1:${ts}:POST:${url.pathname}:${raw}`))?job:null;",'return job;',async m=>{assert.equal(await m.verifyPreviewRequest(await signed(job(),'wrong-synthetic-key'.repeat(3)),env()),null);}],
@@ -90,4 +93,18 @@ test('a new canary ID cannot bypass an unknown stop; acknowledged cleanup permit
  assert.equal((await f.run(next)).status,200);assert.equal(f.stats().starts,2);
  const before=f.stats().starts;assert.equal((await f.run(first)).status,503);assert.equal(f.stats().starts,before);
  await reconcilePreviewCanaryAlarm(f.state,next.created_ms+600001);assert.equal(f.data.size,0);
+});
+
+
+test('the actual deployment CLI preflight runs without a test loader and refuses incomplete owner configuration before network access',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'cf-preview-cli-5675-')),output=join(dir,'receipt.json');
+ const script=new URL('../../scripts/verify-meeting-bot-preview.mjs',import.meta.url);
+ const config={...process.env,MEETING_BOT_PREVIEW_ORIGIN:origin,MEETING_BOT_PREVIEW_SECRET:root,MEETING_BOT_PREVIEW_ROUTE_VERIFIED:'true',GITHUB_SHA:'a'.repeat(40),PREVIEW_CANARY_RECEIPT:output};
+ const run=(change:Record<string,string>)=>spawnSync(process.execPath,['--experimental-strip-types','--no-warnings',script.pathname,'--preflight'],{env:{...config,...change},encoding:'utf8',timeout:5000});
+ try{
+  const valid=run({});assert.equal(valid.status,0,valid.stderr);assert.equal(existsSync(output),false);
+  for(const change of [{MEETING_BOT_PREVIEW_ORIGIN:'https://app.axal.vc'},{MEETING_BOT_PREVIEW_SECRET:''},{MEETING_BOT_PREVIEW_ROUTE_VERIFIED:'false'},{GITHUB_SHA:'invalid'}]){
+   const r=run(change);assert.equal(r.status,1,r.stderr);const evidence=JSON.parse(readFileSync(output,'utf8'));assert.equal(evidence.stage,'preflight');assert.equal(evidence.state,'fail');assert.ok(!JSON.stringify(evidence).includes(root));
+  }
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

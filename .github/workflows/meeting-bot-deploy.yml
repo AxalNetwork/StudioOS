@@ -38,13 +38,20 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: node scripts/build-meeting-bot-image.mjs
+      - name: Validate owner-approved preview configuration before deployment
+        env:
+          MEETING_BOT_PREVIEW_SECRET: ${{ secrets.MEETING_BOT_PREVIEW_SECRET }}
+          MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
+          MEETING_BOT_PREVIEW_ROUTE_VERIFIED: ${{ vars.MEETING_BOT_PREVIEW_ROUTE_VERIFIED }}
+        run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs --preflight
       - name: Deploy preview bot host only
         env:
+          MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
         run: |
-          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview --var "MEETING_BOT_VERSION:${GITHUB_SHA}"
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview --var "MEETING_BOT_VERSION:${GITHUB_SHA}" --var "PREVIEW_CANARY_ENABLED:on" --var "PREVIEW_CANARY_ORIGIN:${MEETING_BOT_PREVIEW_ORIGIN}"
       - name: Verify deployed preview callback before normal promotion
         env:
           MEETING_BOT_PREVIEW_SECRET: ${{ secrets.MEETING_BOT_PREVIEW_SECRET }}
