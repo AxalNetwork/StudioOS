@@ -191,7 +191,8 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
    inherited failure.** Merge `main` only for your own conflict, or once main
    is green again and your PR needs a fresh run.
 4. **Never re-run a failed workflow for an inherited failure.** The gate
-   job's summary says which it is (`scripts/ci-classify.mjs`):
+   job's summary and the CI failure digest comment say which it is
+   (`scripts/ci-classify.mjs`, `<!-- studioos-ci-digest:v1 -->`):
    - `inherited_main_failure`: every failed part is red on main too. Do
      nothing to the PR.
    - `pr_failure`: at least one part is yours. Fix it.

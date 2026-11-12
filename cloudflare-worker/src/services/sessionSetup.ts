@@ -64,6 +64,7 @@ export function callRefusal(channel: string, provider: string | null, meetingUrl
   let url: URL;
   try { url = new URL(meetingUrl); } catch { return 'That meeting link is not a web address.'; }
   if (url.protocol !== 'https:') return 'A meeting link must start with https://.';
+  if (url.username || url.password) return 'Use a meeting link without a username or password.';
   if (!hostOk(url.hostname.toLowerCase())) return `That link is not a ${PROVIDER_NAMES[provider]} link.`;
   return null;
 }
