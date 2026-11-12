@@ -211,3 +211,29 @@ test('source discrepancy intervals are itemized separately and never invent a co
   try { const result = await relay.poll(); assert.equal(result.gaps.accepted, 1); f.advance(300001); await f.drain(box); const text = f.sent.map(s => s.text).join('\n'); assert.match(text, /missing-record-count:unknown/); assert.match(text, /gap:actions:2026/); assert.equal(cursors.get('publication-gaps:v1:public'), 1); }
   finally { f.db.close(); }
 });
+
+test('controlled action next steps and GitHub fallback ownership are visible without inferring a Slack identity', () => {
+  const item = prepare(event(1, 'failure'), { ...action(), githubOwner: 'author', nextStep: 'read_pr_owned_digest', cause: 'mixed_pr_and_shared' });
+  const text = row(item); assert.match(text, /owner:github:author/); assert.match(text, /next:Read PR-owned CI digest/); assert.match(text, /cause:mixed PR and shared failure/); assert.doesNotMatch(text, /<@/);
+  const bad = prepare(event(2), { ...action(), githubOwner: '<@UATTACK>', nextStep: '<!channel>', cause: 'failure https://evil.example' }); assert.equal(bad.githubOwner, null); assert.equal(bad.nextStep, null); assert.equal(bad.cause, null);
+});
+
+test('durable failure categories remain specific and exclude arbitrary provider error content', async () => {
+  const f = fixture(), box = f.make();
+  try {
+    box.enqueue(event(1, 'failure'), action()); f.fail({ state: 'dead', code: 'workspace_mismatch' }); await box.tick(); assert.equal(box.get('subject:o/r:pr:3:prs').code, 'workspace_mismatch');
+    box.enqueue(event(2, 'failure'), { ...action(2), subject: 'pr:4' }); f.advance(1000); f.fail({ state: 'dead', code: 'private provider body' }); await box.tick(); assert.equal(box.get('subject:o/r:pr:4:prs').code, 'destination_refused'); assert.doesNotMatch(JSON.stringify(box.get('subject:o/r:pr:4:prs')), /private provider body/);
+  } finally { f.db.close(); }
+});
+
+test('label boundary admits only quoted data and rejects markup, entity tricks and active URLs', () => {
+  const item = prepare({ ...event(1), labels: ['<@UATTACK>', '<!channel>', '&lt;!channel&gt;', 'https://evil.example', '*bold*', '`break`', '_safe_'] });
+  assert.deepEqual(item.labels, ['_safe_']); const text = row(item); assert.match(text, /`_safe_`/); assert.doesNotMatch(text, /UATTACK|!channel|evil\.example|&lt;|bold|break/);
+});
+
+test('candidate, landed and requested deployment SHA roles remain distinct in activity', () => {
+  for (const [field, role] of [['candidate','candidate'], ['landed','landed'], ['deploymentTarget','deployment-target']]) {
+    const text = row(prepare({ ...event(1), refs: { [field]: 'c'.repeat(40) }, ids: { deployment: '60', prs: [] } }));
+    assert.ok(text.includes(`${role}:cccccccccccc`)); assert.match(text, /https:\/\/api\.github\.com\/repos\/o\/r\/deployments\/60/);
+  }
+});

@@ -102,7 +102,11 @@ export class SlackOutbox {
         else if (outcome?.state === 'retry') {
           const delay = Math.max(1000, Math.min(86_400_000, Number(outcome.retryAfterMs) || 1000 * 2 ** started.attempts)) + this.jitter();
           this.save(value.key, { ...started, code: ['rate_limited', 'provider_unavailable', 'not_configured', 'preflight_unavailable'].includes(outcome.code) ? outcome.code : 'provider_unavailable' }, started.attempts >= 5 ? 'dead' : 'retry', this.now() + delay);
-        } else this.save(value.key, { ...started, code: outcome?.state === 'dead' ? 'destination_refused' : 'transport_outcome_unknown' }, outcome?.state === 'dead' ? 'dead' : 'ambiguous');
+        } else {
+          const allowed = ['destination_refused', 'workspace_mismatch', 'channel_access_mismatch', 'receipt_invalid', 'response_invalid', 'accepted_outcome_unknown', 'transport_outcome_unknown'];
+          const code = allowed.includes(outcome?.code) ? outcome.code : outcome?.state === 'dead' ? 'destination_refused' : 'transport_outcome_unknown';
+          this.save(value.key, { ...started, code }, outcome?.state === 'dead' ? 'dead' : 'ambiguous');
+        }
         return { state: this.get(value.key).state, key: value.key };
       }
       return { state: 'idle' };

@@ -22,7 +22,7 @@ export class DeliveryActor extends DurableObject {
   }
   async wake() { const next = this.outbox.nextWake(); if (next !== null && this.env.DELIVERY_ENABLED === 'true') await this.ctx.storage.setAlarm(next); return this.outbox.summary(); }
   async summary() { return this.outbox.summary(); }
-  async receipt(key) { const row = this.outbox.get(key); return row ? { key, state: row.state, receipt: row.receipt } : { key, state: 'unknown' }; }
+  async receipt(key) { const row = this.outbox.get(key); return row ? { key, state: row.state, receipt: row.receipt, code: row.code || null, attempts: row.attempts } : { key, state: 'unknown' }; }
   async alarm() {
     if (this.env.DELIVERY_ENABLED !== 'true') return;
     const result = await this.outbox.tick();
