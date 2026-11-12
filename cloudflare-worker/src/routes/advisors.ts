@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { getCurrentUser, requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { PROFILE_LIMITS, boundedList, boundedText, hourlyRate } from '../services/advisorLimits';
+import { AdvisorValidationError, PROFILE_LIMITS, boundedList, boundedText, hourlyRate } from '../services/advisorLimits';
 import { railFor, refuseRun } from '../util/railContext';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { MATCH_DEPS, MatchRefused, matchRows } from '../services/ai/matchRows';
@@ -283,6 +283,20 @@ function mergeProfileFields(existing: AdvisorRow | null, body: any) {
   };
 }
 
+function profileWriteFields(existing: AdvisorRow | null, body: Record<string, any>, fallbackName: string) {
+  const has = (key: string) => Object.hasOwn(body, key);
+  const display_name = has('display_name') || !existing
+    ? boundedText('display_name', body.display_name || fallbackName, PROFILE_LIMITS.display_name)
+    : existing.display_name;
+  if (!display_name) throw new AdvisorValidationError('display_name_required', 'A profile needs a display name.');
+  const bio = has('bio') ? boundedText('bio', body.bio, PROFILE_LIMITS.bio) : (existing?.bio ?? null);
+  const linkedin_url = has('linkedin_url') ? boundedText('linkedin_url', body.linkedin_url, PROFILE_LIMITS.linkedin_url) : (existing?.linkedin_url ?? null);
+  const hourly_rate_usd = has('hourly_rate_usd') ? hourlyRate(body.hourly_rate_usd) : (existing?.hourly_rate_usd ?? null);
+  const expertise_json = has('expertise') ? JSON.stringify(boundedList('expertise', body.expertise)) : (existing?.expertise_json ?? '[]');
+  const sectors_json = has('sectors') ? JSON.stringify(boundedList('sectors', body.sectors)) : (existing?.sectors_json ?? '[]');
+  return { display_name, bio, linkedin_url, hourly_rate_usd, expertise_json, sectors_json, ...mergeProfileFields(existing, body) };
+}
+
 /**
  * D4670 (#4670): only an Advisor (a primary or an additional licence, D4472)
  * or an admin may create or change an advisor profile. Before, a founder's
@@ -304,16 +318,8 @@ advisors.post('/me', async (c) => {
     // fields cannot overwrite one another, and a `revision` makes an edit to the
     // same record conditional on it not having moved since it was read.
     const has = (k: string) => k in body;
-    const display_name = has('display_name') || !existing
-      ? boundedText('display_name', body.display_name || user.name || user.email, PROFILE_LIMITS.display_name)
-      : existing.display_name;
-    if (!display_name) return refuse(c, 400, { code: 'display_name_required', message: 'A profile needs a display name.' });
-    const bio = has('bio') ? boundedText('bio', body.bio, PROFILE_LIMITS.bio) : (existing?.bio ?? null);
-    const linkedin_url = has('linkedin_url') ? boundedText('linkedin_url', body.linkedin_url, PROFILE_LIMITS.linkedin_url) : (existing?.linkedin_url ?? null);
-    const hourly_rate_usd = has('hourly_rate_usd') ? hourlyRate(body.hourly_rate_usd) : (existing?.hourly_rate_usd ?? null);
-    const expertise_json = has('expertise') ? JSON.stringify(boundedList('expertise', body.expertise)) : (existing?.expertise_json ?? '[]');
-    const sectors_json = has('sectors') ? JSON.stringify(boundedList('sectors', body.sectors)) : (existing?.sectors_json ?? '[]');
-    const p = mergeProfileFields(existing, body);
+    const { display_name, bio, linkedin_url, hourly_rate_usd, expertise_json, sectors_json, ...p } =
+      profileWriteFields(existing, body, user.name || user.email);
     const now = nowIso();
     if (existing) {
       const revision = sentRevision(body);
@@ -376,6 +382,96 @@ advisors.post('/me', async (c) => {
     const fresh = await loadAdvisorById(c.env, newId);
     return c.json(advisorDto(fresh!));
   } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
+});
+
+type ProfileDraftRow = { revision: string; base_revision: string; fields_json: string; updated_at: string };
+
+function loadProfileDraft(env: Env, advisorId: number) {
+  return env.DB.prepare('SELECT revision, base_revision, fields_json, updated_at FROM advisor_profile_drafts WHERE advisor_id = ?')
+    .bind(advisorId).first<ProfileDraftRow>();
+}
+
+function profileDraftDto(row: ProfileDraftRow, published: AdvisorRow) {
+  const { fields_json, ...metadata } = row;
+  return { ...metadata, stale: row.base_revision !== published.updated_at,
+    profile: advisorDto({ ...published, ...JSON.parse(fields_json) }) };
+}
+
+const DRAFT_CHANGED = { code: 'profile_draft_conflict', message: 'The profile or draft changed. Reopen the draft before continuing.' } as const;
+const DRAFT_STALE = { code: 'profile_draft_stale', message: 'The published profile changed after this draft was saved. Discard the draft to start from the current profile.' } as const;
+
+advisors.get('/me/profile-draft', async (c) => {
+  try {
+    const advisor = await requireMyAdvisor(c, await requireAuth(c));
+    const row = await loadProfileDraft(c.env, advisor.id);
+    return c.json({ draft: row ? profileDraftDto(row, advisor) : null });
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.patch('/me/profile-draft', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const advisor = await requireMyAdvisor(c, user);
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return refuse(c, 400, { code: 'profile_draft_required', message: 'Send the profile fields you want to save.' });
+    }
+    const current = await loadProfileDraft(c.env, advisor.id);
+    const expected = sentRevision(body);
+    if ((current?.revision ?? null) !== expected) return refuse(c, 409, DRAFT_CHANGED);
+    if (current && current.base_revision !== advisor.updated_at) return refuse(c, 409, DRAFT_STALE);
+    const source = current ? { ...advisor, ...JSON.parse(current.fields_json) } : advisor;
+    const fields = profileWriteFields(source, body, user.name || user.email);
+    const draft = { revision: newUid(), base_revision: advisor.updated_at,
+      fields_json: JSON.stringify(fields), updated_at: nowIso() };
+    const saved = await c.env.DB.prepare(
+      `INSERT INTO advisor_profile_drafts (advisor_id, revision, base_revision, fields_json, updated_at)
+       SELECT id, ?, updated_at, ?, ? FROM advisors
+        WHERE id = ? AND user_id = ? AND updated_at IS ?
+          AND (? IS NULL OR EXISTS (
+            SELECT 1 FROM advisor_profile_drafts d WHERE d.advisor_id = advisors.id AND d.revision = ?
+          ))
+       ON CONFLICT(advisor_id) DO UPDATE SET revision = excluded.revision, fields_json = excluded.fields_json,
+         updated_at = excluded.updated_at WHERE advisor_profile_drafts.revision IS ?`
+    ).bind(draft.revision, draft.fields_json, draft.updated_at, advisor.id, user.id, advisor.updated_at,
+      expected, expected, expected).run();
+    if (!saved.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
+    return c.json({ draft: profileDraftDto(draft, advisor) });
+  } catch (e) { return validationRefusal(c, e) ?? mapError(c, e); }
+});
+
+advisors.post('/me/profile-draft/publish', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const advisor = await requireMyAdvisor(c, user);
+    const revision = sentRevision(await c.req.json().catch(() => null));
+    const draft = await loadProfileDraft(c.env, advisor.id);
+    if (!draft || revision !== draft.revision) return refuse(c, 409, DRAFT_CHANGED);
+    if (draft.base_revision !== advisor.updated_at) return refuse(c, 409, DRAFT_STALE);
+    const now = nowIso();
+    const publishedAt = now === advisor.updated_at ? new Date(Date.parse(now) + 1).toISOString() : now;
+    const result = await c.env.DB.prepare(
+      `UPDATE advisor_profile_drafts SET publish_requested_at = ?
+        WHERE advisor_id = ? AND revision = ? AND EXISTS (
+          SELECT 1 FROM advisors a WHERE a.id = advisor_profile_drafts.advisor_id
+            AND a.user_id = ? AND a.updated_at IS advisor_profile_drafts.base_revision
+        )`
+    ).bind(publishedAt, advisor.id, revision, user.id).run();
+    if (!result.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
+    const published = await loadAdvisorById(c.env, advisor.id);
+    return c.json(advisorDto(published!));
+  } catch (e) { return mapError(c, e); }
+});
+
+advisors.delete('/me/profile-draft', async (c) => {
+  try {
+    const advisor = await requireMyAdvisor(c, await requireAuth(c));
+    const revision = sentRevision(await c.req.json().catch(() => null));
+    const result = await c.env.DB.prepare('DELETE FROM advisor_profile_drafts WHERE advisor_id = ? AND revision = ?')
+      .bind(advisor.id, revision).run();
+    if (!result.meta.changes) return refuse(c, 409, DRAFT_CHANGED);
+    return c.json({ draft: null });
+  } catch (e) { return mapError(c, e); }
 });
 
 // ---------------------------------------------------------------------------
