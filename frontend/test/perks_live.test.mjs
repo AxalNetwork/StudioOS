@@ -161,7 +161,7 @@ test('a partner route 404s for a listing they do not own', () => {
 test('no caller-controlled string can reach a column name', () => {
   // The PATCH handler interpolates `sets.join(', ')` into the query TEXT,
   // where no binding protects it, and that is recorded in
-  // scripts/sql-prepare-baseline.json as a reviewed-safe site. It is only
+  // scripts/baselines/sql-prepare/ as a reviewed-safe site. It is only
   // safe while every column name is a literal — so that is the thing to pin,
   // not the reviewer's memory of having checked it once.
   const s = read(ROUTE);
