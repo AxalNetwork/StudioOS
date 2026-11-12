@@ -186,6 +186,9 @@ export function heldNow(reply) {
  * at all (`hideUnavailable`) or, for a read on main, "Could not be read".
  */
 export function deckRail(deckId = null) {
+  // D4599: no deck yet (the versions read has not answered, or there is none) is no usage to read.
+  // `/decks/null/usage` was asked three times on every Overview load and 404'd each time.
+  const deckUsageRead = () => (deckId == null ? Promise.resolve(unavailable(SURFACES.deckUsage.issue)) : deckUsage(deckId));
   return {
     page: DECK_RAIL_PAGE,
     items: railItems(deckId),
@@ -199,12 +202,12 @@ export function deckRail(deckId = null) {
           return v == null ? { available: false, unreadable: true } : { available: true, value: v };
         }),
       },
-      { id: 'estimated', label: 'Estimated for this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => usageRow(a, 'estimated')) },
-      { id: 'spent', label: 'Spent on this deck', hideUnavailable: true, read: () => deckUsage(deckId).then((a) => usageRow(a, 'spent')) },
+      { id: 'estimated', label: 'Estimated for this deck', hideUnavailable: true, read: () => deckUsageRead().then((a) => usageRow(a, 'estimated')) },
+      { id: 'spent', label: 'Spent on this deck', hideUnavailable: true, read: () => deckUsageRead().then((a) => usageRow(a, 'spent')) },
       {
         id: 'units', label: 'Your balance in plain units', hideUnavailable: true,
         read: async () => {
-          const a = await deckUsage(deckId);
+          const a = await deckUsageRead();
           if (!a?.available) return a;
           try {
             const line = plainUnits((await aiBudgetApi.mine())?.balance_microusd, a.value?.units);
