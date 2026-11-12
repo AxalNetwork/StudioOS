@@ -162,3 +162,5 @@ the main CI gate: the prior 30-minute limit cancelled a run during final lint.
 No trigger, permission, secret or check changes.
 
 D5566: `workspace-image.yml` checks the separate disabled coding candidate, actual local Docker fixtures and pinned SBOM/vulnerability evidence on relevant PRs; it never publishes or deploys.
+
+| `workspace-image.yml` | D5566: separate disabled coding candidate, actual Docker fixtures and pinned vulnerability/SBOM evidence; never publishes or deploys. |
