@@ -91,10 +91,10 @@ test('invalid, inaccessible and mismatched person contexts are refused before pr
     assert.equal(mismatch.status, 409);
     assert.equal(mismatch.body.error, 'draft_person_mismatch');
     assert.equal(f.deliveries.length, 0);
-    const key = 'person-bound-operation-4662';
-    assert.equal((await send(f, { operation_key: key })).status, 201);
-    assert.equal((await send(f, { operation_key: key })).status, 200);
-    assert.equal((await send(f, { operation_key: key, person: 'interviewee:12' })).status, 409);
+    const operationId = crypto.randomUUID();
+    assert.equal((await send(f, { operation_key: operationId })).status, 201);
+    assert.equal((await send(f, { operation_key: operationId })).status, 200);
+    assert.equal((await send(f, { operation_key: operationId, person: 'interviewee:12' })).status, 409);
     assert.equal(f.deliveries.length, 1, 'a replay never delivers again or moves the message');
     assert.equal((await history(f)).body.total, 1);
     assert.equal((await history(f, 'interviewee:12')).body.total, 0);
