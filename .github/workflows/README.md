@@ -174,3 +174,4 @@ artifacts and compact name outputs. Missing main timings use equal weights.
 `release-rehearsal.yml` (D5501) checks release admission fixtures and profiles
 its exact Worker candidate on a disposable Linux runner using isolated workerd.
 It uses synthetic queue responses and has no production credentials.
+| `cloudflare-heartbeat-5671.yml` | D5671: disabled-by-default fixed-period fallback check; no PR secrets or per-event job. |

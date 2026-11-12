@@ -19,3 +19,9 @@ Read [D5664](../documentation/architecture/decisions/D5664.md) before rollout.
 | `snapshots.mjs` | D5664: GET-only PR/review/issue/check/status/deployment/release/ref/claim recovery with explicit unrecoverable gaps. |
 
 | `wrangler.security.jsonc` | D5664: separately disabled security Worker/Queue/ledger proposal; normal ingress cannot accept security events. |
+| `cloudflare-receiver-5671.mjs` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
+| `cloudflare-outbox-5671.mjs` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
+| `cloudflare-transport-5671.mjs` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
+| `cloudflare-worker-5671.mjs` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
+| `wrangler.cloudflare-5671.jsonc` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
+| `cloudflare-heartbeat-5671.mjs` | D5671: bounded private status reads and missed-schedule/undelivered-age evaluation. |

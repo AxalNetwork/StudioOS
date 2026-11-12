@@ -297,3 +297,4 @@ binding targets and branch isolation.
 | `health-alert-episodes.mjs` | D5663: paginated health episodes with persistent transition delivery intents. |
 
 | `health-alert-transport.mjs` | D5663: explicit legacy webhook receipts, retries and uncertain delivery. |
+| `cloudflare-heartbeat-5671.mjs` | D5671: fixed-message read-only independent GitHub heartbeat check. |
