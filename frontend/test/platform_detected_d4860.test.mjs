@@ -26,7 +26,8 @@ import {
 } from '../src/pages/hq/platformOverviewModel.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const NOW = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+// The page reads the real clock itself, so every fixture stamp is relative to this minute.
+const NOW = new Date(Math.floor(Date.now() / 60_000) * 60_000); // clock-ok: relative
 const ago = (minutes) => new Date(NOW.getTime() - minutes * 60_000).toISOString().slice(0, 19).replace('T', ' ');
 const U = Symbol('unavailable');
 const RUNBOOK = 'documentation/operations/PLATFORM_OBSERVABILITY.md';
