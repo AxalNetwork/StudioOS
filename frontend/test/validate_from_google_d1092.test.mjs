@@ -14,6 +14,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import ValidateFromGoogle, { COLUMNS, rowsOf, syncSentence } from '../src/pages/cycles/ValidateFromGoogle.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const response = (body, status = 200) => ({ ok: status < 400, status, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
@@ -220,7 +221,7 @@ test('the states: a teammate or a support session reads why, a company not allow
 });
 
 test('the source: mounted on the three modules, no pop-up, no respondent field read, every light hover paired', () => {
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = cycleRouteText();
   for (const m of ['customer_research', 'demand_signals', 'experiments']) {
     assert.match(route, new RegExp(`<ValidateFromGoogle part=\\{data\\?\\.parts\\?\\.from_google\\} module="${m}" projectId=\\{ctx\\.projectId\\} reload=\\{ctx\\.reload\\} />`), m);
   }

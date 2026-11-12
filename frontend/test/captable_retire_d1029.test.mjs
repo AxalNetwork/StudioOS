@@ -29,6 +29,7 @@ import { MOVED_NOTICES, TABS } from '../src/pages/raise/captable/capTableModel.j
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const root = resolve(process.cwd());
@@ -216,7 +217,7 @@ test('the old doors land in the tool: the zone actions, the cycle doors and the 
   const zone = read('frontend/src/workspaces/founderZoneActions.js');
   assert.match(zone, /\{ label: 'Export to Carta', to: '\/raise\/cap-table\/import-export'/);
   assert.match(zone, /\{ label: 'Add instrument', to: '\/raise\/cap-table\/instruments' \}/);
-  const cycle = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const cycle = cycleRouteText();
   assert.match(cycle, /'founding-team': \(q\) => \(\{ label: 'Open the cap table and vesting', href: `\/raise\/cap-table\$\{q \|\| ''\}` \}\)/);
   assert.doesNotMatch(cycle, /'cap-table': \(\) => \(\{ label: 'Open the cap table'/, 'the module page has no door to itself');
   assert.match(read('frontend/src/pages/ProjectDetail.jsx'), /to=\{`\/raise\/cap-table\?project_id=\$\{project\.id\}`\}/);
