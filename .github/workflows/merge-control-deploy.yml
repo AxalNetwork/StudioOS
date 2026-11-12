@@ -1,0 +1,36 @@
+name: Merge Control deploy
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'merge-control/**'
+      - 'wrangler.merge-control.toml'
+      - '.github/workflows/merge-control-deploy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: merge-control-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.MERGE_CONTROL_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: npm ci --prefix cloudflare-worker
+      - name: Package and deploy only Merge Control
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.MERGE_CONTROL_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          cloudflare-worker/node_modules/.bin/tsc -p merge-control/tsconfig.json
+          cloudflare-worker/node_modules/.bin/wrangler deploy --dry-run --config wrangler.merge-control.toml
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.merge-control.toml
