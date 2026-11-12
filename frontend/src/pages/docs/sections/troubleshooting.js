@@ -149,16 +149,16 @@ export default {
       id: 'contact-support',
       title: 'Contact support',
       overview:
-        "Support is available via the Tickets page in-app and via email. Response times depend on your plan; the team is fastest on weekdays during business hours but covers urgent items 24/7 for enterprise plans.",
+        "Members can open a ticket from Help → Your tickets. Ordinary tickets and replies may be mirrored into a public GitHub tracker and are visible to administrators. Use the separate private security channel for vulnerability reports; never put sensitive evidence in an ordinary ticket. Response times are not guaranteed here.",
       howto: [
-        'Open Tickets from the sidebar to file a new ticket.',
-        'Pick a category (Bug, How-to, Billing, Security, Other).',
-        'Describe what you tried and what you expected; attach a screenshot if you can.',
-        'For urgent security issues, email security@axal.vc directly.',
+        'If signed out, open /help for public guidance; sign in to open /help/tickets?new=1 for account-specific help.',
+        'Choose a required Type: Task, Bug or Feature. Optionally choose one of eight Categories: Fund administration, Contracts, Access & permissions, Licence & seats, Billing, Data & reporting, Onboarding, or Other.',
+        'Describe the problem, expected behavior and affected page without secrets, account records or confidential attachments. The ticket form has no file-upload control.',
+        'For a vulnerability, do not open a ticket: use the private GitHub Security Advisory at https://github.com/AxalNetwork/StudioOS/security/advisories/new or follow /trust/disclosure.',
       ],
       tips: [
-        'Including the URL where the issue happened cuts triage time in half.',
-        'Screenshots beat descriptions every time — drop them in the ticket.',
+        'Share the affected route and nonsensitive steps to reproduce so support can investigate.',
+        'Ordinary ticket replies can follow the linked tracker; use the private advisory for sensitive screenshots or evidence.',
       ],
       pitfalls: [
         'Filing the same ticket twice fragments the conversation — update the original instead.',

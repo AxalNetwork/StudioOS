@@ -195,3 +195,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `cloudflare_delivery_5671.test.mjs` | D5671: authenticated source, isolation, replay, paging, sharing and Workers restart. |
 | `platform_policy_5672.test.mjs` | D5672: sensor states, denominator, persistence prerequisites and episode recovery. |
 | `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
+| `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |

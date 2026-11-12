@@ -73,3 +73,6 @@ The Axal starter skill library: twelve HQ skills, one SKILL.md file each, in
 per skill in `skills/cases/<slug>.json` for part D (#3954). Content only:
 A1 (#3951) seeds them into `agent_skills` and `agent_skill_versions`.
 `cloudflare-worker/test/agent_skill_library_d1612.test.ts` holds every file to the catalogue.
+| `workspaceSpec.ts` | D5565: closed broker-created workspace specification, executor interface, typed capability refusals and normalized transition rules. |
+| `runnerProtocol.ts` | D5565: host-independent per-run lease/heartbeat/fencing/completion protocol over an injected atomic store; no mount or task dispatch. |
+| `workspaceSecurity.ts` | D5567: broker-only scope/image/provider gates, audience/generation/nonce grants and server-mediated tenant-bound AES-GCM artifacts; unmounted. |

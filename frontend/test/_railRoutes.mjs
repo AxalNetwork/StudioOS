@@ -21,6 +21,8 @@ const HELPERS = { founderWorkspace: 'FounderWorkspacePage', investorWorkspace: '
 const NOT_COMPONENTS = new Set(['Route', 'Navigate', 'Suspense', 'Fragment']);
 /** The member roles `authOnly` admits (any signed-in member). */
 const AUTH_ONLY_ROLES = ['founder', 'investor', 'advisor', 'partner', 'admin', 'exploring'];
+// D5721: public Help still admits every member profile whose rail key the census must check.
+const PUBLIC_HELP_ROUTES = new Set(['/help', '/help/:area/:guide']);
 
 function resolveImport(from, spec) {
   if (!spec.startsWith('.')) return null;
@@ -93,7 +95,7 @@ export function railRoutes() {
       let roles = [...new Set([...body.matchAll(/(?:guard|labRoles)\(\s*\[([^\]]*)\]/g)]
         .flatMap((m) => m[1].split(',').map((x) => x.trim().replace(/['"]/g, '')).filter(Boolean)))];
       // D1408: `authOnly(…)` admits every signed-in member, so its rail is keyed for each profile.
-      if (!roles.length && /\bauthOnly\(/.test(body)) roles = [...AUTH_ONLY_ROLES];
+      if (!roles.length && (/\bauthOnly\(/.test(body) || PUBLIC_HELP_ROUTES.has(pm[1]))) roles = [...AUTH_ONLY_ROLES];
       rows.push({ path: pm[1], roles, rail: names.some((n) => comp.get(n) && reachesRail(comp.get(n))) });
     }
   }

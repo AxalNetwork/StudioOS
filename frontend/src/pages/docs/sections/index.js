@@ -62,6 +62,17 @@ export const SECTIONS = [
   admin,
 ];
 
+// D4637 (#4637): these account-independent guides are approved for
+// anonymous readers. An untagged member guide is NOT implicitly public.
+export const PUBLIC_HELP_ANCHORS = new Set([
+  'getting-started/what-is-studioos',
+  'getting-started/roles',
+  'getting-started/onboarding',
+  'getting-started/help-and-shortcuts',
+  'account/auth-recovery',
+  'troubleshooting/contact-support',
+]);
+
 // Legacy in-manifest search index. Kept for backwards compatibility
 // with anything still importing buildSearchIndex from this module;
 // new callers should use `frontend/src/lib/docs/search.js` which
@@ -75,11 +86,13 @@ export const SECTIONS = [
 // rail doesn't render an empty group.
 export function filterSectionsForRole(sections, role) {
   const r = String(role || '').toLowerCase();
+  const publicOnly = r === 'public';
   const out = [];
   for (const section of sections) {
     if (Array.isArray(section.roles) && !section.roles.includes(r)) continue;
     const subs = section.subsections.filter(
-      (sub) => !Array.isArray(sub.roles) || sub.roles.includes(r),
+      (sub) => (!publicOnly || PUBLIC_HELP_ANCHORS.has(`${section.id}/${sub.id}`))
+        && (!Array.isArray(sub.roles) || sub.roles.includes(r)),
     );
     if (subs.length === 0) continue;
     out.push({ ...section, subsections: subs });

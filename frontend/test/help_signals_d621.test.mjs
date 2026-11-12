@@ -216,8 +216,8 @@ const layout = codeOnly(read('frontend/src/pages/docs/DocsLayout.jsx'));
 const signals = codeOnly(read('frontend/src/pages/docs/HelpSignals.jsx'));
 
 test('the layout mounts each part where the canvas draws it, and the admin card for an admin only', () => {
-  assert.match(layout, /\{!trimmedQuery && <PopularGuides sections=\{visibleSections\} \/>\}/,
-    'popular sits under the browse grid, not under search results');
+  assert.match(layout, /\{!trimmedQuery && user && <PopularGuides sections=\{visibleSections\} \/>\}/,
+    'popular guides appear for signed-in readers browsing the catalogue');
   assert.match(layout, /\{role === 'admin' && <GuideAnswersAdmin sections=\{visibleSections\} \/>\}/);
   assert.match(layout, /<GuideFeedback anchor=\{`\$\{section\.id\}\/\$\{sub\.id\}`\} \/>/);
   const article = layout.slice(layout.indexOf('function HelpArticle('), layout.indexOf('function HelpHome('));

@@ -153,12 +153,12 @@ export const COMPARE = Object.freeze({
 
 export const HERO = Object.freeze({
   title: 'Pricing',
-  line: 'Pay for the cycles you are in. AI is included with every plan, and you can top up as you go.',
+  line: 'Pay for the cycles you are in. Eligible paid plans include an AI allowance; Free users can add AI tokens to use supported models.',
 });
 
 export const AI_BAND = Object.freeze({
-  kick: 'AI on every plan',
-  text: "Each plan includes 25% of its price as AI tokens every month. Past that, top up AI tokens as you go. You don't need a plan to top up.",
+  kick: 'AI access and usage are separate',
+  text: "Paid plans include a monthly AI allowance calculated from the billed subscription amount. Free plans include no funded AI allowance: AI runs require purchased AI tokens. Purchased tokens remain separate from your plan allowance.",
   link: 'See model prices',
 });
 
@@ -211,12 +211,17 @@ export const TOKENS_BAND = Object.freeze({
 
 /** The FAQ. "Can I set a spending limit?" names D788's monthly spend limit (Account › Usage › Limits). */
 export const FAQ = Object.freeze([
-  ['What are AI tokens?', 'AI tokens pay for AI runs in StudioOS. Each run is priced on the model that ran it, at the rates on the Models tab. Your plan includes some every month, and you can top up at any time.'],
+  ['What are AI tokens?', 'Purchased AI tokens pay for supported AI runs. An eligible paid subscription separately includes a monthly AI allowance; a Free plan has no included funded AI allowance. Each run draws from applicable allowance first and then your token balance.'],
   ['Are AI tokens the same as Perks credits?', 'No. Perks credits are claimed for perks from partners. AI tokens pay for AI runs. Neither can be spent as the other.'],
   ['What happens when my allowance runs out?', 'Runs draw on the AI tokens you have bought. If you have none, AI runs wait until you top up or your allowance resets on the 1st. Everything else keeps working.'],
   ['Can I set a spending limit?', 'Yes. Set a monthly spend limit in Account › Usage › Limits. AI never spends more than your monthly allowance and the tokens you have bought, and Account › Usage shows your allowance, your use and your balance, run by run.'],
   ['Do unused tokens expire?', 'Tokens you buy never expire. Your plan’s monthly allowance resets on the 1st and does not carry over.'],
-  ['How do refunds work?', 'Plan payments and token purchases follow the terms shown at checkout. Ask us through Contact if a purchase went wrong.'],
+  ['How do refunds work?', 'Refunds are not automatic: the effective Terms and applicable law govern each purchase, and the checkout terms may differ for subscriptions and one-time token packs. If you believe a payment was wrong or a required legal right applies, contact Axal VC with the transaction reference before retrying the payment.'],
+  ['How does annual billing affect my AI allowance?', 'The plan card displays the full amount billed for the year, not just its monthly equivalent. The included AI allowance is a monthly amount and can be lower under yearly billing than monthly billing; compare the two catalogue-backed figures shown with each available plan before checkout.'],
+  ['When does my subscription renew or stop?', 'Check the renewal date, amount and interval in the checkout quote and Account → Billing. Where available, you can schedule cancellation for the end of the paid period in Account → Billing. The effective Terms also describe written cancellation before renewal; if the account control is unavailable, contact Axal VC in writing in time. Confirm the recorded cancellation outcome.'],
+  ['What if I downgrade, cancel or a payment fails?', 'Check the effective licence status in Account → Billing. Paid-only features may stop at the applicable period end or after a payment failure; existing documents, invitations and shared links remain subject to their own access rules. Do not assume continued access or deletion until the relevant records and terms are verified.'],
+  ['What currency and taxes will I pay?', 'The current checkout quote displays the billing currency, charge and any applicable taxes for the selected product and location. A plan card is not a tax assessment. Platform fees are separate from separately contracted investment or fund fees.'],
+  ['What about AI allowance resets and tokens?', 'Included monthly allowance is not a purchased token balance: it resets on the 1st of the calendar month and does not roll over. Purchased AI tokens do not expire. If an AI run or top-up has an unknown outcome, review Account → Usage and transaction history before repeating it.'],
 ]);
 
 /** The Investor tab's three questions, asked first. */
