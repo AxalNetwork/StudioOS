@@ -107,8 +107,8 @@ export default function RecordCompose({ pack, refs, project = null, to, account,
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const key = operation.current.keyFor([account.uid, address.trim(), subject, body, placed?.uid ?? null, introUid ?? null]);
-      const r = await api.send({ account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), operation_key: key, nonce });
+      const key = operation.current.keyFor([person.ref, account.uid, address.trim(), subject, body, placed?.uid ?? null, introUid ?? null]);
+      const r = await api.send({ person: person.ref, account_uid: account.uid, to: address.trim(), subject, body, ...(placed ? { draft_uid: placed.uid } : {}), ...(introUid ? { intro_uid: introUid } : {}), operation_key: key, nonce });
       setConfirm(false);
       const out = readOutcome(r);
       if (out.state === 'accepted') { operation.current.forget(); setPlaced(null); onSent?.(out.sent); }

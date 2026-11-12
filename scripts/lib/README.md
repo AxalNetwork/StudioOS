@@ -43,6 +43,7 @@ can be read to find out what a rule actually is.
 | `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
 | `runnerBenchmark.mjs` | D5611: runner-lane timing/cost summaries, provenance and explicit paid-benchmark gates. |
 | `runnerBenchmark.test.mjs` | D5611: measurement fixtures, unavailable evidence and lane-gate regressions. |
+| `landingThroughput.mjs` | D5623: native/batch capacity arithmetic, binary-bisection cost and strict 14-day decision trigger; `landingThroughput.test.mjs` checks arithmetic, evidence and table parity. |
 | `workerStartup.test.mjs` | D5532: startup budget, profile accounting and Wrangler bundle identity fixtures. |
 | `productionAdmission.test.mjs` | D5501: trust, failure and supersession fixtures and mutation ordering in the release workflows. |
 | `selectTests.mjs` | D5610: conservative affected-test selection, honest shadow scoring and aggregate reporting; tests in `selectTests.test.mjs`. |

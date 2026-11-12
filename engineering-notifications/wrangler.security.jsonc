@@ -1,0 +1,69 @@
+{
+  "$schema": "../cloudflare-worker/node_modules/wrangler/config-schema.json",
+  "name": "studioos-engineering-security",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-12",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.01
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LEDGER",
+        "class_name": "EngineeringLedger"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "EngineeringLedger"
+      ]
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "EVENTS",
+        "queue": "studioos-engineering-security"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "studioos-engineering-security",
+        "max_batch_size": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "studioos-engineering-security-dead"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "vars": {
+    "CAPTURE_ENABLED": "false",
+    "RECONCILE_ENABLED": "false",
+    "REPOSITORY": "AxalNetwork/StudioOS",
+    "REPOSITORY_ID": "",
+    "INSTALLATION_ID": "",
+    "SECURITY_INSTALLATION_ID": "",
+    "REPOSITORY_VISIBILITY": "public",
+    "SECURITY_MODE": "true",
+    "ALLOWED_EVENTS": "[\"code_scanning_alert\", \"secret_scanning_alert\", \"secret_scanning_alert_location\", \"dependabot_alert\", \"repository_vulnerability_alert\"]",
+    "INGRESS_LIMIT_PER_MINUTE": "1000"
+  }
+}
