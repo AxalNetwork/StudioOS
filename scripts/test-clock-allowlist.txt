@@ -110,6 +110,7 @@ date cloudflare-worker/test/channels_meeting_attach_d685.test.ts
 date cloudflare-worker/test/channels_meetings_d684.test.ts
 date cloudflare-worker/test/channels_readiness_d756.test.ts
 date cloudflare-worker/test/claim_status_v2_4586.test.ts
+date cloudflare-worker/test/client_deliverable_opens_5314.test.ts
 date cloudflare-worker/test/community_gaps_d1121.test.ts
 date cloudflare-worker/test/company_invitations.test.ts
 date cloudflare-worker/test/compliance_events_columns_d691.test.ts
