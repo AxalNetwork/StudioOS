@@ -54,42 +54,12 @@ test('every `npm run <script>` the runbook names exists in package.json', () => 
   assert.deepEqual(missing, [], `runbook names scripts that do not exist: ${missing.join(', ')}`);
 });
 
-test('the deploy chain table quotes the real predeploy/deploy/postdeploy commands', () => {
-  const rows = Object.fromEntries(
-    [...operative.matchAll(/^\|\s*`(\w+)`\s*\|\s*`([^`]+)`\s*\|/gm)].map((m) => [m[1], m[2]]),
-  );
-
-  for (const hook of ['predeploy', 'deploy', 'postdeploy']) {
-    assert.ok(hook in rows, `the chain table is missing its \`${hook}\` row`);
-    assert.equal(
-      rows[hook],
-      rootPkg.scripts[hook],
-      `DEPLOY.md quotes \`${hook}\` as "${rows[hook]}" but package.json says "${rootPkg.scripts[hook]}"`,
-    );
-  }
-});
-
-test('§1.1 is still right that the worker package’s own deploy delegates to the root', () => {
-  const s = workerPkg.scripts.deploy;
-  assert.ok(s, 'cloudflare-worker/package.json has no deploy script');
-  assert.equal(
-    s,
-    'cd .. && npm run deploy',
-    'the worker package deploy script must hand off to the root deploy script, ' +
-      'not call wrangler directly — DEPLOY.md §1.1 relies on this',
-  );
-  assert.ok(
-    !s.includes('wrangler deploy'),
-    'the worker package deploy script must never call wrangler deploy itself',
-  );
-  assert.ok(
-    'predeploy' in rootPkg.scripts && /migrate-d1/.test(rootPkg.scripts.predeploy),
-    'the root package must run migrate-d1 in predeploy for the delegation to migrate',
-  );
-  assert.ok(
-    'deploy' in rootPkg.scripts && rootPkg.scripts.deploy.includes('--env production'),
-    'the root package deploy script must set --env production for the delegation to hit the right env',
-  );
+test('the documented operator deploy command dispatches the protected main workflow', () => {
+  const command = 'gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main';
+  assert.deepEqual({ deploy: rootPkg.scripts.deploy, pre: rootPkg.scripts.predeploy, post: rootPkg.scripts.postdeploy },
+    { deploy: command, pre: undefined, post: undefined });
+  assert.ok(operative.includes('| `deploy` | `' + command + '` |'));
+  assert.equal(workerPkg.scripts.deploy, 'cd .. && npm run deploy');
 });
 
 test('§1.1 is still right that the un-suffixed deploy hits the live worker', () => {

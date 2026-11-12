@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: meeting-bot-production-deploy
@@ -22,22 +23,31 @@ concurrency:
 jobs:
   deploy:
     # Owner enables this only after the isolated first-deploy steps in PRODUCTION.md.
-    if: github.ref == 'refs/heads/main' && vars.MEETING_BOT_DEPLOY_ENABLED == 'true'
+    if: github.repository == 'AxalNetwork/StudioOS' && github.ref == 'refs/heads/main' && vars.MEETING_BOT_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 125
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Verify the exact main candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --wait
       - run: npm ci --prefix cloudflare-worker
       - name: Build and verify image before any deployment
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: node scripts/build-meeting-bot-image.mjs
+      - name: Recheck the candidate before publishing the bot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
       - name: Validate owner-approved preview configuration before deployment
         env:
           MEETING_BOT_PREVIEW_SECRET: ${{ secrets.MEETING_BOT_PREVIEW_SECRET }}
@@ -58,6 +68,10 @@ jobs:
           MEETING_BOT_PREVIEW_ORIGIN: ${{ vars.MEETING_BOT_PREVIEW_ORIGIN }}
           MEETING_BOT_PREVIEW_ROUTE_VERIFIED: ${{ vars.MEETING_BOT_PREVIEW_ROUTE_VERIFIED }}
         run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs
+      - name: Recheck the candidate after preview verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-production-candidate.mjs "$GITHUB_SHA" --once
       - name: Promote verified revision to production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN }}

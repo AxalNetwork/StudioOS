@@ -69,6 +69,7 @@ test('normal deployment must pass preview before production; failure artifact is
  const w=readFileSync(new URL('../../.github/workflows/meeting-bot-deploy.yml',import.meta.url),'utf8');
  const verify=w.lastIndexOf('run: node --experimental-strip-types --no-warnings scripts/verify-meeting-bot-preview.mjs');
  assert.ok(w.indexOf('--env preview')<verify);assert.ok(verify<w.indexOf('--env ""'));
+ assert.ok(verify<w.indexOf('Recheck the candidate after preview verification'));assert.ok(w.indexOf('Recheck the candidate after preview verification')<w.indexOf('--env \"\"'));assert.match(w,/verify-production-candidate\.mjs \"\$GITHUB_SHA\" --wait/);
  assert.doesNotMatch(w,/continue-on-error|skip.canary|bypass/i);assert.match(w,/MEETING_BOT_PREVIEW_ROUTE_VERIFIED/);
  assert.ok(w.indexOf('verify-meeting-bot-preview.mjs --preflight')<w.indexOf('--env preview'));assert.match(w,/--var \"PREVIEW_CANARY_ENABLED:on\"/);assert.match(w,/--var \"PREVIEW_CANARY_ORIGIN:\$\{MEETING_BOT_PREVIEW_ORIGIN\}\"/);
  const cli=readFileSync(new URL('../../scripts/verify-meeting-bot-preview.mjs',import.meta.url),'utf8');assert.match(cli,/previewPromotionEligible/);assert.doesNotMatch(cli,/hooks.slack|chat.postMessage|meeting_url|attendee/);
