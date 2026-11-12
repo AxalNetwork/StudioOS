@@ -1,0 +1,78 @@
+{
+  "DELETE /api/calendar/events/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the row's owner (user_id = caller) or an admin deletes a manual calendar row. Every other account, including a party to the owner's check-in, gets the same 404 a missing row gets and the row stays; no credentials or a disabled owner get 401."
+  },
+  "DELETE /api/calendar/founder-checkins/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the founder or counterpart on the row, or an admin, cancels. Every other account gets the same 404 a missing check-in gets; the check-in and its copies are unchanged and nothing reaches the provider; no credentials or a disabled counterpart get 401."
+  },
+  "DELETE /api/calendar/ic-meetings/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the organiser or an admin cancels (organizer_user_id = caller). An invited attendee gets 403 naming nothing; every non-party gets the same 404 a missing meeting gets; the meeting, its attendees and every calendar copy are unchanged and nothing reaches the provider; no credentials or a disabled party get 401."
+  },
+  "GET /api/calendar/feed/calendar.ics": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/calendar/feed/my-events.ics": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/calendar/google/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  },
+  "GET /api/calendar/microsoft/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  },
+  "PATCH /api/calendar/events/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the row's owner (user_id = caller) or an admin edits a manual calendar row. Every other account, including a party to the owner's check-in, gets the same 404 a missing row gets and the row is unchanged; no credentials or a disabled owner get 401."
+  },
+  "PATCH /api/calendar/founder-checkins/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the founder or counterpart on the row, or an admin, reschedules. Every other account gets the same 404 a missing check-in gets; nothing moves, no audit row, no provider call; no credentials or a disabled counterpart get 401."
+  },
+  "PATCH /api/calendar/ic-meetings/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Only the organiser or an admin reschedules (organizer_user_id = caller). An invited attendee gets 403 naming nothing; every non-party gets the same 404 a missing meeting gets; nothing moves, no audit row, no provider call; no credentials or a disabled party get 401."
+  },
+  "POST /api/calendar/ic-meetings/:id/rsvp": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Bound to the caller in SQL (meeting_id and user_id = caller): only an invited attendee answers. A non-party gets the same 404 a missing meeting gets and no RSVP changes; no credentials or a disabled attendee get 401."
+  },
+  "POST /api/calendar/push/:kind/:source_id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_calendar_writes_d4570.test.ts",
+    "note": "Pushes only a session the caller's own calendar reader returns (organiser or invitee; founder or counterpart). A non-party gets the same 404 a missing session gets; no copy is written and nothing reaches the provider; no credentials or a disabled party get 401."
+  }
+}

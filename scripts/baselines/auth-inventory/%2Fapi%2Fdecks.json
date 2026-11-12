@@ -1,0 +1,12 @@
+{
+  "GET /api/decks/print-export/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "GET /api/decks/share/:token/nda": {
+    "review": "record_without_ownership_check",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}
