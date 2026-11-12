@@ -1,0 +1,17 @@
+{
+  "GET /api/connectors/public/calendly/:userId": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/connectors/:provider/notify-me": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/connectors/webhook/vercel": {
+    "review": "no_gate_found",
+    "kind": "webhook",
+    "state": "unreviewed"
+  }
+}

@@ -34,6 +34,7 @@ disagrees with the code, the document is the thing to fix.
 | `ANALYTICS_FUNNEL.md` | The funnel events and what they mean. |
 | `SKILL_DISCOVERY_CONTRACT.md` | D4538: the task-to-skill recommendation request and response: the hard eligibility gate (`attachCheck`'s codes plus `output_mismatch`, `input_unavailable`, `not_runnable`), the ranking stages, abstention, and how a ranker is measured. Not a built route yet. |
 | `skill-discovery/` | D4538: the labelled discovery query set (`queries.v1.json`) a recommender is measured against; its README has the rule for adding a scenario. |
+| `HUBS.md` | D5615: the five frozen hub files (`api.js`, `App.jsx`, `CycleRoute.jsx`, `index.ts`, `advisors.ts`): what still lives in each, where a new entry goes instead, and the follow-up part that empties it. `frontend/test/hub_freeze_5615.test.mjs` fails a new entry by name and cites its section. |
 
 **`CLAUDE.md` at the repo root outranks everything here.** Where this folder
 disagrees with it, that file wins.

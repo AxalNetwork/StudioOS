@@ -135,6 +135,8 @@ function freshDb() {
   db.exec(migration('232_partner_engagement_health'));
   // #5314 part 3: the revisions on health, caps, internal and client hours.
   db.exec(migration('202611111141_5314_delivery_write_versions'));
+  // #5314 part 2: the status report's Blocked section and the client review history.
+  db.exec(migration('202611111140_5314_status_report_blocked_history'));
 
   const u = db.prepare('INSERT INTO users (id, role, partner_id, name, email) VALUES (?,?,?,?,?)');
   u.run(OURS_USER, 'partner', 1, 'Ours', 'ours@example.com');
@@ -390,6 +392,23 @@ test('#5314: a write that states no revision (a page from before this build) kee
   const cap = await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 38 });
   assert.equal(cap.status, 200);
   assert.equal((await call(e, 'PUT', '/capacity/cap', ours, { weekly_hours: 40 })).body.revision, 1);
+});
+
+test('#5314 parts 2+3: a health save that loses the race appends no client review', async () => {
+  const { db, e } = setup();
+  const first = await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours,
+    { satisfaction: 4, satisfaction_source: 'QBR call', expected_revision: null });
+  assert.equal(first.status, 200);
+  // Both read revision 0; the other request's edit lands between this one's read and its write.
+  after(/SELECT \* FROM partner_engagement_health WHERE engagement_id = \?/, () => {
+    db.prepare('UPDATE partner_engagement_health SET satisfaction = 2, revision = revision + 1 WHERE engagement_id = ?').run(OUR_ENGAGEMENT);
+  });
+  // Mutation checked: drop `WHERE changes() = 1` from the review append -> a 5 is appended, and this fails.
+  assertStale(await call(e, 'PUT', `/engagements/${OUR_ENGAGEMENT}/health`, ours,
+    { satisfaction: 5, satisfaction_source: 'Hallway chat', expected_revision: 0 }), 1);
+  const rows = db.prepare('SELECT satisfaction FROM engagement_client_reviews WHERE engagement_id = ? ORDER BY id').all(OUR_ENGAGEMENT) as any[];
+  assert.deepEqual(rows.map((r) => r.satisfaction), [4]);
+  assert.equal(one(db, 'SELECT satisfaction FROM partner_engagement_health WHERE engagement_id = ?', OUR_ENGAGEMENT).satisfaction, 2);
 });
 
 test('#5314: a write that lands between the read and the write wins; the later request changes nothing', async () => {

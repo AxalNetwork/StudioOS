@@ -18,6 +18,7 @@ import {
   NO_RAIL_ROUTES, PROFILES, RAIL_BOARD_ALIASES, RAIL_PAGES, crumbsOfKey, currentRail, keysOf, pageFor, pageKeyFor, railBody, setCurrentRail,
 } from '../src/lib/railPages.js';
 import { RailCrumbsProvider, RailPageProvider, useRailCrumbs, useRailOption, useRailPage, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const CANVAS = JSON.parse(readFileSync('design/incoming/airail-every-page-data/canvas.json', 'utf8'));
 /** Every board the canvas draws, as its page key. */
@@ -282,7 +283,7 @@ test('every run the rail starts sends rail: { page, option, record }', async () 
 test('the shell mounts the provider with its shell role, and Validate\'s options call useRailOption', () => {
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
   assert.match(app, /<RailPageProvider role=\{shellRole\}>\s*<RailStripSlot\.Provider value=\{railStrip\}>/);
-  const cycle = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const cycle = cycleRouteText();
   assert.match(cycle, /useRailOption\('transcribe:interview', 'Record a session'\)/);
   // D771 (#2097, Grow): every cycle's fill band names itself, not Validate's alone.
   assert.match(cycle, /railOption=\{`fill:\$\{fillKind\}`\}/);

@@ -17,6 +17,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import ReasonGate, { AccessBanner } from '../src/ui/ReasonGate.jsx';
 import WorkerRail from '../src/ui/WorkerRail.jsx';
 import { NarrativeHome } from '../src/pages/raise/narrative/NarrativeTool.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 import {
   FOUNDER_RECORD_OFF, REASON_CHIPS, SAVE_REFUSED, bannerLine, countdown, endedLine, grantSpan, reasonCheck, refusalView, ruleLine, timeOf,
 } from '../src/ui/reasonGate.js';
@@ -195,7 +196,7 @@ test('RR03 (Q1 A): on a founder\'s record the rail keeps where, says Eadwyn is o
   const on = renderToStaticMarkup(h(WorkerRail, { workspace: 'Raise' }));
   assert.match(on, /switch-worker-rail-ai-off/, 'every other page keeps its switch');
   assert.doesNotMatch(on, /text-worker-rail-founder-record/);
-  const route = read('pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D1464 (#4021): a per-open read of the Data room or Capital relationships turns it off too.
   assert.match(route, /readOnlyFor=\{narrativeAdmin \|\| supportOpen \? 'founder-record' : null\}/);
 });
@@ -205,5 +206,5 @@ test('RR07: a founder sees who read the narrative on Home, even with no saved ve
   assert.match(founder, /data-testid="narrative-reads"/);
   assert.match(founder, /An admin gives a reason before reading\. You see each read here\./);
   assert.doesNotMatch(html(h(NarrativeHome, { data: { parts: {} }, projectId: 7, admin: true })), /narrative-reads/);
-  assert.match(read('pages/cycles/CycleRoute.jsx'), /<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>/);
+  assert.match(cycleRouteText(), /<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>/);
 });

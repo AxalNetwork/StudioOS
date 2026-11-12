@@ -9,13 +9,10 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 
 1. **The Cloudflare Worker is the production API at `axal.vc`.** Source of
    truth lives in `cloudflare-worker/src/index.ts` and `cloudflare-worker/src/routes/*.ts`.
-   Wrangler config: `wrangler.toml`. Deploy with **`npm run deploy`**, which is
-   `wrangler deploy --config ../wrangler.toml --env production` — `--env
-   production` IS correct (`documentation/architecture/PRODUCTION.md`, verified 2026-05-06: the
-   `[env.production]` block redeclares every binding, confirmed against the
-   live worker's bindings API). Do not run `npx wrangler deploy` by hand: it
-   skips the `predeploy` hook that applies D1 migrations, so the worker ships
-   ahead of its schema.
+   Wrangler config: `wrangler.toml`. **`npm run deploy`** dispatches the
+   production release workflow on `main`. It verifies the exact candidate,
+   checks queues and Worker startup, applies D1 migrations and deploys with
+   `--env production`. Use the workflow to preserve these release gates.
 2. **D1 (`studioos-db`) is the canonical user store.** Every production user
    account lives in D1. The dev FastAPI uses a separate SQLite file
    (`backend/app.db`) and is **not** kept in sync.
@@ -31,7 +28,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
    `not_found_handling = "single-page-application"`) plus the `/api/*`
    handlers. One build sits behind both hosts and ships on every `wrangler
    deploy` — `.github/workflows/cloudflare-worker-deploy.yml` on each push to
-   `main` (build → D1 migrations → deploy), or `npm run deploy` by hand —
+   `main` or an operator dispatch (admission → build and preflight → D1 migrations → deploy) —
    so the two hosts always carry the same build. This has been so since
    2026-09-01: `1d320dda9` ("Remove stale documentation asset files", author
    Replit Agent) replaced the Pages cutover's three path routes (`e1de44c2f`,

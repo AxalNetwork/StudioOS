@@ -493,6 +493,7 @@ export default function LoginPage() {
   // ---- Submit ----
   const submit = async () => {
     if (!email.trim()) { setErrorField('email'); setError('Enter your email.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { setErrorField('email'); setError('Enter a valid email address (e.g. you@example.com).'); return; }
     if (TURNSTILE_SITE_KEY && !turnstileToken) {
       setError('Please complete the verification challenge.');
       return;
@@ -533,6 +534,7 @@ export default function LoginPage() {
   const sendMagicLink = async () => {
     const target = email.trim();
     if (!target) { setErrorField('email'); setError('Enter your email above, then request a sign-in link.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(target)) { setErrorField('email'); setError('Enter a valid email address (e.g. you@example.com).'); return; }
     // Turnstile still gates the request when the widget is working; when it
     // failed to load, the magic link is deliberately the recovery path
     // (the endpoint has its own per-IP + per-email rate limits server-side).
