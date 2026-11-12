@@ -86,7 +86,7 @@ const MIGRATIONS = [
   '565_advisor_cohort_assignment_events',
   // D4670: the claim a confirmation was asked about, its codes and its history.
   '202611062216_advisor_proof_attestation',
-  '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof',
+  '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication',
 ];
 
 function fresh() {
