@@ -44,8 +44,8 @@ case and the seed imports each as its own case, by `case_id` + `revision`;
 
 The Worker reads no file at run time. `node scripts/build-skill-library.mjs`
 embeds every file here in `../skillLibrary.generated.ts`, which is never edited
-by hand. Run it after adding or changing a skill; the library test fails while
-the module is stale.
+by hand and never committed (D5612): it is gitignored, and
+`scripts/build-generated.mjs` writes it before every build, typecheck and test.
 
 `POST /api/admin/ai-agents/skills/library/seed { reason }` (Super Admin) creates
 each skill not yet in the store as an Axal **draft** with its golden case. It

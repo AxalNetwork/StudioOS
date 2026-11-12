@@ -186,7 +186,7 @@ function context(r: any, store: AgreementContext['store'], legal: LegalStatus): 
     licence_reason: null,
     territory: r.territory ? String(r.territory).split(',').filter(Boolean) : [],
     package_key: r.package_key ?? null,
-    package_name: pkg?.name ?? (r.package_key ? String(r.package_key) : null),
+    package_name: r.frozen_package_name ?? pkg?.name ?? (r.package_key ? String(r.package_key) : null),
     package_version: r.package_version ?? null,
     program_key: r.program_key ?? null,
     program_name: program?.name ?? (r.program_key ? String(r.program_key) : null),
@@ -330,6 +330,7 @@ export async function loadLicenceAgreementContexts(sql: Sql): Promise<AgreementC
   try {
     const rows = await sql`
       SELECT a.uid, a.licence_uid, a.agreement_kind, a.program_key, a.package_key, a.package_version, a.template_slug,
+             CASE WHEN json_valid(a.merge_values_json) THEN json_extract(a.merge_values_json, '$."package.name"') END AS frozen_package_name,
              a.template_version, a.status, a.envelope_uuid, a.created_at, a.sent_at, a.signed_at, a.effective_from,
              a.effective_to, a.superseded_at,
              l.licence_ref, l.legal_entity_name, l.brand_name,

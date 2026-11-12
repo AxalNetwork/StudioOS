@@ -4,8 +4,9 @@
  *
  * Until #4105 the block (`// api-modules:begin` … `// api-modules:end`) sat in
  * `frontend/src/lib/api.js` and was edited by hand; it is now generated into
- * `frontend/src/lib/apiModules.generated.js` by `scripts/build-api-index.mjs`,
- * which `api.js` re-exports with one line. The lines are unchanged
+ * `frontend/src/lib/apiModules.generated.js` by `scripts/build-api-index.mjs`
+ * (built before every test by `scripts/build-generated.mjs`, never committed,
+ * D5612), which `api.js` re-exports with one line. The lines are unchanged
  * (`export * from './api/<name>.js';`, alphabetical), so a test that read the
  * block from `api.js` reads it here instead and asserts the same thing.
  * Returns the block from its begin marker up to (not including) its end

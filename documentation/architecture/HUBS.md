@@ -41,8 +41,8 @@ names: every export (`export <name>`) and every key of an exported object
 
 **Where a new entry goes.** A method for an API domain that has a module goes
 in that module, `frontend/src/lib/api/<domain>.js`. A new domain is a new
-module there (D527); `node scripts/build-api-index.mjs` regenerates the index
-`api.js` re-exports, so `api.js` is not edited (#4105). Either way the method
+module there (D527); the index `api.js` re-exports is built, never committed,
+by `node scripts/build-generated.mjs` (D5612), so `api.js` is not edited (#4105). Either way the method
 needs a mounted Worker route (`npm run test:drift` checks it).
 
 **Follow-up.** Moving the `api` object's existing methods into their domain
@@ -100,7 +100,8 @@ Durable Object exports. Frozen names: every static import or re-export
 
 **Where a new entry goes.** A new router is one file,
 `cloudflare-worker/src/routes/<name>.ts`, exporting `mount` (`{ path, router,
-before? }`), and `node scripts/build-route-registry.mjs` (#4105,
+before? }`), which `node scripts/build-generated.mjs` collects into the
+uncommitted `routes/_registry.ts` (#4105, D5612,
 `cloudflare-worker/src/util/routeRegistry.ts`). Never an `app.route(…)` line.
 Middleware for a new router belongs on that router.
 
