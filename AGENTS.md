@@ -191,7 +191,8 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
    inherited failure.** Merge `main` only for your own conflict, or once main
    is green again and your PR needs a fresh run.
 4. **Never re-run a failed workflow for an inherited failure.** The gate
-   job's summary says which it is (`scripts/ci-classify.mjs`):
+   job's summary and the CI failure digest comment say which it is
+   (`scripts/ci-classify.mjs`, `<!-- studioos-ci-digest:v1 -->`):
    - `inherited_main_failure`: every failed part is red on main too. Do
      nothing to the PR.
    - `pr_failure`: at least one part is yours. Fix it.
@@ -354,6 +355,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy
