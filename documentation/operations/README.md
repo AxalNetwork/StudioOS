@@ -42,3 +42,5 @@ files say how to act on it.
 Name the system and the action in the title. Give secret and variable names
 only: no value belongs in a runbook, in the repo or in an issue. Add a row here
 and a link in `documentation/README.md`.
+
+| `ENGINEERING_EVENTS_5664.md` | D5664: read-only workflow/provider inventory, pilot counts and deployment gaps. |

@@ -1,0 +1,1673 @@
+{
+  "schema": 1,
+  "asOf": "2026-11-12",
+  "baseSha": "8ef2ebd1e7",
+  "historicalIssueInventory": 40,
+  "committed": [
+    {
+      "path": ".github/workflows/backup-d1.yml",
+      "name": "Daily D1 Backup \u2192 R2",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "backup": "inherits"
+      },
+      "registeredIds": [
+        280437834
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/beta-readiness-reaudit.yml",
+      "name": "Beta Readiness Re-audit Reminder",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "issues": "write",
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "open-tracking-issue": "inherits"
+      },
+      "registeredIds": [
+        280437835
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/branch-provision.yml",
+      "name": "Provision a branch",
+      "events": [
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "write",
+        "pull-requests": "write"
+      },
+      "jobPermissions": {
+        "provision": "inherits"
+      },
+      "registeredIds": [
+        358644715
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/build-worker-contracts.yml",
+      "name": "Build Worker contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        383619772
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/changelog-gate.yml",
+      "name": "CHANGELOG gate",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "gate": "inherits"
+      },
+      "registeredIds": [
+        389078766
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/channel-worker-contracts.yml",
+      "name": "Channel Worker contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        383722055
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/ci-scorecard.yml",
+      "name": "Daily CI scorecard",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {},
+      "jobPermissions": {
+        "scorecard": {
+          "contents": "read",
+          "actions": "read",
+          "pull-requests": "read",
+          "issues": "write"
+        }
+      },
+      "registeredIds": [
+        415189216
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "name": "CI",
+      "events": [
+        "push",
+        "pull_request",
+        "merge_group"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "frontend": "inherits",
+        "worker": "inherits",
+        "verified": {
+          "actions": "read"
+        },
+        "suite": "inherits",
+        "gate": "inherits",
+        "classify": {
+          "contents": "read",
+          "actions": "read",
+          "issues": "read"
+        },
+        "visual": "inherits",
+        "drift": "inherits",
+        "routing-docs": "inherits",
+        "og-tags": "inherits",
+        "lfs-gate": "inherits",
+        "dev-backend": "inherits",
+        "audit-frontend": "inherits",
+        "audit-worker": "inherits",
+        "audit-python": "inherits",
+        "digest": {
+          "contents": "read",
+          "actions": "read",
+          "issues": "read",
+          "pull-requests": "write"
+        }
+      },
+      "registeredIds": [
+        271983865
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/claims-reaper.yml",
+      "name": "Expired task claims",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read",
+        "issues": "write"
+      },
+      "jobPermissions": {
+        "reap": "inherits"
+      },
+      "registeredIds": [
+        415288589
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/claude-code.yml",
+      "name": "Claude Code",
+      "events": [
+        "issue_comment",
+        "pull_request_review_comment",
+        "pull_request_review",
+        "issues",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "write",
+        "issues": "write",
+        "pull-requests": "write",
+        "id-token": "write"
+      },
+      "jobPermissions": {
+        "claude": "inherits"
+      },
+      "registeredIds": [
+        280914787
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/claude-review.yml",
+      "name": "Claude review",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {},
+      "jobPermissions": {
+        "selftest": {
+          "contents": "read"
+        },
+        "review": {
+          "contents": "read",
+          "pull-requests": "read",
+          "actions": "read",
+          "id-token": "write"
+        },
+        "alert": {
+          "contents": "read",
+          "issues": "write"
+        }
+      },
+      "registeredIds": [
+        387466304
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/cloudflare-worker-deploy.yml",
+      "name": "Cloudflare Worker deploy",
+      "events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "deploy": "inherits",
+        "spa-smoke": "inherits",
+        "schema-drift": "inherits",
+        "branches": "inherits"
+      },
+      "registeredIds": [
+        348320146
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/codeql.yml",
+      "name": "CodeQL",
+      "events": [
+        "push",
+        "pull_request",
+        "schedule"
+      ],
+      "permissions": {
+        "contents": "read",
+        "security-events": "write",
+        "actions": "read"
+      },
+      "jobPermissions": {
+        "visibility": "inherits",
+        "analyze": "inherits"
+      },
+      "registeredIds": [
+        271924731
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "name": "Copilot setup steps",
+      "events": [
+        "workflow_dispatch",
+        "push",
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "copilot-setup-steps": {
+          "contents": "read"
+        }
+      },
+      "registeredIds": [
+        366466560
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/d1-migrate.yml",
+      "name": "D1 migrations",
+      "events": [
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "migrate": "inherits"
+      },
+      "registeredIds": [
+        349163829
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/deck-visual.yml",
+      "name": "deck-visual",
+      "events": [
+        "pull_request",
+        "workflow_dispatch"
+      ],
+      "permissions": "unspecified",
+      "jobPermissions": {
+        "visual": {
+          "contents": "read"
+        }
+      },
+      "registeredIds": [
+        403922592
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/dr-drill.yml",
+      "name": "Monthly DR Drill",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "drill": "inherits"
+      },
+      "registeredIds": [
+        280437837
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/form-lightbox-contracts.yml",
+      "name": "Form lightbox contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        385718276
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/github-alerts.yml",
+      "name": "GitHub alerts",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {},
+      "jobPermissions": {
+        "queue-stalled": {
+          "contents": "read",
+          "actions": "read",
+          "issues": "write"
+        },
+        "main-red": {
+          "contents": "read",
+          "actions": "read",
+          "issues": "write"
+        },
+        "queue": {
+          "contents": "read",
+          "actions": "read",
+          "issues": "write"
+        },
+        "future-clock-part": {
+          "contents": "read"
+        },
+        "future-clock": {
+          "contents": "read"
+        }
+      },
+      "registeredIds": [
+        412302440
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/gitleaks.yml",
+      "name": "gitleaks",
+      "events": [
+        "push",
+        "pull_request",
+        "merge_group"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "scan": "inherits"
+      },
+      "registeredIds": [
+        271983867
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/labels-sync.yml",
+      "name": "Labels sync",
+      "events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read",
+        "issues": "write"
+      },
+      "jobPermissions": {
+        "sync": "inherits"
+      },
+      "registeredIds": [
+        374048125
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/lfs-budget.yml",
+      "name": "LFS budget",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "budget": "inherits"
+      },
+      "registeredIds": [
+        280914788
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/magic-link-insert-probe.yml",
+      "name": "magic-link insert probe",
+      "events": [
+        "workflow_dispatch",
+        "schedule"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "probe": "inherits"
+      },
+      "registeredIds": [
+        356755115
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/magic-link-probe.yml",
+      "name": "magic-link round-trip probe",
+      "events": [
+        "workflow_dispatch",
+        "schedule"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "probe": "inherits"
+      },
+      "registeredIds": [
+        356728695
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/mcp-worker-contracts.yml",
+      "name": "MCP Worker contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        384104652
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/meeting-bot-deploy.yml",
+      "name": "Meeting bot deploy",
+      "events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "deploy": "inherits"
+      },
+      "registeredIds": [
+        395019406
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/meeting-bot-image.yml",
+      "name": "Meeting bot image",
+      "events": [
+        "workflow_dispatch",
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "validate": "inherits",
+        "publish": {
+          "contents": "read",
+          "packages": "write"
+        }
+      },
+      "registeredIds": [
+        393240969
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/meeting-worker-contracts.yml",
+      "name": "Meeting Worker contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        383638715
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/migration-immutability.yml",
+      "name": "Migration immutability",
+      "events": [
+        "pull_request",
+        "push",
+        "merge_group"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "gate": "inherits"
+      },
+      "registeredIds": [
+        366792790
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/post-deploy-smoke.yml",
+      "name": "post-deploy SPA smoke",
+      "events": [
+        "workflow_dispatch",
+        "schedule"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "smoke": "inherits"
+      },
+      "registeredIds": [
+        295717983
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/pr-overlap.yml",
+      "name": "Advisory PR overlap",
+      "events": [
+        "schedule",
+        "workflow_dispatch"
+      ],
+      "permissions": {},
+      "jobPermissions": {
+        "report": {
+          "contents": "read",
+          "issues": "write",
+          "pull-requests": "write"
+        }
+      },
+      "registeredIds": [
+        415788595
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/pr-preview.yml",
+      "name": "PR preview",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read",
+        "pull-requests": "write"
+      },
+      "jobPermissions": {
+        "deploy": "inherits",
+        "login-e2e": {
+          "contents": "read"
+        },
+        "delete": "inherits"
+      },
+      "registeredIds": [
+        349437953
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/prompt-eval-gate.yml",
+      "name": "Prompt eval gate",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "gate": "inherits"
+      },
+      "registeredIds": [
+        404322234
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/record-page-contracts.yml",
+      "name": "Record page contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        385334346
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/release-alpha-rename.yml",
+      "name": "Release alpha rename",
+      "events": [
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "write"
+      },
+      "jobPermissions": {
+        "rename": "inherits"
+      },
+      "registeredIds": [
+        397598132
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/release-draft.yml",
+      "name": "Release draft",
+      "events": [
+        "push",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "write"
+      },
+      "jobPermissions": {
+        "draft": "inherits"
+      },
+      "registeredIds": [
+        393952015
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/release-published.yml",
+      "name": "Release published",
+      "events": [
+        "release"
+      ],
+      "permissions": {
+        "actions": "write",
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "redeploy": "inherits"
+      },
+      "registeredIds": [
+        393952017
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/research-import.yml",
+      "name": "Research data import",
+      "events": [
+        "workflow_dispatch",
+        "repository_dispatch"
+      ],
+      "permissions": {
+        "contents": "write"
+      },
+      "jobPermissions": {
+        "import": "inherits"
+      },
+      "registeredIds": [
+        377491625
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/round-call-worker-contracts.yml",
+      "name": "Round call Worker contracts",
+      "events": [
+        "pull_request"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "contracts": "inherits"
+      },
+      "registeredIds": [
+        384017598
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/schema-rehearsal.yml",
+      "name": "Schema rehearsal (hosted provisioning and restore)",
+      "events": [
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read"
+      },
+      "jobPermissions": {
+        "rehearse": "inherits"
+      },
+      "registeredIds": [
+        412401690
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "path": ".github/workflows/semgrep.yml",
+      "name": "Semgrep",
+      "events": [
+        "push",
+        "pull_request",
+        "schedule"
+      ],
+      "permissions": {
+        "contents": "read",
+        "security-events": "write",
+        "actions": "read"
+      },
+      "jobPermissions": {
+        "visibility": "inherits",
+        "scan": "inherits"
+      },
+      "registeredIds": [
+        274932014
+      ],
+      "coverage": "all-workflow webhook + all-run REST, independent of name",
+      "owner": "S01/infrastructure"
+    }
+  ],
+  "registrations": [
+    {
+      "id": 280437834,
+      "name": "Daily D1 Backup \u2192 R2",
+      "path": ".github/workflows/backup-d1.yml",
+      "state": "active"
+    },
+    {
+      "id": 280437835,
+      "name": "Beta Readiness Re-audit Reminder",
+      "path": ".github/workflows/beta-readiness-reaudit.yml",
+      "state": "active"
+    },
+    {
+      "id": 358644715,
+      "name": "Provision a branch",
+      "path": ".github/workflows/branch-provision.yml",
+      "state": "active"
+    },
+    {
+      "id": 383619772,
+      "name": "Build Worker contracts",
+      "path": ".github/workflows/build-worker-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 389078766,
+      "name": "CHANGELOG gate",
+      "path": ".github/workflows/changelog-gate.yml",
+      "state": "active"
+    },
+    {
+      "id": 383722055,
+      "name": "Channel Worker contracts",
+      "path": ".github/workflows/channel-worker-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 415189216,
+      "name": "Daily CI scorecard",
+      "path": ".github/workflows/ci-scorecard.yml",
+      "state": "active"
+    },
+    {
+      "id": 271983865,
+      "name": "CI",
+      "path": ".github/workflows/ci.yml",
+      "state": "active"
+    },
+    {
+      "id": 415288589,
+      "name": "Expired task claims",
+      "path": ".github/workflows/claims-reaper.yml",
+      "state": "active"
+    },
+    {
+      "id": 280914787,
+      "name": "Claude Code",
+      "path": ".github/workflows/claude-code.yml",
+      "state": "active"
+    },
+    {
+      "id": 387466304,
+      "name": "Claude review",
+      "path": ".github/workflows/claude-review.yml",
+      "state": "active"
+    },
+    {
+      "id": 348320146,
+      "name": "Cloudflare Worker deploy",
+      "path": ".github/workflows/cloudflare-worker-deploy.yml",
+      "state": "active"
+    },
+    {
+      "id": 271924731,
+      "name": "CodeQL",
+      "path": ".github/workflows/codeql.yml",
+      "state": "active"
+    },
+    {
+      "id": 366466560,
+      "name": "Copilot setup steps",
+      "path": ".github/workflows/copilot-setup-steps.yml",
+      "state": "active"
+    },
+    {
+      "id": 349163829,
+      "name": "D1 migrations",
+      "path": ".github/workflows/d1-migrate.yml",
+      "state": "active"
+    },
+    {
+      "id": 403922592,
+      "name": "deck-visual",
+      "path": ".github/workflows/deck-visual.yml",
+      "state": "active"
+    },
+    {
+      "id": 280437837,
+      "name": "Monthly DR Drill",
+      "path": ".github/workflows/dr-drill.yml",
+      "state": "active"
+    },
+    {
+      "id": 385718276,
+      "name": "Form lightbox contracts",
+      "path": ".github/workflows/form-lightbox-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 412302440,
+      "name": "GitHub alerts",
+      "path": ".github/workflows/github-alerts.yml",
+      "state": "active"
+    },
+    {
+      "id": 271983867,
+      "name": "gitleaks",
+      "path": ".github/workflows/gitleaks.yml",
+      "state": "active"
+    },
+    {
+      "id": 374048125,
+      "name": "Labels sync",
+      "path": ".github/workflows/labels-sync.yml",
+      "state": "active"
+    },
+    {
+      "id": 415180957,
+      "name": "Landing policy",
+      "path": ".github/workflows/landing-policy.yml",
+      "state": "active"
+    },
+    {
+      "id": 280914788,
+      "name": "LFS budget",
+      "path": ".github/workflows/lfs-budget.yml",
+      "state": "active"
+    },
+    {
+      "id": 356755115,
+      "name": "magic-link insert probe",
+      "path": ".github/workflows/magic-link-insert-probe.yml",
+      "state": "active"
+    },
+    {
+      "id": 356728695,
+      "name": "magic-link round-trip probe",
+      "path": ".github/workflows/magic-link-probe.yml",
+      "state": "active"
+    },
+    {
+      "id": 384104652,
+      "name": "MCP Worker contracts",
+      "path": ".github/workflows/mcp-worker-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 395019406,
+      "name": "Meeting bot deploy",
+      "path": ".github/workflows/meeting-bot-deploy.yml",
+      "state": "active"
+    },
+    {
+      "id": 393240969,
+      "name": "Meeting bot image",
+      "path": ".github/workflows/meeting-bot-image.yml",
+      "state": "active"
+    },
+    {
+      "id": 383638715,
+      "name": "Meeting Worker contracts",
+      "path": ".github/workflows/meeting-worker-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 366792790,
+      "name": "Migration immutability",
+      "path": ".github/workflows/migration-immutability.yml",
+      "state": "active"
+    },
+    {
+      "id": 295717983,
+      "name": "post-deploy SPA smoke",
+      "path": ".github/workflows/post-deploy-smoke.yml",
+      "state": "active"
+    },
+    {
+      "id": 415788595,
+      "name": "Advisory PR overlap",
+      "path": ".github/workflows/pr-overlap.yml",
+      "state": "active"
+    },
+    {
+      "id": 349437953,
+      "name": "PR preview",
+      "path": ".github/workflows/pr-preview.yml",
+      "state": "active"
+    },
+    {
+      "id": 404322234,
+      "name": "Prompt eval gate",
+      "path": ".github/workflows/prompt-eval-gate.yml",
+      "state": "active"
+    },
+    {
+      "id": 385334346,
+      "name": "Record page contracts",
+      "path": ".github/workflows/record-page-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 397598132,
+      "name": "Release alpha rename",
+      "path": ".github/workflows/release-alpha-rename.yml",
+      "state": "active"
+    },
+    {
+      "id": 393952015,
+      "name": "Release draft",
+      "path": ".github/workflows/release-draft.yml",
+      "state": "active"
+    },
+    {
+      "id": 393952017,
+      "name": "Release published",
+      "path": ".github/workflows/release-published.yml",
+      "state": "active"
+    },
+    {
+      "id": 415055620,
+      "name": "Isolated Worker release rehearsal",
+      "path": ".github/workflows/release-rehearsal.yml",
+      "state": "active"
+    },
+    {
+      "id": 377491625,
+      "name": "Research data import",
+      "path": ".github/workflows/research-import.yml",
+      "state": "active"
+    },
+    {
+      "id": 384017598,
+      "name": "Round call Worker contracts",
+      "path": ".github/workflows/round-call-worker-contracts.yml",
+      "state": "active"
+    },
+    {
+      "id": 412401690,
+      "name": "Schema rehearsal (hosted provisioning and restore)",
+      "path": ".github/workflows/schema-rehearsal.yml",
+      "state": "active"
+    },
+    {
+      "id": 274932014,
+      "name": "Semgrep",
+      "path": ".github/workflows/semgrep.yml",
+      "state": "active"
+    },
+    {
+      "id": 400027153,
+      "name": "temporary latency probe",
+      "path": ".github/workflows/zz-latency-probe.yml",
+      "state": "active"
+    },
+    {
+      "id": 383324611,
+      "name": "Dev Environment Prebuilds",
+      "path": "dynamic/codespaces/create_codespaces_prebuilds",
+      "state": "active"
+    },
+    {
+      "id": 271983937,
+      "name": "Dependabot Updates",
+      "path": "dynamic/dependabot/dependabot-updates",
+      "state": "active"
+    },
+    {
+      "id": 267816512,
+      "name": "Dependency Graph",
+      "path": "dynamic/dependabot/update-graph",
+      "state": "active"
+    },
+    {
+      "id": 343193387,
+      "name": "CodeQL - Code Quality",
+      "path": "dynamic/github-code-quality/codeql",
+      "state": "active"
+    },
+    {
+      "id": 271863507,
+      "name": "CodeQL - Code Quality",
+      "path": "dynamic/github-code-scanning/codeql",
+      "state": "active"
+    },
+    {
+      "id": 254324228,
+      "name": "pages-build-deployment",
+      "path": "dynamic/pages/pages-build-deployment",
+      "state": "active"
+    }
+  ],
+  "externalProviders": {
+    "checks": [
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941893,
+        "name": "suite (worker-6-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941757,
+        "name": "suite (worker-4-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941725,
+        "name": "suite (rest)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941673,
+        "name": "suite (worker-5-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941590,
+        "name": "suite (worker-2-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941583,
+        "name": "suite (worker-3-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941558,
+        "name": "suite (frontend-1-of-2)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941529,
+        "name": "suite (frontend-2-of-2)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": null,
+        "id": 131099941516,
+        "name": "suite (worker-1-of-6)",
+        "status": "in_progress"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131098527079,
+        "name": "future clock (${{ matrix.part }})",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131098527043,
+        "name": "main is red",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131098526784,
+        "name": "future clock (report)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131098526562,
+        "name": "Merge queue stalled",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131098524929,
+        "name": "Actions queue",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131097764232,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131096240638,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131096173741,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131096162000,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131096154708,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131094317439,
+        "name": "redeploy every provisioned branch",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131094317042,
+        "name": "repo can still rebuild production's schema",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131094316991,
+        "name": "live current and previous lazy chunks",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131094280571,
+        "name": "claude",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131093523823,
+        "name": "build and deploy studioos Worker",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131092079248,
+        "name": "Scan",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090258228,
+        "name": "update the release draft",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "skipped",
+        "id": 131090255552,
+        "name": "lfs size gate",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090254416,
+        "name": "worker (typecheck)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090254330,
+        "name": "applied migrations unchanged",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090254102,
+        "name": "open graph metadata",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090254092,
+        "name": "dev backend (import smoke)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253999,
+        "name": "frontend (build)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253993,
+        "name": "audit (python pip-audit)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253985,
+        "name": "audit (worker npm)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253938,
+        "name": "editor visual regression and axe",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253872,
+        "name": "audit (frontend npm)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253855,
+        "name": "already verified in the merge queue",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253829,
+        "name": "routing docs (artifact)",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090253650,
+        "name": "api \u2194 worker drift",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090252227,
+        "name": "code scanning takes uploads?",
+        "status": "completed"
+      },
+      {
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "conclusion": "success",
+        "id": 131090252076,
+        "name": "scan",
+        "status": "completed"
+      }
+    ],
+    "total_count": 41
+  },
+  "families": [
+    {
+      "family": "work",
+      "hooks": [
+        "pull_request",
+        "pull_request_review",
+        "pull_request_review_comment",
+        "pull_request_review_thread",
+        "issues",
+        "issue_comment",
+        "create",
+        "delete"
+      ],
+      "readPermissions": [
+        "pull_requests:read",
+        "issues:read",
+        "contents:read"
+      ],
+      "recovery": "current PR/issue/review/claim state via read adapters; intermediate transitions need retained signed deliveries",
+      "implementedREST": "pilot snapshots only; recurring adapter not installed",
+      "owner": "S01"
+    },
+    {
+      "family": "ci",
+      "hooks": [
+        "workflow_run",
+        "workflow_job",
+        "check_run",
+        "check_suite",
+        "status"
+      ],
+      "readPermissions": [
+        "actions:read",
+        "checks:read",
+        "statuses:read"
+      ],
+      "recovery": "all workflows, runs and attempts/jobs; check providers require per-commit scope",
+      "implementedREST": "Actions all-run/all-attempt adapter; providers inventoried from current commit",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "family": "delivery",
+      "hooks": [
+        "merge_group",
+        "push",
+        "create",
+        "delete",
+        "release",
+        "deployment",
+        "deployment_status",
+        "deployment_review",
+        "deployment_protection_rule"
+      ],
+      "readPermissions": [
+        "contents:read",
+        "deployments:read",
+        "pull_requests:read"
+      ],
+      "recovery": "terminal refs/release/deployment snapshots; destroyed group membership and missed approvals may be unrecoverable",
+      "implementedREST": "pilot snapshots only; recurring adapter not installed",
+      "owner": "S01/infrastructure"
+    },
+    {
+      "family": "security",
+      "hooks": [
+        "code_scanning_alert",
+        "secret_scanning_alert",
+        "dependabot_alert"
+      ],
+      "readPermissions": [
+        "separate approved installation and minimum security-alert reads"
+      ],
+      "recovery": "disabled and explicitly unsupported until separate installation approved; metadata only, restricted partition",
+      "implementedREST": "disabled",
+      "owner": "S01/security via #5668"
+    },
+    {
+      "family": "unsupported",
+      "hooks": [
+        "approved newly observed kinds"
+      ],
+      "readPermissions": [
+        "explicit event allowlist amendment"
+      ],
+      "recovery": "safe IDs/state plus unsupported gap; never silently dropped",
+      "implementedREST": "explicit gap",
+      "owner": "S01"
+    }
+  ]
+}
