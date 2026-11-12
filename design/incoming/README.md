@@ -2631,3 +2631,7 @@ One more board set from the owner's Claude Design canvas "Axal VC – platform d
 - **`Administrator Deal Preparation Page.dc.html`**, **`Administrator Deal Preparation · Boards.dc.html`**: sections ADPW-00 to ADPW-26, 56 frames (D5459). The Admin profile's **Deals** workspace at `/admin/deals`; the investor Deals redesign stays `Deals v2` (D4815).
 
 Not built yet. Ventures, funds, firms, people and amounts are sample content; the decision lists what is frontend-only, what needs backend work and what waits on the owner's policy decisions.
+
+## Portfolio audited-gap addendum — owner review required (#4817)
+
+- `Portfolio v2 · Addendum.dc.html` — D4817 review-only collection of additional company rights/reporting/KPI, responsive/dark, source-state and route/access handoff specimens, imported from the existing Portfolio Page. The landed PF boards are retained; production implementation waits for owner review and #5311. See D4817 for the audit-gap map and current backend fit.

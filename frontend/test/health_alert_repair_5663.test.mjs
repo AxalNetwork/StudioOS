@@ -110,7 +110,7 @@ test('producer records the actual child exit and digest atomically without swall
   const dir = mkdtempSync(join(tmpdir(), 's38-fc-'));
   try {
     const env = { ...process.env, RUNNER_TEMP: dir, GITHUB_RUN_ID: '42996752605', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: sha, FUTURE_CLOCK_DAYS: '7' };
-    const result = produce('frontend-1-of-2', env, (cmd, args, options) => { assert.deepEqual(args, ['scripts/test-drift-parts.mjs', 'frontend-1-of-2']); writeFileSync(options.stdio[1], tap(true)); return { status: 1 }; });
+    const result = produce('frontend-1-of-2', env, (cmd, args, options) => { assert.deepEqual(args, ['scripts/test-drift-parts.mjs', 'frontend-1-of-2', '--plan-file', 'suite-plan.json']); writeFileSync(options.stdio[1], tap(true)); return { status: 1 }; });
     assert.equal(result.exitCode, 1); assert.equal(result.sha256, blob('frontend-1-of-2', true).manifest.sha256);
     assert.equal(JSON.parse(readFileSync(join(dir, 'future-clock/manifest.json'))).runId, '42996752605');
     assert.throws(() => produce('worker-1-of-6', { ...env, FUTURE_CLOCK_DAYS: '0' }), /identity/);
@@ -147,4 +147,13 @@ test('a queue response without count or oldest evidence cannot mutate its episod
     const result = spawnSync(process.execPath, ['--import', preload, 'scripts/github-alerts.mjs', 'queue'], { encoding: 'utf8', env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: 'fixture' } });
     assert.equal(result.status, 1); assert.match(result.stderr, /no recovery inferred/); assert.doesNotMatch(result.stdout, /UNEXPECTED_MUTATION/);
   }
+});
+
+test('producer refuses a missing planner contract before starting any test child', () => {
+  const dir = mkdtempSync(join(tmpdir(), 's38-plan-contract-'));
+  try {
+    const hook = `import cp from 'node:child_process'; import {syncBuiltinESMExports} from 'node:module'; cp.spawnSync=()=>{console.log('UNEXPECTED_CHILD');return {status:0}};syncBuiltinESMExports();`;
+    const result = spawnSync(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(hook), 'scripts/future-clock-producer.mjs', 'frontend-1-of-2'], { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: dir, GITHUB_RUN_ID: '42996752605', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: sha, FUTURE_CLOCK_DAYS: '7' } });
+    assert.equal(result.status, 1); assert.doesNotMatch(result.stdout, /UNEXPECTED_CHILD/); assert.match(result.stderr, /producer evidence unavailable/);
+  } finally { rmSync(dir, { recursive: true }); }
 });

@@ -103,9 +103,9 @@ test('the workflow wires each alert, and the reviewer alert sits in claude-revie
   assert.match(wf, /--import=\$GITHUB_WORKSPACE\/scripts\/future-clock\.mjs/);
   assert.match(wf, /FUTURE_CLOCK_DAYS: '7'/);
   assert.match(wf, /SLACK_GITHUB_WEBHOOK_URL: \$\{\{ secrets\.SLACK_GITHUB_WEBHOOK_URL \}\}/);
-  // Every CI test part runs ahead: the matrix names the same parts CI does.
-  const parts = /part: \[([^\]]+)\]/.exec(wf)[1].split(',').map((s) => s.trim());
-  assert.deepEqual(parts.filter((p) => /^(frontend|worker)-/.test(p)).length, 8);
+  // Every test part comes from the shared generator; the nightly run omits rest.
+  assert.match(wf, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
+  assert.match(wf, /--plan test-timings\.json --without-rest/);
 
   const review = read('.github/workflows/claude-review.yml');
   assert.match(review, /outcome: \$\{\{ steps\.review\.outputs\.outcome \}\}/);

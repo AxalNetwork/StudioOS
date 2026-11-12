@@ -99,6 +99,7 @@ const DOCUMENTED = new Map([
   ['scripts/baselines/sql-prepare',   'one reviewed SQL-prepare ledger file per Worker source file'],
   ['scripts/baselines/auth-inventory','one authorization review ledger per route family'],
   ['scripts/lib',                     'the pure half — the decisions each script makes, testable apart from its effects'],
+  ['scripts/lib/fixtures',            'evidence-backed offline replay fixtures'],
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
   ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],

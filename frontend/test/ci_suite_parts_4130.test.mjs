@@ -1,82 +1,87 @@
-// D4130 (#4130): CI runs `npm run test:drift` in parallel parts. Splitting the
-// suite must not drop a step or a test file, so this holds the parts to the
-// suite itself:
-//   - every step of package.json's test:drift is in exactly one part;
-//   - a sharded script's parts are the same command with --test-shard=i/N,
-//     for every i from 1 to N, and nothing else changed;
-//   - ci.yml's matrix lists exactly these parts, and the job runs each one.
-//
-// Run with:
-//   node --test frontend/test/ci_suite_parts_4130.test.mjs
+// D4130/D5609: one generated plan covers the full suite exactly once.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { partsOf, shardCommand, SHARDS, REST } from '../../scripts/test-drift-parts.mjs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { partsOf, testCommand, suiteFiles, buildPlan, validatePlan, timingsOf, SHARDS, REST } from '../../scripts/test-drift-parts.mjs';
+import { assertExactOnce } from '../../scripts/lib/shardPlan.mjs';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const parts = partsOf(pkg.scripts);
-const steps = pkg.scripts['test:drift'].split(' && ').map((s) => s.trim());
+const plan = buildPlan(pkg.scripts);
 
-const SHARD_FLAG = / --test-shard=(\d+)\/(\d+)(?= )/;
-
-test('every step of test:drift is in exactly one part, and the parts add nothing', () => {
-  const covered = [];
-  for (const p of parts) {
-    if (p.name === REST) { covered.push(...p.commands); continue; }
-    assert.equal(p.commands.length, 1, `${p.name} is one sharded command`);
-  }
-  for (const script of Object.keys(SHARDS)) covered.push(`npm run ${script}`);
-  assert.deepEqual([...covered].sort(), [...steps].sort(), 'the parts are the suite: no step dropped, none added, none twice');
-  const rest = parts.find((p) => p.name === REST);
-  assert.deepEqual(rest.commands, steps.filter((s) => !Object.keys(SHARDS).some((k) => s === `npm run ${k}`)), 'rest keeps the suite\'s order');
+test('every test:drift step appears once; rest retains order', () => {
+  const steps = pkg.scripts['test:drift'].split(' && ');
+  const rest = plan.parts.find((p) => p.name === REST);
+  assert.deepEqual(rest.commands, steps.filter((s) => !Object.keys(SHARDS).some((k) => s === `npm run ${k}`)));
+  assert.deepEqual([...rest.commands, ...Object.keys(SHARDS).map((k) => `npm run ${k}`)].sort(), [...steps].sort());
 });
 
-test('a sharded script runs as N shards, 1 to N, each the unchanged command plus the shard flag', () => {
-  for (const [script, n] of Object.entries(SHARDS)) {
-    assert.ok(Number.isInteger(n) && n >= 2, `${script} is cut into at least two shards`);
-    const mine = parts.filter((p) => p.name.startsWith(`${script.replace(/^test:/, '')}-`));
-    assert.equal(mine.length, n);
-    const seen = [];
-    for (const p of mine) {
-      const [cmd] = p.commands;
-      const m = SHARD_FLAG.exec(cmd);
-      assert.ok(m, `${p.name} carries --test-shard`);
-      assert.equal(Number(m[2]), n, `${p.name} shards out of ${n}`);
-      seen.push(Number(m[1]));
-      assert.equal(cmd.replace(SHARD_FLAG, ''), pkg.scripts[script], `${p.name} is ${script} with only the shard flag added`);
-      assert.match(cmd, / --test --test-shard=/, 'the flag sits right after --test');
+test('real tree glob expansion and every generated file list cover the same files exactly once', () => {
+  for (const [script, count] of Object.entries(SHARDS)) {
+    const parts = plan.parts.filter((p) => p.script === script);
+    assert.equal(parts.length, count);
+    assertExactOnce(parts, suiteFiles(pkg.scripts[script]));
+    for (const part of parts) {
+      assert.doesNotMatch(part.commands[0], /--test-shard|\*/);
+      assert.ok(part.commands[0].startsWith(testCommand(pkg.scripts[script]).prefix));
+      assert.equal(testCommand(part.commands[0]).patterns.length, part.files.length);
     }
-    assert.deepEqual(seen.sort((a, b) => a - b), Array.from({ length: n }, (_, i) => i + 1), `${script}: every shard 1..${n}, once`);
+  }
+  assert.equal(JSON.stringify(plan), JSON.stringify(buildPlan(pkg.scripts)));
+  assert.equal(new Set(plan.parts.map((p) => p.name)).size, plan.parts.length);
+  assert.equal(validatePlan(plan, pkg.scripts).length, plan.parts.length);
+  const misplaced = structuredClone(plan);
+  misplaced.parts[0].script = 'test:worker';
+  assert.throws(() => validatePlan(misplaced, pkg.scripts), /names\/scripts/);
+  for (const mutation of ['drop', 'repeat', 'extra']) {
+    const bad = structuredClone(plan);
+    if (mutation === 'drop') bad.parts[0].files.pop();
+    if (mutation === 'repeat') bad.parts[0].files.push(bad.parts[0].files[0]);
+    if (mutation === 'extra') bad.parts[0].files.push('extra.test.mjs');
+    assert.throws(() => validatePlan(bad, pkg.scripts), /missing|repeated|extra/);
   }
 });
 
-test('part names are unique', () => {
-  const names = parts.map((p) => p.name);
-  assert.equal(new Set(names).size, names.length);
+test('Node 22 globSync agrees with node --test glob expansion on a temporary tree', () => {
+  const root = mkdtempSync(join(tmpdir(), 's38-glob-'));
+  try {
+    for (const f of ['a.test.mjs', 'b.test.mjs']) writeFileSync(join(root, f), `import test from 'node:test'; test('${f}', () => {});`);
+    const cmd = "node --test '*.test.mjs'";
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '*.test.mjs'], { cwd: root, encoding: 'utf8', env });
+    assert.equal(r.status, 0, r.stderr);
+    for (const f of suiteFiles(cmd, root)) assert.ok(r.stdout.includes(`# Subtest: ${f}`), JSON.stringify(r.stdout));
+    assert.match(r.stdout, /# tests 2\b/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('a command the script cannot cut safely is refused, not guessed', () => {
-  assert.throws(() => shardCommand("node --test 'a/*.mjs' && echo x", 1, 2), /compound/);
-  assert.throws(() => shardCommand('node --test --test-shard=1/2 a.mjs', 1, 2), /already sharded/);
-  assert.throws(() => shardCommand('node a.mjs', 1, 2), /exactly one --test/);
-  assert.throws(() => partsOf({ 'test:drift': 'npm run test:guards' }, { 'test:frontend': 2 }), /does not run/);
-  assert.throws(() => partsOf({ 'test:drift': 'npm run test:x' }, { 'test:x': 2 }), /does not define/);
-  assert.throws(() => partsOf({ 'test:drift': 'npm run test:x && npm run test:x', 'test:x': 'node --test a' }, { 'test:x': 2 }), /twice/);
+test('unsafe commands and missing plan fail closed', () => {
+  for (const cmd of ['node --test a && echo x', 'node --test --test-shard=1/2 a', 'node a']) assert.throws(() => testCommand(cmd));
+  assert.throws(() => partsOf({ 'test:drift': 'npm run test:guards' }, { 'test:x': 2 }), /does not run/);
+  const r = spawnSync(process.execPath, ['scripts/test-drift-parts.mjs', plan.parts[0].name], { encoding: 'utf8' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /requires --plan-file/);
 });
 
-test('ci.yml\'s suite matrix lists exactly these parts and runs each one', () => {
-  const ci = readFileSync('.github/workflows/ci.yml', 'utf8').split('\n').filter((l) => !/^\s*#/.test(l));
-  const at = ci.findIndex((l) => l === '  suite:');
-  assert.ok(at > 0, 'ci.yml has the suite job');
-  const end = ci.findIndex((l, i) => i > at && /^ {2}\S/.test(l));
-  const job = ci.slice(at, end);
-  const m = job.findIndex((l) => l.trim() === 'part:');
-  const listed = [];
-  for (const l of job.slice(m + 1)) {
-    const item = /^ {10}- (\S+)\s*$/.exec(l);
-    if (!item) break;
-    listed.push(item[1]);
-  }
-  assert.deepEqual(listed, parts.map((p) => p.name), 'the matrix is the parts, in order — update one with the other');
-  assert.ok(job.some((l) => l.trim() === '- run: node scripts/test-drift-parts.mjs ${{ matrix.part }}'), 'each matrix leg runs its part');
+test('both workflow matrices consume only generated names and the gate requires a successful plan', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  const alerts = readFileSync('.github/workflows/github-alerts.yml', 'utf8');
+  for (const wf of [ci, alerts]) assert.doesNotMatch(wf, /(?:frontend|worker)-\d+-of-\d+/);
+  assert.match(ci, /part: \$\{\{ fromJSON\(needs\.plan\.outputs\.parts\) \}\}/);
+  assert.match(ci, /needs: \[verified, plan, suite\]/);
+  assert.match(ci, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]/);
+  assert.match(ci, /--plan-file suite-plan\.json/);
+  assert.match(alerts, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
+  assert.match(alerts, /--plan test-timings\.json --without-rest/);
+  assert.ok(Buffer.byteLength(JSON.stringify(plan.parts.map((p) => p.name)), 'utf16le') < 1024, 'names alone are far below the 1 MB job-output limit');
+});
+
+
+test('D5608 timing metadata is unpacked before duration planning', () => {
+  assert.deepEqual(timingsOf({ sha: 'abc', node: 'v22', tests: { 'a.test.mjs': { wallMs: 120, exitCode: 0 }, 'b.test.ts': { wallMs: 400, exitCode: 1 } }, untraced: [] }), { 'a.test.mjs': 120, 'b.test.ts': 400 });
+  assert.deepEqual(timingsOf({ 'a.test.mjs': 10 }), { 'a.test.mjs': 10 });
+  for (const input of [null, [], { tests: [] }]) assert.throws(() => timingsOf(input), /invalid/);
 });
