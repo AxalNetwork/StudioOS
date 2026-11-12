@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -22,7 +22,9 @@ function fixture(initial = []) {
     if (init.method === 'POST') { const issue = { ...body, number: Math.max(0, ...rows.map(r => r.number)) + 1, state: 'open', user: { login: 'github-actions[bot]' } }; rows.push(issue); return structuredClone(issue); }
     if (init.method === 'PATCH') {
       if (failSaveAfterAck && body.body.includes('"acknowledged"')) { failSaveAfterAck = false; throw new Error('persist unavailable'); }
-      const issue = rows.find(r => r.number === Number(path.split('/').at(-1))); Object.assign(issue, body); return structuredClone(issue);
+      const issue = rows.find(r => r.number === Number(path.split('/').at(-1)));
+      for (const key of ['body', 'state', 'labels', 'title']) if (Object.hasOwn(body, key)) issue[key] = body[key];
+      return structuredClone(issue);
     }
     const url = new URL(path, 'https://api.github.com'), page = Number(url.searchParams.get('page'));
     let list = rows.filter(r => url.searchParams.get('state') === 'all' || r.state === 'open');
@@ -110,7 +112,7 @@ test('producer records the actual child exit and digest atomically without swall
   const dir = mkdtempSync(join(tmpdir(), 's38-fc-'));
   try {
     const env = { ...process.env, RUNNER_TEMP: dir, GITHUB_RUN_ID: '42996752605', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: sha, FUTURE_CLOCK_DAYS: '7' };
-    const result = produce('frontend-1-of-2', env, (cmd, args, options) => { assert.deepEqual(args, ['scripts/test-drift-parts.mjs', 'frontend-1-of-2', '--plan-file', 'suite-plan.json']); writeFileSync(options.stdio[1], tap(true)); return { status: 1 }; });
+    const result = produce('frontend-1-of-2', env, (cmd, args, options) => { assert.deepEqual(args, ['scripts/test-drift-parts.mjs', 'frontend-1-of-2', '--plan-file', 'suite-plan.json']); writeFileSync(options.stdio[1], tap(true)); renameSync(join(dir, 'future-clock/future-clock.tap'), join(dir, 'future-clock/original.tap')); writeFileSync(join(dir, 'future-clock/future-clock.tap'), tap(false)); return { status: 1 }; });
     assert.equal(result.exitCode, 1); assert.equal(result.sha256, blob('frontend-1-of-2', true).manifest.sha256);
     assert.equal(JSON.parse(readFileSync(join(dir, 'future-clock/manifest.json'))).runId, '42996752605');
     assert.throws(() => produce('worker-1-of-6', { ...env, FUTURE_CLOCK_DAYS: '0' }), /identity/);
@@ -142,9 +144,9 @@ test('TAP completeness accepts actual Node output for both green and assertion f
 test('a queue response without count or oldest evidence cannot mutate its episode', () => {
   const issue = { number: 7, title: ALERT_KINDS.queue.title, state: 'open', body: '', labels: [], user: { login: 'github-actions[bot]' } };
   for (const queue of [{ workflow_runs: [] }, { total_count: 1, workflow_runs: [] }]) {
-    const code = `globalThis.fetch = async (url, init={}) => { if (init.method && init.method !== 'GET') { console.log('UNEXPECTED_MUTATION'); return Response.json(${JSON.stringify(issue)}); } return Response.json(String(url).includes('/issues?') ? [${JSON.stringify(issue)}] : ${JSON.stringify(queue)}); };`;
+    const code = "const {issue, queue} = JSON.parse(process.env.S38_QUEUE_FIXTURE); globalThis.fetch = async (url, init={}) => { if (init.method && init.method !== 'GET') { console.log('UNEXPECTED_MUTATION'); return Response.json(issue); } return Response.json(String(url).includes('/issues?') ? [issue] : queue); };";
     const preload = 'data:text/javascript,' + encodeURIComponent(code);
-    const result = spawnSync(process.execPath, ['--import', preload, 'scripts/github-alerts.mjs', 'queue'], { encoding: 'utf8', env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: 'fixture' } });
+    const result = spawnSync(process.execPath, ['--import', preload, 'scripts/github-alerts.mjs', 'queue'], { encoding: 'utf8', env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: 'fixture', S38_QUEUE_FIXTURE: JSON.stringify({issue, queue}) } });
     assert.equal(result.status, 1); assert.match(result.stderr, /no recovery inferred/); assert.doesNotMatch(result.stdout, /UNEXPECTED_MUTATION/);
   }
 });
@@ -156,4 +158,12 @@ test('producer refuses a missing planner contract before starting any test child
     const result = spawnSync(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(hook), 'scripts/future-clock-producer.mjs', 'frontend-1-of-2'], { encoding: 'utf8', env: { ...process.env, RUNNER_TEMP: dir, GITHUB_RUN_ID: '42996752605', GITHUB_RUN_ATTEMPT: '1', GITHUB_SHA: sha, FUTURE_CLOCK_DAYS: '7' } });
     assert.equal(result.status, 1); assert.doesNotMatch(result.stdout, /UNEXPECTED_CHILD/); assert.match(result.stderr, /producer evidence unavailable/);
   } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('complete TAP can prove a failure even when a different test did not execute; partial evidence never recovers', () => {
+  const partial = blob(expected[0], true);
+  partial.tap = 'TAP version 13\nnot ok 1 - failed\nok 2 - unavailable # SKIP\n1..2\n# tests 2\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 1\n# todo 0\n# duration_ms 10\n';
+  partial.manifest.bytes = Buffer.byteLength(partial.tap); partial.manifest.sha256 = createHash('sha256').update(partial.tap).digest('hex');
+  const result = assessFutureClock(evidence([partial, blob(expected[1])])); assert.equal(result.active, true); assert.equal(result.failed, 1); assert.equal(result.complete, false); assert.equal(result.state, 'incomplete');
+  for (const exitCode of [-1, 256]) { const invalid = blob(expected[0], true); invalid.manifest.exitCode = exitCode; assert.equal(assessFutureClock(evidence([invalid, blob(expected[1])])).active, null); }
 });
