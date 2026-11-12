@@ -351,8 +351,12 @@ jobs:
           trusted="$RUNNER_TEMP/fast-guards"
           mkdir -p "$trusted"
           guards=(scripts/migration-immutability-gate.mjs scripts/lib/migrationImmutability.mjs
-            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs
-            scripts/lib/generatedOutput.mjs)
+            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs)
+          # D5612 adds a dependency to the archived drift checker. Older bases
+          # still use the standalone checkers and have no helper to archive.
+          if git cat-file -e "$BASE_SHA:scripts/lib/generatedOutput.mjs" 2>/dev/null; then
+            guards+=(scripts/lib/generatedOutput.mjs)
+          fi
           git archive "$BASE_SHA" "${guards[@]}" | tar -x -C "$trusted"
           ln -s "$GITHUB_WORKSPACE/frontend" "$trusted/frontend"
           ln -s "$GITHUB_WORKSPACE/cloudflare-worker" "$trusted/cloudflare-worker"

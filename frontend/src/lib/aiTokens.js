@@ -7,6 +7,8 @@
 // (#1919). A failed read is `unreadable`; a configuration HQ must fix is
 // `not_ready`, which a retry cannot change.
 
+import { toUtcInstant } from './notices.js';
+
 /** "Nothing is on sale" (D750 decision 3), in one place. */
 export const TOPUP_UNAVAILABLE = "Top-up isn't available yet.";
 /** The same sentence where the page also says what runs do instead. */
@@ -167,7 +169,7 @@ const HOUR_MS = 60 * 60 * 1000;
 export function purchaseState(latest, now = Date.now()) {
   if (!latest || typeof latest !== 'object' || !PURCHASE_STATES.has(latest.state)) return null;
   if (latest.state === 'waiting') {
-    const at = Date.parse(String(latest.at ?? '').replace(' ', 'T'));
+    const at = Date.parse(toUtcInstant(latest.at) ?? '');
     if (Number.isFinite(at) && now - at > HOUR_MS) return 'overdue';
   }
   return latest.state;
