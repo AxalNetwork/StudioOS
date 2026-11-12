@@ -18,7 +18,7 @@ async function fixture(factory = createWorkspaceSecurity) {
   const sponsor = { member_id: 71, tenant_id: spec.tenant_id, company_id: spec.company_id, project_id: spec.project_id };
   const flags = { enabled: true, halted: false, allowed: true, revision: 1, approved: false, keyAvailable: true };
   const image: WorkspaceImageEvidence = { digest: spec.image_digest, signature_verified: true, provenance_verified: true, sbom_verified: true, scan_passed: true, revoked: false };
-  const provider: WorkspaceProviderEvidence = { capabilities: fakeCapabilities(), non_root: true, immutable_root: true, ephemeral_scratch: true,
+  const provider: WorkspaceProviderEvidence = { capabilities: fakeCapabilities(), non_root: true, no_new_privileges: true, immutable_image: true, ephemeral_scratch: true,
     resource_limits: true, host_socket: false, privileged: false, isolation: 'microvm', network_connect_fence: true, metadata_denied: true };
   const object: WorkspaceObject = { ref: 'object-synthetic', tenant_id: spec.tenant_id, company_id: spec.company_id, project_id: spec.project_id,
     run_id: spec.run_id, execution_generation: 1, sink_ref: spec.artifact_sink_ref, region: 'weur', approved_restore_regions: [], key_id: 'key-synthetic', expires_at: 120000 };
@@ -53,7 +53,7 @@ test('broker admission refuses cross-scope sponsors, unverified images and unsup
   for (const field of ['signature_verified', 'provenance_verified', 'sbom_verified', 'scan_passed'] as const) {
     f.image[field] = false; denied(await f.security.register(f.spec, f.sponsor), 'image_not_approved'); f.image[field] = true;
   }
-  for (const field of ['non_root', 'immutable_root', 'ephemeral_scratch', 'resource_limits', 'network_connect_fence', 'metadata_denied'] as const) {
+  for (const field of ['non_root', 'no_new_privileges', 'immutable_image', 'ephemeral_scratch', 'resource_limits', 'network_connect_fence', 'metadata_denied'] as const) {
     f.provider[field] = false; denied(await f.security.register(f.spec, f.sponsor), 'provider_security_denied'); f.provider[field] = true;
   }
   for (const field of ['host_socket', 'privileged'] as const) {
@@ -93,6 +93,21 @@ test('revoked sponsor, changed authorization revision, halt and revoked image al
     denied(await f.security.redeem(token, f.target())); assert.equal(f.audit.length, auditBefore);
     denied(await f.security.issue(f.target()));
   }
+});
+
+test('current scoped operators can stop/clean a halted or revoked run, but cannot use control grants to start or publish', async () => {
+  const f = await fixture(); await f.register();
+  const operator = { ...f.sponsor, member_id: 72 };
+  f.deps.authorize = async actor => ({ allowed: actor.member_id === 72, revision: 7, approved: false });
+  f.flags.halted = true; f.flags.enabled = false; f.image.revoked = true; await f.security.revoke(f.spec.run_id);
+  const target = f.target('executor.cancel');
+  denied(await f.security.issue(target), 'sponsor_not_authorized');
+  denied(await f.security.issue(f.target(), 30000, operator), 'operator_audience_denied');
+  const token = value(await f.security.issue(target, 30000, operator)).token;
+  denied(await f.security.redeem(token, f.target()), 'grant_target_denied');
+  assert.equal(value(await f.security.redeem(token, target)).claims.member_id, 72);
+  assert.equal((f.audit.at(-1) as any).member_id, 72);
+  denied(await f.security.issue(f.target('executor.cleanup'), 30000, { ...operator, company_id: 999 }), 'sponsor_scope_denied');
 });
 
 test('generation advancement retains the contract and invalidates old callbacks, without amending v1 compute grants', async () => {
@@ -166,7 +181,7 @@ test('security mutations must fail one-use, sponsor, provenance, halt and object
     .replace("'./workspaceSpec'", JSON.stringify(new URL('../src/services/agents/workspaceSpec.ts', import.meta.url).href));
   const changes: [string, string, string, (factory: typeof createWorkspaceSecurity) => Promise<void>][] = [
     ['nonce replay', 'nonce.used || ', '', async factory => { const f = await fixture(factory); await f.register(); const token = await f.issue(); value(await f.security.redeem(token, f.target())); denied(await f.security.redeem(token, f.target())); }],
-    ['sponsor revision', 'current.revision === run.permission_revision', 'true', async factory => { const f = await fixture(factory); await f.register(); const token = await f.issue(); f.flags.revision++; denied(await f.security.redeem(token, f.target())); }],
+    ['sponsor revision', 'current.revision', 'run.permission_revision', async factory => { const f = await fixture(factory); await f.register(); const token = await f.issue(); f.flags.revision++; denied(await f.security.redeem(token, f.target())); }],
     ['image provenance', 'evidence.provenance_verified !== true', 'false', async factory => { const f = await fixture(factory); f.image.provenance_verified = false; denied(await f.security.register(f.spec, f.sponsor)); }],
     ['emergency halt', 'deps.enabled() !== true || deps.halted() !== false', 'deps.enabled() !== true', async factory => { const f = await fixture(factory); await f.register(); const token = await f.issue(); f.flags.halted = true; denied(await f.security.redeem(token, f.target())); }],
     ['object tenant fence', 'object.tenant_id !== spec.tenant_id', 'false', async factory => { const f = await fixture(factory); await f.register(); f.object.tenant_id = 999; denied(await f.security.issue(f.target('artifact.read', { object_ref: f.object.ref, region: 'weur' }))); }],
@@ -174,7 +189,7 @@ test('security mutations must fail one-use, sponsor, provenance, halt and object
   try {
     for (const [label, before, after, journey] of changes) {
       assert.ok(source.includes(before), label); const file = join(dir, label.replaceAll(' ', '-') + '.ts');
-      writeFileSync(file, source.replace(before, after));
+      writeFileSync(file, source.replaceAll(before, after));
       const broken = (await import(pathToFileURL(file).href)).createWorkspaceSecurity as typeof createWorkspaceSecurity;
       await assert.rejects(journey(broken), 'must kill ' + label);
     }
