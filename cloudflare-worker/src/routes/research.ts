@@ -68,6 +68,7 @@ import { perkLifecycle } from './perks';
 // calls this first; the KPI draft surface is a consumer.
 import { ensureProjectMetricsSchema } from './progress';
 import { todayIso } from './_t13t14t15_helpers';
+import { deliverableReadsSince, readStateFor, readTrackingFor } from './_partner_workspace_helpers';
 import {
   googleSheetsOAuthAvailable, preflightSheetsOAuthSecrets, buildSheetsAuthUrl,
   makeSheetsState, consumeSheetsState, exchangeSheetsCode, fetchSheetsUserinfo,
@@ -2008,15 +2009,20 @@ const DRAFT_SURFACES: Record<string, {
     // client opened the file: `opened_at` is theirs to set and nothing writes it.
     instruction: [
       'Draft one short chase note per unopened deliverable below: the item, when it went out, and what reviewing it unblocks.',
-      'Never say or imply the client ignored it: this product records no opens at all, so an unopened row means we have not heard, not that they did not look.',
+      'Never say or imply the client ignored it: an unopened row means the client has not opened the shared link here yet, not that they did not look.',
       'State the milestone consequence plainly and assign no blame. These are drafts for a person to send.',
     ].join(' '),
     gather: async (c, userId) => {
       const me = await c.env.DB.prepare('SELECT partner_id FROM users WHERE id = ?')
         .bind(userId).first<{ partner_id: number | null }>();
       if (!me?.partner_id) return [];
+      // #5314 part 1: only a deliverable whose open could have been recorded is
+      // chased; one sent before opens were recorded, or with no link, is
+      // "Not recorded", and there is nothing to chase.
+      const tracking = readTrackingFor([], undefined, await deliverableReadsSince(c.env));
+      if (!tracking.available) return [];
       const rows = await c.env.DB.prepare(
-        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at,
+        `SELECT d.title AS title, d.version AS version, d.sent_at AS sent_at, d.link_url AS link_url,
                 n.title AS need_title, f.name AS client,
                 (SELECT COUNT(*) FROM engagement_milestones m
                   WHERE m.engagement_id = e.id AND m.completed_at IS NULL) AS open_milestones
@@ -2027,12 +2033,12 @@ const DRAFT_SURFACES: Record<string, {
           WHERE e.partner_id = ? AND d.sent_at IS NOT NULL AND d.opened_at IS NULL
           ORDER BY d.sent_at ASC LIMIT 100`
       ).bind(me.partner_id).all<{
-        title: string; version: string | null; sent_at: string;
+        title: string; version: string | null; sent_at: string; link_url: string | null;
         need_title: string | null; client: string | null; open_milestones: number;
       }>();
-      return (rows.results || []).map((r) =>
+      return (rows.results || []).filter((r) => readStateFor({ ...r, opened_at: null }, tracking) === 'unopened').map((r) =>
         `${r.client || 'client not recorded'} — "${r.title}"${r.version ? ` v${r.version}` : ''}, `
-        + `sent ${String(r.sent_at).slice(0, 10)}, not acknowledged here; `
+        + `sent ${String(r.sent_at).slice(0, 10)}, not yet opened by the client; `
         + `${r.need_title ? `engagement: ${r.need_title}; ` : ''}`
         + `${r.open_milestones} milestone${r.open_milestones === 1 ? '' : 's'} still open on it`);
     },
