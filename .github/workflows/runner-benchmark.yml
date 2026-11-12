@@ -1,0 +1,81 @@
+name: Runner benchmark
+
+on:
+  push:
+    branches: ['bench/runners-**']
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: plan
+        env:
+          SPENDING_CAP_VERIFIED: ${{ vars.RUNNER_BENCHMARK_SPENDING_CAP_VERIFIED }}
+          GITHUB8_READY: ${{ vars.RUNNER_BENCHMARK_GITHUB8_READY }}
+          EPHEMERAL_READY: ${{ vars.RUNNER_BENCHMARK_EPHEMERAL_READY }}
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          import { partsOf } from './scripts/test-drift-parts.mjs';
+          import { benchmarkLanes } from './scripts/lib/runnerBenchmark.mjs';
+          const lanes = benchmarkLanes({ spendingCapVerified: process.env.SPENDING_CAP_VERIFIED, github8Ready: process.env.GITHUB8_READY, ephemeralReady: process.env.EPHEMERAL_READY });
+          const parts = partsOf(JSON.parse(readFileSync('package.json', 'utf8')).scripts);
+          console.log('matrix=' + JSON.stringify({ include: lanes.flatMap(lane => parts.map(part => ({ ...lane, part: part.name }))) }));
+          NODE
+
+  benchmark:
+    name: benchmark/${{ matrix.lane }}/${{ matrix.part }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 27
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
+      # The suite imports React deck templates and the worker's TypeScript, so
+      # it needs both workspaces' dependencies installed.
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      # D5398: D4558's independent-recovery tests require the real age CLI.
+      # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
+      # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.
+      # The script installs locally to RUNNER_TEMP and adds only age to PATH.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: bash scripts/ci/install-age-linux.sh
+      # docs/ is not committed (D529), and part of the suite reads the built
+      # SPA (check-docs-assets-closure, the tests that open docs/), so build
+      # it first — the same root build the deploy runs.
+      - name: Build the SPA
+        run: npm run build
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}

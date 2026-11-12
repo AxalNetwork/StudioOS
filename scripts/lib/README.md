@@ -41,6 +41,8 @@ can be read to find out what a rule actually is.
 | `spaChunks.mjs` | Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI runs. |
 | `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
 | `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
+| `runnerBenchmark.mjs` | D5611: runner-lane timing/cost summaries, provenance and explicit paid-benchmark gates. |
+| `runnerBenchmark.test.mjs` | D5611: measurement fixtures, unavailable evidence and lane-gate regressions. |
 
 ## Tests
 
