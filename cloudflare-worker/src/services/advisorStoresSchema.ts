@@ -406,6 +406,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
     await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
     await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisor_services', [
+      ['publication_state', `ALTER TABLE advisor_services ADD COLUMN publication_state TEXT NOT NULL DEFAULT 'draft'  CHECK (publication_state IN ('draft', 'published', 'hidden'))`],
+    ]);
     await addMissingColumns(env, 'advisor_proof_items', [
       ['published_consent_id', 'ALTER TABLE advisor_proof_items ADD COLUMN published_consent_id INTEGER'],
     ]);
