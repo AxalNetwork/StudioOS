@@ -122,3 +122,10 @@ test('forwarding records only durable sender acceptance and preserves pending wo
  assert.equal((await pendingCfSourceReceipts(db)).length,0);
  }finally{f.db.close();}
 });
+
+test('equal provider timestamps preserve active version but do not invent rollback ordering',async()=>{
+ const f=fixture();try{f.deps[1].created_on=f.deps[0].created_on;f.deps[2].versions=f.deps[0].versions;await f.run();
+ const rows=await pendingCfSourceReceipts(d1Over(f.db) as any);assert.ok(rows.some(r=>r.code==='history_gap'));assert.equal(rows.some(r=>r.code==='rollback'),false);
+ assert.equal((await f.store.read('deployments:studioos')).active_id,f.deps[2].id);
+ }finally{f.db.close();}
+});
