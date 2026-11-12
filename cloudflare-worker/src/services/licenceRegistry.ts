@@ -20,6 +20,7 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import { eventsOf } from './userLicences';
 import {
   LICENCE_TYPE_LABELS, licenceContractLegalStatus, loadUserLicenceAgreements,
   programAgreementLegalStatus, userLicenceTemplateFor, type AgreementContext, type LegalStatus, LEGAL_STATUS_LABELS,
@@ -429,9 +430,12 @@ export async function registryDetail(env: Env, uid: string) {
     : await env.DB.prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?').bind(accountId).first<any>();
   const users = await section(() => userAgreements(env, accountId === null ? [] : [accountId]));
   const tpl = userLicenceTemplateFor(row.licence_type);
-  // The lifecycle history is #5058's store (`user_licence_events`, PR #5390), which main does not have yet; this read
-  // reaches it once that lands, rather than querying a table nothing creates.
-  const history = notRecorded('A user licence\'s lifecycle history is not recorded yet: #5058 adds its store.');
+  const events = await section(() => eventsOf(env, { uid }));
+  const history = events.ok
+    ? { available: true, items: events.value }
+    : events.missing
+      ? notRecorded('The user licence history store is not on this database.')
+      : unreadable('The user licence history');
   const agreementVersions = !users.ok
     ? (users.missing ? notRecorded('E-sign envelopes are not on this database.') : unreadable('The user licence agreements'))
     : {
