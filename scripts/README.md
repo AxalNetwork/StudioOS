@@ -289,6 +289,7 @@ binding targets and branch isolation.
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
 
+| `notification-routing-context.mjs` | D5666: GET-only GitHub PR/ruleset/linked-issue/claim metadata adapter. |
 | `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |
 
 | `future-clock-report.mjs` | D5663: trusted same-attempt producer evidence verification. |
