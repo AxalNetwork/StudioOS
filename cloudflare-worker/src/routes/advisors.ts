@@ -25,7 +25,7 @@ import {
   type AdvisorRow, type BookingOffer, type BookingRow, advisorMoney, bookingDto, myAdvisor, parsePriceCents, requireMyAdvisor, sentRevision, validationRefusal,
 } from '../services/advisorPractice';
 import advisorServicesRoutes from './advisors_services';
-import advisorProofRoutes from './advisors_proof';
+import advisorProofRoutes, { publishedAdvisorProof } from './advisors_proof';
 import advisorMoneyRoutes from './advisors_money';
 import advisorCohortsRoutes from './advisors_cohorts';
 import advisorEngagementsRoutes from './advisors_engagements';
@@ -568,7 +568,7 @@ advisors.get('/:uid', async (c) => {
     ).bind(m.id).all<BookingLinkRow>();
     const { email: _email, user_id: _userId, id: _id, ...profile } = advisorDto(m);
     return c.json({ ...profile, session_types: (types.results || []).map(sessionTypeDto),
-      booking_links: (links.results || []).map(bookingLinkDto) });
+      booking_links: (links.results || []).map(bookingLinkDto), proof: await publishedAdvisorProof(c.env, m.id) });
   } catch (e) { return mapError(c, e); }
 });
 
