@@ -15,6 +15,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { TABS, forecastHref, isUseOfFundsTab, tabHref, tabSearch } from '../src/pages/raise/useoffunds/useOfFundsModel.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -145,7 +146,7 @@ test('a failed plan read says so where the sections would be (D1177: Allocation 
  * ------------------------------------------------------------------ */
 
 test('the wiring: CycleRoute branches on the tab word, only D1178\'s two pages under a tab are routes, and the canvas sits in incoming', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.ok(route.includes('isUseOfFundsTab(slug, recordId)') && route.includes('!uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("'use-of-funds': (q) => ({ label: 'Open the forecast', href: forecastHref(q) })"));
   const routes = read('frontend/src/App.jsx').match(/path="\/raise\/use-of-funds[^"]*"/g) || [];

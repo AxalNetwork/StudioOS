@@ -50,6 +50,12 @@
  * `D<n>.md` (every file in the folder but its README is read, so a misnamed
  * one is refused rather than skipped), a file with no heading or whose first
  * line is not `## D<n> — <title>`, and a file holding more than one decision.
+ *
+ * PARTS (D5615, #5615). A later part of a multi-part issue writes its own file,
+ * `D<n>-p<k>.md`, headed `## D<n> part <k> — <title> (#<n>)`, and never edits
+ * `D<n>.md`. The check refuses a part file whose parent `D<n>.md` is not in the
+ * folder, whose heading names another decision or part, or whose heading does
+ * not cite its own issue.
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -132,11 +138,66 @@ export function fileDecisionId(name) {
 }
 
 /**
+ * D5615 (#5615): a later part of a multi-part issue records its decision in its
+ * own file, `D<n>-p<k>.md` beside the issue's `D<n>.md`, so parallel parts
+ * never edit one file (`D4811.md` changed in 22 commits in the week to
+ * 2026-11-11). `D4589-p2.md` → `{ id: 4589, part: 2 }`; anything else → null.
+ */
+export function filePart(name) {
+  const m = /^D([1-9]\d*)-p([1-9]\d*)\.md$/.exec(name);
+  return m ? { id: Number(m[1]), part: Number(m[2]) } : null;
+}
+
+/**
  * The first line of a decision file: `## D<n> — <title>`, at exactly that
  * level, with the em dash and a title. The folder README and AGENTS.md both
  * state this shape, so a reader can find an entry by its first line.
  */
 const FIRST_LINE = /^## D([1-9]\d*) — \S/;
+/** A part file's first line: `## D<n> part <k> — <title> (#<n>)` (D5615). */
+const PART_FIRST_LINE = /^## D([1-9]\d*) part ([1-9]\d*) — \S/;
+
+/**
+ * The problems in one part file, `D<n>-p<k>.md` (D5615). Its parent `D<n>.md`
+ * must be in the folder: a part records a later step of a decision that
+ * exists, never a decision of its own. Parts are issue-numbered decisions'
+ * (D4000 up), because the heading cites the issue, `#<n>`, as the parent's does.
+ */
+function partFileProblems(name, md, { id, part }, names) {
+  const problems = [];
+  if (id < ISSUE_NUMBERED_FROM) {
+    problems.push(
+      `${name} is a part of D${id}, but parts are for decisions numbered by their issue,`
+      + ` D${ISSUE_NUMBERED_FROM} up (D5615).`,
+    );
+  }
+  if (!names.has(`D${id}.md`)) {
+    problems.push(
+      `${name} has no parent: D${id}.md is not in the folder. A part file records a later part`
+      + ` of the decision its issue's D${id}.md made (D5615).`,
+    );
+  }
+  const first = md.split(/\r?\n/, 1)[0];
+  const m = PART_FIRST_LINE.exec(first);
+  if (!m) {
+    problems.push(`${name} does not start with \`## D${id} part ${part} — <title> (#${id})\` (D5615).`);
+  } else if (Number(m[1]) !== id || Number(m[2]) !== part) {
+    problems.push(
+      `${name} is headed D${m[1]} part ${m[2]}. A part file's name and its heading are the same`
+      + ` decision and part (D5615).`,
+    );
+  }
+  const cited = [...first.matchAll(/#(\d+)\b/g)].map((c) => Number(c[1]));
+  if (!cited.includes(id)) {
+    problems.push(
+      `${name}: a part's heading cites its own issue, #${id}`
+      + ` (\`## D${id} part ${part} — <title> (#${id})\`). ${cited.length ? `It cites #${cited.join(', #')}.` : 'It cites no issue.'} (D5615)`,
+    );
+  }
+  const heads = decisionIds(md);
+  if (heads.length > 1) problems.push(`${name} holds ${heads.length} decision headings; one file holds one part.`);
+  return problems;
+}
 
 /**
  * The problems in the per-decision files, as readable lines.
@@ -148,10 +209,19 @@ const FIRST_LINE = /^## D([1-9]\d*) — \S/;
  */
 export function decisionFileProblems(files) {
   const problems = [];
+  const names = new Set(files.map((f) => f.name));
   for (const { name, md } of files) {
+    const part = filePart(name);
+    if (part) {
+      problems.push(...partFileProblems(name, md, part, names));
+      continue;
+    }
     const n = fileDecisionId(name);
     if (n == null) {
-      problems.push(`${name} is not named D<n>.md, so its number cannot be read from its name.`);
+      problems.push(
+        `${name} is not named D<n>.md, so its number cannot be read from its name`
+        + ' (a later part of a multi-part issue is D<n>-p<k>.md, D5615).',
+      );
       continue;
     }
     if (n <= LAST_IN_DECISIONS_MD) {
@@ -250,13 +320,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 
   const ids = decisionIds(md);
-  const fileIds = files.map((f) => fileDecisionId(f.name)).sort((a, b) => a - b);
+  const fileIds = files.map((f) => fileDecisionId(f.name)).filter((n) => n != null).sort((a, b) => a - b);
+  const parts = files.filter((f) => filePart(f.name)).length;
   console.log(
     `✓ check-decision-ids: ${ids.length} decisions in DECISIONS.md, D${ids[0]} through D${ids[ids.length - 1]}`
     + ' in increasing order, and '
     + (fileIds.length
       ? `${fileIds.length} in ${DIR}/, D${fileIds[0]} through D${fileIds[fileIds.length - 1]}`
       : `none yet in ${DIR}/`)
+    + (parts ? `, with ${parts} part file${parts === 1 ? '' : 's'} beside their parents` : '')
     + '; all distinct.',
   );
 }

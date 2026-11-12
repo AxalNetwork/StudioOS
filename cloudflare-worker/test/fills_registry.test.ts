@@ -248,8 +248,10 @@ test('every kind has a host that mounts its band — the other half of D17', () 
   // The cycle pages mount a kind through their `fills` entries (D691, #1698:
   // Grow's feedback theme), read as `frontend/test/_cycleBands.mjs` reads them,
   // and the page passes that kind to the one band it draws.
-  const route = readFileSync(resolve(HERE, '../../frontend/src/pages/cycles/CycleRoute.jsx'), 'utf8');
-  const cycleKinds = [...route.matchAll(/\n {4}fills: \{([^}]*)\},/g)]
+  // D5615 (#5615): each cycle's entry, its `fills` among them, is `defs/<cycle>.jsx`.
+  const route = ['CycleRoute.jsx', 'defs/validate.jsx', 'defs/raise.jsx', 'defs/grow.jsx', 'defs/build.jsx']
+    .map((f) => readFileSync(resolve(HERE, `../../frontend/src/pages/cycles/${f}`), 'utf8')).join('\n');
+  const cycleKinds = [...route.matchAll(/\n {2}fills: \{([^}]*)\},/g)]
     .flatMap((m) => [...m[1].matchAll(/'?[a-z-]+'?: '([a-z_]+)'/g)].map((k) => k[1]));
   assert.match(route, /<FillProposals [^>]*kind=\{fillKind\}/, 'the cycle page passes no kind to its band');
 

@@ -80,6 +80,7 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name == 'push'",
   // D5398: the failure classifier runs only after a PR's suite failed; it is a pull_request-only job, so never in the queue.
   "failure() && github.event_name == 'pull_request'",
+  "always() && github.event_name == 'pull_request'",
 ]);
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
@@ -134,10 +135,10 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   const all = jobs(code('ci.yml'));
   const gate = all.find((j) => j.name === AGGREGATOR);
   const body = gate.body.join('\n');
-  assert.deepEqual(gate.needs, ['verified', 'suite']);
+  assert.deepEqual(gate.needs, ['verified', 'plan', 'suite']);
   // The two ways to pass, and nothing else.
   assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
-  assert.match(body, /if \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  assert.match(body, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
   assert.match(body, /exit 0\n\s+fi\n\s+echo "::error::[^\n]+"\n\s+exit 1\s*$/, 'anything else fails');
   assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
   assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);

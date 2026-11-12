@@ -1,0 +1,7 @@
+{
+  "GET /api/developer/usage/events/:execution_id": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

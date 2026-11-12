@@ -97,7 +97,7 @@ export const READ_KEYS = Object.freeze([
   'compliance.calendar', 'mercury.balances', 'stripe.revenue',
   'github.repos', 'vercel.deployments',
   // D4667 (owner's answer A): typed records with read keys of their own, so a rule book names them on purpose.
-  'grow.burn', 'raise.pipeline', 'validate.transcripts', 'raise.diligence',
+  'grow.burn', 'raise.pipeline', 'validate.transcripts', 'raise.diligence', 'grow.board_metrics',
 ] as const);
 
 /**

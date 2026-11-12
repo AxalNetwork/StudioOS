@@ -609,7 +609,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
                         not in their own set — and re-indexing it would index
                         into a namespace it does not belong to. Drawing either
                         would be a control that cannot act. */}
-                    {d.source !== 'client' && (
+                    {d.source !== 'client' && d.read_only !== true && (
                       <>
                         <DocumentMetadata document={d} onSaved={load} />
                         {problem?.action === 'retry' ? null : (
