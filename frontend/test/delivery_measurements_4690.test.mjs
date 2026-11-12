@@ -16,6 +16,7 @@ import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), p), 'utf8'));
 const capacity = read('frontend/src/pages/partner/delivery/CapacityZone.jsx');
+const home = read('frontend/src/pages/partner/PartnerHomeP2.jsx');
 const deliverables = read('frontend/src/pages/partner/delivery/DeliverablesZone.jsx');
 const health = read('frontend/src/pages/partner/delivery/HealthZone.jsx');
 const board = read('frontend/src/pages/partner/delivery/BoardZone.jsx');
@@ -31,11 +32,25 @@ test('the capacity period chips say month because the period they read is a mont
   assert.match(capacity, /padStart\(2, '0'\)/);
 });
 
-test('hours are shown against the cap the Worker compared with, not the weekly number', () => {
-  assert.match(capacity, /`\$\{p\.total_hours\} of \$\{p\.period_cap_hours\} h`/,
-    'the total is shown against the weekly cap');
+test('#5314 capacity is drawn on one basis, hours a week, against the cap as stated', () => {
+  // The total and the cap are the two figures the Worker compared.
+  assert.match(capacity, /`\$\{p\.total_hours_per_week\} of \$\{p\.cap_hours\} h`/,
+    'the weekly total is not shown against the weekly cap');
   assert.ok(!/\$\{p\.total_hours\} of \$\{p\.cap_hours\}/.test(capacity), 'monthly hours are shown against a weekly cap');
-  assert.match(capacity, /h a week = \$\{d\.period_cap_hours\} h in \$\{d\.period\}/);
+  assert.ok(!/period_cap_hours|period_days/.test(capacity), 'the page still draws the per-month cap');
+  // The basis line says so, and no longer explains a mismatch.
+  assert.match(capacity, /hours a week/);
+  assert.ok(!/compared over the month’s days|monthly totals/.test(capacity), 'the mismatch explanation is back');
+  // Every hour column reads its weekly figure.
+  for (const f of ['project_hours_per_week', 'seat_hours_per_week', 'internal_hours_per_week', 'total_hours_per_week']) {
+    assert.ok(capacity.includes(`p.${f}`), `the row stopped reading ${f}`);
+  }
+  // The strip's two hour tiles are weekly too, and Not recorded when absent, never 0.
+  assert.match(capacity, /nr=\{d\?\.project_hours_total_per_week == null\}/);
+  assert.match(capacity, /nr=\{d\?\.seat_hours_total_per_week == null\}/);
+  assert.ok(!/project_hours_total(?:_per_week)? \?\? 0/.test(capacity), 'an absent total reads 0');
+  // The home card says the same thing in the same unit.
+  assert.match(home, /`\$\{p\.total_hours_per_week\} h a week against a cap of \$\{p\.cap_hours\} h a week`/);
 });
 
 test('a deliverable is only called unopened where opens are observable', () => {

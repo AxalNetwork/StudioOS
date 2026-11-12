@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { ChevronDown } from 'lucide-react';
 import { api } from '../../lib/api';
 import { accountCompaniesApi } from '../../lib/api/accountCompanies.js';
+import { accountPortfolioApi } from '../../lib/api/accountPortfolio.js';
 import { teamsApi } from '../../lib/api/teams.js';
 import { reportError } from '../../lib/log';
 import { safeReadJSON } from '../../lib/storage';
@@ -221,14 +222,16 @@ function useProjectTeam(id, companies) {
   const load = useCallback(async () => {
     const who = me();
     try {
-      const [project, members, mine] = await Promise.all([
-        api.getProject(id),
+      const [settings, members, mine] = await Promise.all([
+        accountPortfolioApi.settingsScope({ project: id }).catch(() => null),
         teamsApi.listProjectMembers(id),
         accountCompaniesApi.projects().catch(() => null),
       ]);
+      const project = settings?.project ?? await api.getProject(id);
       const row = (mine?.projects || []).find((p) => String(p.id) === String(id));
-      const company = projectCompany(project, { row, companies: known.current });
-      setState({ status: 'ready', project, members, company, meId: who.id, projects: projectsOfCompany(mine?.projects, company?.uid) });
+      const company = settings?.company ?? projectCompany(project, { row, companies: known.current });
+      setState({ status: 'ready', project, members, company, myAuthority: settings?.my_authority,
+        companyEditors: settings?.company_editors, meId: who.id, projects: projectsOfCompany(mine?.projects, company?.uid) });
     } catch (e) {
       setState({ status: e?.status === 404 || e?.status === 403 ? 'refused' : 'error', error: e });
     }
@@ -275,7 +278,7 @@ function ProjectTeam({ form }) {
   const p = state.project;
   const fresh = scopeFor({ project: { id, name: p?.name || (state.status === 'loading' ? '…' : null), company: state.status === 'ready' ? state.company : (form === 'company_project' ? { uid, name: null } : null) }, projects: state.projects });
   const freshKey = scopeKey(fresh);
-  const scope = useMemo(() => fresh, [freshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scope = useMemo(() => fresh && { ...fresh, myAuthority: state.myAuthority }, [freshKey, state.myAuthority]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!scope) return <div className="p-6"><NotAMember name={null} /></div>;
   if (state.status === 'ready') {
     // One address per form: a project in a company is reached from Company settings › Projects.
@@ -380,7 +383,7 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
           <h1 className="m-0 text-[26px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100">{TITLE}</h1>
           <p className={`m-0 mt-0.5 ${MUTED}`}>{purposeLine(name)}</p>
           {!reading && scope.kind === 'company_project' ? (
-            <p role="note" className="m-0 mt-2 w-fit rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-ink dark:bg-violet-900/20 dark:text-gray-100" data-testid="team-managed-note">{managedNote(scope.company.name)}</p>
+            <p role="note" className="m-0 mt-2 w-fit rounded-axal-md bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-ink dark:bg-violet-900/20 dark:text-gray-100" data-testid="team-managed-note">{managedNote(scope.company.name, Boolean(scope.myAuthority))}</p>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
@@ -400,6 +403,8 @@ function TeamBody({ state, reload, scope, people, canEdit, invitations, highligh
         <>
           <PeopleCard kind={kind} people={people} loading={reading} error={state.status === 'error'} onRetry={reload}
             canEdit={canEdit} company={scope.company?.name} lock={lock} highlightKey={highlightKey}
+            companyEditors={Array.isArray(state.companyEditors) ? { available: true, value: state.companyEditors } : null}
+            managesThrough={scope.myAuthority === 'company_editor' ? scope.company?.name : null}
             onChangeRole={(p) => setDialog({ kind: 'changeRole', p })} onRemove={(p) => setDialog({ kind: 'remove', p })}>
             {!reading && canEdit && invitations ? (
               <InvitationsBlock kind={kind} invitations={invitations.list} error={invitations.ok === false} onRetry={reload}
