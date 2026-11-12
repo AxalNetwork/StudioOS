@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 
 TS = [
+ ('cloudflare-worker/src/routes/agent_compute.ts', 'AND o.owner_user_id = ?', 'AND ? IS NOT NULL', 'artifact delivery'),
+ ('cloudflare-worker/src/routes/agent_compute.ts', "(scope.kind === 'company' ? scope.id : scope.company_id) !== spec.company_id", 'false', 'artifact delivery'),
  ('cloudflare-worker/src/routes/agent_compute.ts', 'if (error instanceof Error && AUTH_ERROR_STATUSES[error.message]) throw error;', 'void error;', 'every signed-in route refuses'),
  ('cloudflare-worker/src/services/agents/computeBridge.ts', 'WHERE e.request_uid = r.uid AND a.sponsor_user_id = ?1)', 'WHERE e.request_uid = r.uid AND a.sponsor_user_id = ?1 AND 0)', 'after a sponsor change'),
  ('cloudflare-worker/src/agents/engine.ts', 'NOT EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?)', 'EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?)', 'created between'),
@@ -61,13 +63,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--image', required=True)
     parser.add_argument('--node', default='node')
+    parser.add_argument('--match', default='', help='Run mutations whose test name includes this text; controls still run in full')
     args = parser.parse_args()
+    if not any(args.match in case[-1] for case in TS + PYTHON + SERVER):
+        parser.error('No mutation matches the requested test name')
     root = Path(__file__).resolve().parent.parent
     with tempfile.TemporaryDirectory(prefix='compute-mutations-4557-') as directory:
         copy = Path(directory); copy.chmod(0o755)
         for name in ['cloudflare-worker/src', 'cloudflare-worker/test', 'cloudflare-worker/sql', 'agent-compute']:
             shutil.copytree(root / name, copy / name, ignore=shutil.ignore_patterns('node_modules', '__pycache__'))
-        for name in ['scripts', 'frontend', 'meeting-bot', 'node_modules', 'cloudflare-worker/node_modules']:
+        for name in ['scripts', 'frontend', 'meeting-bot', 'node_modules', 'cloudflare-worker/node_modules', 'cloudflare-worker/ai-workers']:
             (copy / name).symlink_to((root / name).resolve(), target_is_directory=True)
         tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts')) + ['cloudflare-worker/test/authz_sweep_d4570.test.ts']
         command = [args.node, '--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--test', '--test-concurrency=2']
@@ -75,8 +80,9 @@ def main():
             result = subprocess.run(command + (['--test-name-pattern', pattern] if pattern else []) + tests, cwd=copy, capture_output=True, text=True, timeout=60)
             return result.returncode, result.stdout + result.stderr
         code, log = run_ts()
-        if code: raise RuntimeError('Unmutated Worker controls failed:\n' + log[-5000:])
+        if code: raise RuntimeError('Unmutated Worker controls failed:\n' + log[:5000])
         for path, old, new, pattern in TS:
+            if args.match not in pattern: continue
             source = copy / path; original = source.read_text()
             if old not in original: raise RuntimeError('Stale mutation: ' + old)
             try:
@@ -88,6 +94,7 @@ def main():
         for name, cases in [('runner.py', PYTHON), ('server.py', SERVER)]:
             source = copy / 'agent-compute' / name; original = source.read_text(); source.chmod(0o644)
             for old, new, pattern in cases:
+                if args.match not in pattern: continue
                 if old not in original: raise RuntimeError('Stale image mutation: ' + old)
                 try:
                     source.write_text(original.replace(old, new))

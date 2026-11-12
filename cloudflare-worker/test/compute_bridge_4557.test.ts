@@ -3,12 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { computeWorld } from './_compute_world_4557.ts';
-import { AGENT, SPONSOR, STRANGER, PROJECT, loopDeps } from './_agent_engine_fixture.ts';
+import { AGENT, ADMIN, SPONSOR, STRANGER, PROJECT, loopDeps } from './_agent_engine_fixture.ts';
 import { createComputeRequest, uploadComputeInput, readyComputeRequest, dispatchCompute, cancelComputeRun, computeInternal, authorizeCompute, eraseComputeData, sweepComputeObjects } from '../src/services/agents/computeBridge.ts';
 import { runTaskLoop, load, runStep } from '../src/agents/loop.ts';
 import { createJob } from '../src/services/agents/compute.ts';
 import { computeTarget } from '../src/services/agents/computeHost.ts';
 import { router } from '../src/routes/agent_compute.ts';
+import { createJWT } from '../src/auth.ts';
 import { storageUsedBytes } from '../src/services/storageUsage.ts';
 import { removeMigratedDatabases } from './_storage_schema.ts';
 
@@ -260,5 +261,25 @@ test('erasing an agent after a sponsor change cleans its former execution before
     await eraseComputeData(w.env, { userId: STRANGER });
     assert.equal(w.stats.forgotten.length, 1); assert.equal(w.objects.size, 0);
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_compute_requests').get() as any).n, 0);
+  } finally { w.close(); }
+});
+
+
+test('artifact delivery requires its owner and the original company, including for an admin reader', async () => {
+  const w = await computeWorld();
+  try {
+    const { runUid } = await prepare(w); await load(loopDeps(w, noModel), runUid); await dispatchCompute(w.env, runUid); await w.runAlarms();
+    const row = w.db.prepare("SELECT uid FROM agent_compute_objects WHERE kind = 'output'").get() as any;
+    const app = new Hono().route('/api/agent-compute', router);
+    async function download(id: number) {
+      const user = w.user(id), token = await createJWT(w.env, id, user.email, user.role);
+      return app.request('/api/agent-compute/artifacts/' + row.uid, { headers: { authorization: 'Bearer ' + token } }, w.env);
+    }
+    const own = await download(SPONSOR);
+    assert.equal(own.status, 200); assert.equal(own.headers.get('cache-control'), 'private, no-store');
+    assert.deepEqual(await own.json(), { sum: 6 });
+    for (const id of [STRANGER, ADMIN]) assert.equal((await download(id)).status, 404);
+    w.db.prepare('UPDATE projects SET company_id = NULL WHERE id = ?').run(PROJECT);
+    assert.equal((await download(SPONSOR)).status, 404);
   } finally { w.close(); }
 });
