@@ -67,7 +67,8 @@ test('project data: HQ without a seat, support and a non-editing seat are refuse
 });
 
 test('creating a company project is refused before any founder or project row is written', async () => {
-  for (const [who, claims, reason] of [[HQ, {}, 'hq_access'], [OWNER, support, 'support_session'], [PLAIN, {}, 'not_an_editor']] as const) {
+  // D5525 (owner decision A): a plain Member seat may create; only HQ without a seat and support are refused.
+  for (const [who, claims, reason] of [[HQ, {}, 'hq_access'], [OWNER, support, 'support_session']] as const) {
     const w = fixture();
     const before = (w.db.prepare('SELECT COUNT(*) AS n FROM projects').get() as any).n;
     const founders = (w.db.prepare('SELECT COUNT(*) AS n FROM founders').get() as any).n;
@@ -76,6 +77,13 @@ test('creating a company project is refused before any founder or project row is
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM projects').get() as any).n, before);
     assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM founders').get() as any).n, founders);
   }
+});
+
+test('D5525: a plain Member seat creates a project in its company', async () => {
+  const w = fixture();
+  const out = await call(w, PLAIN, 'POST', '', { name: 'Member project', company_id: COMPANY });
+  assert.equal(out.status, 201, out.text);
+  assert.equal((w.db.prepare("SELECT company_id FROM projects WHERE name = 'Member project'").get() as any)?.company_id, COMPANY);
 });
 
 test('project data: owner, editing co-founder and platform admin with an editing seat keep existing authority', async () => {
