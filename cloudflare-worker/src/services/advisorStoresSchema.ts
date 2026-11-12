@@ -233,6 +233,31 @@ const TABLES = [
    BEGIN
        SELECT RAISE(ABORT, 'advisor_proof_consent_events is append-only (D4670).');
    END`,
+
+  // D5315: cancellation evidence and credential revocation are one write.
+  `CREATE TABLE IF NOT EXISTS advisor_proof_consent_cancellations (
+     consent_id   INTEGER PRIMARY KEY,
+     cancelled_by INTEGER NOT NULL,
+     cancelled_at TEXT NOT NULL
+   )`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_revoke
+   AFTER INSERT ON advisor_proof_consent_cancellations
+   BEGIN
+     UPDATE advisor_proof_consents SET request_token = NULL, updated_at = NEW.cancelled_at
+      WHERE id = NEW.consent_id;
+     UPDATE advisor_proof_consent_codes SET used_at = NEW.cancelled_at
+      WHERE consent_id = NEW.consent_id AND used_at IS NULL;
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_update
+   BEFORE UPDATE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS advisor_proof_consent_cancellations_block_delete
+   BEFORE DELETE ON advisor_proof_consent_cancellations
+   BEGIN
+     SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
+   END`,
 ];
 
 /** 202611062216 (D4670) — the claim a confirmation was asked about. */
