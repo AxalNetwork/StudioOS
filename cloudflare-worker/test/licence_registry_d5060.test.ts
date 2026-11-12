@@ -255,9 +255,7 @@ test('6. Not recorded and Unreadable are said, never zero or none', async () => 
   assert.equal(detail.programs.state, 'not_recorded');
   assert.equal(detail.overview.entitlements.state, 'not_recorded');
   assert.equal(detail.billing.state, 'not_recorded');
-  // The lifecycle history is #5058's store: Not recorded here, naming it.
-  assert.equal(detail.history.state, 'not_recorded');
-  assert.match(detail.history.reason, /#5058/);
+  assert.deepEqual(detail.history, { available: true, items: [] });
 
   // An agreement store that fails to read is Unreadable on the row, and attention says so; never "none".
   db.exec('ALTER TABLE licence_contracts RENAME COLUMN superseded_at TO superseded_at_x');
@@ -274,6 +272,29 @@ test('6. Not recorded and Unreadable are said, never zero or none', async () => 
   assert.equal(none.state, 'not_recorded');
   assert.equal(none.items, null);
   assert.equal(none.total, null);
+});
+
+test('user detail reads this licence’s lifecycle events, newest first, and distinguishes a missing store from a failed read', async () => {
+  const db = fixture();
+  const path = '/api/admin/licence-registry/ulic_5_founder';
+  const add = db.prepare(`INSERT INTO user_licence_events
+    (licence_uid, user_id, licence_type, action, to_status, revision, reason)
+    VALUES (?, ?, ?, ?, ?, ?, 'Synthetic history fixture')`);
+  add.run('ulic_5_founder', FOUNDER, 'founder', 'activate', 'active', 1);
+  add.run('ulic_5_investor', FOUNDER, 'investor', 'activate', 'active', 1);
+  add.run('ulic_5_founder', FOUNDER, 'founder', 'suspend', 'suspended', 2);
+
+  const history = (await ok(db, path)).history;
+  assert.equal(history.available, true);
+  assert.deepEqual(history.items.map((event: any) => [event.licence_uid, event.action, event.revision]), [
+    ['ulic_5_founder', 'suspend', 2], ['ulic_5_founder', 'activate', 1],
+  ]);
+
+  db.exec('ALTER TABLE user_licence_events RENAME COLUMN licence_uid TO old_uid');
+  assert.equal((await ok(db, path)).history.state, 'unreadable');
+  db.exec('DROP TABLE user_licence_events');
+  assert.equal((await ok(db, path)).history.state, 'not_recorded');
+  db.close();
 });
 
 test('7. the four user licence agreement templates are Contracts\' rows, authored or not', async () => {

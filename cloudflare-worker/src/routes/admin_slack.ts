@@ -16,7 +16,9 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireSuperAdmin } from '../auth';
+import { logAdminAction } from '../services/adminAudit';
+import { sendSectionPreview } from '../services/sectionSlackPreview';
 import {
   isConfigured,
   channelStatus,
@@ -99,6 +101,25 @@ adminSlack.post('/test/:channel', async (c) => {
     }, 502);
   }
   return c.json({ ok: true, ts: result.ts, channel: result.channel });
+});
+
+// A real Worker-originated receipt test. Ordinary site users and branch
+// admins cannot use an HQ sender or supply Slack text, IDs, or raw events.
+adminSlack.post('/sections/:slug/test', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  if (c.req.raw.body !== null) return c.json({ ok: false, error: 'empty_body_required' }, 400);
+  const slug = c.req.param('slug');
+  const result = await sendSectionPreview(c.env, slug);
+  await logAdminAction(c.env, actor.id, actor.email, 'section_slack_delivery_test', {
+    section: result.ok || result.reason !== 'unknown_section' ? slug : null,
+    ...result,
+  });
+  if (result.ok) return c.json(result);
+  if (result.retry_after_seconds !== undefined) c.header('Retry-After', String(result.retry_after_seconds));
+  if (result.reason === 'unknown_section') return c.json(result, 404);
+  if (result.reason === 'rate_limited') return c.json(result, 429);
+  if (result.reason === 'unconfigured' || result.reason === 'invalid_configuration') return c.json(result, 503);
+  return c.json(result, 502);
 });
 
 export default adminSlack;

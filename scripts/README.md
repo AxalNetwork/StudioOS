@@ -15,6 +15,7 @@
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
+| `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 | `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
 
 ## The guards
@@ -290,6 +291,7 @@ binding targets and branch isolation.
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
 
+| `scan-fingerprints.py` | D5602: bounded opaque Semgrep fingerprints using its existing Python runtime; parity-checked against the Node contract. |
 | `notification-routing-context.mjs` | D5666: GET-only GitHub PR/ruleset/linked-issue/claim metadata adapter. |
 | `future-clock-producer.mjs` | D5663: attempt-bound future-clock TAP and exit manifests. |
 
