@@ -1,0 +1,10 @@
+# Retired spelling -> declared canonical spelling. No label is deleted.
+"slot:S1": "slot:S01"
+"slot:s35": "slot:S35"
+"slot:s36": "slot:S36"
+"state:in-review": "state:review"
+"state:active": "state:in-progress"
+"state:done": "state:review"
+"state:needs-decision": "needs-decision"
+"tracking": "tracker"
+"priority: medium": "priority:medium"

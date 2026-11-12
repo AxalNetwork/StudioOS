@@ -21,6 +21,7 @@ import {
   RESERVATION_TTL_MS, REFUSAL_MESSAGES,
 } from '../src/services/promoRedemption.ts';
 import { resolveCartPromo } from '../src/services/orders.ts';
+import { checkPromoRenewal, settlePromoRenewal } from '../src/services/promoRenewal.ts';
 import { quarterKey } from '../src/services/statements.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -43,10 +44,70 @@ const PACKS = (() => {
 const ADA = 51, BEA = 52;
 const PERIOD = quarterKey(new Date());
 
+const renewal = (id: string) => ({
+  id, billing_reason: 'subscription_cycle', subtotal: 7900,
+  parent: { subscription_details: { subscription: 'sub_renew', metadata: { promo_code_id: 'promo_RENEW', user_id: String(ADA) } } },
+});
+
+test('a recurring code with one use left admits one draft, holds the other and counts one paid invoice', async () => {
+  const d = database();
+  insertPromo(d, 'RENEW', { off: 400, max: 2 });
+  d.exec("UPDATE promo_codes SET duration = 'repeating' WHERE id = 'promo_RENEW'");
+  nativePromoUses = 1;
+  const e = env(d);
+  const invoices = [renewal('in_first'), renewal('in_second')];
+  await Promise.all(invoices.map(invoice => checkPromoRenewal(e, invoice)));
+  const row = d.prepare("SELECT ref, amount_cents FROM promo_ceiling_reservations").get();
+  assert.equal(row?.amount_cents, 400, 'only the matching Stripe discount is counted');
+  const winner = invoices.find(invoice => `renewal:${invoice.id}` === row?.ref)!;
+  const loser = invoices.find(invoice => invoice !== winner)!;
+  const [hold] = posted(`/invoices/${loser.id}`);
+  assert.equal(new URLSearchParams(hold?.body).get('auto_advance'), 'false');
+  assert.equal(posted(`/invoices/${winner.id}`).length, 0);
+  await checkPromoRenewal(e, winner);
+  await settlePromoRenewal(e, winner, true);
+  await settlePromoRenewal(e, winner, true);
+  assert.equal(d.prepare("SELECT state FROM promo_ceiling_reservations WHERE ref = ?").get(row!.ref)?.state, 'committed');
+  assert.deepEqual(d.prepare('SELECT payment_intent_id, discount_cents FROM promo_redemptions').all().map(r => [r.payment_intent_id, r.discount_cents]), [[`invoice:${winner.id}`, 400]]);
+  await checkPromoRenewal(e, renewal('in_third'));
+  assert.equal(posted('/invoices/in_third').length, 1, 'a paid renewal adds to the Stripe subscription counter');
+});
+
+test('voiding a renewal releases the allowance for another draft', async () => {
+  const d = database(400);
+  insertPromo(d, 'RENEW', { off: 400, max: 2 });
+  d.exec("UPDATE promo_codes SET duration = 'forever' WHERE id = 'promo_RENEW'");
+  const e = env(d);
+  const invoice = renewal('in_voided');
+  await checkPromoRenewal(e, invoice);
+  await checkPromoRenewal(e, renewal('in_blocked'));
+  assert.equal(posted('/invoices/in_blocked').length, 1);
+  await settlePromoRenewal(e, invoice, false);
+  await checkPromoRenewal(e, renewal('in_next'));
+  assert.equal(posted('/invoices/in_next').length, 0);
+  assert.equal(d.prepare('SELECT issued_cents FROM branch_promo_ceiling').get()?.issued_cents, 400);
+});
+
+test('a renewal reservation and a new checkout share the last recurring-code use at HQ', async () => {
+  const d = database(null);
+  insertPromo(d, 'RENEW', { off: 400, max: 2 });
+  d.exec("UPDATE promo_codes SET duration = 'forever' WHERE id = 'promo_RENEW'");
+  nativePromoUses = 1;
+  const e = env(d, null);
+  const invoice = renewal('in_hq');
+  await checkPromoRenewal(e, invoice);
+  const request = { code: 'RENEW', productId: 'prod_growth', amountCents: 7900, currency: 'usd',
+    buyer: { userId: BEA, interval: 'month' }, reference: 'new-hq-checkout' };
+  assert.equal((await reservePromo(e, request)).ok, false);
+  await settlePromoRenewal(e, invoice, false);
+  assert.equal((await reservePromo(e, request)).ok, true);
+});
+
 // ── Stripe, stubbed ────────────────────────────────────────────────────────
 let calls: Array<{ url: string; method: string; body: string }> = [];
 let refuseIntent = false;
 let refuseSubscription = false;
+let nativePromoUses = 0;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init: any = {}) => {
   const url = String(typeof input === 'string' ? input : input?.url);
@@ -54,7 +115,15 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   calls.push({ url, method, body: String(init?.body ?? '') });
   const path = url.replace('https://api.stripe.com/v1', '');
   const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s });
-  if (path.startsWith('/promotion_codes/')) return json({ times_redeemed: 0 });
+  if (path.startsWith('/promotion_codes/')) return json({ times_redeemed: nativePromoUses });
+  if (path.startsWith('/invoices/in_')) {
+    if (method === 'POST') return json({ status: 'draft', auto_advance: false });
+    return json({
+      status: 'draft', currency: 'usd',
+      discounts: [{ id: 'di_renewal', promotion_code: 'promo_RENEW' }, { id: 'di_other' }],
+      total_discount_amounts: [{ discount: 'di_renewal', amount: 400 }, { discount: 'di_other', amount: 120 }],
+    });
+  }
   if (path.startsWith('/subscriptions') && method === 'GET') return json({ data: [], has_more: false });
   if (path.startsWith('/subscriptions') && refuseSubscription) return json({ error: { message: 'card declined' } }, 402);
   if (path.startsWith('/subscriptions')) return json({ id: 'sub_1', status: 'incomplete', latest_invoice: { id: 'in_1', payment_intent: { id: 'pi_1', client_secret: 'pi_1_secret_fixture' } } });
@@ -67,7 +136,7 @@ globalThis.fetch = (async (input: any, init: any = {}) => {
   return new Response('unexpected call in test', { status: 599 });
 }) as typeof fetch;
 process.on('exit', () => { globalThis.fetch = realFetch; });
-beforeEach(() => { calls = []; refuseIntent = false; refuseSubscription = false; });
+beforeEach(() => { calls = []; refuseIntent = false; refuseSubscription = false; nativePromoUses = 0; });
 const posted = (prefix: string) => calls.filter((c) => c.method === 'POST' && c.url.startsWith(`https://api.stripe.com/v1${prefix}`));
 
 // ── The store ───────────────────────────────────────────────────────────────
@@ -700,12 +769,30 @@ test('D4855: no checkout path asks the code\'s terms directly — they all go th
 
 const WEBHOOK = 'd4855-fixture-only-webhook-secret';
 async function webhook(env: any, type: string, object: Record<string, unknown>) {
-  const body = JSON.stringify({ id: `evt_${object.id}`, livemode: false, type, data: { object } });
+  const body = JSON.stringify({ id: `evt_${type.replaceAll('.', '_')}_${object.id}`, livemode: false, type, data: { object } });
   const t = Math.floor(Date.now() / 1000);
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(WEBHOOK), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const sig = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${body}`)))).map((n) => n.toString(16).padStart(2, '0')).join('');
   return billingRoute.request('/stripe/webhook', { method: 'POST', headers: { 'stripe-signature': `t=${t},v1=${sig}`, 'content-type': 'application/json' }, body }, env);
 }
+
+test('the signed billing webhook holds an exhausted renewal and releases an admitted invoice on void', async () => {
+  const d = database();
+  const migration = read('691_stripe_mode_stamps.sql');
+  const at = migration.indexOf('CREATE TABLE IF NOT EXISTS stripe_webhook_events');
+  d.exec(migration.slice(at, migration.indexOf('\n);', at) + 3));
+  insertPromo(d, 'RENEW', { off: 400, max: 2 });
+  d.exec("UPDATE promo_codes SET duration = 'forever' WHERE id = 'promo_RENEW'");
+  nativePromoUses = 1;
+  const e = { ...env(d), STRIPE_WEBHOOK_SECRET: WEBHOOK };
+  const admitted = renewal('in_admitted');
+  const held = renewal('in_held');
+  assert.equal((await webhook(e, 'invoice.created', admitted)).status, 200);
+  assert.equal((await webhook(e, 'invoice.created', held)).status, 200);
+  assert.equal(new URLSearchParams(posted('/invoices/in_held')[0]?.body).get('metadata[axal_promo_review]'), 'required');
+  assert.equal((await webhook(e, 'invoice.voided', admitted)).status, 200);
+  assert.equal(d.prepare('SELECT state FROM promo_ceiling_reservations WHERE ref = ?').get('renewal:in_admitted')?.state, 'released');
+});
 
 test('D4855: payment_intent.succeeded commits the reservation the PaymentIntent carries — once, and for a lapsed one too', async () => {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });

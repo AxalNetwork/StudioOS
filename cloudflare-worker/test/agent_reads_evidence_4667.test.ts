@@ -131,18 +131,16 @@ test('the ten skills: an input matrix, and a preflight through the actual reader
       assert.notEqual(full.state, 'ready', `${slug}: the built readers do not carry its typed evidence, so it is not ready`);
       assert.equal(none.state, 'not_ready', `${slug}: with no project it cannot run`);
       assert.ok(full.limits.length > 0, `${slug}: what is missing is named`);
-      // D4667 second and third slices: typed readers now carry every required input of these five; the other five still
-      // need document text, typed board metrics, typed fund performance or a person's review policy.
-      const carried = ['cash-runway-snapshot', 'monthly-investor-update', 'legal-due-diligence-coordination', 'pipeline-health-diagnostics', 'customer-interview-summary'].includes(slug);
+      const carried = ['cash-runway-snapshot', 'board-meeting-brief', 'monthly-investor-update', 'legal-due-diligence-coordination', 'pipeline-health-diagnostics', 'customer-interview-summary'].includes(slug);
       assert.equal(full.paths.default_context, carried ? 'supported' : 'unsupported', `${slug}: which paths can supply its required evidence`);
       assert.equal(full.paths.manual, 'approved_tool_reads_not_exercised_here');
     }
     // Balances and burn have typed readers now (agent_typed_readers_4667); this fixture's agent has no sponsor, so both
-    // are withheld. Board metrics are still only activity summaries.
+    // are withheld. The board KPI reader also requires a venture sponsor.
     const cash = (await preflight(f.env, 'cash-runway-snapshot', f.ctx(), READERS, NOW))!;
     assert.deepEqual(cash.inputs.map((i) => [i.read, i.status]), [['mercury.balances', 'withheld'], ['grow.burn', 'withheld']]);
     const board = (await preflight(f.env, 'board-meeting-brief', f.ctx(), READERS, NOW))!;
-    assert.match(board.inputs.find((i) => i.read === 'grow.records')!.note!, /activity summaries, not typed record/);
+    assert.equal(board.inputs.find((i) => i.read === 'grow.board_metrics')!.status, 'withheld');
     const interview = (await preflight(f.env, 'customer-interview-summary', f.ctx(), READERS, NOW))!;
     assert.equal(interview.state, 'not_ready', 'a transcript the sponsor may not read leaves nothing to summarise');
     const risk = (await preflight(f.env, 'contract-risk-issue-spotting', f.ctx(), READERS, NOW))!;

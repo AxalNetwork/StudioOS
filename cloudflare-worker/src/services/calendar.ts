@@ -1570,9 +1570,48 @@ function googlePayload(ev: CalendarEvent): any {
   return body;
 }
 
+export type GoogleCalendarWriteLimit = 'rate' | 'usage';
+
+// Google Calendar reports both short rate limits and longer usage limits as 403.
+async function googleCalendarWriteLimit(response: Response): Promise<GoogleCalendarWriteLimit | undefined> {
+  if (response.status !== 403) return;
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const limit = 8_192;
+  const decoder = new TextDecoder();
+  let size = 0;
+  let body = '';
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => {});
+  }, 10_000);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) return;
+      body += decoder.decode(value, { stream: true });
+    }
+    if (timedOut) return;
+    const reasons = JSON.parse(body + decoder.decode())?.error?.errors;
+    if (!Array.isArray(reasons)) return;
+    if (reasons.some((entry) => entry?.reason === 'quotaExceeded')) return 'usage';
+    if (reasons.some((entry) => entry?.reason === 'rateLimitExceeded' || entry?.reason === 'userRateLimitExceeded')) {
+      return 'rate';
+    }
+  } catch {
+    return;
+  } finally {
+    clearTimeout(timeout);
+    void reader.cancel().catch(() => {});
+  }
+}
+
 export async function pushEventToGoogle(
   accessToken: string, ev: CalendarEvent, googleEventId: string | null,
-  createKey?: string, refused?: (status: number) => void,
+  createKey?: string, refused?: (status: number, limit: GoogleCalendarWriteLimit | undefined) => void,
 ): Promise<string | null> {
   if (ev.read_only || ev.kind === 'calendly_event') return null;
   const headers = { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
@@ -1587,7 +1626,7 @@ export async function pushEventToGoogle(
       if (r.status === 404) {
         // Remote was deleted — fall through to a fresh insert.
       } else if (!r.ok) {
-        refused?.(r.status);
+        refused?.(r.status, await googleCalendarWriteLimit(r));
         console.warn('[CAL] gcal patch', r.status);
         return null;
       } else {
@@ -1601,11 +1640,11 @@ export async function pushEventToGoogle(
     if (r.status === 409 && createKey) {
       const saved = await patchEvent(createKey);
       if (saved.ok) return createKey;
-      refused?.(saved.status);
+      refused?.(saved.status, await googleCalendarWriteLimit(saved));
       return null;
     }
     if (!r.ok) {
-      refused?.(r.status);
+      refused?.(r.status, await googleCalendarWriteLimit(r));
       console.warn('[CAL] gcal insert', r.status);
       return null;
     }
