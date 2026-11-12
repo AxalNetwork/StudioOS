@@ -3,12 +3,12 @@ import { z } from 'zod';
 import { executorEligibility, trustedWorkspaceSpec, workspaceRefusal, workspaceReference,
   type ExecutorCapabilities, type WorkspaceResult, type WorkspaceSpec } from './workspaceSpec';
 
-export const WORKSPACE_AUDIENCES = ['executor.bootstrap', 'executor.heartbeat', 'executor.complete', 'artifact.upload', 'artifact.read', 'integration.publish'] as const;
+export const WORKSPACE_AUDIENCES = ['executor.bootstrap', 'executor.heartbeat', 'executor.complete', 'executor.status', 'executor.cancel', 'executor.collect', 'executor.cleanup', 'artifact.upload', 'artifact.read', 'integration.publish'] as const;
 export type WorkspaceAudience = typeof WORKSPACE_AUDIENCES[number];
 export type WorkspaceSponsor = { member_id: number; tenant_id: number; company_id: number; project_id: number | null };
 type Authorization = { allowed: boolean; revision: number; approved: boolean };
 export type WorkspaceImageEvidence = { digest: string; signature_verified: boolean; provenance_verified: boolean; sbom_verified: boolean; scan_passed: boolean; revoked: boolean };
-export type WorkspaceProviderEvidence = { capabilities: ExecutorCapabilities; non_root: boolean; immutable_root: boolean;
+export type WorkspaceProviderEvidence = { capabilities: ExecutorCapabilities; non_root: boolean; no_new_privileges: boolean; immutable_image: boolean;
   ephemeral_scratch: boolean; resource_limits: boolean; host_socket: boolean; privileged: boolean;
   isolation: 'microvm' | 'gvisor' | 'container' | 'unknown'; network_connect_fence: boolean; metadata_denied: boolean };
 export type WorkspaceObject = { ref: string; tenant_id: number; company_id: number; project_id: number | null; run_id: string;
@@ -56,6 +56,7 @@ function unb64(value: string): Uint8Array {
 const hash = async (value: string | Uint8Array) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', typeof value === 'string' ? bytes(value) : value))].map(x => x.toString(16).padStart(2, '0')).join('');
 const sameSponsor = (sponsor: WorkspaceSponsor, spec: WorkspaceSpec) => Number.isSafeInteger(sponsor.member_id) && sponsor.member_id > 0
   && sponsor.tenant_id === spec.tenant_id && sponsor.company_id === spec.company_id && sponsor.project_id === spec.project_id;
+const controlAudience = (audience: WorkspaceAudience) => ['executor.status', 'executor.cancel', 'executor.cleanup'].includes(audience);
 
 /** URL checking is only a broker preflight; an attested connect-time fence is separately mandatory. */
 export function workspaceDestination(spec: WorkspaceSpec, raw: string): boolean {
@@ -85,7 +86,7 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
     if (!evidence || evidence.digest !== spec.image_digest || evidence.signature_verified !== true || evidence.provenance_verified !== true
       || evidence.sbom_verified !== true || evidence.scan_passed !== true || evidence.revoked !== false) return refuse('image_not_approved', 403);
     const provider = await deps.provider(spec);
-    if (!provider || provider.non_root !== true || provider.immutable_root !== true || provider.ephemeral_scratch !== true || provider.resource_limits !== true
+    if (!provider || provider.non_root !== true || provider.no_new_privileges !== true || provider.immutable_image !== true || provider.ephemeral_scratch !== true || provider.resource_limits !== true
       || provider.host_socket !== false || provider.privileged !== false || provider.metadata_denied !== true || provider.network_connect_fence !== true) return refuse('provider_security_denied', 403);
     if (spec.workload_class === 'coding_untrusted' && !['microvm', 'gvisor'].includes(provider.isolation)) return refuse('hostile_workload_denied', 403);
     const caps = executorEligibility(spec, provider.capabilities);
@@ -114,8 +115,8 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
     const material = await crypto.subtle.sign('HMAC', deps.rootKey, bytes(JSON.stringify(['workspace-grant-v1', claims.tenant_id, claims.run_id, claims.execution_generation, claims.aud])));
     return crypto.subtle.importKey('raw', material, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
   }
-  async function audit(action: string, run: WorkspaceSecurityRun) {
-    await deps.audit({ action, run_id: run.spec.run_id, generation: run.spec.execution_generation, member_id: run.sponsor.member_id });
+  async function audit(action: string, run: WorkspaceSecurityRun, memberId = run.sponsor.member_id) {
+    await deps.audit({ action, run_id: run.spec.run_id, generation: run.spec.execution_generation, member_id: memberId });
   }
   const methods = {
     eligibility,
@@ -136,14 +137,19 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
       });
     },
 
-    async issue(target: GrantTarget, ttlMs = 30000): Promise<WorkspaceResult<{ token: string; expires_at: number }>> {
+    async issue(target: GrantTarget, ttlMs = 30000, operator?: WorkspaceSponsor): Promise<WorkspaceResult<{ token: string; expires_at: number }>> {
       if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000 || ttlMs > 60000 || !WORKSPACE_AUDIENCES.includes(target.audience)) return refuse('grant_policy_denied', 422);
+      if (operator && !controlAudience(target.audience)) return refuse('operator_audience_denied', 403);
       return deps.store.transaction(async runs => {
         const run = runs.get(target.run_id);
         if (!run || run.spec.execution_generation !== target.execution_generation) return refuse('stale_generation', 403);
-        const allowed = await eligibility(run.spec); if (!allowed.ok) return allowed;
+        if (!controlAudience(target.audience)) { const allowed = await eligibility(run.spec); if (!allowed.ok) return allowed; }
         const objectRef = target.object_ref ?? null, region = target.region ?? null;
-        if (!await authorization(run, target.audience, objectRef)) return refuse('sponsor_not_authorized', 403);
+        const actor = operator || run.sponsor;
+        if (!sameSponsor(actor, run.spec)) return refuse('sponsor_scope_denied', 403);
+        const current = await deps.authorize(actor, run.spec, target.audience, objectRef);
+        if (!current.allowed || !Number.isSafeInteger(current.revision) || current.revision < 1
+          || (!controlAudience(target.audience) && (!await authorization(run, target.audience, objectRef)))) return refuse('sponsor_not_authorized', 403);
         if (await objectFor(run.spec, objectRef, region, target.audience) === false) return refuse('object_not_authorized', 403);
         const at = now();
         for (const [nonce, entry] of run.nonces) if (entry.expires_at <= at) run.nonces.delete(nonce);
@@ -151,14 +157,14 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
         const nonce = deps.nonce();
         const claims: Claims = { version: 1, aud: target.audience, tenant_id: run.spec.tenant_id, company_id: run.spec.company_id,
           project_id: run.spec.project_id, agent_id: run.spec.agent_id, task_id: run.spec.task_id, run_id: run.spec.run_id,
-          attempt: run.spec.attempt, execution_generation: run.spec.execution_generation, member_id: run.sponsor.member_id,
-          permission_revision: run.permission_revision, contract_hash: await hash(JSON.stringify(run.spec)), nonce,
+          attempt: run.spec.attempt, execution_generation: run.spec.execution_generation, member_id: actor.member_id,
+          permission_revision: current.revision, contract_hash: await hash(JSON.stringify(run.spec)), nonce,
           iat: at, exp: at + ttlMs, object_ref: objectRef, region };
         if (!claimsSchema.safeParse(claims).success || run.nonces.has(nonce)) return refuse('grant_nonce_invalid', 503);
         const payload = b64(bytes(JSON.stringify(claims)));
         const signature = b64(new Uint8Array(await crypto.subtle.sign('HMAC', await signingKey(claims), bytes(payload))));
         run.nonces.set(nonce, { expires_at: claims.exp, used: false, digest: await hash(payload) });
-        await audit('workspace_grant_issued', run);
+        await audit('workspace_grant_issued', run, actor.member_id);
         return { ok: true, value: { token: `${payload}.${signature}`, expires_at: claims.exp } };
       });
     },
@@ -180,17 +186,21 @@ export function createWorkspaceSecurity(deps: WorkspaceSecurityDeps) {
       return deps.store.transaction(async runs => {
         const run = runs.get(claims.run_id);
         if (!run || run.spec.execution_generation !== claims.execution_generation || run.spec.attempt !== claims.attempt) return refuse('stale_generation', 403);
-        const allowed = await eligibility(run.spec); if (!allowed.ok) return allowed;
-        if (run.sponsor.member_id !== claims.member_id || run.permission_revision !== claims.permission_revision
+        const control = controlAudience(claims.aud);
+        if (!control) { const allowed = await eligibility(run.spec); if (!allowed.ok) return allowed; }
+        const actor = { ...run.sponsor, member_id: claims.member_id };
+        const current = await deps.authorize(actor, run.spec, claims.aud, claims.object_ref);
+        if (!current.allowed || current.revision !== claims.permission_revision
+          || (!control && (run.sponsor.member_id !== claims.member_id || run.permission_revision !== claims.permission_revision))
           || run.spec.tenant_id !== claims.tenant_id || run.spec.company_id !== claims.company_id || run.spec.project_id !== claims.project_id
           || run.spec.agent_id !== claims.agent_id || run.spec.task_id !== claims.task_id || await hash(JSON.stringify(run.spec)) !== claims.contract_hash
-          || !await authorization(run, claims.aud, claims.object_ref)) return refuse('sponsor_not_authorized', 403);
+          || (!control && !await authorization(run, claims.aud, claims.object_ref))) return refuse('sponsor_not_authorized', 403);
         const object = await objectFor(run.spec, claims.object_ref, claims.region, claims.aud);
         if (object === false) return refuse('object_not_authorized', 403);
         const nonce = run.nonces.get(claims.nonce);
         if (!nonce || nonce.used || nonce.expires_at !== claims.exp || nonce.digest !== await hash(payload)) return refuse('grant_replay', 403);
         nonce.used = true;
-        await audit('workspace_grant_redeemed', run);
+        await audit('workspace_grant_redeemed', run, claims.member_id);
         return { ok: true, value: { claims, spec: structuredClone(run.spec), object: object ? structuredClone(object) : null } };
       });
     },
