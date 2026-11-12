@@ -16,6 +16,7 @@
  *   · SLA is a word with a shape ("Past SLA · 38h"), never colour alone.
  */
 import { escalationKindLabel } from '../../../lib/escalationKinds';
+import { toUtcInstant } from '../../../lib/notices';
 
 /** The four workspaces, in the canvas's order. Queue is the default. */
 export const SUPPORT_WORKSPACES = Object.freeze([
@@ -45,9 +46,20 @@ export function hoursText(h) {
   return v < 1 ? '<1h' : `${Math.floor(v)}h`;
 }
 
-/** "14:30" from an ISO stamp the server sent, or null. The page never invents a time. */
+/** Both D1's UTC datetime and zoned ISO instants occur in Support reads. */
+function supportInstant(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(value)) return null;
+  const time = Date.parse(toUtcInstant(value));
+  return Number.isFinite(time) ? time : null;
+}
+
+export function decisionStamp(value) {
+  const time = supportInstant(value);
+  return time === null ? null : new Date(time).toISOString().slice(0, 16).replace('T', ' ');
+}
+
 export function clockOf(iso) {
-  return typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : null;
+  return decisionStamp(iso)?.slice(11) || null;
 }
 
 /**
@@ -376,13 +388,58 @@ export const matrixCompares = (matrix) => Boolean(matrix?.available) && (matrix.
 
 // ─────────────────────────────────────────────────────────── delivery ──
 
-/** Decisions this session whose push did not reach the branch, first. */
-export function deliveryRows(recorded) {
-  const failedFirst = (r) => (r.pushed && r.pushed.ok === true ? 1 : 0);
-  return [...(recorded || [])].sort((a, b) => failedFirst(a) - failedFirst(b));
+/**
+ * The Worker stores one decision and its latest delivery attempt per escalation.
+ * A just-completed write can be newer than a read which was already in flight.
+ * Once a newer read lands, it owns the row, including removals from the window.
+ */
+export function recentDecisions(data, changes = []) {
+  const history = data?.recent_decisions;
+  const rows = new Map();
+  for (const item of history?.items || []) {
+    const ok = item.push_ok === 1 ? true : (item.push_ok === 0 ? false : null);
+    rows.set(item.uid, { ...item, pushed: { ok, reason: item.push_reason, push_at: item.push_at } });
+  }
+  for (const change of changes) {
+    const stored = rows.get(change.uid);
+    const storedTime = supportInstant(stored?.answered_at);
+    const changeTime = supportInstant(change.answered_at);
+    const sameDecision = stored && storedTime === changeTime && stored.status === change.status && stored.answer === change.answer;
+    const readAfterChange = history?.available && data.readOrder >= change.changeOrder;
+    if (readAfterChange) {
+      // Retain transient feedback only for the same decision and delivery attempt.
+      if (sameDecision && change.resend &&
+          (change.pushed?.push_at || null) === (stored.push_at || null) && change.pushed?.ok === stored.pushed.ok) {
+        rows.set(change.uid, { ...stored, resend: change.resend });
+      }
+    } else {
+      // An overlapping read can also see a later decision or push by another operator.
+      const newerDecision = storedTime !== null && changeTime !== null && storedTime > changeTime;
+      const newerPush = sameDecision && change.pushed?.push_at &&
+        supportInstant(stored.push_at) > supportInstant(change.pushed.push_at);
+      if (!newerDecision && !newerPush) rows.set(change.uid, change);
+    }
+  }
+  return [...rows.values()].sort((a, b) =>
+    (supportInstant(b.answered_at) ?? -Infinity) - (supportInstant(a.answered_at) ?? -Infinity) ||
+    b.uid.localeCompare(a.uid)).slice(0, data?.list_limit ?? 25);
 }
 
-export const notDelivered = (recorded) => (recorded || []).filter((r) => !(r.pushed && r.pushed.ok === true)).length;
+export function deliveryState(record) {
+  if (record.branch_code === 'hq') return 'hq';
+  if (record.resend?.state === 'unknown') return 'unknown';
+  if (record.pushed?.ok === false) return 'failed';
+  if (record.pushed?.ok === true) return 'delivered';
+  return 'unknown';
+}
+
+/** Keep recent decisions in time order within each delivery state. */
+export function deliveryRows(recorded) {
+  const order = { failed: 0, unknown: 1, delivered: 2, hq: 3 };
+  return [...(recorded || [])].sort((a, b) => order[deliveryState(a)] - order[deliveryState(b)]);
+}
+
+export const notDelivered = (recorded) => (recorded || []).filter((r) => deliveryState(r) === 'failed').length;
 
 /**
  * The GitHub mirror in one line when nothing needs looking at; null when the
@@ -410,7 +467,7 @@ export function mirrorLine(sync) {
  */
 export function distributionState(slaPolicy, branchState = 'ready') {
   const p = slaPolicy?.branch_copy?.propagation || null;
-  if (!p) return branchState === 'ready' ? { state: 'none' } : { state: 'unknown', branchState };
+  if (!p) return { state: 'unknown', branchState };
   if (!p.total) return { state: 'none' };
   if (p.current >= p.total) return { state: 'complete', current: p.current, total: p.total };
   return { state: 'incomplete', current: p.current, total: p.total };
