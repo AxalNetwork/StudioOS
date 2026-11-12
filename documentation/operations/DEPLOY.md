@@ -98,6 +98,19 @@ ruleset (Settings → Rules → Rulesets → `main` → Require merge queue):
 
 To merge, press **Merge when ready**, not **Merge**.
 
+D5606 uses two pull requests for the required check cutover.
+
+1. Land PR 1 with the current six required checks and the shadow `landing gate`.
+   Check both contexts on a PR, a merge-group run and a push. Verify that a
+   changed applied migration blocks the shadow gate and an audit-only failure
+   leaves its required verdict passing.
+2. With an empty queue, the owner adds `landing gate` to the required checks
+   and then removes the six old names. Verify the queue requires the new name.
+3. Land PR 2 to remove the old jobs and workflows and update the deploy's
+   expected check names. Record the first push admitted by the new gate and the
+   resulting CI job count. Keep the previous names available until step 2 is
+   confirmed.
+
 ### 1.3 A branch database
 
 A subsidiary branch is a separate Worker over a separate D1 database

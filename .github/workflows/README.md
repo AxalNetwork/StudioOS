@@ -21,7 +21,7 @@ Task #48.
 | `meeting-bot-deploy.yml` | D886 B8: builds the runtime image, then deploys only the private preview and production bot hosts; never site migrations | bot/shared-helper changes in a push to `main`; manual main dispatch; `MEETING_BOT_DEPLOY_ENABLED=true` required | `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | `meeting-bot-image.yml` | D886 B8 (#2586): tests the image helper/deployment isolation, validates config and builds/boots the real image without publishing; an owner-triggered run on `main` publishes to GHCR (see "Meeting bot image" below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
 | `deck-visual.yml` | D1511 (#3762): visual regression (17 structures × every served theme × 2 aspects, and the accepted one-click deck) and axe (zero serious violations; light, dark, the keyboard path, the Ask dialog, phone and tablet) on the Pitch deck editor, in the pinned `mcr.microsoft.com/playwright:v1.64.1-noble` container with the fonts pinned in `frontend/package.json`. A missing baseline is written by the run and committed to the branch for review; every later run compares | PR to `main` touching the deck editor, its suite or the deck services; manual dispatch | none (`GITHUB_TOKEN` with `contents: write`, used only to commit new baselines to a same-repository branch) |
-| `ci.yml` | D5619 adds a failure-only digest job: one updating comment for same-repository PRs, base-SHA scripts, job-only pull-requests write. Frontend build, worker typecheck, API↔Worker drift, the full suite, dev-backend import smoke, npm + pip audits. The full suite (`npm run test:drift`) runs as parallel parts, the `suite (<part>)` matrix (`scripts/test-drift-parts.mjs`: the frontend and worker suites cut by `--test-shard`, plus `rest`), and the required check `test:drift (full suite)` passes only when every part passed (D4130). On a push to main the parts are skipped only when the merge queue already passed that exact commit; otherwise they run. In the merge queue (#4107) its four required jobs and the parts they need run; the rest skip under `merge_group` | push/PR to `main`; `merge_group` | none (uses `GITHUB_TOKEN` only) |
+| `ci.yml` | Frontend build, Worker typecheck, API drift the full suite and dev-backend import smoke. D5619 publishes one failure digest per same-repository PR using scripts from the base SHA and job-only pull-requests write permission. D5606 shadows the required checks with `ci / fast` and `landing gate`. The fast job also runs npm and pip audits and generates the routing docs on PRs and pushes. The `suite (<part>)` matrix runs in parallel and is reused on a push only when the merge queue passed the exact commit (D4130) | push/PR to `main`; `merge_group` | none (uses `GITHUB_TOKEN` only) |
 | `meeting-worker-contracts.yml` | Mocked meeting reliability, mutation/restoration and hosted-attach contracts, alongside the full drift gate | PR to `main` touching meeting Worker code or tests | none (`contents: read`) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |
 | `claude-code.yml` | Runs the Claude Code GitHub Action against an `@claude` mention written by an owner, member or collaborator of the repository (#4571 SC-02: anyone can comment on a public repository), or a manual dispatch carrying an optional one-shot `prompt`. Short-circuits with a readable error if its secret is missing rather than a generic 401 | `issue_comment` [created], `pull_request_review_comment` [created], `pull_request_review` [submitted], `issues` [opened, assigned], manual dispatch | `ANTHROPIC_API_KEY` (billed via the Anthropic API, not a Claude.ai subscription — the org has subscription access to Claude Code disabled) |
@@ -67,16 +67,19 @@ with the ones ahead of it is taken out of the queue with the reason.
 | `pr-overlap.yml` | D5616: advisory overlap comments and parent summary; no PR code executes | hourly and manual | `contents: read`, `issues: write`, `pull-requests: write` |
 | `claims-reaper.yml` | D5617: comments once per expired atomic task claim, never deletes refs | hourly and manual | `contents: read`, `issues: write` |
 
-Only these three workflows listen for `merge_group`. Nothing else runs in the
-queue: no preview, no Claude review, no comment, and no deploy; the deploy
-stays on a push to `main`. `ci.yml`'s jobs that are not required checks skip
-under `merge_group`, because they already ran on the pull request. A required
-check never carries an `if:`: a skipped job reports as passed, and the queue
-would take that for green. The one exception is `test:drift (full suite)`: it needs
-its parts, so it runs on `always()` (never skipped) and fails unless every part
-passed (D4130). `frontend/test/merge_queue_ci_4107.test.mjs` fails
-on any of these, and its `REQUIRED` list changes with the ruleset ("main:
-required checks").
+Only these three workflows listen for `merge_group`. Previews, reviews,
+comments and deployment stay outside the queue. The deploy starts on a push
+to `main`. During the D5606 shadow phase, `ci / fast` and `landing gate` also
+run in the queue. The fast job runs the required guards, typecheck and build
+there. Dependency audits and routing docs run on PRs and pushes, and the
+LFS check runs on PRs.
+
+The two aggregators run on `always()` so a failing dependency cannot make
+either check report as skipped. `landing gate` requires a passing fast
+verdict and follows the same suite rule as `test:drift (full suite)`.
+Advisory step failures can make the fast job red while its required
+verdict passes. `frontend/test/merge_queue_ci_4107.test.mjs` tracks the
+active ruleset in `REQUIRED` and the shadow check in `SHADOW`.
 
 The queue was switched on on 2026-11-02 (#4107). The ruleset lets the Admin
 role bypass it, so an admin's plain Merge skips the queue and its checks: use
