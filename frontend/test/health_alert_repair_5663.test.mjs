@@ -75,6 +75,7 @@ test('permission failure is visible and cannot emit Slack or infer recovery; uns
   await assert.rejects(monitor.apply(kind, false, facts, 100), /401/); assert.equal(sent, 0);
   const value = safeHealthFacts({ title: '<!channel>', failures: { names: ['secret'] }, runUrl: 'https://evil.example/', outcome: '<@U1>', sha: 'bad', pr: 'x' });
   assert.deepEqual(value, {});
+  assert.match(safeHealthFacts({ fingerprint: 'suite (worker-1-of-6)/Run actions/setup-node@v6' }).fingerprint, /setup-node at v6/);
   const child = spawnSync(process.execPath, ['scripts/github-alerts.mjs', 'future-clock'], { encoding: 'utf8', env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: '' } });
   assert.equal(child.status, 1); assert.match(child.stderr, /no recovery inferred/);
   const preload = 'data:text/javascript,' + encodeURIComponent("globalThis.fetch = async () => new Response('', { status: 401 });");
@@ -136,4 +137,14 @@ test('TAP completeness accepts actual Node output for both green and assertion f
       assert.equal(inspectTap(child.stdout).state, fail ? 'failure' : 'green');
     }
   } finally { rmSync(dir, { recursive: true }); }
+});
+
+test('a queue response without count or oldest evidence cannot mutate its episode', () => {
+  const issue = { number: 7, title: ALERT_KINDS.queue.title, state: 'open', body: '', labels: [], user: { login: 'github-actions[bot]' } };
+  for (const queue of [{ workflow_runs: [] }, { total_count: 1, workflow_runs: [] }]) {
+    const code = `globalThis.fetch = async (url, init={}) => { if (init.method && init.method !== 'GET') { console.log('UNEXPECTED_MUTATION'); return Response.json(${JSON.stringify(issue)}); } return Response.json(String(url).includes('/issues?') ? [${JSON.stringify(issue)}] : ${JSON.stringify(queue)}); };`;
+    const preload = 'data:text/javascript,' + encodeURIComponent(code);
+    const result = spawnSync(process.execPath, ['--import', preload, 'scripts/github-alerts.mjs', 'queue'], { encoding: 'utf8', env: { ...process.env, GITHUB_REPOSITORY: repo, GITHUB_TOKEN: 'fixture' } });
+    assert.equal(result.status, 1); assert.match(result.stderr, /no recovery inferred/); assert.doesNotMatch(result.stdout, /UNEXPECTED_MUTATION/);
+  }
 });

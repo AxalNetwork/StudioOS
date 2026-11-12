@@ -25,6 +25,8 @@ const repo = env.GITHUB_REPOSITORY;
 async function gh(path, init = {}) {
   const res = await fetch(`${api}${path}`, {
     ...init,
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
     headers: {
       authorization: `Bearer ${env.GITHUB_TOKEN}`,
       accept: 'application/vnd.github+json',
@@ -82,13 +84,15 @@ async function main() {
     };
     // Oldest first: the API lists newest first, so read the last page's last run.
     const first = await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100`);
-    const total = Number(first?.total_count) || 0;
+    if (!Number.isSafeInteger(first?.total_count) || first.total_count < 0 || !Array.isArray(first.workflow_runs)) throw new Error('queue_evidence_unreadable');
+    const total = first.total_count;
     let oldest = null;
     if (total) {
       const lastPage = Math.min(10, Math.ceil(total / 100));
       const page = lastPage === 1 ? first : await gh(`/repos/${repo}/actions/runs?status=queued&per_page=100&page=${lastPage}`);
       const runs = page?.workflow_runs || [];
       oldest = runs.length ? runs[runs.length - 1].created_at : null;
+      if (!Number.isFinite(Date.parse(oldest || ''))) throw new Error('queue_age_unreadable');
     }
     const q = queueState({ queued: total, oldestCreatedAt: oldest, thresholds, issueOpen: Boolean(await openIssue('queue')) });
     return apply('queue', q.active, q);

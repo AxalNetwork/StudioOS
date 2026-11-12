@@ -7,7 +7,7 @@ export function safeHealthFacts(facts = {}) {
   for (const key of ['pr', 'queued', 'waitedMin', 'days', 'failedCount']) if (Number.isSafeInteger(Number(facts[key])) && Number(facts[key]) >= 0) out[key] = Number(facts[key]);
   if (/^[a-f0-9]{40}$/.test(facts.sha || '')) out.sha = facts.sha;
   if (['budget_refused', 'configuration_error', 'reviewed', 'duplicate'].includes(facts.outcome)) out.outcome = facts.outcome;
-  if (/^[a-zA-Z0-9_ ()/.-]{1,200}$/.test(facts.fingerprint || '')) out.fingerprint = facts.fingerprint;
+  if (/^[a-zA-Z0-9_ ()/.@:-]{1,200}$/.test(facts.fingerprint || '')) out.fingerprint = facts.fingerprint.replaceAll('@', ' at ');
   if (/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/[1-9]\d*$/.test(facts.runUrl || '')) out.runUrl = facts.runUrl;
   return out;
 }
