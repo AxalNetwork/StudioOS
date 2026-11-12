@@ -369,7 +369,7 @@ export default function RegisterPage() {
               {/* Task #10 — real <form> so Enter submits (audit fix 12);
                   inputs get autocomplete/inputmode and ≥16px mobile font
                   (fix 13, prevents iOS focus zoom). */}
-              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); registerWithMagic(); }}>
+              <form noValidate className="space-y-4" onSubmit={(e) => { e.preventDefault(); registerWithMagic(); }}>
                 <div>
                   <label htmlFor="register-name" className="text-xs text-gray-600 block mb-1">Full Name</label>
                   <input id="register-name" type="text" aria-invalid={error && errorField === 'name' ? true : undefined} aria-describedby={error ? 'register-error' : undefined} value={form.name} onChange={e => { markFormStart(); setForm(f => ({ ...f, name: e.target.value })); }}

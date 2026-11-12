@@ -1,0 +1,7 @@
+{
+  "POST /api/customer-chat/slack-reply": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

@@ -41,7 +41,7 @@ const CI = '.github/workflows/ci.yml';
 const FORMS = '.github/ISSUE_TEMPLATE';
 
 const STATE_LABELS = ['state:ready', 'state:in-progress', 'state:blocked', 'state:review'];
-const SLOT_LABELS = Array.from({ length: 30 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
+const SLOT_LABELS = Array.from({ length: 37 }, (_, i) => `slot:S${String(i + 1).padStart(2, '0')}`);
 
 /** The block every agent posts. AGENTS.md carries it to be reproduced exactly. */
 const STATUS_BLOCK = [
@@ -198,7 +198,7 @@ function formLabels(src) {
 
 // ---------- .github/labels.yml ----------
 
-test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S30', () => {
+test('labels.yml declares the four state labels, needs-decision and slot:S01 to slot:S37', () => {
   const names = declaredLabels().map((l) => l.name);
   const missing = [...STATE_LABELS, 'needs-decision', ...SLOT_LABELS].filter((n) => !names.includes(n));
   assert.deepEqual(missing, [],
@@ -341,4 +341,17 @@ test('blank issues stay open, and security reports go to a private advisory', ()
     'blank issues stay enabled; the forms are a help, not a gate');
   assert.match(config, /^\s+url: https:\/\/github\.com\/AxalNetwork\/StudioOS\/security\/advisories\/new\s*$/m,
     'the repository is public: the issue chooser must send a security report to a private advisory');
+});
+
+test('retired labels map to declared labels, including case-only renames', () => {
+  const names = declaredLabels().map(l => l.name);
+  const rows = at('.github/labels-retired.yml').split('\n').filter(l => l.startsWith('"'));
+  assert.equal(rows.length, 9);
+  for (const row of rows) {
+    const match = /^"([^"]+)": "([^"]+)"$/.exec(row);
+    assert.ok(match);
+    assert.ok(names.includes(match[2]), match[2]);
+  }
+  assert.match(at(AGENTS), /claim\/|claim\.mjs/);
+  assert.match(at(SYNC), /Normalize case-only/);
 });

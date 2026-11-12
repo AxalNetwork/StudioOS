@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import FromNotion from '../src/pages/cycles/FromNotion.jsx';
 import NotionInterviewImport, { CONSENT_METHODS, NO_CONSENT_NOTE, importBody } from '../src/pages/cycles/NotionInterviewImport.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -120,7 +121,7 @@ test('without an accept dialog, Accept is immediate, as D1086 built it', async (
 });
 
 test('the wiring: From Notion on Customer research with the consent dialog, and on Market intelligence', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /<FromNotion section="validate" projectId=\{ctx\.projectId\} module="customer_research" acceptDialog=\{NotionInterviewImport\} \/>/);
   assert.match(route, /'market-intelligence': \(_data, ctx\) => <FromNotion section="validate" projectId=\{ctx\.projectId\} module="market_intelligence" \/>/);
   const dialog = read('frontend/src/pages/cycles/NotionInterviewImport.jsx');
