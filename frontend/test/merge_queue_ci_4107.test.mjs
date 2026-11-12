@@ -24,6 +24,7 @@ const REQUIRED = Object.freeze({
   'applied migrations unchanged': 'migration-immutability.yml',
   scan: 'gitleaks.yml',
 });
+const SHADOW = Object.freeze({ 'landing gate': 'ci.yml' });
 // The only workflows the queue runs. Adding one here is a decision: nothing in
 // a queue run may deploy, post a comment or touch production.
 const IN_QUEUE = Object.freeze(['ci.yml', 'gitleaks.yml', 'migration-immutability.yml']);
@@ -69,8 +70,7 @@ function jobs(lines) {
 // D4130 (#4130): the one required check that is an aggregator. Its parts run
 // as other jobs it `needs`, so it must run even when one of them failed —
 // a job whose need failed is SKIPPED by default, and a skipped required check
-// reports as passed. It is the only required check allowed `if: always()`, and
-// its own step must fail unless every part passed.
+// reports as passed. Both aggregators use `if: always()` so their own steps can report failure.
 const AGGREGATOR = 'test:drift (full suite)';
 
 // The forms of job-level `if:` that skip a job under merge_group.
@@ -80,12 +80,13 @@ const SKIPS_IN_QUEUE = Object.freeze([
   "github.event_name == 'push'",
   // D5398: the failure classifier runs only after a PR's suite failed; it is a pull_request-only job, so never in the queue.
   "failure() && github.event_name == 'pull_request'",
+  "always() && github.event_name == 'pull_request'",
 ]);
 
 const FILES = readdirSync(DIR).filter((f) => /\.ya?ml$/.test(f)).sort(compareMigrations);
 
-test('every required check comes from a job in its workflow, which listens for merge_group and runs there', () => {
-  for (const [check, file] of Object.entries(REQUIRED)) {
+test('every required and shadow check comes from a job in its workflow, which listens for merge_group and runs there', () => {
+  for (const [check, file] of Object.entries({ ...REQUIRED, ...SHADOW })) {
     const lines = code(file);
     assert.ok(events(lines).includes('merge_group'), `${file} gives the required check "${check}" and must listen for merge_group, or every queued PR waits forever`);
     const matches = FILES.flatMap((f) => jobs(code(f)).filter((j) => j.name === check).map((j) => ({ ...j, file: f })));
@@ -94,7 +95,7 @@ test('every required check comes from a job in its workflow, which listens for m
     // A skipped job reports as passed, so a required check that skips in the
     // queue would let anything through. It runs unconditionally — or, for the
     // aggregator, `always()`, which never skips.
-    if (check === AGGREGATOR) {
+    if (check === AGGREGATOR || check in SHADOW) {
       assert.equal(job.if, 'always()', `"${check}" needs its parts, so it runs on always(); without it a failed part would skip it, and a skipped required check passes`);
     } else {
       assert.equal(job.if, null, `"${check}" (${file}) has an if: ${job.if}; a required check never skips in the queue`);
@@ -112,8 +113,8 @@ test('the queue runs only these workflows: no deploy, preview, review or comment
   }
 });
 
-test('in a queue workflow, every job that is not a required check is skipped under merge_group, unless a required check needs it', () => {
-  const required = new Set(Object.keys(REQUIRED));
+test('in a queue workflow, jobs outside the required and shadow checks skip under merge_group unless needed', () => {
+  const required = new Set([...Object.keys(REQUIRED), ...Object.keys(SHADOW)]);
   for (const f of IN_QUEUE) {
     const all = jobs(code(f));
     // What the required checks wait on. Such a job feeds a required check, so

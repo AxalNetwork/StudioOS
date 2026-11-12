@@ -8,7 +8,7 @@
     "deploy": "cd .. && npm run deploy",
     "db:create": "wrangler d1 create studioos-db",
     "db:schema": "wrangler d1 execute studioos-db --config ../wrangler.toml --file=sql/schema_baseline.sql",
-    "db:schema:remote": "wrangler d1 execute studioos-db --config ../wrangler.toml --remote --file=sql/schema_baseline.sql",
+    "db:schema:remote": "cd .. && npm run d1:migrate:remote",
     "lint:no-console": "node scripts/check-console.mjs",
     "prelint": "node ../scripts/build-generated.mjs",
     "lint": "npm run lint:no-console && tsc --noEmit"
