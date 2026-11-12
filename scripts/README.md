@@ -288,3 +288,5 @@ binding targets and branch isolation.
 | `remote-latency.mjs` | D1581 (#3828): the staging test that the phone remote advances Present within 300 ms. It pairs a deck, joins as the phone, and times each step from the request to the frame on Present's socket. It needs `STUDIOOS_BASE`, `STUDIOOS_TOKEN` and a deck id; exits 1 at 300 ms or more. Not in CI. |
 | `hub-freeze.json` | D5615: the sorted names each frozen hub held when the freeze landed, read by `lib/hubFreeze.mjs`. A name leaving a hub stays listed; never add one to let an entry in (`documentation/architecture/HUBS.md`). |
 | `pr-overlap.mjs` | D5616: bounded advisory open-PR overlap and real merge-tree conflict checks; `--dry-run` writes no comments. |
+
+| `scan-fingerprints.py` | D5602: bounded opaque Semgrep fingerprints using its existing Python runtime; parity-checked against the Node contract. |

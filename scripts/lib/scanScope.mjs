@@ -9,7 +9,7 @@ export function sensitiveScanPath(path) {
   return typeof path === 'string' && (path.startsWith('cloudflare-worker/sql/')
     || path === 'cloudflare-worker/src/auth.ts' || path.startsWith('cloudflare-worker/src/middleware/')
     || path.startsWith('.github/') || /^wrangler[^/]*\.toml$/.test(path) || LOCKFILE.test(path)
-    || ['.semgrepignore', 'scripts/sarif-summary.py', 'scripts/strip-suppressed-sarif.py'].includes(path));
+    || ['.semgrepignore', 'scripts/sarif-summary.py', 'scripts/strip-suppressed-sarif.py', 'scripts/scan-fingerprints.py'].includes(path));
 }
 
 /** Unknown/incomplete PR inventories scan. Renames check both the old and new path. */

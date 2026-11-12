@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import * as policy from '../../scripts/lib/scanScope.mjs';
 import { prepareState, previousState, selectScope, verifyArtifactRead } from '../../scripts/scan-scope.mjs';
@@ -15,7 +15,7 @@ const paths = ['cloudflare-worker/sql/migrations/x.sql', 'cloudflare-worker/src/
   'cloudflare-worker/src/middleware/authz.ts', '.github/workflows/x.yml', 'wrangler.toml', 'wrangler-preview.toml',
   'package.json', 'frontend/package.json', 'cloudflare-worker/package-lock.json', 'apps/yarn.lock',
   'apps/pnpm-lock.yaml', 'infra/.terraform.lock.hcl', 'apps/deno.lock', 'nix/flake.lock', 'tools/uv.lock', 'Pipfile.lock', 'nested/bun.lockb', '.semgrepignore',
-  'scripts/sarif-summary.py', 'scripts/strip-suppressed-sarif.py'];
+  'scripts/sarif-summary.py', 'scripts/strip-suppressed-sarif.py', 'scripts/scan-fingerprints.py'];
 function scopeChecks(m) {
   for (const event of ['push', 'schedule']) assert.equal(m.scanScope({ event, files: ['README.md'] }), true);
   for (const path of paths) assert.equal(m.scanScope({ event: 'pull_request', files: [path] }), true, path);
@@ -207,4 +207,26 @@ test('mutations of sensitive paths, scope overrides, incident retention and supe
   assert.notDeepEqual(brokenState.advanceScan([...first(), ...second()], introduced).open, second(), 'dropping retention must break repeat handling');
   const c = read('.github/workflows/codeql.yml'), s = read('.github/workflows/semgrep.yml');
   assert.throws(() => workflowChecks(c, s.replace("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", 'cancel-in-progress: false')));
+});
+
+
+test('Semgrep fingerprints run in Python without Node in the scanner and match the shared opaque contract',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'scan-python-5602-')),input=join(dir,'input.sarif'),output=join(dir,'snapshot.json');
+ const result=(rule,uri,more={})=>({ruleId:rule,locations:[{physicalLocation:{artifactLocation:{uri}}}],...more});
+ const sarif={runs:[{results:[result('rule.one','private/path.ts'),result('rule.one','private/path.ts'),result('rule.two','unicode/é.ts'),result('ignored','secret.ts',{suppressions:[{kind:'inSource'}]})]}]};
+ const run=()=>spawnSync('python3',['scripts/scan-fingerprints.py',input,output],{cwd:root,env:{...process.env,GITHUB_REPOSITORY:'AxalNetwork/StudioOS',GITHUB_RUN_ID:'123'},encoding:'utf8'});
+ try{
+  writeFileSync(input,JSON.stringify(sarif));const good=run();assert.equal(good.status,0,good.stderr);
+  const actual=JSON.parse(readFileSync(output,'utf8'));assert.deepEqual(actual.current,policy.findingSnapshot([sarif]));assert.equal(actual.scanner,'semgrep');assert.equal(actual.run_id,123);assert.doesNotMatch(JSON.stringify(actual),/private|unicode|secret/);
+  for(const bad of [{runs:[]},{runs:[{}]},{runs:[{results:[{ruleId:'rule'}]}]}]){writeFileSync(input,JSON.stringify(bad));assert.notEqual(run().status,0);assert.throws(()=>policy.findingSnapshot([bad]));}
+  writeFileSync(input,JSON.stringify(sarif));
+  const source=read('scripts/scan-fingerprints.py');
+  for(const [before,after] of [["rule + '\\0' + uri","rule + uri"],["if isinstance(result.get('suppressions'), list) and result['suppressions']:","if False:"]]){
+   assert.ok(source.includes(before));const broken=join(dir,'mutated.py');writeFileSync(broken,source.replace(before,after));
+   const r=spawnSync('python3',[broken,input,output],{env:{...process.env,GITHUB_REPOSITORY:'AxalNetwork/StudioOS',GITHUB_RUN_ID:'123'},encoding:'utf8'});assert.equal(r.status,0,r.stderr);
+   assert.throws(()=>assert.deepEqual(JSON.parse(readFileSync(output,'utf8')).current,policy.findingSnapshot([sarif])),'fingerprint/suppression mutations must fail parity');
+  }
+  const workflow=read('.github/workflows/semgrep.yml'),scan=workflow.slice(workflow.indexOf('  scan:\n'),workflow.indexOf('  findings:\n'));
+  assert.doesNotMatch(scan,/actions\/setup-node|run: node /);assert.match(scan,/scripts\/scan-fingerprints\.py/);
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });
