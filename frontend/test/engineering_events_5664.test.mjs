@@ -164,7 +164,7 @@ test('work/delivery/check/claim snapshots recover metadata while missed transiti
     if (path.includes('/issues/comments?')) return [{ id: 32, updated_at: at, issue_url: 'https://api.github.com/repos/o/r/issues/7', body: 'never retain issue body' }];
     if (path.includes('/releases?')) return [{ id: 50, published_at: at, body: 'never retain release body' }];
     if (path.includes('/deployments/60/statuses?')) return [{ id: 61, state: 'success', created_at: at }];
-    if (path.includes('/deployments?')) return [{ id: 60, environment: 'staging', created_at: at }];
+    if (path.includes('/deployments?')) return [{ id: 60, environment: 'staging', sha: prHead, created_at: at }];
     if (path.includes('/matching-refs/heads/claim/')) return [{ ref: 'refs/heads/claim/7', object: { sha: prHead } }];
     if (path.includes('/git/commits/')) return { message: claimMessage({ issue: 7, slot: 'S18', session: '18', agent: 'Codex', at: new Date(at) }) };
     if (path.includes('/matching-refs/')) return [];
@@ -174,7 +174,7 @@ test('work/delivery/check/claim snapshots recover metadata while missed transiti
   };
   try {
     const result = await reconcileSnapshots({ read, ledger: f.ledger, repository, until: Date.parse(at) + 1000 }); assert.equal(result.complete, true);
-    const records = f.ledger.history(0, 1000); assert.ok(records.some(e => e.kind === 'pull_request' && e.draft === true)); assert.ok(records.some(e => e.ids.review === '30' && e.refs.reviewed === prHead)); assert.ok(records.some(e => e.ids.comment === '31')); assert.ok(records.some(e => e.ids.release === '50')); assert.ok(records.some(e => e.ids.deployment === '60' && e.state === 'success')); assert.ok(records.some(e => e.provider.id === '91')); assert.ok(records.some(e => e.kind === 'claim'));
+    const records = f.ledger.history(0, 1000); assert.ok(records.some(e => e.kind === 'pull_request' && e.draft === true)); assert.ok(records.some(e => e.ids.review === '30' && e.refs.reviewed === prHead)); assert.ok(records.some(e => e.ids.comment === '31')); assert.ok(records.some(e => e.ids.release === '50')); assert.ok(records.some(e => e.ids.deployment === '60' && e.state === 'success' && e.refs.deploymentTarget === prHead && e.refs.landed === null)); assert.ok(records.some(e => e.provider.id === '91')); assert.ok(records.some(e => e.kind === 'claim'));
     assert.doesNotMatch(JSON.stringify(records), /never retain/); assert.ok(result.gaps.some(g => g.scope === 'security')); const cursor = f.ledger.cursor('snapshots');
     const failed = await reconcileSnapshots({ read: async () => { throw Error('permission_revoked'); }, ledger: f.ledger, repository, until: Date.parse(at) + 2000 }); assert.equal(failed.complete, false); assert.equal(f.ledger.cursor('snapshots'), cursor); assert.ok(failed.gaps.some(g => g.code === 'permission_revoked'));
   } finally { f.db.close(); }

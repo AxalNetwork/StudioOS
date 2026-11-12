@@ -47,7 +47,7 @@ export async function reconcileSnapshots({ read, ledger, repository, until = Dat
   await scope('delivery', async () => {
     await list('releases', null, release => emit('release', { release, action: release.draft ? 'draft' : release.published_at ? 'published' : 'observed' }));
     const deployments = new Map();
-    for (let after = 0; ; ) { const page = ledger.history(after, 1000); if (!page.length) break; for (const e of page) { after = e.sequence; if (e.ids.deployment) deployments.set(e.ids.deployment, { id: e.ids.deployment, environment: e.environment }); } }
+    for (let after = 0; ; ) { const page = ledger.history(after, 1000); if (!page.length) break; for (const e of page) { after = e.sequence; if (e.ids.deployment) deployments.set(e.ids.deployment, { id: e.ids.deployment, environment: e.environment, sha: e.refs.deploymentTarget }); } }
     await list('deployments', null, async deployment => { deployments.set(String(deployment.id), deployment); await emit('deployment', { deployment, action: 'observed' }); }, { sorted: true });
     for (const deployment of deployments.values()) {
       if (!/^[1-9]\d{0,18}$/.test(String(deployment.id))) throw new Error('source_shape_invalid');
