@@ -48,6 +48,41 @@ test('the four keys are catalogue reads, so a rule book names them on purpose', 
   }
 });
 
+test('board metrics use scoped KPI values, recorded units and a bounded period', async () => {
+  const f = fixture();
+  try {
+    f.db.exec(`INSERT INTO custom_kpis(id, uid, project_id, label, unit, currency) VALUES
+      (11, 'customers', 1, 'Paying customers', 'count', NULL),
+      (12, 'sales', 1, 'Sales', 'money', 'USD'),
+      (13, 'other', 2, 'Other venture metric', 'count', NULL)`);
+    const value = f.db.prepare('INSERT INTO custom_kpi_values(uid, kpi_id, as_of, value, value_cents) VALUES (?, ?, ?, ?, ?)');
+    value.run('current', 11, today, 0, null);
+    value.run('sales-today', 12, today, null, 1500);
+    value.run('older', 11, daysAgo(45), 37, null);
+    value.run('outside', 13, today, 999, null);
+    const ctx = { ...f.ctx(), page: { from: daysAgo(14), to: today } };
+    const result = await readOne(f.env, 'grow.board_metrics', ctx);
+    assert.deepEqual((result.data as any).records.map(row => [row.ref, row.value, row.unit, row.currency]), [
+      ['custom_kpi_value:sales-today', 1500, 'cents', 'USD'],
+      ['custom_kpi_value:current', 0, 'count', null],
+    ]);
+    assert.deepEqual((result.data as any).coverage, { returned: 2, total: 2, omitted: 0, complete: true });
+    assert.deepEqual(keysOf((await readOne(f.env, 'grow.board_metrics', f.ctx(3))).data), ['reason', 'withheld']);
+    const board = await preflight(f.env, 'board-meeting-brief', ctx, READERS, NOW);
+    assert.equal(board!.inputs.find(input => input.read === 'grow.board_metrics')!.status, 'available');
+    assert.notEqual(board!.state, 'not_ready');
+    const missing = await preflight(f.env, 'board-meeting-brief', {
+      ...ctx, page: { from: daysAgo(35), to: daysAgo(20) },
+    }, READERS, NOW);
+    assert.equal(missing!.inputs.find(input => input.read === 'grow.board_metrics')!.status, 'empty');
+    assert.equal(missing!.state, 'not_ready');
+    f.db.exec("UPDATE custom_kpis SET currency = NULL WHERE uid = 'sales'");
+    const partial = await preflight(f.env, 'board-meeting-brief', ctx, READERS, NOW);
+    assert.equal(partial!.inputs.find(input => input.read === 'grow.board_metrics')!.status, 'partial');
+    await assert.rejects(readOne(f.env, 'grow.board_metrics', { ...ctx, page: { ...ctx.page, after: 'custom_kpi_value:current' } }), { code: 'invalid_page' });
+  } finally { f.close(); }
+});
+
 test('grow.burn: net burn by snapshot date in cents for the team; an empty period is empty; an outsider is withheld', async () => {
   const f = fixture();
   try {
