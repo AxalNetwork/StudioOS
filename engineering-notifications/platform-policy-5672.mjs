@@ -8,7 +8,9 @@ export function evaluatePlatform(input,policy,now) {
   let breach=false,reason='healthy';
   if(['http','runtime'].includes(input.kind)){
     if(!number(input.total)||!number(input.failures)||input.failures>input.total||!number(policy.minimumSamples)||policy.minimumSamples<1||!number(policy.rate)||policy.rate<=0||policy.rate>1)return unknown('invalid_denominator');
-    if(input.total<policy.minimumSamples)return {state:'quiet',reason:'insufficient_volume'};
+    // Adaptive COUNT estimates are not the number of source samples supporting a rate.
+    if(!Number.isSafeInteger(input.sampleCount)||input.sampleCount<0||input.sampleCount>input.total)return unknown('sample_size_unavailable');
+    if(input.sampleCount<policy.minimumSamples)return {state:'quiet',reason:'insufficient_volume'};
     breach=input.failures/input.total>=policy.rate;reason=input.kind==='http'?'handled_http_5xx':'runtime_outcome';
   }else if(input.kind==='probe'){
     if(!['edgeOk','customerOk','dependencyOk','independentlyConfirmed'].every(k=>typeof input[k]==='boolean'))return unknown('probe_incomplete');

@@ -2,12 +2,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {evaluatePlatform,correlatePlatform} from '../../engineering-notifications/platform-policy-5672.mjs';
 const now=Date.parse('2026-11-12T10:00:00Z'),p={approved:true,maxAgeMs:60000,minimumSamples:100,rate:.05,sustainMs:10000,ageSeconds:900,graceMs:60000,stuckMs:300000};
-const sample=(kind,extra={})=>({kind,script:'studioos',available:true,observedAt:now,breachSince:now-20000,...extra});
+const sample=(kind,extra={})=>({kind,script:'studioos',available:true,observedAt:now,breachSince:now-20000,sampleCount:100,...extra});
 test('handled HTTP errors and runtime outcomes use separate denominators, sample floors and sustained evidence',()=>{
  assert.equal(evaluatePlatform(sample('http',{total:100,failures:5}),p,now).state,'firing');
  assert.equal(evaluatePlatform(sample('runtime',{total:100,failures:6}),p,now).reason,'runtime_outcome');
- assert.equal(evaluatePlatform(sample('http',{total:2,failures:1}),p,now).state,'quiet');
- assert.equal(evaluatePlatform(sample('http',{total:0,failures:0}),p,now).state,'quiet');
+ assert.equal(evaluatePlatform(sample('http',{total:2,failures:1,sampleCount:2}),p,now).state,'quiet');
+ assert.equal(evaluatePlatform(sample('http',{total:0,failures:0,sampleCount:0}),p,now).state,'quiet');
+ assert.equal(evaluatePlatform(sample('http',{total:10000,failures:600,sampleCount:2}),p,now).state,'quiet');
+ assert.equal(evaluatePlatform(sample('http',{total:100,failures:0,sampleCount:null}),p,now).state,'unknown');
+ assert.equal(evaluatePlatform(sample('http',{total:100,failures:0,sampleCount:101}),p,now).state,'unknown');
  assert.equal(evaluatePlatform(sample('http',{total:100,failures:4}),p,now).state,'healthy');
  assert.equal(evaluatePlatform(sample('http',{total:100,failures:101}),p,now).state,'unknown');
  assert.equal(evaluatePlatform(sample('http',{total:100,failures:5,breachSince:now}),p,now).state,'pending');
