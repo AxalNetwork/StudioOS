@@ -75,7 +75,9 @@ Provision the environment's `COMPUTE_PREVIEW_IMAGE_REF`,
 `COMPUTE_PREVIEW_IMAGE_SIGNER_WORKFLOW`, `COMPUTE_PREVIEW_HOST_NAME`,
 `COMPUTE_PREVIEW_BROKER_NAME`, `COMPUTE_PREVIEW_DEFAULT_POLICY_REAFFIRMED`,
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` through approved stores.
-It verifies GitHub OCI provenance from the approved signing workflow and deploys
+It authenticates to GHCR with a read-only workflow token, verifies GitHub OCI
+provenance from the approved signer and exact source commit, clears registry
+credentials on completion, and deploys
 only the disabled host. The referenced protected-main publish/signing pipeline
 and signature review remain operator prerequisites; this PR never publishes an
 image. The manual workflow intentionally supports only a reaffirmed default
@@ -122,3 +124,9 @@ This host currently accepts only an explicitly approved worldwide region policy
 placement control; restricted-region requests fail closed even if a policy
 claims them. Do not substitute a DO location hint or jurisdiction for Container
 residency. A future regional mode requires a separate reviewed enforcement path.
+
+The manual workflow requires a current GitHub CLI with attestation support.
+The [official verification reference](https://cli.github.com/manual/gh_attestation_verify)
+defines its signer/source-digest constraints and requires registry authentication
+for OCI verification. These flags were checked against that reference; the
+owner-gated remote deployment has not been run.

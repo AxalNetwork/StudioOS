@@ -81,6 +81,7 @@ jobs:
           config = config.replace('image_build_context = "./agent-compute"\n', '')
           Path('wrangler.agent-compute.approved.toml').write_text(config)
           PY
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           gh attestation verify "oci://$IMAGE_REF" --repo "$REPOSITORY" --signer-workflow "$IMAGE_SIGNER_WORKFLOW" --source-digest "$GITHUB_SHA"
       - name: Install locked tools and package the disabled Worker
         run: |
@@ -93,3 +94,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
         run: cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.agent-compute.approved.toml --env preview
+      - name: Clear preview registry credentials
+        if: always()
+        run: docker logout ghcr.io
