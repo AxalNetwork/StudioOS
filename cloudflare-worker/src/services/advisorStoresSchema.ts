@@ -258,6 +258,13 @@ const TABLES = [
    BEGIN
      SELECT RAISE(ABORT, 'advisor_proof_consent_cancellations is append-only (D5315).');
    END`,
+  `CREATE TRIGGERIF NOT EXISTS advisor_proof_withdrawal_unpublishes
+   AFTER UPDATE OF consent_given, withdrawn_at ON advisor_proof_consents
+   WHEN NEW.consent_given <> 1 OR COALESCE(NEW.withdrawn_at, '') <> ''
+   BEGIN
+     UPDATE advisor_proof_items SET published_consent_id = NULL
+      WHERE id = NEW.proof_item_id AND published_consent_id = NEW.id;
+   END`,
 ];
 
 /** 202611062216 (D4670) — the claim a confirmation was asked about. */
@@ -399,6 +406,9 @@ export async function ensureAdvisorStoresSchema(env: Env): Promise<void> {
     await addMissingColumns(env, 'advisors', PROFILE_COLUMNS);
     await addMissingColumns(env, 'advisor_bookings', BOOKING_COLUMNS);
     await addMissingColumns(env, 'advisor_proof_consents', CONSENT_COLUMNS);
+    await addMissingColumns(env, 'advisor_proof_items', [
+      ['published_consent_id', 'ALTER TABLE advisor_proof_items ADD COLUMN published_consent_id INTEGER'],
+    ]);
     // D573 / migration 394: nullable facts, including databases adopted by baseline.
     await addMissingColumns(env, 'advisor_deliverables', [
       ['due_date', 'ALTER TABLE advisor_deliverables ADD COLUMN due_date TEXT'],

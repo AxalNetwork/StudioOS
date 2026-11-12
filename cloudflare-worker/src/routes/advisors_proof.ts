@@ -26,7 +26,7 @@ const advisors = new Hono<{ Bindings: Env }>();
 type ProofRow = {
   id: number; uid: string; advisor_id: number; kind: string; title: string;
   detail: string | null; organization: string | null; period_note: string | null;
-  is_public: number; created_at: string; updated_at: string;
+  is_public: number; published_consent_id: number | null; created_at: string; updated_at: string;
 };
 type ConsentRow = {
   id: number; uid: string; proof_item_id: number;
@@ -79,6 +79,7 @@ function proofDto(r: ProofRow, consents: ConsentRow[], currentClaimSha: string):
     kind: r.kind, title: r.title, detail: r.detail,
     organization: r.organization, period_note: r.period_note,
     is_public: !!r.is_public,
+    published: live.some((consent) => consent.id === r.published_consent_id),
     attested: live.length > 0,
     // "Self-stated" is a claim with no confirmation behind it. Saying so is the
     // point of the zone: the advisor's own word and someone else's word are
@@ -188,6 +189,59 @@ advisors.post('/me/proof', async (c) => {
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ProofRow>();
     return c.json(proofDto(fresh!, [], await claimSha256(fresh!)));
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Public proof exposes the explicitly published claim, never the consent record. */
+export async function publishedAdvisorProof(env: Env, advisorId: number) {
+  const { results = [] } = await env.DB.prepare(
+    `SELECT p.uid, p.kind, p.title, p.detail, p.organization, p.period_note, x.claim_sha256
+       FROM advisor_proof_items p
+       JOIN advisor_proof_consents x ON x.id = p.published_consent_id AND x.proof_item_id = p.id
+      WHERE p.advisor_id = ? AND x.consent_given = 1
+        AND COALESCE(x.withdrawn_at, '') = '' AND x.claim_sha256 IS NOT NULL
+      ORDER BY p.created_at DESC, p.id DESC`
+  ).bind(advisorId).all<Pick<ProofRow, 'uid' | 'kind' | 'title' | 'detail' | 'organization' | 'period_note'> & { claim_sha256: string }>();
+  const checked = await Promise.all(results.map(async ({ claim_sha256, ...proof }) =>
+    await claimSha256(proof) === claim_sha256 ? proof : null));
+  return checked.filter((proof) => proof !== null);
+}
+
+advisors.patch('/me/proof/:id/publication', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const m = await requireMyAdvisor(c, user);
+    const id = Number(c.req.param('id'));
+    const body = await c.req.json().catch(() => null);
+    if (typeof body?.published !== 'boolean') {
+      return refuse(c, 400, { code: 'published_required', message: 'Choose whether to publish this proof.' });
+    }
+    const item = await c.env.DB.prepare('SELECT * FROM advisor_proof_items WHERE id = ? AND advisor_id = ?')
+      .bind(id, m.id).first<ProofRow>();
+    if (!item) return refuse(c, 404, { code: 'proof_not_found', message: 'This proof item does not exist.' });
+    if (!body.published) {
+      await c.env.DB.prepare('UPDATE advisor_proof_items SET published_consent_id = NULL WHERE id = ? AND advisor_id = ?')
+        .bind(id, m.id).run();
+      return c.json({ id, published: false });
+    }
+    const sha = await claimSha256(item);
+    // Select a live confirmation in the same write that publishes the claim.
+    // Withdrawal and publication therefore observe each other in write order.
+    const updated = await c.env.DB.prepare(
+      `UPDATE advisor_proof_items SET published_consent_id = (
+         SELECT x.id FROM advisor_proof_consents x
+          WHERE x.proof_item_id = advisor_proof_items.id AND x.consent_given = 1
+            AND COALESCE(x.withdrawn_at, '') = '' AND x.claim_sha256 = ?
+          ORDER BY x.consent_given_at DESC, x.id DESC LIMIT 1
+       ) WHERE id = ? AND advisor_id = ? AND kind IS ? AND title IS ?
+           AND detail IS ? AND organization IS ? AND period_note IS ?
+       RETURNING published_consent_id`
+    ).bind(sha, id, m.id, item.kind, item.title, item.detail, item.organization, item.period_note)
+      .first<{ published_consent_id: number | null }>();
+    if (!updated?.published_consent_id) {
+      return refuse(c, 409, { code: 'proof_confirmation_required', message: 'Only proof with a current confirmation can be published.' });
+    }
+    return c.json({ id, published: true });
   } catch (e) { return mapError(c, e); }
 });
 
