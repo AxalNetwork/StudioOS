@@ -17,6 +17,7 @@
  * the legacy in-worker routes mounted here as the source of truth.
  */
 
+import { clientSectionHint } from './util/clientSection';
 import { LEGACY_BUILDER_PATHS, builderRedirectTarget } from './services/builderRedirect';
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
@@ -756,6 +757,7 @@ app.post('/api/client-error', async (c) => {
           name: clip(body.name, 100),
           message: clip(body.message, 500),
           path: clip(body.path, 200),
+          client_section_hint: clientSectionHint(body.path, body.sectionContext, body.scope),
           ts: typeof body.ts === 'number' ? body.ts : Date.now(),
           stack: clip(body.stack, 2000),
           // Deliberately NO IP. The client already redacts secrets/PII from the

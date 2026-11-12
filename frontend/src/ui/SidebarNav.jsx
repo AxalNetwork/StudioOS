@@ -258,6 +258,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
                 <NavLink
                   key={to}
                   to={to}
+                  state={to === '/account' || to === '/trust/me' ? { sectionSidebarShell: role } : undefined}
                   end={manualActive === null}
                   onClick={onNavigate}
                   title={collapsed ? label : undefined}

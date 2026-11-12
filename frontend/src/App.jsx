@@ -1346,7 +1346,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           The height is the dynamic viewport where the browser has one: iOS Safari's
           100vh is taller than the visible screen, so the whole shell scrolled and
           took the band with it. */}
-      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}>
+      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}
+        data-error-shell={shellRole} data-error-licences={heldLicences.filter(isLicence).join(' ')}
+        data-error-sidebar={location.state?.sectionSidebarShell === shellRole && !!shellRole ? '1' : undefined}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
