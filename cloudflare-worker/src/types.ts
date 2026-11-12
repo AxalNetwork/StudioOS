@@ -658,6 +658,11 @@ export interface Env {
   // no-op (returns ok:false) and never breaks the underlying business
   // action that called it.
   SLACK_BOT_TOKEN?: string;
+  // Operator-owned section delivery configuration, stored per environment.
+  AXAL_SECTION_SLACK_TEAM_ID?: string;
+  AXAL_SECTION_SLACK_CHANNELS?: string;
+  // ISO UTC cutoff. Only later HQ D1-size episodes are eligible when set.
+  AXAL_SECTION_CAPACITY_SLACK_START_UTC?: string;
   // Channel IDs (NOT names — looks like `C012ABCD3EF`). The keys here
   // mirror the constants in services/slackBus.ts.
   SLACK_CHANNEL_OPS?: string;       // #axal-ops — 5xx, auth failures, GitHub

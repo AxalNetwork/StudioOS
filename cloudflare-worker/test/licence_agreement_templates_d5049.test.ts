@@ -30,7 +30,9 @@ import { SignJWT } from 'jose';
 import grantsRoute from '../src/routes/admin_program_grants.ts';
 import agreementsRoute from '../src/routes/admin_licence_agreements.ts';
 import { onAgreementEnvelopeCompleted } from '../src/services/programAgreements.ts';
-import { AGREEMENT_TEMPLATES, agreementMergeValues, readinessOf } from '../src/services/agreementTemplates.ts';
+import { AGREEMENT_TEMPLATES, PACKAGES, agreementMergeValues, readinessOf } from '../src/services/agreementTemplates.ts';
+import { loadLicenceAgreementContexts } from '../src/services/contractAgreementSources.ts';
+import { getSQL } from '../src/db.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -202,12 +204,57 @@ test('2. merge completeness: unrecorded values and flat keys block the send; tem
   // Only namespaced keys are produced.
   const values = agreementMergeValues({
     licence: { uid: LIVE, licence_ref: 'AXL-001', legal_entity_name: 'X', brand_name: 'Y', currency: 'EUR' } as any, territories: [], seats: [],
-    licenceTerms: null, grant: null, program_key: null, package_key: 'core_network', package_version: null, signer: null,
+    licenceTerms: null, grant: null, program_key: null, package_key: 'core_network', package_name: 'Core Network', package_version: null, signer: null,
     agreement: { kind: 'package_master', prepared_on: '2026-11-08' },
   });
   assert.ok(Object.keys(values).every((k) => k.includes('.')), 'no flat key is ever filled');
   assert.deepEqual([values['package.name'], values['package.version']], ['Core Network', null]);
   assert.equal(AGREEMENT_TEMPLATES.length, new Set(AGREEMENT_TEMPLATES.map((t) => t.slug)).size);
+  db.close();
+});
+
+test('package agreements freeze the published catalogue name and version at draft time', async () => {
+  const db = fixture();
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/202611091023_program_packages.sql'), 'utf8'));
+  const seeds = db.prepare('SELECT package_key AS key, name FROM program_packages WHERE version = 1 ORDER BY package_key').all();
+  assert.deepEqual(seeds.map((r) => ({ ...r })), [...PACKAGES].sort((a, b) => a.key.localeCompare(b.key)));
+  // Both stores must accept the catalogue's package keys, including future versions.
+  const keyRule = (table: string) => {
+    const row = db.prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?").get(table);
+    return String(row?.sql).match(/length\(package_key\) BETWEEN \d+ AND \d+ AND package_key NOT GLOB '[^']+'/i)?.[0];
+  };
+  const catalogueRule = keyRule('program_packages');
+  assert.ok(catalogueRule);
+  assert.equal(keyRule('licence_program_agreements'), catalogueRule);
+  db.prepare(`INSERT INTO legal_templates (slug, title, category, body_md, version, is_active, is_stub)
+    VALUES ('package_core_network_master', 'Core package agreement', 'compliance', '{{package.name}} v{{package.version}}', 1, 1, 0)`).run();
+  const scope = { agreement_kind: 'package_master', program_key: null, package_key: 'core_network', template_slug: 'package_core_network_master' };
+  const draftPackage = async (extra = {}) => {
+    const result = await draft(db, { ...scope, ...extra });
+    assert.equal(result.status, 201, JSON.stringify(result.body));
+    return result.body.agreement;
+  };
+  const first = await draftPackage();
+  assert.deepEqual([first.body_md, first.package_version], ['Core Network v1', 1]);
+  const issued = await send(db, first.uid, first.revision);
+  assert.equal(issued.status, 200, JSON.stringify(issued.body));
+  await sign(db, issued.body.envelope.uuid, 'a'.repeat(64));
+
+  db.prepare(`INSERT INTO program_packages (uid, package_key, version, name, status, base_annual_fee_cents, effective_from, created_at)
+    VALUES ('synthetic-core-v2', 'core_network', 2, 'Renamed Network', 'draft', 100, '2026-01-01', '2026-01-01T00:00:00Z')`).run();
+  assert.equal((await draft(db, { ...scope, package_version: 2 })).body.error, 'package_not_published');
+  db.exec("UPDATE program_packages SET status='retired' WHERE uid='pkg_core_network_v1'");
+  assert.equal((await draft(db, scope)).body.error, 'package_not_published');
+  db.exec("UPDATE program_packages SET status='active' WHERE uid='synthetic-core-v2'");
+  const second = await draftPackage();
+  assert.deepEqual([second.body_md, second.package_version], ['Renamed Network v2', 2]);
+  assert.equal(version(db, first.uid).body_sha256, first.body_sha256);
+  assert.equal(envelope(db, issued.body.envelope.uuid).document_body, 'Core Network v1');
+  const contexts = await loadLicenceAgreementContexts(getSQL({ DB: d1Over(db) } as any));
+  assert.equal(contexts.find((row) => row.agreement_uid === first.uid)?.package_name, 'Core Network');
+  assert.equal(contexts.find((row) => row.agreement_uid === second.uid)?.package_name, 'Renamed Network');
+  assert.equal((await draftPackage({ package_version: 1 })).body_md, 'Core Network v1');
+  assert.equal((await draft(db, { ...scope, package_version: 99 })).body.error, 'package_not_published');
   db.close();
 });
 

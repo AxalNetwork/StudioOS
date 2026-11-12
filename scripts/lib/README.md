@@ -75,6 +75,7 @@ A module belongs here when a CLI's *decision* is worth testing separately from
 its *effects* — which is most of them, and all the dangerous ones. If it needs
 to spawn something or talk to Cloudflare, that part stays in the script above.
 
+| `scanScope.mjs` | D5602: PR scan policy, opaque finding snapshots, outstanding-new state and redacted shared incident format. |
 | `notificationRouting.mjs` | D5666: observational ownership and routing from claims, live rules and existing CI digest. |
 
 | `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
