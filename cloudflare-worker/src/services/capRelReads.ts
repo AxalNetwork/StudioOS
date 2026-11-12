@@ -58,6 +58,7 @@
 import type { Env } from '../types';
 import { fundFit, FIT_LABEL, receivedCredits, type Fit } from './raiseCycle';
 import { DirectoryQueryError, listDirectory, parseDirectoryQuery, servedFocusValues, type DirectoryQuery } from './researchFundDirectory';
+import { majorToMinor } from '../../../frontend/src/lib/money.js';
 
 // ───────────────────────────────────────────────────────────────── vocabulary
 
@@ -87,12 +88,17 @@ export const NOT_COUNTED_WHY: Record<'indicated' | 'soft' | 'not_recorded' | 'ot
 const RANK: Record<CommitStatus, number> = Object.fromEntries(COMMIT_STATUSES.map((s, i) => [s, i])) as Record<CommitStatus, number>;
 
 const MAX_DOLLARS = 10_000_000_000_000;
-/** Dollars as cents, by migration 607's rule; out of range or missing is null, never 0. */
-export function dollarsToCents(v: unknown): number | null {
+/**
+ * A legacy REAL column of major units as the currency's own minor units, rounded once; out of range or missing is null,
+ * never 0. D5373: migration 607's two-decimal mirror holds only for two-decimal currencies, so this reads the currency's
+ * decimals (JPY none, KWD three, the default USD two), and a currency the layer does not list is null, never a figure at a
+ * guessed factor. Named `dollarsToCents` since the column was dollars.
+ */
+export function dollarsToCents(v: unknown, currency: string = 'USD'): number | null {
   if (v == null || v === '') return null;
   const n = Number(v);
   if (!Number.isFinite(n) || n < 0 || n > MAX_DOLLARS) return null;
-  return Math.round(n * 100);
+  return majorToMinor(n, currency);
 }
 
 const CURRENCY = /^[A-Z]{3}$/;
@@ -194,7 +200,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     const status: CommitStatus = p.commit_status === 'signed' || p.commit_status === 'wired' || p.commit_status === 'soft' ? p.commit_status : 'not_recorded';
     add(`prospect:${p.id}`, Number(p.id), prospectName.get(Number(p.id))!, line({
       key: `typed:${p.id}`, source: 'typed', status,
-      cents: p.amount_cents != null ? Number(p.amount_cents) : dollarsToCents(p.amount),
+      cents: p.amount_cents != null ? Number(p.amount_cents) : dollarsToCents(p.amount, currencyOf(p.currency, 'USD')),
       currency: currencyOf(p.currency, 'USD'), on: p.updated_at ? String(p.updated_at).slice(0, 10) : null, via: null,
     }));
   }
@@ -236,7 +242,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
     const k = keyFor(d.email, Number(d.investor_user_id));
     add(k.key, k.prospectId, k.prospectId != null ? prospectName.get(k.prospectId)! : (String(d.investor_name || '').trim() || 'Investor'), line({
       key: `deal:${d.uid}`, source: 'recorded', status: d.status,
-      cents: dollarsToCents(d.amount), currency: currencyOf(d.currency, 'USD'),
+      cents: dollarsToCents(d.amount, currencyOf(d.currency, 'USD')), currency: currencyOf(d.currency, 'USD'),
       on: d.created_at ? String(d.created_at).slice(0, 10) : null, via: 'Deal room',
     }));
   }
@@ -288,7 +294,7 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
   }
   out.sort((a, b) => RANK[a.chosen.status] - RANK[b.chosen.status] || (b.chosen.cents ?? -1) - (a.chosen.cents ?? -1) || a.name.localeCompare(b.name));
 
-  const targetCents = round ? (round.target_cents != null ? Number(round.target_cents) : dollarsToCents(round.target_amount)) : null;
+  const targetCents = round ? (round.target_cents != null ? Number(round.target_cents) : dollarsToCents(round.target_amount, currency)) : null;
   const partial = Object.values(sources).some((s) => s.state === 'unreadable');
   return {
     currency,
