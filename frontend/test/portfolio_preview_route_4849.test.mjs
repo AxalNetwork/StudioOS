@@ -25,9 +25,7 @@ import { register } from 'node:module';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
-// #4574 H4: the ui barrel and the recording view left the shell, so App no longer loads them at start-up; the first
-// route that needs them evaluates them then. This suite settles each load with a fixed number of ticks, so it loads
-// them first, as a browser has them once their chunks arrive (the same move as H5's _cycleSteps.mjs). No assertion changes.
+// #4574 H4 moved these shared modules out of the shell. Preload them as a browser would after their chunks arrive.
 await import('../src/ui/index.js');
 await import('../src/pages/founder/RecordingView.jsx');
 
@@ -84,12 +82,6 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
   const host = dom.document.createElement('div'); dom.document.body.appendChild(host);
   const root = createRoot(host);
   const { error, warn } = console; console.error = () => {}; console.warn = () => {};
-  const tick = async (n = 40) => { for (let i = 0; i < n; i += 1) await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5)))); };
-  // #4574 (H4): a page's lazy chunk now carries modules the shell used to hold, so its first draw can take longer than a
-  // fixed 40 ticks on a busy machine. A lazy route can still be loading after those rounds (its Suspense fallback has
-  // no heading), which read as "no heading" and failed shard frontend-2 on 2026-11-09. Keep going, boundedly, until a
-  // heading is drawn; a page that never draws still fails below.
-  const settle = async () => { await tick(); for (let i = 0; i < 400 && !select(dom.document, 'h1').length; i += 1) await tick(1); };
   const read = () => ({
     path: at?.pathname,
     studio: select(dom.document, STUDIO).length,
@@ -97,15 +89,31 @@ async function app(member, { viewMode = null, hq = '1', api = 'empty' } = {}, ru
     h1: select(dom.document, 'h1').map((n) => n.textContent.trim()),
     links: select(dom.document, 'a').map((n) => n.getAttribute?.('href')).filter(Boolean),
   });
+  const investorView = (viewMode ?? member.role) === 'investor';
+  async function settle(route) {
+    const heading = investorView ? PORTFOLIO_ROUTES[route] ?? OTHER_ROUTES[route] : undefined;
+    const ready = () => {
+      if (route === '/studio') return at?.pathname === route && select(dom.document, STUDIO).length > 0;
+      const headings = select(dom.document, 'h1');
+      if (!heading) return headings.length > 0;
+      return at?.pathname === route && headings.some((node) => node.textContent.trim() === heading);
+    };
+    // A lazy destination can still be loading while the shell or the previous page has a heading.
+    const deadline = performance.now() + 30_000;
+    while (!ready() && performance.now() < deadline) {
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
+    }
+    return read();
+  }
   try {
     return await run({
       /** A direct load, as a refresh is. */
       async load(route) {
         await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route], key: `${route}:${Math.random()}` }, h(App), h(Landed))); });
-        await settle(); return read();
+        return settle(route);
       },
       /** A client-side move, as a click in the shell is. */
-      async go(route) { await act(async () => { navigate(route); }); await settle(); return read(); },
+      async go(route) { await act(async () => { navigate(route); }); return settle(route); },
       read,
     });
   } finally {
