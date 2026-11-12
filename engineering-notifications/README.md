@@ -19,3 +19,4 @@ Read [D5664](../documentation/architecture/decisions/D5664.md) before rollout.
 | `snapshots.mjs` | D5664: GET-only PR/review/issue/check/status/deployment/release/ref/claim recovery with explicit unrecoverable gaps. |
 
 | `wrangler.security.jsonc` | D5664: separately disabled security Worker/Queue/ledger proposal; normal ingress cannot accept security events. |
+| `platform-policy-5672.mjs` | D5672: conservative aggregate policy and observational shared-episode presentation. |
