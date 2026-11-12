@@ -289,3 +289,5 @@ D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+
+D5566: `workspace_cloudflare_5566.test.ts` exercises private host/adapter failures and guard mutations; actual Docker image evidence lives in `workspace-engine/test/`.

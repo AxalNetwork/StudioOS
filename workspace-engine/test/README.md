@@ -1,0 +1,7 @@
+# Workspace evidence
+
+`local-synthetic.mjs` runs the actual candidate image against local Git bundles in restricted Docker containers and writes synthetic signed-manifest/teardown evidence under the temporary directory. It uses no hosted resource, provider credential or GitHub push. The checks cover exact SHA, scoped edit, Node tests, second fresh tenant, reduced privileges/environment, traversal, symlink trees, compressed disk exhaustion, cancellation and timeout. All fixture containers are removed in finally blocks.
+
+`scan-image.mjs` saves the local image, runs a digest-pinned Trivy scanner without a Docker socket, emits CycloneDX SBOM/vulnerability/provenance files, removes the image archive and refuses high/critical/unknown findings or unavailable inventories. Evidence remains disabled for admission until a trusted published image/signature and hosted policy proofs exist. The scanner may use Docker's configured network proxy; the coding fixture clears proxy variables and has network disabled.
+
+Controller/adapter faults and deliberate guard mutations run in `cloudflare-worker/test/workspace_cloudflare_5566.test.ts`. The image workflow checks types and these contracts, builds, runs the real fixture and scans. It never publishes, deploys, activates a flag or obtains provider credentials. Add hosted evidence separately after the broker bridge, account capacity, residency/egress proof and owner bounds are settled; never relabel Docker or fake-provider evidence as hosted acceptance.

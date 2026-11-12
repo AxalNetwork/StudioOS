@@ -1,0 +1,49 @@
+name: Workspace image candidate
+on:
+  pull_request:
+    paths:
+      - 'workspace-engine/**'
+      - '.github/workflows/workspace-image.yml'
+      - 'cloudflare-worker/src/services/agents/workspace*.ts'
+      - 'cloudflare-worker/test/workspace_*'
+permissions:
+  contents: read
+concurrency:
+  group: workspace-image-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci --prefix cloudflare-worker
+      - name: Check preview host types and controller refusals
+        run: |
+          cloudflare-worker/node_modules/.bin/tsc --noEmit -p workspace-engine/tsconfig.json
+          node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/workspace_*test.ts
+      - name: Build separate candidate image (no publication)
+        run: docker build --tag studioos-workspace-s39:local workspace-engine/container
+      - name: Run isolated synthetic coding and teardown journeys
+        run: node workspace-engine/test/local-synthetic.mjs
+      - name: Generate SBOM and fail closed on high or critical vulnerabilities
+        run: node workspace-engine/test/scan-image.mjs
+      - name: Retain bounded evidence only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workspace-candidate-evidence
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            /tmp/workspace-image-scan/sbom.cdx.json
+            /tmp/workspace-image-scan/vulnerabilities.json
+            /tmp/workspace-image-scan/provenance.json
+            /tmp/s39-workspace-5566-evidence/result.json
+            /tmp/s39-workspace-5566-evidence/signed-synthetic-manifest.json

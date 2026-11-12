@@ -160,3 +160,5 @@ D1165 (#3072, PR #3230): the form/lightbox workflow keeps all focused checks,
 guards, the root build and full drift. Its job has the same 60-minute bound as
 the main CI gate: the prior 30-minute limit cancelled a run during final lint.
 No trigger, permission, secret or check changes.
+
+D5566: `workspace-image.yml` checks the separate disabled coding candidate, actual local Docker fixtures and pinned SBOM/vulnerability evidence on relevant PRs; it never publishes or deploys.

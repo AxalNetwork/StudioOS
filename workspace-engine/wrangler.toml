@@ -1,0 +1,31 @@
+# D5566: candidate only. No deploy/provision is authorized by committing this file.
+name = "studioos-workspace-disabled"
+main = "worker/index.ts"
+compatibility_date = "2026-11-02"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+WORKSPACE_PILOT = "off"
+
+[env.preview]
+name = "studioos-workspace-preview"
+
+[env.preview.vars]
+WORKSPACE_PILOT = "off"
+
+[[env.preview.durable_objects.bindings]]
+name = "WORKSPACES"
+class_name = "CodingWorkspace"
+
+[[env.preview.migrations]]
+tag = "5566-preview-v1"
+new_sqlite_classes = ["CodingWorkspace"]
+
+[[env.preview.containers]]
+class_name = "CodingWorkspace"
+scheduling_policy = "durable_object"
+max_instances = 1
+
+[env.preview.containers.images.coding]
+dockerfile = "./container/Dockerfile"
+build_context = "./container"

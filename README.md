@@ -59,3 +59,5 @@ Full walkthrough + auth-error troubleshooting:
 
 Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
 to Axal VC Management LLC for operation.
+
+D5566 (#5566): `workspace-engine/` holds the separate disabled coding-container candidate, private host and local image evidence; production admission remains off.
