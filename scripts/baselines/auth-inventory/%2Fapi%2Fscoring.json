@@ -1,0 +1,12 @@
+{
+  "GET /api/scoring/deal-memos/:projectId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/scoring/score/:projectId/deal-memo": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "GET /api/auth/factors": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/google/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/google/config": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/google/start": {
+    "review": "optional_auth",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/magic/verify": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/recover/email/verify": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/recover/ticket/:id": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "GET /api/auth/verify-email": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/confirm-verify-email": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/google/popup": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/login": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/logout": {
+    "review": "optional_auth",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/magic/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/passkey/auth-options": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/passkey/auth-verify": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/admin/escalate": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/backup-code": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/claim": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/email/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/kyc/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/sms/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/sms/verify": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/recover/trusted-contact/start": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/register": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/resend-verification": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/setup-totp": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/sms/start-challenge": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/sms/verify-challenge": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/support/redeem": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  },
+  "POST /api/auth/verify-totp": {
+    "review": "no_gate_found",
+    "kind": "sign_in",
+    "state": "unreviewed"
+  }
+}

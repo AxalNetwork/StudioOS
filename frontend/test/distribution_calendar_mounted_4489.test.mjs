@@ -4,11 +4,11 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import PostPreview from '../src/pages/cycles/distribution/PostPreview.jsx';
-import { readFileSync } from 'node:fs';
 import { mountContracts } from './_contracts_dom.mjs';
 import { CalendarWeek } from '../src/pages/cycles/distribution/CalendarTab.jsx';
 import PieceSheet from '../src/pages/cycles/distribution/PieceSheet.jsx';
 import { ProposalCard } from '../src/pages/cycles/distribution/WaitingForYou.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 const h = React.createElement;
 
 test('Repurpose is a writer-only Calendar action when AI is on', () => {
@@ -46,7 +46,7 @@ test('failed weekly read is Unreadable with retry, never empty or a raw server e
   try { await m.flush(); assert.match(m.text(), /Unreadable/); assert.doesNotMatch(m.text(), /private server detail|Nothing planned/); fail = false; await m.click('Try again'); await m.flush(); assert.match(m.text(), /Nothing planned this week/); } finally { await m.unmount(); }
 });
 test('Calendar is a real tab and Overview retires the old list', () => {
-  const s = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const s = cycleRouteText();
   assert.match(s, /distributionTab === 'calendar'.*<CalendarTab projectId=\{projectId\}/);
   assert.match(s, /<CalendarWeek projectId=\{ctx.projectId\}/); assert.doesNotMatch(s, /<ContentCalendar/);
 });
