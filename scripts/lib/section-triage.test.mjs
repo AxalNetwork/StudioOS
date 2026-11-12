@@ -47,9 +47,15 @@ function fixture(t) {
 test('offline public projection uses only trusted constants, SHA, count and opaque marker', async () => {
   const p = prepare(input);
   assert.equal(p.key, prepare({ ...input, count: 7 }).key);
-  assert.ok(!p.issue.body.includes(input.episode));
-  assert.ok(!p.issue.body.includes('@'));
-  assert.ok(!p.issue.body.includes('slack.com'));
+  assert.match(p.key, /^[a-f0-9]{64}$/);
+  const revisionUrl = `https://github.com/AxalNetwork/StudioOS/blob/${input.revision}`;
+  assert.equal(p.issue.body, [
+    'Learning discovery list rendering failed in a controlled reproduction.',
+    'Section: all-learning. Cumulative observations at filing: 2.',
+    `[Source at the observed revision](${revisionUrl}/frontend/src/pages/learning/LearningHome.jsx) · [Regression test](${revisionUrl}/frontend/test/learning_discovery_4648.test.mjs)`,
+    'S01 triages the incident and authorizes any slot task. Recovery requires a verified release and healthy evidence.',
+    `<!-- axal-section-incident:v1:${p.key} -->`,
+  ].join('\n\n'));
   const fixtureFile = new URL('./section-triage-example.json',import.meta.url).pathname;
   assert.equal((await main([fixtureFile])).state, 'offline-preview');
   for (const bad of [{ ...input, url: 'customer' }, { ...input, source: 'github' },
