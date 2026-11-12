@@ -11,7 +11,8 @@ const SENSITIVE_NAME = /auth|session|permissions?|tenan(?:t|cy)|billing|money|pa
 const LEAF_UI = /^frontend\/src\/(?:components|icons|styles)\//;
 const ORDINARY = /^(?:cloudflare-worker\/src\/(?:routes|services)|backend\/app\/(?:api\/routes|services)|frontend\/src\/(?:routes|services|pages))\//;
 const LINK_MODES = new Set(['120000', '160000']);
-const BASELINE = /(?:^|\/)scripts\/baselines\/|[-_.](?:baseline|ledger)\.json$/i;
+const BASELINE_DIRECTORY = /(?:^|\/)scripts\/baselines\//i;
+const BASELINE_FILENAME = /[-_.](?:baseline|ledger)\.json$/i;
 const RESTRICTED_TEST = /(?:\.\s*|\b)(?:skip|todo|only)\s*(?:\(|:\s*(?!false\b))/;
 const TIMEOUT = /(?:\b[\w-]*timeout[\w-]*\b)/i;
 const TEST_CALL = /\b(?:test|it)\s*\(/g;
@@ -59,7 +60,8 @@ export function classify(files) {
       record(previousLevel, `${previousLevel}: ${previousRule}: previous path ${previousPath}`);
     }
     if (!'ACDMR'.includes(code) || !code) record('T2', `Unsupported change status: ${path}`);
-    if (BASELINE.test(path) || (previousPath && BASELINE.test(previousPath))) {
+    if ([path, previousPath].some((file) =>
+      file && (BASELINE_DIRECTORY.test(file) || BASELINE_FILENAME.test(file)))) {
       record('T2', `Test baseline or ledger changed: ${path}`);
     }
     const test = TEST.test(path) || (previousPath && TEST.test(previousPath));
