@@ -26,7 +26,11 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = new URL('../../', import.meta.url);
 const DIR = new URL('.github/workflows/', ROOT);
@@ -122,6 +126,44 @@ export function ungenerated(files) {
 }
 
 const REAL = FILES.map((f) => [f, readFileSync(new URL(f, DIR), 'utf8')]);
+
+for (const generated of [true, false]) {
+  test(`fast guards load from a trusted base ${generated ? 'with' : 'without'} D5612's helper`, (t) => {
+    const root = mkdtempSync(join(tmpdir(), 'trusted-fast-guards-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const put = (rel, text) => {
+      mkdirSync(dirname(join(root, rel)), { recursive: true });
+      writeFileSync(join(root, rel), text);
+    };
+    const files = ['scripts/migration-immutability-gate.mjs', 'scripts/lib/migrationImmutability.mjs',
+      'scripts/lfs-size-gate.mjs', 'scripts/check-api-drift.mjs', 'scripts/lib/apiModules.mjs', 'scripts/lib/routeRegistry.mjs'];
+    for (const file of files) {
+      // Older standalone helpers deliberately have no generated-output dependency.
+      put(file, !generated && /lib\/(apiModules|routeRegistry)\.mjs$/.test(file)
+        ? 'export const legacy = true;\n' : readFileSync(new URL(file, ROOT), 'utf8'));
+    }
+    if (generated) put('scripts/lib/generatedOutput.mjs', readFileSync(new URL('scripts/lib/generatedOutput.mjs', ROOT), 'utf8'));
+    const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    git('init', '--quiet');
+    git('add', '.');
+    git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'trusted base');
+    const base = git('rev-parse', 'HEAD');
+    // Working-tree content must never substitute for the archived trusted base.
+    put('scripts/lib/generatedOutput.mjs', 'throw new Error("untrusted working tree");\n');
+    const ci = jobsOf(REAL.find(([f]) => f === 'ci.yml')[1]);
+    const run = ci.find((j) => j.job === 'fast').steps.find((s) => s.name === 'Load static checkers from the trusted base').run;
+    const archive = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', run], {
+      cwd: root, encoding: 'utf8', env: { ...process.env, EVENT: 'pull_request', BASE_SHA: base,
+        RUNNER_TEMP: join(root, 'runner'), GITHUB_WORKSPACE: root },
+    });
+    assert.equal(archive.status, 0, archive.stderr);
+    const trusted = join(root, 'runner/fast-guards/scripts/lib');
+    const load = spawnSync(process.execPath, ['--input-type=module', '-e',
+      `await import(${JSON.stringify(pathToFileURL(join(trusted, 'apiModules.mjs')).href)}); await import(${JSON.stringify(pathToFileURL(join(trusted, 'routeRegistry.mjs')).href)});`],
+    { encoding: 'utf8' });
+    assert.equal(load.status, 0, load.stderr);
+  });
+}
 
 test('every job that runs tsc, node --test, wrangler, vite or playwright test builds the generated modules first', () => {
   assert.deepEqual(ungenerated(REAL), [], 'add a step `run: node scripts/build-generated.mjs` (or `node ../scripts/build-generated.mjs` under a working-directory) before it');
