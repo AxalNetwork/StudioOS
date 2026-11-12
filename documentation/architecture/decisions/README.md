@@ -100,4 +100,5 @@ and citations by number keep working.
 | `D5664.md` | Independent signed metadata capture, immutable ledger and explicit source gaps. |
 | `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
 | `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
+| `D5680.md` | Restricted operational security triage without public disclosure. |
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
