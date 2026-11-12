@@ -46,4 +46,5 @@ and a link in `documentation/README.md`.
 
 | `ENGINEERING_EVENTS_5664.md` | D5664: read-only workflow/provider inventory, pilot counts and deployment gaps. |
 | `ENGINEERING_SLACK_5665.md` | D5665: destination kill switches, canary and uncertain-send recovery. |
+| `CLOUDFLARE_ROLLOUT_5670.md` | D5670: source-to-receipt rollout, privacy, outage and rollback checklist. |
 | `CLOUDFLARE_DELIVERY_5671.md` | D5671: private registry/secret setup, connectivity versus receipts, canary, fallback and rollback. |
