@@ -189,9 +189,9 @@ test('the instrument is the artboard’s six columns, at its own grid', () => {
   // AND NEITHER TURNS AN UNMEASURED PERSON INTO A ZERO. Nobody logging hours
   // for someone is not the same as their having done no work, and the two hour
   // columns must keep that apart the way the Internal one does.
-  assert.match(cells[2], /p\.project_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cells[2], /p\.project_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'a person with no hours logged now reads as zero project hours');
-  assert.match(cells[3], /p\.seat_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cells[3], /p\.seat_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'a person with no hours logged now reads as zero seat hours');
 });
 
@@ -220,12 +220,12 @@ test('a total with no internal hours behind it is marked a floor', () => {
     'the total no longer says when it is only part of a week');
   // NULL IS DRAWN ABSENT, never as zero: a week assembled from nothing is not a
   // week of no work.
-  assert.match(totalCell, /p\.total_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(totalCell, /p\.total_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'an unmeasured person now reads as zero hours');
   assert.ok(/p\.over_committed === true/.test(totalCell),
     'the Over pill no longer requires an explicit true — null would light it');
   // The internal column keeps the same distinction on its own.
-  assert.match(cellsOf(INST)[4], /p\.internal_hours == null\s*\?\s*\{ nr: true \}/,
+  assert.match(cellsOf(INST)[4], /p\.internal_hours_per_week == null\s*\?\s*\{ nr: true \}/,
     'unstated internal hours now read as zero');
 
   // AND THE WORKER MAKES THE SAME DISTINCTION, so the page is not carrying it
@@ -271,8 +271,14 @@ test('the cap writer is the firm’s own number, and it can be taken back', () =
   const put = between(worker, "partnerDelivery.put('/capacity/cap'", "partnerDelivery.put('/capacity/internal-hours'");
   assert.ok(/hours <= 0 \|\| hours >= 168/.test(put), 'a cap outside a week that exists is now accepted');
   assert.ok(/if \(b\.weekly_hours === null\) \{/.test(put), 'a cap can be set and not unset');
-  assert.equal((put.match(/DELETE FROM partner_capacity/g) || []).length, 2,
-    'one of the two clear paths — the firm’s default and one person’s — is gone');
+  // #5314 part 3: the cap row is read for its scope (two literal reads, the
+  // firm's default and one person's) and cleared by that row's id and revision.
+  assert.ok(put.includes("'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id IS NULL'"),
+    'the firm’s default can no longer be read, so it can no longer be cleared');
+  assert.ok(put.includes("'SELECT * FROM partner_capacity WHERE partner_id = ? AND person_user_id = ?'"),
+    'one person’s cap can no longer be read, so it can no longer be cleared');
+  assert.equal((put.match(/DELETE FROM partner_capacity WHERE id = \? AND revision = \?/g) || []).length, 1,
+    'the clear path is gone, or no longer names the revision it read');
   // TWO LITERAL STATEMENTS, because `check-sql-prepare` refuses a `${}` inside
   // `DB.prepare` and the partial unique indexes need the NULL case spelled out.
   assert.ok(/ON CONFLICT \(partner_id\) WHERE person_user_id IS NULL/.test(put));

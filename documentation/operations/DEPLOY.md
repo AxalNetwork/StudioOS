@@ -10,67 +10,33 @@ written down here. That is deliberate; see [§7](#7-why-nothing-here-is-hardcode
 
 ---
 
-## 1. The one command
+## 1. Dispatching a release
 
-From the **repository root**:
+Use an authenticated GitHub CLI from the repository root, or run **Cloudflare Worker deploy** on `main` in Actions.
 
 ```bash
 npm run deploy
 ```
 
-npm expands that into three scripts, in order:
+| Script | Command |
+| --- | --- |
+| `deploy` | `gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main` |
 
-| Hook         | Command                                                                                     |
-| ------------ | ------------------------------------------------------------------------------------------- |
-| `predeploy`  | `node scripts/migrate-d1.mjs --remote`                                                        |
-| `deploy`     | `npm run build && cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production` |
-| `postdeploy` | `node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs` |
+This queues a release of the dispatched `main` SHA. Follow the Actions run for the outcome. The command returning successfully means GitHub accepted the dispatch. The Worker package's own `npm run deploy` delegates to the root command.
 
-So one invocation applies pending D1 migrations, builds the frontend into
-`docs/`, uploads the worker, and then probes the live site.
+### 1.1 Admission before production writes
 
-A failing `post`-script propagates to the parent `npm run`. **`npm run deploy`
-exiting 0 is therefore real evidence that the live smoke check passed** — not
-just that the upload succeeded.
+For a push or dispatch, the admission job verifies the six required jobs from their expected Actions workflows on the exact landed `main` SHA. A missing or pending result can wait up to 95 minutes, outside the shared production release lock. Failure, an untrusted result, or a newer `main` prevents production writes. A completed CI push can use the merge-queue result through CI's exact-SHA reuse logic. A different merge-group SHA provides no proof for this candidate.
 
-### 1.1 One way to silently skip the migrations
+Under the lock, the release job revalidates eligibility, builds the SPA from the pinned checkout, verifies the production queue inventory, and measures the production-shaped dry-run bundle. It records the migration plan and previous Worker deployment and rechecks `main` immediately before migrations. A missing DLQ must be provisioned by the Cloudflare account owner. An inconclusive queue lookup or startup profile blocks the release. See [D5535](../architecture/decisions/D5535.md) and [D5532](../architecture/decisions/D5532.md).
 
-This deploys the worker *without* applying schema changes, leaving the new
-code running against the old database:
+The job applies pending D1 migrations, then publishes through Wrangler on the same pinned checkout. The published Worker receives the candidate in `WORKER_DEPLOY_VERSION`. The artifact records the preflight bundle digest and the resulting Worker version ID. Wrangler packages again at publication, so the digest identifies the prepared check artifact. The workflow records admission, migrations and publishing separately. Live smoke, branch rollout and schema parity remain distinct jobs.
 
-1. **`npx wrangler deploy --config ../wrangler.toml --env production` by hand.**
-   npm only fires `pre`/`post` hooks for `npm run <script>`. Invoking wrangler
-   directly bypasses `predeploy` entirely.
+### 1.2 Manual D1 maintenance
 
-**`cd cloudflare-worker && npm run deploy`** used to be a second way to hit
-this footgun: that package's own script called `wrangler deploy` directly,
-with no `--env production` and no migration hook, and because the top-level
-`name` and the `[env.production]` `name` in `wrangler.toml` are both
-`studioos`, it still shipped to the live worker — just with the top-level
-binding, var and route set, ahead of its schema. That script now reads
-`cd .. && npm run deploy`: it hands off to the root `deploy` script instead
-of calling wrangler itself, so it inherits the root's `predeploy` migration
-hook and `--env production` for free. There is only one real deploy path
-left to bypass.
+Use **D1 migrations** on `main` in Actions. Production `apply`, `baseline`, `adopt-and-baseline` and `verify-marked` take the production release lock and run both preflight checks. Wait for the exact SHA's checks to finish before dispatching a write. `dry-run` can read the plan without the write lock. The production npm migration aliases dispatch this workflow. Branch-only migration and the isolated preview retain their own targets.
 
-Deploy from the repository root, through `npm run deploy` (directly, or via
-`cd cloudflare-worker && npm run deploy`, which now delegates to it).
-Nothing else.
-
-### 1.2 The same runner, from CI
-
-Two workflows call `scripts/migrate-d1.mjs --remote` with the repository's
-Cloudflare secrets, so applying migrations no longer depends on whose
-workstation holds wrangler credentials:
-
-| Workflow | When | What it runs |
-| --- | --- | --- |
-| `cloudflare-worker-deploy.yml` | every push to `main` | the runner, **before** `wrangler deploy` — a failure fails the deploy |
-| `d1-migrate.yml` | by hand, from the Actions tab | one of `dry-run`, `adopt-and-baseline`, `verify-marked`, `apply`, each bracketed by a read-only plan |
-
-The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as
-Workers Scripts:Edit. Until 2026-09-03 the deploy workflow called
-`wrangler deploy` directly — the first "silent skip" above, on every merge.
+Use the existing token with permission to list queues in the production account and to read the current Worker deployments, in addition to its D1 and Worker publish permissions. Privileged direct Wrangler commands can bypass workflow admission. Reserve those for the owner-controlled recovery procedure in §3.
 
 ### 1.2.1 The merge queue in front of the deploy (#4107)
 
@@ -79,8 +45,7 @@ each entry on a `gh-readonly-queue/main/…` branch through the `merge_group`
 event and merges it only when main's six required checks pass there (the
 table is in `.github/workflows/README.md`, "The merge queue"). Nothing in a
 queue run deploys or touches production: `cloudflare-worker-deploy.yml`
-listens for a push to `main` only, so the deploy starts when the queue's merge
-lands, as it did when a PR was merged by hand. A queue entry that fails is not
+runs on a push or a manual dispatch on `main`. The queue’s merge schedules the release, which waits for the landed SHA’s evidence. A queue entry that fails is not
 merged and nothing ships; the PR returns to its author with the failing check.
 
 The queue's settings, as the owner set them on 2026-11-02 in the `main`
@@ -90,13 +55,39 @@ ruleset (Settings → Rules → Rulesets → `main` → Require merge queue):
 | --- | --- |
 | Merge method | Squash |
 | Build concurrency | 5 |
+| Auto-merge | Off in the API; owner approved On (#5605) |
+| Update branch | Off in the API; owner approved On (#5605) |
 | Group size | minimum 1, maximum 5 |
 | Wait time to meet the minimum group size | 5 minutes |
 | Require all queue entries to pass required checks | on |
 | Status check timeout | 90 minutes (`test:drift`'s own job limit; a full run took 43 to 81 minutes on 2026-11-02) |
 | Require branches to be up to date before merging | off: the queue tests each entry on top of the latest `main` |
 
+The approved bypass setting is **no bypass actors**. In an emergency the owner
+edits the ruleset. See [#5500](https://github.com/AxalNetwork/StudioOS/issues/5500)
+for application and exercise evidence.
+
+Keep build concurrency at **5**. Move to **8–10** only once the measured
+per-entry failure rate is **at most 3%** and run wall time is **at most 15 minutes**.
+Use **2** only while the queue-stalled alert is open. This retires the
+[#5506](https://github.com/AxalNetwork/StudioOS/issues/5506) concurrency pilot.
+The [owner actions list](https://github.com/AxalNetwork/StudioOS/issues/1008)
+tracks the settings and capacity work recorded in [D5605](../architecture/decisions/D5605.md).
+
 To merge, press **Merge when ready**, not **Merge**.
+
+D5606 uses two pull requests for the required check cutover.
+
+1. Land PR 1 with the current six required checks and the shadow `landing gate`.
+   Check both contexts on a PR, a merge-group run and a push. Verify that a
+   changed applied migration blocks the shadow gate and an audit-only failure
+   leaves its required verdict passing.
+2. With an empty queue, the owner adds `landing gate` to the required checks
+   and then removes the six old names. Verify the queue requires the new name.
+3. Land PR 2 to remove the old jobs and workflows and update the deploy's
+   expected check names. Record the first push admitted by the new gate and the
+   resulting CI job count. Keep the previous names available until step 2 is
+   confirmed.
 
 ### 1.3 A branch database
 
@@ -125,7 +116,7 @@ enforced rather than remembered:
   `--remote` flag, which would have refused exactly this; it now names the
   database that must never be bootstrapped (`bootstrapRefusal` in
   `scripts/lib/migrationTargets.mjs`).
-- **`adopt-and-baseline` is production-only.** A branch has no legacy ledger
+- **The baseline modes are production-only.** A branch has no legacy ledger
   to adopt; the workflow fails the run rather than doing something plausible.
 
 Backups follow the same split: `backup-d1.yml` takes a `target_db` and now
@@ -215,11 +206,8 @@ GitHub evicted after seven days unused) the deploy still ships, the build log
 says `retention restarted`, and the run carries a warning: a tab opened before
 that deploy may need one reload.
 
-A hand deploy with `npm run deploy` builds over whatever `docs/` holds on your
-machine. Its postdeploy hook records successful deployment before running
-the live check. With no previous build there it restarts retention the same
-way. Retention still depends on restoring the previous successful cache; a
-cache miss or missing saved files cannot recreate deleted chunks. See D1364
+A manual dispatch uses the same retained asset tree as an automatic release.
+A cache miss can only preserve assets still available to the workflow. See D1364
 for the measured cache budget and platform limits.
 
 The deploy workflow also checks every lazy JS/CSS dependency after publishing
@@ -246,11 +234,8 @@ retention check. A matched but unreadable cache fails instead of silently
 dropping the previous generation. No cache or build metadata is published.
 A smoke-only retry reuses this run's artifact; a full deploy retry replaces
 it. Custom dispatch hosts check their live graph without production cache
-hashes. The scheduled retention proof assumes CI deploys: a hand deployment
-via `npm run deploy` does not update Actions' cache and can leave the schedule
-red against stale generation identities until the next CI deploy. Such a
-run cannot establish previous-deploy retention; inspect the deployed version
-and cache provenance before treating it as asset loss.
+hashes. The scheduled retention proof uses the last successful workflow's cached assets.
+Owner-controlled recovery outside that workflow can leave its cache behind the live version.
 
 The smoke fails the deploy run on a missing file, wrong content type or
 unreadable dependency map. It never rolls production back. The owner checks
@@ -269,6 +254,11 @@ already covers it.
 ---
 
 ## 3. Capture a rollback point first
+
+For direct owner recovery, pause new production dispatches and wait for any
+in-flight release or manual D1 writer to finish before selecting the recorded
+known-good Worker version. Keep the migrated schema and confirm compatibility
+before resuming normal releases.
 
 ```bash
 cd cloudflare-worker
@@ -306,7 +296,7 @@ existed, so the runner sees them as pending and replaying them fails. This is
 the one legitimate use of:
 
 ```bash
-npm run d1:baseline      # = node scripts/migrate-d1.mjs --remote --baseline
+npm run d1:baseline      # dispatches the locked production baseline workflow
 ```
 
 It applies the idempotent pending files for real, *records* the non-idempotent
@@ -365,8 +355,7 @@ exception to the rule below: it corrects a claim the ledger never earned.
 
 ## 5. Verifying it actually shipped
 
-`npm run deploy` exiting 0 already includes the live smoke check. If you need
-to re-run it alone:
+Check the release run for live smoke, branch rollout, and schema parity. To repeat the live probe separately:
 
 ```bash
 npm run verify:live      # = node scripts/check-spa-live.mjs

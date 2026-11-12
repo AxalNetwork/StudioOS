@@ -352,6 +352,24 @@ test('10: a SAFE with a prospect changes the after-round share and links the pro
   assert.equal(stored(db).safes.find((x: any) => x.key === note.id).instrument, 'note');
 });
 
+test('D5497 SAFE writes require whole model dollars and preserve an existing entry on refusal', async () => {
+  const db = holderFixture();
+  await save(db, TABLE);
+  const env = envOf(db);
+  const args = {
+    projectId: P, actor: STUDIO, name: 'Harbour Angels II',
+    group: 'investors' as const, instrument: 'safe' as const,
+    amount_cents: 50_000_000, cap_cents: 600_000_000,
+  };
+  const before = stored(db);
+  await assert.rejects(addHolder(env, { ...args, amount_cents: 50_000_001 }), /amount_cents must represent whole US dollars/);
+  assert.deepEqual(stored(db), before);
+  const { id } = await addHolder(env, args);
+  const added = stored(db);
+  await assert.rejects(updateHolder(env, { projectId: P, actor: STUDIO, id, cap_cents: 600_000_001 }), /cap_cents must represent whole US dollars/);
+  assert.deepEqual(stored(db), added);
+});
+
 test('10: updateHolder on an h- id changes the register row, the entry and the vesting, and recomputes', async () => {
   const db = holderFixture();
   await save(db, TABLE);

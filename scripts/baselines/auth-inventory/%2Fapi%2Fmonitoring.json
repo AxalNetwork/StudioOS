@@ -1,0 +1,7 @@
+{
+  "GET /api/monitoring/analytics/download/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  }
+}

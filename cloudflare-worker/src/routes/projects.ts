@@ -42,7 +42,7 @@ import { checkSlug, slugHolder, generateSlug } from '../services/slugs';
 import { bindingKey } from '../util/schemaBootstrap';
 import { findableBy, keepFindable } from '../services/investorFindable';
 import { ndaChoiceInput } from '../services/dataRoomNda';
-import { companyWriteDenial, denialBody, isSupportSession } from '../services/companyAccess';
+import { companyCreateDenial, companyWriteDenial, denialBody, isSupportSession } from '../services/companyAccess';
 
 const projects = new Hono<{ Bindings: Env }>();
 
@@ -579,7 +579,8 @@ async function createProjectHandler(c: any) {
     }
   }
   if (createCompanyId != null) {
-    const denial = await companyWriteDenial(c.env, { id: createCompanyId }, user, await isSupportSession(c));
+    // D5525: a project is created by any seat; only support and HQ without a seat are refused.
+    const denial = await companyCreateDenial(c.env, { id: createCompanyId }, user, await isSupportSession(c));
     if (denial) { await sql.end(); return c.json(denialBody(denial), 403); }
   }
 
@@ -726,7 +727,8 @@ projects.post('/submit', async (c) => {
   const submitCompanyId = await resolveActiveCompany(
     c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
   if (submitCompanyId != null) {
-    const denial = await companyWriteDenial(c.env, { id: submitCompanyId }, submitUser, await isSupportSession(c));
+    // D5525: a project is created by any seat; only support and HQ without a seat are refused.
+    const denial = await companyCreateDenial(c.env, { id: submitCompanyId }, submitUser, await isSupportSession(c));
     if (denial) return c.json(denialBody(denial), 403);
   }
 
@@ -1499,7 +1501,8 @@ projects.get('/:id/members', async (c) => {
   const companyDenial = project.company_id == null
     ? null
     : await companyWriteDenial(c.env, { id: Number(project.company_id) }, user, await isSupportSession(c));
-  const manager = companyDenial == null && isProjectManager(user, project);
+  const manager = !user.support_session && companyDenial == null
+    && (project.company_id != null || isProjectManager(user, project));
   let canView = manager;
   if (!canView && !holdsOnlyLicence(user, 'investor')) {
     canView = await canAccessProject(c.env, user, project, { write: false });
@@ -1526,9 +1529,10 @@ projects.get('/:id/members', async (c) => {
     }
     const gate = evaluateTeamGate(user as any);
     // Caller's effective edit rights, so the UI can show "Edit Project" to
-    // co-founders/owner/managers and hide it from advisors/investors.
+    // project-data editors. Roster authority does not grant project-data access.
     const myRole = await getProjectMembershipRole(c.env, id, user.id);
-    const canEdit = companyDenial == null && (manager || myRole === 'owner' || myRole === 'cofounder');
+    const canEdit = !user.support_session && companyDenial == null
+      && (isProjectManager(user, project) || myRole === 'owner' || myRole === 'cofounder');
     return c.json({
       members,
       invitations,
@@ -1549,12 +1553,16 @@ projects.get('/:id/members', async (c) => {
 // row (id, founder_id) on success, or a Response to short-circuit.
 async function requireRosterManager(c: any, user: any, projectId: number): Promise<{ project: any } | { res: Response }> {
   const sql = getSQL(c.env);
-  const rows = await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId} AND deleted_at IS NULL`;
+  const rows = await sql`SELECT id, founder_id, company_id FROM projects WHERE id = ${projectId} AND deleted_at IS NULL`;
   await sql.end();
   if (rows.length === 0) return { res: c.json({ error: 'Project not found' }, 404) };
   const project = rows[0];
-  if (!isProjectManager(user, project)) {
-    return { res: c.json({ detail: 'Forbidden: only the project owner can manage the team' }, 403) };
+  if (project.company_id != null) {
+    const denial = await companyWriteDenial(c.env, { id: project.company_id }, user, !!user.support_session);
+    if (denial) return { res: c.json(denialBody(denial), 403) };
+  }
+  if (user.support_session || (project.company_id == null && !isProjectManager(user, project))) {
+    return { res: c.json({ detail: 'Forbidden: only project managers can manage the team' }, 403) };
   }
   const gate = evaluateTeamGate(user as any);
   if (gate.locked) {
@@ -1754,10 +1762,14 @@ projects.post('/:id/invitations/:invId/resend', async (c) => {
   const invId = parseInt(c.req.param('invId'));
   if (!Number.isFinite(id) || !Number.isFinite(invId)) return c.json({ error: 'Invalid id' }, 400);
   await ensureProjectMembershipSchema(c.env);
-  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
-    .bind(id).first() as { id: number; founder_id: number | null } | null;
+  const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .bind(id).first<{ id: number; founder_id: number | null; company_id: number | null }>();
   if (!project) return refuse(c, 404, { code: 'not_found', message: 'There is no such invitation.' });
-  if (!isProjectManager(user, project)) return refuse(c, 403, { code: 'not_manager', message: 'Only the project owner can manage the team.' });
+  if (project.company_id != null) {
+    const denial = await companyWriteDenial(c.env, { id: project.company_id }, user, !!user.support_session);
+    if (denial) return c.json(denialBody(denial), 403);
+  }
+  if (user.support_session || (project.company_id == null && !isProjectManager(user, project))) return refuse(c, 403, { code: 'not_manager', message: 'Only the project’s managers can manage the team.' });
   const inv = await c.env.DB.prepare('SELECT id, status, source, invitee_email FROM project_member_invitations WHERE id = ? AND project_id = ?')
     .bind(invId, id).first() as { id: number; status: string; source: string | null; invitee_email: string | null } | null;
   if (!inv) return refuse(c, 404, { code: 'not_found', message: 'There is no such invitation.' });

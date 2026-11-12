@@ -3,6 +3,7 @@
 // (services/capTableRecord.ts, routes/captable.ts /today and /simulate,
 // services/capTableRegister.ts equityPlanBody, the 409A read) and every figure
 // is worked out by hand.
+import { withCapabilities } from './_cap_table_capabilities.mjs';
 import './_cycleSteps.mjs'; // D4574 (#4574, H5): CycleRoute's lazy steps, loaded before it mounts
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -194,6 +195,15 @@ test('which price won, in words, for each case the engine answers', () => {
   assert.equal(price(0.0123), '$0.0123');
 });
 
+test('the conversion calculation uses the instrument currency exponent', () => {
+  const [north] = recordInstruments({
+    ...RECORD,
+    instruments: { rows: [{ ...RECORD.instruments.rows[0], currency: 'JPY' }] },
+  });
+  const view = instrumentView(north, { sim: SIM });
+  assert.equal(view.steps.lines[0], 'Cap price = ¥1,000,000,000 ÷ 1,219,512,195 shares = 0.82 JPY');
+});
+
 test('the instrument drawer: terms with their source, the conversion in steps, MFN against later SAFEs, the exit before conversion', () => {
   const [north, , , note] = recordInstruments(RECORD);
   const v = instrumentView(north, { today: TODAY, sim: SIM });
@@ -321,7 +331,7 @@ function handlerFor(o = {}) {
     if (/\/captable\/409a\/3$/.test(url) && options.method === 'POST') return response({ ok: true, id: 4 }, 201);
     if (url.includes('/captable/409a/3')) return send(at.v409a);
     if (url.includes('/captable/equity-plan?project_id=3')) return send(at.plan);
-    if (url.includes('/captable/record/3')) return send(at.record);
+    if (url.includes('/captable/record/3')) return send(withCapabilities(at.record, OWNER, { can_change: true }));
     if (url.includes('/cycles/raise/modules/')) return response(MODULE);
     if (url.includes('/auth/me')) return response(OWNER);
     return response({});

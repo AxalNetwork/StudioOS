@@ -3,8 +3,11 @@
  * `cloudflare-worker/src` multiply or divide a money value by 100 by hand.
  *
  * A line is flagged when, with comments removed, it (1) divides, multiplies or takes a remainder by a bare `100`, (2)
- * names money (a cents/amount/price/fee/... word) or builds two fixed decimals (`padEnd(2`, `+ '00'`, `.toFixed(2)`) and
- * (3) does not read as a percentage, ratio or score. A conversion split over lines with no money word is not seen. That is a
+ * names money (a cents/amount/price/fee/... word), builds two fixed decimals (`padEnd(2`, `+ '00'`, `.toFixed(2)`) or
+ * formats the quotient as a locale number (`toLocaleString(`, `Intl.NumberFormat`, `FractionDigits`: D5373 part 2, the shape
+ * of `(value / 100).toLocaleString(...)` beside a currency code that no money word flagged) and (3) does not read as a
+ * percentage, ratio or score. A conversion split over lines with no money word is not seen, nor is a bare
+ * `Math.round(a * 100)` on a value that no word on the line says is money. That is a
  * heuristic on purpose: it errs towards flagging, and a flagged file is either migrated onto `lib/money.js` or listed,
  * with its reason, in the test's allow-list. The conversions that ARE the money layer live in `lib/money.js`, which is
  * the one file the scan skips.
@@ -21,6 +24,8 @@ const MONEYISH = /cents?\b|_cents|amount|price|dollar|usd|money|\bfee|budget|spe
 const NOT_AMOUNT = /pct|percent|bps|%|\bscore|opacity|progress|confidence|coverage|share\b|ratio|weight|\bwidth|\bheight|Math\.min\(100|Math\.max\(0, *Math\.min\(100/i;
 // A line that builds or prints two fixed decimals is converting an amount even when no money word is on it.
 const FIXED_TWO = /padEnd\(2|\+ '00'|\.toFixed\(2\)/;
+// ...or formats the result of the division as a number for people to read (the shape D5373 part 1's scan missed).
+const FORMATS_NUMBER = /toLocaleString\(|Intl\.NumberFormat|FractionDigits/;
 const BY_100 = /(?:[/*]|%)\s*100\b(?![.\d])|(?<![\w-])100\s*[/*]\s*[\w(]/;
 
 /** Source text without block comments, line comments and the `//` inside strings left alone. */
@@ -34,7 +39,7 @@ export function codeOnly(text) {
 export function scanFile(text) {
   const out = [];
   codeOnly(text).split('\n').forEach((line, i) => {
-    if (BY_100.test(line) && (MONEYISH.test(line) || FIXED_TWO.test(line)) && !NOT_AMOUNT.test(line)) out.push([i + 1, line.trim()]);
+    if (BY_100.test(line) && (MONEYISH.test(line) || FIXED_TWO.test(line) || FORMATS_NUMBER.test(line)) && !NOT_AMOUNT.test(line)) out.push([i + 1, line.trim()]);
   });
   return out;
 }

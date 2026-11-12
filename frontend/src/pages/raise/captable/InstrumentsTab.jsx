@@ -5,7 +5,7 @@ import { capTableRecordApi } from '../../../lib/api/capTableRecord';
 import { capTableScenariosApi } from '../../../lib/api/capTableScenarios';
 import { Unreadable, actionGhost, actionPrimary } from '../../../ui';
 import { Tag } from './CapTableTag';
-import { BASIS_CHECK, scenarioCard, tabSearch } from './capTableModel';
+import { BASIS_CHECK, scenarioCard, symbolOf, tabSearch } from './capTableModel';
 import {
   BASIS_OPTIONS, EMPTY_FILTERS, NOTES_ONLY, SORT_OPTIONS, STATUS_OPTIONS, TYPE_OPTIONS,
   convertBody, convertView, filterInstruments, instrumentHref, instrumentView, over100, recordInstruments,
@@ -135,6 +135,8 @@ function RecordTable({ rows, all, search }) {
 
 /** "Convert at": a next-round price, or a scenario's first round. Modelled; nothing is saved. */
 function ConvertAt({ projectId, today, compare, instruments, onResult }) {
+  // D5373: the typed figures are in the venture's currency; the hint carries a "$" only for USD.
+  const mark = symbolOf(today?.status === 'ready' ? today.data?.currency : null).trim() === '$' ? '$' : '';
   const scenarios = useMemo(() => {
     if (compare.status !== 'ready') return [];
     const out = [];
@@ -170,8 +172,8 @@ function ConvertAt({ projectId, today, compare, instruments, onResult }) {
         {radio('price', 'Next round price')}
         {mode === 'price' ? (
           <div className="flex flex-wrap gap-2 pl-6">
-            <label className={`flex flex-col text-[10.5px] font-bold uppercase ${MUTED}`}>Price per share<input className={`${INPUT} ${MONO}`} inputMode="decimal" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder="$1.03" aria-label="Price per share" data-testid="captable-convert-price" /></label>
-            <label className={`flex flex-col text-[10.5px] font-bold uppercase ${MUTED}`}>Amount raised<input className={`${INPUT} ${MONO}`} inputMode="decimal" value={form.raise} onChange={(e) => setForm((f) => ({ ...f, raise: e.target.value }))} placeholder="$3,000,000" aria-label="Amount raised" data-testid="captable-convert-raise" /></label>
+            <label className={`flex flex-col text-[10.5px] font-bold uppercase ${MUTED}`}>Price per share<input className={`${INPUT} ${MONO}`} inputMode="decimal" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} placeholder={`${mark}1.03`} aria-label="Price per share" data-testid="captable-convert-price" /></label>
+            <label className={`flex flex-col text-[10.5px] font-bold uppercase ${MUTED}`}>Amount raised<input className={`${INPUT} ${MONO}`} inputMode="decimal" value={form.raise} onChange={(e) => setForm((f) => ({ ...f, raise: e.target.value }))} placeholder={`${mark}3,000,000`} aria-label="Amount raised" data-testid="captable-convert-raise" /></label>
           </div>
         ) : null}
         {scenarios.length ? radio('scenario', 'From a scenario') : <span className={`text-[12px] ${MUTED}`} data-testid="captable-convert-no-scenario">{compare.status === 'error' ? 'Your scenarios could not be read, so none can be picked.' : 'No scenario plans a round yet.'}</span>}

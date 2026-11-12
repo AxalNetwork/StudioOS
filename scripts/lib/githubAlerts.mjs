@@ -17,14 +17,32 @@
  * two messages, and everyone has one place to look instead of opening fixes.
  */
 
+import { infraFingerprint } from './ciClassify.mjs';
+import { SCAN_ALERT_TITLE } from './scanScope.mjs';
+
 export const ALERT_KINDS = Object.freeze({
   'main-red': { title: '[alert] main is red', label: 'main CI' },
   'review-blocked': { title: '[alert] the PR reviewer is not reviewing', label: 'PR reviewer' },
   queue: { title: '[alert] the Actions queue is backed up', label: 'Actions queue' },
+  'queue-stalled': { title: '[alert] merge queue stalled', label: 'Merge queue' },
+  scan: { title: SCAN_ALERT_TITLE, label: 'Main scan' },
   // D5398: the nightly future-clock run is stateful too. It used to post on every failing night and keep no issue,
   // so a date-bound test was announced again each night and nothing said when it was fixed.
   'future-clock': { title: '[alert] future-clock tests failing', label: 'Future-clock tests' },
 });
+
+/** Newest completed run first. Only a green run clears an existing stall. */
+export function queueStallState(runs) {
+  const [latest, previous] = (runs || []).filter(r => r.event === 'merge_group' && r.status === 'completed')
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  if (latest?.conclusion === 'success') return { active: false, fingerprint: null };
+  const fingerprint = latest?.conclusion === 'failure' ? infraFingerprint(latest.jobs) : null;
+  if (fingerprint && previous?.conclusion === 'failure' && latest.head_sha && previous.head_sha
+      && latest.head_sha !== previous.head_sha && fingerprint === infraFingerprint(previous.jobs)) {
+    return { active: true, fingerprint };
+  }
+  return { active: null, fingerprint: null };
+}
 
 /** Reviewer outcomes that mean no model was called because of setup, not because of the PR. */
 export const REVIEW_BLOCKED_OUTCOMES = Object.freeze(['budget_refused', 'configuration_error']);
@@ -107,8 +125,12 @@ export function message(kind, action, facts = {}) {
   if (kind === 'queue') {
     return `:hourglass: *The Actions queue is backed up:* ${facts.queued} runs queued, the oldest waiting ${facts.waitedMin} min.${issue}\nCI results will be slow. Until it drains: no branch updates, no bulk re-runs, no ports of a main fix (AGENTS.md, D5398).`;
   }
+  if (kind === 'queue-stalled') {
+    return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
+  }
+  if (kind === 'scan') return `New unsuppressed scan fingerprints on main.${run}`;
   if (kind === 'future-clock') {
-    const text = facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
+    const text = Number.isSafeInteger(facts.failedCount) ? `:alarm_clock: *${facts.failedCount} verified test failures with the clock ${facts.days} days ahead.*${run}` : facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
     return `${text}${issue}`;
   }
   return '';

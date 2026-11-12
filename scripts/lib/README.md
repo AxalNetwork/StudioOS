@@ -8,6 +8,7 @@ can be read to find out what a rule actually is.
 
 | File | What it decides |
 | --- | --- |
+| `ciScorecard.mjs` | D5603: pure daily CI metrics over Actions jobs and PR queue timelines. |
 | `deckEval.mjs` | D1518 (#3770): the deck harness's data and decisions: the golden briefs (records, never a prompt), rubric v0 (named, D1517's), the investor rubric (recorded, not gated), editing tasks v0, the competitor arms (waiting on decision F), the zero-edit verdict, the live-run refusal, and the readers of `documentation/product/ELEMENT_EVAL.md` and `DECK_BENCHMARK.md`. Owned by `../eval-elements.mjs`. |
 | `probeOutcome.mjs` | #4571 R2-09: the one outcome a sign-in probe run is filed under (EDGE_CHALLENGED, APPLICATION_REFUSED, REFUSED_UNATTRIBUTED, APPLICATION_FAILED, ACCEPTED_NOT_VERIFIED, VERIFIED_END_TO_END). A skipped check is never a pass. Read by `../check-magic-link-insert.mjs` and `../check-magic-link-live.mjs`. |
 | `runtimeDdl.mjs` | #4568 R2-04: the inventory of runtime `ADD COLUMN` in the Worker (file, table, column, whether the file asks the table first, whether a migration declares the column) and the no-growth ratchet over it. Owned by `../check-runtime-ddl.mjs` and `cloudflare-worker/test/runtime_ddl_4568.test.ts`. |
@@ -26,8 +27,9 @@ can be read to find out what a rule actually is.
 | `accessComments.mjs` | Which comments in the Worker may say "Cloudflare Access": a small lexer that tells a comment from a string, a template literal or a regex, and the rule that every mention must be quoted by an entry in `../access-comment-allowlist.json`. Owned by `../check-access-comments.mjs`. |
 | `authInventory.mjs` | #4570: reads every Worker route's identity gate and ownership evidence from source — the handler, the router and path-scoped app middleware that cover it, and the functions it calls or hands on by name, three levels down. Errs towards review: a gate it cannot see reads as weaker, never stronger, and the auth module's own queries (the caller's row) are never ownership evidence. Owned by `../build-auth-inventory.mjs`; tested in `authInventory.test.mjs`. |
 | `migrationImmutability.mjs` | Which changes may land under `cloudflare-worker/sql/migrations/`: an addition, and nothing that alters a file already on the base. It parses `git diff --name-status -z`, refuses a status letter it does not know, and resolves the base — a pull request's base branch, or on a push to main the commit main pointed at before it — refusing any branch name or commit id git could read as something else. Owned by `../migration-immutability-gate.mjs` (D269). |
-| `apiModules.mjs` | Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every module under `frontend/src/lib/api/` — the generated re-export index's exact text and whether the committed one names exactly those modules in alphabetical order (#4105), whether `api.js` re-exports it, and whether each `request()` call has a Worker route (D527). Owned by `../check-api-drift.mjs` and `../build-api-index.mjs`. |
-| `routeRegistry.mjs` | #4105: the Worker's self-mounting route modules read as text — each `mount` export parsed, `_registry.ts`'s exact text, the routes it adds for the static readers, and everything wrong with the descriptors (a `before` nobody mounts, a cycle, a router also mounted by hand) or the committed registry. Owned by `../build-route-registry.mjs`; read by `../check-api-drift.mjs` and the Worker's api_drift and route_registry tests. |
+| `apiModules.mjs` | Which files hold the SPA's client calls — `frontend/src/lib/api.js` and every module under `frontend/src/lib/api/` — the generated re-export index's exact text and whether the built one names exactly those modules in alphabetical order (#4105) from a deterministic generator, untracked by git (D5612), whether `api.js` re-exports it, and whether each `request()` call has a Worker route (D527). Owned by `../check-api-drift.mjs` and `../build-api-index.mjs`. |
+| `routeRegistry.mjs` | #4105: the Worker's self-mounting route modules read as text — each `mount` export parsed, `_registry.ts`'s exact text, the routes it adds for the static readers, and everything wrong with the descriptors (a `before` nobody mounts, a cycle, a router also mounted by hand) or the registry's generator (not deterministic, or its output tracked by git, D5612). Owned by `../build-route-registry.mjs`; read by `../check-api-drift.mjs` and the Worker's api_drift and route_registry tests. |
+| `generatedOutput.mjs` | D5612 (#5612): what sound means for a generated module that is not committed — two renders of the same sources (one from each listing reversed) give the same bytes, and `git ls-files` does not list the output. Read by `routeRegistry.mjs`, `apiModules.mjs` and `../build-skill-library.mjs`. |
 | `secEdgarCompanies.mjs` | What a SEC EDGAR company row carries and how a migration is written from EDGAR's company_tickers_exchange.json: one row per CIK, the first listing as its ticker, nothing EDGAR does not record, every row citing its source and licence, `INSERT OR IGNORE` in batches of 100. The header number is the leading digits of `--out` (404 created the table; 412 holds the rows). Owned by `../import-sec-edgar.mjs` (D595). |
 | `claudeReview.mjs` | The advisory Claude review's rules: its settings and their bounds, which pull requests may be reviewed (never a fork or Dependabot), the diff parse, which files are sent and in what order, the prompt with its nonce-fenced untrusted data, the output schema and the validation of every finding against the diff, the cost estimate and the per-review and monthly caps, the artifact-name ledger, and the escaped summary and annotations. Owned by `../claude-review/review.mjs`. |
 | `claudeReviewRun.mjs` | The whole review run with git, the GitHub API and the Anthropic client handed in, so a missing secret, a fork, an empty or oversized diff, a repeat, a budget refusal, an API failure, a refusal and a malformed answer are all tested with fakes. |
@@ -39,6 +41,18 @@ can be read to find out what a rule actually is.
 | `assetRetentionBuild.test.mjs` | D1364: real build-wrapper restore, protected output cap and total static-file limit with synthetic bundler output. |
 | `spaChunks.mjs` | Parses Vite's dependency list as JSON, validates JS/CSS paths and types, and selects the cached previous entry (#3590). `spaChunks.test.mjs` uses the actual built `../fixtures/vite-lazy-entry.js` plus stubbed capture/live CLI runs. |
 | `ownerPlanPrices.mjs` | D1430 (#3702): the owner’s six paid plan targets and unpriced profiles, shared only by offline planners and the live drift check. Runtime prices remain Stripe’s D1 mirror. |
+| `productionQueues.test.mjs` | D5535: production Wrangler config, account inventory and fail-closed release fixtures. |
+| `runnerBenchmark.mjs` | D5611: runner-lane timing/cost summaries, provenance and explicit paid-benchmark gates. |
+| `runnerBenchmark.test.mjs` | D5611: measurement fixtures, unavailable evidence and lane-gate regressions. |
+| `landingThroughput.mjs` | D5623: native/batch capacity arithmetic, binary-bisection cost and strict 14-day decision trigger; `landingThroughput.test.mjs` checks arithmetic, evidence and table parity. |
+| `workerStartup.test.mjs` | D5532: startup budget, profile accounting and Wrangler bundle identity fixtures. |
+| `productionAdmission.test.mjs` | D5501: trust, failure and supersession fixtures and mutation ordering in the release workflows. |
+| `selectTests.mjs` | D5610: conservative affected-test selection, honest shadow scoring and aggregate reporting; tests in `selectTests.test.mjs`. |
+| `fixtures/` | Evidence-backed replay inputs; no invented historical results. |
+| `shardPlan.mjs` | D5609: longest-first duration packing, suite p90 for unknown tests, and exact-once coverage validation; tested in `shardPlan.test.mjs`. |
+| `splitLedger.mjs` | D5613: validate and merge per-entry JSON maps and rewrite only changed files; tested in `splitLedger.test.mjs`. |
+| `hubFreeze.mjs` | D5615 (#5615): the names each frozen hub holds (`api.js`'s exports and object keys, `App.jsx`'s and `CycleRoute.jsx`'s import specifiers, `index.ts`'s static imports and app registrations, `advisors.ts`'s method plus path registrations; dynamic imports unfrozen) and every name `../hub-freeze.json` does not list, each with its `HUBS.md` section. A set, not a count. Run by `frontend/test/hub_freeze_5615.test.mjs`. |
+| `prOverlap.mjs` | D5616: pure path classes, overlapping pairs, migration stamps, landing order and escaped Markdown. |
 
 ## Tests
 
@@ -61,3 +75,9 @@ passing over nothing.
 A module belongs here when a CLI's *decision* is worth testing separately from
 its *effects* — which is most of them, and all the dangerous ones. If it needs
 to spawn something or talk to Cloudflare, that part stays in the script above.
+
+| `scanScope.mjs` | D5602: PR scan policy, opaque finding snapshots, outstanding-new state and redacted shared incident format. |
+| `notificationRouting.mjs` | D5666: observational ownership and routing from claims, live rules and existing CI digest. |
+
+| `notificationRoutingStore.mjs` | D5666: serialized atomic local routing history/checkpoint store. |
+| `futureClockEvidence.mjs` | D5663: complete TAP and producer provenance before health recovery. |

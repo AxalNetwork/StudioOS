@@ -32,8 +32,8 @@ async function sha256Hex(v: string): Promise<string> {
 }
 
 /** The intended mailbox, recipient, message and what it came from. A changed message is a different operation. */
-export const fingerprintOf = (m: { account_uid: string; to: string; subject: string; body: string; draft_uid: string | null; intro_uid: string | null }) =>
-  sha256Hex(JSON.stringify([m.account_uid, m.to, m.subject, m.body, m.draft_uid, m.intro_uid]));
+export const fingerprintOf = (m: { account_uid: string; to: string; subject: string; body: string; draft_uid: string | null; intro_uid: string | null; person?: string | null }) =>
+  sha256Hex(JSON.stringify([m.account_uid, m.to, m.subject, m.body, m.draft_uid, m.intro_uid, ...(m.person ? [m.person] : [])]));
 
 export async function opByKey(env: Env, user: User, opKey: string): Promise<OpRow | null> {
   const row = await env.DB.prepare('SELECT * FROM mail_send_ops WHERE user_id = ? AND op_key = ?').bind(user.id, opKey).first<OpRow>();

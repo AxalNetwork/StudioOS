@@ -17,13 +17,18 @@
  *     descriptor must be literal enough to read without running it: `path` a
  *     string literal, `router` and each `before` an identifier.
  *   - `renderRegistry(files)` — the exact text of `_registry.ts`.
+ *   - `buildRegistry(root, { reversed })` — that text for the modules on disk;
+ *     `reversed` reverses the folder listing first (the determinism check).
+ *   - `descriptorProblems(root)` — what blocks writing the registry.
  *   - `registryProblems(root)` — everything wrong with the descriptors, their
- *     `before` targets, and the committed registry.
+ *     `before` targets, and the generator: it must be deterministic and its
+ *     output untracked (D5612: `_registry.ts` is built, never committed).
  *   - `registeredMounts(root)` — `[{ path, file, router }]`, the routes the
  *     registry adds, for the static route-table readers.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, posix } from 'node:path';
+import { generatedOutputProblems } from './generatedOutput.mjs';
 
 export const WORKER_SRC_REL = 'cloudflare-worker/src';
 export const ROUTES_DIR_REL = 'cloudflare-worker/src/routes';
@@ -32,11 +37,12 @@ export const INDEX_REL = 'cloudflare-worker/src/index.ts';
 
 const MOUNT_EXPORT = /^export\s+const\s+mount\b[^=]*=/m;
 
-/** Route module stems under routes/ (no `_` prefix, no tests), sorted. */
-export function routeFiles(root) {
+/** Route module stems under routes/ (no `_` prefix, no tests), sorted. `reversed` reverses the raw listing first. */
+export function routeFiles(root, { reversed = false } = {}) {
   const dir = resolve(root, ROUTES_DIR_REL);
   if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
+  const listed = readdirSync(dir, { withFileTypes: true });
+  return (reversed ? listed.reverse() : listed)
     .filter((e) => e.isFile() && e.name.endsWith('.ts') && !e.name.startsWith('_') && !e.name.endsWith('.d.ts'))
     .map((e) => e.name.slice(0, -3))
     .sort();
@@ -112,9 +118,9 @@ export function parseMount(src) {
 }
 
 /** Every module under routes/ that exports `mount`: `[{ file, src, entries?, error? }]`. */
-export function mountModules(root) {
+export function mountModules(root, { reversed = false } = {}) {
   const out = [];
-  for (const file of routeFiles(root)) {
+  for (const file of routeFiles(root, { reversed })) {
     const src = readFileSync(resolve(root, ROUTES_DIR_REL, `${file}.ts`), 'utf8');
     const parsed = parseMount(src);
     if (parsed) out.push({ file, src, ...parsed });
@@ -182,8 +188,8 @@ export function renderRegistry(files) {
     '// One import per route module that exports `mount`, in file-name order.',
     '// The mount ORDER is not this list: src/util/routeRegistry.ts plans it',
     '// at startup from each descriptor\'s `before`. Add a module by adding its',
-    '// file and running `node scripts/build-route-registry.mjs`;',
-    '// cloudflare-worker/test/route_registry_4105.test.ts fails while stale.',
+    '// file; scripts/build-generated.mjs writes this file before every build,',
+    '// typecheck and test. It is gitignored and never committed (D5612).',
     "import type { RegisteredModule } from '../util/routeRegistry';",
     ...sorted.map((f) => `import { mount as ${ident(f)} } from './${f}';`),
     '',
@@ -192,6 +198,16 @@ export function renderRegistry(files) {
     '];',
     '',
   ].join('\n');
+}
+
+/**
+ * The registry text for the modules on disk under `root`. With `reversed`, the
+ * folder listing is reversed and so is the list handed to `renderRegistry`, so
+ * a render that depends on either order differs between the two (D5612).
+ */
+export function buildRegistry(root, { reversed = false } = {}) {
+  const files = mountModules(root, { reversed }).map((m) => m.file);
+  return renderRegistry(reversed ? [...files].reverse() : files);
 }
 
 /**
@@ -210,8 +226,15 @@ export function registeredMounts(root) {
   return out;
 }
 
-/** Everything wrong with the registered modules and the committed registry. Empty when sound. */
+/** Everything wrong with the registered modules and the registry's generator. Empty when sound. */
 export function registryProblems(root) {
+  // D5612: the registry is built, never committed — the generator is
+  // deterministic and git does not track its output.
+  return [...descriptorProblems(root), ...generatedOutputProblems(root, REGISTRY_REL, (o) => buildRegistry(root, o))];
+}
+
+/** Everything wrong with the `mount` descriptors and their `before` targets: what blocks writing the registry. */
+export function descriptorProblems(root) {
   const problems = [];
   const mods = mountModules(root);
   const legacy = existsSync(resolve(root, INDEX_REL)) ? legacyMounts(root) : new Map();
@@ -268,11 +291,6 @@ export function registryProblems(root) {
     state.set(n, 'done');
   };
   for (const n of edges.keys()) visit(n, []);
-  // The committed registry is exactly what the generator writes.
-  const want = renderRegistry(mods.map((m) => m.file));
-  const file = resolve(root, REGISTRY_REL);
-  const have = existsSync(file) ? readFileSync(file, 'utf8') : null;
-  if (have !== want) problems.push(`${REGISTRY_REL} is ${have == null ? 'missing' : 'stale'} — run: node scripts/build-route-registry.mjs`);
   return problems;
 }
 

@@ -1,0 +1,57 @@
+{
+  "GET /api/articles": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/:id/image/:filename": {
+    "review": "optional_auth",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/:id/revisions": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/:id/revisions/:rev": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/:slug": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/by-author/:user_id": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/cover/:id": {
+    "review": "optional_auth",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/draft/:id": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/articles/sectors": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/articles/:id/cover": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/articles/:id/image": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

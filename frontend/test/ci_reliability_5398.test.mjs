@@ -49,7 +49,7 @@ test('main unread, unfinished or cancelled is unknown, never inherited', () => {
     assert.equal(classify({ pr, main }).verdict, 'main_health_unknown', JSON.stringify(main));
   }
   assert.equal(classify({ pr: [], main: { conclusion: 'failure', jobs: [job(W1, 'failure')] } }).verdict, 'pr_failure', 'no failed part found: read it, never inherited');
-  assert.deepEqual(VERDICTS, ['pr_failure', 'inherited_main_failure', 'main_health_unknown']);
+  assert.deepEqual(VERDICTS, ['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
 });
 
 test('the classifier is its own job, after a PR failure only, read-only, outside the gate and unable to fail', () => {
@@ -73,7 +73,7 @@ test('the future-clock alert is one issue: open on the first failure, quiet whil
   assert.equal(transition(null, true), 'none', 'no log is unknown, never recovered');
   assert.match(message('future-clock', 'open', { days: 7, failures: { names: ['a test'], more: 0 }, issueUrl: 'https://i' }), /a test[\s\S]*<https:\/\/i\|issue>/);
   const cli = read('scripts/github-alerts.mjs');
-  assert.match(cli, /const active = tap\.trim\(\) \? failures\.names\.length \+ failures\.more > 0 : null;/);
+  assert.match(cli, /const active = evidence\.active;/);
   assert.match(cli, /return apply\('future-clock', active,/);
 });
 

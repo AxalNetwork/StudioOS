@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card } from '../../ui';
 import { shareUpdateApi } from '../../lib/api/shareUpdate.js';
@@ -131,7 +131,7 @@ function ReplyForm({ ask, onReply }) {
 }
 
 /** The page body from props alone. `data` is the Worker's `/page` answer. */
-export function SentUpdateView({ data, onReply = null, onAskAgain = null, initial = {} }) {
+export function SentUpdateView({ data, onReply = null, onAskAgain = null, reminderBusy = false, initial = {} }) {
   const author = Array.isArray(data.recipients);
   const metrics = Array.isArray(data.metrics) ? data.metrics : null;
   const [q, setQ] = useState(initial.q || '');
@@ -202,7 +202,7 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, initia
                   <span className="text-axal-muted">{a.can_ask_again ? 'No replies after 14 days.' : 'No replies yet.'}</span>
                   <span className="flex items-center gap-2">
                     {a.can_ask_again && <span className={AMBER}>No replies</span>}
-                    {a.can_ask_again && onAskAgain && <button type="button" className={PRIMARY} onClick={() => onAskAgain(a.uid)}>Ask again</button>}
+                    {a.can_ask_again && onAskAgain && <button type="button" className={PRIMARY} disabled={reminderBusy} onClick={() => onAskAgain(a.uid)}>Ask again</button>}
                   </span>
                 </div>
               )}
@@ -240,18 +240,42 @@ export function SentUpdateView({ data, onReply = null, onAskAgain = null, initia
 export default function SentUpdatePage() {
   const { uid } = useParams();
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  const [reminder, setReminder] = useState(null);
+  const [reminderBusy, setReminderBusy] = useState(false);
+  const sending = useRef(false);
   const load = useCallback(async () => {
     setState({ loading: true, error: null, data: null });
     try { setState({ loading: false, error: null, data: await shareUpdateApi.page(uid) }); }
     catch (e) { setState({ loading: false, error: e?.status === 404 ? 'This update was not found.' : (e?.message || 'Unreadable'), data: null }); }
   }, [uid]);
   useEffect(() => { load(); }, [load]);
-  const askAgain = async (askUid) => { await shareUpdateApi.askAgain(askUid); load(); };
+  const askAgain = async (askUid) => {
+    if (sending.current) return;
+    sending.current = true;
+    setReminderBusy(true);
+    setReminder(null);
+    try {
+      const { recipients, notified, failed } = await shareUpdateApi.askAgain(askUid);
+      const measured = [recipients, notified, failed].every(count => Number.isSafeInteger(count) && count >= 0);
+      setReminder(measured
+        ? `Recipients: ${recipients}. In-app reminders recorded: ${notified}. Failed: ${failed}.`
+        : 'Reminder delivery counts are unavailable.');
+    } catch (error) {
+      setReminder(error?.status === 409
+        ? 'This ask is no longer eligible for a reminder. Check the refreshed update.'
+        : 'The reminder outcome could not be confirmed. Check the refreshed update before trying again.');
+    } finally {
+      await load();
+      setReminderBusy(false);
+      sending.current = false;
+    }
+  };
   return (
     <main className="mx-auto max-w-3xl p-4">
       {state.loading && <p className="text-[12.5px] text-axal-muted">Loading this update…</p>}
       {state.error && <Card padding="lg"><p className="text-[12.5px]">{state.error}</p></Card>}
-      {state.data && <SentUpdateView data={state.data} onReply={shareUpdateApi.reply} onAskAgain={askAgain} />}
+      {reminder && <p role="status" className="mb-3 text-sm">{reminder}</p>}
+      {state.data && <SentUpdateView data={state.data} onReply={shareUpdateApi.reply} onAskAgain={askAgain} reminderBusy={reminderBusy} />}
     </main>
   );
 }

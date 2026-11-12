@@ -133,7 +133,7 @@ test('Ask: the draft opens as a form intent with the hold line first; Accept pla
     const sent = api.calls.find(([n]) => n === 'send')?.[1];
     assert.match(sent.operation_key, /^[A-Za-z0-9_-]{16,64}$/, 'D4665: the send carries its operation key');
     const { operation_key: _key, ...rest } = sent;
-    assert.deepEqual(rest, { account_uid: 'acc-1', to: 'ada@example.test', subject: 'Thank you for the interview', body: 'Dear Ada,\nThank you.', draft_uid: 'dr-1', nonce: 'n-1' });
+    assert.deepEqual(rest, { person: 'interviewee:11', account_uid: 'acc-1', to: 'ada@example.test', subject: 'Thank you for the interview', body: 'Dear Ada,\nThank you.', draft_uid: 'dr-1', nonce: 'n-1' });
   } finally { await page.close(); }
 });
 

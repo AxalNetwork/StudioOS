@@ -53,6 +53,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend --no-audit --no-fund
 
+      # D5612: the API index is built, not committed; vite's webServer imports it.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+
       - name: Run the visual and axe suites
         id: run
         working-directory: frontend

@@ -204,6 +204,10 @@ test('an outstanding promise can be asked for directly, however deep the history
   const all = await get(db, '');
   assert.deepEqual(outstanding.body.totals, all.body.totals, 'the totals are unfiltered');
   assert.equal(outstanding.body.page.total, 450, 'and the page total is the ledger\'s population');
+  assert.equal(outstanding.body.page.matching_total, 150, 'the pager counts only matching promises');
+  const last = await get(db, '?state=promised&limit=10&offset=140');
+  assert.equal(last.body.entries.length, 10);
+  assert.equal(last.body.page.next_offset, null);
   // An unknown state is ignored rather than returning nothing.
   const bogus = await get(db, '?state=nonsense');
   assert.equal(bogus.body.filter.state, null);

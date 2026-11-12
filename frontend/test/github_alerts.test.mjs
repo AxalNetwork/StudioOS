@@ -103,17 +103,17 @@ test('the workflow wires each alert, and the reviewer alert sits in claude-revie
   assert.match(wf, /--import=\$GITHUB_WORKSPACE\/scripts\/future-clock\.mjs/);
   assert.match(wf, /FUTURE_CLOCK_DAYS: '7'/);
   assert.match(wf, /SLACK_GITHUB_WEBHOOK_URL: \$\{\{ secrets\.SLACK_GITHUB_WEBHOOK_URL \}\}/);
-  // Every CI test part runs ahead: the matrix names the same parts CI does.
-  const parts = /part: \[([^\]]+)\]/.exec(wf)[1].split(',').map((s) => s.trim());
-  assert.deepEqual(parts.filter((p) => /^(frontend|worker)-/.test(p)).length, 8);
+  // Every test part comes from the shared generator; the nightly run omits rest.
+  assert.match(wf, /part: \$\{\{ fromJSON\(needs\.future-clock-plan\.outputs\.parts\) \}\}/);
+  assert.match(wf, /--plan test-timings\.json --without-rest/);
 
   const review = read('.github/workflows/claude-review.yml');
   assert.match(review, /outcome: \$\{\{ steps\.review\.outputs\.outcome \}\}/);
   assert.match(review, /node scripts\/github-alerts\.mjs review-blocked/);
 });
 
-test('an alert never fails its run: the CLI catches and exits 0', () => {
+test('a trusted reporter fails visibly without changing the watched run', () => {
   const r = spawnSync(process.execPath, [resolve(root, 'scripts/github-alerts.mjs'), 'nonsense'], { env: { ...process.env, GITHUB_TOKEN: '', SLACK_GITHUB_WEBHOOK_URL: '' }, encoding: 'utf8' });
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /::warning::github-alerts: unknown mode/);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /::error::github-alerts observation or persistence unavailable/);
 });

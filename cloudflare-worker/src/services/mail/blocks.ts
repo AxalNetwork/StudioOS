@@ -17,6 +17,7 @@ import { isAdmin } from '../narrative/adminRead';
 import { readPositioning } from '../narrative/store';
 import { capitalCanWork } from '../capRelAccess';
 import { commitmentsRead } from '../capRelReads';
+import { exponentOf, formatMinorOrCount } from '../../../../frontend/src/lib/money.js';
 import { customerResearchCard } from '../cycleValidate';
 import { kpiRows, type KpiRow } from '../growKpis';
 import { specFor } from '../records';
@@ -31,8 +32,12 @@ const day = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(
 const latest = (days: Array<string | null>) => days.filter((d): d is string => !!d).sort().at(-1) ?? null;
 const grouped = (n: number) => String(Math.trunc(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-function money(cents: number, currency: string): string {
-  const whole = grouped(cents / 100);
+export function money(cents: number, currency: string): string {
+  // D5373: whole major units at the currency's own decimals (JPY none, KWD three, USD and EUR two, as before). A currency
+  // the layer does not list names the stored count instead of a figure at a guessed factor.
+  const exp = exponentOf(currency);
+  if (exp === null) return formatMinorOrCount(cents, currency) ?? String(cents);
+  const whole = grouped(cents / 10 ** exp);
   return currency === 'USD' ? `$${whole}` : `${currency} ${whole}`;
 }
 

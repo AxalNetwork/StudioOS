@@ -8,6 +8,7 @@
  *     --test cloudflare-worker/test/interview_findings_d757.test.ts
  */
 import test from 'node:test';
+import { applyAcceptRetryKeys } from './_accept_retry_keys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -62,6 +63,7 @@ function world({ findings = true } = {}) {
   db.exec(mig('255_hypothesis_verdict_history.sql'));
   db.exec(mig('311_revenue_entries.sql').replace(/REFERENCES documents\(id\)/, ''));
   db.exec(mig('440_validate_cycle_stores.sql'));
+  applyAcceptRetryKeys(db); // D5352
   db.exec('ALTER TABLE mvp_features ADD COLUMN pain_group_id INTEGER REFERENCES pain_groups(id)');
   db.exec(mig('459_cycle_activity_convention.sql'));
   db.exec(mig('460_validate_record_stores.sql'));
