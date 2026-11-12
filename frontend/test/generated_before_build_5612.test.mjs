@@ -9,7 +9,11 @@
  *   - `wrangler deploy|dev|versions` (anything that bundles the Worker; `wrangler
  *                                  d1`, `r2`, `tail`, `secret` and the like read
  *                                  no source and are not counted),
- *   - `vite`                      (the SPA bundle).
+ *   - `vite`                      (the SPA bundle),
+ *   - `playwright test`           (its `webServer` starts vite, and its specs
+ *                                  import the source; the preview smokes have
+ *                                  no server but are counted too, so the rule
+ *                                  stays one line).
  * Such a step must come after a step that generates them in the same job:
  * `node scripts/build-generated.mjs` (or `../scripts/…` from a subfolder), or
  * `npm run build`, whose `scripts/build-frontend.mjs` (root) and `prebuild`
@@ -37,6 +41,7 @@ export function needsGenerated(cmd) {
   if (/(?:^|[\s;&|(])node\b[^\n]*\s--test(?:\s|=|$)/m.test(cmd)) return 'node --test';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?wrangler(?:@\S+)?\s+(?:deploy|dev|versions|publish)\b/m.test(cmd)) return 'wrangler';
   if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?vite(?:\s|$)/m.test(cmd)) return 'vite';
+  if (/(?:^|[\s;&|(])(?:npx\s+(?:--no-install\s+)?)?playwright\s+test\b/m.test(cmd)) return 'playwright test';
   return null;
 }
 
@@ -106,7 +111,7 @@ export function ungenerated(files) {
         const need = needsGenerated(s.run);
         // A step that generates and then runs counts as generated when the generate comes first.
         const gi = s.run.search(/node\s+(?:\.\.\/)?scripts\/build-generated\.mjs|npm\s+run\s+build(?:\s|$)/);
-        if (need && !built && !(generates(s.run) && gi >= 0 && gi < s.run.search(/tsc|--test|wrangler|vite/))) {
+        if (need && !built && !(generates(s.run) && gi >= 0 && gi < s.run.search(/tsc|--test|wrangler|vite|playwright/))) {
           out.push(`${file} › ${job} › ${s.name || s.run.split('\n')[0]}: runs ${need} before the generated modules are built`);
         }
         if (generates(s.run)) built = true;
@@ -118,7 +123,7 @@ export function ungenerated(files) {
 
 const REAL = FILES.map((f) => [f, readFileSync(new URL(f, DIR), 'utf8')]);
 
-test('every job that runs tsc, node --test, wrangler or vite builds the generated modules first', () => {
+test('every job that runs tsc, node --test, wrangler, vite or playwright test builds the generated modules first', () => {
   assert.deepEqual(ungenerated(REAL), [], 'add a step `run: node scripts/build-generated.mjs` (or `node ../scripts/build-generated.mjs` under a working-directory) before it');
   // The parser still sees the jobs it guards: a reader that found nothing would pass vacuously.
   const ci = jobsOf(REAL.find(([f]) => f === 'ci.yml')[1]);
@@ -152,4 +157,7 @@ test('the guard flags a job with no generate step, and passes one with it', () =
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npx wrangler deploy --env production\n')]]).length, 1);
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: wrangler d1 export studioos-db --remote\n')]]), [], 'wrangler d1 reads no source');
   assert.deepEqual(ungenerated([['x.yml', wf('      - run: npm run test:worker\n')]]), [], 'npm run test:* generates through its pre hook');
+  const pw = '      - name: visual\n        run: npx --no-install playwright test -c playwright.visual.config.js\n';
+  assert.deepEqual(ungenerated([['x.yml', wf(pw)]]), ['x.yml › worker › visual: runs playwright test before the generated modules are built'], 'playwright test starts vite');
+  assert.deepEqual(ungenerated([['x.yml', wf(gen + pw)]]), []);
 });

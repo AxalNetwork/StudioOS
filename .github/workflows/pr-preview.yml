@@ -155,6 +155,9 @@ jobs:
       - name: Install Chromium for Playwright
         run: npm --prefix frontend run test:e2e:install
 
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+
       # A brand-new workers.dev URL can answer a few seconds after the deploy
       # reports success; wait for /login rather than fail the first test on it.
       - name: Wait for the preview to answer
