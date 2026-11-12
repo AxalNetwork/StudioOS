@@ -193,7 +193,26 @@ test('D5366: company agent management needs an editing company seat and support 
   assert.equal((await call(w, ADMIN, 'POST', `${CO}/agents`, cfo({ role_key: 'cto' }))).status, 201, 'a platform admin acting through an Admin seat keeps company-member rights');
 });
 
-test.todo('a company editor manages agents on a project inside the company once #3697 part 2 gives isProjectManager its company branch (https://github.com/AxalNetwork/StudioOS/issues/3697)');
+test('company editing authority follows the project and never grants a seat', async () => {
+  const w = world();
+  const path = `/project/${IN_CO}/agents`;
+  assert.equal((await call(w, EDITOR, 'POST', `/project/${ALONE}/agents`, cfo())).status, 403);
+  w.db.prepare("INSERT INTO company_profiles (id, uid, company_name) VALUES (2, 'co-uid-2', 'Other company')").run();
+  w.db.prepare('UPDATE projects SET company_id = 2 WHERE id = ?').run(ALONE);
+  assert.equal((await call(w, EDITOR, 'POST', `/project/${ALONE}/agents`, cfo())).status, 403);
+  assert.equal((await call(w, MEMBER, 'POST', path, cfo())).status, 403);
+  assert.equal((await call(w, ADMIN, 'POST', path, cfo())).status, 403);
+  assert.equal((await call(w, EDITOR, 'POST', path, cfo(), { impersonated_by: ADMIN })).status, 403);
+  const added = await call(w, EDITOR, 'POST', path, cfo());
+  assert.equal(added.status, 201, added.text);
+  assert.equal((await call(w, EDITOR, 'GET', path)).body.can_manage, true);
+  const agent = `/agents/${added.body.agent.uid}`;
+  assert.equal((await call(w, EDITOR, 'GET', agent)).body.can_manage, true);
+  assert.equal((await call(w, EDITOR, 'PATCH', agent, { status: 'paused' })).status, 200);
+  assert.equal((await call(w, EDITOR, 'DELETE', agent)).status, 200);
+  w.db.prepare('UPDATE projects SET company_id = NULL WHERE id = ?').run(IN_CO);
+  assert.equal((await call(w, EDITOR, 'POST', path, cfo())).status, 403);
+});
 
 // 5 ───────────────────────────────────────────────────────────────────────────
 test('the registry: role_taken until removed, model_not_offered, invalid_name, tool_not_approved, and remove withdraws open proposals', async () => {

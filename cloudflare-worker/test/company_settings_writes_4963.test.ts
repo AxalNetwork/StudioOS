@@ -87,6 +87,87 @@ const events = (db: DatabaseSync, kind = 'profile_update') => (db.prepare('SELEC
   .map((e) => ({ actor: e.actor_user_id, before: JSON.parse(e.before_json), after: JSON.parse(e.after_json), at: e.created_at }));
 const PATCH = '/api/company/co-north';
 
+// #5669: all three membership writes must decide against archive state inside their batch.
+const MEMBERSHIP_WRITES = [
+  { name: 'leave', who: BEN, method: 'POST', path: `${PATCH}/leave`, body: {}, endsSeat: true },
+  { name: 'remove', who: ADA, method: 'DELETE', path: `${PATCH}/members/${BEN}`, body: undefined, endsSeat: true },
+  { name: 'role change', who: ADA, method: 'PATCH', path: `${PATCH}/members/${BEN}`, body: { role_in_company: 'Admin', is_primary_admin: true }, endsSeat: false },
+];
+const links = (db: DatabaseSync) => db.prepare('SELECT * FROM user_company_links WHERE company_id = ? ORDER BY id').all(NORTH);
+const compliance = (db: DatabaseSync) => db.prepare('SELECT uid, completion_status, assignee_user_id, needs_reassignment FROM compliance_events WHERE company_id = ? ORDER BY id').all(NORTH);
+const reassignmentEvents = (db: DatabaseSync) => db.prepare("SELECT kind FROM compliance_task_events WHERE kind = 'needs_reassignment'").all();
+function assignedTasks(db: DatabaseSync) {
+  for (const status of ['pending', 'completed']) db.prepare(`INSERT INTO compliance_events
+    (uid, company_id, jurisdiction, event_type, title, due_date, assignee_kind, assignee_user_id, completion_status)
+    VALUES (?, ?, 'Synthetic', 'other', 'Made-up filing', '2027-01-01', 'person', ?, ?)`)
+    .run(`task-${status}`, NORTH, BEN, status);
+}
+for (const write of MEMBERSHIP_WRITES) test(`#5669: archive racing membership ${write.name} wins without dependent writes; restore permits the retry`, async () => {
+  const db = fixture(); assignedTasks(db);
+  const before = { links: links(db), tasks: compliance(db) };
+  const inner = d1Over(db);
+  let raced = false;
+  const DB = { ...inner, batch: async (statements: any[]) => {
+    if (!raced) {
+      raced = true;
+      const archived = await call(envOf(db), ADA, 'POST', `${PATCH}/archive`, {});
+      assert.equal(archived.status, 200);
+    }
+    return inner.batch(statements);
+  } };
+  const response = await call(envOf(db, { DB }), write.who, write.method, write.path, write.body);
+  assert.deepEqual({ response: [response.status, response.body.error, response.body.code, response.body.message],
+    links: links(db), tasks: compliance(db), events: db.prepare("SELECT kind FROM company_membership_events WHERE kind <> 'archive'").all(), reassignment: reassignmentEvents(db) },
+  { response: [409, 'archived', 'archived', ARCHIVED_MESSAGE], ...before, events: [], reassignment: [] });
+  assert.equal((await call(envOf(db), ADA, 'POST', `${PATCH}/restore`, {})).status, 200);
+  const retry = await call(envOf(db), write.who, write.method, write.path, write.body);
+  assert.deepEqual({ status: retry.status, seat: links(db).some((l: any) => l.user_id === BEN),
+    flags: compliance(db).map((t: any) => t.needs_reassignment), reassignment: reassignmentEvents(db).length,
+    guard: db.prepare('SELECT COUNT(*) AS n FROM decision_guard').get()!.n },
+  { status: 200, seat: !write.endsSeat, flags: write.endsSeat ? [1, 0] : [0, 0], reassignment: write.endsSeat ? 1 : 0, guard: 0 });
+  const membership = db.prepare("SELECT kind, actor_user_id, target_user_id FROM company_membership_events WHERE kind IN ('remove', 'role_change')").all();
+  assert.deepEqual(membership.map((r) => ({ ...r })), write.name === 'leave' ? [] : [{ kind: write.endsSeat ? 'remove' : 'role_change', actor_user_id: ADA, target_user_id: BEN }]);
+  db.close();
+});
+
+for (const method of ['PATCH', 'DELETE']) test(`#5669: ${method} cannot lose the last primary admin after preflight`, async () => {
+  const db = fixture();
+  db.prepare('UPDATE user_company_links SET is_primary_admin = 1 WHERE company_id = ? AND user_id = ?').run(NORTH, BEN);
+  const inner = d1Over(db);
+  let raced = false;
+  const DB = { ...inner, batch: async (statements: any[]) => {
+    if (!raced) {
+      raced = true;
+      assert.equal((await call(envOf(db), BEN, 'POST', `${PATCH}/leave`, {})).status, 200);
+    }
+    return inner.batch(statements);
+  } };
+  const response = await call(envOf(db, { DB }), ADA, method, `${PATCH}/members/${ADA}`, method === 'PATCH' ? { is_primary_admin: false } : undefined);
+  assert.deepEqual({ status: response.status, primary: db.prepare('SELECT user_id FROM user_company_links WHERE company_id = ? AND is_primary_admin = 1').all(NORTH).map((r) => ({ ...r })),
+    events: db.prepare("SELECT kind FROM company_membership_events WHERE kind IN ('role_change', 'remove', 'leave')").all() },
+  { status: 400, primary: [{ user_id: ADA }], events: [] });
+  db.close();
+});
+
+for (const method of ['PATCH', 'DELETE']) test(`#5669: ${method} of a seat that left after preflight writes no phantom membership event`, async () => {
+  const db = fixture(); assignedTasks(db);
+  const inner = d1Over(db);
+  let raced = false;
+  const DB = { ...inner, batch: async (statements: any[]) => {
+    if (!raced) {
+      raced = true;
+      assert.equal((await call(envOf(db), BEN, 'POST', `${PATCH}/leave`, {})).status, 200);
+    }
+    return inner.batch(statements);
+  } };
+  const response = await call(envOf(db, { DB }), ADA, method, `${PATCH}/members/${BEN}`, method === 'PATCH' ? { role_in_company: 'Admin' } : undefined);
+  assert.deepEqual({ status: response.status, detail: response.body.detail,
+    membership: db.prepare("SELECT kind FROM company_membership_events WHERE kind IN ('role_change', 'remove')").all(),
+    reassignment: reassignmentEvents(db).length, flags: compliance(db).map((t: any) => t.needs_reassignment) },
+  { status: 404, detail: 'Member not found on this company', membership: [], reassignment: 1, flags: [1, 0] });
+  db.close();
+});
+
 // ── compare-and-swap ──────────────────────────────────────────────────────
 
 test('two editors on the same version: the first save wins, the second is a 409 with the current company', async () => {

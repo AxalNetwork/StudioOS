@@ -55,11 +55,24 @@ ruleset (Settings → Rules → Rulesets → `main` → Require merge queue):
 | --- | --- |
 | Merge method | Squash |
 | Build concurrency | 5 |
+| Auto-merge | Off in the API; owner approved On (#5605) |
+| Update branch | Off in the API; owner approved On (#5605) |
 | Group size | minimum 1, maximum 5 |
 | Wait time to meet the minimum group size | 5 minutes |
 | Require all queue entries to pass required checks | on |
 | Status check timeout | 90 minutes (`test:drift`'s own job limit; a full run took 43 to 81 minutes on 2026-11-02) |
 | Require branches to be up to date before merging | off: the queue tests each entry on top of the latest `main` |
+
+The approved bypass setting is **no bypass actors**. In an emergency the owner
+edits the ruleset. See [#5500](https://github.com/AxalNetwork/StudioOS/issues/5500)
+for application and exercise evidence.
+
+Keep build concurrency at **5**. Move to **8–10** only once the measured
+per-entry failure rate is **at most 3%** and run wall time is **at most 15 minutes**.
+Use **2** only while the queue-stalled alert is open. This retires the
+[#5506](https://github.com/AxalNetwork/StudioOS/issues/5506) concurrency pilot.
+The [owner actions list](https://github.com/AxalNetwork/StudioOS/issues/1008)
+tracks the settings and capacity work recorded in [D5605](../architecture/decisions/D5605.md).
 
 To merge, press **Merge when ready**, not **Merge**.
 
