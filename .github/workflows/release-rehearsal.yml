@@ -30,6 +30,8 @@ jobs:
         with:
           node-version: '22'
       - run: npm ci --prefix frontend && npm ci --prefix cloudflare-worker
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Rehearse admitted and blocked release paths with synthetic inventory
         run: |
           set -euo pipefail

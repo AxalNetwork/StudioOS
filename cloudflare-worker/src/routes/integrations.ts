@@ -789,7 +789,10 @@ integrations.delete('/:uid', async (c) => {
   const impl = getProviderImpl(row.provider_key);
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
-    catch (e) { console.warn('[integrations] provider disconnect threw:', (e as Error).message); }
+    catch (e) {
+      if (row.provider_key === 'tiktok') return c.json({ error: 'tiktok_revocation_failed' }, 503);
+      console.warn('[integrations] provider disconnect threw:', (e as Error).message);
+    }
   } else {
     // D1080: a member's MCP sign-in is revoked at the provider before its row is deleted.
     try { await mcpDisconnect(c.env, row); }

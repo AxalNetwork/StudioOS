@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Test the release rules
         run: node --test scripts/lib/releaseDraft.test.mjs
       - name: Create or update the draft

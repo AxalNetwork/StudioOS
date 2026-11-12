@@ -223,10 +223,29 @@ A grant older than a raised session floor is also refused on every tool call (`g
     - Rotation: put the new `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then Register webhook at once (updates answer 401 in between, and Telegram retries). For the token, `/revoke` in @BotFather, put the new `TELEGRAM_CHANNEL_BOT_TOKEN`, then Register webhook.
     - Off without a deploy: delete `TELEGRAM_CHANNEL_WEBHOOK_SECRET`; the webhook then answers 503 and Telegram retries for a while. To stop the retries too, `/revoke` the token in @BotFather.
 
+### Independent Cloudflare notification Worker (D5671; disabled)
+
+These belong only to the separate receiver configured in
+`engineering-notifications/wrangler.cloudflare-5671.jsonc`, not the StudioOS
+production Worker. No receiver is deployed or enabled by this configuration.
+See [the delivery procedure](../operations/CLOUDFLARE_DELIVERY_5671.md) for
+private registries, destination checks, canary receipts and rollback.
+
+- [ ] `SLACK_BOT_TOKEN` — approved internal publisher with verified workspace,
+      private channel membership and recipient access.
+- [ ] `CF_WEBHOOK_SECRET` — random 32+ characters, configured identically in
+      Cloudflare's generic `cf-webhook-auth` destination field; never logged.
+- [ ] `CF_OBSERVER_SECRET` — a separate random 32+ character secret for private
+      `/status` reads. Only the independent observer receives this credential.
+
 ### GitHub Actions secrets
 - [ ] `CLOUDFLARE_API_TOKEN` – scoped: `Workers Scripts:Edit`, `Workers KV:Edit`, `Workers AI:Read`.
 - [ ] `CLOUDFLARE_ACCOUNT_ID`
 - [ ] `SLACK_DEPLOY_WEBHOOK_URL` – optional, failure notifications.
+- [ ] `CF_OBSERVER_SECRET` — optional D5671 observer credential, matching the
+      independent receiver's observer secret. It is neither the Slack token nor
+      the ingress secret. The observer remains off until `CF_HEARTBEAT_ENABLED`
+      and the approved `CF_STATUS_URL` are configured and fallback receipt is verified.
 
 ---
 

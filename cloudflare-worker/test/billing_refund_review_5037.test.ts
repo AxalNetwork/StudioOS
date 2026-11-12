@@ -124,7 +124,8 @@ async function post(e: any, actor: number, path: string, body: Record<string, un
 }
 const review = (e: any, body: Record<string, unknown>, actor = SUPER) => post(e, actor, '/refund/review', body);
 const confirm = (e: any, body: Record<string, unknown>, actor = SUPER) => post(e, actor, '/refund', { reason: REASON, ...body });
-const audit = (db: any) => (db.prepare("SELECT * FROM admin_audit_log WHERE action = 'billing_refund' ORDER BY rowid").all() as any[]).map((r) => JSON.parse(r.filters_json));
+// id is the INTEGER PRIMARY KEY, so it is the rowid: insertion order, first refund before second.
+const audit = (db: any) => (db.prepare("SELECT * FROM admin_audit_log WHERE action = 'billing_refund' ORDER BY id").all() as any[]).map((r) => JSON.parse(r.filters_json));
 
 test('the lookup moves no money, writes nothing, and shows the payment before anything is confirmed', async () => {
   const db = freshDb();

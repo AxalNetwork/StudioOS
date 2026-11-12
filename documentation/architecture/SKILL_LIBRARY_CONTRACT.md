@@ -14,7 +14,8 @@ skill that has one, its scenario pack at
 `cloudflare-worker/src/services/agents/skills/scenarios/<slug>.json` (#4588,
 D5336). The build script embeds all three in `skillLibrary.generated.ts`: the
 golden case first, then each scenario as a case of its own. The module is
-generated only.
+generated only, and never committed (D5612): it is gitignored, and
+`scripts/build-generated.mjs` writes it before every build, typecheck and test.
 `skillLibrarySeed.ts` reads the generated data, validates it as an HQ draft,
 and can create a **draft** and live cases. The Worker never reads the source
 directory at runtime. Review, evaluations, and publication use stored rows.

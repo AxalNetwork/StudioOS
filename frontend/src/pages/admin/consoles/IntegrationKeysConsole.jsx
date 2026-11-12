@@ -45,6 +45,7 @@ const PROVIDER_LABELS = {
   carta: 'Carta',
   github: 'GitHub',
   vercel: 'Vercel',
+  tiktok: 'TikTok',
   crunchbase: 'Crunchbase',
   affinity: 'Affinity',
   telegram: 'Telegram',

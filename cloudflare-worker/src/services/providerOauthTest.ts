@@ -387,5 +387,6 @@ export async function testOauthCreds(
     case 'affinity':   return testAffinity(cred.id, cred.secret);
     case 'telegram':   return testTelegram(cred.id, cred.secret);
     case 'gcip':       return testGcip(cred.id, cred.secret);
+    case 'tiktok':     return { ok: false, reachable: false, detail: 'Verify TikTok credentials by completing an approved member sign-in.' };
   }
 }

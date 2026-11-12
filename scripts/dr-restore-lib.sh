@@ -111,7 +111,8 @@ dr_import_chunks() {
     dr_fail 2 split_failed "could not split the backup into import chunks"
   fi
   log "split (chunk budget ${chunk_bytes} bytes): ${summary}"
-  total=$(wc -l < "${dir}/chunks/manifest.tsv")
+  # awk, not wc: macOS wc pads the count, and the comparison below wants a bare number.
+  total=$(awk 'END { print NR + 0 }' "${dir}/chunks/manifest.tsv")
   # The chunk list is read on fd 3 so nothing wrangler reads from stdin eats it.
   while IFS=$'\t' read -r file phase stmts size over <&3; do
     n=$(( n + 1 ))

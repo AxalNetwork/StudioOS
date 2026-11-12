@@ -23,6 +23,8 @@ import { MERCURY_FEEDS, mercuryFedModules } from './mercuryFeeds';
 import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
+import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
+import { TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
 import { GOOGLE_WORKSPACE_FEEDS } from './googleWorkspaceFeeds';
@@ -33,7 +35,7 @@ export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
 /** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
 export type AuthType = 'none' | 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
-export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting' | 'Analytics' | 'Marketing';
+export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace' | 'Design and build' | 'Hosting' | 'Analytics' | 'Marketing' | 'Social';
 export interface ConnectorMetadata {
   category: ConnectorCategory;
   verified: boolean;
@@ -623,6 +625,13 @@ export const REGISTRY: ProviderDescriptor[] = [
   // D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, read only, signed in through Beehiiv's MCP server (D1080).
   // Beta until the owner's first live connection verifies every UNVERIFIED fact in D2407.md.
   {
+    key: 'tiktok', display_name: 'TikTok', integration_type: 'data_feed',
+    description: 'Connect your TikTok account with read-only access to profile and public video figures.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', docs_url: 'https://developers.tiktok.com/docs/en/login-kit-web',
+    icon: 'Video', oauth_scopes: [...TIKTOK_READ_SCOPES],
+  },
+  {
     key: 'beehiiv', display_name: 'Beehiiv', integration_type: 'data_feed',
     description: 'Your newsletter on Beehiiv, read only, through Beehiiv’s own sign-in: each company reads one publication you choose. It reads audience and post figures, never your subscribers’ addresses.',
     status: 'beta', tier: 'free', auth_type: 'oauth_mcp', capabilities: ['Grow', 'Read-only'],
@@ -634,6 +643,8 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
+    permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
   figma: { category: 'Design', verified: false, pulls: [{ what: 'Designs', module: 'prototype_mvp' }], sends: [], feeds: ['prototype_mvp'], permissions: [] },
   hubspot: { category: 'CRM', verified: false, pulls: [{ what: 'Deals and contacts', module: 'capital_relationships' }], sends: [{ what: 'New company', target: 'HubSpot company', default_mode: 'ask' }, { what: 'Deal stage change', target: 'HubSpot deal', default_mode: 'auto' }], feeds: ['capital_relationships', 'network'], permissions: ['Connect to your HubSpot account.', 'Read your HubSpot deals.', 'Update your HubSpot deals.', 'Read your HubSpot contacts.', 'Update your HubSpot contacts.', 'Read your HubSpot companies.', 'Update your HubSpot companies.', 'Read your HubSpot deal fields.'] },
