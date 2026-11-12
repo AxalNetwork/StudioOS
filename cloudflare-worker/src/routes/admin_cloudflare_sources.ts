@@ -24,7 +24,8 @@ r.post('/reconcile',async c=>{
   // Deliberately separate read-only token; never reuse the Worker's script-edit credential.
   const readApi=cfReadApi(c.env.CLOUDFLARE_ACCOUNT_ID,c.env.CF_OBSERVER_READ_TOKEN),store=d1CfSourceStore(c.env.DB),now=Date.now();
   try{
-    if((await store.read('deployments:studioos')).through_ms>now-60000){c.header('Retry-After','60');return c.json({error:'cf_source_rate_limited'},429);}
+    const cursors=await Promise.all(CF_SCRIPTS.map(script=>store.read('deployments:'+script)));
+    if(cursors.some(cursor=>cursor.through_ms>now-60000)){c.header('Retry-After','60');return c.json({error:'cf_source_rate_limited'},429);}
     const result=[];for(const script of CF_SCRIPTS)result.push({script,...await reconcileCfScript({script,now,readApi,store})});
     await logAdminAction(c.env,actor.id,actor.email,'cloudflare_sources_reconciled',{scripts:result.length});
     return c.json({state:result.some(r=>r.state!=='observed')?'unknown':'observed',sources:result,delivery:'not_configured'});
