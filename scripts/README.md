@@ -15,6 +15,7 @@
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
 | `baselines/` | D5613: split auth-inventory and SQL-prepare ledgers, each directory with its own README. |
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
+| `runner-benchmark-report.mjs` | D5611: read-only report for one branch-only runner benchmark, with rounded per-job cost and wait evidence. |
 
 ## The guards
 

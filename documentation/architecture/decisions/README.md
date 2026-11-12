@@ -91,6 +91,7 @@ and citations by number keep working.
 | `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
 | `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
+| `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
 | `D5666.md` | Observational session attribution and persistent PR/incident routing. |
@@ -99,3 +100,4 @@ and citations by number keep working.
 | `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
 | `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
 | `D5671.md` | Authenticated Cloudflare delivery and explicit route isolation. |
+| `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |

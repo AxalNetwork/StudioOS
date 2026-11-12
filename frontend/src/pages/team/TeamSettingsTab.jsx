@@ -32,7 +32,7 @@ export default function TeamSettingsTab({ scope, agentsBlock, canManage, onEditC
           <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">{WHO_PAYS}</p>
         </TeamCard>
         <TeamCard title="Who may add agents" testId="team-settings-who">
-          <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="team-settings-who-rule">{whoMayAddAgents(scope.kind, company)}</p>
+          <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="team-settings-who-rule">{whoMayAddAgents(scope.kind, company, Boolean(scope.myAuthority))}</p>
           <p className={`m-0 mt-1 ${MUTED}`}>This follows each person’s role on the team. It is not set here.</p>
         </TeamCard>
       </div>
