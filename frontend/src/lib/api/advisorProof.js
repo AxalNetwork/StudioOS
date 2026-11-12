@@ -1,3 +1,4 @@
+/** Advisor proof publication and consent cancellation API calls. */
 import { request } from '../api.js';
 
 export const advisorProofApi = {

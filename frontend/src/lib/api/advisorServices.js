@@ -1,3 +1,4 @@
+/** Advisor service publication-state API calls. */
 import { request } from '../api.js';
 
 export const advisorServicesApi = {
