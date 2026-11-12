@@ -120,8 +120,8 @@ const CHAT_WORKER = read('cloudflare-worker/src/routes/customer_chat.ts');
 test('/help is the Help Center and the ticket flow sits under it', () => {
   assert.match(
     APP_CODE,
-    /path="\/help" element=\{guard\([^)]*<HelpCenterPage \/>\)\}/,
-    '/help must mount the Help Center, not the ticket tracker',
+    /path="\/help" element=\{<HelpCenterPage \/>\}/,
+    '/help must mount the public Help Center, not the ticket tracker',
   );
   assert.match(
     APP_CODE,
@@ -316,7 +316,7 @@ test('every guide has its own address, and the page reads it', () => {
   // one long scroll under the home, under a rail listing all of them.
   assert.match(
     APP_CODE,
-    /path="\/help\/:area\/:guide" element=\{guard\([^)]*<HelpCenterPage \/>\)\}/,
+    /path="\/help\/:area\/:guide" element=\{<HelpCenterPage \/>\}/,
     'a guide must have a route, and it must mount the Help Center',
   );
   assert.match(LAYOUT_CODE, /const route = parseGuidePath\(location\.pathname\)/);
@@ -441,10 +441,12 @@ test('the canvas the page is built to is in the repository, with its imported sc
 test('the contact block points at the flow, not at a menu item', () => {
   const body = fnBody(LAYOUT_CODE, 'StillStuck');
   // D599 — straight to the form: the ticket page opens it on `?new=1`.
-  assert.match(body, /to="\/help\/tickets\?new=1"/, 'the ticket link must be a link, to the form');
+  assert.ok(body.includes("<Link to={user ? '/help/tickets?new=1' : '/login?next=%2Fhelp%2Ftickets%3Fnew%3D1'}"),
+    'members open the ticket form directly and guests return to the same form after sign-in');
   assert.match(TICKETS, /useState\(\(\) => new URLSearchParams\(location\.search\)\.get\('new'\) === '1'\)/,
     'the ticket page must open its form when it arrives with ?new=1');
-  assert.match(body, /to="\/trust\/me"/, 'the canvas sends "What we can see" to the Trust Center');
+  assert.ok(body.includes("<Link to={user ? '/trust/me' : '/trust/disclosure'}"),
+    'members see their Trust Center data and guests get public disclosure guidance');
   assert.ok(
     !/in the sidebar/.test(body),
     'naming a sidebar item is how this went stale the first time',
