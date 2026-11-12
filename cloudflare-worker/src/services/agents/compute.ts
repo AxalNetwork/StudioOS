@@ -1,45 +1,9 @@
 /**
- * D4557 (#4557, Part of): bounded compute for an agent run, the parts that
- * do not depend on the container's host. The owner's answers (2026-11-07):
- * Q1 B, build these now; Q2 A, the host is a separate Worker owning the
- * container; Q3 A, the Durable Object Container API on the default policy
- * with internet off; Q4 A, a job's output is still a proposal whose payload
- * references an R2 artifact. The host itself waits on D4554.
- *
- * OFF BY DEFAULT. `computeEnabled` is true only when AGENT_COMPUTE is `on`
- * AND AGENT_COMPUTE_SECRET is set. Neither is declared anywhere, no route
- * calls this file yet, and every entry point refuses `compute_off` until
- * both are.
- *
- * THE WORKER STAYS THE BROKER. A job is created by the run's own Worker side
- * (`createJob`), after the run's scope, task and agent are already checked by
- * the D1528 loop. The container receives only:
- *   - a short-lived, signed, single-use RUN GRANT (`mintGrant`): job uid, run
- *     uid, scope, workload, idempotency key, jti and expiry, signed with a key
- *     derived per job from AGENT_COMPUTE_SECRET, so one leaked grant opens one
- *     job;
- *   - the input references the job names.
- * It gets no D1, no provider key and no R2 credential.
- *
- * Every callback is checked before anything is written (`verifyGrant`): the
- * signature, the expiry, that the grant names this job and its scope (a
- * cross-tenant callback is refused), and that the job is still live (a
- * callback after a cancel is refused). `claimGrant` spends the grant once, by
- * a conditional UPDATE in D1, so a replay is refused even when concurrent.
- * `recordResult` ends the job once, by a guarded UPDATE, so a second callback
- * changes nothing. A result's artifacts must lie under the job's own prefix,
- * `agent-compute/<scope_kind>/<scope_id>/<run_uid>/`.
- *
- * QUOTAS ARE THE SERVER'S. `LIMITS` per workload: the input size and count,
- * the file types, the output size, the artifact count, and the CPU, memory,
- * wall-clock, disk and process limits the host is to apply, plus the live jobs
- * per scope. Input names are checked for traversal: no absolute path, `..`,
- * backslash, NUL or control character. Archives are refused as inputs in v1;
- * an Office file is a zip, which the container opens under its own
- * decompression limit.
- *
- * Never stored or logged: a grant token, an input, stdout, an output's
- * content or a prompt. Bound SQL only.
+ * D4557: default-off bounded job metadata, quotas and compatibility grants.
+ * The general host uses D5567 Workspace security via computeBridge; mintGrant,
+ * verifyGrant and claimGrant remain legacy compatibility helpers, not a second
+ * authority for host admission. Bytes stay in private R2 under artifactPrefix.
+ * LIMITS are server ceilings; the approved runner can impose narrower limits.
  */
 import type { Env } from '../../types';
 import { constantTimeEqual } from '../../rpc/secret';
@@ -147,19 +111,26 @@ export async function createJob(env: Env, input: { runUid: string; agent: Pick<A
   const scopeId = scopeKind === 'company' ? input.agent.company_id : input.agent.project_id;
   if (scopeId == null) return no(404, 'run_not_found', 'There is no such run for this agent.');
   const live = await env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM agent_compute_jobs WHERE scope_kind = ? AND scope_id = ? AND status IN ('queued', 'dispatched', 'running')`,
+    `SELECT COUNT(*) AS n FROM agent_compute_jobs j LEFT JOIN agent_compute_executions e ON e.job_uid = j.uid
+      WHERE j.scope_kind = ? AND j.scope_id = ? AND (j.status IN ('queued', 'dispatched', 'running') OR e.cleanup_required = 1)`,
   ).bind(scopeKind, scopeId).first<{ n: number }>();
   if (Number(live?.n ?? 0) >= MAX_LIVE_JOBS_PER_SCOPE) return no(429, 'compute_busy', `This team already has ${MAX_LIVE_JOBS_PER_SCOPE} compute jobs running.`);
   const inputs = (input.inputs as Input[]).map((f) => ({ name: f.name, bytes: f.bytes }));
   const uid = newUid();
   await env.DB.prepare(
     `INSERT INTO agent_compute_jobs (uid, run_uid, agent_id, scope_kind, scope_id, workload, idempotency_key, inputs_json, input_bytes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (idempotency_key) DO NOTHING`,
+     SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM agent_compute_jobs j LEFT JOIN agent_compute_executions e ON e.job_uid = j.uid
+         WHERE j.scope_kind = ? AND j.scope_id = ? AND (j.status IN ('queued', 'dispatched', 'running') OR e.cleanup_required = 1)) < ?
+       AND (SELECT COUNT(*) FROM agent_compute_jobs j LEFT JOIN agent_compute_executions e ON e.job_uid = j.uid
+         WHERE j.status IN ('queued', 'dispatched', 'running') OR e.cleanup_required = 1) < 4
+       AND EXISTS(SELECT 1 FROM agent_task_runs WHERE uid = ? AND agent_id = ? AND status = 'running')
+     ON CONFLICT (idempotency_key) DO NOTHING`,
   ).bind(uid, input.runUid, input.agent.id, scopeKind, scopeId, input.workload, input.idempotencyKey, JSON.stringify(inputs),
-    inputs.reduce((n, f) => n + f.bytes, 0)).run();
+    inputs.reduce((n, f) => n + f.bytes, 0), scopeKind, scopeId, MAX_LIVE_JOBS_PER_SCOPE, input.runUid, input.agent.id).run();
   // Two deliveries racing on one key: whichever row landed is the job.
   const job = await env.DB.prepare('SELECT * FROM agent_compute_jobs WHERE idempotency_key = ?').bind(input.idempotencyKey).first<JobRow>();
-  if (!job) return no(503, 'job_unwritten', 'The job could not be recorded.');
+  if (!job) return no(429, 'compute_busy', 'The job could not be admitted within the current run and scope limits.');
   return { ok: true, job, replayed: job.uid !== uid };
 }
 
@@ -217,8 +188,8 @@ export async function claimGrant(env: Env, job: JobRow, now = new Date()): Promi
 
 export type Result = {
   outcome: 'succeeded' | 'failed' | 'timed_out';
-  output_bytes: number; artifacts: string[]; cpu_ms: number; wall_ms: number; peak_rss_bytes: number;
-  exit_code: number; failure_code?: string | null;
+  output_bytes: number; artifacts: string[]; cpu_ms: number | null; wall_ms: number | null; peak_rss_bytes: number | null;
+  exit_code: number | null; failure_code?: string | null;
 };
 /** The job's R2 prefix: inputs and outputs live only here. */
 export const artifactPrefix = (job: Pick<JobRow, 'scope_kind' | 'scope_id' | 'run_uid'>) => `agent-compute/${job.scope_kind}/${Number(job.scope_id)}/${job.run_uid}/`;
@@ -228,8 +199,11 @@ export function resultRefusal(job: Pick<JobRow, 'workload' | 'scope_kind' | 'sco
   const l = LIMITS[job.workload];
   const bad = no(422, 'result_invalid', 'That result is not one this job can record.');
   if (!r || !['succeeded', 'failed', 'timed_out'].includes(r.outcome)) return bad;
-  for (const k of ['output_bytes', 'cpu_ms', 'wall_ms', 'peak_rss_bytes']) if (!Number.isSafeInteger(r[k]) || r[k] < 0) return bad;
-  if (!Number.isSafeInteger(r.exit_code)) return bad;
+  for (const k of ['output_bytes', 'cpu_ms', 'wall_ms', 'peak_rss_bytes']) {
+    if (r.outcome !== 'succeeded' && ['cpu_ms', 'wall_ms', 'peak_rss_bytes'].includes(k) && r[k] === null) continue;
+    if (!Number.isSafeInteger(r[k]) || r[k] < 0) return bad;
+  }
+  if (!Number.isSafeInteger(r.exit_code) && !(r.outcome !== 'succeeded' && r.exit_code === null)) return bad;
   if (r.failure_code != null && !(typeof r.failure_code === 'string' && /^[a-z0-9_]{1,64}$/.test(r.failure_code))) return bad;
   if (r.output_bytes > l.max_output_bytes) return no(413, 'output_too_large', 'The job wrote more than its output limit.');
   if (!Array.isArray(r.artifacts) || r.artifacts.length > l.max_artifacts) return no(422, 'too_many_artifacts', `A job keeps at most ${l.max_artifacts} artifacts.`);
@@ -243,15 +217,30 @@ export function resultRefusal(job: Pick<JobRow, 'workload' | 'scope_kind' | 'sco
 }
 
 /** End a running job once with its bounded outcome. A second callback, or one after a cancel, changes nothing. */
-export async function recordResult(env: Env, job: JobRow, r: Result, now = new Date()): Promise<{ ok: true } | ComputeRefusal> {
+export async function recordResult(env: Env, job: JobRow, r: Result, now = new Date(), expectedGeneration: number | null = null): Promise<{ ok: true } | ComputeRefusal> {
   const bad = resultRefusal(job, r);
   if (bad) return bad;
-  const u = await env.DB.prepare(
+  const statement = env.DB.prepare(
     `UPDATE agent_compute_jobs SET status = ?, output_bytes = ?, artifact_keys_json = ?, cpu_ms = ?, wall_ms = ?, peak_rss_bytes = ?,
         exit_code = ?, failure_code = ?, ended_at = ?
-      WHERE uid = ? AND status = 'running' AND cancelled_at IS NULL`,
+      WHERE uid = ? AND status = 'running' AND cancelled_at IS NULL
+        AND EXISTS(SELECT 1 FROM agent_task_runs r WHERE r.uid = agent_compute_jobs.run_uid AND r.status = 'running')
+        AND (? IS NULL OR EXISTS(SELECT 1 FROM agent_compute_executions e JOIN agent_task_runs r ON r.uid = agent_compute_jobs.run_uid
+          JOIN team_agents a ON a.id = r.agent_id WHERE e.job_uid = agent_compute_jobs.uid AND e.generation = ? AND a.status = 'active'
+          AND a.sponsor_user_id = json_extract(e.sponsor_json, '$.member_id')
+          AND EXISTS(SELECT 1 FROM users u WHERE u.id = a.sponsor_user_id AND u.is_active = 1)
+          AND a.scope_kind = agent_compute_jobs.scope_kind
+          AND (CASE WHEN a.scope_kind = 'company' THEN a.company_id ELSE a.project_id END) = agent_compute_jobs.scope_id
+          AND (agent_compute_jobs.scope_kind = 'company' OR EXISTS(SELECT 1 FROM projects p WHERE p.id = agent_compute_jobs.scope_id
+            AND p.company_id = json_extract(e.spec_json, '$.company_id')))))`,
   ).bind(r.outcome, r.output_bytes, JSON.stringify(r.artifacts), r.cpu_ms, r.wall_ms, r.peak_rss_bytes, r.exit_code, r.failure_code ?? null,
-    sqlTime(now), job.uid).run();
+    sqlTime(now), job.uid, expectedGeneration, expectedGeneration);
+  const u = expectedGeneration === null ? await statement.run() : (await env.DB.batch([
+    statement,
+    env.DB.prepare(`UPDATE agent_compute_executions SET cleanup_required = 0 WHERE job_uid = ? AND generation = ?
+      AND EXISTS(SELECT 1 FROM agent_compute_jobs WHERE uid = ? AND status IN ('succeeded','failed','timed_out') AND cancelled_at IS NULL)`)
+      .bind(job.uid, expectedGeneration, job.uid),
+  ]))[0];
   return Number(u.meta?.changes ?? 0) ? { ok: true } : no(409, 'already_recorded', 'This job has already ended.');
 }
 

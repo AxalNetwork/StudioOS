@@ -61,3 +61,4 @@ Full walkthrough + auth-error troubleshooting:
 
 Proprietary — platform IP owned by Axal VC Holdings LLC and licensed
 to Axal VC Management LLC for operation.
+| `agent-compute/` | D4557: separate default-off general compute host and bounded Container runtime. |

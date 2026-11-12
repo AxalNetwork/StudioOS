@@ -109,3 +109,4 @@ and citations by number keep working.
 | `D5680.md` | Restricted operational security triage without public disclosure. |
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
 | `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
+| `D4557-p2.md` | Bounded general compute host with canonical grants; hosted activation remains owner-gated. |

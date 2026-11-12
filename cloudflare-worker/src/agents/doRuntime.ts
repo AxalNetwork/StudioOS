@@ -184,6 +184,7 @@ const liveOf = (r: RunRow): LiveRun => ({ run_uid: r.uid, agent_id: r.agent_id, 
 
 /** End a run's instance and its row. A gone instance or row is not an error. */
 export async function terminateRun(env: Env, runUid: string, refusal: 'erased' | 'cancelled_by_person' = 'erased') {
+  await (await import('../services/agents/computeBridge')).cancelComputeRun(env, runUid);
   try {
     const inst = await env.AGENT_TASK?.get(runUid);
     await inst?.terminate();

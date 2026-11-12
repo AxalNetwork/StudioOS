@@ -290,6 +290,7 @@ export const AREA_PLACE = Object.freeze({
   brand_files: ['your account', '/account'],
   csv_imports: ['your imports', null],
   articles: ['your articles', '/articles/draft'],
+  agent_compute: ['your agent results', null],
 });
 
 function day(iso) {

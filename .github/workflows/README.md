@@ -176,3 +176,5 @@ artifacts and compact name outputs. Missing main timings use equal weights.
 its exact Worker candidate on a disposable Linux runner using isolated workerd.
 It uses synthetic queue responses and has no production credentials.
 | `cloudflare-heartbeat-5671.yml` | D5671: disabled-by-default fixed-period fallback check; no PR secrets or per-event job. |
+| `agent-compute-image.yml` | D4557: read-only PR image validation; no publishing, credentials or deployment. |
+| `agent-compute-preview.yml` | D4557: owner-dispatched, independently protected, exact-main disabled preview host deployment; no broker enablement. |

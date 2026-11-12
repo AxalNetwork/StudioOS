@@ -159,6 +159,12 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
   if (!task || task.assignee_kind !== 'agent' || task.assignee_agent_id !== a.id || !isReady(task, deps) || !task.module || !task.option) {
     return no(409, 'not_ready', 'That task is not ready for this agent: it must be open, assigned to it, with nothing left to wait on.');
   }
+  const computeRequest = await env.DB.prepare('SELECT uid, status, requested_by_user_id FROM agent_compute_requests WHERE task_id = ?')
+    .bind(task.id).first<{ uid: string; status: string; requested_by_user_id: number }>();
+  if (computeRequest) {
+    const { computeConfigured } = await import('../services/agents/computeBridge');
+    if (!computeConfigured(env) || computeRequest.status !== 'ready' || computeRequest.requested_by_user_id !== a.sponsor_user_id) return no(409, 'compute_not_ready', 'The compute inputs and approved host must be ready before starting this task.');
+  }
   const live = await env.DB.prepare("SELECT 1 AS ok FROM agent_task_runs WHERE agent_id = ? AND status IN ('admitted', 'running')").bind(a.id).first<{ ok: number }>();
   if (live) return no(409, 'agent_busy', 'This agent is already working on a task.');
   if (await countInScope(env, s, LIVE_STATUSES) >= settings.max_parallel_runs) {
@@ -175,10 +181,16 @@ export async function admitInScope(env: Env, s: ScopeRef, t: Trigger): Promise<A
   const attempt = Number((await env.DB.prepare('SELECT MAX(attempt) AS n FROM agent_task_runs WHERE task_id = ?').bind(task.id).first<{ n: number | null }>())?.n ?? 0) + 1;
   const uid = t.runUid ?? crypto.randomUUID();
   try {
-    await env.DB.prepare(
+    const insertRun = env.DB.prepare(
       `INSERT INTO agent_task_runs (uid, agent_id, task_id, attempt, status, workflow_instance_id, admitted_company_id)
-       VALUES (?, ?, ?, ?, 'admitted', ?, ?)`,
-    ).bind(uid, a.id, task.id, attempt, uid, admittedCompany).run();
+       SELECT ?, ?, ?, ?, 'admitted', ?, ?
+       WHERE (? IS NULL AND NOT EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?))
+         OR EXISTS(SELECT 1 FROM agent_compute_requests WHERE uid = ? AND task_id = ? AND status = 'ready' AND requested_by_user_id = ?)`,
+    ).bind(uid, a.id, task.id, attempt, uid, admittedCompany, computeRequest?.uid ?? null, task.id, computeRequest?.uid ?? null, task.id, a.sponsor_user_id);
+    const inserted = computeRequest ? (await env.DB.batch([insertRun,
+      env.DB.prepare('INSERT INTO agent_compute_run_requests (run_uid, request_uid) SELECT ?, ? WHERE EXISTS(SELECT 1 FROM agent_task_runs WHERE uid = ?)').bind(uid, computeRequest.uid, uid),
+    ]))[0] : await insertRun.run();
+    if (!Number(inserted.meta?.changes)) return no(409, 'compute_not_ready', 'The compute request changed during admission; start this task again.');
   } catch (e) {
     if (/UNIQUE/i.test(String((e as Error)?.message))) return no(409, 'agent_busy', 'This agent is already working on a task.');
     throw e;

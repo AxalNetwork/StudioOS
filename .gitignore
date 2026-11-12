@@ -142,3 +142,5 @@ cloudflare-worker/src/services/agents/skillLibrary.generated.ts
 
 # #4591: written by scripts/schema-rehearsal.mjs for its throwaway databases, deleted when it ends.
 wrangler.rehearsal.*.toml
+agent-compute/worker-configuration.d.ts
+agent-compute/__pycache__/
