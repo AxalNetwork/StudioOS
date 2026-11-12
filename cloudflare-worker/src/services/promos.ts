@@ -959,10 +959,10 @@ export async function recordPaidRedemption(
 }
 
 /**
- * D1274: record a subscription's redemption from its first paid invoice.
+ * D1274 and D5368: record a subscription's first payment or an admitted renewal.
  *
- * Keyed `sub:<subscription id>`, so a re-delivered invoice, or a second
- * invoice of the same subscription, records nothing more. It does NOT bump
+ * First payments use `sub:<subscription id>` and renewals use `invoice:<id>`.
+ * Each event can be re-delivered without adding another row. This does not bump
  * `promo_codes.times_redeemed`: Stripe counts a subscription redemption
  * itself, and checkout's cap adds Stripe's counter to the mirror's
  * (`totalRedeemed`), so a bump here would count it twice. One statement, so a
@@ -970,7 +970,7 @@ export async function recordPaidRedemption(
  */
 export async function recordSubscriptionRedemption(
   env: Env,
-  args: { promoId: string; userId: number; subscriptionId: string; detail: Omit<RedemptionDetail, 'source'> },
+  args: { promoId: string; userId: number; subscriptionId: string; invoiceId?: string; detail: Omit<RedemptionDetail, 'source'> },
 ): Promise<boolean> {
   await ensurePromoSchema(env);
   const v = detailColumns({ ...args.detail, source: 'subscription' });
@@ -980,7 +980,7 @@ export async function recordSubscriptionRedemption(
         amount_before_cents, discount_cents, currency)
      VALUES (?, ?, ?, 'subscription', ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(args.promoId, args.userId, `sub:${args.subscriptionId}`, v.product_id, v.price_id, v.billing_interval,
+    .bind(args.promoId, args.userId, args.invoiceId ? `invoice:${args.invoiceId}` : `sub:${args.subscriptionId}`, v.product_id, v.price_id, v.billing_interval,
       v.amount_before_cents, v.discount_cents, v.currency)
     .run();
   return (ins.meta?.changes ?? 0) === 1;

@@ -82,3 +82,5 @@ and citations by number keep working.
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
 | `D4580.md` | Grow auth browser evidence, accessible malformed-input fixes and remaining live-account verification. |
+| `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
+| `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
