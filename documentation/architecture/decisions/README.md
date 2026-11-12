@@ -75,12 +75,15 @@ and citations by number keep working.
 | `D4574.md` | #4574: measured lazy boundaries, the Studio page's radar and Product testing panels (H6), then the cycle steps (H5), with before/after bundle numbers from #4573's method. |
 | `D5352.md` | #5352: proposal-keyed retries for the remaining Validate/Grow target writers. |
 | `D5366.md` | #5366: company project writes pass the company-seat gate while #5329 retains project-scope authority. |
+| `D5525.md` | #5525: a company Member may still create a project in its company; creation refuses only support sessions and HQ access without a seat. |
 | `D4569.md` | #4569 (accepted): stay on one optimised D1. Records the thresholds, conditional partitioning options A–D, authority boundaries, the payer shard key and the financial-consistency protocol. No migration. |
 | `D5339.md` | The production Advisor provider boundary is an import-graph and mount-gate invariant enforced in every drift run. |
 | `D5334.md` | Published skill evaluations dedupe case content, scope regression alerts to one version, and share one primary area/level rule. |
 | `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
+| `D5532.md` | Measure production-shaped Worker startup and bind diagnostics to the release artifact. |
+| `D5501.md` | Gate production D1 and Worker publication on the exact verified main candidate. |
 | `D4710.md` | Mounted Delivery stale-edit/stale-send verification of merged revision handling; remaining 6/6 handoff scope. |
 | `D4580.md` | Grow auth browser evidence, accessible malformed-input fixes and remaining live-account verification. |
 | `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
@@ -90,3 +93,4 @@ and citations by number keep working.
 - [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
 
 - [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
+| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |

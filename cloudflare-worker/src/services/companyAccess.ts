@@ -126,6 +126,17 @@ export async function companyWriteDenial(env: Env, company: { id: number }, user
   return DENIALS.not_an_editor;
 }
 
+/**
+ * D5525 (#5525, owner decision A): creating a project in a company needs a seat
+ * of any role there, as before D5366. Only the two refusals #5366 asked for
+ * apply: a support session, and HQ access without a seat. Writes to an existing
+ * company project keep `companyWriteDenial`.
+ */
+export async function companyCreateDenial(env: Env, company: { id: number }, user: User, support: boolean): Promise<WriteDenial | null> {
+  const denial = await companyWriteDenial(env, company, user, support);
+  return denial && denial.reason !== 'not_an_editor' ? denial : null;
+}
+
 async function hasSeat(env: Env, company: { id: number }, user: User): Promise<boolean> {
   return !!(await env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(company.id, user.id).first());
 }

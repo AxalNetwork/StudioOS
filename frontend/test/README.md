@@ -183,3 +183,5 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 
 `delivery_stale_writes_4710.test.mjs` mounts all four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a stale Mark sent never claims success or retries on reload (D4710).
 | `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
+
+| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |

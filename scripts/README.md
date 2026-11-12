@@ -9,6 +9,7 @@
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
+| `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
 | `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
@@ -74,6 +75,9 @@ represents a bug that reached production once:
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 | `plan-persona-prices.mjs` | D1430: offline Advisor/Operating Partner price requests on `plan_group`; missing products are `product_needed`. Same private `--catalog` export and audited action format as the Founder/Investor planners. |
 | `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
+| `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
+| `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
+| `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 
 ## The one rule that needed a linter
 
