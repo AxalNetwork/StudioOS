@@ -1,5 +1,5 @@
 /** D5676: independent SQLite receipt/check loop with actual writer protocol, conditional R2 faults and metadata-only inspection. */
-import test from 'node:test';import assert from 'node:assert/strict';import { DatabaseSync } from 'node:sqlite';
+import test, { before, after, mock } from 'node:test';import assert from 'node:assert/strict';import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
 import { d1Over } from './_d1_sqlite.mjs';
 import { writeArchiveBatch } from '../../cloudflare-worker-tail/src/archive.ts';
@@ -8,6 +8,8 @@ import { archiveMac,type ArchiveNotice } from '../../cloudflare-worker-tail/src/
 import { recordArchiveNotice,expectArchiveMarker,checkArchiveHealth } from '../../cloudflare-archive-observer/src/health.ts';
 import observer from '../../cloudflare-archive-observer/src/index.ts';
 import { cfRoute } from '../src/services/cloudflareSourceReceipt.ts';
+before(()=>mock.timers.enable({apis:['Date'],now:1900000000000}));
+after(()=>mock.timers.reset());
 const ROOT=new URL('../../',import.meta.url),marker='b'.repeat(32),secret='synthetic-archive-writer-key-'.repeat(3);
 function fixture(){
  const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('cloudflare-archive-observer/migrations/202611121119_5676_metadata.sql',ROOT),'utf8'));const db=d1Over(sql) as any;
