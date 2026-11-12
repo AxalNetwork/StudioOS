@@ -290,3 +290,4 @@ D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter
 D5673: `cloudflare_sources_5673.test.ts` covers paginated provider metadata, real SQLite replay/CAS and protected source reads.
 
 D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary loss and guard mutations.
+D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.

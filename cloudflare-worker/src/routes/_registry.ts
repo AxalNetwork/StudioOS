@@ -12,6 +12,7 @@ import { mount as admin_ai_agents_policyMount } from './admin_ai_agents_policy';
 import { mount as admin_ai_agents_rosterMount } from './admin_ai_agents_roster';
 import { mount as admin_ai_element_modelsMount } from './admin_ai_element_models';
 import { mount as admin_archive_canaryMount } from './admin_archive_canary';
+import { mount as admin_cloudflare_botMount } from './admin_cloudflare_bot';
 import { mount as admin_cloudflare_sourcesMount } from './admin_cloudflare_sources';
 import { mount as admin_company_skillsMount } from './admin_company_skills';
 import { mount as admin_deck_betaMount } from './admin_deck_beta';
@@ -88,6 +89,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_ai_agents_roster', mount: admin_ai_agents_rosterMount },
   { file: 'admin_ai_element_models', mount: admin_ai_element_modelsMount },
   { file: 'admin_archive_canary', mount: admin_archive_canaryMount },
+  { file: 'admin_cloudflare_bot', mount: admin_cloudflare_botMount },
   { file: 'admin_cloudflare_sources', mount: admin_cloudflare_sourcesMount },
   { file: 'admin_company_skills', mount: admin_company_skillsMount },
   { file: 'admin_deck_beta', mount: admin_deck_betaMount },

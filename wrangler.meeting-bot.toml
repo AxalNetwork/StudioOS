@@ -46,3 +46,22 @@ scheduling_policy = "durable_object"
 [env.preview.containers.images.runtime]
 dockerfile = "./meeting-bot/Dockerfile"
 build_context = "./meeting-bot"
+
+# D5674: private host evidence. No tail consumer, so these logs cannot feed the archive recursively.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
+
+[env.preview.observability]
+enabled = true
+[env.preview.observability.logs]
+enabled = true
+head_sampling_rate = 1
+[env.preview.observability.traces]
+enabled = true
+head_sampling_rate = 0.01

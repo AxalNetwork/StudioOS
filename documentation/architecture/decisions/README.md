@@ -93,4 +93,5 @@ and citations by number keep working.
 - [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
 
 - [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
+- [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
 | `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
