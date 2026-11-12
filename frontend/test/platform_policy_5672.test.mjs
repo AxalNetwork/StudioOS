@@ -20,8 +20,10 @@ test('edge reachability never substitutes for independently confirmed customer/d
 });
 test('scheduled completion, queue age, durable DLQ and Workflow distinguish inactivity and unavailable telemetry',()=>{
  assert.equal(evaluatePlatform(sample('cron',{expectedCompletionAt:now-120000,status:'skipped'}),p,now).state,'firing');
- assert.equal(evaluatePlatform(sample('cron',{expectedCompletionAt:now-120000,lastSuccessAt:now-150000,status:'completed'}),p,now).state,'healthy');
- assert.equal(evaluatePlatform(sample('cron',{expectedCompletionAt:now-120000,lastSuccessAt:now+1,status:'completed'}),p,now).state,'unknown');
+ assert.equal(evaluatePlatform(sample('cron',{expectedRunAt:now-180000,expectedCompletionAt:now-120000,lastSuccessAt:now-150000,status:'completed'}),p,now).state,'healthy');
+ assert.equal(evaluatePlatform(sample('cron',{expectedRunAt:now-120000,expectedCompletionAt:now-120000,lastSuccessAt:now-150000,status:'completed'}),p,now).state,'firing');
+ assert.equal(evaluatePlatform(sample('cron',{expectedCompletionAt:now-120000,lastSuccessAt:now-150000,status:'completed'}),p,now).state,'unknown');
+ assert.equal(evaluatePlatform(sample('cron',{expectedRunAt:now-180000,expectedCompletionAt:now-120000,lastSuccessAt:now+1,status:'completed'}),p,now).state,'unknown');
  assert.equal(evaluatePlatform(sample('queue',{depth:0,oldestAgeSeconds:null}),p,now).reason,'quiet_queue');
  assert.equal(evaluatePlatform(sample('queue',{depth:3,oldestAgeSeconds:901}),p,now).state,'firing');
  assert.equal(evaluatePlatform(sample('queue',{depth:3,oldestAgeSeconds:null}),p,now).state,'unknown');

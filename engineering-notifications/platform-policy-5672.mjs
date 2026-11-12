@@ -26,8 +26,9 @@ export function evaluatePlatform(input,policy,now) {
   }else if(input.kind==='cron'){
     if(!number(input.expectedCompletionAt)||!number(policy.graceMs))return unknown('cron_schedule_unavailable');
     if(input.lastSuccessAt!=null&&(!number(input.lastSuccessAt)||input.lastSuccessAt>input.observedAt))return unknown('cron_completion_unverified');
+    if(input.status==='completed'&&(!number(input.expectedRunAt)||input.expectedRunAt>input.expectedCompletionAt))return unknown('cron_run_unverified');
     if(input.status==='failed')breach=true;
-    else if(input.status==='completed'&&number(input.lastSuccessAt)&&input.lastSuccessAt>=input.expectedCompletionAt-policy.graceMs)return {state:'healthy',reason:'confirmed_completion'};
+    else if(input.status==='completed'&&number(input.lastSuccessAt)&&input.lastSuccessAt>=input.expectedRunAt)return {state:'healthy',reason:'confirmed_completion'};
     else if(now>input.expectedCompletionAt+policy.graceMs)breach=true;
     else return {state:'waiting',reason:'within_completion_deadline'};
     reason='missed_or_failed_completion';
