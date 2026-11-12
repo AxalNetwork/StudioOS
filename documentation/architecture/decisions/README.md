@@ -82,3 +82,4 @@ and citations by number keep working.
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
+| `D5565.md` | Strict portable WorkspaceSpec/ExecutorAdapter and injected-clock atomic lease/fencing protocol; unmounted and no new task/usage ledger. |
