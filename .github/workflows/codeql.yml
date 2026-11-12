@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     branches: [main]
   schedule:
     # Weekly Sunday 03:42 UTC — catches advisories that land between PRs
@@ -40,6 +41,29 @@ concurrency:
 # cannot read the code-scanning API (it answers 403 to their token).
 # Findings never fail the job.
 jobs:
+  scope:
+    name: security scan scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      scan: ${{ steps.scope.outputs.scan }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Verify prior-run artifact read permission
+        run: node scripts/scan-scope.mjs verify-artifact-read
+      - name: Select scan scope
+        id: scope
+        run: node scripts/scan-scope.mjs scope
+
   # D721: ask, do not assume, whether code scanning takes an upload. It is
   # free on a public repository and needs GitHub Code Security on a private
   # one, which this repository does not have. The repository has been both
@@ -48,6 +72,8 @@ jobs:
   # codeql.yml and semgrep.yml; code_scanning_visibility_d721.test.mjs keeps
   # the two identical and runs its step.
   visibility:
+    needs: scope
+    if: needs.scope.outputs.scan == 'true'
     name: code scanning takes uploads?
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -78,7 +104,8 @@ jobs:
 
   analyze:
     name: analyze (${{ matrix.language }})
-    needs: visibility
+    needs: [scope, visibility]
+    if: needs.scope.outputs.scan == 'true'
     runs-on: ubuntu-latest
     # 60, not 30: the JavaScript analysis took 28+ minutes on main (2026-11-08).
     timeout-minutes: 60
@@ -92,6 +119,9 @@ jobs:
             build-mode: none
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
@@ -107,3 +137,55 @@ jobs:
           upload: ${{ needs.visibility.outputs.upload }}
       - name: Report findings
         run: python3 scripts/sarif-summary.py "CodeQL (${{ matrix.language }})" codeql-results
+      - name: Save opaque finding fingerprints
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/scan-scope.mjs snapshot codeql codeql-results .scan-fingerprints/${{ matrix.language }}.json
+      - name: Upload finding fingerprints
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-fingerprints-codeql-${{ matrix.language }}
+          path: .scan-fingerprints/${{ matrix.language }}.json
+          if-no-files-found: error
+          retention-days: 90
+
+  findings:
+    name: main scan findings
+    needs: analyze
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    # Both scanners update the same incident; never race its creation/closure.
+    concurrency:
+      group: scan-main-findings
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: scan-fingerprints-codeql*
+          path: .scan-input
+          merge-multiple: true
+      - name: Compare with the previous completed main scan
+        run: node scripts/scan-scope.mjs prepare codeql .scan-input .scan-state
+      - name: Retain the scan baseline and outstanding fingerprints
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-state-codeql
+          path: .scan-state/state.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Reconcile one main scan alert
+        env:
+          SCAN_FACTS_FILE: .scan-state/facts.json
+        run: node scripts/github-alerts.mjs scan

@@ -18,6 +18,7 @@ import {
   ALERT_KINDS, QUEUE_DEFAULTS, failingTests, mainState, message, queueStallState, queueState, reviewState, transition,
 } from './lib/githubAlerts.mjs';
 import { safeGithubUrl } from './lib/ciClassify.mjs';
+import { readScanAlert, scanAlertBody, scanFacts } from './lib/scanScope.mjs';
 
 const env = process.env;
 const api = env.GITHUB_API_URL || 'https://api.github.com';
@@ -72,6 +73,29 @@ async function apply(kind, active, facts) {
 
 async function main() {
   const mode = process.argv[2];
+  if (mode === 'scan') {
+    const facts = scanFacts(JSON.parse(readFileSync(env.SCAN_FACTS_FILE, 'utf8')));
+    if (!facts.baseline) return console.log('scan: no known baseline; no alert transition');
+    // Separate scanners share one issue. Their short report jobs are serialized;
+    // resolving one scanner cannot close the other's outstanding findings.
+    let issue = null;
+    for (let page = 1; page <= 100; page++) {
+      const rows = await gh(`/repos/${repo}/issues?state=open&per_page=100&page=${page}`);
+      if (!Array.isArray(rows)) throw new Error('Unreadable scan alert inventory');
+      issue = rows.find(row => !row.pull_request && row.title === ALERT_KINDS.scan.title);
+      if (issue || rows.length < 100) break;
+      if (page === 100) throw new Error('Scan alert inventory cap reached');
+    }
+    const states = issue ? readScanAlert(issue.body) : {};
+    states[facts.scanner] = facts;
+    const active = Object.values(states).some(state => Object.keys(state.counts).length > 0);
+    if (!active && !issue) return;
+    const body = scanAlertBody(states);
+    if (!issue) return gh(`/repos/${repo}/issues`, { method: 'POST', body: JSON.stringify({ title: ALERT_KINDS.scan.title, body }) });
+    if (body !== issue.body) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ body }) });
+    if (!active) await gh(`/repos/${repo}/issues/${issue.number}`, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) });
+    return;
+  }
   if (mode === 'queue-stalled') {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&status=completed&per_page=30`);
     const runs = (list.workflow_runs || []).filter(run => run.head_branch?.startsWith('gh-readonly-queue/main/')).slice(0, 2);
@@ -122,7 +146,7 @@ async function main() {
     const active = tap.trim() ? failures.names.length + failures.more > 0 : null;
     return apply('future-clock', active, { days: Number(env.FUTURE_CLOCK_DAYS) || 0, failures, runUrl: env.RUN_URL });
   }
-  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled or future-clock`);
+  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled, future-clock or scan`);
 }
 
 main().catch((e) => {

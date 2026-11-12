@@ -63,3 +63,5 @@ passing over nothing.
 A module belongs here when a CLI's *decision* is worth testing separately from
 its *effects* — which is most of them, and all the dangerous ones. If it needs
 to spawn something or talk to Cloudflare, that part stays in the script above.
+
+| `scanScope.mjs` | D5602: PR scan policy, opaque finding snapshots, outstanding-new state and redacted shared incident format. |

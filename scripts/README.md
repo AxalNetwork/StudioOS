@@ -10,6 +10,7 @@
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
 | `claim.mjs` | D5617: atomic claim refs, renewal, release, inspection and comment-only expiry reaping; identity flags `--slot`, `--agent`, `--session`; exit 3 held, 4 label fallback required. |
+| `scan-scope.mjs` | D5602: scan admission, authenticated prior-run artifact proof, opaque SARIF snapshots and main baseline preparation. |
 
 ## The guards
 
