@@ -1,5 +1,5 @@
 /** D5673: real SQLite source journal, paginated provider fixtures and hostile metadata/redirection refusals. */
-import test from 'node:test';
+import test, { before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -11,6 +11,8 @@ import { d1CfSourceStore, pendingCfSourceReceipts, forwardPendingCfSourceReceipt
 import { reconcileCfScript, cfReadApi, type ReadCfApi } from '../src/services/cloudflareDeployments.ts';
 import { cfRoute, parseCfReceipt, forwardCfReceipt } from '../src/services/cloudflareSourceReceipt.ts';
 const NOW=1900000000000;
+before(()=>mock.timers.enable({apis:['Date'],now:NOW}));
+after(()=>mock.timers.reset());
 const uid=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 function fixture(n=3){
   const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('../sql/migrations/202611121040_5673_cloudflare_source_receipts.sql',import.meta.url),'utf8'));
@@ -138,7 +140,7 @@ test('all-script reconcile cooldown respects any recently advanced script and av
  const journey=async(r:any)=>{
   const db=migratedDatabase(),original=globalThis.fetch,secret='synthetic-source-write-key'.repeat(3);let calls=0;
   try{
-   db.exec("INSERT INTO users(id,name,email,role,is_active) VALUES (66,'Hq','hq@example.test','admin',1);INSERT INTO super_admins(user_id) VALUES (66);INSERT INTO user_sessions(jti,user_id,factor,created_at,last_step_up_at) VALUES ('source-totp',66,'totp',datetime('now'),datetime('now'));");
+   db.exec("INSERT INTO users(id,name,email,role,is_active) VALUES (66,'Hq','hq@example.test','admin',1);INSERT INTO super_admins(user_id) VALUES (66);INSERT INTO user_sessions(jti,user_id,factor,created_at,last_step_up_at) VALUES ('source-totp',66,'totp','2030-03-17T17:46:40Z','2030-03-17T17:46:40Z');");
    const token=await new SignJWT({user_id:66}).setJti('source-totp').setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('5m').sign(new TextEncoder().encode(secret));
    const app=new Hono<any>();app.route('/source',r);const env={JWT_SECRET:secret,ENVIRONMENT:'development',DB:d1Over(db),CF_SOURCE_POLL:'on',CF_OBSERVER_READ_TOKEN:'synthetic-read-only',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32)};
    globalThis.fetch=async()=>{calls++;throw Error('synthetic provider offline');};
