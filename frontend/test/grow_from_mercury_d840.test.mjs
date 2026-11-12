@@ -18,6 +18,7 @@ import GrowFromMercury from '../src/pages/cycles/GrowFromMercury.jsx';
 import { mercuryView, money, monthLabel, runwayText } from '../src/pages/cycles/growFromMercury.js';
 import { cyclesWrite } from '../src/lib/api/cycles.js';
 import { makeCycleWrites } from '../src/lib/api/cycleWrites.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const draw = (slug, part) => renderToStaticMarkup(h(GrowFromMercury, { slug, part, projectId: 101, reload() {} }));
@@ -140,7 +141,7 @@ test('the three calls go to the Worker\'s routes, and every fed module mounts th
     ['/cycles/grow/mercury/facts/3?project=101', 'DELETE', null],
     ['/cycles/grow/mercury/sync', 'POST', JSON.stringify({ project: 101 })],
   ]);
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const route = cycleRouteText();
   for (const slug of ['revenue-and-traction', 'durable-company-building', 'team-expansion', 'distribution', 'partner-network']) {
     assert.ok(route.includes(`fromMercury('${slug}', data, ctx)`), slug);
   }

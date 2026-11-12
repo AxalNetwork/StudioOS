@@ -12,7 +12,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { RecordMount } from '../src/pages/cycles/CycleRoute.jsx';
+import { RecordMount } from '../src/pages/cycles/defs/validate.jsx';
 import { interviewListOf, interviewsOf } from '../src/lib/discoveryEvidence.js';
 
 const h = React.createElement;

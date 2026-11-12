@@ -243,6 +243,7 @@ export default function ResearchWorkspace({ role = 'founder', user = null }) {
       return (
         <Suspense fallback={<Loading />}>
           <LibraryZone
+            key={`${user?.id ?? 'anonymous'}:${role}`}
             role={role}
             zoneFilters={(opts) => zoneFiltersFor(role, 'research/library', opts)}
             /* `handlers` — dropped here until now, and the drop was invisible:

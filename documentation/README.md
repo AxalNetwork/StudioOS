@@ -37,6 +37,7 @@ nothing here is served.
 | How do archetype, skills and values profiling work, and how do they change over time? | [architecture/PROFILING_V2.md](architecture/PROFILING_V2.md) — the Profiling v2 spec (D356) that Sessions 7–15 build against. |
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
+| May I add to `api.js`, `App.jsx`, `CycleRoute.jsx`, `index.ts` or `advisors.ts`? | No: [architecture/HUBS.md](architecture/HUBS.md) says where each new entry goes instead (D5615) |
 
 The visible meeting bot’s owner steps and rollout checks are in [`MEETING_BOT.md`](operations/MEETING_BOT.md) (D886, #2587).
 

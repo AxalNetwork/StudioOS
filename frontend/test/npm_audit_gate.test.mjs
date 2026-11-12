@@ -54,15 +54,9 @@ function jobBlock(name) {
 test('the gate is never made to pass on a failure', () => {
   // The easy "fix" for a flaky security gate, and the one that must never land.
   assert.doesNotMatch(CI, /npm-audit-gate\.mjs[^\n]*\|\|\s*true/);
-  // Checked over each WHOLE job rather than around the call site: a
-  // `continue-on-error: true` sits at step level, several lines above the
-  // `run:` it disarms, and can be added to either job. Scanning near the first
-  // call only would have missed it on the second — which is what the mutation
-  // check caught when this test was written the narrow way.
-  for (const name of ['audit-frontend', 'audit-worker']) {
-    assert.doesNotMatch(jobBlock(name), /continue-on-error:\s*true/,
-      `a security gate allowed to fail silently is not a gate (${name})`);
-  }
+  // Scan the entire job so this covers both audit steps and the job itself.
+  assert.doesNotMatch(jobBlock('fast'), /continue-on-error:\s*true/,
+    'the fast job must report failures from either audit step');
 });
 
 test('an unreachable advisory database exits non-zero and says it is not a finding', () => {

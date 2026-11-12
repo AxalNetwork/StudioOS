@@ -1,0 +1,32 @@
+{
+  "GET /api/legalcap/compliance/:dealId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/legalcap/diligence/:dealId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/legalcap/legal/docs/:dealId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/legalcap/spinout/status/:dealId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/legalcap/subsidiaries/:dealId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/legalcap/legal/docs/:id/sign": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

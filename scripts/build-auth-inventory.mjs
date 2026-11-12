@@ -13,7 +13,7 @@
  * The reading rules are scripts/lib/authInventory.mjs. The JSON is build
  * output, never committed (.gitignore), like the route map's projections.
  *
- * THE LEDGER, scripts/auth-inventory-ledger.json. Unknown authorization is
+ * THE LEDGER, scripts/baselines/auth-inventory/. Unknown authorization is
  * review required: every route the reader cannot place behind an identity
  * gate with ownership evidence has an entry, keyed `METHOD path`, with
  *   review  the reason the reader gives (no_gate_found, forwarded, optional_auth,
@@ -34,14 +34,16 @@
  *     note, or a verified one with no test file that exists;
  *   - a registered mount that resolves to no route at all.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inventory } from './lib/authInventory.mjs';
+import { inventory, familyOf } from './lib/authInventory.mjs';
+import { readSplit, writeSplit, entryFile } from './lib/splitLedger.mjs';
 import { registeredMounts } from './lib/routeRegistry.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const LEDGER = join(ROOT, 'scripts', 'auth-inventory-ledger.json');
+const LEDGER = join(ROOT, 'scripts/baselines/auth-inventory');
+export const authLedgerFile = (key) => entryFile(familyOf(key.slice(key.indexOf(' ') + 1)));
 const OUT = join(ROOT, 'documentation', 'architecture', 'AUTH_INVENTORY.json');
 
 export const STATES = ['unreviewed', 'public_by_design', 'verified'];
@@ -68,7 +70,7 @@ export function ledgerProblems(rows, ledger, { root = ROOT, mounts = [] } = {}) 
   for (const r of rows) {
     if (!r.review) continue;
     const key = `${r.method} ${r.path}`;
-    if (!entries[key]) problems.push(`${key} — ${r.review} (${r.file}:${r.line}): no ledger entry. Put it behind a gate, or add it to scripts/auth-inventory-ledger.json as unreviewed.`);
+    if (!entries[key]) problems.push(`${key} — ${r.review} (${r.file}:${r.line}): no ledger entry. Put it behind a gate, or add it to scripts/baselines/auth-inventory/ as unreviewed.`);
   }
   for (const [key, e] of Object.entries(entries)) {
     const r = byKey.get(key);
@@ -86,8 +88,10 @@ export function ledgerProblems(rows, ledger, { root = ROOT, mounts = [] } = {}) 
   return problems;
 }
 
-function readLedger() {
-  try { return JSON.parse(readFileSync(LEDGER, 'utf8')); } catch { return { routes: {} }; }
+export function readLedger(root = ROOT) {
+  const legacy = join(root, 'scripts', ['auth', 'inventory', 'ledger.json'].join('-'));
+  if (existsSync(legacy)) throw new Error(`obsolete ledger restored: ${legacy}; use scripts/baselines/auth-inventory/`);
+  return { routes: readSplit(join(root, 'scripts/baselines/auth-inventory'), authLedgerFile) };
 }
 
 function main() {
@@ -104,7 +108,7 @@ function main() {
       added += 1;
     }
     const sorted = Object.fromEntries(Object.entries(routes).sort(([a], [b]) => a.localeCompare(b)));
-    writeFileSync(LEDGER, `${JSON.stringify({ ...ledger, routes: sorted }, null, 2)}\n`);
+    writeSplit(LEDGER, sorted, authLedgerFile);
     console.log(`auth inventory: ${added} entr${added === 1 ? 'y' : 'ies'} added to the ledger as unreviewed.`);
     return;
   }
