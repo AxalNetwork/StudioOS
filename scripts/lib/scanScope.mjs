@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 export const SCAN_FILE_CAP = 3000;
 export const SCANNERS = Object.freeze(['codeql', 'semgrep']);
 export const SCAN_ALERT_TITLE = '[alert] a scan found something new on main';
-const LOCKFILE = /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|uv\.lock|poetry\.lock|Pipfile\.lock|Cargo\.lock|Gemfile\.lock|composer\.lock|packages\.lock\.json)$/;
+const LOCKFILE = /(?:^|\/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|uv\.lock|poetry\.lock|Pipfile\.lock|Cargo\.lock|Gemfile\.lock|composer\.lock|packages\.lock\.json|[^/]+\.lock|\.terraform\.lock\.hcl)$/;
 export function sensitiveScanPath(path) {
   return typeof path === 'string' && (path.startsWith('cloudflare-worker/sql/')
     || path === 'cloudflare-worker/src/auth.ts' || path.startsWith('cloudflare-worker/src/middleware/')

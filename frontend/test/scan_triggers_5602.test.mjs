@@ -14,7 +14,7 @@ const read = file => readFileSync(resolve(root, file), 'utf8');
 const paths = ['cloudflare-worker/sql/migrations/x.sql', 'cloudflare-worker/src/auth.ts',
   'cloudflare-worker/src/middleware/authz.ts', '.github/workflows/x.yml', 'wrangler.toml', 'wrangler-preview.toml',
   'package.json', 'frontend/package.json', 'cloudflare-worker/package-lock.json', 'apps/yarn.lock',
-  'apps/pnpm-lock.yaml', 'tools/uv.lock', 'Pipfile.lock', 'nested/bun.lockb', '.semgrepignore',
+  'apps/pnpm-lock.yaml', 'infra/.terraform.lock.hcl', 'apps/deno.lock', 'nix/flake.lock', 'tools/uv.lock', 'Pipfile.lock', 'nested/bun.lockb', '.semgrepignore',
   'scripts/sarif-summary.py', 'scripts/strip-suppressed-sarif.py'];
 function scopeChecks(m) {
   for (const event of ['push', 'schedule']) assert.equal(m.scanScope({ event, files: ['README.md'] }), true);
