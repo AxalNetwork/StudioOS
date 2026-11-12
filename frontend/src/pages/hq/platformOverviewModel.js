@@ -76,10 +76,10 @@ export const WEBHOOK_REFUSED_RUN = 3;
 /** This many is Critical (the Worker's WEBHOOK_FAILURE_CRITICAL). */
 export const WEBHOOK_CRITICAL_RUN = 10;
 /**
- * The webhook's silence threshold on this page: no delivery for this long
- * reads as Stale (owner answer C, 2026-11-09). The Worker's own silence
- * incident waits 72 h; which one stands is question Q4 on #4860. Silence is a
- * Low note on either scale and never lowers health on its own.
+ * The webhook's silence threshold: no delivery for this long reads as Stale
+ * (owner answer C, 2026-11-09), and the Worker notes silence at the same
+ * threshold (Q4 = B, 2026-11-12). Silence is a Low note and never lowers
+ * health on its own.
  */
 export const WEBHOOK_SILENCE_HOURS = 24;
 /** A Telegram channel tested within this many hours, with no error since, is Verified recently. */

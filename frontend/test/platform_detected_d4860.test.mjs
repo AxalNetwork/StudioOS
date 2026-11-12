@@ -22,7 +22,7 @@ import { resolve } from 'node:path';
 import { installAppDom, select } from './_appDom.mjs';
 import {
   signals, platformHealth, attention, detectedIncidents,
-  DLQ_HIGH, WEBHOOK_REFUSED_RUN, WEBHOOK_CRITICAL_RUN,
+  DLQ_HIGH, WEBHOOK_REFUSED_RUN, WEBHOOK_CRITICAL_RUN, WEBHOOK_SILENCE_HOURS,
 } from '../src/pages/hq/platformOverviewModel.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -139,6 +139,8 @@ test('the page uses the Worker\'s thresholds', () => {
   assert.equal(WEBHOOK_CRITICAL_RUN, worker('WEBHOOK_FAILURE_CRITICAL'));
   assert.equal(WEBHOOK_REFUSED_RUN, worker('WEBHOOK_FAILURE_STREAK'));
   assert.equal(DLQ_HIGH, worker('DLQ_HIGH'));
+  // #4860 Q4 = B: one silence threshold, 24 h, on both.
+  assert.equal(WEBHOOK_SILENCE_HOURS, worker('WEBHOOK_SILENCE_HOURS'));
 });
 
 test('without detected incidents, the page\'s own reading is on the Worker\'s scale: a backlog is never Critical', () => {
