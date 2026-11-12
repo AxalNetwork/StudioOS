@@ -129,3 +129,34 @@ test('equal provider timestamps preserve active version but do not invent rollba
  assert.equal((await f.store.read('deployments:studioos')).active_id,f.deps[2].id);
  }finally{f.db.close();}
 });
+
+
+test('all-script reconcile cooldown respects any recently advanced script and avoids provider calls; old cursors allow a new attempt',async()=>{
+ const {Hono}=await import('hono'),{SignJWT}=await import('jose');
+ const {migratedDatabase,removeMigratedDatabases}=await import('./_storage_schema.ts');
+ const {default:router}=await import('../src/routes/admin_cloudflare_sources.ts');
+ const journey=async(r:any)=>{
+  const db=migratedDatabase(),original=globalThis.fetch,secret='synthetic-source-write-key'.repeat(3);let calls=0;
+  try{
+   db.exec("INSERT INTO users(id,name,email,role,is_active) VALUES (66,'Hq','hq@example.test','admin',1);INSERT INTO super_admins(user_id) VALUES (66);INSERT INTO user_sessions(jti,user_id,factor,created_at,last_step_up_at) VALUES ('source-totp',66,'totp',datetime('now'),datetime('now'));");
+   const token=await new SignJWT({user_id:66}).setJti('source-totp').setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('5m').sign(new TextEncoder().encode(secret));
+   const app=new Hono<any>();app.route('/source',r);const env={JWT_SECRET:secret,ENVIRONMENT:'development',DB:d1Over(db),CF_SOURCE_POLL:'on',CF_OBSERVER_READ_TOKEN:'synthetic-read-only',CLOUDFLARE_ACCOUNT_ID:'a'.repeat(32)};
+   globalThis.fetch=async()=>{calls++;throw Error('synthetic provider offline');};
+   const post=()=>app.request('https://unit.test/source/reconcile',{method:'POST',headers:{Authorization:'Bearer '+token}},env);
+   for(const script of ['studioos','studioos-meeting-bot','studioos-meeting-bot-preview','studioos-tail']){
+    db.exec('DELETE FROM cf_source_cursors');await d1CfSourceStore(env.DB as any).read('deployments:'+script);
+    db.prepare('UPDATE cf_source_cursors SET through_ms=?').run(Date.now());const response=await post();
+    assert.equal(response.status,429,script);assert.equal(calls,0,script+' must not poll during the route cooldown');
+   }
+   db.prepare('UPDATE cf_source_cursors SET through_ms=0').run();const response=await post();assert.equal(response.status,200);assert.equal((await response.json()).state,'unknown');assert.ok(calls>0);
+  }finally{globalThis.fetch=original;db.close();removeMigratedDatabases();}
+ };
+ await journey(router);
+ const dir=mkdtempSync(join(tmpdir(),'cf-source-cooldown-'));
+ try{
+  const url=new URL('../src/routes/admin_cloudflare_sources.ts',import.meta.url);let broken=readFileSync(url,'utf8');
+  broken=broken.replaceAll(/from '([^']+)'/g,(whole,name)=>name.startsWith('.')?'from '+JSON.stringify(new URL(name+'.ts',url).href):name==='hono'?'from '+JSON.stringify(import.meta.resolve('hono')):whole);
+  assert.ok(broken.includes('cursors.some('));broken=broken.replace('cursors.some(','cursors.slice(0,1).some(');const file=join(dir,'cooldown.ts');writeFileSync(file,broken);
+  await assert.rejects(journey((await import(pathToFileURL(file).href)).default),'single-script cooldown mutation must fail the real route');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
