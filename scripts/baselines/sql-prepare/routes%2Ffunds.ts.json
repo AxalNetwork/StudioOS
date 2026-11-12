@@ -1,0 +1,7 @@
+{
+  "callScope.sql @ routes/funds.ts": 1,
+  "manage.sql @ routes/funds.ts": 1,
+  "marks @ routes/funds.ts": 1,
+  "scope.sql @ routes/funds.ts": 1,
+  "where.join(' AND ') @ routes/funds.ts": 1
+}

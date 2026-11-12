@@ -215,6 +215,7 @@ export * from './api/newsletter.js';
 export * from './api/notion.js';
 export * from './api/partnerDealReads.js';
 export * from './api/partnerDealTypes.js';
+export * from './api/partnerDeliveryReviews.js';
 export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';

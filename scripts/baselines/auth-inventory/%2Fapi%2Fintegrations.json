@@ -1,0 +1,12 @@
+{
+  "GET /api/integrations/public/calendly/:userId": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/integrations/:provider/notify-me": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

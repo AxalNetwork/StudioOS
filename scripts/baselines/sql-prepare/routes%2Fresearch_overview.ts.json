@@ -1,0 +1,6 @@
+{
+  "SERVED_FUNDS @ routes/research_overview.ts": 7,
+  "bandSql @ routes/research_overview.ts": 1,
+  "liveIndexSql() @ routes/research_overview.ts": 2,
+  "liveRowSql() @ routes/research_overview.ts": 1
+}

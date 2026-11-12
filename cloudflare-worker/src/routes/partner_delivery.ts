@@ -755,7 +755,7 @@ partnerDelivery.get('/health', async (c) => {
  */
 partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -813,8 +813,8 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
     // read's revision whether or not the caller stated one: a request that
     // merged over an older row changes nothing.
     if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'engagement health', current);
-    const wrote = current
-      ? await c.env.DB.prepare(
+    const write = current
+      ? c.env.DB.prepare(
         `UPDATE partner_engagement_health
             SET owner_user_id = ?, scope_state = ?, scope_note = ?,
                 satisfaction = ?, satisfaction_source = ?, satisfaction_at = ?,
@@ -823,8 +823,8 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       ).bind(
         ownerId, scopeState, scopeNote, satisfaction, source, at, nowIso(),
         engagementId, Number(current.revision),
-      ).run()
-      : await c.env.DB.prepare(
+      )
+      : c.env.DB.prepare(
         `INSERT INTO partner_engagement_health
            (engagement_id, owner_user_id, scope_state, scope_note,
             satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
@@ -833,7 +833,28 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       ).bind(
         engagementId, ownerId, scopeState, scopeNote,
         satisfaction, source, at, nowIso(), nowIso(),
-      ).run();
+      );
+
+    // #5314 part 2 — A CHANGED REVIEW IS APPENDED, IN THE SAME BATCH. The
+    // health row keeps only the latest score; the history keeps each one as
+    // it was recorded, so a later edit no longer erases what the client said
+    // before. A save that leaves the review as it was appends nothing, and
+    // `changes() = 1` ties the append to the guarded write above: a stale
+    // write (part 3) changes no row, so it appends no review either.
+    let wrote: any;
+    if (!sameReview(current, { satisfaction, source, at })) {
+      const [w] = await c.env.DB.batch([
+        write,
+        c.env.DB.prepare(
+          `INSERT INTO engagement_client_reviews
+             (engagement_id, satisfaction, source, said_at, recorded_at, recorded_by)
+           SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1`,
+        ).bind(engagementId, satisfaction, source, at, nowIso(), user.id),
+      ]);
+      wrote = w;
+    } else {
+      wrote = await write.run();
+    }
     const saved = await c.env.DB.prepare(
       'SELECT revision FROM partner_engagement_health WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -849,6 +870,69 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       satisfaction,
       satisfaction_source: source,
       satisfaction_at: at,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Whether a health save leaves the client's review (score, source, when) as it was. */
+function sameReview(current: any, next: { satisfaction: any; source: any; at: any }) {
+  const s = (v: any) => (v == null ? null : Number(v));
+  const t = (v: any) => (v == null ? null : String(v));
+  return s(current?.satisfaction) === s(next.satisfaction)
+    && t(current?.satisfaction_source) === t(next.source)
+    && t(current?.satisfaction_at) === t(next.at);
+}
+
+/**
+ * #5314 part 2 — the client's reviews of one engagement, oldest first.
+ *
+ * Before this history began only the latest score was kept, so an engagement
+ * whose current score is on no history row says so (`earlier_not_recorded`).
+ * An unreadable history is `available: false` with the reason — never an
+ * empty list standing for "no reviews".
+ */
+partnerDelivery.get('/engagements/:engagementId/reviews', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    let rows: any[];
+    try {
+      const r = await c.env.DB.prepare(
+        `SELECT r.id, r.satisfaction, r.source, r.said_at, r.recorded_at, u.name AS recorded_by_name
+           FROM engagement_client_reviews r
+           LEFT JOIN users u ON u.id = r.recorded_by
+          WHERE r.engagement_id = ?
+          ORDER BY r.id`,
+      ).bind(engagementId).all<any>();
+      rows = r.results || [];
+    } catch (e) {
+      console.error('[delivery] client review history unreadable', e);
+      return c.json({
+        engagement_id: engagementId, available: false, items: null,
+        reason: 'Unreadable: the review history could not be read.',
+      });
+    }
+    const current = await c.env.DB.prepare(
+      'SELECT satisfaction FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    const earlierNotRecorded = current?.satisfaction != null && rows.length === 0;
+    return c.json({
+      engagement_id: engagementId,
+      available: true,
+      items: rows.map((r) => ({
+        id: Number(r.id),
+        satisfaction: r.satisfaction == null ? null : Number(r.satisfaction),
+        cleared: r.satisfaction == null,
+        source: r.source ?? null,
+        said_at: r.said_at ?? null,
+        recorded_at: r.recorded_at,
+        recorded_by_name: r.recorded_by_name ?? null,
+      })),
+      earlier_not_recorded: earlierNotRecorded,
+      earlier_note: earlierNotRecorded
+        ? 'Not recorded: the current score was saved before review history was kept, so earlier reviews are not on record.'
+        : null,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -2000,6 +2084,33 @@ function reportDto(r: any) {
     sent_at: r.sent_at ?? null,
     revision: Number(r.revision ?? 0),
     sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
+    ...blockedSection(r),
+  };
+}
+
+/**
+ * #5314 part 2 — THE REPORT'S BLOCKED SECTION, AS WRITTEN. Words the firm
+ * wrote, like Shipped and Next; the live blockers stay evidence beside it.
+ * A report saved before the section existed (or saved without stating it)
+ * has no `blocked_recorded_at` and reads "Not recorded" — never "nothing
+ * blocked", which would be a claim nobody made. A recorded section with no
+ * words is the firm stating that nothing is blocked.
+ */
+export function blockedSection(r: any) {
+  const recordedAt = r?.blocked_recorded_at ?? null;
+  if (!recordedAt) {
+    return {
+      blocked: null,
+      blocked_recorded: false,
+      blocked_recorded_at: null,
+      blocked_state_note: 'Not recorded: this report was saved without a Blocked section.',
+    };
+  }
+  return {
+    blocked: r.blocked ?? null,
+    blocked_recorded: true,
+    blocked_recorded_at: recordedAt,
+    blocked_state_note: null,
   };
 }
 
@@ -2167,6 +2278,7 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
     const existing = await c.env.DB.prepare(
       'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
     ).bind(engagementId, p.period).first<any>();
+    const hasBlocked = b != null && Object.prototype.hasOwnProperty.call(b, 'blocked');
 
     // A SENT REPORT IS FROZEN. It is a thing a client has already read; editing
     // it in place would make the record disagree with what they received, and
@@ -2188,11 +2300,20 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       // wins: the report the client received is not edited afterwards, and a
       // second edit that read an older draft does not overwrite a newer one.
       if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'report', existing);
+      // #5314 part 2: an omitted `blocked` leaves the section as it was; a
+      // present one (null included) records it now.
+      const blockedNow = hasBlocked
+        ? [trimOrNull(b.blocked, 4000), nowIso()]
+        : [existing.blocked ?? null, existing.blocked_recorded_at ?? null];
       const upd = await c.env.DB.prepare(
         `UPDATE engagement_status_reports
-            SET shipped = ?, next_up = ?, updated_at = ?, revision = revision + 1
+            SET shipped = ?, next_up = ?, blocked = ?, blocked_recorded_at = ?,
+                updated_at = ?, revision = revision + 1
           WHERE id = ? AND state = 'draft' AND revision = ?`,
-      ).bind(trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), existing.id, Number(existing.revision)).run();
+      ).bind(
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), ...blockedNow,
+        nowIso(), existing.id, Number(existing.revision),
+      ).run();
       if (!changedOne(upd)) {
         const now = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
           .bind(existing.id).first<any>();
@@ -2205,12 +2326,15 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       // lose cleanly instead of making a second row.
       const ins = await c.env.DB.prepare(
         `INSERT INTO engagement_status_reports
-           (uid, engagement_id, period, state, shipped, next_up, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
+           (uid, engagement_id, period, state, shipped, next_up, blocked, blocked_recorded_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
          ON CONFLICT (engagement_id, period) DO NOTHING`,
       ).bind(
         newUid(), engagementId, p.period,
-        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), nowIso(),
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000),
+        hasBlocked ? trimOrNull(b.blocked, 4000) : null, hasBlocked ? nowIso() : null,
+        nowIso(), nowIso(),
       ).run();
       if (!changedOne(ins)) {
         const now = await c.env.DB.prepare(
