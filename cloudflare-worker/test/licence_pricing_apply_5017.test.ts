@@ -322,7 +322,7 @@ test('the pure rules: no invisible average, unknown stays unknown, review kinds'
 
 // Regression for #5652 — synthetic supported-route interleaving.
 test('review closure racing the apply must not commit new pricing terms', async () => {
-  const {call,env,db,licence,one}=fixture();
+  const {call,env,licence}=fixture();
   const opened=await call(SUPER,'POST',`${P}/reviews`,{});
   assert.equal(opened.status,201);
   const before=licence();
@@ -341,7 +341,7 @@ test('review closure racing the apply must not commit new pricing terms', async 
 
 // Regression for #5653 — synthetic supported-route interleaving.
 test('a pricing policy change racing the apply must make the snapshot stale at commit', async () => {
-  const {call,env,db,licence}=fixture();
+  const {call,env,licence}=fixture();
   const snapshot=await call(SUPER,'POST',`${P}/snapshot`,{});
   assert.equal(snapshot.status,201);
   const before=licence();
