@@ -73,7 +73,7 @@ export function answerabilityOf(d) {
  * and for a client's document, which is not the reader's to change.
  */
 export function rowProblem(d) {
-  if (!d || d.source === 'client') return null;
+  if (!d || d.source === 'client' || d.read_only === true || d.in_ask === true) return null;
   if (d.index_state === 'failed') {
     return { reason: d.index_note || 'The last read failed.', action: 'retry', label: 'Retry' };
   }

@@ -6,14 +6,15 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import React, { act } from 'react';
 import LibraryZone from '../src/pages/research/LibraryZone.jsx';
+import ResearchWorkspace from '../src/workspaces/ResearchWorkspace.jsx';
 import { api } from '../src/lib/api.js';
 import { MAX_POLLS, batchSummary, hasPending, pollDelay, reindexTargets, runBatch } from '../src/pages/research/libraryIndexing.js';
 import { rowProblem } from '../src/pages/research/researchStates.js';
 import { mountContracts } from './_contracts_dom.mjs';
 
 const h = React.createElement;
-const doc = (uid, index_state, extra = {}) => ({ uid, title: `Doc ${uid}`, kind: 'document', source: 'own', index_state, in_ask: ['indexed', 'partial'].includes(index_state), chunk_count: null, ...extra });
-const lib = (items) => ({ items, indexed: items.filter((d) => d.in_ask).length, not_indexed: items.filter((d) => !d.in_ask).length, from_clients: 0 });
+const doc = (uid, index_state, extra = {}) => ({ uid, title: `Doc ${uid}`, kind: 'document', source: 'own', read_only: false, index_state, in_ask: ['indexed', 'partial'].includes(index_state), chunk_count: null, ...extra });
+const lib = (items) => ({ items, indexed: items.filter((d) => d.index_state === 'indexed').length, answerable: items.filter((d) => d.in_ask).length, not_answerable: items.filter((d) => !d.in_ask).length, from_clients: items.filter((d) => d.source === 'client').length });
 
 test('the schedule is bounded and slows down; pending counts only own documents', () => {
   assert.deepEqual([0, 1, 2, 3, 4, 5, 19].map(pollDelay), [2000, 3000, 5000, 8000, 13000, 15000, 15000]);
@@ -22,10 +23,10 @@ test('the schedule is bounded and slows down; pending counts only own documents'
   assert.equal(hasPending([doc('a', 'pending')]), true);
 });
 
-test('Re-index targets what Ask cannot fully read and is not already being read', () => {
-  const items = [doc('a', 'indexed'), doc('b', 'pending'), doc('c', 'failed'), doc('d', 'partial'), doc('e', 'unsupported'), doc('f', 'failed', { source: 'client' })];
+test('Re-index targets what the server says is outside Ask and is not already being read', () => {
+  const items = [doc('a', 'indexed'), doc('b', 'pending'), doc('c', 'failed'), doc('d', 'partial'), doc('e', 'unsupported'), doc('f', 'failed', { source: 'client', in_ask: false }), doc('g', 'failed', { read_only: true }), doc('h', 'indexed', { in_ask: false })];
   // Mutation checked: keep pending documents in the set → b is resubmitted.
-  assert.deepEqual(reindexTargets(items).map((d) => d.uid), ['c', 'd', 'e']);
+  assert.deepEqual(reindexTargets(items).map((d) => d.uid), ['c', 'e', 'h']);
 });
 
 test('the batch runs at most two at once, waits for all, and reports each outcome', async () => {
@@ -122,4 +123,65 @@ test('the failed row names its recorded reason and the next step', async () => {
     assert.equal(byTid(m.ui, 'library-retry-b'), null, 'an unsupported file is replaced, not retried');
     assert.match(m.ui.text(), /Remove it and add a version with readable text\./);
   } finally { await m.close(); s.restore(); }
+});
+
+for (const terminal of ['partial', 'failed']) {
+  test(`a mounted pending row reaches ${terminal}, retains its reason, and stops polling`, async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    const s = stubs([lib([doc('a', 'pending')]), lib([doc('a', terminal, { index_note: 'Only the opening pages were readable.' })])]);
+    const m = await mountLibrary();
+    try {
+      await tick(m.ui, 2000);
+      assert.match(m.ui.text(), terminal === 'partial' ? /Partly answerable/ : /Failed/);
+      assert.match(m.ui.text(), /Only the opening pages were readable/);
+      assert.equal(Boolean(byTid(m.ui, 'library-retry-a')), terminal === 'failed');
+      assert.match(m.ui.text(), terminal === 'partial' ? /1 answerable/ : /0 answerable/);
+      await tick(m.ui, 60000);
+      assert.equal(s.calls.documents, 2);
+    } finally { await m.close(); s.restore(); mock.timers.reset(); }
+  });
+}
+
+test('shared and read-only pending rows never poll, retry, or inflate Ask counts', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const s = stubs([lib([
+    doc('shared', 'pending', { source: 'client', read_only: true, in_ask: false }),
+    doc('locked', 'failed', { read_only: true, in_ask: false }),
+    doc('part', 'partial'),
+  ])]);
+  const m = await mountLibrary();
+  try {
+    assert.match(m.ui.text(), /1 answerable/);
+    assert.ok(!byTid(m.ui, 'library-retry-locked'));
+    assert.ok(!byTid(m.ui, 'library-retry-shared'));
+    await tick(m.ui, 60000);
+    assert.equal(s.calls.documents, 1);
+    assert.deepEqual(s.calls.reindex, []);
+    assert.deepEqual(reindexTargets(safeItems()), []);
+  } finally { await m.close(); s.restore(); mock.timers.reset(); }
+  function safeItems() { return [doc('pending', 'pending', { read_only: true }), doc('failed', 'failed', { read_only: true }), doc('partial', 'partial')]; }
+});
+
+test('switching library users fences an in-flight poll and cancels the old schedule', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  let release;
+  const late = new Promise((resolve) => { release = resolve; });
+  const s = stubs([lib([doc('old', 'pending')]), late, lib([doc('new', 'indexed')])]);
+  function Switchable() {
+    const [id, setId] = React.useState(1);
+    return h(React.Fragment, null, h('button', { onClick: () => setId(2) }, 'Switch library user'), h(ResearchWorkspace, { role: 'founder', user: { id } }));
+  }
+  const media = globalThis.matchMedia;
+  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  let ui;
+  try {
+    ui = await mountContracts(h(Switchable), '/research/library'); await settle();
+    assert.match(ui.text(), /Doc old/);
+    await tick(ui, 2000); assert.equal(s.calls.documents, 2);
+    await ui.click('Switch library user'); await settle();
+    assert.match(ui.text(), /Doc new/);
+    await act(async () => { release(lib([doc('late-old-user', 'pending')])); }); await settle();
+    assert.doesNotMatch(ui.text(), /Doc old|Doc late-old-user/);
+    await tick(ui, 60000); assert.equal(s.calls.documents, 3);
+  } finally { if (ui) await ui.unmount(); globalThis.matchMedia = media; s.restore(); mock.timers.reset(); }
 });

@@ -37,7 +37,8 @@ export const FIRST_TEN: readonly SkillInputs[] = Object.freeze([
   ] },
   { slug: 'board-meeting-brief', needs: [
     need('the company or project profile', 'project.summary', 'project_profile'),
-    need('metrics for the reporting period', 'grow.records', 'typed_record'),
+    need('recorded KPIs for the reporting period', 'grow.board_metrics', 'typed_record'),
+    need('recorded monthly burn, for any runway claim', 'grow.burn', 'typed_record', false),
     need('recorded balances, for any runway claim', 'mercury.balances', 'typed_record', false),
     need('compliance dates', 'compliance.calendar', 'typed_record', false),
   ] },
