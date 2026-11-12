@@ -54,8 +54,8 @@ const RETAINERS = {
 const CAP_NONE = { over_committed_count: null, cap_note: 'Capacity limits not set. Set available hours to identify over-allocation; until then nobody is marked over-committed.', people: [] };
 const CAP_SET = {
   over_committed_count: 1,
-  people: [{ user_id: 9, name: 'Rin', total_hours: 46, cap_hours: 40, cap_source: 'person', over_committed: true },
-           { user_id: 10, name: 'Sam', total_hours: 10, cap_hours: 40, cap_source: 'firm', over_committed: false }],
+  people: [{ user_id: 9, name: 'Rin', total_hours: 199.33, total_hours_per_week: 46, cap_hours: 40, cap_source: 'person', over_committed: true },
+           { user_id: 10, name: 'Sam', total_hours: 43.33, total_hours_per_week: 10, cap_hours: 40, cap_source: 'firm', over_committed: false }],
 };
 
 const tile = (tiles, key) => tiles.find((t) => t.key === key);
@@ -92,7 +92,7 @@ test('D394: the feed names each line\'s receipt, and a seat reads as recorded by
   assert.deepEqual(keys, ['risk-1', 'due-1', 'due-2', 'cap-9', 'renew-1', 'seat-1']);
   assert.ok(f.every((x) => x.receipt && x.to), 'every line has a receipt and a place to act');
   assert.equal(f[0].body, '2 milestones overdue');
-  assert.equal(f.find((x) => x.key === 'cap-9').body, '46 h against a cap of 40 h');
+  assert.equal(f.find((x) => x.key === 'cap-9').body, '46 h a week against a cap of 40 h a week'); // #5314 part 4: one basis
   const seat = f.find((x) => x.key === 'seat-1');
   assert.equal(seat.grant, 'Scope recorded by the firm: Board, KPIs');
   assert.ok(!f.some((x) => /granted by/i.test(`${x.grant || ''}${x.title}`)), 'no chip speaks in the founder\'s voice');
