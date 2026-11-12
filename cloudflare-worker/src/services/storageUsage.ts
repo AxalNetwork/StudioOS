@@ -66,13 +66,6 @@ const VENTURE_OWNERS = `(SELECT p.id AS project_id, COALESCE(
 // ventures as one JSON array (`json_each(?)`); a personal area binds their id.
 // Group rows are per venture (`project_id`, NULL for personal files).
 const AREAS: ReadonlyArray<Def> = [
-  { key: 'agent_compute', kind: 'documents', scope: 'personal',
-    groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
-      FROM agent_compute_objects WHERE owner_user_id = ?`,
-    largest: `SELECT name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
-      FROM agent_compute_objects WHERE owner_user_id = ? ORDER BY size_bytes DESC, uid LIMIT 10`,
-    owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
-      FROM agent_compute_objects GROUP BY owner_user_id` },
   { key: 'data_room', kind: 'data_room', scope: 'company',
     groups: `SELECT f.project_id AS project_id, COUNT(*) AS files, SUM(f.size_bytes) AS bytes,
       SUM(CASE WHEN f.size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
@@ -294,6 +287,13 @@ const AREAS: ReadonlyArray<Def> = [
       SUM(CASE WHEN size_bytes IS NULL THEN 1 ELSE 0 END) AS unknown_size_files
       FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND TRIM(raw_file_r2_key) <> '' AND size_missing_at IS NULL
       GROUP BY user_id` },
+  { key: 'agent_compute', kind: 'documents', scope: 'personal',
+    groups: `SELECT NULL AS project_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
+      FROM agent_compute_objects WHERE owner_user_id = ?`,
+    largest: `SELECT name, NULL AS version, size_bytes AS bytes, created_at AS added_at, NULL AS project_id, uid AS ref
+      FROM agent_compute_objects WHERE owner_user_id = ? ORDER BY size_bytes DESC, uid LIMIT 10`,
+    owners: `SELECT owner_user_id AS user_id, COUNT(*) AS files, SUM(size_bytes) AS bytes, 0 AS unknown_size_files
+      FROM agent_compute_objects GROUP BY owner_user_id` },
 ];
 
 /**
