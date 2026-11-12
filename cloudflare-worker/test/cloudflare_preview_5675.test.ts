@@ -1,10 +1,12 @@
 /** D5675: provider-free signed preview callback, existing host lifecycle, promotion refusal and synthetic cleanup. No cloud resources or messages. */
 import { spawnSync } from 'node:child_process';
-import test from 'node:test';import assert from 'node:assert/strict';
+import test, { before, after, mock } from 'node:test';import assert from 'node:assert/strict';
 import { mkdtempSync,readFileSync,writeFileSync,rmSync,existsSync } from 'node:fs';import { tmpdir } from 'node:os';import { join } from 'node:path';import { pathToFileURL } from 'node:url';
 import { preparePreviewCanary,previewIngress,previewKey,verifyPreviewRequest,validPreviewReceipt,previewPromotionEligible,reconcilePreviewCanaryAlarm,type CanaryJob } from '../../meeting-bot/worker/previewCanary.ts';
 import { MeetingBotContainer } from '../../meeting-bot/worker/container.ts';
 import { signRequest } from '../../meeting-bot/src/callback.ts';import { runPreviewCallback } from '../../meeting-bot/src/previewCanary.ts';
+before(()=>mock.timers.enable({apis:['Date'],now:1900000000000}));
+after(()=>mock.timers.reset());
 const origin='https://studioos-meeting-bot-preview.synthetic.workers.dev',root='synthetic-preview-secret-'.repeat(3);
 const job=():CanaryJob=>({version:1,audience:'preview',script:'studioos-meeting-bot-preview',id:'00000000-0000-4000-8000-000000000001',nonce:'b'.repeat(32),revision:'a'.repeat(40),created_ms:Date.now(),op:'run'});
 const env=()=>({CF_BOT_AUDIENCE:'preview',PREVIEW_CANARY_ENABLED:'on',PREVIEW_CANARY_ORIGIN:origin,MEETING_BOT_PREVIEW_SECRET:root,MEETING_BOT_VERSION:'a'.repeat(40)});
