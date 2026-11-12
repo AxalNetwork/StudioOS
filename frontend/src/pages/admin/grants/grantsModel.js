@@ -126,6 +126,8 @@ const WAIT_WORDS = {
   schedule_signed: 'the schedule to be signed',
   start_date: 'its start date',
   ended_by_date: 'its end date has passed',
+  // D5052/D5051: the frozen policy's gate holds the program until its agreement is executed.
+  agreement_executed: 'its agreement to be executed',
 };
 export const waitingWord = (list) => (list || []).map((w) => WAIT_WORDS[w] || String(w).replace(/_/g, ' ')).join(' and ');
 
