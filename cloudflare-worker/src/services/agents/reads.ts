@@ -230,6 +230,41 @@ const centsOf = (cents: unknown, dollars: unknown) => (cents != null && Number.i
  * is named in `missing_fields`, never filled in; the preflight then calls the input partial.
  */
 const TYPED_MORE: Partial<Record<string, Reader>> = {
+  'grow.board_metrics': async (env, c) => {
+    if (!c.projectId) return null;
+    const who = await sponsorOf(env, c);
+    if (!who || !(await isTeamViewer(env, { id: Number(who.id), founder_id: who.founder_id ?? null }, c.projectId))) {
+      return withheld('Only the venture’s team reads its recorded board metrics.');
+    }
+    const now = new Date();
+    const from = c.page?.from ?? monthsAgo(now, 3);
+    const to = c.page?.to ?? now.toISOString().slice(0, 10);
+    if (c.page?.after || !DAY.test(from) || !DAY.test(to) || from > to) throw new ReadPageError('invalid_page');
+    const rows = (await env.DB.prepare(
+      `SELECT v.uid, k.label, k.unit, k.currency, v.as_of, v.value, v.value_cents, v.source
+         FROM custom_kpi_values v JOIN custom_kpis k ON k.id = v.kpi_id
+        WHERE k.project_id = ? AND v.as_of >= ? AND v.as_of <= ?
+        ORDER BY v.as_of DESC, v.id DESC LIMIT ?`,
+    ).bind(c.projectId, from, to, PIPELINE_LIMIT).all<{
+      uid: string; label: string; unit: 'money' | 'pct' | 'count'; currency: string | null;
+      as_of: string; value: number | null; value_cents: number | null; source: string;
+    }>()).results ?? [];
+    const count = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM custom_kpi_values v JOIN custom_kpis k ON k.id = v.kpi_id
+        WHERE k.project_id = ? AND v.as_of >= ? AND v.as_of <= ?`,
+    ).bind(c.projectId, from, to).first<{ n: number }>().catch(() => null);
+    const records = rows.map(row => ({
+      ref: `custom_kpi_value:${row.uid}`, at: row.as_of, label: row.label,
+      value: row.unit === 'money' ? row.value_cents : row.value,
+      unit: row.unit === 'money' ? 'cents' : row.unit,
+      currency: row.unit === 'money' ? row.currency : null, source: row.source,
+    }));
+    const missingUnits = records.some(record => record.value == null || (record.unit === 'cents' && !record.currency));
+    return {
+      records, coverage: coverageOf(records.length, count?.n ?? null), period: { from, to },
+      source: 'custom_kpi_values', ...(missingUnits ? { missing_fields: ['value or currency'] } : {}),
+    };
+  },
   // Net burn from the venture's metrics (`project_metrics`: typed by the founder, or fed from Stripe or Mercury),
   // by snapshot date, in a period (default the last twelve months). The team only, as Mercury's figures are.
   'grow.burn': async (env, c) => {
@@ -391,6 +426,7 @@ export const READER_PROVIDES: Readonly<Record<string, 'project_profile' | 'compa
   'project.summary': 'project_profile', 'company.profile': 'company_profile', 'team.roster': 'roster',
   'mercury.balances': 'typed_record', 'stripe.revenue': 'typed_record', 'cap_table.read': 'typed_record',
   'grow.burn': 'typed_record', 'raise.pipeline': 'typed_record', 'validate.transcripts': 'typed_record', 'raise.diligence': 'typed_record',
+  'grow.board_metrics': 'typed_record',
   'validate.records': 'activity_summaries', 'build.records': 'activity_summaries', 'raise.records': 'activity_summaries', 'grow.records': 'activity_summaries',
 });
 

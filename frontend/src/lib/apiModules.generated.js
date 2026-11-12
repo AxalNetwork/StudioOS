@@ -64,6 +64,7 @@ export * from './api/capTableScenarios.js';
 export * from './api/capitalRelationships.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
+export * from './api/clientDeliverables.js';
 export * from './api/closings.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';

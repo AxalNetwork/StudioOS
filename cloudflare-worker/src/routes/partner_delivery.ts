@@ -24,9 +24,11 @@
  *      208:160 is explicit that a partner-side write to either would be the
  *      firm reporting a metric about itself. No route here accepts them, on
  *      create or on patch, and a test sends both and asserts the row is
- *      unchanged. The consequence is real and goes on the page rather than
- *      being hidden: on this build every deliverable reads *Unopened* forever,
- *      and the read says why.
+ *      unchanged. The client sets `opened_at` through its own route,
+ *      `POST /api/client/deliverables/:uid/open` (#5314 part 1,
+ *      `client_deliverables.ts`), once, when it opens the shared link; a
+ *      deliverable whose open could not have been recorded reads
+ *      "Not recorded", and the read says why.
  *
  * UTILISATION IS READ, NOT RECOMPUTED. `/health` imports the same
  * `utilisationFor` that `/api/partner/pipeline/retainers` uses. The Health
@@ -47,7 +49,7 @@ import {
 } from './_t13t14t15_helpers';
 import type { ReadTracking } from './_partner_workspace_helpers';
 import {
-  daysBetween, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
   periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
   requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
 } from './_partner_workspace_helpers';
@@ -277,7 +279,7 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -316,7 +318,7 @@ partnerDelivery.get('/board', async (c) => {
     const reportByEng = new Map<number, any>((reports.results || []).map((r: any) => [Number(r.engagement_id), r]));
 
     const group = groupByEngagement;
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
     const seatByEng = group(seats.results || []);
     const msByEng = group(milestones.results || []);
     const blByEng = group(blockers.results || []);
@@ -523,7 +525,7 @@ partnerDelivery.get('/health', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -568,7 +570,7 @@ partnerDelivery.get('/health', async (c) => {
     // THE WHOLE COLLECTION, not the first row (#4690): `seatStateFor` is the one
     // definition the Board and Capacity use too.
     const seatsByEng = groupByEngagement(seats.results || []);
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
 
     const by = groupByEngagement;
     const msByEng = by(milestones.results || []);
@@ -1078,7 +1080,25 @@ async function bookReadTracking(env: Env, partnerId: number): Promise<ReadTracki
       WHERE e.partner_id = ? AND d.opened_at IS NOT NULL
       LIMIT 1`,
   ).bind(partnerId).first<any>();
-  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : []);
+  // #5314 part 1: once the client-open route records, the answer is "yes, from then".
+  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : [], undefined, await deliverableReadsSince(env));
+}
+
+/**
+ * #5314 part 1: the median days from send to the client's first open, over the
+ * opens actually recorded. Fewer than MIN_OPENS_FOR_MEDIAN opens is not a
+ * median anybody should plan by, so it stays null and says how many there are.
+ */
+const MIN_OPENS_FOR_MEDIAN = 3;
+function medianDaysToOpen(items: any[]): { value: number | null; opens: number } {
+  const days = items
+    .filter((d) => d.sent_at && d.opened_at)
+    .map((d) => daysBetween(d.sent_at, String(d.opened_at)))
+    .filter((n): n is number => n != null && n >= 0)
+    .sort((a, b) => a - b);
+  if (days.length < MIN_OPENS_FOR_MEDIAN) return { value: null, opens: days.length };
+  const mid = Math.floor(days.length / 2);
+  return { value: days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2, opens: days.length };
 }
 
 function deliverableDto(r: any, tracking: ReadTracking) {
@@ -1096,13 +1116,28 @@ function deliverableDto(r: any, tracking: ReadTracking) {
     opened_at: r.opened_at ?? null,
     signed_off_at: r.signed_off_at ?? null,
     days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
+    // #5314 part 1: which version the client opened. `opened_current` is false
+    // when the firm edited the deliverable after the open, so the open is not
+    // passed off as a read of what the row says now.
+    opened_version: r.opened_at ? (r.opened_version ?? null) : null,
+    opened_current: r.opened_at && r.opened_revision != null
+      ? Number(r.opened_revision) === Number(r.revision ?? 0)
+      : null,
     // Derived, not stored: sent and not opened — and NULL, not true, where
-    // opens cannot be observed (#4690): "not recorded" is not "unopened".
-    is_unopened: !r.sent_at ? false : (tracking.available ? !r.opened_at : null),
+    // this row's open cannot be observed (#4690, #5314): "not recorded" is not
+    // "unopened".
+    is_unopened: unopenedFlag(r, tracking),
     read_state: readStateFor(r, tracking),
     // #5314 part 3: what an edit or delete sends back as `expected_revision`.
     revision: Number(r.revision ?? 0),
   };
+}
+
+function unopenedFlag(r: any, tracking: ReadTracking): boolean | null {
+  const state = readStateFor(r, tracking);
+  if (state === 'unopened') return true;
+  if (state === 'not_recorded') return null;
+  return false;
 }
 
 partnerDelivery.get('/deliverables', async (c) => {
@@ -1122,26 +1157,38 @@ partnerDelivery.get('/deliverables', async (c) => {
     const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
     const sent = items.filter((d: any) => d.sent_at);
     const unopened = items.filter((d: any) => d.is_unopened === true);
+    const unobserved = sent.filter((d: any) => d.read_state === 'not_recorded');
+    const median = medianDaysToOpen(items);
     return c.json({
       items,
       sent_count: sent.length,
       // NULL, NOT 0, while opens cannot be observed: zero would claim every
       // client opened everything, and the true count would claim they ignored it.
       unopened_count: readTracking.available ? unopened.length : null,
+      // #5314 part 1: sent rows whose open cannot be observed — sent before
+      // opens were recorded, or with no link for the client to open.
+      not_recorded_count: readTracking.available ? unobserved.length : null,
       read_tracking: readTracking,
-      // NULL, not a number, and this is the whole reason the column exists in
-      // the response at all. `opened_at` is the client's to set and nothing in
-      // this product sets it, so on this build every sent deliverable is
-      // unopened — which makes the count TRUE and the median MEANINGLESS.
-      median_days_to_open: null,
-      median_days_to_open_note:
-        // D4822: product copy, so no column names. Read time is the client's to record, and nowhere lets them yet.
-        'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.',
+      // Over the opens actually recorded, and null below a sample worth a
+      // median: an open is the client's act, and a median of one or two would
+      // look like a metric it is not.
+      median_days_to_open: readTracking.available ? median.value : null,
+      median_days_to_open_note: !readTracking.available
+        // D4822: product copy, so no column names.
+        ? 'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.'
+        : (median.value == null
+          ? `Not recorded yet: ${median.opens} client open${median.opens === 1 ? '' : 's'} recorded, and a median needs ${MIN_OPENS_FOR_MEDIAN}.`
+          : `Across ${median.opens} recorded client opens.`),
       unopened_note: !readTracking.available
         ? (sent.length
           ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
           : null)
-        : (unopened.length ? `${unopened.length} sent and not marked opened.` : null),
+        : ([
+          unopened.length ? `${unopened.length} sent and not yet opened by the client.` : null,
+          unobserved.length
+            ? `${unobserved.length} sent ${unobserved.length === 1 ? 'reads' : 'read'} "Not recorded": sent before client opens were recorded, or with no link for the client to open.`
+            : null,
+        ].filter(Boolean).join(' ') || null),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -2050,7 +2097,7 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
     const readTracking = await bookReadTracking(c.env, partnerId);
     const [deliverables, blockers, milestones, existing] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT title, version, sent_at, opened_at FROM engagement_deliverables
+        `SELECT title, version, sent_at, opened_at, link_url FROM engagement_deliverables
           WHERE engagement_id = ? AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50`,
       ).bind(engagementId).all<any>(),
       c.env.DB.prepare(
@@ -2080,7 +2127,8 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
           title: d.title, version: d.version ?? null, sent_at: d.sent_at,
           // NULL where opens cannot be observed: false would read as "the
           // client did not open it" in a report going to that client.
-          opened: d.opened_at ? true : (readTracking.available ? false : null),
+          // #5314: false only where this row's open could have been recorded.
+          opened: d.opened_at ? true : (readStateFor(d, readTracking) === 'unopened' ? false : null),
         })),
       next_from_milestones: (milestones.results || []).map((m: any) => ({
         title: m.title, due_at: m.due_at ?? null,

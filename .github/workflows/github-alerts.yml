@@ -26,7 +26,7 @@ on:
       check:
         description: 'Which check to run now'
         type: choice
-        options: [main-red, queue, future-clock]
+        options: [main-red, queue, queue-stalled, future-clock]
         default: queue
 
 permissions: {}
@@ -36,6 +36,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  queue-stalled:
+    name: Merge queue stalled
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue-stalled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: github-alerts-queue-stalled
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - run: node scripts/github-alerts.mjs queue-stalled
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
+
   main-red:
     name: main is red
     if: >-
