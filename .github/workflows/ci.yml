@@ -80,6 +80,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci
+      - name: Build the generated modules (D5612)
+        run: node ../scripts/build-generated.mjs
       - name: TypeScript check
         # --no-install: fail loudly if `npm ci` didn't install the local
         # typescript, instead of silently fetching the unrelated `tsc` package.
@@ -349,7 +351,8 @@ jobs:
           trusted="$RUNNER_TEMP/fast-guards"
           mkdir -p "$trusted"
           guards=(scripts/migration-immutability-gate.mjs scripts/lib/migrationImmutability.mjs
-            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs)
+            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs
+            scripts/lib/generatedOutput.mjs)
           git archive "$BASE_SHA" "${guards[@]}" | tar -x -C "$trusted"
           ln -s "$GITHUB_WORKSPACE/frontend" "$trusted/frontend"
           ln -s "$GITHUB_WORKSPACE/cloudflare-worker" "$trusted/cloudflare-worker"
@@ -375,6 +378,12 @@ jobs:
         run: node "$RUNNER_TEMP/fast-guards/scripts/lfs-size-gate.mjs" --against="origin/$GITHUB_BASE_REF"
         id: lfs
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+      # D5612: the API index and route registry are built, not committed. The
+      # base's drift checker re-renders them from the folders and compares.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+        id: generated
+        if: ${{ !cancelled() }}
       - name: Run drift checker
         run: node "$RUNNER_TEMP/fast-guards/scripts/check-api-drift.mjs"
         id: drift
@@ -715,6 +724,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Run drift checker
         run: node scripts/check-api-drift.mjs
 

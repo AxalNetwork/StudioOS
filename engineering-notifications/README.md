@@ -25,3 +25,4 @@ Read [D5664](../documentation/architecture/decisions/D5664.md) before rollout.
 | `cloudflare-worker-5671.mjs` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
 | `wrangler.cloudflare-5671.jsonc` | D5671: authenticated Cloudflare metadata, private route delivery and disabled independent receiver. |
 | `cloudflare-heartbeat-5671.mjs` | D5671: bounded private status reads and missed-schedule/undelivered-age evaluation. |
+| `platform-policy-5672.mjs` | D5672: conservative aggregate policy and observational shared-episode presentation. |

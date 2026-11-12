@@ -34,6 +34,8 @@ for(let i=0;i<${assets};i++)fs.writeFileSync(path.join(docs,'assets',i===0?'curr
 fs.writeFileSync(path.join(docs,'index.html'),'<script src="/assets/current.js"></script>');
 `);
   fs.chmodSync(fake,0o755);
+  // D5612: the wrapper builds the generated modules first; the fixture has no sources for them.
+  fs.writeFileSync(path.join(dir,'scripts/build-generated.mjs'),'');
   fs.writeFileSync(path.join(dir,'scripts/prerender-og.mjs'),`import fs from 'node:fs';const docs=new URL('../docs/',import.meta.url);for(let i=0;i<${publicFiles};i++)fs.writeFileSync(new URL('public-'+i+'.txt',docs),'');`);
   if(history){
     const assetsDir=path.join(dir,'docs/assets');fs.mkdirSync(assetsDir,{recursive:true});
