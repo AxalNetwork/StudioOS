@@ -5,7 +5,7 @@ const input={kind:'gate',domain:'tenant_isolation',state:'firing',count:100,corr
 const policy={approved:true,minimumCount:10,existenceSensitive:true,genericImpactAllowed:false};
 const grant={verified:true,private:true,slackConnect:false,recipientAllowed:true,tenantScopeKnown:true,teamMatches:true,purpose:'restricted-case',domain:'tenant_isolation',caseId:input.caseId,channelId:'CPRIVATE'} as const;
 test('only a matching authorized private case receives metadata; raw diagnostic and mention fields never escape',async()=>{
- const sent:unknown[]=[];const result=await deliverSecurityTriage5680({...input,raw:'<!channel> user@example.test https://private/?token=secret'} as any,policy,async()=>grant,async(route,payload)=>{sent.push({route,payload});return {state:'pending',key:'a'.repeat(64)}});
+ const sent:unknown[]=[];const result=await deliverSecurityTriage5680({...input,raw:'<!channel> user@example.test https://private/?token=secret'} as any,policy,async()=>grant,async(route,payload,destination)=>{assert.deepEqual(destination,{channelId:'CPRIVATE'});sent.push({route,payload});return {state:'pending',key:'a'.repeat(64)}});
  assert.equal(result.state,'pending');assert.equal(sent.length,1);assert.doesNotMatch(JSON.stringify(sent),/channel|example|token|private\//);assert.match(JSON.stringify(sent),/restricted-security/);
 });
 test('external channel, missing grants, wrong tenant/domain/case, missing privacy and profile claims produce zero sends',async()=>{
@@ -20,12 +20,14 @@ test('external channel, missing grants, wrong tenant/domain/case, missing privac
  assert.equal(securityTriage5680({...input,state:'recovery'},policy,grant).state,'withheld');
  assert.equal(securityTriage5680({...input,state:'recovery',recoveryVerified:true},policy,grant).state,'permitted');
 });
-test('generic impact needs separate approval and contains neither finding existence nor a restricted case reference',()=>{
+test('generic impact needs separate approval and contains neither finding existence nor a restricted case reference',async()=>{
  const section={...grant,purpose:'generic-impact'} as const;
  assert.equal(securityTriage5680({...input,operationalImpactVerified:true},policy,section).state,'withheld');
  assert.equal(securityTriage5680({...input,operationalImpactVerified:true},{...policy,genericImpactAllowed:true},section).state,'withheld');
  const result=securityTriage5680({...input,operationalImpactVerified:true},{...policy,existenceSensitive:false,genericImpactAllowed:true},section);
  assert.equal(result.state,'permitted');assert.doesNotMatch(JSON.stringify(result),/security|tenant|case_|finding/);
+ const delivered=await deliverSecurityTriage5680({...input,operationalImpactVerified:true},{...policy,existenceSensitive:false,genericImpactAllowed:true},async()=>({...section,channelId:'CSECTION'}),async(route,payload,destination)=>{assert.equal(route,'section');assert.deepEqual(destination,{channelId:'CSECTION'});assert.doesNotMatch(JSON.stringify(payload),/security|tenant|case_|finding/);return {state:'pending',key:'b'.repeat(64)}});
+ assert.equal(delivered.state,'pending');
 });
 test('existing HQ Super Admin gate precedes aggregate SQL and a read failure is unavailable, never zero',async()=>{
  let reads=0;const env={DB:{prepare:()=>{reads++;throw Error('unreadable')}}} as any;

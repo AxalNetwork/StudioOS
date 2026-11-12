@@ -39,13 +39,13 @@ export async function securityTriageCounts5680(env:Env,user:Pick<User,'role'>&{i
   }catch{return {available:false as const,counts:null};}
 }
 /** No destination or finding text comes from input. The injected #5667 publisher receives only the permitted schema. */
-export async function deliverSecurityTriage5680(input:TriageInput,policy:TriagePolicy,authorize:()=>Promise<TriageGrant>,publish:(route:'section'|'security',payload:unknown)=>Promise<unknown>) {
+export async function deliverSecurityTriage5680(input:TriageInput,policy:TriagePolicy,authorize:()=>Promise<TriageGrant>,publish:(route:'section'|'security',payload:unknown,destination:Readonly<{channelId:string}>)=>Promise<unknown>) {
   let grant:TriageGrant;
   try{grant=await authorize()}catch{return {state:'unavailable' as const}}
   const result=securityTriage5680(input,policy,grant);
   if(result.state!=='permitted')return result;
   let outcome:unknown;
-  try{outcome=await publish(result.route,result.payload)}catch{return {state:'ambiguous' as const}}
+  try{outcome=await publish(result.route,result.payload,{channelId:grant.channelId})}catch{return {state:'ambiguous' as const}}
   const value=outcome as {state?:string;key?:string};
   if(value?.state==='pending'&&/^[a-f0-9]{64}$/.test(value.key||''))return {state:'pending' as const,key:value.key};
   return {state:'ambiguous' as const};
