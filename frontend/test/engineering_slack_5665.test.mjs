@@ -62,11 +62,11 @@ test('started send survives crash as ambiguous; late old update cannot replace a
 test('untrusted labels and content cannot escalate, mention or leak; restricted records cannot use broad fallback', () => {
   const f = fixture(), box = f.make();
   try {
-    const evil = { ...event(1), labels: ['<!channel>', '<@UATTACK>', '[action]', 'token&secret'], title: 'secret title', body: 'secret body', logs: 'secret logs' };
-    const prepared = prepare(evil); const text = row(prepared); assert.match(text, /\[routine\]/); assert.doesNotMatch(text, /<!channel>|<@|secret|title|body|logs/);
+    const evil = { ...event(1), labels: ['<!channel>', '<@UATTACK>', '[action]', 'token&secret', 'github_pat_fixture_not_a_token'], title: 'secret title', body: 'secret body', logs: 'secret logs' };
+    const prepared = prepare(evil); const text = row(prepared); assert.match(text, /\[routine\]/); assert.doesNotMatch(text, /<!channel>|<@|github_pat_|secret|title|body|logs/);
     assert.equal(box.enqueue({ ...evil, visibility: 'restricted' }).state, 'redacted');
     assert.equal(box.enqueue({ ...event(999), family: 'security', visibility: 'public' }, { schema: 1, role: 'security', disposition: 'routine', material: false }).state, 'redacted');
-    box.enqueue(evil, action()); assert.doesNotMatch(JSON.stringify(f.db.prepare('SELECT payload FROM activity').all()), /secret|<!channel>|<@/);
+    box.enqueue(evil, action()); assert.doesNotMatch(JSON.stringify(f.db.prepare('SELECT payload FROM activity').all()), /secret|github_pat_|<!channel>|<@/);
     const security = { ...event(2), family: 'security', visibility: 'restricted' };
     box.enqueue(security, { schema: 1, role: 'security', disposition: 'routine', material: false });
     f.advance(300001); box.flush(); const rows = f.db.prepare("SELECT channel,payload FROM outbox WHERE role='security'").all(); assert.ok(rows.length); assert.ok(rows.every(r => r.channel === 'GPRIVATE'));
@@ -158,4 +158,56 @@ test('per-channel pacing holds acknowledged root replies and actions precede rea
     assert.equal(f.sent.filter(s => s.channel.id === 'CPRS').length, 1);
     f.advance(1000); await box.tick(); assert.ok(f.sent.length > count); assert.equal(f.sent.filter(s => s.channel.id === 'CPRS').length, 2);
   } finally { f.db.close(); }
+});
+
+test('routing v1 shared-incident links and reviewer metadata stay controlled and searchable', () => {
+  const shared = prepare(event(1), { schema: 1, role: 'prs', disposition: 'shared', material: false, incidentIssue: 9, githubReviewers: ['reviewer', '<@UATTACK>'] });
+  assert.match(row(shared), /https:\/\/github\.com\/o\/r\/issues\/9\|shared incident/);
+  assert.match(row(shared), /requested:reviewer/); assert.doesNotMatch(row(shared), /UATTACK/);
+});
+
+test('non-job source IDs and tested SHA roles survive itemized rendering without arbitrary links', () => {
+  const value = { ...event(1), kind: 'check_run', subject: { type: 'check', id: '99' }, refs: { tested: 'b'.repeat(40) }, ids: { check: '99', release: '77', deployment: '66', prs: [] } };
+  const text = row(prepare(value)); assert.match(text, /check:99/); assert.match(text, /release:77/); assert.match(text, /deployment:66/); assert.match(text, /tested:bbbbbbbbbbbb/); assert.match(text, /commit\/b+\/checks\?check_run_id=99/);
+});
+
+test('source relay survives interruption after intent before cursor, preserving logical item count and restricted segregation', async () => {
+  const { PublicationRelay } = await import('../../engineering-slack/relay-v1.mjs');
+  const f = fixture(), box = f.make(); let cursor = 0, crash = true;
+  const rows = [{ ...event(1), sequence: 1 }, { ...event(2), sequence: 3 }];
+  const relay = () => new PublicationRelay({ source: { history: async ({ after }) => rows.filter(e => e.sequence > after) }, outbox: box, policyFor: async () => ({ schema: 1, role: 'activity', disposition: 'routine', material: false }), cursors: { get: async () => cursor, set: async (scope, next) => { if (crash) { crash = false; throw Error('cursor interrupted'); } cursor = next; } } });
+  try {
+    await assert.rejects(relay().poll(), /cursor interrupted/); assert.equal(box.summary().itemCount, 1); assert.equal(cursor, 0);
+    const result = await relay().poll(); assert.equal(result.accepted, 2); assert.equal(cursor, 3); assert.equal(box.summary().itemCount, 2);
+    const bad = new PublicationRelay({ source: { history: async () => [{ ...event(3), sequence: 4, visibility: 'restricted' }] }, policyFor: async () => { throw Error('must not route'); }, outbox: box, cursors: { get: async () => 0 } });
+    await assert.rejects(bad.poll(), /visibility/);
+  } finally { f.db.close(); }
+});
+
+test('a successful response for the wrong channel remains ambiguous rather than forging a receipt', async () => {
+  const wrong = transportFixture({ post: { ok: true, channel: 'COTHER', ts: '123.000001' } }); assert.equal((await wrong.send()).state, 'ambiguous'); assert.equal(wrong.calls.at(-1).body.channel, 'CPRS');
+});
+
+test('wake deadlines honor Retry-After and held routes without busy alarm loops', async () => {
+  const f = fixture(), box = f.make();
+  try {
+    box.enqueue(event(1, 'failure'), action()); f.fail({ state: 'retry', code: 'rate_limited', retryAfterMs: 7000 }); await box.tick(); assert.equal(box.nextWake(), at + 7000);
+    for (const channel of Object.values(box.registry.channels)) channel.enabled = false;
+    f.advance(300001); await box.tick(); assert.equal(box.nextWake(), null);
+  } finally { f.db.close(); }
+});
+
+test('large bounded metadata retains every ID in paged text and untrusted markup stays quoted', async () => {
+  const { pages } = await import('../../engineering-slack/presentation-v1.mjs');
+  const prs = Array.from({ length: 100 }, (_, n) => String(10n ** 18n + BigInt(n)));
+  const item = prepare({ ...event(1), ids: { prs }, labels: Array.from({length:20}, () => '_label_'.repeat(10)), gaps: Array.from({length:10}, () => 'source_unverified') });
+  const rendered = pages([item]); assert.equal(rendered.length, 1); assert.ok(rendered[0].length < 8000); assert.ok(prs.every(pr => rendered[0].includes(pr))); assert.match(rendered[0], /`_label_/);
+});
+
+test('source discrepancy intervals are itemized separately and never invent a count of missing records', async () => {
+  const { PublicationRelay } = await import('../../engineering-slack/relay-v1.mjs'); const f = fixture(), box = f.make(), cursors = new Map();
+  const gap = { ...event(999, 'unknown'), family: 'unsupported', kind: 'source_gap', sequence: 1, sourceGap: { scope: 'actions', from: at - 300000, to: at }, gaps: ['poll_cannot_reconstruct_intermediate_transitions'] };
+  const relay = new PublicationRelay({ source: { history: async () => [], gapHistory: async () => [gap] }, outbox: box, policyFor: async () => ({ schema: 1, role: 'activity', disposition: 'unknown', material: false }), cursors: { get: async key => cursors.get(key), set: async (key, value) => cursors.set(key, value) } });
+  try { const result = await relay.poll(); assert.equal(result.gaps.accepted, 1); f.advance(300001); await f.drain(box); const text = f.sent.map(s => s.text).join('\n'); assert.match(text, /missing-record-count:unknown/); assert.match(text, /gap:actions:2026/); assert.equal(cursors.get('publication-gaps:v1:public'), 1); }
+  finally { f.db.close(); }
 });

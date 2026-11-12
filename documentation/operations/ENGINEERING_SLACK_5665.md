@@ -39,3 +39,13 @@ An independent observer must read the sender health/aggregate summary and keep a
 GitHub-visible heartbeat/escalation under separately approved privileges. The
 sender itself has no GitHub write token. Until #5668 configures that observer and
 records the canary, neither fallback availability nor live delivery is verified.
+
+The approved independent sender uses `SLACK_BOT_TOKEN` as a secret and
+`ROUTING_REGISTRY` as reviewed metadata containing no token values. Its current
+transport requires `chat:write` plus the approved minimum channel metadata reads
+for `conversations.info`; file scopes are unnecessary. The source relay uses
+read-only event/gap service contracts and an injected observational policy.
+No production binding, GitHub write token or live service connection is added
+by these disabled proposals. Independent wake deadlines and the five-minute
+wake schedule recover pending work; summary timestamps distinguish last send
+attempt/acknowledgement from mere HTTP availability.

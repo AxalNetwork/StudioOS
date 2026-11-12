@@ -65,7 +65,7 @@ export class SlackOutbox {
       const parent = `hour:${role}:${hour}`; this.insert({ key: parent, role, text: `[activity] ${new Date(hour).toISOString()} — five-minute itemized batches`, priority: 10 });
       const rendered = pages(items), sequence = new Date(bucket).toISOString();
       const index = `batch:${role}:${bucket}:${items[0].key}`;
-      this.insert({ key: index, role, parent, text: `[activity] ${sequence}–${new Date(bucket + 300_000).toISOString()} items:${items.length} pages:${rendered.length} missing:${items.reduce((n, i) => n + i.gaps.length, 0)}`, priority: 10 });
+      this.insert({ key: index, role, parent, text: `[activity] ${sequence}–${new Date(bucket + 300_000).toISOString()} items:${items.length} pages:${rendered.length} source-gaps:${items.reduce((n, i) => n + i.gaps.length, 0)} missing-record-count:${items.some(i => i.gaps.length) ? 'unknown' : '0'}`, priority: 10 });
       let offset = 0;
       for (let page = 0; page < rendered.length; page++) {
         const count = rendered[page].split('\n').length, keys = items.slice(offset, offset + count).map(i => i.key); offset += count;
@@ -108,8 +108,19 @@ export class SlackOutbox {
       return { state: 'idle' };
     } finally { this.busy = false; }
   }
+  nextWake() {
+    let next = Infinity;
+    for (const r of this.sql.exec('SELECT bucket FROM activity WHERE chunk_key IS NULL ORDER BY bucket LIMIT 1').toArray()) next = Math.min(next, Math.max(this.now() + 1000, r.bucket + 300000));
+    for (const r of this.sql.exec("SELECT logical_key FROM outbox WHERE state IN ('pending', 'retry')").toArray()) {
+      const value = this.get(r.logical_key), channel = this.registry.channels[value.role];
+      if (!channel?.enabled || value.parent && this.get(value.parent)?.state !== 'acknowledged') continue;
+      const pace = this.sql.exec('SELECT not_before FROM pacing WHERE channel = ?', channel.id).toArray()[0]?.not_before || 0;
+      next = Math.min(next, Math.max(this.now() + 1000, value.notBefore, pace));
+    }
+    return Number.isFinite(next) ? next : null;
+  }
   summary() {
     const states = this.sql.exec('SELECT role, state, COUNT(*) AS count FROM outbox GROUP BY role, state').toArray();
-    return { schema: 1, states, itemCount: this.sql.exec('SELECT COUNT(*) AS count FROM activity').toArray()[0].count, redacted: this.sql.exec('SELECT COUNT(*) AS count FROM redacted').toArray()[0].count, unbatched: this.sql.exec('SELECT COUNT(*) AS count FROM activity WHERE chunk_key IS NULL').toArray()[0].count };
+    return { schema: 1, states, lastAttemptAt: this.sql.exec("SELECT MAX(json_extract(payload, '$.attemptedAt')) AS time FROM outbox").toArray()[0].time, lastAcknowledgedAt: this.sql.exec("SELECT MAX(json_extract(payload, '$.acknowledgedAt')) AS time FROM outbox").toArray()[0].time, itemCount: this.sql.exec('SELECT COUNT(*) AS count FROM activity').toArray()[0].count, redacted: this.sql.exec('SELECT COUNT(*) AS count FROM redacted').toArray()[0].count, unbatched: this.sql.exec('SELECT COUNT(*) AS count FROM activity WHERE chunk_key IS NULL').toArray()[0].count };
   }
 }

@@ -12,3 +12,5 @@ There is no public enqueue endpoint, file upload API or GitHub mutation client.
 | `health-adapter.mjs` | D5663 bridge: original logical keys survive; queue acceptance is not delivery acknowledgement. |
 | `worker.mjs` | Service-binding publisher and SQLite delivery actor with independent alarms and kill switch. |
 | `wrangler.jsonc` | Disabled independent deployment proposal; no provisioned resources or credentials. |
+
+| `relay-v1.mjs` | D5665: read-only source batches to durable intents, then cursor advancement; injected D5666 policy. |
