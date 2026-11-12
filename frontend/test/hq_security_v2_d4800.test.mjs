@@ -348,7 +348,10 @@ test('status by area: eight cells, no score, and Subprocessor notices Not instru
   assert.equal(by.trust.state, 'measured_zero');
   assert.equal(by.ai.fact, '2 of 2 evaluated outputs judged safe · small sample');
   assert.equal(by.events.fact, '5 of 5 sources · newest 14:12 UTC');
-  assert.equal(by.subprocessors.state, 'not_instrumented');
+  // D4803 browser pass: delivery is recorded per notice (Trust draws it), so this is never Not instrumented;
+  // the Overview does not read it, so it cannot say which way it stands.
+  assert.equal(by.subprocessors.state, 'unknown');
+  assert.match(by.subprocessors.fact, /Recorded per notice/);
   const html = consoleHtml('overview');
   const cell = renderedText(between(html, 'data-testid="security-area-auth"', '</a>'));
   assert.match(cell, /0 of 2 admins have MFA/, 'an area cell does not draw its fact');
@@ -461,6 +464,12 @@ test('mounted: the arrow keys move between workspaces, the URL follows, and focu
     // The reads answered once and were not repeated by moving between workspaces.
     const text = (n) => (n.nodeType === 3 || !n.childNodes?.length ? n.textContent || '' : n.childNodes.map(text).join(''));
     assert.match(text(container), /Lumen Founder/, 'the Privacy workspace did not draw the read it already had');
+    // D4803 browser pass: a key moves from the link that has focus, even when the page has
+    // not re-rendered since the last move (the router's transition). This handler was drawn
+    // while Privacy was open; pressed on Resilience it must wrap to Overview, not go to Trust.
+    const staleResilience = props(tabNode('resilience')).onKeyDown;
+    await act(async () => { staleResilience({ key: 'ArrowRight', preventDefault() {} }); });
+    assert.equal(where.search, '?tab=overview', 'a key moved from the open workspace rather than the focused link');
   } finally {
     await act(async () => root.unmount());
     api.hqSecurityOverview = saved.o; api.hqGovernance = saved.g; api.hqSecuritySessions = saved.s; globalThis.fetch = saved.fetch;

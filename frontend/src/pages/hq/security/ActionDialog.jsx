@@ -36,7 +36,7 @@ export function StepIndicator({ step }) {
           <li
             key={s}
             aria-current={on ? 'step' : undefined}
-            className={`flex items-center gap-1.5 ${on ? 'text-axal-ink dark:text-white' : done ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-faint dark:text-gray-500'}`}
+            className={`flex items-center gap-1.5 ${on ? 'text-axal-ink dark:text-white' : done ? 'text-emerald-700 dark:text-emerald-300' : 'text-axal-muted dark:text-gray-500'}`}
           >
             <span
               aria-hidden="true"
@@ -121,7 +121,7 @@ export function ReasonField({ id, value, onChange, error, placeholder }) {
         className={`w-full rounded-md border bg-white px-2.5 py-1.5 text-[13px] text-axal-ink dark:bg-gray-900 dark:text-gray-100 ${error ? 'border-red-700 dark:border-red-500' : 'border-axal-hairline dark:border-gray-700'}`}
         data-testid="action-reason"
       />
-      <span id={hint} className="text-[11px] text-axal-faint dark:text-gray-400">
+      <span id={hint} className="text-[11px] text-axal-muted dark:text-gray-400">
         At least {MIN_REASON} characters. Saved to the admin audit log with this act.
       </span>
       {error && <span id={err} role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300">✕ {error}</span>}

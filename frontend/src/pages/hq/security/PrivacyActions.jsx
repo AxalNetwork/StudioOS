@@ -142,7 +142,7 @@ export default function DsrOutcomeDialog({ row, onClose, onRecorded, onReread, s
                 <span><b className="text-axal-ink dark:text-white">{o.word}</b><br /><small className="text-axal-muted dark:text-gray-400">{o.line}</small></span>
               </label>
             ))}
-            <p className="text-[11.5px] text-axal-faint dark:text-gray-400">Withdrawn isn&apos;t offered: only the requester can withdraw.</p>
+            <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Withdrawn isn&apos;t offered: only the requester can withdraw.</p>
           </fieldset>
           <ScopeBox
             title="What closing does"

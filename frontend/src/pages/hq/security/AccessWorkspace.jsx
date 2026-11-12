@@ -44,7 +44,7 @@ const CELL = 'block py-0.5 md:table-cell md:px-3 md:py-2 md:align-top';
 
 function Time({ value, empty = 'Not stamped' }) {
   const text = formatUtc(value);
-  if (!text) return <span className="text-axal-faint dark:text-gray-400">{empty}</span>;
+  if (!text) return <span className="text-axal-muted dark:text-gray-400">{empty}</span>;
   return <time dateTime={isoOf(value)} className="font-mono text-[11.5px]">{text}</time>;
 }
 
@@ -60,10 +60,10 @@ function SessionDetails({ row, s, tokenHours, zone }) {
   const items = [
     ['Session ID', <span key="i" className="font-mono">{row.id}</span>],
     ['Network', bucket ? <span key="net" className="font-mono">{bucket}</span> : 'no network recorded'],
-    ['Started', <span key="st"><Time value={row.created_at} />{local(row.created_at) && <small className="block text-axal-faint dark:text-gray-400">Your time: {local(row.created_at)}</small>}</span>],
-    ['Last active', <span key="la"><Time value={row.last_seen_at} />{local(row.last_seen_at) && <small className="block text-axal-faint dark:text-gray-400">Your time: {local(row.last_seen_at)}</small>}</span>],
+    ['Started', <span key="st"><Time value={row.created_at} />{local(row.created_at) && <small className="block text-axal-muted dark:text-gray-400">Your time: {local(row.created_at)}</small>}</span>],
+    ['Last active', <span key="la"><Time value={row.last_seen_at} />{local(row.last_seen_at) && <small className="block text-axal-muted dark:text-gray-400">Your time: {local(row.last_seen_at)}</small>}</span>],
     ['Expires', s.expires
-      ? <span key="ex"><Time value={s.expires} /><small className="block text-axal-faint dark:text-gray-400">Started + {tokenHours} h, the token&apos;s lifetime. Derived; nothing stores it.</small></span>
+      ? <span key="ex"><Time value={s.expires} /><small className="block text-axal-muted dark:text-gray-400">Started + {tokenHours} h, the token&apos;s lifetime. Derived; nothing stores it.</small></span>
       : 'Unknown — no start time is stamped'],
     ['Sign-in factor', row.factor || 'Not stamped'],
     ['User agent', row.user_agent ? <span key="ua" className="break-all font-mono text-[11px]">{row.user_agent}</span> : 'None stored on this session'],
@@ -102,11 +102,11 @@ function ReachCard({ scope }) {
           </React.Fragment>
         ))}
       </dl>
-      <p className="mt-3 text-[11.5px] text-axal-faint dark:text-gray-400">
+      <p className="mt-3 text-[11.5px] text-axal-muted dark:text-gray-400">
         Every act needs a session signed in with your authenticator (TOTP) and a recent step-up, takes its own reason of
         at least {MIN_REASON} characters, and is recorded in the admin audit log.
       </p>
-      <p className="mt-1 text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="hq-sessions-scope">{scopeSentence(scope)}</p>
+      <p className="mt-1 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="hq-sessions-scope">{scopeSentence(scope)}</p>
     </section>
   );
 }
@@ -200,7 +200,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
       <p className="text-[12.5px] text-axal-ink dark:text-gray-100">
         Signs out every HQ-held account, you included. Branch databases are not touched.
       </p>
-      <p className="text-[11.5px] text-axal-faint dark:text-gray-400">
+      <p className="text-[11.5px] text-axal-muted dark:text-gray-400">
         How many accounts it reaches is known only after it runs: the server counts them as it signs them out.
       </p>
       <button
@@ -223,7 +223,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
       </div>
     );
   } else if (!list) {
-    sessionsBody = <p role="status" className="p-4 text-[12.5px] text-axal-faint dark:text-gray-400" data-testid="access-loading">Loading sessions — nothing is claimed yet.</p>;
+    sessionsBody = <p role="status" className="p-4 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="access-loading">Loading sessions — nothing is claimed yet.</p>;
   } else {
     sessionsBody = (
       <>
@@ -240,13 +240,13 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
           )}
         </div>
         {rows.length === 0 ? (
-          <p className="px-4 pb-4 text-[12.5px] text-axal-faint dark:text-gray-400" data-testid="hq-sessions-empty">
+          <p className="px-4 pb-4 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-sessions-empty">
             No session was seen in this window. The table was read; it held no active row.
           </p>
         ) : (
           <>
             {rows.length === 1 && rows[0].is_current && (
-              <p className="px-4 pb-2 text-[12.5px] text-axal-faint dark:text-gray-400" data-testid="hq-sessions-only-you">
+              <p className="px-4 pb-2 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-sessions-only-you">
                 Only your own session is active. The table was read; no other account holds an active session.
               </p>
             )}
@@ -254,7 +254,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
               <caption ref={caption} tabIndex={-1} className="sr-only">
                 Active sessions on HQ-held accounts, newest seen first. Times are UTC.
               </caption>
-              <thead className="hidden border-y border-axal-hairline bg-axal-ground text-[11px] uppercase tracking-[.06em] text-axal-faint md:table-header-group dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+              <thead className="hidden border-y border-axal-hairline bg-axal-ground text-[11px] uppercase tracking-[.06em] text-axal-muted md:table-header-group dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
                 <tr>
                   <th scope="col" className="px-3 py-2">
                     <input type="checkbox" aria-label="Select every session shown that can be revoked" checked={allOn} disabled={readOnly || !visibleSelectable.length} onChange={toggleAll} data-testid="hq-sessions-select-all" />
@@ -292,25 +292,25 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
                         </td>
                         <td className={CELL}>
                           <b className="text-axal-ink dark:text-white">{s.name}{s.isCurrent ? ' (you)' : ''}</b>
-                          {s.role && <small className="block text-axal-faint dark:text-gray-400">{s.role}</small>}
+                          {s.role && <small className="block text-axal-muted dark:text-gray-400">{s.role}</small>}
                         </td>
                         <td className={CELL}>
-                          <span className={s.uaMissing || (!s.browser && !s.os) ? 'text-axal-faint dark:text-gray-400' : ''}>{s.device}</span>
-                          <span className="block text-[11px] text-axal-faint dark:text-gray-400">{networkLine(row)}</span>
+                          <span className={s.uaMissing || (!s.browser && !s.os) ? 'text-axal-muted dark:text-gray-400' : ''}>{s.device}</span>
+                          <span className="block text-[11px] text-axal-muted dark:text-gray-400">{networkLine(row)}</span>
                           {row.holder?.kind === 'support' && row.holder.label && (
                             <span className="block text-[11px] font-semibold text-red-700 dark:text-red-300">held by {row.holder.label}</span>
                           )}
                         </td>
-                        <td className={CELL}><span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">Started</span><Time value={row.created_at} /></td>
+                        <td className={CELL}><span className="mr-1 text-axal-muted md:hidden dark:text-gray-400">Started</span><Time value={row.created_at} /></td>
                         <td className={CELL}>
-                          <span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">Last active</span>
+                          <span className="mr-1 text-axal-muted md:hidden dark:text-gray-400">Last active</span>
                           <Time value={row.last_seen_at} />
-                          {relativeTo(row.last_seen_at, now) && <small className="block text-axal-faint dark:text-gray-400">{relativeTo(row.last_seen_at, now)}</small>}
+                          {relativeTo(row.last_seen_at, now) && <small className="block text-axal-muted dark:text-gray-400">{relativeTo(row.last_seen_at, now)}</small>}
                         </td>
                         <td className={CELL}><StatusBadge state={st.state} label={st.word} data-testid={`hq-session-status-${row.id}`} /></td>
                         <td className={CELL}>
-                          <span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">Expires</span>
-                          {s.expires ? <Time value={s.expires} /> : <span className="text-axal-faint dark:text-gray-400">Unknown</span>}
+                          <span className="mr-1 text-axal-muted md:hidden dark:text-gray-400">Expires</span>
+                          {s.expires ? <Time value={s.expires} /> : <span className="text-axal-muted dark:text-gray-400">Unknown</span>}
                         </td>
                         <td className={CELL}>
                           <div className="flex flex-wrap gap-1.5 pt-1 md:justify-end md:pt-0">
@@ -349,7 +349,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
               </tbody>
             </table>
             {q && shown.length === 0 && (
-              <p className="px-4 py-3 text-[12.5px] text-axal-faint dark:text-gray-400">No session shown matches “{filter}”.</p>
+              <p className="px-4 py-3 text-[12.5px] text-axal-muted dark:text-gray-400">No session shown matches “{filter}”.</p>
             )}
             {list.cursor && onLoadMore ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-axal-hairline px-4 py-3 text-[12px] dark:border-gray-800" data-testid="hq-sessions-more">
@@ -402,7 +402,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
           </p>
         )}
         {loaded && access === 'unknown' && rows.length > 0 && (
-          <p className="mx-4 mb-3 text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="access-bar-unknown">
+          <p className="mx-4 mb-3 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="access-bar-unknown">
             Your own session is not in the rows read, so this page can&apos;t tell whether it was signed in with your
             authenticator. The server checks when you act.
           </p>
@@ -421,7 +421,7 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
           {imp?.available && imp.rows.length === 0 && <StatusBadge state="measured_zero" label="0 live" />}
         </div>
         {!loaded ? (
-          <p className="px-4 pb-4 text-[12.5px] text-axal-faint dark:text-gray-400">
+          <p className="px-4 pb-4 text-[12.5px] text-axal-muted dark:text-gray-400">
             {list === unavailable ? 'Not read: the session list could not be read, and support sessions come with it.' : 'Loading — nothing is claimed yet.'}
           </p>
         ) : imp?.available === false ? (
@@ -429,13 +429,13 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
             <Unreadable what="The support-session list" claim="This is not a claim that no support session is live." onRetry={onRetry} />
           </div>
         ) : !imp?.rows?.length ? (
-          <p className="px-4 pb-4 text-[12.5px] text-axal-faint dark:text-gray-400" data-testid="hq-live-impersonations-empty">
+          <p className="px-4 pb-4 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="hq-live-impersonations-empty">
             No one is acting as another user right now. Ended support sessions are in Events → Impersonations.
           </p>
         ) : (
           <table className="w-full text-left text-[12.5px]" data-testid="hq-live-impersonations">
             <caption className="sr-only">Live support sessions. Times are UTC.</caption>
-            <thead className="hidden border-y border-axal-hairline bg-axal-ground text-[11px] uppercase tracking-[.06em] text-axal-faint md:table-header-group dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+            <thead className="hidden border-y border-axal-hairline bg-axal-ground text-[11px] uppercase tracking-[.06em] text-axal-muted md:table-header-group dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
               <tr>
                 <th scope="col" className="px-3 py-2">Support admin</th>
                 <th scope="col" className="px-3 py-2">Acting as</th>
@@ -453,9 +453,9 @@ export default function AccessWorkspace({ list, unavailable, onAct, onRetry, onR
                 return (
                   <tr key={i.id} className="block border-b border-axal-hairline px-4 py-3 md:table-row md:p-0 dark:border-gray-800" data-testid={`hq-live-impersonation-${i.id}`}>
                     <td className={CELL}><b className="text-axal-ink dark:text-white">{admin}</b></td>
-                    <td className={CELL}><span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">acting as</span><b className="text-axal-ink dark:text-white">{target}</b></td>
-                    <td className={CELL}><span className="mr-1 text-axal-faint md:hidden dark:text-gray-400">Started</span><Time value={i.started_at} /></td>
-                    <td className={CELL}>{i.context || <span className="text-axal-faint dark:text-gray-400">None given</span>}</td>
+                    <td className={CELL}><span className="mr-1 text-axal-muted md:hidden dark:text-gray-400">acting as</span><b className="text-axal-ink dark:text-white">{target}</b></td>
+                    <td className={CELL}><span className="mr-1 text-axal-muted md:hidden dark:text-gray-400">Started</span><Time value={i.started_at} /></td>
+                    <td className={CELL}>{i.context || <span className="text-axal-muted dark:text-gray-400">None given</span>}</td>
                     <td className={CELL}>
                       {ended
                         ? <StatusBadge state="verified" label="Ended" />

@@ -26,7 +26,7 @@ function Freshness({ row, now }) {
   if (!f) return null;
   return f.state
     ? <span data-testid="security-source-stale"><StatusBadge state="stale" label={f.text} /></span>
-    : <span className="text-axal-faint">· {f.text}</span>;
+    : <span className="text-axal-muted">· {f.text}</span>;
 }
 
 export default function SourceAvailability({ sources, onRetry, filterLabel, compact = false, children, 'data-testid': testId = 'security-sources' }) {
@@ -35,14 +35,14 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
   const staleNames = [...rows, ...evidence].filter((s) => s.freshness === 'stale').map((s) => SOURCE_LABELS[s.table || s.source] || s.table || s.source);
   let summary;
   if (state === 'unreadable') summary = <StatusBadge state="unavailable" label="Sources could not be read" />;
-  else if (state !== 'ready') summary = <span className="text-[12px] text-axal-faint">Reading sources…</span>;
+  else if (state !== 'ready') summary = <span className="text-[12px] text-axal-muted">Reading sources…</span>;
   else summary = <StatusBadge state={failed.length || total === 0 ? 'unavailable' : staleNames.length ? 'stale' : 'healthy'} label={`${read} of ${total} sources read`} />;
 
   return (
     <div className={compact ? 'flex flex-col items-start gap-1 sm:items-end' : 'space-y-2'} data-testid={testId}>
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         {summary}
-        {state === 'ready' && filterLabel && <span className="text-[11px] text-axal-faint">under the {filterLabel} filter on Events</span>}
+        {state === 'ready' && filterLabel && <span className="text-[11px] text-axal-muted">under the {filterLabel} filter on Events</span>}
         {(state === 'unreadable' || failed.length > 0) && onRetry && (
           <button
             type="button"
@@ -68,7 +68,7 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
         {rows.length > 0 && (
           <ul className="mt-1.5 space-y-0.5" data-testid={`${testId}-list`}>
             {rows.map((s) => (
-              <li key={s.table} className="flex flex-wrap items-center gap-1.5 text-axal-faint">
+              <li key={s.table} className="flex flex-wrap items-center gap-1.5 text-axal-muted">
                 <StatusBadge state={s.available ? 'healthy' : 'unavailable'} label={SOURCE_LABELS[s.table] || s.table} />
                 <span className="font-mono text-[10.5px]">{s.table}</span>
                 <span>· {s.available ? `${Number(s.rows).toLocaleString()} rows read` : s.reason || 'did not answer'}</span>
@@ -80,7 +80,7 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
         {evidence.length > 0 && (
           <ul className="mt-1.5 space-y-0.5" data-testid={`${testId}-evidence`}>
             {evidence.map((s) => (
-              <li key={s.source} className="flex flex-wrap items-center gap-1.5 text-axal-faint">
+              <li key={s.source} className="flex flex-wrap items-center gap-1.5 text-axal-muted">
                 <StatusBadge state={s.answered ? 'healthy' : 'unavailable'} label={SOURCE_LABELS[s.source] || s.source} />
                 <span className="font-mono text-[10.5px]">{s.source}</span>
                 {!s.answered && <span>· did not answer</span>}
@@ -89,7 +89,7 @@ export default function SourceAvailability({ sources, onRetry, filterLabel, comp
             ))}
           </ul>
         )}
-        {children && <div className="mt-2 space-y-1.5 leading-relaxed text-axal-faint">{children}</div>}
+        {children && <div className="mt-2 space-y-1.5 leading-relaxed text-axal-muted">{children}</div>}
       </details>
     </div>
   );

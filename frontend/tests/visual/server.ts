@@ -27,6 +27,7 @@
  *     frontend/tests/visual/server.ts            (from the repo root; PORT defaults to 4791)
  */
 import { createServer } from 'node:http';
+import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -39,6 +40,7 @@ import { d1Over } from '../../../cloudflare-worker/test/_d1_sqlite.mjs';
 import { memKV } from '../../../cloudflare-worker/test/_mem_kv.mjs';
 import { fakeAI } from '../../../cloudflare-worker/test/_recorded_ai.mjs';
 import { ONE_CLICK, seedOneClickVenture } from '../../../cloudflare-worker/test/fixtures/oneClickVenture.ts';
+import { securityBackups, seedSecurity, SECURITY_ADMIN } from './_security_seed.ts';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const DOCS = join(ROOT, 'docs');
@@ -70,12 +72,34 @@ if (!existsSync(join(DOCS, 'index.html'))) {
 }
 
 const db = migratedDatabase();
+/**
+ * D4803 (#4803): SQLite's `'now'` follows the pinned clock too. The Worker
+ * windows sessions, sign-in refusals and "today" in SQL (`datetime('now',
+ * '-1 day')`), so with only JavaScript pinned those windows read the host's
+ * real date and a seeded session fell outside them. Each date function is
+ * re-registered to compute on a second connection with `'now'` replaced by
+ * the pinned stamp; any other time value passes through unchanged. They are
+ * registered deterministic, because the schema indexes a date expression and
+ * `'now'` is one fixed stamp here. Only the
+ * `CURRENT_TIMESTAMP` keyword (a column default) still reads the real clock,
+ * and no baseline can depend on that, because it would differ on every run.
+ */
+const sqlClock = new DatabaseSync(':memory:');
+const PINNED_SQL = new RealDate(NOW).toISOString().slice(0, 19).replace('T', ' ');
+for (const name of ['datetime', 'date', 'time', 'julianday', 'strftime', 'unixepoch']) {
+  db.function(name, { varargs: true, deterministic: true }, (...args: any[]) => {
+    const at = args.map((v) => (typeof v === 'string' && v.toLowerCase() === 'now' ? PINNED_SQL : v));
+    return (sqlClock.prepare(`SELECT ${name}(${at.map(() => '?').join(', ')}) AS v`).get(...at) as any).v;
+  });
+}
 const venture = seedOneClickVenture(db);
 // The founder finished onboarding, so the app's wizard gate lets them into the editor.
 db.prepare("INSERT INTO onboarding_progress (user_id, flow, step, total_steps, completed_at) VALUES (?, 'founder', 3, 3, '2026-09-01 09:00:00')").run(venture.founderUserId);
 const env: any = {
   JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), AI: fakeAI(),
   RATE_LIMITS: noLimits(), TOKENS: memKV(), OAUTH_KV: memKV(), AI_SPEND: memKV(),
+  // D4803 (#4803): the backup and drill markers the Security pass reads.
+  BACKUPS: securityBackups(NOW),
 };
 const ctx: any = { waitUntil() {}, passThroughOnException() {} };
 const token = await createJWT(env, venture.founderUserId, `synthetic-${venture.founderUserId}@example.invalid`, 'founder');
@@ -136,8 +160,13 @@ const accepted = await api('POST', `/api/decks/proposals/${built.proposal.id}/ke
 db.prepare('UPDATE pitch_decks SET created_at = ? WHERE project_id = ?').run(SAVED_AT, ONE_CLICK.projectId);
 const oneClick = { projectId: ONE_CLICK.projectId, deckId: accepted.deck.id, cards: accepted.deck.slides.length, theme: 'neutral_light', aspect: '16:9' };
 
+// D4803 (#4803): HQ Security's scenario and its Super Admin's session (`_security_seed.ts`).
+const security = { ...(await seedSecurity(db, env, NOW)), user: null as unknown };
+security.user = await worker.fetch(new Request(`${ORIGIN}/api/auth/me`, { headers: { Authorization: `Bearer ${security.token}` } }), env, ctx)
+  .then((r) => r.json()).catch(() => ({ ...SECURITY_ADMIN, role: 'admin', is_super_admin: 1 }));
+
 const me = await api('GET', '/api/auth/me').catch(() => null);
-const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery };
+const manifest = { token, user: me ?? { id: venture.founderUserId, role: 'founder', founder_id: venture.founderId }, themes: THEMES, aspects: ASPECTS, structures: STRUCTURES.map((s) => s.id), matrix, oneClick, draftRecovery, security };
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
