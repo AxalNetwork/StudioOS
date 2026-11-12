@@ -1,0 +1,7 @@
+{
+  "PATCH /api/ic/meetings/:uid/minutes": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

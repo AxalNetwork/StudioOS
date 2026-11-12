@@ -24,9 +24,11 @@
  *      208:160 is explicit that a partner-side write to either would be the
  *      firm reporting a metric about itself. No route here accepts them, on
  *      create or on patch, and a test sends both and asserts the row is
- *      unchanged. The consequence is real and goes on the page rather than
- *      being hidden: on this build every deliverable reads *Unopened* forever,
- *      and the read says why.
+ *      unchanged. The client sets `opened_at` through its own route,
+ *      `POST /api/client/deliverables/:uid/open` (#5314 part 1,
+ *      `client_deliverables.ts`), once, when it opens the shared link; a
+ *      deliverable whose open could not have been recorded reads
+ *      "Not recorded", and the read says why.
  *
  * UTILISATION IS READ, NOT RECOMPUTED. `/health` imports the same
  * `utilisationFor` that `/api/partner/pipeline/retainers` uses. The Health
@@ -47,7 +49,7 @@ import {
 } from './_t13t14t15_helpers';
 import type { ReadTracking } from './_partner_workspace_helpers';
 import {
-  daysBetween, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
+  daysBetween, deliverableReadsSince, groupByEngagement, healthFor, mergePatch, parseHours, parsePeriod,
   periodCapHours, periodMonths, readStateFor, retainerPeriodFor, readTrackingFor, requireOwnEngagement,
   requirePartnerRole, retainerProjection, seatStateFor, unopenedCountFor, daysInPeriod,
 } from './_partner_workspace_helpers';
@@ -277,7 +279,7 @@ partnerDelivery.get('/board', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.signed_off_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -316,7 +318,7 @@ partnerDelivery.get('/board', async (c) => {
     const reportByEng = new Map<number, any>((reports.results || []).map((r: any) => [Number(r.engagement_id), r]));
 
     const group = groupByEngagement;
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
     const seatByEng = group(seats.results || []);
     const msByEng = group(milestones.results || []);
     const blByEng = group(blockers.results || []);
@@ -523,7 +525,7 @@ partnerDelivery.get('/health', async (c) => {
           WHERE e.partner_id = ?`,
       ).bind(partnerId).all<any>(),
       c.env.DB.prepare(
-        `SELECT d.engagement_id, d.sent_at, d.opened_at
+        `SELECT d.engagement_id, d.sent_at, d.opened_at, d.link_url
            FROM engagement_deliverables d
            JOIN engagements e ON e.id = d.engagement_id
           WHERE e.partner_id = ?`,
@@ -568,7 +570,7 @@ partnerDelivery.get('/health', async (c) => {
     // THE WHOLE COLLECTION, not the first row (#4690): `seatStateFor` is the one
     // definition the Board and Capacity use too.
     const seatsByEng = groupByEngagement(seats.results || []);
-    const readTracking = readTrackingFor(deliverables.results || []);
+    const readTracking = readTrackingFor(deliverables.results || [], undefined, await deliverableReadsSince(c.env));
 
     const by = groupByEngagement;
     const msByEng = by(milestones.results || []);
@@ -753,7 +755,7 @@ partnerDelivery.get('/health', async (c) => {
  */
 partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
   try {
-    const { partnerId } = await actingPartner(c);
+    const { user, partnerId } = await actingPartner(c);
     const engagementId = Number(c.req.param('engagementId'));
     await requireOwnEngagement(c.env, partnerId, engagementId);
     const b = await body<any>(c);
@@ -811,8 +813,8 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
     // read's revision whether or not the caller stated one: a request that
     // merged over an older row changes nothing.
     if (staleAgainst(statedRevision(b), current)) return deliveryChanged(c, 'engagement health', current);
-    const wrote = current
-      ? await c.env.DB.prepare(
+    const write = current
+      ? c.env.DB.prepare(
         `UPDATE partner_engagement_health
             SET owner_user_id = ?, scope_state = ?, scope_note = ?,
                 satisfaction = ?, satisfaction_source = ?, satisfaction_at = ?,
@@ -821,8 +823,8 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       ).bind(
         ownerId, scopeState, scopeNote, satisfaction, source, at, nowIso(),
         engagementId, Number(current.revision),
-      ).run()
-      : await c.env.DB.prepare(
+      )
+      : c.env.DB.prepare(
         `INSERT INTO partner_engagement_health
            (engagement_id, owner_user_id, scope_state, scope_note,
             satisfaction, satisfaction_source, satisfaction_at, created_at, updated_at)
@@ -831,7 +833,28 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       ).bind(
         engagementId, ownerId, scopeState, scopeNote,
         satisfaction, source, at, nowIso(), nowIso(),
-      ).run();
+      );
+
+    // #5314 part 2 — A CHANGED REVIEW IS APPENDED, IN THE SAME BATCH. The
+    // health row keeps only the latest score; the history keeps each one as
+    // it was recorded, so a later edit no longer erases what the client said
+    // before. A save that leaves the review as it was appends nothing, and
+    // `changes() = 1` ties the append to the guarded write above: a stale
+    // write (part 3) changes no row, so it appends no review either.
+    let wrote: any;
+    if (!sameReview(current, { satisfaction, source, at })) {
+      const [w] = await c.env.DB.batch([
+        write,
+        c.env.DB.prepare(
+          `INSERT INTO engagement_client_reviews
+             (engagement_id, satisfaction, source, said_at, recorded_at, recorded_by)
+           SELECT ?, ?, ?, ?, ?, ? WHERE changes() = 1`,
+        ).bind(engagementId, satisfaction, source, at, nowIso(), user.id),
+      ]);
+      wrote = w;
+    } else {
+      wrote = await write.run();
+    }
     const saved = await c.env.DB.prepare(
       'SELECT revision FROM partner_engagement_health WHERE engagement_id = ?',
     ).bind(engagementId).first<any>();
@@ -847,6 +870,69 @@ partnerDelivery.put('/engagements/:engagementId/health', async (c) => {
       satisfaction,
       satisfaction_source: source,
       satisfaction_at: at,
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+/** Whether a health save leaves the client's review (score, source, when) as it was. */
+function sameReview(current: any, next: { satisfaction: any; source: any; at: any }) {
+  const s = (v: any) => (v == null ? null : Number(v));
+  const t = (v: any) => (v == null ? null : String(v));
+  return s(current?.satisfaction) === s(next.satisfaction)
+    && t(current?.satisfaction_source) === t(next.source)
+    && t(current?.satisfaction_at) === t(next.at);
+}
+
+/**
+ * #5314 part 2 — the client's reviews of one engagement, oldest first.
+ *
+ * Before this history began only the latest score was kept, so an engagement
+ * whose current score is on no history row says so (`earlier_not_recorded`).
+ * An unreadable history is `available: false` with the reason — never an
+ * empty list standing for "no reviews".
+ */
+partnerDelivery.get('/engagements/:engagementId/reviews', async (c) => {
+  try {
+    const { partnerId } = await actingPartner(c);
+    const engagementId = Number(c.req.param('engagementId'));
+    await requireOwnEngagement(c.env, partnerId, engagementId);
+    let rows: any[];
+    try {
+      const r = await c.env.DB.prepare(
+        `SELECT r.id, r.satisfaction, r.source, r.said_at, r.recorded_at, u.name AS recorded_by_name
+           FROM engagement_client_reviews r
+           LEFT JOIN users u ON u.id = r.recorded_by
+          WHERE r.engagement_id = ?
+          ORDER BY r.id`,
+      ).bind(engagementId).all<any>();
+      rows = r.results || [];
+    } catch (e) {
+      console.error('[delivery] client review history unreadable', e);
+      return c.json({
+        engagement_id: engagementId, available: false, items: null,
+        reason: 'Unreadable: the review history could not be read.',
+      });
+    }
+    const current = await c.env.DB.prepare(
+      'SELECT satisfaction FROM partner_engagement_health WHERE engagement_id = ?',
+    ).bind(engagementId).first<any>();
+    const earlierNotRecorded = current?.satisfaction != null && rows.length === 0;
+    return c.json({
+      engagement_id: engagementId,
+      available: true,
+      items: rows.map((r) => ({
+        id: Number(r.id),
+        satisfaction: r.satisfaction == null ? null : Number(r.satisfaction),
+        cleared: r.satisfaction == null,
+        source: r.source ?? null,
+        said_at: r.said_at ?? null,
+        recorded_at: r.recorded_at,
+        recorded_by_name: r.recorded_by_name ?? null,
+      })),
+      earlier_not_recorded: earlierNotRecorded,
+      earlier_note: earlierNotRecorded
+        ? 'Not recorded: the current score was saved before review history was kept, so earlier reviews are not on record.'
+        : null,
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1078,7 +1164,25 @@ async function bookReadTracking(env: Env, partnerId: number): Promise<ReadTracki
       WHERE e.partner_id = ? AND d.opened_at IS NOT NULL
       LIMIT 1`,
   ).bind(partnerId).first<any>();
-  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : []);
+  // #5314 part 1: once the client-open route records, the answer is "yes, from then".
+  return readTrackingFor(probe ? [{ opened_at: probe.opened_at }] : [], undefined, await deliverableReadsSince(env));
+}
+
+/**
+ * #5314 part 1: the median days from send to the client's first open, over the
+ * opens actually recorded. Fewer than MIN_OPENS_FOR_MEDIAN opens is not a
+ * median anybody should plan by, so it stays null and says how many there are.
+ */
+const MIN_OPENS_FOR_MEDIAN = 3;
+function medianDaysToOpen(items: any[]): { value: number | null; opens: number } {
+  const days = items
+    .filter((d) => d.sent_at && d.opened_at)
+    .map((d) => daysBetween(d.sent_at, String(d.opened_at)))
+    .filter((n): n is number => n != null && n >= 0)
+    .sort((a, b) => a - b);
+  if (days.length < MIN_OPENS_FOR_MEDIAN) return { value: null, opens: days.length };
+  const mid = Math.floor(days.length / 2);
+  return { value: days.length % 2 ? days[mid] : (days[mid - 1] + days[mid]) / 2, opens: days.length };
 }
 
 function deliverableDto(r: any, tracking: ReadTracking) {
@@ -1096,13 +1200,28 @@ function deliverableDto(r: any, tracking: ReadTracking) {
     opened_at: r.opened_at ?? null,
     signed_off_at: r.signed_off_at ?? null,
     days_since_sent: r.sent_at ? daysBetween(r.sent_at) : null,
+    // #5314 part 1: which version the client opened. `opened_current` is false
+    // when the firm edited the deliverable after the open, so the open is not
+    // passed off as a read of what the row says now.
+    opened_version: r.opened_at ? (r.opened_version ?? null) : null,
+    opened_current: r.opened_at && r.opened_revision != null
+      ? Number(r.opened_revision) === Number(r.revision ?? 0)
+      : null,
     // Derived, not stored: sent and not opened — and NULL, not true, where
-    // opens cannot be observed (#4690): "not recorded" is not "unopened".
-    is_unopened: !r.sent_at ? false : (tracking.available ? !r.opened_at : null),
+    // this row's open cannot be observed (#4690, #5314): "not recorded" is not
+    // "unopened".
+    is_unopened: unopenedFlag(r, tracking),
     read_state: readStateFor(r, tracking),
     // #5314 part 3: what an edit or delete sends back as `expected_revision`.
     revision: Number(r.revision ?? 0),
   };
+}
+
+function unopenedFlag(r: any, tracking: ReadTracking): boolean | null {
+  const state = readStateFor(r, tracking);
+  if (state === 'unopened') return true;
+  if (state === 'not_recorded') return null;
+  return false;
 }
 
 partnerDelivery.get('/deliverables', async (c) => {
@@ -1122,26 +1241,38 @@ partnerDelivery.get('/deliverables', async (c) => {
     const items = (rows.results || []).map((r: any) => deliverableDto(r, readTracking));
     const sent = items.filter((d: any) => d.sent_at);
     const unopened = items.filter((d: any) => d.is_unopened === true);
+    const unobserved = sent.filter((d: any) => d.read_state === 'not_recorded');
+    const median = medianDaysToOpen(items);
     return c.json({
       items,
       sent_count: sent.length,
       // NULL, NOT 0, while opens cannot be observed: zero would claim every
       // client opened everything, and the true count would claim they ignored it.
       unopened_count: readTracking.available ? unopened.length : null,
+      // #5314 part 1: sent rows whose open cannot be observed — sent before
+      // opens were recorded, or with no link for the client to open.
+      not_recorded_count: readTracking.available ? unobserved.length : null,
       read_tracking: readTracking,
-      // NULL, not a number, and this is the whole reason the column exists in
-      // the response at all. `opened_at` is the client's to set and nothing in
-      // this product sets it, so on this build every sent deliverable is
-      // unopened — which makes the count TRUE and the median MEANINGLESS.
-      median_days_to_open: null,
-      median_days_to_open_note:
-        // D4822: product copy, so no column names. Read time is the client's to record, and nowhere lets them yet.
-        'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.',
+      // Over the opens actually recorded, and null below a sample worth a
+      // median: an open is the client's act, and a median of one or two would
+      // look like a metric it is not.
+      median_days_to_open: readTracking.available ? median.value : null,
+      median_days_to_open_note: !readTracking.available
+        // D4822: product copy, so no column names.
+        ? 'Read time unavailable: client opens are not currently tracked. Whether a deliverable was opened is the client\'s to set, and nowhere lets them set it yet, so no median is taken.'
+        : (median.value == null
+          ? `Not recorded yet: ${median.opens} client open${median.opens === 1 ? '' : 's'} recorded, and a median needs ${MIN_OPENS_FOR_MEDIAN}.`
+          : `Across ${median.opens} recorded client opens.`),
       unopened_note: !readTracking.available
         ? (sent.length
           ? `${sent.length} sent. ${readTracking.reason} Read it as "we do not know", not as "the client ignored it".`
           : null)
-        : (unopened.length ? `${unopened.length} sent and not marked opened.` : null),
+        : ([
+          unopened.length ? `${unopened.length} sent and not yet opened by the client.` : null,
+          unobserved.length
+            ? `${unobserved.length} sent ${unobserved.length === 1 ? 'reads' : 'read'} "Not recorded": sent before client opens were recorded, or with no link for the client to open.`
+            : null,
+        ].filter(Boolean).join(' ') || null),
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -1953,6 +2084,33 @@ function reportDto(r: any) {
     sent_at: r.sent_at ?? null,
     revision: Number(r.revision ?? 0),
     sent_revision: r.sent_revision == null ? null : Number(r.sent_revision),
+    ...blockedSection(r),
+  };
+}
+
+/**
+ * #5314 part 2 — THE REPORT'S BLOCKED SECTION, AS WRITTEN. Words the firm
+ * wrote, like Shipped and Next; the live blockers stay evidence beside it.
+ * A report saved before the section existed (or saved without stating it)
+ * has no `blocked_recorded_at` and reads "Not recorded" — never "nothing
+ * blocked", which would be a claim nobody made. A recorded section with no
+ * words is the firm stating that nothing is blocked.
+ */
+export function blockedSection(r: any) {
+  const recordedAt = r?.blocked_recorded_at ?? null;
+  if (!recordedAt) {
+    return {
+      blocked: null,
+      blocked_recorded: false,
+      blocked_recorded_at: null,
+      blocked_state_note: 'Not recorded: this report was saved without a Blocked section.',
+    };
+  }
+  return {
+    blocked: r.blocked ?? null,
+    blocked_recorded: true,
+    blocked_recorded_at: recordedAt,
+    blocked_state_note: null,
   };
 }
 
@@ -2050,7 +2208,7 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
     const readTracking = await bookReadTracking(c.env, partnerId);
     const [deliverables, blockers, milestones, existing] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT title, version, sent_at, opened_at FROM engagement_deliverables
+        `SELECT title, version, sent_at, opened_at, link_url FROM engagement_deliverables
           WHERE engagement_id = ? AND sent_at IS NOT NULL ORDER BY sent_at DESC LIMIT 50`,
       ).bind(engagementId).all<any>(),
       c.env.DB.prepare(
@@ -2080,7 +2238,8 @@ partnerDelivery.get('/engagements/:engagementId/report-draft/:period', async (c)
           title: d.title, version: d.version ?? null, sent_at: d.sent_at,
           // NULL where opens cannot be observed: false would read as "the
           // client did not open it" in a report going to that client.
-          opened: d.opened_at ? true : (readTracking.available ? false : null),
+          // #5314: false only where this row's open could have been recorded.
+          opened: d.opened_at ? true : (readStateFor(d, readTracking) === 'unopened' ? false : null),
         })),
       next_from_milestones: (milestones.results || []).map((m: any) => ({
         title: m.title, due_at: m.due_at ?? null,
@@ -2119,6 +2278,7 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
     const existing = await c.env.DB.prepare(
       'SELECT * FROM engagement_status_reports WHERE engagement_id = ? AND period = ?',
     ).bind(engagementId, p.period).first<any>();
+    const hasBlocked = b != null && Object.prototype.hasOwnProperty.call(b, 'blocked');
 
     // A SENT REPORT IS FROZEN. It is a thing a client has already read; editing
     // it in place would make the record disagree with what they received, and
@@ -2140,11 +2300,20 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       // wins: the report the client received is not edited afterwards, and a
       // second edit that read an older draft does not overwrite a newer one.
       if (staleAgainst(statedRevision(b), existing)) return deliveryChanged(c, 'report', existing);
+      // #5314 part 2: an omitted `blocked` leaves the section as it was; a
+      // present one (null included) records it now.
+      const blockedNow = hasBlocked
+        ? [trimOrNull(b.blocked, 4000), nowIso()]
+        : [existing.blocked ?? null, existing.blocked_recorded_at ?? null];
       const upd = await c.env.DB.prepare(
         `UPDATE engagement_status_reports
-            SET shipped = ?, next_up = ?, updated_at = ?, revision = revision + 1
+            SET shipped = ?, next_up = ?, blocked = ?, blocked_recorded_at = ?,
+                updated_at = ?, revision = revision + 1
           WHERE id = ? AND state = 'draft' AND revision = ?`,
-      ).bind(trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), existing.id, Number(existing.revision)).run();
+      ).bind(
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), ...blockedNow,
+        nowIso(), existing.id, Number(existing.revision),
+      ).run();
       if (!changedOne(upd)) {
         const now = await c.env.DB.prepare('SELECT * FROM engagement_status_reports WHERE id = ?')
           .bind(existing.id).first<any>();
@@ -2157,12 +2326,15 @@ partnerDelivery.put('/engagements/:engagementId/status-reports/:period', async (
       // lose cleanly instead of making a second row.
       const ins = await c.env.DB.prepare(
         `INSERT INTO engagement_status_reports
-           (uid, engagement_id, period, state, shipped, next_up, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
+           (uid, engagement_id, period, state, shipped, next_up, blocked, blocked_recorded_at,
+            created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)
          ON CONFLICT (engagement_id, period) DO NOTHING`,
       ).bind(
         newUid(), engagementId, p.period,
-        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000), nowIso(), nowIso(),
+        trimOrNull(b.shipped, 4000), trimOrNull(b.next_up, 4000),
+        hasBlocked ? trimOrNull(b.blocked, 4000) : null, hasBlocked ? nowIso() : null,
+        nowIso(), nowIso(),
       ).run();
       if (!changedOne(ins)) {
         const now = await c.env.DB.prepare(

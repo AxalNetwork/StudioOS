@@ -1,0 +1,7 @@
+{
+  "GET /api/health": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}
