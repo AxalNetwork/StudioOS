@@ -9,7 +9,7 @@
  * It never fails the job it runs in: a read that fails is `main_health_unknown`, and every error exits 0.
  */
 import { appendFileSync } from 'node:fs';
-import { classify, summary } from './lib/ciClassify.mjs';
+import { classify, infraFingerprint, summary } from './lib/ciClassify.mjs';
 import { ALERT_KINDS } from './lib/githubAlerts.mjs';
 
 const env = process.env;
@@ -26,6 +26,13 @@ const jobsOf = async (runId) => (await gh(`/repos/${repo}/actions/runs/${runId}/
 
 async function main() {
   const pr = await jobsOf(env.RUN_ID);
+  const fingerprint = infraFingerprint(pr);
+  if (fingerprint) {
+    const text = summary({ verdict: 'infra_failure', reason: `Runner setup failed: ${fingerprint}.`, shared: [], own: [] });
+    console.log(text);
+    if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, `${text}\n`);
+    return;
+  }
   let main = null; let mainRunUrl = null; let incident = null;
   try {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?branch=main&event=push&status=completed&per_page=1`);

@@ -29,9 +29,9 @@ test('cycle roots, every declared module, action, new page and record have the c
   // D1029: the variants page was the last static child; its addresses redirect into Scenarios now.
   assert.deepEqual(STATIC_CHILDREN, []);
   assert.equal(RECORD_ID.test('data_room'), true);
-  const defs = read('frontend/src/pages/cycles/CycleRoute.jsx');
   for (const [cycle, action] of Object.entries(ACTION_PATHS)) {
-    assert.match(defs, new RegExp(`${cycle}: \\{[\\s\\S]*?path: '${action}'`));
+    const defs = read(`frontend/src/pages/cycles/defs/${cycle}.jsx`);
+    assert.match(defs, new RegExp(`const ${cycle} = \\{[\\s\\S]*?path: '${action}'`));
   }
 });
 

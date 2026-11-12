@@ -8,9 +8,12 @@ import test from 'node:test';
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8');
 
 function job(id) {
-  const block = workflow.match(new RegExp(`^  ${id}:\\n(?:^ {4}.*\\n|^\\n)+`, 'm'));
-  assert.ok(block, `missing ${id} job`);
-  return block[0];
+  const heading = `  ${id}:`;
+  const lines = workflow.split('\n');
+  const start = lines.indexOf(heading);
+  assert.ok(start >= 0, `missing ${id} job`);
+  const next = lines.findIndex((line, index) => index > start && /^ {2}\S/.test(line));
+  return lines.slice(start, next < 0 ? undefined : next).join('\n') + '\n';
 }
 
 function shell(block, step) {
@@ -27,7 +30,8 @@ const landing = job('landing');
 
 test('fast runs the guards before installing dependencies on a single full-history checkout', () => {
   assert.match(fast, /^    name: ci \/ fast$/m);
-  assert.doesNotMatch(fast, /^    if:|continue-on-error:/m);
+  assert.doesNotMatch(fast, /^    if:/m);
+  assert.doesNotMatch(fast, /continue-on-error:/);
   assert.equal([...fast.matchAll(/actions\/checkout@/g)].length, 1);
   assert.match(fast, /^          fetch-depth: 0\n          filter: blob:none$/m);
   for (const step of fast.split(/^ {6}- /m).slice(1)) {
@@ -40,7 +44,7 @@ test('fast runs the guards before installing dependencies on a single full-histo
     assert.ok(index > 0 && index < firstInstall, `${guard} runs before npm ci`);
   }
   for (const id of ['audit-frontend', 'audit-worker', 'audit-python', 'routing-docs', 'lfs-gate']) {
-    assert.doesNotMatch(workflow, new RegExp(`^  ${id}:`, 'm'));
+    assert.ok(!workflow.split('\n').includes(`  ${id}:`), `${id} was folded into fast`);
   }
   assert.match(job('gate'), /^    name: ['"]?test:drift \(full suite\)['"]?$/m);
 });

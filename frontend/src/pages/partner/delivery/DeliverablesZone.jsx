@@ -39,25 +39,50 @@ import { EngagementFocusBar, focusEngagementId, focusLabel, matchesFocus, useEng
  * accusation about clients.
  *
  * WHAT WOULD FIX IT is a founder-side surface that records an open — not a
- * column here. Until that exists, this zone is a log of what was sent, which is
- * genuinely useful and is exactly what it claims to be.
+ * column here. #5314 part 1 built it: the client opens a shared deliverable
+ * from its engagement (`POST /api/client/deliverables/:uid/open`), which records
+ * the first open once. From then a sent deliverable with a link reads Opened
+ * or Never opened; one sent before, or with no link, still reads "Read status
+ * unavailable" and says which.
  */
 
-function OpenedState({ row }) {
+function OpenedState({ row, readsUnavailable = false }) {
   if (!row.sent_at) return <span className="text-axal-faint">Not sent yet</span>;
   if (row.signed_off_at) return <Pill tone="ok">Signed off {formatDay(row.signed_off_at)}</Pill>;
+  // #5314 part 1: the open is the client's, recorded against the version they
+  // were shown; an edit after it is not passed off as what they read.
+  if (row.opened_at && row.opened_current === false) {
+    return <Pill tone="info">Opened an earlier version {formatDay(row.opened_at)}</Pill>;
+  }
   if (row.opened_at) return <Pill tone="info">Opened {formatDay(row.opened_at)}</Pill>;
   // NOT a red "ignored" pill. The absence is ours, not the client's — and while
   // opens cannot be observed (#4690) it is not "unopened" at all.
   if (row.read_state === 'unopened') return <Pill tone="warn">Unopened</Pill>;
   return (
-    <NotComputable why="Client opens are not currently tracked.">
+    <NotComputable why={notRecordedWhy(row, readsUnavailable)}>
       Read status unavailable
     </NotComputable>
   );
 }
 
-function DeliverableRow({ row, saving, deleting, onSave, onDelete, note }) {
+/**
+ * #5314 part 1: why one sent row's open cannot be read. Opens are recorded
+ * when the client follows the shared link, from the day that began; a row sent
+ * before then, or with no link, says so rather than "Never opened".
+ */
+function notRecordedSub(row, readsUnavailable = false) {
+  if (readsUnavailable || row?.read_state !== 'not_recorded') return 'client opens are not currently tracked';
+  return row.link_url
+    ? 'sent before client opens were recorded'
+    : 'sent without a link, so the client has nothing to open here';
+}
+
+function notRecordedWhy(row, readsUnavailable = false) {
+  const sub = notRecordedSub(row, readsUnavailable);
+  return `${sub.charAt(0).toUpperCase()}${sub.slice(1)}.`;
+}
+
+function DeliverableRow({ row, readsUnavailable = false, saving, deleting, onSave, onDelete, note }) {
   const [edit, setEdit] = useState(false);
   const [draft, setDraft] = useState(row);
   const editButton = useRef(null);
@@ -75,7 +100,7 @@ function DeliverableRow({ row, saving, deleting, onSave, onDelete, note }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-extrabold tracking-tight">{row.title}</span>
             {row.version && <Pill tone="neutral">{row.version}</Pill>}
-            <OpenedState row={row} />
+            <OpenedState row={row} readsUnavailable={readsUnavailable} />
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11.5px] text-axal-faint">
             <span>{row.founder_name || row.need_title || row.engagement_uid}</span>
@@ -274,8 +299,10 @@ export default function PartnerDeliverablesZone() {
   // than trust whatever order the read returned. `By client` is the one chip
   // that replaces this ordering, because that is what the chip IS.
   const ordered = view === 'by_client' ? visible : [...visible].sort((a, b) => {
-    const au = a.sent_at && !a.opened_at ? 0 : 1;
-    const bu = b.sent_at && !b.opened_at ? 0 : 1;
+    // #5314: rows the client could have opened and has not lead; a
+    // "Not recorded" row follows them, then the rest.
+    const au = a.is_unopened === true ? 0 : (a.sent_at && !a.opened_at ? 1 : 2);
+    const bu = b.is_unopened === true ? 0 : (b.sent_at && !b.opened_at ? 1 : 2);
     return au - bu || (b.days_since_sent ?? -1) - (a.days_since_sent ?? -1);
   });
 
@@ -441,8 +468,11 @@ export default function PartnerDeliverablesZone() {
           />
           <ShipTile
             label="Median days to open"
-            nr
-            note="Read time unavailable · client opens are not currently tracked"
+            nr={readsUnavailable || d?.median_days_to_open == null}
+            value={d?.median_days_to_open == null ? undefined : String(d.median_days_to_open)}
+            note={readsUnavailable || !d?.median_days_to_open_note
+              ? 'Read time unavailable · client opens are not currently tracked'
+              : d.median_days_to_open_note}
           />
         </div>
 
@@ -484,13 +514,16 @@ export default function PartnerDeliverablesZone() {
                     ? { pill: 'Opened', pillTone: 'info' }
                     : (row.sent_at
                       ? (row.read_state === 'not_recorded'
-                        ? { pill: 'Read status unavailable', pillTone: 'neutral', sub: 'client opens are not currently tracked' }
+                        ? { pill: 'Read status unavailable', pillTone: 'neutral', sub: notRecordedSub(row, readsUnavailable) }
                         : { pill: 'Never opened', pillTone: 'danger', sub: 'or opened without telling us' })
                       : { pill: 'Not sent', pillTone: 'neutral' })),
               ],
             };
           })}
-          note={'Unopened rows lead, oldest first, only where opens can be observed. Client opens are not currently tracked, so a sent deliverable reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d \u2014 and the median time to open stays empty rather than averaging a record nobody writes.'}
+          note={readsUnavailable
+            ? 'Unopened rows lead, oldest first, only where opens can be observed. Client opens are not currently tracked, so a sent deliverable reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d \u2014 and the median time to open stays empty rather than averaging a record nobody writes.'
+            // #5314 part 1: opens are recorded when the client follows the shared link.
+            : 'Unopened rows lead, oldest first, only where opens can be observed: an open is recorded when the client follows the shared link. A deliverable sent before that began, or with no link, reads \u201cRead status unavailable\u201d \u2014 never \u201cignored\u201d.'}
         />
 
         <ZoneDraft
@@ -514,6 +547,7 @@ export default function PartnerDeliverablesZone() {
               <DeliverableRow
                 key={row.id}
                 row={row}
+                readsUnavailable={readsUnavailable}
                 saving={isPending(`save:${row.id}`)}
                 deleting={isPending(`delete:${row.id}`)}
                 note={note}

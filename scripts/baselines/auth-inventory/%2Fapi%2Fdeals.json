@@ -1,0 +1,42 @@
+{
+  "GET /api/deals/:id/data-room": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/deals/:id/market": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/deals/:id/team": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/deals/:id/traction": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PATCH /api/deals/:id/closing-checklist/items/:itemUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/deals/:id/closing-checklist/apply": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/deals/:id/closing-checklist/items": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/deals/:id/commitments/:uid/withdraw": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

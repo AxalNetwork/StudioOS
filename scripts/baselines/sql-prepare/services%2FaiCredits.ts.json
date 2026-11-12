@@ -1,0 +1,5 @@
+{
+  "PURCHASE_SELECT @ services/aiCredits.ts": 3,
+  "kinds.map(() => '?').join(',') @ services/aiCredits.ts": 1,
+  "where @ services/aiCredits.ts": 1
+}
