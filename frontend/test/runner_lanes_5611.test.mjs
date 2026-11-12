@@ -6,6 +6,14 @@ import { secretJobs } from '../../scripts/lib/runnerBenchmark.mjs';
 const read = file => readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8');
 const benchmark = read('.github/workflows/runner-benchmark.yml');
 const ci = read('.github/workflows/ci.yml');
+const stepsOf = (source, job) => {
+  const lines = source.split('\n'), start = lines.indexOf(`  ${job}:`);
+  assert.ok(start >= 0);
+  const next = lines.findIndex((line, i) => i > start && /^  [A-Za-z][\w-]*:$/.test(line));
+  const block = lines.slice(start, next < 0 ? undefined : next), at = block.indexOf('    steps:');
+  assert.ok(at >= 0);
+  return block.slice(at + 1).filter(line => !line.startsWith('  #')).join('\n').trimEnd();
+};
 const policy = source => {
   assert.match(source, /on:\n  push:\n    branches: \['bench\/runners-\*\*'\]/);
   assert.equal(source.match(/^on:/gm)?.length, 1);
@@ -21,8 +29,11 @@ test('benchmark runs only on explicit branches, without secrets or elevated toke
   assert.throws(() => policy(benchmark + '\n# ${{ secrets.API_KEY }}\n'));
 });
 test('benchmark suite steps match merged CI, with the same per-part timeout and dynamic part derivation', () => {
-  const steps = ci.split('  suite:\n')[1].split('    steps:\n')[1].split('\n  gate:')[0];
-  assert.equal(benchmark.split('  benchmark:\n')[1].split('    steps:\n')[1], steps);
+  assert.equal(stepsOf(benchmark, 'benchmark'), stepsOf(ci, 'suite'));
+  const planner = stepsOf(benchmark, 'plan');
+  assert.ok(planner.startsWith(stepsOf(ci, 'plan')));
+  assert.match(planner, /id: matrix/);
+  assert.match(benchmark, /matrix: \$\{\{ steps\.matrix\.outputs\.matrix \}\}/);
   assert.match(benchmark, /partsOf\(JSON.parse\(readFileSync\('package.json'/);
   assert.match(benchmark, /timeout-minutes: 40/); assert.match(benchmark, /max-parallel: 27/);
   assert.match(benchmark, /benchmarkLanes\(/); assert.match(benchmark, /SPENDING_CAP_VERIFIED/);
