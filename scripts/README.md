@@ -26,6 +26,7 @@ represents a bug that reached production once:
 | `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the mounted routers (index.ts and the self-mounting modules in `cloudflare-worker/src/routes/_registry.ts`, #4105), including a local factory’s returned Hono instance (D696). Unmounted alternate factories do not count. |
 | `ci/no-anthropic-in-prod.mjs` | D5339: the production Personal Advisor import graph cannot reach D851's provider runner or adapters; Anthropic references stay in an explicit reviewed allowlist; `/api/assistant` stays behind its non-production, exact-flag mount gate. Runs in `test:guards`; fixture and mutation coverage lives in `lib/noAnthropicInProd.test.mjs`. |
 | `lib/noAnthropicInProd.mjs` | D5339's import-graph, reference-allowlist and assistant-mount rules, shared by the guard and its synthetic-tree tests. |
+| `pip_audit_gate.py` | #5526: audits the pinned Python requirements, retries transient PyPI advisory lookup failures, and preserves strict scan findings. |
 | `ci/test-tracer.mjs` | D5608: opt-in Node test dependency and timing preload. Set `TEST_TRACE_DIR` when invoking a suite part to record repo-relative paths, probes, subprocess visibility and wall time. |
 | `ci/merge-test-deps.mjs` | D5608: merges process traces into commit-level dependency and timing JSON, reports untraced tests and counts opaque ones. |
 | `lib/prTier.mjs` | D5621: standalone PR tier selection and exact-head full-run evidence validation. |
