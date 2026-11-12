@@ -56,7 +56,7 @@ async function mount({ url = '/raise/pitch?project_id=7', tab = 'overview', deck
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  const settle = () => act(async () => { for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 0)); });
+  const settle = () => act(async () => { for (let i = 0; i < 20; i += 1) await new Promise((r) => setImmediate(r)); });
   await act(async () => { root.render(h(MemoryRouter, { initialEntries: [url] }, h(AuthProvider, null, h(PitchStudio, { tab })))); });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
