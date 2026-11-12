@@ -81,6 +81,8 @@ and citations by number keep working.
 | `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
+| `D5532.md` | Measure production-shaped Worker startup and bind diagnostics to the release artifact. |
+| `D5501.md` | Gate production D1 and Worker publication on the exact verified main candidate. |
 | `D4710.md` | Mounted Delivery stale-edit/stale-send verification of merged revision handling; remaining 6/6 handoff scope. |
 | `D4580.md` | Grow auth browser evidence, accessible malformed-input fixes and remaining live-account verification. |
 | `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |

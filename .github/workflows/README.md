@@ -17,6 +17,7 @@ Task #48.
 | `form-lightbox-contracts.yml` | D695 canonical/legacy form and responsive page contracts with modal effects and mutation/restoration; guards, root build then full drift | PR to `main` touching form/lightbox contracts | none (`contents: read`) |
 | `release-draft.yml` | Maintains daily drafts from the complete first-parent history of main; active month totals, monthly zero-based week (0–4) and active day (1–31) counters, UTC. Published daily tags/releases stay fixed; missing days are backfilled and only matching drafts refresh | push to `main`; manual dispatch | none (`GITHUB_TOKEN` with `contents: write`) |
 | `release-alpha-rename.yml` | One-off: gives the releases #2655 left without a stage suffix (v1.0.1 to v8.3.26) their `-alpha` tag on the same commit and moves each release onto it; drafts change name only. Dry run by default; old tags kept unless asked | manual dispatch only | none (`GITHUB_TOKEN` with `contents: write`) |
+| `release-rehearsal.yml` | D5501: validates release-admission fixtures against synthetic queue responses, builds the frontend, and checks the prepared Worker on an isolated workerd runner; uploads rehearsal evidence without production access. | PR to `main` touching release admission, deployment preflight, or its workflow/tests | None (`GITHUB_TOKEN` with `contents: read`; no production credentials) |
 | `release-published.yml` | When the owner publishes a release, dispatches `cloudflare-worker-deploy.yml` on `main`, so the build picks up the new tag and the version beside the logo shows it; never deploys the tag's own commit | release published | none (`GITHUB_TOKEN` with `actions: write`) |
 | `meeting-bot-deploy.yml` | D886 B8: builds the runtime image, then deploys only the private preview and production bot hosts; never site migrations | bot/shared-helper changes in a push to `main`; manual main dispatch; `MEETING_BOT_DEPLOY_ENABLED=true` required | `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
 | `meeting-bot-image.yml` | D886 B8 (#2586): tests the image helper/deployment isolation, validates config and builds/boots the real image without publishing; an owner-triggered run on `main` publishes to GHCR (see "Meeting bot image" below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
@@ -167,3 +168,7 @@ No trigger, permission, secret or check changes.
 
 D5609 (#5609): `ci.yml` and `github-alerts.yml` consume generated suite-plan
 artifacts and compact name outputs. Missing main timings use equal weights.
+
+`release-rehearsal.yml` (D5501) checks release admission fixtures and profiles
+its exact Worker candidate on a disposable Linux runner using isolated workerd.
+It uses synthetic queue responses and has no production credentials.
