@@ -49,7 +49,7 @@ test('main unread, unfinished or cancelled is unknown, never inherited', () => {
     assert.equal(classify({ pr, main }).verdict, 'main_health_unknown', JSON.stringify(main));
   }
   assert.equal(classify({ pr: [], main: { conclusion: 'failure', jobs: [job(W1, 'failure')] } }).verdict, 'pr_failure', 'no failed part found: read it, never inherited');
-  assert.deepEqual(VERDICTS, ['pr_failure', 'inherited_main_failure', 'main_health_unknown']);
+  assert.deepEqual(VERDICTS, ['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
 });
 
 test('the classifier is its own job, after a PR failure only, read-only, outside the gate and unable to fail', () => {

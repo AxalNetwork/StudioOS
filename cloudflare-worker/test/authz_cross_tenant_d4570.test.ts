@@ -3,7 +3,7 @@
 // see: it sits in a service the route reaches through a namespace or a factory.
 // Each case is a member who is not a party asking for another member's record,
 // on the migrated schema: refused as 404, before anything is read for them or
-// changed. They are the `verified` entries of scripts/auth-inventory-ledger.json.
+// changed. They are the `verified` entries of scripts/baselines/auth-inventory/.
 //
 //   POST /api/relationships/intro-requests/:uid/drafts/intro        introInput  (the teammate asked)
 //   POST /api/relationships/intro-requests/:uid/drafts/follow-up    followUpInput (either person)

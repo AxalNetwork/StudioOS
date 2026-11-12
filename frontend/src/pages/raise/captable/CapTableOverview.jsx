@@ -525,9 +525,12 @@ export function CapTableOverview({ projectId, search = '', holderId = null, open
     // the reason-gated read; it grants nothing by itself. D5074: a refused read carries no capability map, so this
     // one link reads the account: it only opens a door the Worker gates (the reasoned support read), never a write.
     const admin = String(user?.role || '').toLowerCase() === 'admin';
+    const supportRequired = record.error?.code === 'scoped_cap_table_required';
     body = (
-      <Center mark="⊘" title={OTHER_TITLE} line={OTHER_LINE} testId="captable-other-company">
-        <Link className={GHOST} to={HOME_PATH}>Switch company</Link>
+      <Center mark="⊘" title={supportRequired ? 'Admin access requires a support reason.' : OTHER_TITLE}
+        line={supportRequired ? 'Open the recorded cap table in the read-only support view. The founder will see your reason.' : OTHER_LINE}
+        testId="captable-other-company">
+        {!supportRequired ? <Link className={GHOST} to={HOME_PATH}>Switch company</Link> : null}
         {admin ? <Link className={GHOST} to={`/cap-tables/${encodeURIComponent(String(projectId))}`} data-testid="captable-other-company-support">Open for support, with a reason</Link>
           : <AskForAccess projectId={projectId} testId="captable-other-company" />}
       </Center>

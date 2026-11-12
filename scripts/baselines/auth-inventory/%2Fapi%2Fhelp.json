@@ -1,0 +1,12 @@
+{
+  "POST /api/help/guides/:area/:guide/view": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "PUT /api/help/guides/:area/:guide/feedback": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

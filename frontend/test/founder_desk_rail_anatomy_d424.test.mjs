@@ -141,13 +141,15 @@ test('no desk calls what Eadwyn produces advice or a recommendation', () => {
   // "Advisor" is not banned here: human advisors are a real persona, and the
   // Network zones filter by them. What is banned is the assistant's output
   // described as advice.
-  for (const file of [CYCLE_ROUTE,
+  // D5615: the bands' wording is in each cycle's entry, `defs/<cycle>.jsx`.
+  const DEFS = ['validate', 'raise', 'grow', 'build'].map((c) => `frontend/src/pages/cycles/defs/${c}.jsx`);
+  for (const file of [CYCLE_ROUTE, ...DEFS,
     'frontend/src/pages/founder/FounderNetworkDesk.jsx', 'frontend/src/pages/founder/FounderResearchDesk.jsx']) {
     const page = codeOnly(read(file));
     assert.doesNotMatch(page, /\badvice\b/i, `${file} says "advice"`);
     assert.doesNotMatch(page, /\brecommend(ation|ed|s)?\b/i, `${file} says "recommend"`);
   }
-  assert.match(read(CYCLE_ROUTE), /foot: 'A reading of your documents, not counsel[’']s review\. Counsel is on the Team page\.'/);
+  assert.match(read('frontend/src/pages/cycles/defs/raise.jsx'), /foot: 'A reading of your documents, not counsel[’']s review\. Counsel is on the Team page\.'/);
 });
 
 // ── 4. Tokens ────────────────────────────────────────────────────────────────

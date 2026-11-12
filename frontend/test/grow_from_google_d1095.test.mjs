@@ -14,6 +14,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 import {
   COLUMNS, DurableFromGoogle, RevenueFromGoogle, SHEET_FIELDS, calendarSentence, decodeMapping, encodeMapping, growRefusal, rowsOf, sheetsSentence,
 } from '../src/pages/cycles/GrowFromGoogle.jsx';
@@ -165,8 +166,8 @@ test('Durable company-building: tagged events with Accept and Dismiss, each thro
 });
 
 test('the wiring: both Grow modules mount their part, the dialog saves the feed’s shape, no browser pop-up', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.ok(route.includes("import { DurableFromGoogle, RevenueFromGoogle } from './GrowFromGoogle';"));
+  const route = cycleRouteText();
+  assert.ok(route.includes("import { DurableFromGoogle, RevenueFromGoogle } from '../GrowFromGoogle';"));
   assert.match(route, /'revenue-and-traction': \(data, ctx\) => \(<>\s*\{fromMercury\('revenue-and-traction', data, ctx\)\}\s*<RevenueFromGoogle projectId=\{ctx\.projectId\} \/>/);
   assert.match(route, /<DurableFromGoogle projectId=\{ctx\.projectId\} \/>\s*<\/>\),/);
   const dialog = read('frontend/src/pages/cycles/MapColumnsDialog.jsx');
