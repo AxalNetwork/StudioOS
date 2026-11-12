@@ -25,6 +25,7 @@ import { CycleHeader } from '../src/pages/cycles/CycleOverview.jsx';
 import CycleRoute, { underSlug, underModule } from '../src/pages/cycles/CycleRoute.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { readRouteMap } from '../../scripts/lib/routeMap.mjs';
+import { cycleDef, cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -242,9 +243,9 @@ test('the three action routes are literal routes with their guard and `lightbox`
 });
 
 test('one mechanism: each cycle names its path and Mount; opening pushes state.under; closing and finishing follow the rules', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   for (const [cycle, path, mount] of [['validate', 'record', 'ValidateMount'], ['build', 'connect', 'BuildMount'], ['raise', 'call', 'RaiseMount'], ['grow', 'update', 'GrowMount']]) {
-    const def = route.slice(route.indexOf(`\n  ${cycle}: {`), route.indexOf('\n  },', route.indexOf(`\n  ${cycle}: {`)));
+    const def = cycleDef(route, cycle);
     assert.match(def, new RegExp(`path: '${path}',\\s*Mount: ${mount},`), cycle);
     if (cycle === 'raise') {
       assert.match(def, /action: \(q\) => \(\{ label: 'Build your deck', href: `\/raise\/pitch\$\{q\}` \}\)/, 'Raise opens Pitch Studio with the venture, without the call lightbox handler');

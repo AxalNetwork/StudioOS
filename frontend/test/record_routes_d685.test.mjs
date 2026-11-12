@@ -24,6 +24,7 @@ import { CHANNEL, RECORDS, TITLES } from '../src/pages/cycles/adapters/validate.
 import { underModule, underSlug } from '../src/pages/cycles/CycleRoute.jsx';
 import { MODULES } from '../src/pages/cycles/modules.js';
 import { DOORS } from '../src/lib/siteDoors.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -136,13 +137,13 @@ test('App.jsx serves /validate/record behind the founder guard, as the page and 
   const line = app.slice(rec, app.indexOf('\n', rec));
   assert.match(line, /guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="validate" lightbox \/>\)/);
   assert.doesNotMatch(line, /<Navigate/);
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D695 (#1656): `adding` is the module's `/new` address; `lightbox` is unchanged.
   assert.match(route, /export default function CycleRoute\(\{[^}]*\blightbox = false, adding = false\b[^}]*\}\)/, 'record lightbox and adding defaults survive unrelated route options');
 });
 
 test('closing goes back to the page underneath, makes no server call, and a plain click records where it came from', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   // D686 §5.1: one mechanism for every cycle's lightbox.
   assert.match(route, /if \(location\.state\?\.under\) navigate\(-1\);\s*else navigate\(`\/\$\{cycle\}\$\{q\}`, \{ replace: true \}\);/);
   assert.match(route, /navigate\(`\/\$\{cycle\}\/\$\{def\.path\}\$\{q\}`, \{ state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)/);
@@ -155,7 +156,7 @@ test('closing goes back to the page underneath, makes no server call, and a plai
 });
 
 test('both entry points name /validate/record; the old ?new=record is gone from the cycle page and redirects from the log', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
   assert.match(route, /'customer-research': \(q, open\) => \(\{ text: 'Record a session', href: `\/validate\/record\$\{q\}`, onOpen: open \}\)/);
   assert.doesNotMatch(route, /new=record/);

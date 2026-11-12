@@ -61,6 +61,8 @@ const REQUIRED_EVENTS: string[] = [
   // D1049 (#2900) subscribes to bank confirmation requests (3-D Secure);
   // D1052 (#2903) handles renewal alerts when the member must confirm.
   'invoice.payment_action_required',
+  'invoice.created',
+  'invoice.voided',
   'invoice.finalized',
   'invoice.paid',
   'charge.succeeded',
