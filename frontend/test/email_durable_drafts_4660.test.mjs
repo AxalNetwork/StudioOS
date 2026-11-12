@@ -213,7 +213,7 @@ test('a stored draft reopens with the member\'s saved text and recipient, and se
     await page.press(page.by('compose-send'));
     await page.press(page.by('compose-confirm-send'));
     const sent = api.calls.find(([n]) => n === 'send')?.[1];
-    assert.deepEqual({ ...sent, operation_key: undefined }, { account_uid: 'acc-1', to: 'ada.l@example.test', subject: 'Saved subject', body: 'Saved body, finished by me.', draft_uid: 'dr-7', operation_key: undefined, nonce: 'n-1' });
+    assert.deepEqual({ ...sent, operation_key: undefined }, { person: 'interviewee:11', account_uid: 'acc-1', to: 'ada.l@example.test', subject: 'Saved subject', body: 'Saved body, finished by me.', draft_uid: 'dr-7', operation_key: undefined, nonce: 'n-1' });
     assert.equal(api.calls.some(([n, , body]) => n === 'draft' || (n === 'revise' && !body?.estimate)), false, 'sent with no AI run');
     // Shorter on the reopened draft revises the saved text, and the estimate names it.
     await page.settle(450);

@@ -339,3 +339,11 @@ export function draftRowText(d) {
   const e = d?.edit ?? null;
   return { subject: e ? e.subject : (d?.subject ?? ''), body: e ? e.body : (d?.body ?? ''), edited: !!e };
 }
+
+/** D4662 / D4665: history preserves the provider outcome; an unconfirmed delivery is never labelled sent or failed. */
+export function sentLine(row) {
+  if (row.status === 'uncertain') return 'Delivery is unconfirmed. Check your mailbox before sending again.';
+  if (row.status === 'pending') return 'Sending. The mail server has not answered yet.';
+  if (row.status === 'failed') return `Not sent: ${row.error || 'the mail server refused it.'}`;
+  return quotedLine(row);
+}

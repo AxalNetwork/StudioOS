@@ -10,7 +10,7 @@ import { Link } from 'react-router-dom';
 import Lightbox from '../../ui/Lightbox';
 import { Unreadable } from '../../ui';
 import { mailApi } from '../../lib/api/mail.js';
-import { mailboxLine, pageLabel, quotedLine } from './emailModel.js';
+import { mailboxLine, pageLabel, sentLine } from './emailModel.js';
 import { BODY, BTN, CARD, DANGER, ERROR, EYEBROW, H3, MUTED } from './emailParts.jsx';
 import ConnectPanel from './ConnectPanel.jsx';
 
@@ -71,7 +71,8 @@ export default function EmailSettings({ api = mailApi }) {
         : sent.items.length === 0 ? <p className={`mt-2 ${BODY}`}>Nothing sent yet.</p>
         : <ul className="mt-2 flex flex-col divide-y divide-axal-hairline dark:divide-gray-700">{sent.items.map((r) => <li key={r.uid} className="flex flex-col gap-0.5 py-2" data-testid="sent-row">
             <span className={BODY}><span className="font-mono text-[12px]">{String(r.sent_at ?? r.created_at ?? '').slice(0, 16).replace('T', ' · ')}</span> · {r.to} · {r.subject}</span>
-            <span className={`text-[12px] ${r.status === 'failed' ? 'text-red-700 dark:text-red-300' : MUTED}`}>{r.status === 'failed' ? `Not sent: ${r.error || 'the mail server refused it.'}` : quotedLine(r)}</span>
+            {r.person == null && <span className={`text-[12px] ${MUTED}`}>Conversation: Not recorded</span>}
+            <span className={`text-[12px] ${r.status === 'failed' ? 'text-red-700 dark:text-red-300' : MUTED}`}>{sentLine(r)}</span>
           </li>)}</ul>}
       {sent && sent.total > sent.per_page && <div className="mt-2 flex gap-2">
         <button type="button" className={BTN} disabled={page <= 1} onClick={() => setPage(page - 1)}>Newer</button>
