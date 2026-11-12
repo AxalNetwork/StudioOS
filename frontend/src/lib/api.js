@@ -127,6 +127,14 @@ export function isPublicPath(pathname) {
     || currentPath === '/login'
     || currentPath === '/register'
     || currentPath === '/verify-email'
+    // D4637: the public Help home and article-shaped addresses tolerate
+    // background API 401s. Ticket and admin routes stay protected.
+    || currentPath === '/help'
+    || (/^\/help\/[a-z0-9-]+\/[a-z0-9-]+$/i.test(currentPath)
+      && !currentPath.startsWith('/help/tickets/')
+      && !currentPath.startsWith('/help/admin/'))
+    || currentPath === '/status'
+    || currentPath === '/changelog'
     || currentPath.startsWith('/b/')
     // An author's public page, by id or by name slug (owner, 2026-10-12).
     || currentPath.startsWith('/authors/')

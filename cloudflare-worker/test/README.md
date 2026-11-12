@@ -293,6 +293,9 @@ D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, inde
 D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.
 
 D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback, host replay/cleanup and promotion guards without a customer meeting.
+| `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
+| `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
+| `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
 | File | Guarantee |
 | --- | --- |
 | `mail_conversation_history_4662.test.ts` | D4662: validated durable sent identity and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with a non-delivering adapter. |

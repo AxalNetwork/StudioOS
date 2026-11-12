@@ -435,16 +435,19 @@ function StillStuck({ user, onOpenChat }) {
         <div className="min-w-0">
           <h2 id="help-stuck" className="text-[15px] font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Still stuck?</h2>
           <p className="mt-1.5 max-w-[440px] text-[12.5px] leading-relaxed text-gray-600 dark:text-gray-300">
-            Search first: most answers are here. If not, open a ticket and the team answers in its thread.
+            {user
+              ? 'Search first. Ordinary tickets and replies may be mirrored to a public tracker; do not send secrets or confidential records.'
+              : 'Search these public guides. Sign in for account-specific support, or report a security concern privately.'}
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
-          <Link to="/help/tickets?new=1" className={PRIMARY_ACTION}>Open a ticket</Link>
+          <Link to={user ? '/help/tickets?new=1' : '/login?next=%2Fhelp%2Ftickets%3Fnew%3D1'} className={PRIMARY_ACTION}>{user ? 'Open a ticket' : 'Sign in to open a ticket'}</Link>
+          <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className={SECONDARY_ACTION}>Private security report</a>
           {chatAvailable && (
             <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION}>Message the team</button>
           )}
           <span className="flex flex-col items-center gap-1">
-            <Link to="/trust/me" className={SECONDARY_ACTION}>What we can see</Link>
+            <Link to={user ? '/trust/me' : '/trust/disclosure'} className={SECONDARY_ACTION}>{user ? 'What we can see' : 'Disclosure guidance'}</Link>
             <span className="font-mono text-[9.5px] text-gray-400">Trust Center</span>
           </span>
         </div>
@@ -598,7 +601,14 @@ export function HelpArticle({ sections, area, guide, user }) {
             )}
           </div>
 
-          <GuideFeedback anchor={`${section.id}/${sub.id}`} />
+          {user && <GuideFeedback anchor={`${section.id}/${sub.id}`} />}
+          {area === 'troubleshooting' && guide === 'contact-support' && (
+            <p className="mt-5 text-sm text-gray-600 dark:text-gray-300">
+              Security vulnerabilities should not be submitted as ordinary tickets.
+              Use the <a href="https://github.com/AxalNetwork/StudioOS/security/advisories/new" target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-700 underline dark:text-violet-300">private GitHub Security Advisory</a>,
+              or the <Link to="/trust/disclosure" className="font-semibold text-violet-700 underline dark:text-violet-300">Trust Center disclosure guidance</Link>.
+            </p>
+          )}
 
           {related.length > 0 && (
             <section id="related" className="mt-7 scroll-mt-6">
@@ -695,8 +705,8 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
         ) : (
           <BrowseByTask sections={visibleSections} />
         )}
-        {!trimmedQuery && <PopularGuides sections={visibleSections} />}
-        <YourTicketsCard isAdmin={role === 'admin'} />
+        {!trimmedQuery && user && <PopularGuides sections={visibleSections} />}
+        {user && <YourTicketsCard isAdmin={role === 'admin'} />}
         {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
         <StillStuck user={user} onOpenChat={onOpenChat} />
       </div>
@@ -776,7 +786,7 @@ export function HelpPhoneView({ popular, onRetry, areas, openArea, onArea, child
 }
 
 function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInputRef, onOpenChat }) {
-  const [popular, retry] = usePopularGuides(visibleSections);
+  const [popular, retry] = usePopularGuides(visibleSections, !!user);
   const [openArea, setOpenArea] = useState(null);
   const areas = useMemo(() => helpAreas(visibleSections), [visibleSections]);
   const fuse = useMemo(() => createDocsFuse(role), [role]);
@@ -799,7 +809,7 @@ function HelpPhoneHome({ visibleSections, role, user, query, setQuery, searchInp
       </div>
       {trimmedQuery && <SearchResults results={results} query={trimmedQuery} sections={visibleSections} />}
       {!trimmedQuery && area && <AreaGuides area={area} />}
-      <YourTicketsCard isAdmin={role === 'admin'} />
+      {user && <YourTicketsCard isAdmin={role === 'admin'} />}
       {role === 'admin' && <GuideAnswersAdmin sections={visibleSections} />}
       <StillStuck user={user} onOpenChat={onOpenChat} />
     </HelpPhoneView>
@@ -819,14 +829,15 @@ export default function DocsLayout() {
   );
   const [chatOpen, setChatOpen] = useState(false);
   const { user, role } = useAuth() || {};
+  const helpRole = user ? role : 'public';
   const phone = usePhoneWidth();
 
   // Task #2 (DD) — the manifest filtered to what this viewer's role may read.
   // Admin sections and subsections are absent for everyone else: from the
   // grid, from search, and from the guide pages, which answer "not found".
   const visibleSections = useMemo(
-    () => filterSectionsForRole(SECTIONS, role),
-    [role],
+    () => filterSectionsForRole(SECTIONS, helpRole),
+    [helpRole],
   );
   const restrictedAnchors = useMemo(() => adminOnlyAnchors(), []);
   const isAdmin = role === 'admin';
@@ -874,7 +885,7 @@ export default function DocsLayout() {
       ) : phone ? (
         <HelpPhoneHome
           visibleSections={visibleSections}
-          role={role}
+          role={helpRole}
           user={user}
           query={query}
           setQuery={setQuery}
@@ -884,7 +895,7 @@ export default function DocsLayout() {
       ) : (
         <HelpHome
           visibleSections={visibleSections}
-          role={role}
+          role={helpRole}
           user={user}
           query={query}
           setQuery={setQuery}
@@ -895,7 +906,7 @@ export default function DocsLayout() {
       {/* Task #103 — the chat panel renders null while closed and only polls
           while open, so an ineligible viewer (who never gets the button) pays
           nothing for it. */}
-      <CustomerChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />
+      {user && <CustomerChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />}
     </div>
   );
 }

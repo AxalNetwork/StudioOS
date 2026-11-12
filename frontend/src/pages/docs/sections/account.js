@@ -214,9 +214,9 @@ export default {
       overview:
         "If you lose access to your authenticator app, you have two recovery paths: the ten single-use recovery codes you saved when you set up two-factor, or a trusted contact you nominated in advance who can vouch for you to the studio team.",
       howto: [
-        'On the sign-in page, click "Lost your device?".',
-        'Pick "Use a recovery code" and paste one of the ten codes you saved.',
-        'If you have no codes, pick "Ask a trusted contact" — the studio team will reach out to your nominated contact for verification.',
+        'From /login, follow the Account recovery link to /auth/recover.',
+        'The recovery page shows only the recovery methods enabled on your account. If backup codes are available, use a saved one.',
+        'If trusted contacts or another recovery method are enabled, follow the on-screen steps; otherwise use the offered admin-review path.',
         'Once verified, you\'re prompted to set up a fresh authenticator on your new device.',
       ],
       tips: [
