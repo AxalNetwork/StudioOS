@@ -36,6 +36,8 @@ const NORTH = 1;
 
 function fixture(withTriggers = true) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  // #5654: install the production decision CHECK used by profile/logo batches.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/202611071200_program_grant_revisions.sql', import.meta.url), 'utf8'), 'decision_guard'));
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of ['597_company_archive_and_events.sql', '685_company_legal_record_and_slugs.sql', '757_company_default_currency.sql', '202611031619_company_logo_change_event.sql', '202611072255_company_profile_version.sql', '202611072325_company_region_codes.sql']) db.exec(mig(m));
   if (withTriggers) db.exec(mig(TRIGGERS));

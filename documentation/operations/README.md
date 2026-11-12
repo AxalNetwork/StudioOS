@@ -44,3 +44,4 @@ only: no value belongs in a runbook, in the repo or in an issue. Add a row here
 and a link in `documentation/README.md`.
 
 | `ENGINEERING_EVENTS_5664.md` | D5664: read-only workflow/provider inventory, pilot counts and deployment gaps. |
+| `ENGINEERING_SLACK_5665.md` | D5665: destination kill switches, canary and uncertain-send recovery. |
