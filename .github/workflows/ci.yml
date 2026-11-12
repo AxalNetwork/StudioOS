@@ -594,4 +594,46 @@ jobs:
       - name: Install pip-audit
         run: python -m pip install --upgrade pip pip-audit
       - name: pip-audit (audit requirements.txt only)
+        # Audit the pinned requirements file directly instead of the full
+        # environment. This avoids `setuptools (X.Y.Z.post0)` style errors
+        # from environment-injected post-release builds that aren't on PyPI.
+        # `pip_audit_gate.py` runs that command and retries a transient PyPI
+        # advisory lookup (#5526).
         run: python scripts/pip_audit_gate.py
+
+  digest:
+    name: CI failure digest (#5619)
+    needs: [frontend, worker, suite, drift]
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          node-version: '22'
+      - name: Publish from the base commit, when installed there
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -f scripts/ci-digest.mjs ]; then
+            node scripts/ci-digest.mjs
+          else
+            echo 'CI digest starts after #5619 merges onto the base branch.'
+          fi

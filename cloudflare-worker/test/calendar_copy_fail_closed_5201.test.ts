@@ -181,6 +181,152 @@ test('5207: concurrent delivery, lost create replies, mapped updates, reconnect 
   }
 });
 
+for (const { reason, path, expected } of [
+  { reason: 'rateLimitExceeded', path: 'create', expected: 'pending' },
+  { reason: 'userRateLimitExceeded', path: 'collision', expected: 'pending' },
+  { reason: 'userRateLimitExceeded', path: 'mapped', expected: 'pending' },
+  { reason: 'forbidden', path: 'create', expected: 'parked' },
+]) {
+  test(`5207: Google ${path} 403 ${reason} leaves the job ${expected}`, async () => {
+    const f = fixture();
+    const original = globalThis.fetch;
+    let throttle = path !== 'mapped';
+    const writes: string[] = [];
+    try {
+      setTarget(f, 'google');
+      f.db.prepare(`INSERT INTO founder_checkins
+        (id, uid, title, start_at, duration_min, status, founder_user_id)
+        VALUES (41, 'checkin-41', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+      globalThis.fetch = (async (input: string, init: RequestInit) => {
+        const url = new URL(input);
+        if (url.hostname === 'oauth2.googleapis.com') return json({ access_token: 'synthetic-access' });
+        assert.equal(url.hostname, 'www.googleapis.com');
+        writes.push(init.method!);
+        if (path === 'collision' && init.method === 'POST') return json({}, 409);
+        if (throttle) return json({ error: { errors: [{ reason }] } }, 403);
+        return json({ id: 'google-copy' });
+      }) as typeof fetch;
+
+      await onAxalSessionCreated(f.env, SESSION);
+      if (path === 'mapped') {
+        throttle = true;
+        await onAxalSessionUpdated(f.env, SESSION);
+      }
+      const readJob = () => f.db.prepare(
+        'SELECT state, next_attempt_at, updated_at FROM calendar_copy_jobs',
+      ).get() as { state: string; next_attempt_at: number; updated_at: number };
+      const job = readJob();
+      assert.equal(job.state, expected);
+      assert.equal(job.next_attempt_at - job.updated_at, 300_000);
+      assert.deepEqual(writes, path === 'create' ? ['POST'] : ['POST', 'PATCH']);
+      throttle = false;
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at - 1), 0);
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at), expected === 'pending' ? 1 : 0);
+      assert.equal(readJob().state, expected === 'pending' ? 'complete' : 'parked');
+    } finally {
+      globalThis.fetch = original;
+      f.close();
+    }
+  });
+}
+
+for (const recovers of [true, false]) {
+  test(`5207: Google quotaExceeded ${recovers ? 'recovers after hours' : 'stops after six attempts'}`, async () => {
+    const f = fixture();
+    const original = globalThis.fetch;
+    const hour = 3_600_000;
+    let writes = 0;
+    let quotaExceeded = true;
+    try {
+      setTarget(f, 'google');
+      f.db.prepare(`INSERT INTO founder_checkins
+        (id, uid, title, start_at, duration_min, status, founder_user_id)
+        VALUES (41, 'checkin-41', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+      globalThis.fetch = (async (input: string, init: RequestInit) => {
+        const url = new URL(input);
+        if (url.hostname === 'oauth2.googleapis.com') return json({ access_token: 'synthetic-access' });
+        assert.equal(url.hostname, 'www.googleapis.com');
+        assert.equal(init.method, 'POST');
+        writes++;
+        return quotaExceeded
+          ? json({ error: { errors: [{ domain: 'usageLimits', reason: 'quotaExceeded' }] } }, 403)
+          : json({ id: 'google-copy' });
+      }) as typeof fetch;
+
+      const readJob = () => f.db.prepare(`
+        SELECT state, attempts, next_attempt_at, updated_at FROM calendar_copy_jobs
+        WHERE user_id = 1 AND provider = 'google' AND source_kind = 'founder_checkin' AND source_id = 41
+      `).get() as { state: string; attempts: number; next_attempt_at: number; updated_at: number };
+
+      await onAxalSessionCreated(f.env, SESSION);
+      const delays = recovers ? [1, 2, 4] : [1, 2, 4, 6, 6];
+      for (const [index, delay] of delays.entries()) {
+        const job = readJob();
+        assert.equal(job.state, 'pending');
+        assert.equal(job.attempts, index + 1);
+        assert.equal(job.next_attempt_at - job.updated_at, delay * hour);
+        assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at - 1), 0);
+        assert.equal(writes, index + 1);
+        if (recovers && index === delays.length - 1) quotaExceeded = false;
+        assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at), 1);
+      }
+      assert.equal(writes, delays.length + 1);
+      const job = readJob();
+      assert.equal(job.state, recovers ? 'complete' : 'refused');
+      assert.equal(await retryCalendarCopies(f.env, () => job.next_attempt_at + hour), 0);
+      assert.equal(writes, delays.length + 1);
+    } finally {
+      globalThis.fetch = original;
+      f.close();
+    }
+  });
+}
+
+for (const scenario of ['preference restored', 'legacy suppression', 'source cancelled']) {
+  test(`5207: a booking update after ${scenario}`, async () => {
+    const f = fixture();
+    const original = globalThis.fetch;
+    let canWrite = false;
+    let writes = 0;
+    try {
+      setTarget(f, 'google');
+      f.db.prepare(`INSERT INTO founder_checkins
+        (id, uid, title, start_at, duration_min, status, founder_user_id)
+        VALUES (41, 'checkin-41', ?, ?, 30, 'confirmed', 1)`).run(TITLE, SESSION.start_at);
+      globalThis.fetch = (async (input: string) => {
+        const url = new URL(input);
+        if (url.hostname === 'oauth2.googleapis.com') return json({ access_token: 'synthetic-access' });
+        assert.equal(url.hostname, 'www.googleapis.com');
+        writes++;
+        return canWrite ? json({ id: 'google-copy' }) : json({}, 503);
+      }) as typeof fetch;
+      const readJob = () => f.db.prepare(
+        'SELECT state, outcome_code, next_attempt_at FROM calendar_copy_jobs',
+      ).get() as { state: string; outcome_code: string; next_attempt_at: number };
+      await onAxalSessionCreated(f.env, SESSION);
+      const due = readJob().next_attempt_at;
+      f.db.exec("UPDATE calendar_settings SET copy_target='none' WHERE user_id=1");
+      canWrite = true;
+      assert.equal(await retryCalendarCopies(f.env, () => due), 1);
+      assert.equal(readJob().outcome_code, 'not_selected');
+      assert.equal(writes, 1);
+      if (scenario === 'preference restored') assert.equal(readJob().state, 'refused');
+      if (scenario === 'legacy suppression') f.db.exec("UPDATE calendar_copy_jobs SET state='cancelled'");
+      if (scenario === 'source cancelled') await onAxalSessionCancelled(f.env, SESSION.kind, SESSION.source_id);
+
+      f.db.exec("UPDATE calendar_settings SET copy_target='google' WHERE user_id=1");
+      await onAxalSessionUpdated(f.env, SESSION);
+      const cancelled = scenario === 'source cancelled';
+      assert.equal(readJob().state, cancelled ? 'cancelled' : 'complete');
+      assert.equal(readJob().outcome_code, cancelled ? 'source_gone' : 'copied');
+      assert.equal(writes, cancelled ? 1 : 2);
+    } finally {
+      globalThis.fetch = original;
+      f.close();
+    }
+  });
+}
+
 /** Counts what each provider was asked to do; `writeFails` makes the create itself refuse. */
 function stubProviders({ writeFails = false } = {}) {
   const seen: string[] = [];
