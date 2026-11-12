@@ -31,9 +31,10 @@ test('no lane promises "Free to join": each says creating an account is free and
 });
 
 test('the steps after the page are named, with no timing promise', () => {
-  assert.match(MEMBERSHIP_STEPS, /account is created as soon as you confirm your email/);
+  assert.match(MEMBERSHIP_STEPS, /create your account when you request your signup link/);
+  assert.match(MEMBERSHIP_STEPS, /Confirm your email to sign in/);
   assert.match(MEMBERSHIP_STEPS, /reviews your membership/);
-  assert.match(MEMBERSHIP_STEPS, /membership agreement/);
+  assert.match(MEMBERSHIP_STEPS, /agreement to sign/);
   assert.doesNotMatch(MEMBERSHIP_STEPS, /\b(hour|minute|day|week)s?\b/i, 'no review time is invented');
 });
 

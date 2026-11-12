@@ -37,7 +37,7 @@ export const LANE_COPY = Object.freeze({
  * that agreement is signed does an admin give the account its role, and the role (not a plan) is what opens a member
  * workspace, Grow included. Nothing here is a timing promise.
  */
-export const MEMBERSHIP_STEPS = 'Your account is created as soon as you confirm your email. The Axal team then reviews your membership and sends a membership agreement to sign; your workspace opens once it is signed.';
+export const MEMBERSHIP_STEPS = 'We create your account when you request your signup link. Confirm your email to sign in. The Axal team reviews your membership and sends an agreement to sign. After you sign it, the team enables your workspace.';
 
 /**
  * The register page's email actions. A new account's link is not a sign-in link: the email says "Finish creating your

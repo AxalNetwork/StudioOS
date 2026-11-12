@@ -319,3 +319,41 @@ test('the pure rules: no invisible average, unknown stays unknown, review kinds'
   assert.equal(addYear('2028-02-29'), '2029-02-28');
   assert.equal(addYear('2027-01-01'), '2028-01-01');
 });
+
+// Regression for #5652 — synthetic supported-route interleaving.
+test('review closure racing the apply must not commit new pricing terms', async () => {
+  const {call,env,licence}=fixture();
+  const opened=await call(SUPER,'POST',`${P}/reviews`,{});
+  assert.equal(opened.status,201);
+  const before=licence();
+  const original=env.DB.batch.bind(env.DB);
+  let raced=false;
+  env.DB.batch=async (statements:any[])=>{
+    if(raced)return original(statements);raced=true;
+    const kept=await call(SUPER,'POST',`${P}/reviews/${opened.body.review.uid}/resolve`,{action:'keep',expected_revision:1,reason:'Keep the current terms'});
+    assert.equal(kept.status,200,JSON.stringify(kept));
+    return original(statements);
+  };
+  const response=await call(SUPER,'POST',`${P}/apply`,applyBody(opened.body.snapshot.uid,before.terms_revision,{review_uid:opened.body.review.uid}));
+  assert.equal(response.status,409,'the concurrent closed review must win');
+  assert.deepEqual(licence(),before,'no terms outlive a review that did not close in this batch');
+});
+
+// Regression for #5653 — synthetic supported-route interleaving.
+test('a pricing policy change racing the apply must make the snapshot stale at commit', async () => {
+  const {call,env,licence}=fixture();
+  const snapshot=await call(SUPER,'POST',`${P}/snapshot`,{});
+  assert.equal(snapshot.status,201);
+  const before=licence();
+  const original=env.DB.batch.bind(env.DB);
+  let raced=false;
+  env.DB.batch=async (statements:any[])=>{
+    if(raced)return original(statements);raced=true;
+    const changed=await call(SUPER,'PUT',`${P}/policy`,{basis:'primary_country',primary_country:'FR',expected_revision:0,reason:'Record the pricing basis'});
+    assert.equal(changed.status,200,JSON.stringify(changed));
+    return original(statements);
+  };
+  const response=await call(SUPER,'POST',`${P}/apply`,applyBody(snapshot.body.snapshot.uid,before.terms_revision));
+  assert.equal(response.status,409,'a snapshot at policy revision zero cannot be applied after revision one lands');
+  assert.deepEqual(licence(),before);
+});

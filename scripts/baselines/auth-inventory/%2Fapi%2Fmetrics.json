@@ -1,0 +1,37 @@
+{
+  "DELETE /api/metrics/snapshot/:id": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "GET /api/metrics/:projectId": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "GET /api/metrics/:projectId/series": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "GET /api/metrics/:projectId/summary": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "POST /api/metrics/:projectId": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "POST /api/metrics/:projectId/import-stripe": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  },
+  "PUT /api/metrics/snapshot/:id": {
+    "review": "forwarded",
+    "kind": "alias",
+    "state": "unreviewed"
+  }
+}

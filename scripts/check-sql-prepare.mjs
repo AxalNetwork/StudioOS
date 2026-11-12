@@ -27,10 +27,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSplit, writeSplit, entryFile } from './lib/splitLedger.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = path.join(ROOT, 'cloudflare-worker', 'src');
-const BASELINE = path.join(ROOT, 'scripts', 'sql-prepare-baseline.json');
+export const sqlLedgerFile = (key) => entryFile(key.slice(key.lastIndexOf(' @ ') + 3));
+export function readBaseline(root = ROOT) {
+  const legacy = path.join(root, 'scripts', ['sql', 'prepare', 'baseline.json'].join('-'));
+  if (fs.existsSync(legacy)) throw new Error(`obsolete ledger restored: ${legacy}; use scripts/baselines/sql-prepare/`);
+  return readSplit(path.join(root, 'scripts/baselines/sql-prepare'), sqlLedgerFile);
+}
+export function compare(found, baseline) {
+  return { added: [...found.keys()].filter((key) => !Object.hasOwn(baseline, key)), gone: Object.keys(baseline).filter((key) => !found.has(key)) };
+}
 
 function walk(dir) {
   const out = [];
@@ -49,7 +57,8 @@ function walk(dir) {
  * because a template containing an escaped backtick would otherwise end the
  * match early and hide everything after it.
  */
-export function scan() {
+export function scan(root = ROOT) {
+  const SRC = path.join(root, 'cloudflare-worker', 'src');
   const found = new Map();
   for (const file of walk(SRC)) {
     const src = fs.readFileSync(file, 'utf8');
@@ -73,24 +82,13 @@ export function scan() {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const found = scan();
+  const baseline = readBaseline();
   if (process.argv.includes('--write')) {
-    const sorted = Object.fromEntries([...found.entries()].sort(([a], [b]) => a.localeCompare(b)));
-    fs.writeFileSync(BASELINE, `${JSON.stringify({
-      note: 'Interpolations inside DB.prepare(`…`) present when this ledger was written, '
-          + 'each reviewed and none an injection. The gate fails on NEW entries only. '
-          + 'Removing a site is always allowed. Regenerate with: node scripts/check-sql-prepare.mjs --write',
-      sites: sorted,
-    }, null, 2)}\n`);
-    console.log(`✓ wrote baseline: ${Object.keys(sorted).length} sites`);
+    writeSplit(path.join(ROOT, 'scripts/baselines/sql-prepare'), Object.fromEntries(found), sqlLedgerFile);
+    console.log(`✓ wrote baseline: ${found.size} sites`);
     process.exit(0);
   }
-
-  if (!fs.existsSync(BASELINE)) {
-    console.error('✖ check-sql-prepare: baseline missing — run with --write');
-    process.exit(1);
-  }
-  const baseline = JSON.parse(fs.readFileSync(BASELINE, 'utf8')).sites ?? {};
-  const added = [...found.keys()].filter((k) => !(k in baseline));
+  const { added, gone } = compare(found, baseline);
 
   if (added.length) {
     console.error('✖ check-sql-prepare: NEW interpolation inside DB.prepare(`…`):');
@@ -103,7 +101,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   }
 
-  const gone = Object.keys(baseline).filter((k) => !found.has(k));
   console.log(`✓ check-sql-prepare: no new DB.prepare() interpolations `
     + `(${found.size} known${gone.length ? `, ${gone.length} since removed` : ''}).`);
 }

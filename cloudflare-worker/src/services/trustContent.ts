@@ -403,14 +403,23 @@ export async function publish(env: Env, userId: number, note: string, now = Date
     if (prior) return replayOf(prior, userId);
   }
   const fp = await pendingFingerprint(env);
-  if (review.token !== undefined && review.token !== await sha256Hex(fp)) return no('changed_since_review');
+  if (review.token !== undefined && review.token !== await sha256Hex(fp)) {
+    // The same Publish sent twice at once: the first may commit between the key
+    // read above and this fingerprint read, which then differs because the drafts
+    // are now published. That is the first's change, so the second replays it.
+    const raced = review.key ? await changeByKey(env, review.key) : null;
+    return raced ? replayOf(raced, userId) : no('changed_since_review');
+  }
 
   const drafts = ((await env.DB.prepare(`SELECT key FROM trust_content_blocks WHERE state = 'draft'`).all<{ key: string }>()).results || [])
     .map((r) => r.key).filter(isBlockKey);
   const subs = (await env.DB.prepare(
     `SELECT uid, name, state, starts_at FROM trust_subprocessors WHERE state IN ('draft', 'removing') ORDER BY id`,
   ).all<{ uid: string; name: string; state: string; starts_at: string | null }>()).results || [];
-  if (!drafts.length && !subs.length) return no('nothing_to_publish');
+  if (!drafts.length && !subs.length) {
+    const raced = review.key ? await changeByKey(env, review.key) : null;
+    return raced ? replayOf(raced, userId) : no('nothing_to_publish');
+  }
 
   const uid = newUid('tcc');
   const at = new Date(now).toISOString();

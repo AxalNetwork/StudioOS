@@ -99,7 +99,7 @@ jobs:
   # D4130 (#4130): the suite runs in PARTS, in parallel. As one job it took 74
   # minutes on one runner (main at c8c362cd17), on every push to every PR. The
   # `suite` matrix runs one part each (scripts/test-drift-parts.mjs: the
-  # frontend and worker suites cut by node's own --test-shard, plus `rest`, the
+  # frontend and worker suites packed by measured duration, plus `rest`, the
   # other steps of test:drift in order); the parts are derived from
   # package.json's test:drift, and ci_suite_parts_4130.test.mjs proves their
   # union is exactly the suite and that this matrix lists exactly them. The
@@ -147,9 +147,54 @@ jobs:
             echo "No merge-queue run passed on $SHA, so the full suite runs."
           fi
 
+  plan:
+    name: suite plan
+    needs: verified
+    if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Newest main timing artifact, or equal weights
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact=''
+          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
+            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
+          fi
+          if [ -n "$artifact" ]; then
+            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
+              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
+            fi
+          fi
+          if [ ! -f test-timings.json ]; then
+            echo "::notice::No main timings artifact available; using equal weights."
+          fi
+      - name: Generate the exact-once plan
+        id: plan
+        run: |
+          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+
   suite:
     name: suite (${{ matrix.part }})
-    needs: verified
+    needs: [verified, plan]
     # Runs whenever `verified` found nothing (always on a PR and in the queue,
     # where `verified` is skipped, and when its lookup failed).
     if: ${{ !cancelled() && needs.verified.outputs.run == '' }}
@@ -161,16 +206,7 @@ jobs:
       # Queue entries cannot land after a failure. PRs and pushes report every part.
       fail-fast: ${{ github.event_name == 'merge_group' }}
       matrix:
-        part:
-          - frontend-1-of-2
-          - frontend-2-of-2
-          - worker-1-of-6
-          - worker-2-of-6
-          - worker-3-of-6
-          - worker-4-of-6
-          - worker-5-of-6
-          - worker-6-of-6
-          - rest
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Check merge queue ref still exists
@@ -185,6 +221,9 @@ jobs:
             frontend/package-lock.json
             cloudflare-worker/package-lock.json
             package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: suite-plan
       # The suite imports React deck templates and the worker's TypeScript, so
       # it needs both workspaces' dependencies installed.
       - name: Install frontend deps
@@ -211,11 +250,284 @@ jobs:
         if: github.event_name == 'merge_group'
         working-directory: ${{ github.workspace }}
         run: bash scripts/ci/queue-ref-alive.sh
-      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
+
+  # D5606: shadow the replacement for the existing required checks.
+  fast:
+    name: ci / fast
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    outputs:
+      required: ${{ steps.verdict.outputs.required }}
+      advisory: ${{ steps.verdict.outputs.advisory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+        id: checkout
+        if: ${{ !cancelled() }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+        id: node
+        if: ${{ !cancelled() }}
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          GITLEAKS_VERSION=8.21.2
+          URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          for attempt in 1 2 3 4 5; do
+            if curl -sSfL --connect-timeout 10 --max-time 120 -o /tmp/gitleaks.tar.gz "$URL"; then
+              break
+            fi
+            if [ "$attempt" = 5 ]; then
+              echo "::error::Could not download gitleaks ${GITLEAKS_VERSION} after 5 attempts — this is a network failure, not a secret finding."
+              exit 1
+            fi
+            echo "gitleaks download attempt ${attempt} failed; retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+        id: install_scanner
+        if: ${{ !cancelled() }}
+      - name: Determine scan range
+        id: range
+        run: |
+          # Scan only the commits introduced by this push / PR rather than the
+          # entire public history. A new secret is still caught on the commit
+          # that introduces it, but CI no longer fails forever on historical
+          # leaks that cannot be rewritten without breaking every fork, open
+          # Dependabot PR and the backup mirror (see the `commits` allowlist in
+          # .gitleaks.toml for the running list of those unchangeable findings).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "logopts=--log-opts=${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "merge_group" ]; then
+            # #4107: the queue entry is main (base_sha) plus the queued PRs, so
+            # the range is every commit the queue would merge.
+            echo "logopts=--log-opts=${{ github.event.merge_group.base_sha }}..${{ github.event.merge_group.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "logopts=--log-opts=-1" >> "$GITHUB_OUTPUT"
+            else
+              echo "logopts=--log-opts=${BEFORE}..${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        if: ${{ !cancelled() }}
+      - name: Run gitleaks
+        run: |
+          # Uses the project-specific config which extends the upstream default
+          # ruleset and adds project allowlists. Commit range scoped above.
+          gitleaks detect \
+            --config=.gitleaks.toml \
+            --source=. \
+            ${{ steps.range.outputs.logopts }} \
+            --redact \
+            --verbose \
+            --no-banner \
+            --exit-code=1
+        id: scan
+        if: ${{ !cancelled() }}
+      - name: Load static checkers from the trusted base
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          if [[ "$EVENT" == push && "$BASE_SHA" == 0000000000000000000000000000000000000000 ]]; then
+            BASE_SHA="$GITHUB_SHA"
+          fi
+          [[ "$BASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          trusted="$RUNNER_TEMP/fast-guards"
+          mkdir -p "$trusted"
+          guards=(scripts/migration-immutability-gate.mjs scripts/lib/migrationImmutability.mjs
+            scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs)
+          git archive "$BASE_SHA" "${guards[@]}" | tar -x -C "$trusted"
+          ln -s "$GITHUB_WORKSPACE/frontend" "$trusted/frontend"
+          ln -s "$GITHUB_WORKSPACE/cloudflare-worker" "$trusted/cloudflare-worker"
+          ln -s "$GITHUB_WORKSPACE/scripts/api-drift-baseline.json" "$trusted/scripts/api-drift-baseline.json"
+        id: trusted
+        if: ${{ !cancelled() }}
+      - name: No migration on the base was edited, deleted or renamed
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          MIGRATION_GATE_BEFORE: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
+        run: node "$RUNNER_TEMP/fast-guards/scripts/migration-immutability-gate.mjs"
+        id: migrations
+        if: ${{ !cancelled() }}
+      - name: Fetch base branch
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$GITHUB_BASE_REF" --depth=1
+        id: lfs_base
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+      - name: Run LFS size gate
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+        run: node "$RUNNER_TEMP/fast-guards/scripts/lfs-size-gate.mjs" --against="origin/$GITHUB_BASE_REF"
+        id: lfs
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+      - name: Run drift checker
+        run: node "$RUNNER_TEMP/fast-guards/scripts/check-api-drift.mjs"
+        id: drift
+        if: ${{ !cancelled() }}
+      - run: npm ci
+        working-directory: cloudflare-worker
+        id: worker_install
+        if: ${{ !cancelled() }}
+      - name: TypeScript check
+        run: npx --no-install tsc --noEmit
+        working-directory: cloudflare-worker
+        id: worker_typecheck
+        if: ${{ !cancelled() }}
+      - run: npm ci
+        working-directory: frontend
+        id: frontend_install
+        if: ${{ !cancelled() }}
+      - run: npm run build
+        working-directory: frontend
+        id: frontend_build
+        if: ${{ !cancelled() }}
+      - name: npm audit (prod deps, critical fail)
+        run: node ../scripts/npm-audit-gate.mjs --level=critical
+        id: frontend_audit
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+        working-directory: frontend
+      - name: npm audit (prod deps, critical fail)
+        run: node ../scripts/npm-audit-gate.mjs --level=critical
+        id: worker_audit
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+        working-directory: cloudflare-worker
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.11"
+          cache: pip
+        id: python
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Test the PyPI retry policy
+        run: python -m unittest discover -s scripts -p test_pip_audit_gate.py
+        id: pip_test
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+        id: pip_install
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: pip-audit (audit requirements.txt only)
+        run: python scripts/pip_audit_gate.py
+        id: pip_audit
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Check the projection
+        run: node scripts/build-profile-routing.mjs --check
+        id: routing_check
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Build the routing docs
+        run: node scripts/build-profile-routing.mjs
+        id: routing
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Build the authorization inventory
+        run: node scripts/build-auth-inventory.mjs
+        id: auth
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Keep the routing docs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: routing-docs
+          path: |
+            documentation/architecture/PROFILE_ROUTING.md
+            documentation/architecture/PAGE_INVENTORY.md
+            documentation/architecture/AUTH_INVENTORY.json
+          if-no-files-found: error
+          retention-days: 30
+        id: routing_upload
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Report required and advisory results
+        id: verdict
+        if: ${{ !cancelled() }}
+        env:
+          EVENT: ${{ github.event_name }}
+          CHECKOUT: ${{ steps.checkout.outcome }}
+          NODE: ${{ steps.node.outcome }}
+          INSTALL_SCANNER: ${{ steps.install_scanner.outcome }}
+          RANGE: ${{ steps.range.outcome }}
+          SCAN: ${{ steps.scan.outcome }}
+          TRUSTED: ${{ steps.trusted.outcome }}
+          MIGRATIONS: ${{ steps.migrations.outcome }}
+          DRIFT: ${{ steps.drift.outcome }}
+          WORKER_INSTALL: ${{ steps.worker_install.outcome }}
+          WORKER_TYPECHECK: ${{ steps.worker_typecheck.outcome }}
+          FRONTEND_INSTALL: ${{ steps.frontend_install.outcome }}
+          FRONTEND_BUILD: ${{ steps.frontend_build.outcome }}
+          LFS_BASE: ${{ steps.lfs_base.outcome }}
+          LFS: ${{ steps.lfs.outcome }}
+          FRONTEND_AUDIT: ${{ steps.frontend_audit.outcome }}
+          WORKER_AUDIT: ${{ steps.worker_audit.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          PIP_TEST: ${{ steps.pip_test.outcome }}
+          PIP_INSTALL: ${{ steps.pip_install.outcome }}
+          PIP_AUDIT: ${{ steps.pip_audit.outcome }}
+          ROUTING_CHECK: ${{ steps.routing_check.outcome }}
+          ROUTING: ${{ steps.routing.outcome }}
+          AUTH: ${{ steps.auth.outcome }}
+          ROUTING_UPLOAD: ${{ steps.routing_upload.outcome }}
+        run: |
+          required=pass
+          for outcome in "$CHECKOUT" "$NODE" "$INSTALL_SCANNER" "$RANGE" "$SCAN" "$TRUSTED" \
+                         "$MIGRATIONS" "$DRIFT" "$WORKER_INSTALL" "$WORKER_TYPECHECK" \
+                         "$FRONTEND_INSTALL" "$FRONTEND_BUILD"; do
+            if [[ "$outcome" != success ]]; then required=fail; fi
+          done
+          advisory=pass
+          if [[ "$EVENT" == pull_request && ( "$LFS_BASE" != success || "$LFS" != success ) ]]; then
+            advisory=fail
+          fi
+          if [[ "$EVENT" != merge_group ]]; then
+            for outcome in "$FRONTEND_AUDIT" "$WORKER_AUDIT" "$PYTHON" "$PIP_TEST" "$PIP_INSTALL" "$PIP_AUDIT" \
+                           "$ROUTING_CHECK" "$ROUTING" "$AUTH" "$ROUTING_UPLOAD"; do
+              if [[ "$outcome" != success ]]; then advisory=fail; fi
+            done
+          fi
+          printf 'required=%s\nadvisory=%s\n' "$required" "$advisory" >> "$GITHUB_OUTPUT"
+
+  landing:
+    name: landing gate
+    needs: [verified, fast, suite]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Required fast checks and full suite passed
+        env:
+          EVENT: ${{ github.event_name }}
+          VERIFIED_RUN: ${{ needs.verified.outputs.run }}
+          SUITE: ${{ needs.suite.result }}
+          REQUIRED: ${{ needs.fast.outputs.required }}
+        run: |
+          if [ "$REQUIRED" != pass ]; then
+            echo "::error::Required fast checks did not pass."
+            exit 1
+          fi
+          if [ "$EVENT" = "push" ] && [ -n "$VERIFIED_RUN" ] && [ "$SUITE" = "skipped" ]; then
+            echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
+            exit 0
+          fi
+          if [ "$SUITE" = "success" ]; then
+            echo "Every part of test:drift passed."
+            exit 0
+          fi
+          echo "::error::test:drift did not pass: the suite parts ended '$SUITE'."
+          exit 1
 
   gate:
     name: test:drift (full suite)
-    needs: [verified, suite]
+    needs: [verified, plan, suite]
     # Always, never skipped: a skipped required check reports as passed. This
     # job decides, and it passes only when every part passed — or, on a push
     # to main only, when the merge queue already passed this exact commit.
@@ -228,12 +540,13 @@ jobs:
           EVENT: ${{ github.event_name }}
           VERIFIED_RUN: ${{ needs.verified.outputs.run }}
           SUITE: ${{ needs.suite.result }}
+          PLAN: ${{ needs.plan.result }}
         run: |
           if [ "$EVENT" = "push" ] && [ -n "$VERIFIED_RUN" ] && [ "$SUITE" = "skipped" ]; then
             echo "The merge queue passed the full suite on this commit: $VERIFIED_RUN"
             exit 0
           fi
-          if [ "$SUITE" = "success" ]; then
+          if [ "$PLAN" = "success" ] && [ "$SUITE" = "success" ]; then
             echo "Every part of test:drift passed."
             exit 0
           fi
@@ -249,6 +562,66 @@ jobs:
   # reads this run's jobs, main's latest CI run and the red-main alert, and
   # cannot fail (continue-on-error; the script exits 0).
   # -------------------------------------------------------------------------
+  selection-shadow:
+    name: selection (shadow)
+    needs: suite
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Read newest main dependency trace
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json"
+          gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/trace-candidates.json"
+          node scripts/select-tests.mjs --main-artifact "$RUNNER_TEMP/trace-candidates.json" "$RUNNER_TEMP/main-commits.json" > "$RUNNER_TEMP/trace-artifact.json"
+          artifact=$(node -p "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/trace-artifact.json')).id || ''")
+          if [ -n "$artifact" ]; then
+            gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/deps.zip"
+            unzip -j "$RUNNER_TEMP/deps.zip" test-deps.json -d .
+            created=$(node -p "JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP + '/trace-artifact.json')).created_at || ''")
+            echo "TRACE_CREATED_AT=$created" >> "$GITHUB_ENV"
+          fi
+      - name: Read machine-readable CI failures
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ci-failures-*
+          path: ci-failures
+      - name: Record the shadow decision
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node scripts/select-tests.mjs || true
+          if [ ! -s selection-shadow.json ]; then
+            echo '{"kind":"selection-shadow","version":1,"mode":"full","reason":"shadow-setup-failed","scoring":"unscored","misses":null,"failing":null}' > selection-shadow.json
+          fi
+          exit 0
+      - name: Keep one shadow record
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: selection-shadow-${{ github.run_id }}
+          path: selection-shadow.json
+          if-no-files-found: error
+          retention-days: 30
+
   classify:
     name: why CI failed (D5398)
     needs: suite
@@ -346,44 +719,6 @@ jobs:
         run: node scripts/check-api-drift.mjs
 
   # -------------------------------------------------------------------------
-  # D4103 (#4103): the route map's two projections, PROFILE_ROUTING.md and
-  # PAGE_INVENTORY.md, are not committed: every routing change rewrote them
-  # and parallel branches conflicted on them. This job builds them from the
-  # route map and the sidebar (node only, no install) and keeps them as the
-  # run's `routing-docs` artifact, so they can still be read without cloning.
-  # Their invariants are checked by `--check` in test:guards (the gate job).
-  # -------------------------------------------------------------------------
-  routing-docs:
-    name: routing docs (artifact)
-    # Not a required check, and the queue entry's PR already built the
-    # artifact; skipped there like the other optional jobs (#4107).
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: '22'
-      - name: Check the projection
-        run: node scripts/build-profile-routing.mjs --check
-      - name: Build the routing docs
-        run: node scripts/build-profile-routing.mjs
-      # #4570: the authorization inventory, every route's gate and ownership evidence.
-      - name: Build the authorization inventory
-        run: node scripts/build-auth-inventory.mjs
-      - name: Keep the routing docs
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: routing-docs
-          path: |
-            documentation/architecture/PROFILE_ROUTING.md
-            documentation/architecture/PAGE_INVENTORY.md
-            documentation/architecture/AUTH_INVENTORY.json
-          if-no-files-found: error
-          retention-days: 30
-
-  # -------------------------------------------------------------------------
   # Open Graph / social-preview gate.
   #
   # Guards the "every axal.vc link previews with the same wrong image" class of
@@ -418,41 +753,6 @@ jobs:
         run: node scripts/generate-og-images.mjs --check
       - name: Validate tags in built output
         run: node scripts/validate-og-tags.mjs
-
-  # -------------------------------------------------------------------------
-  # LFS size gate — only fires on files added / modified in the PR.
-  # Uses --against so grandfathered pre-audit blobs do NOT block CI.
-  # -------------------------------------------------------------------------
-  lfs-gate:
-    name: lfs size gate
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    # Full history (fetch-depth: 0 below) so `git diff base...HEAD` has a
-    # merge base. That checkout has exceeded this job's old 5-minute limit
-    # before the gate ran (#3514, 2026-10-27), so the job allows 15.
-    #
-    # BLOBLESS (`filter: blob:none`, 2026-11-03). The full clone of every
-    # blob still ran past 15 minutes on a busy day, and a cancelled gate is a
-    # red check on every open PR. The gate needs the commits and trees for the
-    # merge base and the name-only diff, and the bytes of the files HEAD
-    # checks out (which the checkout fetches); it never reads an old blob.
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          fetch-depth: 0
-          filter: blob:none
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: '22'
-      - name: Fetch base branch
-        env:
-          GITHUB_BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "$GITHUB_BASE_REF" --depth=1
-      - name: Run LFS size gate
-        env:
-          GITHUB_BASE_REF: ${{ github.base_ref }}
-        run: node scripts/lfs-size-gate.mjs --against="origin/$GITHUB_BASE_REF"
 
   # -------------------------------------------------------------------------
   # FastAPI dev backend: import + smoke. Catches obvious Python breakage in
@@ -490,116 +790,6 @@ jobs:
         run: |
           python3 -m unittest backend/tests/test_company_fields_d4962.py
           python3 -m unittest backend/tests/test_company_routes_d5367.py
-
-  # -------------------------------------------------------------------------
-  # Epic 11 — supply-chain audits. Both run with `|| true` semantics
-  # downgraded to a hard fail on HIGH/CRITICAL only, so dev-dependency
-  # advisories don't block merge while real prod-dep CVEs do.
-  # -------------------------------------------------------------------------
-  audit-frontend:
-    name: audit (frontend npm)
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
-    # consecutive runs of PR #429, a diff with no dependency change on either
-    # side, and each time the orphaned process named at cancellation was a
-    # registry call: `npm ci` on one run, `npm audit` on the next. That is a
-    # registry stall on the runner rather than a slow step, so the fix is room
-    # for one to clear, matching what `audit (python pip-audit)` already has.
-    # A cancelled job is worse than a failing one: it reads as a red square
-    # with no cause, and it says nothing about the dependencies it exists to
-    # check.
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-      # `--no-audit --no-fund`: npm ci runs its own audit and funding lookup on
-      # install, so this job paid for two registry round-trips to answer one
-      # question — and the install's audit decides nothing, because the
-      # deliberate `npm audit` below is what passes or fails the job. The same
-      # flags are already on the install fallback further up this file.
-      - run: npm ci --no-audit --no-fund
-      # Through the gate rather than `npm audit` directly, because that command
-      # exits 1 for BOTH "you have a critical CVE" and "the registry did not
-      # answer" — and this job spent seven minutes on a 503 from the advisory
-      # endpoint before going red exactly like a real finding. The gate retries
-      # a transport failure, bounds each attempt, names the advisories on a real
-      # one, and still FAILS when the database is unreachable: it just says which
-      # of the two happened. See scripts/npm-audit-gate.mjs.
-      #
-      # Threshold is `critical`, not `high`. Remaining highs (if any) print
-      # on every run — do not hard-code a tolerated list here. The previous
-      # pair was `image-size` (ICNS/JXL/HEIF DoS) and `pptxgenjs`, which
-      # reached it; both lockfiles now override `image-size` to the patched
-      # `image-size-next@1.2.2` fork (Dependabot #161).
-      - name: npm audit (prod deps, critical fail)
-        run: node ../scripts/npm-audit-gate.mjs --level=critical
-
-  audit-worker:
-    name: audit (worker npm)
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    # 10, not 5. Both npm audit jobs were CANCELLED — not failed — on two
-    # consecutive runs of PR #429, a diff with no dependency change on either
-    # side, and each time the orphaned process named at cancellation was a
-    # registry call: `npm ci` on one run, `npm audit` on the next. That is a
-    # registry stall on the runner rather than a slow step, so the fix is room
-    # for one to clear, matching what `audit (python pip-audit)` already has.
-    # A cancelled job is worse than a failing one: it reads as a red square
-    # with no cause, and it says nothing about the dependencies it exists to
-    # check.
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: cloudflare-worker
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: cloudflare-worker/package-lock.json
-      # `--no-audit --no-fund`: npm ci runs its own audit and funding lookup on
-      # install, so this job paid for two registry round-trips to answer one
-      # question — and the install's audit decides nothing, because the
-      # deliberate `npm audit` below is what passes or fails the job. The same
-      # flags are already on the install fallback further up this file.
-      - run: npm ci --no-audit --no-fund
-      # Same gate as the frontend job above, and for the same reason: a registry
-      # outage must not be reported as a vulnerability. The worker's production
-      # tree currently carries nothing at any severity.
-      - name: npm audit (prod deps, critical fail)
-        run: node ../scripts/npm-audit-gate.mjs --level=critical
-
-  audit-python:
-    name: audit (python pip-audit)
-    if: github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-      - name: Test the PyPI retry policy
-        run: python -m unittest discover -s scripts -p test_pip_audit_gate.py
-      - name: Install pip-audit
-        run: python -m pip install --upgrade pip pip-audit
-      - name: pip-audit (audit requirements.txt only)
-        # Audit the pinned requirements file directly instead of the full
-        # environment. This avoids `setuptools (X.Y.Z.post0)` style errors
-        # from environment-injected post-release builds that aren't on PyPI.
-        # `pip_audit_gate.py` runs that command and retries a transient PyPI
-        # advisory lookup (#5526).
-        run: python scripts/pip_audit_gate.py
 
   digest:
     name: CI failure digest (#5619)

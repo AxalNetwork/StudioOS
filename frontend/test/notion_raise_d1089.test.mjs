@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import FromNotion from '../src/pages/cycles/FromNotion.jsx';
 import NotionSnapshotImport, { GATE_WORDS, isUpdate, snapshotBody } from '../src/pages/cycles/NotionSnapshotImport.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (p) => readFileSync(p, 'utf8');
@@ -113,7 +114,7 @@ test('Capital relationships: the Worker\'s words, Add or Link, and an immediate 
 });
 
 test('the wiring: From Notion on Capital relationships and on the Data room with its dialog', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /<FromNotion section="raise" projectId=\{ctx\.projectId\} module="capital_relationships" \/>/);
   assert.match(route, /<FromNotion section="raise" projectId=\{ctx\.projectId\} module="data_room" acceptDialog=\{NotionSnapshotImport\} \/>/);
   const dialog = read('frontend/src/pages/cycles/NotionSnapshotImport.jsx');
