@@ -5,6 +5,7 @@ import {
   Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { clientDeliverablesApi } from '../lib/api/clientDeliverables.js';
 import { bpsPercent } from '../lib/bps';
 import ZoneActions from '../workspaces/ZoneActions';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -842,6 +843,7 @@ function EngagementDetailModal({ engagementId, user, isFounder, isPartner, onClo
 
         <Field label="Deliverables"><p className="whitespace-pre-line text-gray-800 dark:text-gray-200">{eng.deliverables}</p></Field>
         {eng.delivery_notes && <Field label="Delivery notes (from partner)"><p className="whitespace-pre-line text-gray-800 dark:text-gray-200">{eng.delivery_notes}</p></Field>}
+        {isFounder && <SharedDeliverables engagementId={eng.id} />}
         {eng.cancel_reason && <Field label="Cancel reason"><p className="text-gray-800 dark:text-gray-200">{eng.cancel_reason}</p></Field>}
 
         {/* State machine actions */}
@@ -1051,6 +1053,80 @@ function Field({ label, children }) {
       <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">{label}</div>
       {children}
     </div>
+  );
+}
+
+/**
+ * #5314 part 1 (D4822): what the firm has sent on this engagement, for the
+ * client. Opening one goes through the Worker, which records the client's
+ * first open of that version — the open the firm's Deliverables log reads as
+ * "Opened" — and hands back the link. Nothing here notifies anyone.
+ */
+function SharedDeliverables({ engagementId }) {
+  const [state, setState] = useState({ loading: true, items: [], error: null });
+  const [note, setNote] = useState(null);
+  const load = useCallback(async () => {
+    try {
+      const r = await clientDeliverablesApi.list(engagementId);
+      setState({ loading: false, items: Array.isArray(r?.items) ? r.items : [], error: null });
+    } catch {
+      setState({ loading: false, items: [], error: 'Shared deliverables are unreadable right now. Please retry in a moment.' });
+    }
+  }, [engagementId]);
+  useEffect(() => { load(); }, [load]);
+
+  const open = async (item) => {
+    setNote(null);
+    // Opened before the request so a browser does not treat the new tab as a pop-up.
+    // (`noopener` would make window.open return null, so the opener is cut by hand.)
+    const tab = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+    if (tab) tab.opener = null;
+    try {
+      const r = await clientDeliverablesApi.open(item.uid);
+      if (r?.link_url && tab) tab.location.href = r.link_url;
+      else if (r?.link_url && typeof window !== 'undefined') window.open(r.link_url, '_blank', 'noopener');
+      load();
+    } catch (e) {
+      tab?.close?.();
+      setNote(e?.message || 'That deliverable could not be opened.');
+    }
+  };
+
+  return (
+    <Field label="Shared with you">
+      {state.loading && <p className="text-gray-500">Loading…</p>}
+      {state.error && <ErrorBox message={state.error} />}
+      {!state.loading && !state.error && state.items.length === 0 && (
+        <p className="text-gray-500" data-testid="shared-deliverables-empty">Nothing has been sent to you on this engagement yet.</p>
+      )}
+      {state.items.length > 0 && (
+        <ul className="divide-y divide-gray-100 dark:divide-gray-800" data-testid="shared-deliverables">
+          {state.items.map((item) => (
+            <li key={item.uid} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  {item.title}{item.version ? <span className="ml-1 text-xs text-gray-500">v{item.version}</span> : null}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Sent {String(item.sent_at).slice(0, 10)}
+                  {item.opened_at ? ` · You opened it ${String(item.opened_at).slice(0, 10)}` : ''}
+                  {item.changed_since_open ? ' · updated since you opened it' : ''}
+                </div>
+              </div>
+              {item.has_link ? (
+                <button type="button" onClick={() => open(item)}
+                  className="border border-violet-300 text-violet-700 hover:bg-violet-50 rounded-md px-3 py-1.5 text-sm dark:border-violet-700 dark:text-violet-300">
+                  Open
+                </button>
+              ) : (
+                <span className="text-xs text-gray-500">Shared outside the platform</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {note && <p role="alert" className="mt-1 text-xs text-rose-700 dark:text-rose-300">{note}</p>}
+    </Field>
   );
 }
 

@@ -1,0 +1,22 @@
+{
+  "GET /api/references/:id/recording-url": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/references/:id/recording": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/references/:id/summarize": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/references/:id/transcribe": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

@@ -22,6 +22,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const app = codeOnly(read('frontend/src/App.jsx'));
@@ -93,13 +94,13 @@ test('the page that inherited the form honours ?new=1', () => {
   // to read the flag. Either half alone is a button that does nothing. The
   // Build desk held it until D661 (#1474) retired the desk; the Build cycle
   // overview holds it now, and follows the flag while already mounted.
-  const route = codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx'));
+  const route = codeOnly(cycleRouteText());
   assert.match(route, /useState\(\(\) => creates && searchParams\.get\('new'\) === '1'\)/,
     'the Build overview must open the form from ?new=1');
   assert.match(route, /useEffect\(\(\) => \{\s*if \(creates && searchParams\.get\('new'\) === '1'\) setCreating\(true\);/,
     'and must follow ?new=1 when the page is already mounted');
   assert.match(route, /<CreateStartupForm/, 'and must actually mount it');
-  assert.match(route, /build: \{[\s\S]*?creates: true,/, 'Build is the cycle that creates');
+  assert.match(route, /const build = \{[\s\S]*?creates: true,/, 'Build is the cycle that creates');
   assert.match(codeOnly(read('frontend/src/components/CommandPalette.jsx')), /nav\('\/build\?new=1'\)/,
     'the Command Palette entry must address the new home');
 });

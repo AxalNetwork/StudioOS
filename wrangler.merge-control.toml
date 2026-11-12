@@ -1,0 +1,38 @@
+# D5618: independent control plane. Never bind studioos D1, KV, assets or deploy credentials.
+name = "studioos-merge-control"
+main = "merge-control/src/index.ts"
+compatibility_date = "2026-11-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[vars]
+REPOSITORY = "AxalNetwork/StudioOS"
+
+[observability]
+enabled = true
+[observability.traces]
+enabled = true
+head_sampling_rate = 1
+
+[[durable_objects.bindings]]
+name = "REPO_CONTROL"
+class_name = "RepoControl"
+
+[[migrations]]
+tag = "v1-repo-control"
+new_sqlite_classes = ["RepoControl"]
+
+[[queues.producers]]
+binding = "EVENTS"
+queue = "studioos-merge-control-events"
+
+[[queues.consumers]]
+queue = "studioos-merge-control-events"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 5
+dead_letter_queue = "studioos-merge-control-dlq"
+
+[triggers]
+crons = ["*/5 * * * *"]

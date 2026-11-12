@@ -259,3 +259,26 @@ test('a non-member is never told a company is archived', async () => {
     assert.ok([403, 404].includes(res.status), `${method} ${path}: ${res.status}`);
   }
 });
+
+// Regression for #5654 — synthetic supported-route interleaving.
+test('a losing General save emits no audit events when two legitimate writes share a millisecond',async()=>{
+  const NativeDate=Date;
+  class FixedDate extends NativeDate {constructor(...args:any[]){super(...(args.length?args:['2026-11-12T00:00:00.000Z']) as [any]);}static now(){return NativeDate.parse('2026-11-12T00:00:00.000Z');}}
+  globalThis.Date=FixedDate as DateConstructor;
+  try {
+    const db=fixture();const inner=d1Over(db);let raced=false;
+    const DB={...inner,batch:async(sts:any[])=>{if(!raced){raced=true;const other=await call(envOf(db),FAY,'PATCH',PATCH,{description:'Concurrent commit'});assert.equal(other.status,200);}return inner.batch(sts);}};
+    const response=await call(envOf(db,{DB}),ADA,'PATCH',PATCH,{description:'Losing edit'});
+    assert.equal(response.status,409);assert.equal(row(db).description,'Concurrent commit');
+    assert.deepEqual(events(db).map(e=>e.actor),[FAY],'only the winning request may be audited');
+  }finally{globalThis.Date=NativeDate;}
+});
+
+// Regression for #5655 — synthetic supported-route interleaving.
+test('archiving through the supported route after the write gate prevents a General update',async()=>{
+  const db=fixture();const inner=d1Over(db);let raced=false;
+  const DB={...inner,batch:async(sts:any[])=>{if(!raced){raced=true;const archived=await call(envOf(db),ADA,'POST',`${PATCH}/archive`,{});assert.equal(archived.status,200,JSON.stringify(archived));}return inner.batch(sts);}};
+  const response=await call(envOf(db,{DB}),ADA,'PATCH',PATCH,{description:'Changed after archive'});
+  assert.equal(response.status,409,'the archived state must win before the mutable company write');
+  assert.equal(row(db).description,'Original description');assert.deepEqual(events(db),[]);
+});

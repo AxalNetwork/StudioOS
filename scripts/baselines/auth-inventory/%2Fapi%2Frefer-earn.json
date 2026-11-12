@@ -1,0 +1,12 @@
+{
+  "GET /api/refer-earn/submissions/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/refer-earn/submissions/:uid/context": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}
