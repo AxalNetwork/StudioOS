@@ -14,7 +14,7 @@ name: GitHub alerts
 # Each alert is one issue titled `[alert] ...`: the channel hears only when it
 # opens and when it closes. Needs the secret SLACK_GITHUB_WEBHOOK_URL (a Slack
 # incoming webhook for the channel); without it the issues still open and close
-# and the job warns. These jobs never fail on an alert.
+# and the outbox retains delivery intent. Reporter errors fail visibly.
 
 on:
   schedule:
@@ -70,6 +70,9 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'main-red')
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: github-health-main-red
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read
@@ -78,6 +81,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: refs/heads/main
           sparse-checkout: scripts
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -94,6 +98,9 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'queue')
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: github-health-queue
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read
@@ -102,6 +109,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          ref: refs/heads/main
           sparse-checkout: scripts
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
@@ -116,8 +124,8 @@ jobs:
   future-clock-plan:
     name: suite plan
     if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock')
+      github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -127,6 +135,9 @@ jobs:
       parts: ${{ steps.plan.outputs.parts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -163,8 +174,8 @@ jobs:
     needs: future-clock-plan
     name: future clock (${{ matrix.part }})
     if: >-
-      (github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock')
+      github.ref == 'refs/heads/main' && ((github.event_name == 'schedule' && github.event.schedule == '23 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.check == 'future-clock'))
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -217,39 +228,48 @@ jobs:
           export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1
           export NODE_OPTIONS="--import=$GITHUB_WORKSPACE/scripts/future-clock.mjs"
           node scripts/future-clock-check.mjs
-          node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json > "$RUNNER_TEMP/future-clock.tap" 2>&1 || true
-          grep -E '^\s*not ok ' "$RUNNER_TEMP/future-clock.tap" | head -50 || true
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          node scripts/future-clock-producer.mjs ${{ matrix.part }} --plan-file suite-plan.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: future-clock-${{ matrix.part }}
-          path: ${{ runner.temp }}/future-clock.tap
+          path: ${{ runner.temp }}/future-clock/
+          if-no-files-found: error
           retention-days: 3
 
   future-clock:
     name: future clock (report)
     needs: future-clock-part
-    if: ${{ always() && needs.future-clock-part.result != 'skipped' }}
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.future-clock-part.result != 'skipped' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: github-health-future-clock
+      cancel-in-progress: false
     permissions:
       contents: read
+      actions: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts
+            package.json
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true # missing artifacts are reported as unknown, never recovery
         with:
           pattern: future-clock-*
           path: ${{ runner.temp }}/fc
-      - run: |
-          cat "$RUNNER_TEMP"/fc/*/future-clock.tap > "$RUNNER_TEMP/all.tap" 2>/dev/null || true
-          node scripts/github-alerts.mjs future-clock
+      - run: node scripts/github-alerts.mjs future-clock
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SLACK_GITHUB_WEBHOOK_URL: ${{ secrets.SLACK_GITHUB_WEBHOOK_URL }}
           FUTURE_CLOCK_DAYS: '7'
-          FUTURE_CLOCK_LOG: ${{ runner.temp }}/all.tap
+          FUTURE_CLOCK_DIR: ${{ runner.temp }}/fc
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

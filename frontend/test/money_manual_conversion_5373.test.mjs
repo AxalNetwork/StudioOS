@@ -8,13 +8,16 @@
  *
  *   usd / eur   the currency is fixed by contract (the ledger, the fund, the pack is sold in it); the file must name it.
  *   not-money   the line is a percentage, a ratio or a rounding to two places that a money word sits beside.
- *   pending     a variable-currency path this issue did not migrate. Each is named in D5373.md; the list may only shrink.
+ *
+ * There is no `pending` kind any more: the last groups moved onto the money layer in D5496 (Use of Funds), D5497 (the cap
+ * table) and D5498 (advisor ledger, partner forms, pitch sources, Stripe MRR), so a flagged path is either migrated or fixed
+ * by contract. The kind list is asserted exactly, so a `pending` entry cannot be added back without changing this test.
  *
  * The count is exact, so a NEW `/ 100` in a listed file fails (the count goes up) and so does removing one without
  * lowering it here (the list never carries slack a later line could hide in). A file that is not listed at all fails on
  * its first flagged line. Mutations checked, both ways: `/ 100` added to a migrated file (money.js's callers); `* 100`
  * added to a listed file; a listed file's conversion removed without editing the count; a `usd` entry whose file never
- * names the currency; a `pending` file missing from the decision file.
+ * names the currency; a `pending` kind put back (the kind test fails); a `toLocaleString` quotient line added to a file.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -87,7 +90,7 @@ const ALLOW = [
     "frontend/src/pages/investor/InvestorFundLPs.jsx": 2,
     "frontend/src/pages/investor/InvestorFundLanding.jsx": 3,
     "frontend/src/pages/investor/ProofOfFunds.jsx": 1,
-    "frontend/src/pages/investor/fundCallsModel.js": 1,
+    "frontend/src/pages/investor/fundCallsModel.js": 2,
     "frontend/src/pages/investor/proofOfFundsModel.js": 3,
     "frontend/src/pages/investor/deals/ClosingZone.jsx": 4,
     "cloudflare-worker/src/routes/_capital_call_writes.ts": 1,
@@ -137,6 +140,7 @@ const ALLOW = [
     "frontend/src/lib/mercurySpend.js": 1,
     "frontend/src/pages/investor/FromMercury.jsx": 1,
     "frontend/src/pages/cycles/mercuryRaise.js": 1,
+    "frontend/src/pages/cycles/growFromMercury.js": 1,
     "cloudflare-worker/src/services/mercury/growFeeds.ts": 3,
     "cloudflare-worker/src/services/mercury/parse.ts": 1,
     "cloudflare-worker/src/services/mercury/raiseFeeds.ts": 3,
@@ -149,6 +153,9 @@ const ALLOW = [
     "frontend/src/lib/revenueLedger.js": 1,
     "cloudflare-worker/src/services/revenueLedger.ts": 1,
     "frontend/src/components/spinout/SafeIssuancesCard.jsx": 1,
+  } },
+  { kind: 'usd', reason: "An engagement invoice is in US dollars: a quote carries no currency column (`quotes.price` is REAL dollars) and the one route that issues an invoice never passes one, so `engagement_invoices.currency` is always its USD default.", files: {
+    "frontend/src/pages/NeedsBoardPage.jsx": 1,
   } },
   { kind: 'usd', reason: "Admin, advisor-firm, partner, network and founder surfaces that name US dollars in the column or the copy (`price_usd`, `hourly_rate_usd`, \"in dollars\", `$` in the string).", files: {
     "frontend/src/lib/partnerSettlements.js": 1,
@@ -193,7 +200,6 @@ const ALLOW = [
     "cloudflare-worker/src/services/decks/recordSources.ts": 2,
     "cloudflare-worker/src/services/growCycle.ts": 1,
     "cloudflare-worker/src/services/growKpis.ts": 3,
-    "cloudflare-worker/src/services/mail/blocks.ts": 1,
     "cloudflare-worker/src/services/marketReadingRead.ts": 1,
     "cloudflare-worker/src/services/publishSources.ts": 1,
     "cloudflare-worker/src/services/raiseClaims.ts": 1,
@@ -226,6 +232,18 @@ test('the scan flags a hand-written factor of 100 on a money value, and only tha
   assert.ok(!flagged("className=\"text-violet-100/70 amount\""), 'a Tailwind class is not an expression');
   assert.ok(!flagged('const price = formatMinor(cents, code);'));
   assert.ok(!flagged('const n = amount * 1000;'));
+});
+
+test('the scan flags a quotient formatted as a locale number beside a currency code, which no money word marked (D5373 part 2)', () => {
+  const flagged = (line) => scanFile(line).length === 1;
+  // The line cloudflare-worker/src/services/useOfFunds/eadwyn.ts held: no cents/amount/price word, no toFixed(2).
+  assert.ok(flagged("? `${currency.toUpperCase()} ${(value / 100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : String(value);"));
+  assert.ok(flagged("return (n / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });"));
+  assert.ok(flagged("const f = new Intl.NumberFormat('en-US').format(x / 100);"));
+  assert.ok(!flagged("const label = (count / 1000).toLocaleString('en-US');"), 'a factor of 1000 is not a minor unit');
+  assert.ok(!flagged("const share = ((paid / total) * 100).toLocaleString('en-US');"), 'a percentage is not money');
+  assert.ok(!flagged("const t = rows.length.toLocaleString('en-US');"), 'no factor of 100 at all');
+  assert.ok(!flagged("const label = codeAmount(value, currency, { trimWhole: false });"), 'the money layer is the fix');
 });
 
 test('every flagged file is listed, with exactly the flagged lines it holds', () => {
@@ -284,6 +302,11 @@ test('the surfaces D5373 migrated whole are off the allow-list and use the money
     'cloudflare-worker/src/services/capTableAccessRecord.ts:toMajorString',
     'cloudflare-worker/src/services/capTableToday.ts:majorToMinor',
     'cloudflare-worker/src/services/capTableWrites.ts:toMajorString',
+    // Part 2: the Use of Funds source text and the sweep's finds (the cap-table five are D5497's, listed above).
+    'cloudflare-worker/src/services/useOfFunds/eadwyn.ts:codeAmount',
+    'cloudflare-worker/src/services/capRelReads.ts:majorToMinor',
+    'frontend/src/pages/deal/dealAudienceModel.js:majorToMinor',
+    'frontend/src/pages/admin/programs/referralPartnersModel.js:exponentOf',
   ];
   for (const entry of migrated) {
     const [file, fn] = entry.split(':');

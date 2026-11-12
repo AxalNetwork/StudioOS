@@ -1,4 +1,5 @@
 import { holdsLicence, holdsOnlyLicence } from './accountLicences';
+import { companyWriteDenial } from './companyAccess';
 // Task #1 (Spin-Out Teams Collaboration) — shared project membership + access.
 //
 // A Spin-Out project was single-founder via projects.founder_id. This module
@@ -167,6 +168,19 @@ export function isProjectManager(
 ): boolean {
   if (user.role === 'admin') return true;
   return holdsLicence(user, 'founder') && !!user.founder_id && project.founder_id === user.founder_id;
+}
+
+/** D5329: only project management inherits the current company's write authority. */
+export async function canManageProject(
+  env: Env,
+  user: User,
+  project: { founder_id: number | null; company_id: number | null },
+  support: boolean,
+): Promise<boolean> {
+  if (support) return false;
+  if (project.company_id == null) return isProjectManager(user, project);
+  if (holdsLicence(user, 'founder') && !!user.founder_id && project.founder_id === user.founder_id) return true;
+  return (await companyWriteDenial(env, { id: project.company_id }, user, support)) === null;
 }
 
 /**
