@@ -138,3 +138,19 @@ test('a first logo upload finishing late cannot close a different programme edit
     assert.equal(s.creates.length, 1); assert.equal(s.uploads[0][0], 'p1');
   } finally { await ui.close(); }
 });
+
+
+test('partial success focuses its logo retry without waiting for a slow list refresh', async () => {
+  const s = fakeApi(); s.failLogo = true;
+  const ui = await mounted(s.api);
+  let release;
+  const delayed = new Promise((resolve) => { release = resolve; });
+  const read = s.api.programmes;
+  s.api.programmes = async () => { await delayed; return read(); };
+  try {
+    await createWithLogo(ui);
+    assert.ok(ui.by('testing-logo-status-p1'), 'logo retry is outside the pending list read');
+    assert.equal(ui.props(document.activeElement)['data-testid'], 'testing-logo-status-p1', 'focus reaches the retained result while the list is pending');
+    assert.equal(s.creates.length, 1);
+  } finally { await act(async () => { release(); await flush(); }); await ui.close(); }
+});

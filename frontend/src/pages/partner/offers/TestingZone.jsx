@@ -81,7 +81,7 @@ export default function TestingZone({ api = partnerTestingApi }) {
 
   useEffect(() => {
     const target = focusAfterRead.current;
-    if (!target || state.loading || panel.mode !== null) return;
+    if (!target || panel.mode !== null || (state.loading && target.kind !== 'logo')) return;
     const preferred = target.kind === 'logo' ? logoNodes.current.get(target.uid)
       : target.kind === 'programme' ? programmeNodes.current.get(target.uid) : newButtonRef.current;
     const node = preferred || newButtonRef.current || bodyRef.current;
