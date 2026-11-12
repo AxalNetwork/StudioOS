@@ -15,7 +15,8 @@ const BADGE_STYLES = {
 };
 
 function BadgePill({ badge }) {
-  const s = BADGE_STYLES[badge] || BADGE_STYLES.yellow;
+  const s = BADGE_STYLES[badge];
+  if (!s) return <span>Not enough evidence</span>;
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${s.bg} ${s.text} border ${s.border}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -24,18 +25,13 @@ function BadgePill({ badge }) {
   );
 }
 
-function fmtPct(v) {
-  if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+function signalValue(value, source) {
+  return Number.isFinite(value) ? value : source?.reason || 'Not recorded';
 }
-function fmtMonths(v) {
-  if (v === null || v === undefined) return '—';
-  if (v >= 60) return '60+ mo';
-  return `${v.toFixed(1)} mo`;
-}
-function fmtDelta(v, suffix = 'pp') {
-  if (v === null || v === undefined) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(2)}${suffix}`;
+
+function snapshotAge(snapshot) {
+  return [snapshot.snapshot_date, Number.isInteger(snapshot.age_days) ? `${snapshot.age_days} days old` : null,
+    snapshot.stale === true ? 'Stale' : null].filter(Boolean).join(' · ');
 }
 
 function SortHeader({ label, field, sort, setSort }) {
@@ -58,10 +54,12 @@ function DetailDrawer({ projectUid, onClose }) {
 
   useEffect(() => {
     if (!projectUid) return;
+    let current = true;
     setData(null); setErr(null);
     api.portfolioHealthGet(projectUid, 30)
-      .then(setData)
-      .catch(e => setErr(e.message || 'Failed to load'));
+      .then(result => { if (current) setData(result); })
+      .catch(() => { if (current) setErr('Unreadable. This company’s health could not be read.'); });
+    return () => { current = false; };
   }, [projectUid]);
 
   if (!projectUid) return null;
@@ -76,13 +74,17 @@ function DetailDrawer({ projectUid, onClose }) {
               <div>
                 <div className="text-4xl font-bold text-slate-900 dark:text-slate-100">{data.latest.score.toFixed(0)}<span className="text-base text-slate-400">/100</span></div>
                 <div className="mt-1"><BadgePill badge={data.latest.badge} /></div>
+                <p className="mt-1 text-xs">{snapshotAge(data.latest)}</p>
               </div>
               <button
                 onClick={async () => {
                   try {
-                    const r = await api.portfolioHealthRecomputeOne(projectUid);
-                    setData({ ...data, latest: r, history: [r, ...(data.history || []).filter(h => h.uid !== r.uid)] });
-                  } catch (e) { setErr(e.message); }
+                    setErr(null);
+                    await api.portfolioHealthRecomputeOne(projectUid);
+                    setData(await api.portfolioHealthGet(projectUid, 30));
+                  } catch (e) {
+                    setErr(e?.code === 'health_not_measurable' ? e.message : 'Health could not be recomputed. Try again.');
+                  }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900"
               >
@@ -98,7 +100,7 @@ function DetailDrawer({ projectUid, onClose }) {
                   <div>
                     <div className="font-semibold text-rose-900">Intervention recommended</div>
                     <ul className="mt-1 text-sm text-rose-700 list-disc list-inside space-y-0.5">
-                      {data.latest.reasons.map((r, i) => <li key={i}>{r}</li>)}
+                      {data.latest.reasons?.map((r, i) => <li key={i}>{r}</li>)}
                     </ul>
                   </div>
                 </div>
@@ -108,10 +110,9 @@ function DetailDrawer({ projectUid, onClose }) {
             <div>
               <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Signals</h3>
               <div className="grid grid-cols-2 gap-3">
-                <SignalCard label="Runway" value={fmtMonths(data.latest.runway_months)} component={data.latest.components?.runway} />
-                <SignalCard label="Growth velocity" value={fmtPct(data.latest.growth_velocity)} component={data.latest.components?.growth} />
-                <SignalCard label="Churn delta" value={fmtDelta(data.latest.churn_delta)} component={data.latest.components?.churn} />
-                <SignalCard label="Sentiment delta" value={data.latest.sentiment_delta === null ? '—' : data.latest.sentiment_delta.toFixed(2)} component={data.latest.components?.sentiment} />
+                <SignalCard label="Scoring snapshot" value={signalValue(data.latest.drivers?.scoring, data.latest.drivers?.sources?.scoring)} />
+                <SignalCard label={`Activity · ${data.latest.drivers?.window_days ?? 30} days`} value={signalValue(data.latest.drivers?.activity_30d, data.latest.drivers?.sources?.activity)} />
+                <SignalCard label="Open tickets" value={signalValue(data.latest.drivers?.tickets_open, data.latest.drivers?.sources?.tickets)} />
               </div>
             </div>
 
@@ -132,26 +133,20 @@ function DetailDrawer({ projectUid, onClose }) {
           </div>
         )}
         {data && !data.latest && (
-          <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">No health snapshot for this startup yet. Run a recompute to generate one.</div>
+          <div className="p-6 text-slate-500 dark:text-slate-400 text-sm">{data.latest_reason || 'Not recorded. This company has no health snapshot.'}</div>
         )}
       </div>
     </Sheet>
   );
 }
 
-function SignalCard({ label, value, component }) {
-  const sub = component?.score === null || component?.score === undefined
-    ? 'no signal yet'
-    : `${(component.score * 100).toFixed(0)}/100 sub-score`;
-  const w = component?.weight ? `${(component.weight * 100).toFixed(0)}%` : '';
+function SignalCard({ label, value }) {
   return (
     <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded">
       <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
         <span>{label}</span>
-        {w && <span className="text-slate-400">{w}</span>}
       </div>
       <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-slate-100">{value}</div>
-      <div className="text-xs text-slate-400 mt-0.5">{sub}</div>
     </div>
   );
 }
@@ -221,13 +216,9 @@ export default function PortfolioHealthPage({ embedded = false }) {
         interventionOnly: filter.interventionOnly,
       });
       setData(r);
-    } catch (e) {
-      const msg = (e?.message || '').toLowerCase();
-      if (e?.status === 404 || msg === 'not found') {
-        setData({ items: [], totals: { green: 0, yellow: 0, red: 0, intervention: 0 }, as_of: null });
-      } else {
-        setErr(e.message || 'Failed to load');
-      }
+    } catch {
+      setData(null);
+      setErr('Unreadable. Portfolio health could not be read.');
     } finally {
       setLoading(false);
     }
@@ -243,9 +234,6 @@ export default function PortfolioHealthPage({ embedded = false }) {
           case 'name':    return x.project?.name?.toLowerCase() || '';
           case 'badge':   return ({ red: 0, yellow: 1, green: 2 })[x.badge] ?? 3;
           case 'score':   return x.score;
-          case 'runway':  return x.runway_months ?? 999;
-          case 'growth':  return x.growth_velocity ?? -999;
-          case 'churn':   return x.churn_delta ?? 0;
           default:        return x.score;
         }
       };
@@ -270,7 +258,7 @@ export default function PortfolioHealthPage({ embedded = false }) {
           </h1>
         <PageExplainer pageKey="portfolio_health" />
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Daily score per company from runway, growth, churn, and founder sentiment.
+            Daily health scores from recorded scoring snapshots, recent activity and open tickets.
             {data?.as_of && <span className="ml-2 text-slate-400">As of {data.as_of}</span>}
           </p>
         </div>
@@ -300,6 +288,20 @@ export default function PortfolioHealthPage({ embedded = false }) {
           <SummaryCard label="Intervention needed" value={data.totals.intervention} icon={<AlertTriangle className="w-4 h-4" />} color="rose" />
         </div>
       )}
+      {Number.isInteger(data?.population?.projects_visible) && (
+        <p className="mb-3 text-sm">{data.population.projects_visible} visible companies{data.population.filtered ? ' · Results filtered' : ''}</p>
+      )}
+      {data?.not_measured?.length > 0 && (
+        <section aria-label="Companies without a health measurement" className="mb-4">
+          <h2 className="font-semibold">Not enough evidence ({data.not_measured.length})</h2>
+          <ul>{data.not_measured.map(company => (
+            <li key={company.uid} className="text-sm">
+              <button type="button" className="underline" onClick={() => setParams({ project: company.uid })}>{company.name}</button>
+              {' · '}{company.reason}
+            </li>
+          ))}</ul>
+        </section>
+      )}
 
       <div className="flex items-center gap-3 mb-3">
         <Filter className="w-4 h-4 text-slate-400" />
@@ -323,7 +325,7 @@ export default function PortfolioHealthPage({ embedded = false }) {
         </label>
       </div>
 
-      {err && <div className="p-3 mb-3 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err}</div>}
+      {err && <div role="alert" className="p-3 mb-3 bg-rose-50 border border-rose-200 rounded text-rose-700 text-sm">{err} <button type="button" className="underline" onClick={load}>Retry</button></div>}
 
       <div className="bg-white border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden dark:bg-gray-900">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
@@ -332,17 +334,13 @@ export default function PortfolioHealthPage({ embedded = false }) {
               <th className="px-4 py-2 text-left"><SortHeader label="Company" field="name" sort={sort} setSort={setSort} /></th>
               <th className="px-4 py-2 text-left"><SortHeader label="Status" field="badge" sort={sort} setSort={setSort} /></th>
               <th className="px-4 py-2 text-right"><SortHeader label="Score" field="score" sort={sort} setSort={setSort} /></th>
-              <th className="px-4 py-2 text-right"><SortHeader label="Runway" field="runway" sort={sort} setSort={setSort} /></th>
-              <th className="px-4 py-2 text-right"><SortHeader label="Growth" field="growth" sort={sort} setSort={setSort} /></th>
-              <th className="px-4 py-2 text-right"><SortHeader label="Churn Δ" field="churn" sort={sort} setSort={setSort} /></th>
-              <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Top reason</th>
               <th className="px-4 py-2"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>}
-            {!loading && sorted.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-sm">No snapshots yet. Click "Recompute all" to generate the first sweep.</td></tr>
+            {loading && <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">Loading…</td></tr>}
+            {!loading && !err && sorted.length === 0 && (
+              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">{data?.population?.filtered ? 'No snapshots match these filters.' : 'No health snapshots recorded.'}</td></tr>
             )}
             {sorted.map(it => (
               <tr key={it.uid} className={it.intervention ? 'bg-rose-50/30' : ''}>
@@ -350,12 +348,10 @@ export default function PortfolioHealthPage({ embedded = false }) {
                   <div className="font-medium text-slate-900 dark:text-slate-100">{it.project?.name || `Startup #${it.project_id}`}</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">{it.project?.sector || ''} · {it.project?.stage || ''}</div>
                 </td>
-                <td className="px-4 py-3"><BadgePill badge={it.badge} /></td>
+                <td className="px-4 py-3"><BadgePill badge={it.badge} />
+                  <div className="text-xs">{snapshotAge(it)}</div>
+                </td>
                 <td className="px-4 py-3 text-right font-mono text-sm">{it.score.toFixed(0)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtMonths(it.runway_months)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtPct(it.growth_velocity)}</td>
-                <td className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-400">{fmtDelta(it.churn_delta)}</td>
-                <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate">{it.reasons?.[0] || ''}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => setParams({ project: it.project?.uid || '' })}
@@ -370,7 +366,7 @@ export default function PortfolioHealthPage({ embedded = false }) {
         </table>
       </div>
 
-      <DetailDrawer projectUid={drawerUid} onClose={() => { params.delete('project'); setParams(params); }} />
+      <DetailDrawer key={drawerUid} projectUid={drawerUid} onClose={() => { params.delete('project'); setParams(params); }} />
     </div>
   );
 }
