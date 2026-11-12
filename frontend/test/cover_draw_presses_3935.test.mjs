@@ -84,10 +84,14 @@ test('the event editor and the course builder mount the press with their own rou
   const step = read('frontend/src/pages/events/EventCoverStep.jsx');
   assert.match(editor, /<EventCoverStep id=\{id\} form=\{form\} set=\{set\} coverQuote=\{coverQuote\} coverDraw=\{coverDraw\} onCoverDrawn=\{onCoverDrawn\} \/>/);
   assert.match(step, /import CoverDrawPress from '..\/..\/ui\/CoverDrawPress'/);
-  assert.match(step, /\{id \? \([\s\S]*<CoverDrawPress key=\{seed\.n\} initialPrompt=\{seed\.prompt\} testid="event-cover-draw" quote=\{coverQuote\} draw=\{coverDraw\} onDrawn=\{onCoverDrawn\} \/>[\s\S]*\) : <p[^>]*data-testid="event-cover-save-first"/, 'only a saved event');
+  // #5309: the step wraps `onCoverDrawn` in `drawn`, which also records that the
+  // cover was generated and keeps Eadwyn's own alt text. The press is still
+  // mounted only for a saved event.
+  assert.match(step, /\{id \? \([\s\S]*<CoverDrawPress key=\{seed\.n\} initialPrompt=\{seed\.prompt\} testid="event-cover-draw" quote=\{coverQuote\} draw=\{coverDraw\} onDrawn=\{drawn\} \/>[\s\S]*\) : <p[^>]*data-testid="event-cover-save-first"/, 'only a saved event');
+  assert.match(step, /const drawn = \(url, drawnAlt\) => \{[\s\S]*onCoverDrawn\?\.\(url, drawnAlt\);/, 'the step still hands the URL to the editor');
   assert.match(editor, /eventsApi\.coverQuote\(id, prompt\)/);
   assert.match(editor, /eventsApi\.coverDraw\(id, prompt\)/);
-  assert.match(editor, /setForm\(\(f\) => \(\{ \.\.\.f, cover_url: url \}\)\)/, 'the drawn URL fills cover_url only');
+  assert.match(editor, /cover_url: url, \.\.\.\(alt \? \{ cover_alt: alt \} : \{\}\), cover_source: 'generated'/, 'the drawn URL fills cover_url, with its alt text and source');
   const builder = read('frontend/src/pages/learning/StudioCourseBuilder.jsx');
   assert.match(builder, /\{course && <CoverDrawPress testid="course-cover-draw"/, 'only a saved course');
   assert.match(builder, /courseCoverQuote\(uid, prompt\)/);

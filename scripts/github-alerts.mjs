@@ -15,8 +15,9 @@
  */
 import { readFileSync, existsSync } from 'node:fs';
 import {
-  ALERT_KINDS, QUEUE_DEFAULTS, failingTests, mainState, message, queueState, reviewState, transition,
+  ALERT_KINDS, QUEUE_DEFAULTS, failingTests, mainState, message, queueStallState, queueState, reviewState, transition,
 } from './lib/githubAlerts.mjs';
+import { safeGithubUrl } from './lib/ciClassify.mjs';
 
 const env = process.env;
 const api = env.GITHUB_API_URL || 'https://api.github.com';
@@ -71,6 +72,19 @@ async function apply(kind, active, facts) {
 
 async function main() {
   const mode = process.argv[2];
+  if (mode === 'queue-stalled') {
+    const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?event=merge_group&status=completed&per_page=30`);
+    const runs = (list.workflow_runs || []).filter(run => run.head_branch?.startsWith('gh-readonly-queue/main/')).slice(0, 2);
+    if (!runs[0]) return;
+    const withJobs = await Promise.all(runs.map(async run => ({
+      ...run,
+      jobs: run.conclusion === 'failure' && Number.isSafeInteger(run.id)
+        ? (await gh(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100&filter=latest`)).jobs
+        : [],
+    })));
+    const state = queueStallState(withJobs);
+    return apply('queue-stalled', state.active, { ...state, runUrl: safeGithubUrl(runs[0].html_url) });
+  }
   if (mode === 'main-red') {
     const list = await gh(`/repos/${repo}/actions/workflows/${env.CI_WORKFLOW || 'ci.yml'}/runs?branch=main&event=push&status=completed&per_page=1`);
     const run = list?.workflow_runs?.[0];
@@ -108,7 +122,7 @@ async function main() {
     const active = tap.trim() ? failures.names.length + failures.more > 0 : null;
     return apply('future-clock', active, { days: Number(env.FUTURE_CLOCK_DAYS) || 0, failures, runUrl: env.RUN_URL });
   }
-  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue or future-clock`);
+  throw new Error(`unknown mode "${mode}": main-red, review-blocked, queue, queue-stalled or future-clock`);
 }
 
 main().catch((e) => {

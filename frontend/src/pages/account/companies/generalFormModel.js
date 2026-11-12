@@ -68,14 +68,55 @@ export const REVENUE_RANGES = Object.freeze([
 ]);
 export const PROSE_MAX = 500;
 
-/** The form's fields, by section, as the canvas draws them. Growth keeps the old page's four. */
+/**
+ * D4966 (#5312, boards CS-01 to CS-05): the form's fields in the canvas's FOUR
+ * INTENT GROUPS, each with the one line that says what it affects. The five
+ * groups before it (Identity, Links, Where you operate, About, Growth) named
+ * the shape of the data; these name what changing a field does, which is the
+ * question a member actually has. Every field is in exactly one group, and the
+ * set is the same set: `FIELDS` is still the form's whole contract.
+ */
 export const SECTIONS = [
-  { key: 'identity', title: 'Identity', line: 'The name members see everywhere.', fields: ['company_name', 'stage', 'default_currency'] },
-  { key: 'links', title: 'Links', fields: ['website', 'linkedin_url'] },
-  { key: 'where', title: 'Where you operate', line: 'Regions are used to match you with investors, advisors and events.', fields: ['region_codes', 'international_presence'] },
-  { key: 'about', title: 'About', fields: ['description'] },
-  { key: 'growth', title: 'Growth', line: 'Used in investor matching and deal analysis.', fields: ['revenue_range', 'employee_count', 'current_products', 'expansion_goals'] },
+  {
+    key: 'identity',
+    title: 'Company identity',
+    line: 'Used across StudioOS and when interpreting company financial data.',
+    fields: ['company_name', 'stage', 'default_currency'],
+  },
+  {
+    key: 'presence',
+    title: 'Public presence',
+    line: 'How members and StudioOS surfaces understand and present your company.',
+    fields: ['website', 'linkedin_url', 'description'],
+  },
+  {
+    key: 'matching',
+    title: 'Matching profile',
+    line: 'Used to improve matching with investors, advisors, opportunities and events. It narrows suggestions; it doesn’t guarantee them.',
+    fields: ['region_codes', 'international_presence', 'revenue_range'],
+  },
+  {
+    key: 'snapshot',
+    title: 'Business snapshot',
+    line: 'Business context used in fundraising, matching and company analysis where supported. Private to your company.',
+    fields: ['employee_count', 'current_products', 'expansion_goals'],
+  },
 ];
+
+/** The short word under a field, from the canvas. A field with none gets none; nothing is invented. */
+export const FIELD_HINT = Object.freeze({
+  company_name: 'Shown everywhere',
+  employee_count: 'Whole number',
+  revenue_range: 'Private to your company',
+});
+
+/** The sentence beside a field, from the canvas. */
+export const FIELD_HELP = Object.freeze({
+  default_currency: 'How amounts are read for this company. Never guessed.',
+  description: 'One or two sentences: what you make and for whom.',
+  current_products: 'One per line.',
+  expansion_goals: 'What you want to do next, one per line.',
+});
 export const LABELS = {
   company_name: 'Company name', stage: 'Stage', default_currency: 'Default currency', website: 'Website', linkedin_url: 'LinkedIn',
   region_codes: 'Regions', international_presence: 'Notes on where you operate', description: 'Description',
@@ -205,35 +246,50 @@ export function normalizeLinkedIn(raw) {
  * (D4962). With the loaded row, a value written before these rules is left alone (#4964): only a CHANGED link, a
  * changed count and changed prose are checked, and prose the editor is typing is capped at PROSE_MAX.
  */
-export function problemOf(form, row = null) {
-  if (!String(form?.company_name ?? '').trim()) return 'Enter a company name.';
+export function fieldProblems(form, row = null) {
+  const out = [];
+  const add = (field, message) => out.push({ field, message });
+  if (!String(form?.company_name ?? '').trim()) add('company_name', 'Enter a company name.');
   const n = String(form?.employee_count ?? '').trim();
-  if (n && !(/^\d{1,7}$/.test(n) && Number(n) <= EMPLOYEE_MAX)) return `Employee count is a whole number from 0 to ${EMPLOYEE_MAX.toLocaleString('en-US')}.`;
-  if (String(form?.description ?? '').trim().length > DESCRIPTION_MAX) return `The description is at most ${DESCRIPTION_MAX} characters.`;
+  if (n && !(/^\d{1,7}$/.test(n) && Number(n) <= EMPLOYEE_MAX)) add('employee_count', `Employee count is a whole number from 0 to ${EMPLOYEE_MAX.toLocaleString('en-US')}.`);
+  if (String(form?.description ?? '').trim().length > DESCRIPTION_MAX) add('description', `The description is at most ${DESCRIPTION_MAX} characters.`);
   const changed = row ? changes(form, row) : null;
   const check = (f) => !changed || f in changed;
   for (const f of ['revenue_range', 'current_products', 'expansion_goals', 'description']) {
     if (!check(f)) continue;
     const v = String(form?.[f] ?? '').trim();
     // eslint-disable-next-line no-control-regex
-    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v)) return `${LABELS[f]} contains characters that cannot be saved.`;
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(v)) { add(f, `${LABELS[f]} contains characters that cannot be saved.`); continue; }
     const cap = f === 'description' ? DESCRIPTION_MAX : (changed ? Math.min(LIMITS[f], PROSE_MAX) : LIMITS[f]);
-    if (f !== 'description' && v.length > cap) return `${LABELS[f]} is at most ${cap} characters.`;
+    if (f !== 'description' && v.length > cap) add(f, `${LABELS[f]} is at most ${cap} characters.`);
   }
   if (check('website')) {
     const site = String(form?.website ?? '').trim();
-    if (site && !normalizeWebsite(site)) return 'Enter a web address that starts with http:// or https://.';
+    if (site && !normalizeWebsite(site)) add('website', 'Enter a web address that starts with http:// or https://.');
   }
   if (check('linkedin_url')) {
     const linked = String(form?.linkedin_url ?? '').trim();
-    if (linked && !normalizeLinkedIn(linked)) return 'Enter the address of a LinkedIn company, school or showcase page.';
+    if (linked && !normalizeLinkedIn(linked)) add('linkedin_url', 'Enter the address of a LinkedIn company, school or showcase page.');
   }
-  return null;
+  // One problem per field: the first thing wrong with it is what the field says.
+  return out.filter((p, i) => out.findIndex((q) => q.field === p.field) === i);
 }
 
-/** "1 unsaved change", "3 unsaved changes". A pending logo counts as one change. */
+/**
+ * Why the form cannot be saved yet, or null: the FIRST of `fieldProblems`. The
+ * two cannot diverge, because this reads that (D4966's summary links to every
+ * one; the save bar still says one).
+ */
+export function problemOf(form, row = null) {
+  return fieldProblems(form, row)[0]?.message ?? null;
+}
+
+/** How many unsaved changes there are. A pending logo counts as one. The one place this rule lives. */
+export const changeCount = (patch, logo = null) => Object.keys(patch || {}).length + (logo ? 1 : 0);
+
+/** "1 unsaved change", "3 unsaved changes". D4966's rail says it its own way (`railStatus`), from the same count. */
 export const unsavedLine = (patch, logo = null) => {
-  const n = Object.keys(patch || {}).length + (logo ? 1 : 0);
+  const n = changeCount(patch, logo);
   return n ? `${n} unsaved change${n === 1 ? '' : 's'}` : null;
 };
 
@@ -355,4 +411,162 @@ export function saveLine(kind, { detail = '', result = null } = {}) {
     }
     default: return 'We could not confirm whether your changes saved. They are still here; Try again checks first, then saves only what is missing.';
   }
+}
+
+// ── D4966 (#5312): the public-only preview, the save rail, and the fields ────
+
+/**
+ * What the preview may show: the Worker's own `PUBLIC_FIELDS`
+ * (`cloudflare-worker/src/routes/company.ts`), which is what a member who is
+ * not in this company is served. `region_codes` is the reading of the public
+ * `international_presence` column, so it belongs here too.
+ *
+ * Everything in `PREVIEW_NEVER` is on the company's DETAIL read only — it
+ * reaches this member because they can edit the company, and it must not be
+ * drawn as "how your company appears". Revenue, employees, products and goals
+ * are the canvas's named four; the default currency is detail-only too.
+ */
+export const PREVIEW_PUBLIC = Object.freeze([
+  'company_name', 'stage', 'logo_url', 'website', 'linkedin_url', 'description', 'international_presence', 'region_codes',
+]);
+export const PREVIEW_NEVER = Object.freeze(['revenue_range', 'employee_count', 'current_products', 'expansion_goals', 'default_currency']);
+
+/**
+ * A stage's own label, or null when none is recorded. The picker's own empty
+ * choice reads "Not set", which is right inside a form; the preview must say
+ * "not recorded" instead, so an absent stage answers null here.
+ */
+export const stageLabel = (v) => {
+  const k = String(v ?? '');
+  return k ? (STAGES.find(([code]) => code === k) || [null, null])[1] : null;
+};
+
+/**
+ * The preview, from the form over the row: the public fields only, each as the
+ * platform would show it, plus whether what is drawn includes unsaved changes.
+ * A field with no value is null — "not recorded" — and never a placeholder the
+ * company did not write.
+ */
+export function previewOf(row, form = null, logo = null, patch = null) {
+  const value = (f) => (form && f in form ? form[f] : row?.[f]);
+  const text = (f) => { const t = String(value(f) ?? '').trim(); return t || null; };
+  const dirty = Object.keys(patch || {}).filter((f) => PREVIEW_PUBLIC.includes(f));
+  return {
+    name: text('company_name'),
+    stage: stageLabel(value('stage')) || null,
+    regions: regionCodesIn(value('region_codes')).map(regionLabel),
+    description: text('description'),
+    website: normalizeWebsite(text('website')),
+    linkedin: normalizeLinkedIn(text('linkedin_url')),
+    logo: shownLogo(row, logo),
+    // A pending logo is an unsaved change the preview is already drawing.
+    unsaved: dirty.length > 0 || Boolean(logo),
+  };
+}
+export const PREVIEW_UNSAVED = 'Includes unsaved changes';
+export const PREVIEW_TITLE = 'Preview — how your company appears across StudioOS';
+
+/** "last saved 7 Nov, 18:42", from the row's own `updated_at`. An unreadable stamp is left out, never guessed. */
+export function savedAtText(row) {
+  const raw = row?.updated_at ?? null;
+  if (!raw) return null;
+  const at = new Date(String(raw).includes('T') ? raw : String(raw).replace(' ', 'T') + 'Z');
+  if (Number.isNaN(at.getTime())) return null;
+  try {
+    return at.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }).replace(',', ',');
+  } catch { return at.toISOString().slice(0, 16).replace('T', ' '); }
+}
+
+/**
+ * D4966's twelve-state rail (board CS-12): the one line the status region says,
+ * and how it is announced. The states are checked in the order the canvas puts
+ * them: what the server last told us wins over what the form is doing, and a
+ * read-only or archived company has no save state at all.
+ *
+ * `state` is one of: read_only, archived, conflict, unknown, partly, failed,
+ * invalid, saving, checking, saved, dirty, clean.
+ */
+export function railStatus({
+  canEdit = true, archived = false, row = null, status = 'idle', message = '', problems = [], patch = {}, logo = null,
+} = {}) {
+  const line = (state, text, announce) => ({ state, line: text, announce });
+  if (archived) return line('archived', 'Archived · restore to edit', 'none');
+  if (!canEdit) return line('read_only', `Read-only · ${readOnlyReasonLine(row)}`, 'none');
+  if (status === 'conflict') return line('conflict', message || 'Newer company data exists', 'assertive');
+  if (status === 'unknown') return line('unknown', message || 'Checking save outcome…', 'polite');
+  if (status === 'partly') return line('partly', message || 'Some changes still need attention', 'assertive');
+  if (status === 'error') return line('failed', message || 'Save failed', 'assertive');
+  if (status === 'saving') return line('saving', 'Saving…', 'polite');
+  if (status === 'reconciling') return line('checking', message || 'Checking save outcome…', 'polite');
+  const bad = (problems || []).length;
+  if (bad) return line('invalid', `Fix ${bad} field${bad === 1 ? '' : 's'}`, 'assertive');
+  if (status === 'saved') return line('saved', message || 'Saved · just now', 'polite');
+  const n = changeCount(patch, logo);
+  if (n) return line('dirty', `Unsaved changes · ${n} field${n === 1 ? '' : 's'}`, 'polite');
+  const at = savedAtText(row);
+  return line('clean', at ? `All changes saved · last saved ${at}` : 'All changes saved', 'none');
+}
+
+// ── The currency combobox (board CS-06) ─────────────────────────────────────
+
+/** The ones a member is most likely to want, as a fixed list. "Recent" would need a stored history nobody keeps. */
+export const COMMON_CURRENCIES = Object.freeze(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF', 'JPY', 'SGD', 'INR', 'BRL']);
+export const CURRENCY_NONE = 'Not recorded';
+
+/** A code's own name, from the platform's locale data. A code the runtime does not name is its code, never a guess. */
+export function currencyName(code) {
+  const c = String(code ?? '').toUpperCase();
+  if (!c) return '';
+  try {
+    const name = new Intl.DisplayNames(['en'], { type: 'currency' }).of(c);
+    return name && name.toUpperCase() !== c ? name : '';
+  } catch { return ''; }
+}
+
+/** `USD · US Dollar`, or just the code when the runtime names none. */
+export function currencyLabel(code) {
+  const name = currencyName(code);
+  return name ? `${String(code).toUpperCase()} · ${name}` : String(code ?? '').toUpperCase();
+}
+
+/**
+ * The codes a search matches, by code or by name, in the list's own order: the
+ * common ones first when the query is empty, every matching code otherwise.
+ * `stored` is the company's current code, which is always offered even when it
+ * is not on the list, so a stored value can never be dropped by searching.
+ */
+export function currencyMatches(query, { stored = '', limit = 30 } = {}) {
+  const q = String(query ?? '').trim().toLowerCase();
+  const all = CURRENCY_CODES.includes(String(stored).toUpperCase())
+    ? CURRENCY_CODES
+    : [...(String(stored).toUpperCase() ? [String(stored).toUpperCase()] : []), ...CURRENCY_CODES];
+  if (!q) {
+    const common = COMMON_CURRENCIES.filter((c) => all.includes(c));
+    return [...new Set([...(String(stored).toUpperCase() ? [String(stored).toUpperCase()] : []), ...common])].slice(0, limit);
+  }
+  return all.filter((c) => c.toLowerCase().includes(q) || currencyName(c).toLowerCase().includes(q)).slice(0, limit);
+}
+
+// ── URL fields (board CS-09) ────────────────────────────────────────────────
+
+/** The link the field offers to open: the address as it would be SAVED, or null when it is not one yet. */
+export function openableUrl(field, raw) {
+  const t = String(raw ?? '').trim();
+  if (!t) return null;
+  return field === 'linkedin_url' ? normalizeLinkedIn(t) : field === 'website' ? normalizeWebsite(t) : null;
+}
+
+/** "Will be saved as https://…", when what will be stored differs from what was typed. Null when it does not. */
+export function normalisedHint(field, raw) {
+  const t = String(raw ?? '').trim();
+  const url = openableUrl(field, t);
+  return url && url !== t ? `Will be saved as ${url}` : null;
+}
+
+export const LINKEDIN_HINT = 'A company, school or showcase page: linkedin.com/company/…';
+
+/** `118 / 280`, and whether the description is near or over its limit. Never a count of a field nobody typed in. */
+export function descriptionCount(v, max = DESCRIPTION_MAX) {
+  const n = String(v ?? '').length;
+  return { text: `${n} / ${max}`, near: n >= max - 40 && n <= max, over: n > max };
 }
