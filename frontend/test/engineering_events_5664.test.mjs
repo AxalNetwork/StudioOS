@@ -22,6 +22,41 @@ function open(path = ':memory:') {
   const ledger = new EventLedger(sql, fn => { db.exec('BEGIN'); try { const value = fn(); db.exec('COMMIT'); return value; } catch (e) { db.exec('ROLLBACK'); throw e; } });
   return { db, ledger };
 }
+test('terminal endpoint timestamp differences deduplicate without collapsing attempts, results or nonterminal observations', async () => {
+  const f = open();
+  try {
+    for (const kind of ['workflow_run', 'workflow_job']) {
+      const object = kind === 'workflow_run' ? run() : { id: 77, run_id: 11, run_attempt: 1, head_sha: 'a'.repeat(40), status: 'completed', conclusion: 'success', updated_at: at };
+      const first = await normalizeEvent({ kind, deliveryId: `first:${kind}`, payload: { repository, [kind]: object } });
+      const second = await normalizeEvent({ kind, deliveryId: `second:${kind}`, source: 'github-rest', payload: { repository, [kind]: { ...object, updated_at: '2026-11-12T10:00:01Z' } } });
+      assert.notEqual(first.occurredAt, second.occurredAt); assert.equal(first.key, second.key);
+      const a = await f.ledger.append(first), b = await f.ledger.append(second); assert.equal(a.sequence, b.sequence);
+      assert.equal(f.ledger.history().find(e => e.key === first.key).occurredAt, first.occurredAt);
+    }
+    assert.equal(f.ledger.history().length, 2); assert.equal(f.ledger.counts().deliveries, 4);
+    const first = await event();
+    assert.notEqual(first.key, (await event(run(11, 2))).key);
+    assert.notEqual(first.key, (await event(run(11, 1, 'cancelled'))).key);
+    const active = { ...run(), status: 'in_progress', conclusion: null };
+    assert.notEqual((await event(active)).key, (await event({ ...active, updated_at: '2026-11-12T10:00:01Z' })).key);
+  } finally { f.db.close(); }
+});
+test('timestamp identity is retained when an Actions attempt is unknown or an external check can be updated again', async () => {
+  for (const [kind, object] of [['workflow_run', { ...run(), run_attempt: null }], ['check_run', { id: 88, head_sha: 'a'.repeat(40), status: 'completed', conclusion: 'success', updated_at: at }]]) {
+    const a = await normalizeEvent({ kind, deliveryId: `first:${kind}`, payload: { repository, [kind]: object } });
+    const b = await normalizeEvent({ kind, deliveryId: `second:${kind}`, payload: { repository, [kind]: { ...object, updated_at: '2026-11-12T10:00:01Z' } } });
+    assert.notEqual(a.key, b.key);
+  }
+});
+test('a finished Actions attempt cannot become pending due to a later nonterminal timestamp; a new attempt remains pending', async () => {
+  const f = open();
+  try {
+    await f.ledger.append(await event());
+    const queued = { ...run(), status: 'queued', conclusion: null, updated_at: '2026-11-12T10:00:02Z' };
+    await f.ledger.append(await event(queued, 'late-queued')); assert.equal(f.ledger.pending().length, 0);
+    await f.ledger.append(await event({ ...queued, run_attempt: 2 }, 'new-attempt')); assert.equal(f.ledger.pending().length, 1);
+  } finally { f.db.close(); }
+});
 test('raw-byte signature and installation/repository/event allowlists precede durable acceptance; content never enters queue', async () => {
   const payload = { repository, installation: { id: 7 }, workflow_run: { ...run(), display_title: 'secret title', logs: 'private log' }, comment: { body: '<!channel> secret' } };
   const bytes = new TextEncoder().encode(JSON.stringify(payload));

@@ -16,9 +16,17 @@ export const EVENT_FAMILIES = {
 };
 export const DEFAULT_EVENTS = Object.values(EVENT_FAMILIES).flat();
 const terminals = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped', 'timed_out', 'action_required', 'stale', 'startup_failure']);
+export const terminalAttempt = event => event.family === 'ci' && ['workflow_run', 'workflow_job'].includes(event.kind)
+  && Boolean(id(event.ids?.run) && id(event.ids?.attempt) && (event.kind === 'workflow_run' || id(event.ids?.job))) && terminals.has(event.state);
 export async function eventKey(event) {
   const { deliveryId, observedAt, source, sourceVersion, redactions, key, action, ...semantic } = event;
   if (event.family !== 'ci') semantic.action = action;
+  // Run-list and attempt endpoints can disagree on updated_at for the same terminal result.
+  // Keep the first source timestamp in the immutable record, without treating that jitter as a new transition.
+  if (terminalAttempt(event)) {
+    delete semantic.occurredAt;
+    delete semantic.timeConfidence;
+  }
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(semantic)));
   return [...new Uint8Array(bytes)].map(n => n.toString(16).padStart(2, '0')).join('');
 }

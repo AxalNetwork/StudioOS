@@ -1,5 +1,5 @@
 // D5664: transactional append-only metadata/delivery ledger; SQL and transaction boundaries are injected for runtime tests.
-import { validateEvent, eventKey } from './events-v1.mjs';
+import { validateEvent, eventKey, terminalAttempt } from './events-v1.mjs';
 export class EventLedger {
   constructor(sql, transaction) {
     this.sql = sql; this.transaction = transaction;
@@ -43,7 +43,11 @@ export class EventLedger {
   history(after = 0, limit = 100) { return this.sql.exec('SELECT sequence, payload FROM events WHERE sequence > ? ORDER BY sequence LIMIT ?', after, Math.max(1, Math.min(1000, limit))).toArray().map(r => ({ sequence: r.sequence, ...JSON.parse(r.payload) })); }
   pending() {
     const latest = new Map(); let after = 0;
-    for (;;) { const page = this.history(after, 1000); if (!page.length) break; for (const e of page) { after = e.sequence; const key = `${e.subject.type}:${e.subject.id}:${e.ids.attempt}`; if (!latest.has(key) || e.occurredAt >= latest.get(key).occurredAt) latest.set(key, e); } }
+    for (;;) { const page = this.history(after, 1000); if (!page.length) break; for (const e of page) {
+      after = e.sequence; const key = `${e.subject.type}:${e.subject.id}:${e.ids.attempt}`, previous = latest.get(key);
+      if (!previous || terminalAttempt(e) && !terminalAttempt(previous)
+          || terminalAttempt(e) === terminalAttempt(previous) && e.occurredAt >= previous.occurredAt) latest.set(key, e);
+    } }
     return [...latest.values()].filter(e => ['run', 'job', 'check'].includes(e.subject.type) && ['queued', 'waiting', 'requested', 'in_progress', 'pending', 'unknown'].includes(e.state));
   }
   cursor(scope) { return this.sql.exec('SELECT until_ms FROM cursors WHERE scope = ?', scope).toArray()[0]?.until_ms || 0; }
