@@ -76,7 +76,9 @@ try {
   assert.ok(!configuration.Config.Env.some(value => /(?:CLOUDFLARE|AWS_|AZURE_|GITHUB_TOKEN|API_KEY|SECRET)/i.test(value)));
   const fixture = repoFixture('normal');
   const code = "require('node:fs').writeFileSync('src/value.cjs','module.exports = 2;\\n')";
-  const result = await runCase('tenant-a', fixture, [['node', '-e', code], ['node', '--test', 'test/value.test.cjs']]);
+  const result = await runCase('tenant-a', fixture, [
+    ['node', '-e', code], ['node', '--test', 'test/value.test.cjs'], ['npm', '--version'],
+  ]);
   assert.equal(result.exit, 0, JSON.stringify(result)); assert.equal(result.base_sha, fixture.sha);
   assert.deepEqual(result.changed.map(file => file.path), ['src/value.cjs']);
   for (const file of result.changed) assert.equal(createHash('sha256').update(Buffer.from(file.bytes, 'base64')).digest('hex'), file.sha256);
