@@ -35,6 +35,7 @@ import { mount as admin_platform_buildMount } from './admin_platform_build';
 import { mount as admin_program_pricingMount } from './admin_program_pricing';
 import { mount as admin_user_licencesMount } from './admin_user_licences';
 import { mount as client_deliverablesMount } from './client_deliverables';
+import { mount as client_errorMount } from './client_error';
 import { mount as company_complianceMount } from './company_compliance';
 import { mount as data_room_proposalsMount } from './data_room_proposals';
 import { mount as deck_accessMount } from './deck_access';
@@ -109,6 +110,7 @@ export const ROUTE_MODULES: readonly RegisteredModule[] = [
   { file: 'admin_program_pricing', mount: admin_program_pricingMount },
   { file: 'admin_user_licences', mount: admin_user_licencesMount },
   { file: 'client_deliverables', mount: client_deliverablesMount },
+  { file: 'client_error', mount: client_errorMount },
   { file: 'company_compliance', mount: company_complianceMount },
   { file: 'data_room_proposals', mount: data_room_proposalsMount },
   { file: 'deck_access', mount: deck_accessMount },
