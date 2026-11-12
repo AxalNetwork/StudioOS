@@ -135,7 +135,7 @@ export function homeFeed({ board, retainers, capacity }) {
     out.push({
       key: `cap-${p.user_id ?? p.name}`, tone: 'due',
       title: `${p.name || 'A team member'} is over the stated cap`,
-      body: p.total_hours != null && p.cap_hours != null ? `${p.total_hours} h against a cap of ${p.cap_hours} h` : null,
+      body: p.total_hours_per_week != null && p.cap_hours != null ? `${p.total_hours_per_week} h a week against a cap of ${p.cap_hours} h a week` : null,
       receipt: p.cap_source === 'person' ? 'Their own cap, stated by the firm' : 'The firm-wide cap, stated by the firm',
       action: 'Open Capacity', to: '/delivery/capacity',
     });
