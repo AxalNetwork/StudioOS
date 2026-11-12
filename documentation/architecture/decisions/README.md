@@ -84,3 +84,5 @@ and citations by number keep working.
 | `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
 | `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
+
+| `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
