@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** D5602: GitHub file inventory, bounded SARIF snapshots and prior-main artifact reads for scan policy. */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdirSync, mkdtempSync, openSync, readSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,8 +9,20 @@ import { advanceScan, findingSnapshot, readScanAlert, ruleCounts, SCAN_ALERT_TIT
 
 const MAX_JSON = 8 * 1024 * 1024;
 function jsonFile(file) {
-  if (statSync(file).size > MAX_JSON) throw new Error('Scan artifact exceeds its size bound');
-  return JSON.parse(readFileSync(file, 'utf8'));
+  const fd = openSync(file, 'r');
+  try {
+    // Read at most one byte past the limit from the same opened file. A path
+    // replacement or growth after a separate stat cannot bypass this bound.
+    const bytes = Buffer.alloc(MAX_JSON + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (!count) break;
+      length += count;
+    }
+    if (length > MAX_JSON) throw new Error('Scan artifact exceeds its size bound');
+    return JSON.parse(bytes.subarray(0, length).toString('utf8'));
+  } finally { closeSync(fd); }
 }
 function gh(args) {
   try { return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: MAX_JSON, stdio: ['ignore', 'pipe', 'pipe'] }); }

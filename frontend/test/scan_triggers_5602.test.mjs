@@ -1,5 +1,7 @@
 /** D5602: run real scan admission/artifact/alert paths on synthetic data; deliberately break their gates. */
 import test from 'node:test';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -90,6 +92,54 @@ test('both workflow gates preserve main/weekly coverage, PR supersession and mai
   assert.match(read('.github/labels.yml'), /name: "security-scan"/);
 });
 
+test('bounded JSON reads resist a size-check race and close the descriptor on every outcome', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'scan-json-race-5602-'));
+  const file = join(dir, 'event.json');
+  const small = JSON.stringify({ number: 42, pull_request: { labels: [], changed_files: 1 } });
+  const large = JSON.stringify({ number: 42, pull_request: { labels: [{ name: 'security-scan' }] } }) + ' '.repeat(8 * 1024 * 1024);
+  const env = { GITHUB_EVENT_PATH: file, GITHUB_EVENT_NAME: 'pull_request', GITHUB_REPOSITORY: 'synthetic/repo', GITHUB_RUN_ID: '20' };
+  const original = { readFile: fs.readFileSync, read: fs.readSync, open: fs.openSync, close: fs.closeSync };
+  const active = new Set();
+  let race = true;
+  let bytesRead = 0;
+  fs.readFileSync = (path, ...args) => {
+    // Replace the payload at the old path-read boundary, after its size check.
+    if (race && path === file) writeFileSync(file, large);
+    return original.readFile(path, ...args);
+  };
+  fs.openSync = (path, ...args) => {
+    const fd = original.open(path, ...args);
+    if (path === file) active.add(fd);
+    return fd;
+  };
+  fs.readSync = (fd, ...args) => {
+    const count = original.read(fd, ...args);
+    if (active.has(fd)) bytesRead += count;
+    return count;
+  };
+  fs.closeSync = fd => { active.delete(fd); return original.close(fd); };
+  syncBuiltinESMExports();
+  try {
+    writeFileSync(file, small);
+    assert.equal(await selectScope(env, async () => [{ filename: 'README.md' }]), false, 'a stale size check must not admit the replacement payload');
+    race = false;
+    writeFileSync(file, small + ' '.repeat(8 * 1024 * 1024 - Buffer.byteLength(small)));
+    assert.equal(await selectScope(env, async () => [{ filename: 'README.md' }]), false, 'a valid payload at the byte limit remains readable');
+    writeFileSync(file, large);
+    bytesRead = 0;
+    await assert.rejects(selectScope(env), /exceeds its size bound/);
+    assert.ok(bytesRead <= 8 * 1024 * 1024 + 1, 'the read itself stops at the limit plus one byte');
+    writeFileSync(file, '{');
+    await assert.rejects(selectScope(env), SyntaxError);
+    assert.equal(active.size, 0, 'success, oversize and malformed JSON all close their descriptor');
+  } finally {
+    fs.readFileSync = original.readFile; fs.readSync = original.read; fs.openSync = original.open; fs.closeSync = original.close;
+    syncBuiltinESMExports();
+    for (const fd of active) original.close(fd);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the effects reader inventories all PR pages, scans API caps/under-counts and fails on unreadable inventories', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'scope-5602-'));
   try {
@@ -161,7 +211,12 @@ test('actual alert CLI opens once, adds the second scanner, preserves its findin
     res.setHeader('content-type', 'application/json');
     if (req.method === 'GET') return res.end(JSON.stringify(issues.filter(i => i.state === 'open')));
     if (req.method === 'POST') { issues.push({ ...body, number: 100, state: 'open' }); return res.end(JSON.stringify(issues[0])); }
-    if (req.method === 'PATCH') { Object.assign(issues[0], body); return res.end(JSON.stringify(issues[0])); }
+    if (req.method === 'PATCH') {
+      if (Object.hasOwn(body, 'body')) issues[0].body = body.body;
+      if (Object.hasOwn(body, 'state')) issues[0].state = body.state;
+      if (Object.hasOwn(body, 'state_reason')) issues[0].state_reason = body.state_reason;
+      return res.end(JSON.stringify(issues[0]));
+    }
     res.statusCode = 400; res.end('{}');
   });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
@@ -173,6 +228,8 @@ test('actual alert CLI opens once, adds the second scanner, preserves its findin
   };
   try {
     await send('codeql', { 'js/one': 1 }, false); assert.equal(calls.length, 0);
+    const denied = await child(['scripts/github-alerts.mjs', 'scan'], { GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`, GITHUB_TOKEN: '', GITHUB_REPOSITORY: ctx.repo, SCAN_FACTS_FILE: file, SLACK_GITHUB_WEBHOOK_URL: '' });
+    assert.deepEqual({ code: denied.code, calls: calls.length }, { code: 1, calls: 0 }, 'scan reporting retains main’s shared missing-token refusal');
     await send('codeql', {}); assert.equal(issues.length, 0);
     await send('codeql', { 'js/one': 1 }); assert.equal(issues.length, 1);
     await send('codeql', { 'js/one': 1 }); assert.equal(issues.length, 1);
