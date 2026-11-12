@@ -161,3 +161,23 @@ test('the guard flags a job with no generate step, and passes one with it', () =
   assert.deepEqual(ungenerated([['x.yml', wf(pw)]]), ['x.yml › worker › visual: runs playwright test before the generated modules are built'], 'playwright test starts vite');
   assert.deepEqual(ungenerated([['x.yml', wf(gen + pw)]]), []);
 });
+
+
+test('the form job retains its contracts and generation; the required sharded CI owns full-suite coverage', () => {
+  const form = REAL.find(([file]) => file === 'form-lightbox-contracts.yml')[1];
+  const ci = REAL.find(([file]) => file === 'ci.yml')[1];
+  const check = (formSource, ciSource) => {
+    const job = jobsOf(formSource).find(j => j.job === 'contracts');
+    assert.ok(job);
+    const commands = job.steps.map(s => s.run).join('\n');
+    for (const file of ['add_lightbox_d695.test.mjs', 'lightbox_d685.test.mjs']) assert.ok(commands.includes(file), file);
+    assert.deepEqual(ungenerated([['form-lightbox-contracts.yml', formSource]]), []);
+    assert.doesNotMatch(commands, /npm\s+run\s+test:drift\b/, 'the serial duplicate suite times out; required sharded coverage stays in CI');
+    assert.match(ciSource, /name: test:drift \(full suite\)/);
+    assert.match(ciSource, /node scripts\/test-drift-parts\.mjs/);
+  };
+  check(form, ci);
+  assert.throws(() => check(form.replace('run: npm run build', 'run: npm run test:drift'), ci));
+  assert.throws(() => check(form.replace('frontend/test/add_lightbox_d695.test.mjs', ''), ci));
+  assert.throws(() => check(form, ci.replace('name: test:drift (full suite)', 'name: incomplete suite')));
+});
