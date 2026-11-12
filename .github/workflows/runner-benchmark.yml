@@ -1,0 +1,118 @@
+name: Runner benchmark
+
+on:
+  push:
+    branches: ['bench/runners-**']
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Newest main timing artifact, or equal weights
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          artifact=''
+          if gh api "repos/$REPO/commits?sha=main&per_page=100" > "$RUNNER_TEMP/main-commits.json" && gh api "repos/$REPO/actions/artifacts?per_page=100" > "$RUNNER_TEMP/artifacts.json"; then
+            artifact=$(node scripts/test-drift-parts.mjs --main-artifact "$RUNNER_TEMP/artifacts.json" "$RUNNER_TEMP/main-commits.json" || true)
+          fi
+          if [ -n "$artifact" ]; then
+            if gh api "repos/$REPO/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/timings.zip"; then
+              unzip -j "$RUNNER_TEMP/timings.zip" test-timings.json -d . || true
+            fi
+          fi
+          if [ ! -f test-timings.json ]; then
+            echo "::notice::No main timings artifact available; using equal weights."
+          fi
+      - name: Generate the exact-once plan
+        id: plan
+        run: |
+          parts=$(node scripts/test-drift-parts.mjs --plan test-timings.json)
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-plan
+          path: suite-plan.json
+          if-no-files-found: error
+          retention-days: 3
+      - id: matrix
+        env:
+          SPENDING_CAP_VERIFIED: ${{ vars.RUNNER_BENCHMARK_SPENDING_CAP_VERIFIED }}
+          GITHUB8_READY: ${{ vars.RUNNER_BENCHMARK_GITHUB8_READY }}
+          EPHEMERAL_READY: ${{ vars.RUNNER_BENCHMARK_EPHEMERAL_READY }}
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          import { partsOf } from './scripts/test-drift-parts.mjs';
+          import { benchmarkLanes } from './scripts/lib/runnerBenchmark.mjs';
+          const lanes = benchmarkLanes({ spendingCapVerified: process.env.SPENDING_CAP_VERIFIED, github8Ready: process.env.GITHUB8_READY, ephemeralReady: process.env.EPHEMERAL_READY });
+          const parts = partsOf(JSON.parse(readFileSync('package.json', 'utf8')).scripts);
+          console.log('matrix=' + JSON.stringify({ include: lanes.flatMap(lane => parts.map(part => ({ ...lane, part: part.name }))) }));
+          NODE
+
+  benchmark:
+    name: benchmark/${{ matrix.lane }}/${{ matrix.part }}
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 27
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            cloudflare-worker/package-lock.json
+            package-lock.json
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: suite-plan
+      # The suite imports React deck templates and the worker's TypeScript, so
+      # it needs both workspaces' dependencies installed.
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+      - name: Install worker deps
+        working-directory: cloudflare-worker
+        run: npm ci
+      - name: Install root deps
+        run: npm ci || npm install --no-audit --no-fund
+      # D5398: D4558's independent-recovery tests require the real age CLI.
+      # The Ubuntu 26 security.ubuntu.com mirror has intermittently failed DNS
+      # across unrelated PRs; pin a release SHA256 rather than apt-fetching it.
+      # The script installs locally to RUNNER_TEMP and adds only age to PATH.
+      - name: Install age
+        if: startsWith(matrix.part, 'frontend')
+        run: bash scripts/ci/install-age-linux.sh
+      # docs/ is not committed (D529), and part of the suite reads the built
+      # SPA (check-docs-assets-closure, the tests that open docs/), so build
+      # it first — the same root build the deploy runs.
+      - name: Build the SPA
+        run: npm run build
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
+      - run: node scripts/test-drift-parts.mjs ${{ matrix.part }} --plan-file suite-plan.json
