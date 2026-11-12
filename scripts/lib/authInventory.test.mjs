@@ -6,12 +6,14 @@
 // version of it read a gated route as public, or a public one as gated.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classify, closeOf, covers, functionBody, inventory, reach, stripComments, swallowedGates } from './authInventory.mjs';
-import { kindOf, ledgerProblems } from '../build-auth-inventory.mjs';
+import { kindOf, ledgerProblems, readLedger, authLedgerFile } from '../build-auth-inventory.mjs';
+
+import { readSplit, writeSplit } from './splitLedger.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const gateOf = (text) => classify({ path: '/api/x', text }).gate;
@@ -184,4 +186,25 @@ test('the real Worker: routes an earlier reader misread are read right, and ever
   // Mutation checked: '/api/*' middleware counted → this reads optional_auth and fails.
   assert.equal(at('GET', '/api/articles')?.gate, 'public');
   for (const r of rows) assert.match(r.family, /^\/api\/[^/]+$/, `${r.method} ${r.path}`);
+});
+
+
+test('D5613: split review entries retain verification and fail on missing or obsolete evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'split-auth-'));
+  try {
+    const rows = [{ method: 'GET', path: '/api/a', review: 'no_gate_found', gate: 'public', file: 'f.ts', line: 1 }];
+    const entry = { review: 'no_gate_found', kind: 'public_content', state: 'unreviewed' };
+    const dir = join(root, 'scripts/baselines/auth-inventory');
+    writeSplit(dir, { 'GET /api/a': entry }, authLedgerFile);
+    assert.deepEqual(readSplit(dir), { 'GET /api/a': entry });
+    assert.deepEqual(ledgerProblems(rows, readLedger(root), { root }), []);
+    writeSplit(dir, {}, authLedgerFile);
+    assert.ok(ledgerProblems(rows, readLedger(root), { root }).some((p) => p.includes('GET /api/a') && p.includes('no ledger entry')));
+    writeSplit(dir, { 'GET /api/removed': entry }, authLedgerFile);
+    assert.ok(ledgerProblems(rows, readLedger(root), { root }).some((p) => p.includes('no longer serves')));
+    writeSplit(dir, { 'GET /api/a': { ...entry, state: 'verified', test: 'missing.test.ts' } }, authLedgerFile);
+    assert.ok(ledgerProblems(rows, readLedger(root), { root }).some((p) => p.includes('verified needs')));
+    writeFileSync(join(root, 'scripts', ['auth','inventory','ledger.json'].join('-')), '{}');
+    assert.throws(() => readLedger(root), /obsolete ledger restored/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

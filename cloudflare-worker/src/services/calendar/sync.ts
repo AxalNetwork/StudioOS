@@ -25,6 +25,7 @@ import {
   refreshGoogleAccessToken,
   refreshMicrosoftAccessToken,
   pushEventToGoogle,
+  type GoogleCalendarWriteLimit,
   pushEventToMicrosoft,
   deleteEventFromGoogle,
   deleteEventFromMicrosoft,
@@ -38,6 +39,8 @@ type AxalKind = CalendarEvent['kind'];
 type Provider = 'google' | 'microsoft';
 const JOB_LEASE = 120_000;
 const MAX_ATTEMPTS = 6;
+const RETRY_BASE_MINUTES = 5;
+const GOOGLE_USAGE_LIMIT_RETRY_BASE_MINUTES = 60;
 type CopyJob = {
   user_id: number; provider: Provider; source_kind: AxalKind; source_id: number;
   source_day: string; generation: number; attempts: number;
@@ -129,7 +132,7 @@ Promise<{ copy: boolean; outcome: CopyOutcome | null }> {
 async function pushOneUserOneProvider(
   env: Env, userId: number, ev: CalendarEvent,
   provider: 'google' | 'microsoft',
-  failure?: (state: 'pending' | 'parked' | 'refused') => void,
+  failure?: (state: 'pending' | 'parked' | 'refused', retryBaseMinutes?: number) => void,
   stillCurrent?: () => Promise<boolean>,
 ): Promise<CopyOutcome> {
   const tokTable = provider === 'google' ? 'google_oauth_tokens' : 'microsoft_oauth_tokens';
@@ -159,10 +162,13 @@ async function pushOneUserOneProvider(
       AND source_kind = ${ev.kind} AND source_id = ${ev.source_id}
   ` as any[])[0];
   const key = await calendarCopyKey(env, userId, provider, ev);
-  const refused = (status: number) => failure?.(
-    status === 401 || status === 403 ? 'parked'
-      : status === 408 || status === 409 || status === 429 || status >= 500 ? 'pending' : 'refused',
-  );
+  const refused = (status: number, limit?: GoogleCalendarWriteLimit) => {
+    if (limit === 'usage') return failure?.('pending', GOOGLE_USAGE_LIMIT_RETRY_BASE_MINUTES);
+    failure?.(
+      limit === 'rate' ? 'pending' : status === 401 || status === 403 ? 'parked'
+        : status === 408 || status === 409 || status === 429 || status >= 500 ? 'pending' : 'refused',
+    );
+  };
   if (stillCurrent && !await stillCurrent()) return 'write_refused';
   const externalId = provider === 'google'
     ? await pushEventToGoogle(accessToken, ev, existing?.external_event_id || null, key, refused)
@@ -208,6 +214,8 @@ export async function calendarCopyKey(env: Env, userId: number, provider: Provid
 async function enqueueCopy(env: Env, userId: number, provider: Provider, ev: CalendarEvent, update: boolean) {
   const now = Date.now();
   const day = new Date(ev.start_at).toISOString().slice(0, 10);
+  // Older jobs stored preference suppression as a cancellation. Only an
+  // authorized update may revive one of those rows.
   await env.DB.prepare(`
     INSERT INTO calendar_copy_jobs (user_id, provider, source_kind, source_id, source_day, next_attempt_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -215,7 +223,7 @@ async function enqueueCopy(env: Env, userId: number, provider: Provider, ev: Cal
       source_day = excluded.source_day, generation = calendar_copy_jobs.generation + 1,
       attempts = 0, state = CASE WHEN calendar_copy_jobs.state = 'parked' THEN 'parked' ELSE 'pending' END,
       next_attempt_at = excluded.next_attempt_at, updated_at = excluded.updated_at
-    WHERE calendar_copy_jobs.state <> 'cancelled' AND ?
+    WHERE (calendar_copy_jobs.state <> 'cancelled' OR calendar_copy_jobs.outcome_code = 'not_selected') AND ?
   `).bind(userId, provider, ev.kind, ev.source_id, day, now, now, Number(update)).run();
 }
 
@@ -234,6 +242,7 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
   if (!job) return;
   let state: 'pending' | 'parked' | 'refused' | 'complete' | 'cancelled' = 'pending';
   let outcome: CopyOutcome | 'source_gone' = 'write_refused';
+  let retryBaseMinutes = RETRY_BASE_MINUTES;
   try {
     const event = await load(job);
     if (!event || event.status === 'cancelled') {
@@ -242,7 +251,10 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
     } else {
       const decision = await copyDecision(env, key.user_id, event, key.provider);
       if (decision.copy) {
-        outcome = await pushOneUserOneProvider(env, key.user_id, event, key.provider, (next) => { state = next; }, async () =>
+        outcome = await pushOneUserOneProvider(env, key.user_id, event, key.provider, (next, base = RETRY_BASE_MINUTES) => {
+          state = next;
+          retryBaseMinutes = base;
+        }, async () =>
           Boolean(await env.DB.prepare(`
             SELECT 1 FROM calendar_copy_jobs WHERE ? = user_id AND provider = ?
               AND source_kind = ? AND source_id = ? AND state = 'pending'
@@ -254,14 +266,14 @@ async function runCopyJob(env: Env, key: Pick<CopyJob, 'user_id' | 'provider' | 
         }
       } else {
         outcome = decision.outcome!;
-        if (outcome === 'not_selected') state = 'cancelled';
+        if (outcome === 'not_selected') state = 'refused';
       }
     }
   } catch {
     console.warn('[calendar/sync] copy_job_failed');
   }
   if (state === 'pending' && job.attempts >= MAX_ATTEMPTS) state = 'refused';
-  const next = now + Math.min(6 * 60, 5 * 2 ** Math.min(job.attempts - 1, 7)) * 60_000;
+  const next = now + Math.min(6 * 60, retryBaseMinutes * 2 ** Math.min(job.attempts - 1, 7)) * 60_000;
   const current = await env.DB.prepare(`
     UPDATE calendar_copy_jobs SET
       state = CASE WHEN generation = ? AND state = 'pending' THEN ? ELSE state END,

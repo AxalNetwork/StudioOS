@@ -2212,10 +2212,22 @@ async function handleStripeEvent(
     // returns non-2xx → Stripe retries the event (idempotent: one email per
     // invoice/charge id). Stripe's own customer emails are disabled (ops step)
     // so buyers only ever see Axal branding.
+    case 'invoice.created': {
+      const { checkPromoRenewal } = await import('../services/promoRenewal');
+      await checkPromoRenewal(env, obj);
+      return;
+    }
+    case 'invoice.voided': {
+      const { settlePromoRenewal } = await import('../services/promoRenewal');
+      await settlePromoRenewal(env, obj, false);
+      return;
+    }
     case 'invoice.paid':
     case 'invoice.finalized': {
       // D1052: a paid invoice closes its open payment alerts.
       if (event.type === 'invoice.paid') {
+        const { settlePromoRenewal } = await import('../services/promoRenewal');
+        await settlePromoRenewal(env, obj, true);
         const { closeInvoiceAlerts } = await import('../services/billingAlerts');
         await closeInvoiceAlerts(env, obj);
         // D892 §6: a founder or investor row left at `incomplete` for the

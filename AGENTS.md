@@ -12,8 +12,8 @@ in one format, so no person has to relay it.
 
 ## Slots
 
-Work belongs to a slot, not to a session. There are thirty slots, `S01`
-to `S30`. Each has a label, `slot:SNN`, and its queue is the open issues that
+Work belongs to a slot, not to a session. There are thirty-seven standard slots, `S01`
+to `S37`. Each has a label, `slot:SNN`, and its queue is the open issues that
 carry it. Session 1 is slot `S01` and orchestrates: it writes the tasks and
 answers STATUS comments on the same thread.
 
@@ -35,8 +35,15 @@ because only Session 1 makes a task ready.
 1. **Pull.** Take the oldest open issue labelled with your slot and
    `state:ready`, one task at a time. Over the REST API that is
    `GET /repos/AxalNetwork/StudioOS/issues?labels=slot:SNN,state:ready&state=open&sort=created&direction=asc`.
-2. **Claim.** Swap `state:ready` for `state:in-progress` and post a STATUS
-   comment.
+2. **Claim.** Run `node scripts/claim.mjs claim <issue> --slot <SLOT> --agent
+   <AGENT> --session <SESSION>` to create the atomic `claim/<issue>` ref.
+   Exit 0 won; exit 3 means another holder: leave it alone. Renew before the
+   24-hour TTL with `renew` and the same identity. On exit 4 (HTTP 403), fall
+   back to the label claim and say so in STATUS. Then swap `state:ready` for
+   `state:in-progress` and post a STATUS comment. Release with `release` and
+   the same identity on DONE or hand-back; never delete another holder's ref.
+   An expired ref remains held until its holder releases it or the owner
+   explicitly hands it back. The reaper only comments.
 3. **Work.** Branch `agent/<agent>/<issue>-<slug>` from the latest `main`. If
    your environment only allows its designated branch, restart that branch
    from `main` for each task. Open one draft PR whose body contains
@@ -184,7 +191,8 @@ over a hundred workflow runs on 2026-11-09 (#5240, #5251) and did it again on
    inherited failure.** Merge `main` only for your own conflict, or once main
    is green again and your PR needs a fresh run.
 4. **Never re-run a failed workflow for an inherited failure.** The gate
-   job's summary says which it is (`scripts/ci-classify.mjs`):
+   job's summary and the CI failure digest comment say which it is
+   (`scripts/ci-classify.mjs`, `<!-- studioos-ci-digest:v1 -->`):
    - `inherited_main_failure`: every failed part is red on main too. Do
      nothing to the PR.
    - `pr_failure`: at least one part is yours. Fix it.
@@ -206,6 +214,8 @@ applies to everything that is not a fix for a PR's own failure:
 
 The alert clears only once the queue is well below its thresholds, so wait for
 it to close.
+
+- While `[alert] merge queue stalled` is open, do not add new entries to the merge queue (D5604).
 
 ### CHANGELOG.md is Session 1's
 
@@ -341,6 +351,10 @@ documents it indexes.
   the heading cites it: `## D4102 — <title> (#4102)`), then runs
   `node scripts/check-decision-ids.mjs`. `DECISIONS.md` keeps D1 to D525 and
   takes no new entries, so two PRs no longer collide in one file (D526).
+  Part `k` of a multi-part issue `n` writes its own file, `decisions/D<n>-p<k>.md`,
+  headed `## D<n> part <k> — <title> (#<n>)`, beside the issue's `D<n>.md`; a
+  later part never edits `D<n>.md`. The check fails a part file with no parent
+  `D<n>.md` or whose heading names another issue or part (D5615).
 - **Production D1.** Read schema and aggregates only, never user content, and
   never write to it.
 - **After a merge** the owner checks the deploy. If you cannot read the deploy
