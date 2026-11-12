@@ -26,11 +26,12 @@ export function pollDelay(attempt) {
   return DELAYS[attempt] ?? 15000;
 }
 
-export const hasPending = (items) => (items || []).some((d) => d.source !== 'client' && d.index_state === 'pending');
+const canIndex = (d) => d.source !== 'client' && d.read_only !== true;
+export const hasPending = (items) => (items || []).some((d) => canIndex(d) && d.in_ask !== true && d.index_state === 'pending');
 
-/** Own documents Ask cannot fully read that are not already being read. */
-export const reindexTargets = (items) => (items || []).filter((d) => d.source !== 'client'
-  && d.index_state !== 'indexed' && d.index_state !== 'pending');
+/** Writable documents outside Ask that are not already being read. */
+export const reindexTargets = (items) => (items || []).filter((d) => canIndex(d)
+  && d.in_ask !== true && d.index_state !== 'pending');
 
 /** Runs `fn(uid)` over `uids`, at most `concurrency` at once; one outcome per uid, in order. */
 export async function runBatch(uids, fn, concurrency = 2) {
