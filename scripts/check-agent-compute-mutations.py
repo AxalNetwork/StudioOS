@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 
 TS = [
+ ('cloudflare-worker/src/routes/agent_compute.ts', 'if (error instanceof Error && AUTH_ERROR_STATUSES[error.message]) throw error;', 'void error;', 'every signed-in route refuses'),
  ('cloudflare-worker/src/services/agents/computeBridge.ts', 'WHERE e.request_uid = r.uid AND a.sponsor_user_id = ?1)', 'WHERE e.request_uid = r.uid AND a.sponsor_user_id = ?1 AND 0)', 'after a sponsor change'),
  ('cloudflare-worker/src/agents/engine.ts', 'NOT EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?)', 'EXISTS(SELECT 1 FROM agent_compute_requests WHERE task_id = ?)', 'created between'),
  ('cloudflare-worker/src/services/agents/computeHost.ts', "spec.value.allowed_regions[0] !== 'global'", 'false', 'cross-scope'),
@@ -68,7 +69,7 @@ def main():
             shutil.copytree(root / name, copy / name, ignore=shutil.ignore_patterns('node_modules', '__pycache__'))
         for name in ['scripts', 'frontend', 'meeting-bot', 'node_modules', 'cloudflare-worker/node_modules']:
             (copy / name).symlink_to((root / name).resolve(), target_is_directory=True)
-        tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts'))
+        tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts')) + ['cloudflare-worker/test/authz_sweep_d4570.test.ts']
         command = [args.node, '--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--test', '--test-concurrency=2']
         def run_ts(pattern=None):
             result = subprocess.run(command + (['--test-name-pattern', pattern] if pattern else []) + tests, cwd=copy, capture_output=True, text=True, timeout=60)

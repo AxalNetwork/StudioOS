@@ -4,6 +4,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { constantTimeEqual } from '../rpc/secret';
+import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 import { COMPUTE_BODY_CAP, computeBody, computeUid } from '../services/agents/computeHost';
 import { computeFailure, computeInternal, computeTask, createComputeRequest, readyComputeRequest, uploadComputeInput } from '../services/agents/computeBridge';
 
@@ -14,6 +15,7 @@ async function answer(work: () => Promise<unknown>) {
   catch (error) {
     if (error instanceof Response) return error;
     if (error instanceof HTTPException) return error.getResponse();
+    if (error instanceof Error && AUTH_ERROR_STATUSES[error.message]) throw error;
     if (error instanceof SyntaxError) return computeFailure('compute_request_invalid', 422);
     if (error instanceof Error && error.message === 'compute_body_limit') return computeFailure('compute_body_limit', 413);
     return computeFailure('compute_unavailable', 503);
@@ -51,7 +53,9 @@ router.get('/artifacts/:uid', async c => {
     if (!object || object.size !== row.size_bytes) throw computeFailure('artifact_not_found', 404);
     return new Response(object.body, { headers: { 'content-type': 'application/json', 'content-length': String(object.size),
       'content-disposition': 'attachment; filename="result.json"', 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' } });
-  } catch (error) { return error instanceof Response ? error : error instanceof HTTPException ? error.getResponse() : computeFailure('compute_unavailable', 503); }
+  } catch (error) {
+    if (error instanceof Error && AUTH_ERROR_STATUSES[error.message]) throw error;
+    return error instanceof Response ? error : error instanceof HTTPException ? error.getResponse() : computeFailure('compute_unavailable', 503); }
 });
 
 export const mount = { path: '/api/agent-compute', router: router };
