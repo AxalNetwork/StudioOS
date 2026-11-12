@@ -227,7 +227,7 @@ def child(request, read_fd, write_fd, cpu_s, memory_mb):
     try:
         install_syscall_fence()
         answer = {"ok": True, "artifact": execute(request)}
-    except BaseException as error:
+    except Exception as error:
         answer = {"ok": False, "code": str(error) if isinstance(error, Refused) else "operation_failed"}
     try:
         encoded = json.dumps(answer, separators=(",", ":")).encode()
@@ -268,7 +268,7 @@ def run_job(request):
                         if isinstance(decoded, dict):
                             answer = decoded
                     except (ValueError, UnicodeError, RecursionError):
-                        pass
+                        answer = None  # Malformed child output is a failed closed result.
                 break
             total += len(chunk)
             if total > 12 * MIB:

@@ -113,7 +113,7 @@ class RunnerAcceptance(unittest.TestCase):
 
     def test_parser_cannot_create_sockets_processes_or_files(self):
         def probes(_):
-            attempts = [lambda: socket.socket(), lambda: os.fork(), lambda: os.open('/tmp/compute-write', os.O_WRONLY | os.O_CREAT, 0o600),
+            attempts = [socket.socket, os.fork, lambda: os.open('/tmp/compute-write', os.O_WRONLY | os.O_CREAT, 0o600),
                         lambda: os.mkdir('/tmp/compute-dir'), lambda: os.execve('/missing', ['/missing'], {})]
             for action in attempts:
                 try: action()
@@ -149,7 +149,8 @@ class RunnerAcceptance(unittest.TestCase):
         for key in ['COMPUTE_CONTROL_SECRET', 'AGENT_COMPUTE_SECRET', 'CLOUDFLARE_API_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'ANTHROPIC_API_KEY']:
             self.assertNotIn(key, os.environ)
         with self.assertRaises(OSError):
-            open('/app/mutable', 'w')
+            with open('/app/mutable', 'w') as stream:
+                stream.write('refused')
         import zlib
         self.assertEqual(zlib.ZLIB_RUNTIME_VERSION, '1.4')
 

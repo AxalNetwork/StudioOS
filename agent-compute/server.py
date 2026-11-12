@@ -54,9 +54,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             return self.reply(400, {"code": "request_invalid"})
         try:
-            self.reply(200, run_job(request))
+            return self.reply(200, run_job(request))
         except Exception:
-            self.reply(500, {"code": "runtime_failed"})
+            return self.reply(500, {"code": "runtime_failed"})
 
 
 if __name__ == "__main__":
