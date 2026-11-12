@@ -42,6 +42,14 @@ gates kept, a rate-limit bucket for any new public endpoint. -->
 <!-- Slot and agent, for example `S05 · Codex`. Name the model only if your
 environment allows it. -->
 
+## Help impact
+
+<!-- Required for product, route, permission, billing, release or support-channel changes.
+Link the updated Help guide(s) and note what changed, OR say "None" and explain why
+documentation does not change. Do not claim a guide was verified without a source
+and a corresponding completed source/browser check. Keep Help content owned by
+its responsible team. This is a review decision, not a request to copy policy into Help. -->
+
 ## Review requested
 
 <!-- Who should review. A significant PR gets an agent from another vendor. -->
