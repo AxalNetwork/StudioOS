@@ -135,10 +135,10 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   const all = jobs(code('ci.yml'));
   const gate = all.find((j) => j.name === AGGREGATOR);
   const body = gate.body.join('\n');
-  assert.deepEqual(gate.needs, ['verified', 'suite']);
+  assert.deepEqual(gate.needs, ['verified', 'plan', 'suite']);
   // The two ways to pass, and nothing else.
   assert.match(body, /if \[ "\$EVENT" = "push" \] && \[ -n "\$VERIFIED_RUN" \] && \[ "\$SUITE" = "skipped" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
-  assert.match(body, /if \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
+  assert.match(body, /if \[ "\$PLAN" = "success" \] && \[ "\$SUITE" = "success" \]; then\n\s+echo [^\n]+\n\s+exit 0\n\s+fi/);
   assert.match(body, /exit 0\n\s+fi\n\s+echo "::error::[^\n]+"\n\s+exit 1\s*$/, 'anything else fails');
   assert.equal((body.match(/exit 0/g) || []).length, 2, 'exactly two ways to pass');
   assert.match(body, /SUITE: \$\{\{ needs\.suite\.result \}\}/);
@@ -157,7 +157,7 @@ test('D4130: the full-suite check passes only when every part passed, and trusts
   // The parts run unless that lookup found a run — including when it failed.
   const suite = all.find((j) => j.id === 'suite');
   assert.equal(suite.if, "${{ !cancelled() && needs.verified.outputs.run == '' }}");
-  assert.match(suite.body.join('\n'), /fail-fast: false/);
+  assert.match(suite.body.join('\n'), /fail-fast: \$\{\{ github\.event_name == 'merge_group' \}\}/);
 });
 
 test('the diffing gates compare against the queue entry\'s base, never the PR\'s, under merge_group', () => {

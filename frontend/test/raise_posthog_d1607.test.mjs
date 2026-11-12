@@ -6,12 +6,12 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/raise_posthog_d1607.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import RaisePosthog, { RAISE_POSTHOG_MODULES } from '../src/pages/cycles/RaisePosthog.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const READ = { ok: true, link: { linked: true, active: true, mine: true, uid: 'int-fixture' }, tracked: [{ uid: 'a'.repeat(32), name: 'Weekly active users', role_words: 'Active users', unit: 'count', value: 1240, as_of: '2026-10-30' }], facts: [], proposals: [] };
@@ -58,7 +58,7 @@ test('another Raise module draws nothing and reads nothing', async () => {
 });
 
 test('wiring: Readiness and Narrative draw it beside From Mercury; every other Raise module passes through the same line', () => {
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const route = cycleRouteText();
   for (const slug of ['fundraising-readiness', 'investor-narrative']) assert.ok(route.includes(`<RaisePosthog slug="${slug}" projectId={ctx.projectId} />`), slug);
   assert.ok(route.includes('<RaisePosthog slug={m.slug} projectId={ctx.projectId} />'));
 });

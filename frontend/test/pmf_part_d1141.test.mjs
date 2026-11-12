@@ -14,6 +14,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { NOT_YET, readinessHref, validateHref } from '../src/pages/cycles/pmfModel.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const read = (path) => readFileSync(path, 'utf8');
@@ -115,8 +116,8 @@ test('Validate\'s overview opens Fundraising readiness, keeping the venture; Bui
  * ------------------------------------------------------------------ */
 
 test('the wiring: the score part beside From Mercury, the Validate chip, read-only history and the canvas', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /import \{ PmfPart \} from '\.\/PmfPart';/);
+  const route = cycleRouteText();
+  assert.match(route, /import \{ PmfPart \} from '\.\.\/PmfPart';/);
   assert.match(route, /'fundraising-readiness': \(data, ctx\) => \(\s*<>\s*<PmfPart part=\{data\?\.parts\?\.pmf\} card=\{data\?\.card\} records=\{data\?\.records\} projectId=\{ctx\.projectId\} reload=\{ctx\.reload\} \/>\s*\{mercuryPart\('fundraising-readiness', data, ctx\)\}/);
   assert.match(route, /chip=\{cycle === 'validate' && projectId \? <PmfChip projectId=\{projectId\} search=\{q\} \/> : null\}/);
   const part = read('frontend/src/pages/cycles/PmfPart.jsx') + read('frontend/src/pages/cycles/pmfModel.js');

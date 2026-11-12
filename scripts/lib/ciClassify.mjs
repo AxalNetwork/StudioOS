@@ -16,7 +16,14 @@
  * second, PR-only failure inside it, so an inherited verdict says so, and the PR's own tests in that part still
  * count once main is green again.
  */
-export const VERDICTS = Object.freeze(['pr_failure', 'inherited_main_failure', 'main_health_unknown']);
+export const VERDICTS = Object.freeze(['pr_failure', 'inherited_main_failure', 'main_health_unknown', 'infra_failure']);
+
+export const INFRA_STEPS = Object.freeze([
+  /^Set up job$/,
+  /^Run actions\/(?:checkout|setup-node)@[\w.-]+$/,
+  /^(?:Run )?npm ci$/,
+  /^Install [\w .-]+$/,
+]);
 
 /** Jobs whose failure is only a summary of others: the gate reports the suite parts. */
 const SUMMARY_JOBS = new Set(['test:drift (full suite)']);
@@ -31,6 +38,20 @@ export const safeJobName = (v) => {
 };
 /** Only a github.com page reaches the summary as a link. */
 export const safeGithubUrl = (v) => (typeof v === 'string' && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(issues|actions\/runs)\/\d+$/.test(v) ? v : null);
+
+/** Ignore the dependent summary gate. Every failed leaf must have a known setup failure. */
+export function infraFingerprint(jobs) {
+  const failed = (jobs || []).filter(j => ['failure', 'timed_out'].includes(j?.conclusion) && !SUMMARY_JOBS.has(j.name));
+  if (!failed.length) return null;
+  const fingerprints = [];
+  for (const job of failed) {
+    const name = safeJobName(job.name).replace(/ \((?:frontend|worker)-\d+-of-\d+\)$/, '');
+    const step = safeJobName(job.steps?.find(s => s.conclusion === 'failure')?.name);
+    if (!name || !INFRA_STEPS.some(pattern => pattern.test(step))) return null;
+    fingerprints.push(`${name}/${step}`);
+  }
+  return fingerprints.sort()[0];
+}
 /** A PR job whose name is not shown still counts as the PR's own failure, never as inherited. */
 export const UNSHOWN_JOB = '(a job whose name is not shown)';
 const failedNames = (jobs, unsafe = '') => [...new Set((jobs || [])

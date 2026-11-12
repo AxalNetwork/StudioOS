@@ -6,12 +6,12 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/grow_posthog_d1608.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { APART_LINE, ImprovementPosthog, NO_IDENTITY, RETENTION_TITLE, RevenuePosthog, cohortLine, surveyLine } from '../src/pages/cycles/GrowPosthog.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const LINK = { linked: true, active: true, mine: true, uid: 'int-fixture' };
@@ -72,7 +72,7 @@ test('Product improvement: survey figures, and an answer added as customer feedb
 });
 
 test('wiring: Revenue and traction and Product improvement mount their PostHog parts', () => {
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const route = cycleRouteText();
   assert.ok(route.includes('<RevenuePosthog projectId={ctx.projectId} />'));
   assert.ok(route.includes('<ImprovementPosthog projectId={ctx.projectId} />'));
 });
