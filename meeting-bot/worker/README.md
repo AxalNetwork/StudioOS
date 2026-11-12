@@ -23,3 +23,5 @@ one), and it names the boundary a start stopped at: `image_unavailable`,
 `meeting_bot.runtime_stage` log line per transition, with codes only. The
 vocabulary and the time budgets live in
 `cloudflare-worker/src/services/meetingBotStartup.ts`.
+
+D5675: `previewCanary.ts` owns the disabled, authenticated synthetic preview startup/callback gate and ten-minute metadata cleanup; it never starts a meeting.

@@ -170,6 +170,7 @@ No trigger, permission, secret or check changes.
 D5609 (#5609): `ci.yml` and `github-alerts.yml` consume generated suite-plan
 artifacts and compact name outputs. Missing main timings use equal weights.
 
+D5675: the meeting-bot deploy verifies the exact deployed preview revision and signed synthetic callback before normal production promotion; missing preflight stops promotion.
 `release-rehearsal.yml` (D5501) checks release admission fixtures and profiles
 its exact Worker candidate on a disposable Linux runner using isolated workerd.
 It uses synthetic queue responses and has no production credentials.

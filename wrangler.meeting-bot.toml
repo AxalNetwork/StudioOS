@@ -27,8 +27,13 @@ build_context = "./meeting-bot"
 
 [env.preview]
 name = "studioos-meeting-bot-preview"
+workers_dev = true
 
 [env.preview.vars]
+CF_BOT_AUDIENCE = "preview"
+PREVIEW_CANARY_ENABLED = "off"
+# Owner supplies this exact preview script workers.dev origin after private receiver/signing preflight.
+PREVIEW_CANARY_ORIGIN = ""
 APP_URL = "https://studioos-preview.guillaumelauzier.workers.dev"
 
 [[env.preview.durable_objects.bindings]]
