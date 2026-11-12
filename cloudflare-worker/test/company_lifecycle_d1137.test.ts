@@ -43,6 +43,8 @@ const VENTURE = 10;
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   addComplianceStore(db); // D1614 (#3976): a seat's removal flags its compliance tasks in the same batch.
+  // #5654: install the production decision CHECK used by profile/logo batches.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/202611071200_program_grant_revisions.sql', import.meta.url), 'utf8'), 'decision_guard'));
   for (const t of ['users', 'founders', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597);
   db.exec(M685); // D1415: projects.slug, which a move checks

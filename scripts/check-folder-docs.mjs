@@ -103,6 +103,7 @@ const DOCUMENTED = new Map([
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
   ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],
+  ['merge-control',                   'the independent merge control Worker, its pure policies, audit and tests'],
   ['meeting-bot',                     'the meeting bot runtime (D886): the core, its adapter contract and its tests'],
   ['infra/branches',                  'one file per deployed branch — the only place a deployment is declared'],
   ['design/incoming',                 'Claude Design exports waiting to be integrated'],

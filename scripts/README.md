@@ -9,6 +9,7 @@
 | `validate-hq-drafts-4526.mjs` | D4526: validates 70 staged HQ definitions and cases with the supported importer; no database or model calls. |
 | `ci-scorecard.mjs` | D5603: samples the GitHub Actions and PR APIs and updates the daily scorecard on #5600. |
 | `dr-restore-lib.sh` | D5337: the one D1 restore path, sourced by `dr-drill.sh` (the monthly drill) and `restore-d1.sh` (the operator's restore): fetch, manifest check, the independent copy's decryption, chunked import and row-count comparison. Never run on its own. |
+| `check-test-clock.mjs` | D5614: AST check for new test clock reads/fixed sleeps; `test-clock-allowlist.txt` is a stale-checked inventory that can only shrink. |
 | `select-tests.mjs` | D5610: write one advisory PR selection record, aggregate `--report <dir>`, or replay `--backtest`; never skips CI execution. |
 | `test-clock-allowlist.txt` | D5614: reviewed starting inventory of test real-clock dependencies; the follow-up guard permits only removals. |
 | `lib/shardPlan.mjs` | D5609: deterministic duration packing and exact-once coverage for `test-drift-parts.mjs`; tests in `lib/shardPlan.test.mjs`. |
@@ -25,6 +26,7 @@ represents a bug that reached production once:
 | `check-api-drift.mjs` | The SPA calling an endpoint the worker does not serve — resolved against the mounted routers (index.ts and the self-mounting modules in `cloudflare-worker/src/routes/_registry.ts`, #4105), including a local factory’s returned Hono instance (D696). Unmounted alternate factories do not count. |
 | `ci/no-anthropic-in-prod.mjs` | D5339: the production Personal Advisor import graph cannot reach D851's provider runner or adapters; Anthropic references stay in an explicit reviewed allowlist; `/api/assistant` stays behind its non-production, exact-flag mount gate. Runs in `test:guards`; fixture and mutation coverage lives in `lib/noAnthropicInProd.test.mjs`. |
 | `lib/noAnthropicInProd.mjs` | D5339's import-graph, reference-allowlist and assistant-mount rules, shared by the guard and its synthetic-tree tests. |
+| `pip_audit_gate.py` | #5526: audits the pinned Python requirements, retries transient PyPI advisory lookup failures, and preserves strict scan findings. |
 | `ci/test-tracer.mjs` | D5608: opt-in Node test dependency and timing preload. Set `TEST_TRACE_DIR` when invoking a suite part to record repo-relative paths, probes, subprocess visibility and wall time. |
 | `ci/merge-test-deps.mjs` | D5608: merges process traces into commit-level dependency and timing JSON, reports untraced tests and counts opaque ones. |
 | `lib/prTier.mjs` | D5621: standalone PR tier selection and exact-head full-run evidence validation. |
@@ -74,6 +76,9 @@ represents a bug that reached production once:
 | `check-dark-mode.mjs` | A surface with no dark variant. |
 | `plan-persona-prices.mjs` | D1430: offline Advisor/Operating Partner price requests on `plan_group`; missing products are `product_needed`. Same private `--catalog` export and audited action format as the Founder/Investor planners. |
 | `check-production-queues.mjs` | D5535: prove the trusted candidate’s production producers, consumers and dead-letter queues exist in the release account before mutation. |
+| `check-worker-startup.mjs` | D5532: locally profile a trusted production-shaped bundle and record its startup, health and artifact evidence. |
+| `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
+| `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 
 ## The one rule that needed a linter
 

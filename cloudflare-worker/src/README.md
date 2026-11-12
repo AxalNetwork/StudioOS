@@ -8,9 +8,8 @@ Objects.
 for local Replit iteration and is never deployed; Workers do not run Python.
 New features are implemented here first.
 
-Deploy with `npm run deploy` from the repo root. Never `npx wrangler deploy` by
-hand: it skips the `predeploy` hook that applies D1 migrations, and ships the
-worker ahead of its schema.
+`npm run deploy` from the repo root dispatches the verified production release
+workflow, including queue and startup checks before migrations and publication.
 
 | File | What it is |
 | --- | --- |
