@@ -81,3 +81,4 @@ and citations by number keep working.
 | `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
+| `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
