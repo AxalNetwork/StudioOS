@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { normalizeEvent, SECURITY_EVENTS } from '../../engineering-notifications/events-v1.mjs';
+import { normalizeEvent, eventKey, SECURITY_EVENTS } from '../../engineering-notifications/events-v1.mjs';
 import { receive, signed } from '../../engineering-notifications/ingress.mjs';
 import { EventLedger } from '../../engineering-notifications/ledger.mjs';
 import { reconcile, reconcileWindow, githubReader } from '../../engineering-notifications/reconcile.mjs';
@@ -42,9 +42,11 @@ test('raw-byte signature and installation/repository/event allowlists precede du
 });
 test('canonical states keep multiple PRs, workflow/check identities, unknowns, fork visibility and distinct SHA roles', async () => {
   const r = await event(); assert.deepEqual(r.ids.prs, ['1', '2']); assert.equal(r.ids.workflow, '12'); assert.equal(r.refs.runHead, 'a'.repeat(40)); assert.equal(r.refs.head, null);
-  const pr = await normalizeEvent({ kind: 'pull_request', deliveryId: 'pr', payload: { repository, pull_request: { id: 5, number: 3, state: 'open', head: { sha: 'b'.repeat(40), repo: { fork: true } }, base: { sha: 'a'.repeat(40), ref: 'main' }, merge_commit_sha: 'c'.repeat(40), labels: [{ name: 'slot:S18' }, { name: '<!channel>' }], body: 'secret' } }, observedAt: at });
+  const pr = await normalizeEvent({ kind: 'pull_request', deliveryId: 'pr', payload: { repository, pull_request: { id: 5, number: 3, state: 'open', head: { sha: 'b'.repeat(40), repo: { fork: true } }, base: { sha: 'a'.repeat(40), ref: 'main' }, merge_commit_sha: 'c'.repeat(40), labels: [{ name: 'slot:S18' }, { name: '<!channel>' }, { name: 'github_pat_fixture_not_a_token' }], body: 'secret' } }, observedAt: at });
   assert.equal(pr.refs.head, 'b'.repeat(40)); assert.equal(pr.refs.candidate, 'c'.repeat(40)); assert.equal(pr.refs.landed, null); assert.deepEqual(pr.labels, ['slot:S18']);
   const check = await normalizeEvent({ kind: 'check_run', deliveryId: 'check', payload: { repository, check_run: { id: 99, status: 'new_provider_state', app: { id: 88, slug: 'new-provider' }, head_sha: 'c'.repeat(40), updated_at: at } }, observedAt: at });
+  const unicode = await normalizeEvent({ kind: 'check_run', deliveryId: 'unicode-check', payload: { repository, check_run: { id: 100, name: 'api ↔ worker drift', head_sha: 'a'.repeat(40), updated_at: at } } });
+  assert.equal(unicode.checkContext, 'api ↔ worker drift');
   assert.equal(check.state, 'unknown'); assert.equal(check.provider.id, '88'); assert.equal(check.refs.tested, 'c'.repeat(40));
   const unknown = await normalizeEvent({ kind: 'new_provider_event', deliveryId: 'unknown', payload: { repository, body: 'do not store' }, observedAt: at });
   assert.equal(unknown.family, 'unsupported'); assert.ok(unknown.gaps.includes('unsupported_event_kind'));
@@ -102,7 +104,11 @@ test('untrusted canonical extras and visibility escalation cannot be persisted',
   const f = open();
   try {
     const value = await event();
-    await assert.rejects(f.ledger.append({ ...value, commentBody: 'secret' }), /invalid/);
+    const extra = { ...value, commentBody: 'secret' }; extra.key = await eventKey(extra);
+    await assert.rejects(f.ledger.append(extra), /invalid/);
+    const gapExtra = { ...value, sourceGap: { scope: 'actions', from: 1, to: 2, body: 'secret' } }; gapExtra.key = await eventKey(gapExtra);
+    await assert.rejects(f.ledger.append(gapExtra), /invalid/);
+    await assert.rejects(f.ledger.append({ ...value, ownership: { issue: '1', slot: { body: 'secret' }, session: null, state: null, expiresAt: null } }), /invalid/);
     await assert.rejects(f.ledger.append({ ...value, key: '0'.repeat(64) }), /digest_invalid/);
     await assert.rejects(f.ledger.append({ ...value, ids: { ...value.ids, body: 'secret' } }), /invalid/);
     await assert.rejects(f.ledger.append({ ...value, visibility: 'anything' }), /invalid/);
@@ -132,4 +138,75 @@ test('actual Workers SQLite/RPC retains one acknowledged event across runtime re
     const other = await (await mf.dispatchFetch('https://fixture/fixture/other')).json(); assert.deepEqual(other.families, []);
     const disabled = await mf.dispatchFetch('https://fixture/github', { method: 'POST', body: 'fixture' }); assert.equal(disabled.status, 503);
   } finally { await mf.dispose(); rmSync(dir, { recursive: true }); }
+});
+
+test('downtime resumes the durable cursor even when it predates the new bootstrap window; reviewed head remains distinct', async () => {
+  const f = open(); let observed;
+  try {
+    f.ledger.checkpoint('actions', 10000);
+    const source = { scope: 'actions', start: 1000000, recheck: async () => {}, list: async ({start}) => { observed = start; return { total: 0, items: [] }; } };
+    assert.equal(await reconcile({ ledger: f.ledger, source, until: 2000000, overlapMs: 1000 }), true); assert.equal(observed, 9000);
+    const review = await normalizeEvent({ kind: 'pull_request_review', deliveryId: 'reviewed', payload: { repository, pull_request: { number: 3, head: { sha: 'b'.repeat(40) } }, review: { id: 4, state: 'changes_requested', commit_id: 'a'.repeat(40), updated_at: at } } });
+    assert.equal(review.refs.reviewed, 'a'.repeat(40)); assert.equal(review.refs.head, 'b'.repeat(40));
+  } finally { f.db.close(); }
+});
+
+test('work/delivery/check/claim snapshots recover metadata while missed transitions and revoked scopes remain gaps', async () => {
+  const { reconcileSnapshots } = await import('../../engineering-notifications/snapshots.mjs');
+  const { claimMessage } = await import('../../scripts/lib/claims.mjs');
+  const f = open(), paths = [], prHead = 'a'.repeat(40);
+  const read = async path => {
+    paths.push(path);
+    if (/\/pulls\?/.test(path)) return [{ id: 3, number: 3, state: 'open', draft: true, head: { sha: prHead }, updated_at: at, labels: [{ name: 'slot:S18' }] }];
+    if (path.includes('/reviews?')) return [{ id: 30, state: 'changes_requested', commit_id: prHead, submitted_at: at }];
+    if (path.includes('/pulls/3/comments?')) return [{ id: 31, updated_at: at, body: 'never retain comment' }];
+    if (/\/issues\?/.test(path)) return [{ id: 7, number: 7, state: 'open', updated_at: at }];
+    if (path.includes('/issues/comments?')) return [{ id: 32, updated_at: at, issue_url: 'https://api.github.com/repos/o/r/issues/7', body: 'never retain issue body' }];
+    if (path.includes('/releases?')) return [{ id: 50, published_at: at, body: 'never retain release body' }];
+    if (path.includes('/deployments/60/statuses?')) return [{ id: 61, state: 'success', created_at: at }];
+    if (path.includes('/deployments?')) return [{ id: 60, environment: 'staging', created_at: at }];
+    if (path.includes('/matching-refs/heads/claim/')) return [{ ref: 'refs/heads/claim/7', object: { sha: prHead } }];
+    if (path.includes('/git/commits/')) return { message: claimMessage({ issue: 7, slot: 'S18', session: '18', agent: 'Codex', at: new Date(at) }) };
+    if (path.includes('/matching-refs/')) return [];
+    if (path.includes('/check-runs?')) return { check_runs: [{ id: 90, name: 'new-external-check', head_sha: prHead, status: 'completed', conclusion: 'success', updated_at: at, app: { id: 91, slug: 'new-provider' } }] };
+    if (path.includes('/statuses?')) return [{ id: 92, context: 'external-status', state: 'success', created_at: at }];
+    throw Error('unhandled fixture');
+  };
+  try {
+    const result = await reconcileSnapshots({ read, ledger: f.ledger, repository, until: Date.parse(at) + 1000 }); assert.equal(result.complete, true);
+    const records = f.ledger.history(0, 1000); assert.ok(records.some(e => e.kind === 'pull_request' && e.draft === true)); assert.ok(records.some(e => e.ids.review === '30' && e.refs.reviewed === prHead)); assert.ok(records.some(e => e.ids.comment === '31')); assert.ok(records.some(e => e.ids.release === '50')); assert.ok(records.some(e => e.ids.deployment === '60' && e.state === 'success')); assert.ok(records.some(e => e.provider.id === '91')); assert.ok(records.some(e => e.kind === 'claim'));
+    assert.doesNotMatch(JSON.stringify(records), /never retain/); assert.ok(result.gaps.some(g => g.scope === 'security')); const cursor = f.ledger.cursor('snapshots');
+    const failed = await reconcileSnapshots({ read: async () => { throw Error('permission_revoked'); }, ledger: f.ledger, repository, until: Date.parse(at) + 2000 }); assert.equal(failed.complete, false); assert.equal(f.ledger.cursor('snapshots'), cursor); assert.ok(failed.gaps.some(g => g.code === 'permission_revoked'));
+  } finally { f.db.close(); }
+});
+
+test('rate headers pause subsequent reads and expose a durable reset deadline without leaking response bodies', async () => {
+  let calls = 0, reset = 0;
+  const read = githubReader({ token: 'fixture', now: () => 1000, onRateLimit: until => reset = until, fetchImpl: async () => { calls++; return new Response('private response omitted', { status: 429, headers: { 'retry-after': '7', 'x-ratelimit-reset': '20' } }); } });
+  await assert.rejects(read('/repos/o/r/actions/runs'), /rate_limited/); await assert.rejects(read('/repos/o/r/pulls'), /rate_limited/); assert.equal(calls, 1); assert.equal(reset, 20000);
+});
+
+test('security requires the separately configured deployment and never crosses normal ingress', async () => {
+  const payload = { repository, installation: { id: 7 }, alert: { id: 8, state: 'open', updated_at: at, secret: 'not retained' } }, bytes = new TextEncoder().encode(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('fixture-secret'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = 'sha256=' + [...new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes))].map(n => n.toString(16).padStart(2, '0')).join('');
+  const request = path => new Request(`https://fixture${path}`, { method: 'POST', body: bytes, headers: { 'x-hub-signature-256': sig, 'x-github-event': 'dependabot_alert', 'x-github-delivery': 'security-fixture' } });
+  const items = [], env = { SECURITY_MODE: 'true', SECURITY_WEBHOOK_SECRET: 'fixture-secret', SECURITY_INSTALLATION_ID: '7', REPOSITORY_ID: '42', REPOSITORY: 'o/r', ALLOWED_EVENTS: JSON.stringify(['dependabot_alert']), EVENTS: { send: async e => items.push(e) } };
+  assert.equal((await receive(request('/security'), { ...env, SECURITY_MODE: 'false' })).status, 403);
+  assert.equal((await receive(request('/github'), env)).status, 403); assert.equal(items.length, 0);
+  assert.equal((await receive(request('/security'), env)).status, 202); assert.equal(items[0].visibility, 'restricted'); assert.doesNotMatch(JSON.stringify(items), /not retained/);
+});
+
+test('public ingress has a durable anonymous minute budget rather than unbounded signature work', () => {
+  const f = open();
+  try { assert.equal(f.ledger.admit(1000, 2), true); assert.equal(f.ledger.admit(1000, 2), true); assert.equal(f.ledger.admit(1000, 2), false); assert.equal(f.ledger.admit(61000, 2), true); assert.equal(f.ledger.counts().rejects[0].code, 'ingress_rate_limited'); }
+  finally { f.db.close(); }
+});
+
+test('REST/webhook CI actions share semantic identity and opaque review-thread IDs remain traceable', async () => {
+  const a = await normalizeEvent({ kind: 'workflow_run', deliveryId: 'webhook-completed', payload: { repository, workflow_run: run(), action: 'completed' }, observedAt: at });
+  const b = await normalizeEvent({ kind: 'workflow_run', deliveryId: 'rest-completed', payload: { repository, workflow_run: run() }, source: 'github-rest', observedAt: at });
+  assert.equal(a.key, b.key); const f = open(); try { await f.ledger.append(a); await f.ledger.append(b); assert.equal(f.ledger.history().length, 1); assert.equal(f.ledger.counts().deliveries, 2); } finally { f.db.close(); }
+  const thread = await normalizeEvent({ kind: 'pull_request_review_thread', deliveryId: 'thread', payload: { repository, pull_request: { number: 3 }, thread: { id: 'PRRT_fixture_123', is_resolved: true, updated_at: at }, action: 'resolved' } });
+  assert.equal(thread.ids.thread, 'PRRT_fixture_123'); assert.equal(thread.subject.id, 'PRRT_fixture_123'); assert.equal(thread.conversation.resolved, true);
 });

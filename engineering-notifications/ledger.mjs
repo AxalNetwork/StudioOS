@@ -6,6 +6,7 @@ export class EventLedger {
     sql.exec('CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY AUTOINCREMENT, event_key TEXT NOT NULL UNIQUE, family TEXT NOT NULL, payload TEXT NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS deliveries (delivery_id TEXT PRIMARY KEY, event_key TEXT NOT NULL, observed_at TEXT NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS gaps (gap_key TEXT PRIMARY KEY, payload TEXT NOT NULL)');
+    sql.exec('CREATE TABLE IF NOT EXISTS ingress_limits (minute INTEGER PRIMARY KEY, count INTEGER NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS rejects (code TEXT PRIMARY KEY, count INTEGER NOT NULL)');
     sql.exec('CREATE TABLE IF NOT EXISTS cursors (scope TEXT PRIMARY KEY, until_ms INTEGER NOT NULL)');
   }
@@ -18,6 +19,16 @@ export class EventLedger {
       this.sql.exec('INSERT OR IGNORE INTO events (event_key, family, payload) VALUES (?, ?, ?)', event.key, event.family, JSON.stringify(event));
       this.sql.exec('INSERT OR IGNORE INTO deliveries (delivery_id, event_key, observed_at) VALUES (?, ?, ?)', event.deliveryId, event.key, event.observedAt);
       return { key: event.key, duplicateDelivery: Boolean(previous), sequence: this.sql.exec('SELECT sequence FROM events WHERE event_key = ?', event.key).toArray()[0].sequence };
+    });
+  }
+  admit(now, limit = 1000) {
+    if (!Number.isFinite(now) || !Number.isInteger(limit) || limit < 1 || limit > 100000) return false;
+    return this.transaction(() => {
+      const minute = Math.floor(now / 60000);
+      this.sql.exec('DELETE FROM ingress_limits WHERE minute < ?', minute - 2);
+      const row = this.sql.exec('INSERT INTO ingress_limits (minute, count) VALUES (?, 1) ON CONFLICT(minute) DO UPDATE SET count = count + 1 RETURNING count', minute).toArray()[0];
+      if (row.count > limit) { this.reject('ingress_rate_limited'); return false; }
+      return true;
     });
   }
   recordGap({ scope, code, from, to }) {
@@ -37,5 +48,6 @@ export class EventLedger {
   }
   cursor(scope) { return this.sql.exec('SELECT until_ms FROM cursors WHERE scope = ?', scope).toArray()[0]?.until_ms || 0; }
   checkpoint(scope, until) { this.sql.exec('INSERT INTO cursors (scope, until_ms) VALUES (?, ?) ON CONFLICT(scope) DO UPDATE SET until_ms = MAX(until_ms, excluded.until_ms)', scope, until); }
-  counts() { return { schema: 1, rejects: this.sql.exec('SELECT code, count FROM rejects').toArray(), redactedRecords: this.sql.exec('SELECT COUNT(*) AS count FROM events').toArray()[0].count, families: this.sql.exec('SELECT family, COUNT(*) AS count FROM events GROUP BY family').toArray(), deliveries: this.sql.exec('SELECT COUNT(*) AS count FROM deliveries').toArray()[0].count, gaps: this.sql.exec('SELECT payload FROM gaps').toArray().map(r => JSON.parse(r.payload)), pending: this.pending().length }; }
+  gapHistory(after = 0, limit = 100) { return this.sql.exec('SELECT rowid AS sequence, payload FROM gaps WHERE rowid > ? ORDER BY rowid LIMIT ?', after, Math.max(1, Math.min(1000, limit))).toArray().map(r => ({ sequence: r.sequence, ...JSON.parse(r.payload) })); }
+  counts() { return { schema: 1, rejects: this.sql.exec('SELECT code, count FROM rejects').toArray(), redactedRecords: this.sql.exec('SELECT COUNT(*) AS count FROM events').toArray()[0].count, families: this.sql.exec('SELECT family, COUNT(*) AS count FROM events GROUP BY family').toArray(), deliveries: this.sql.exec('SELECT COUNT(*) AS count FROM deliveries').toArray()[0].count, gaps: this.sql.exec('SELECT payload FROM gaps ORDER BY rowid DESC LIMIT 1000').toArray().map(r => JSON.parse(r.payload)), gapCount: this.sql.exec('SELECT COUNT(*) AS count FROM gaps').toArray()[0].count, gapsTruncated: this.sql.exec('SELECT COUNT(*) AS count FROM gaps').toArray()[0].count > 1000, pending: this.pending().length }; }
 }

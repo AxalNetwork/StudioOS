@@ -22,7 +22,8 @@ export async function reconcileWindow({ list, accept, gap, start, end, scope, ca
   return true;
 }
 export async function reconcile({ ledger, source, until, overlapMs = 300_000 }) {
-  const scope = source.scope, from = Math.max(source.start, ledger.cursor(scope) - overlapMs);
+  const scope = source.scope, cursor = ledger.cursor(scope), from = cursor ? Math.max(0, cursor - overlapMs) : source.start;
+  if (!cursor && from > 0) ledger.recordGap({ scope, code: 'history_before_bootstrap_unverified', from: 0, to: from });
   try {
     for (const pending of await ledger.pending()) await source.recheck(pending, event => ledger.append(event));
     const complete = await reconcileWindow({ scope, start: from, end: until, list: options => source.list(options), accept: async event => { await ledger.append(event); await source.enrich?.(event, value => ledger.append(value)); }, gap: value => ledger.recordGap(value) });
@@ -34,11 +35,18 @@ export async function reconcile({ ledger, source, until, overlapMs = 300_000 }) 
     ledger.recordGap({ scope, code, from, to: until }); return false;
   }
 }
-export function githubReader({ token, fetchImpl = fetch }) {
+export function githubReader({ token, fetchImpl = fetch, onRateLimit = () => {}, now = Date.now }) {
+  let paused = false;
   return async path => {
+    if (paused) throw new Error('rate_limited');
     if (!token || !/^\/repos\/[\w.-]+\/[\w.-]+\//.test(path) || /[\r\n]/.test(path)) throw new Error('permission_revoked');
     const response = await fetchImpl(`https://api.github.com${path}`, { method: 'GET', headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'studioos-notification-reader' }, redirect: 'error', signal: AbortSignal.timeout(20_000) });
-    if (response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0') throw new Error('rate_limited');
+    if (response.status === 429 || response.headers.get('x-ratelimit-remaining') === '0' || response.status === 403 && response.headers.has('retry-after')) {
+      paused = true;
+      const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000, delay = Math.max(1000, Number(response.headers.get('retry-after')) * 1000 || 60_000);
+      onRateLimit(Math.min(now() + 86_400_000, Math.max(now() + delay, Number.isFinite(reset) ? reset : 0)));
+      throw new Error('rate_limited');
+    }
     if ([401, 403, 404].includes(response.status)) throw new Error('permission_revoked');
     if (!response.ok) throw new Error('source_unavailable');
     return JSON.parse(new TextDecoder().decode(await boundedBody(response, 8_000_000)));

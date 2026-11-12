@@ -16,6 +16,7 @@ export async function signed(bytes, signature, secret) {
 export async function receive(request, env) {
   const security = new URL(request.url).pathname === '/security';
   if (request.method !== 'POST' || !['/github', '/security'].includes(new URL(request.url).pathname)) return new Response('not found', { status: 404 });
+  if (security !== (env.SECURITY_MODE === 'true')) return new Response('permission boundary rejected', { status: 403 });
   const bytes = await boundedBody(request);
   if (!await signed(bytes, request.headers.get('x-hub-signature-256'), security ? env.SECURITY_WEBHOOK_SECRET : env.WEBHOOK_SECRET)) return new Response('signature rejected', { status: 401 });
   const payload = JSON.parse(new TextDecoder().decode(bytes));

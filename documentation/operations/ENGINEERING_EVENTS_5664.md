@@ -29,9 +29,8 @@ There is no public history endpoint and no GitHub mutation transport.
 Before rollout, #5668 must approve the isolated Worker/Queues/Durable Object
 resources and App repository/installation IDs, minimum read scopes, signed
 webhook registration, heartbeat destination, restricted security boundary,
-retention/deletion policy and canary. Work/delivery/provider recurring REST
-recovery is still a scoped follow-up within #5664; Actions reconciliation is
-implemented locally. Neither #5639 nor StudioOS deployment availability gates
+retention/deletion policy and canary. Actions and work/delivery/provider/claim snapshot recovery are implemented
+locally; their scoped live feed/recovery proof remains outstanding. Neither #5639 nor StudioOS deployment availability gates
 fixture capture or the independent proposed schedule.
 
 Failed deliveries need authorized replay from retained GitHub delivery records;
@@ -40,3 +39,17 @@ kill switches false until installation is verified. A source gap is owned by
 S01/infrastructure; restore scope or replay approved retained deliveries, then
 reconcile overlapping windows. Never erase immutable history to make counts
 match. No retention expiry is implemented or claimed before an owner policy.
+
+At an approved deployment only, the normal capture Worker needs `WEBHOOK_SECRET`
+and the minimum-scope `GITHUB_READ_TOKEN`. The separate security deployment
+needs its own `SECURITY_WEBHOOK_SECRET` and installation; it does not inherit the
+normal reader credential and its REST reconciliation stays disabled. These are
+independent service secrets, not StudioOS production bindings. No values belong
+in configuration, fixtures, logs or the registry. Both configurations include a
+durable anonymous ingress budget and remain disabled until #5668 approves them.
+
+The read-only source exposes independent event and gap cursors. Gap intervals
+are itemized through the publisher with an unknown missing-record count; a
+single discrepancy is never presented as a known number of lost events.
+Aggregate gap output is bounded and includes total/truncation information;
+internal paginated gap history retains every recorded interval.

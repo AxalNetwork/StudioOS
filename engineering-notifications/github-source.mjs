@@ -1,6 +1,7 @@
 // D5664: read-only all-workflow/all-attempt Actions adapter; webhook families remain catalogued even without API scope.
 import { normalizeEvent } from './events-v1.mjs';
 export function actionsSource({ read, repository, start, gap }) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository?.full_name || '')) throw new Error('repository_invalid');
   const root = `/repos/${repository.full_name}`;
   const canonical = async (kind, object) => {
     const event = await normalizeEvent({ kind, deliveryId: `rest:${kind}:${object.id}`, payload: { repository, [kind]: object }, source: 'github-rest' });
@@ -18,7 +19,7 @@ export function actionsSource({ read, repository, start, gap }) {
         if (page > 100) throw new Error('source_shape_invalid');
         const data = await read(`${root}/actions/runs/${event.ids.run}/attempts/${attempt}/jobs?per_page=100&page=${page}`);
         if (!Array.isArray(data.jobs)) throw new Error('source_shape_invalid');
-        for (const job of data.jobs) await accept(await canonical('workflow_job', { ...job, run_id: run.id, run_attempt: attempt, head_sha: run.head_sha, head_branch: run.head_branch }));
+        for (const job of data.jobs) await accept(await canonical('workflow_job', { ...job, run_id: run.id, run_attempt: attempt, head_sha: run.head_sha, head_branch: run.head_branch, pull_requests: run.pull_requests }));
         if (data.jobs.length < 100) break;
       }
     }

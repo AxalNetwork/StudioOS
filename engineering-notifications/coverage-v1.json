@@ -1600,7 +1600,7 @@
         "contents:read"
       ],
       "recovery": "current PR/issue/review/claim state via read adapters; intermediate transitions need retained signed deliveries",
-      "implementedREST": "pilot snapshots only; recurring adapter not installed",
+      "implementedREST": "PR/review/comment/issue and claim snapshots; missed conversation-resolution and claim intermediates remain explicit gaps",
       "owner": "S01"
     },
     {
@@ -1618,7 +1618,7 @@
         "statuses:read"
       ],
       "recovery": "all workflows, runs and attempts/jobs; check providers require per-commit scope",
-      "implementedREST": "Actions all-run/all-attempt adapter; providers inventoried from current commit",
+      "implementedREST": "all Actions attempts/jobs plus external check/status snapshots for observed PR/main commit SHAs; orphan commit gaps explicit",
       "owner": "S01/infrastructure"
     },
     {
@@ -1640,7 +1640,7 @@
         "pull_requests:read"
       ],
       "recovery": "terminal refs/release/deployment snapshots; destroyed group membership and missed approvals may be unrecoverable",
-      "implementedREST": "pilot snapshots only; recurring adapter not installed",
+      "implementedREST": "release/deployment/status/ref/group snapshots; destroyed/transient membership and approvals remain explicit gaps",
       "owner": "S01/infrastructure"
     },
     {
