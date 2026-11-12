@@ -33,6 +33,26 @@ import { ghostButtonClass } from '../kit';
  * the "saved, could not refresh" note, so an old warning cannot outlive the
  * read it was about.
  */
+/** D4836: only a field-naming validation response may supply its sentence to a failed-write note. */
+export function writeFailureText(error, fallback = 'That did not save.') {
+  const code = error?.code || error?.data?.error;
+  const status = Number(error?.status) || ({ validation_error: 422, forbidden: 403, conflict: 409, session_expired: 401, network_error: 0 })[code];
+  if (status === 400 || status === 422) {
+    const field = error?.field || error?.data?.field;
+    const message = typeof error?.message === 'string' ? error.message.trim() : '';
+    if (typeof field === 'string' && /^[a-z][\w.[\]-]{0,79}$/i.test(field) && message && message.length <= 500) return message;
+    return 'Check the fields and try again.';
+  }
+  if (status === 401) return 'Sign in again before saving.';
+  if (status === 403) return 'Your account cannot make this change.';
+  if (status === 404) return 'This record is no longer available. Your entries are kept.';
+  if (status === 409) return 'This conflicts with a newer change. Your entries are kept.';
+  if (status === 429) return 'Too many changes at once. Wait a moment and try again.';
+  if (status >= 500) return 'Axal could not save this right now. Try again.';
+  if (error instanceof TypeError || code === 'network_error' || error?.status === 0) return 'Axal could not be reached. Check your connection and try again.';
+  return fallback;
+}
+
 export function useGuardedWrite(load) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState(null);
@@ -47,7 +67,7 @@ export function useGuardedWrite(load) {
       await write();
     } catch (e) {
       setNote({
-        ok: false, scope, text: e?.message || failed,
+        ok: false, scope, text: writeFailureText(e, failed),
         retry: () => save(write, opts),
       });
       setBusy(false);
