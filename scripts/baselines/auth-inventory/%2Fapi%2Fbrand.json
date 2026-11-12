@@ -1,0 +1,27 @@
+{
+  "GET /api/brand/landing/:slug": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/brand/p/:site/:page": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/brand/templates": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/brand/landing/:slug/view": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "POST /api/brand/landing/:slug/waitlist": {
+    "review": "no_gate_found",
+    "kind": "public_content",
+    "state": "unreviewed"
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "sets.join(', ') @ routes/admin_telegram.ts": 2,
+  "whereSql @ routes/admin_telegram.ts": 2
+}

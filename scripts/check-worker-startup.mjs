@@ -48,7 +48,8 @@ export function measureProfile(profile) {
   let activeUs = 0;
   for (const [i, elapsed] of timeDeltas.entries()) {
     const frame = frames.get(samples[i]);
-    if (!frame || !Number.isFinite(elapsed) || elapsed < 0) throw new Error('Startup profile contains an invalid sample.');
+    if (!frame) throw new Error(`Startup profile sample ${i} names an unknown frame.`);
+    if (!Number.isFinite(elapsed) || elapsed < 0) throw new Error(`Startup profile sample ${i} has invalid time delta ${elapsed}.`);
     if (frame.functionName === '(idle)') continue;
     activeUs += elapsed;
     const location = frame.url ? ` (${frame.url}:${frame.lineNumber + 1})` : '';
@@ -65,6 +66,19 @@ export function classifyStartup(measurements) {
     return 'inconclusive';
   }
   return measurements.some(({ activeMs }) => activeMs > maxActiveMs) ? 'over_budget' : 'verified';
+}
+
+export function collectStartupProfiles(sample, measurements, invalid) {
+  // Replace at most two invalid inspector captures. Every valid capture,
+  // including any over-budget sample, counts toward the three required runs.
+  for (let attempt = 1; attempt <= runs + 2 && measurements.length < runs; attempt += 1) {
+    const { profile, ...health } = sample(attempt);
+    try {
+      measurements.push({ ...measureProfile(profile), ...health });
+    } catch (error) {
+      invalid.push({ attempt, reason: error.message });
+    }
+  }
 }
 
 const moduleTypes = {
@@ -148,7 +162,7 @@ async function main(candidate, bundle, output) {
   const report = {
     candidate: /^[a-f0-9]{40}$/.test(candidate ?? '') ? candidate : null,
     platform: `${platform()}-${arch()}`, cpu: cpus()[0]?.model, node: process.version,
-    thresholdMs: maxActiveMs, measurements: [], status: 'inconclusive',
+    thresholdMs: maxActiveMs, measurements: [], invalid: [], status: 'inconclusive',
   };
   try {
     const artifact = resolve(bundle);
@@ -156,7 +170,7 @@ async function main(candidate, bundle, output) {
     report.wrangler = JSON.parse(readFileSync(join(workerDir, 'node_modules/wrangler/package.json'), 'utf8')).version;
     // The probe uses the pinned local workerd and a loopback inspector.
     const env = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, NO_COLOR: '1' };
-    for (let i = 1; i <= runs; i += 1) {
+    collectStartupProfiles(i => {
       const file = `startup-${i}.cpuprofile`;
       const profilePath = join(dir, file);
       const child = spawnSync(process.execPath, [fileURLToPath(import.meta.url), '--profile', artifact],
@@ -172,20 +186,20 @@ async function main(candidate, bundle, output) {
       if (records.length !== 1) throw new Error(`Local startup profile ${i} did not emit one result.`);
       const { profile, coldMs, warmMs } = JSON.parse(records[0].slice(prefix.length));
       if (![coldMs, warmMs].every(ms => Number.isFinite(ms) && ms > 0)) throw new Error('Invalid health timings.');
-      const measurements = measureProfile(profile);
       writeFileSync(profilePath, JSON.stringify(profile));
-      report.measurements.push({ file, ...measurements, coldMs, warmMs });
-    }
+      return { file, profile, coldMs, warmMs };
+    }, report.measurements, report.invalid);
     const finalDigest = createHash('sha256').update(readFileSync(artifact)).digest('hex');
     if (finalDigest !== report.bundle.sha256) throw new Error('Bundle changed during startup profiling.');
     report.status = classifyStartup(report.measurements);
+    if (report.status === 'inconclusive') report.reason = report.invalid.at(-1)?.reason;
     if (report.status === 'over_budget') report.reason = 'At least one cold profile exceeded the local CPU budget.';
   } catch (error) {
     report.reason = error.message;
   }
   writeFileSync(join(dir, 'startup.json'), JSON.stringify(report, null, 2) + '\n');
   console.log(JSON.stringify({ candidate: report.candidate, status: report.status,
-    activeMs: report.measurements.map(run => run.activeMs), thresholdMs: report.thresholdMs, reason: report.reason }));
+    activeMs: report.measurements.map(run => run.activeMs), thresholdMs: report.thresholdMs, invalid: report.invalid, reason: report.reason }));
   if (report.status !== 'verified') process.exitCode = 1;
 }
 

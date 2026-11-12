@@ -1,0 +1,5 @@
+{
+  "base @ routes/admin_cohort.ts": 2,
+  "cycleId ? 'AND c.id = ?' : '' @ routes/admin_cohort.ts": 1,
+  "cycleId ? 'AND s.cohort_cycle_id = ?' : '' @ routes/admin_cohort.ts": 1
+}

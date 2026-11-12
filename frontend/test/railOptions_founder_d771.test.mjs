@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
-import { CYCLES, CYCLE_ROUTE, cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
+import { CYCLES, CYCLE_DEF_FILES, cycleBands, cycleFills, cycleRouteSource } from './_cycleBands.mjs';
 import {
   FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES, OPTION_KINDS,
 } from '../src/lib/railOptions/founder.js';
@@ -73,6 +73,8 @@ const FOUNDER_FILES = [...new Set([
 ])].sort();
 
 const optionsAt = (file) => FOUNDER_OPTIONS.filter((o) => o.at.some(([f]) => f === file));
+/** D5615: the options listed on the cycle table, whose entries are `defs/<cycle>.jsx`. */
+const onCycleTable = (o) => o.at.some(([f]) => CYCLE_DEF_FILES.includes(f));
 const listed = (file, call) => FOUNDER_OPTIONS.some((o) => o.at.some(([f, c]) => f === file && c === call));
 
 test('every option names a founder page, a kind, a handler and a key unique on its page', () => {
@@ -121,12 +123,12 @@ test('every band on the founder\'s boards is listed, under the Worker\'s own nam
     ...Object.values(cycleFills(src, cycle)).map((kind) => `fill:${kind}`),
   ]);
   assert.ok(fromTables.length >= 13, `expected the cycles' bands; found ${fromTables.length}`);
-  const fromCycle = optionsAt(CYCLE_ROUTE).filter((o) => /^(draft|fill):/.test(o.key)).map((o) => o.key);
+  const fromCycle = FOUNDER_OPTIONS.filter(onCycleTable).filter((o) => /^(draft|fill):/.test(o.key)).map((o) => o.key);
   assert.deepEqual([...fromCycle].sort(), [...fromTables].sort(),
     'CycleRoute\'s bands and the founder options listed on it have diverged');
 
   // Everywhere else a band is a literal `<ZoneDraft surface="…">`.
-  for (const file of FOUNDER_FILES.filter((f) => f !== CYCLE_ROUTE)) {
+  for (const file of FOUNDER_FILES.filter((f) => !CYCLE_DEF_FILES.includes(f))) {
     const mounted = codeOnly(read(file)).split('<ZoneDraft').slice(1)
       .map((seg) => seg.slice(0, seg.indexOf('/>')).match(/surface="([a-z/-]+)"/)?.[1])
       .filter(Boolean);
@@ -196,7 +198,7 @@ const fillNamed = (section) => {
  * A cycle page's draft band names itself through `ZoneDraft`'s `railOption`,
  * which `CycleRoute` builds as `draft:<surface>` for every band in its table.
  */
-const cycleDraft = (o) => o.key.startsWith('draft:') && o.at.some(([file]) => file === CYCLE_ROUTE);
+const cycleDraft = (o) => o.key.startsWith('draft:') && onCycleTable(o);
 const draftNamed = () => /<ZoneDraft key=\{`\$\{slug\}-\$\{draft\.surface\}`\} \{\.\.\.draft\}[^>]*railOption=\{`draft:\$\{draft\.surface\}`\}/.test(cycleRouteSource())
   && /useRailOption\(busy === 'run' \|\| item \? railOption \|\| `draft:\$\{surface\}` : null,/.test(codeOnly(read('frontend/src/workspaces/ZoneDraft.jsx')));
 /** The keys a file names to the rail: its `useRailOption('<key>', …)` calls, and a `ZoneDraft`'s `railOption="<key>"`. */

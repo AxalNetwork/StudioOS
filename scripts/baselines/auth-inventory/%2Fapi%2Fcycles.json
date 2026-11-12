@@ -1,0 +1,17 @@
+{
+  "POST /api/cycles/grow/google/proposals/:id/accept": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/cycles/grow/google/proposals/:id/dismiss": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/cycles/grow/google/sync": {
+    "review": "no_gate_found",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

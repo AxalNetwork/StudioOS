@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { bundleIdentity, classifyStartup, maxActiveMs, measureProfile } from '../check-worker-startup.mjs';
+import { bundleIdentity, classifyStartup, collectStartupProfiles, maxActiveMs, measureProfile } from '../check-worker-startup.mjs';
 
 const candidate = 'a'.repeat(40);
 
@@ -32,4 +32,19 @@ test('all three cold samples are required and any sample over the budget blocks 
   assert.equal(classify(200, 300, maxActiveMs + 1), 'over_budget');
   assert.equal(classify(200, 300), 'inconclusive');
   assert.equal(classify(200, 0, 300), 'inconclusive');
+});
+
+
+test('invalid captures have bounded replacements and a valid over-budget capture still blocks', () => {
+  const nodes = [{ id: 1, callFrame: { functionName: 'startup' } }];
+  const run = (elapsed, measurements, invalid) => collectStartupProfiles(attempt => ({
+    profile: { nodes, samples: [1], timeDeltas: [elapsed[attempt - 1]] },
+  }), measurements, invalid);
+  const measured = [], invalid = [];
+  run([-1, 200_000, 801_000, 250_000], measured, invalid);
+  assert.deepEqual([invalid.map(entry => entry.attempt), measured.map(entry => entry.activeMs), classifyStartup(measured)],
+    [[1], [200, 801, 250], 'over_budget']);
+  const missing = [], rejected = [];
+  run([-1, -1, 200_000, -1, 250_000, 220_000], missing, rejected);
+  assert.deepEqual([rejected.map(entry => entry.attempt), classifyStartup(missing)], [[1, 2, 4], 'inconclusive']);
 });
