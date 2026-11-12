@@ -29,6 +29,7 @@ import { FOUNDER_ZONE_ACTIONS } from '../src/workspaces/founderZoneActions.js';
 import { FOUNDER_ZONE_FILTERS } from '../src/workspaces/founderZoneFilters.js';
 import { FOUNDER_TOOLS } from '../src/pages/cycles/founderToolNavigation.js';
 import { routeBlock } from './_routes.mjs';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 /** A target with its query as a set of `key=value` pairs, so order never matters. */
 const asSet = (t) => (t == null ? t : {
@@ -160,9 +161,9 @@ test('D704 test 2 (route): the three old paths render ValidateZoneRedirect under
 });
 
 test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interviews page', () => {
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = readFileSync('frontend/src/pages/cycles/defs/validate.jsx', 'utf8'); // D5615: Validate's entry
   const at = route.indexOf('tools: toFnMap({');
-  const tools = route.slice(at, route.indexOf('\n    }),', at)); // Validate's block, to its closing line
+  const tools = route.slice(at, route.indexOf('\n  }),', at)); // Validate's block, to its closing line
   assert.doesNotMatch(tools, /'customer-research':/, 'Customer research has no tool link: its module is the tool');
   assert.doesNotMatch(tools, /\/validate\/interviews/);
   assert.match(tools, /'market-intelligence': \(\) => \(\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}\)/, 'Market intelligence keeps its tool');
@@ -192,10 +193,10 @@ test('D704 test 5 (the door): the Validate chapter lists the modules, and its li
     for (const i of door.live) assert.doesNotMatch(i.route, /^\/validate\/(interviews|pain-map|hypotheses)$/, `${i.t} links an old page`);
   }
   // Validate's tools give no old path: only Market intelligence keeps a tool.
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = readFileSync('frontend/src/pages/cycles/defs/validate.jsx', 'utf8'); // D5615: Validate's entry
   const at = route.indexOf('tools: toFnMap({');
-  const tools = route.slice(at, route.indexOf('\n    }),', at));
-  assert.deepEqual([...tools.matchAll(/^ {6}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence']);
+  const tools = route.slice(at, route.indexOf('\n  }),', at));
+  assert.deepEqual([...tools.matchAll(/^ {4}'?([a-z-]+)'?: /gm)].map((m) => m[1]), ['market-intelligence']);
 });
 
 /** Test 6's pattern: an old page path, not part of a longer path or name. */
@@ -261,7 +262,7 @@ test('D704 test 7 (deleted and kept): the old workspace and its pieces are gone;
 test('D704 test 8 (census): each verdict-zone feature is drawn at its home', () => {
   const read = (p) => readFileSync(p, 'utf8');
   const sections = read('frontend/src/pages/cycles/ValidateSections.jsx');
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   const adapter = read('frontend/src/pages/cycles/adapters/validate.js');
   const forms = read('frontend/src/pages/cycles/forms.js');
   const homes = [

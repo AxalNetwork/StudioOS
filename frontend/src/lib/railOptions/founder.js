@@ -43,7 +43,11 @@ export const FOUNDER_HANDLERS = ['form', 'upload', 'draft', 'transcribe', 'none'
 /** D1478 (#3721): kinds only an option takes, each run by the fixed job its `task` names. D1580 part 2b: `live`, a streamed transcript. */
 export const OPTION_KINDS = ['image', 'live'];
 
-const CYCLE = 'frontend/src/pages/cycles/CycleRoute.jsx';
+// D5615 (#5615): each cycle's bands, fills and lightbox live in its entry, `defs/<cycle>.jsx`.
+const VALIDATE = 'frontend/src/pages/cycles/defs/validate.jsx';
+const BUILD = 'frontend/src/pages/cycles/defs/build.jsx';
+const RAISE = 'frontend/src/pages/cycles/defs/raise.jsx';
+const GROW = 'frontend/src/pages/cycles/defs/grow.jsx';
 const PMF = 'frontend/src/workspaces/PmfExplain.jsx';
 const UOF = 'frontend/src/workspaces/UseOfFundsEadwyn.jsx';
 const ADVISOR = 'frontend/src/components/advisor/PersonalAdvisor.jsx';
@@ -86,14 +90,14 @@ export const FOUNDER_OPTIONS = [
   // ── Validate.
   {
     page: 'Founder · Validate · Problem discovery', key: 'fill:pain_tag', route: '/validate/problem-discovery', label: 'Tag ungrouped phrases', kind: 'synth', handler: 'form',
-    at: [[CYCLE, "'pain_tag'"]],
+    at: [[VALIDATE, "'pain_tag'"]],
   },
   // Record a session opens from every Validate page; it is Customer research's Add.
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:interview', route: '/validate/record', label: 'Record a session', kind: 'speech', handler: 'transcribe',
     at: [['frontend/src/pages/founder/RecordLightbox.jsx', 'sessions.create('], ['frontend/src/pages/founder/RecordLightbox.jsx', 'sessions.open(']],
     // D768 names it where the lightbox is mounted (`RecordMount`).
-    rail: [CYCLE],
+    rail: [VALIDATE],
   },
   {
     page: 'Founder · Validate · Customer research', key: 'transcribe:session', route: '/validate/record/live', label: 'Stop and process', kind: 'speech', handler: 'transcribe',
@@ -120,11 +124,11 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Validate · Experiments and evidence', key: 'fill:hypothesis', route: '/validate/experiments', label: 'Draft a hypothesis', kind: 'reason', handler: 'form',
-    at: [[CYCLE, "experiments: 'hypothesis'"]],
+    at: [[VALIDATE, "experiments: 'hypothesis'"]],
   },
   {
     page: 'Founder · Validate · Verdict', key: 'export:summary', route: '/validate/verdict', label: 'Export summary', kind: 'reason', handler: 'none',
-    at: [[CYCLE, 'api.exportValidateSummary(']],
+    at: [[VALIDATE, 'api.exportValidateSummary(']],
   },
 
   // ── Build.
@@ -135,19 +139,19 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Build · Product roadmap', key: 'draft:build/roadmap', route: '/build/product-roadmap', label: 'Argue the ordering', kind: 'plan', handler: 'draft',
-    at: [[CYCLE, "surface: 'build/roadmap'"]],
+    at: [[BUILD, "surface: 'build/roadmap'"]],
   },
   {
     page: 'Founder · Build · Operating systems', key: 'draft:build/this-week', route: '/build/operating-systems', label: 'Draft a Monday plan', kind: 'plan', handler: 'draft',
-    at: [[CYCLE, "surface: 'build/this-week'"]],
+    at: [[BUILD, "surface: 'build/this-week'"]],
   },
   {
     page: 'Founder · Build · Operating systems', key: 'draft:build/retro', route: '/build/operating-systems', label: 'Draft a retro summary', kind: 'synth', handler: 'draft',
-    at: [[CYCLE, "surface: 'build/retro'"]],
+    at: [[BUILD, "surface: 'build/retro'"]],
   },
   {
     page: 'Founder · Build · Operating systems', key: 'draft:build/kpi', route: '/build/operating-systems', label: 'Draft an annotation', kind: 'numbers', handler: 'draft',
-    at: [[CYCLE, "surface: 'build/kpi'"]],
+    at: [[BUILD, "surface: 'build/kpi'"]],
   },
 
   // ── Raise.
@@ -173,15 +177,15 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/data-room', route: '/raise/fundraising-readiness', label: 'Read the room', kind: 'reason', handler: 'draft',
-    at: [[CYCLE, "surface: 'raise/data-room'"]],
+    at: [[RAISE, "surface: 'raise/data-room'"]],
   },
   {
     page: 'Founder · Raise · Fundraising readiness', key: 'draft:raise/legal', route: '/raise/fundraising-readiness', label: 'Explain the clauses', kind: 'legal', handler: 'draft',
-    at: [[CYCLE, "surface: 'raise/legal'"]],
+    at: [[RAISE, "surface: 'raise/legal'"]],
   },
   {
     page: 'Founder · Raise · Investor narrative', key: 'draft:raise/narrative-fix', route: '/raise/investor-narrative', label: 'Phrase the fix', kind: 'write', handler: 'draft',
-    at: [[CYCLE, "surface: 'raise/narrative-fix'"]],
+    at: [[RAISE, "surface: 'raise/narrative-fix'"]],
   },
   // D911 (#2695): positioning moved into the Investor narrative tool, so its
   // option moved from Pitch deck's page to the narrative's (was draft:positioning).
@@ -315,11 +319,11 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Raise · Cap table', key: 'draft:raise/capital', route: '/raise/cap-table', label: 'Read the round back', kind: 'numbers', handler: 'draft',
-    at: [[CYCLE, "surface: 'raise/capital'"]],
+    at: [[RAISE, "surface: 'raise/capital'"]],
   },
   {
     page: 'Founder · Raise · Cap table', key: 'draft:raise/liquidity', route: '/raise/cap-table', label: 'Explain the order of payment', kind: 'numbers', handler: 'draft',
-    at: [[CYCLE, "surface: 'raise/liquidity'"]],
+    at: [[RAISE, "surface: 'raise/liquidity'"]],
   },
 
   // ── Grow. Share an update is the section's action, on every Grow page.
@@ -334,7 +338,7 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Grow · Product improvement', key: 'fill:feedback_theme', route: '/grow/product-improvement', label: 'Propose themes', kind: 'synth', handler: 'form',
-    at: [[CYCLE, "'feedback_theme'"]],
+    at: [[GROW, "'feedback_theme'"]],
   },
   // D4493: the retired 'Draft a sequence' band moved, key and models kept (agents propose it too):
   // the sequence builder's 'Ask Eadwyn for a sequence' runs D4488's drafting task with kind `sequence`.
@@ -367,7 +371,7 @@ export const FOUNDER_OPTIONS = [
   },
   {
     page: 'Founder · Grow · Team expansion', key: 'draft:grow/talent', route: '/grow/team-expansion', label: 'Rank the applicants', kind: 'match', handler: 'draft',
-    at: [[CYCLE, "surface: 'grow/talent'"]],
+    at: [[GROW, "surface: 'grow/talent'"]],
   },
 
   // ── Network. The desk's two bands, and the workspace's Relationships and Introductions tabs.

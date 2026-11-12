@@ -167,6 +167,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
 | `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
 | `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
+| `hub_freeze_5615.test.mjs` | D5615: every name in the five hub files is on `scripts/hub-freeze.json`; a new `api` key, `app.route(…)`, import or advisors registration fails naming the entry and its `HUBS.md` section; a removal passes with no list edit; `CycleRoute.jsx` holds no cycle entry. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
