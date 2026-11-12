@@ -7,6 +7,7 @@
  *   detail   -> members + private fields (member emails masked unless viewer is
  *               a member of this company or platform admin).
  */
+import { runDecision, decisionGuard, clearGuard } from '../services/decisionBatch';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, generateToken, selectJwt } from '../auth';
@@ -844,6 +845,19 @@ r.get('/company/:uid/logo', async (c) => {
 // route and it is retired on D304's rule with its client method. Role change
 // and removal below are unchanged.
 
+/** #5669: distinguish archive/seat races from a last-primary-admin refusal after rollback. */
+async function membershipWriteLost(c: any, company: Company, userId: number, action: 'leave' | 'remove' | 'demote') {
+  const fresh = await getCompanyOr404(c.env, company.uid);
+  if (fresh && isArchived(fresh)) return archivedRefusal(c);
+  if (!fresh || !(await getLink(c.env, company.id, userId))) {
+    return c.json({ detail: action === 'leave' ? 'Company not found' : 'Member not found on this company' }, 404);
+  }
+  if (action === 'leave') return c.json({ code: 'last_primary_admin', detail: 'Assign another primary admin before leaving this company.' }, 409);
+  return c.json({ detail: action === 'remove'
+    ? 'Cannot remove the only primary admin — assign another first'
+    : 'Cannot demote the only primary admin — appoint another first' }, 400);
+}
+
 // Wave 2 — change a member's role, or move primary-admin status.
 //
 // The canvas's Members & access zone asks for role change; only add and remove
@@ -925,8 +939,12 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     }
 
     if (!sets.length) return c.json({ detail: 'Nothing to update' }, 400);
-    params.push(link.id);
-    const update = c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?`).bind(...params);
+    // #5669: archive and last-admin safety are decided by the write, not the earlier reads.
+    params.push(link.id, company.id, body.is_primary_admin !== undefined && !body.is_primary_admin ? 1 : 0, company.id, userId);
+    const update = c.env.DB.prepare(`UPDATE user_company_links SET ${sets.join(', ')} WHERE id = ?
+      AND EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND archived_at IS NULL)
+      AND (? = 0 OR is_primary_admin = 0 OR EXISTS (
+        SELECT 1 FROM user_company_links other WHERE other.company_id = ? AND other.user_id != ? AND other.is_primary_admin = 1))`).bind(...params);
     // D1137: a change to the role or to primary admin is a membership event,
     // recorded with the update. Title, authority and carry are not membership.
     const before: Record<string, unknown> = {}; const after: Record<string, unknown> = {};
@@ -935,9 +953,10 @@ r.patch('/company/:uid/members/:userId', async (c) => {
     if (body.is_primary_admin !== undefined && Boolean(body.is_primary_admin) !== Boolean(link.is_primary_admin)) {
       before.is_primary_admin = Boolean(link.is_primary_admin); after.is_primary_admin = Boolean(body.is_primary_admin);
     }
-    await c.env.DB.batch(Object.keys(after).length
-      ? [update, membershipEvent(c.env, { kind: 'role_change', companyId: company.id, actorUserId: user.id, targetUserId: userId, before, after })]
-      : [update]);
+    const outcome = await runDecision(c.env, [update, decisionGuard(c.env),
+      ...(Object.keys(after).length ? [membershipEvent(c.env, { kind: 'role_change', companyId: company.id, actorUserId: user.id, targetUserId: userId, before, after })] : []),
+      clearGuard(c.env)]);
+    if (outcome.lost) return membershipWriteLost(c, company, userId, 'demote');
     return c.json(await detailDto(c.env, company, user, await isSupportSession(c)));
   } catch (e) { return mapError(c, e); }
 });
@@ -954,13 +973,14 @@ r.post('/company/:uid/leave', async (c) => {
     if (isArchived(company)) return archivedRefusal(c);
     // One statement makes the last-admin check hold even for simultaneous leaves.
     // D1614 (#3976): the member's open compliance tasks are flagged in the same batch, only if the seat went.
-    const [result] = await c.env.DB.batch([c.env.DB.prepare(
+    const outcome = await runDecision(c.env, [c.env.DB.prepare(
       `DELETE FROM user_company_links WHERE company_id = ? AND user_id = ?
+       AND EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND archived_at IS NULL)
        AND (is_primary_admin = 0 OR EXISTS (
          SELECT 1 FROM user_company_links other
          WHERE other.company_id = ? AND other.user_id != ? AND other.is_primary_admin = 1))`
-    ).bind(company.id, user.id, company.id, user.id), ...seatEndedStatements(c.env, company.id, user.id)]);
-    if (!result.meta.changes) return c.json({ code: 'last_primary_admin', detail: 'Assign another primary admin before leaving this company.' }, 409);
+    ).bind(company.id, user.id, company.id, company.id, user.id), decisionGuard(c.env), ...seatEndedStatements(c.env, company.id, user.id), clearGuard(c.env)]);
+    if (outcome.lost) return membershipWriteLost(c, company, user.id, 'leave');
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -984,15 +1004,22 @@ r.delete('/company/:uid/members/:userId', async (c) => {
       }
     }
     // D1137: a removal, or a leave when the member removes themselves.
-    await c.env.DB.batch([
-      c.env.DB.prepare('DELETE FROM user_company_links WHERE id = ?').bind(link.id),
+    const outcome = await runDecision(c.env, [
+      c.env.DB.prepare(`DELETE FROM user_company_links WHERE id = ?
+        AND EXISTS (SELECT 1 FROM company_profiles WHERE id = ? AND archived_at IS NULL)
+        AND (is_primary_admin = 0 OR EXISTS (
+          SELECT 1 FROM user_company_links other WHERE other.company_id = ? AND other.user_id != ? AND other.is_primary_admin = 1))`)
+        .bind(link.id, company.id, company.id, userId),
+      decisionGuard(c.env),
       // D1614 (#3976): flag the member's open compliance tasks for reassignment; never reassigned automatically.
       ...seatEndedStatements(c.env, company.id, userId),
       membershipEvent(c.env, {
         kind: userId === user.id ? 'leave' : 'remove', companyId: company.id, actorUserId: user.id, targetUserId: userId,
         before: { role_in_company: link.role_in_company, is_primary_admin: Boolean(link.is_primary_admin) },
       }),
+      clearGuard(c.env),
     ]);
+    if (outcome.lost) return membershipWriteLost(c, company, userId, 'remove');
     return c.json({ ok: true });
   } catch (e) { return mapError(c, e); }
 });
