@@ -1,0 +1,37 @@
+{
+  "GET /api/learning/courses/:uid/cover/:filename": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/exams/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/items/:uid/captions/:lang": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/items/:uid/video": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/stream/source/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "unreviewed"
+  },
+  "GET /api/learning/webinars/:uid/calendar.ics": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/learning/exams/:uid/attempts/:attempt/submit": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

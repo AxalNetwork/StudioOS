@@ -31,6 +31,7 @@ import { moduleToolLinks } from '../src/pages/cycles/founderToolNavigation.js';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
 import { redirectPatternFor } from '../src/lib/redirectBeacon.js';
 import { isRetiredRedirect } from './_retiredRedirects_2319.mjs';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 const root = resolve(process.cwd());
@@ -166,7 +167,7 @@ test('the module\'s tool link and the founder\'s navigation open the tool with t
   assert.deepEqual(moduleToolLinks('raise', 'capital-relationships', founder, '?project_id=3').map((l) => [l.label, l.href]),
     [['Open investor match', '/raise/capital-relationships/match?project_id=3']]);
   assert.equal(moduleToolLinks('grow', 'distribution', founder).some((l) => l.href.includes('capital-match')), false);
-  const cycle = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const cycle = cycleRouteText();
   assert.match(cycle, /'capital-relationships': \(q\) => \(\{ label: 'Open the investor pipeline', href: `\/raise\/capital-relationships\/pipeline\$\{q \|\| ''\}` \}\)/);
   assert.match(read('frontend/src/lib/siteDoors.js'), /\/raise\/capital-relationships\/match/);
   assert.match(read('cloudflare-worker/src/services/raiseCycle.ts'), /pipeline: '\/raise\/capital-relationships\/pipeline',/);

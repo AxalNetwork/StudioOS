@@ -220,13 +220,13 @@ test('/compliance only redirects, and nothing in the app still sends people ther
   // The embedded Legal Engine card is a different address and stays.
   assert.match(app, /path="\/raise\/legal-engine\/compliance"/);
   for (const file of [
-    'frontend/src/sidebarConfig.js', 'frontend/src/lib/adminPlacement.js', 'frontend/src/pages/cycles/CycleRoute.jsx',
+    'frontend/src/sidebarConfig.js', 'frontend/src/lib/adminPlacement.js', 'frontend/src/pages/cycles/CycleRoute.jsx', 'frontend/src/pages/cycles/defs/grow.jsx',
     'frontend/src/pages/founder/FounderRaiseLegal.jsx', 'cloudflare-worker/src/routes/assistant.ts',
     'cloudflare-worker/src/services/advisor/tools.ts', 'cloudflare-worker/src/services/onboardingChecklist.ts',
   ]) {
     assert.doesNotMatch(read(file).replace(/\/\/.*$/gm, ''), /['"`]\/compliance(?:['"`?])/, `${file} still links to /compliance`);
   }
-  for (const file of ['frontend/src/pages/cycles/CycleRoute.jsx', 'frontend/src/pages/founder/FounderRaiseLegal.jsx', 'cloudflare-worker/src/routes/assistant.ts', 'cloudflare-worker/src/services/onboardingChecklist.ts']) {
+  for (const file of ['frontend/src/pages/cycles/defs/grow.jsx', 'frontend/src/pages/founder/FounderRaiseLegal.jsx', 'cloudflare-worker/src/routes/assistant.ts', 'cloudflare-worker/src/services/onboardingChecklist.ts']) {
     assert.match(read(file), /\/calendar\?layer=compliance/, `${file} does not open the Compliance layer`);
   }
 });

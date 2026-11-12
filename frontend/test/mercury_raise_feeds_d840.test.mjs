@@ -22,9 +22,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import MercuryRaiseFeed from '../src/pages/cycles/MercuryRaiseFeed.jsx';
 import { figureText, isEmptyView, mercuryView, usd } from '../src/pages/cycles/mercuryRaise.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const ROUTE = read('frontend/src/pages/cycles/CycleRoute.jsx');
+const ROUTE = cycleRouteText();
 const WRITES = read('frontend/src/lib/api/cycleWrites.js');
 const WORKER = read('cloudflare-worker/src/routes/cycle_raise.ts');
 // D1114: the narrative's figures carry an "Insert in Story" link, so the part renders inside a router.

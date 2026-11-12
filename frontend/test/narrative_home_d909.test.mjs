@@ -19,6 +19,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { NarrativeHome } from '../src/pages/raise/narrative/NarrativeTool.jsx';
 import { FORMS, startFromChips } from '../src/pages/cycles/forms.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 import {
   ANSWERS_UNREADABLE, CLAIMS_WAIT, NEEDS_NONE, NOT_RECORDED, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles,
   needsYou, newVersionLine, nextVersion, readByLine, startFromHref, versionSub,
@@ -200,7 +201,7 @@ test('Versions: a failed compare says so, never "the same"', async () => {
 });
 
 test('the wiring: Home is the module part, never a fork; /new is today\'s address; the client calls D908\'s compare', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} admin=\{isNarrativeAdmin\(\{ role: ctx\.role \}\)\} projectId=\{ctx\.projectId\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
   assert.equal((route.match(/<CycleModulePage|<ModulePage/g) || []).length >= 1, true);
   const api = read('frontend/src/lib/api/cycles.js');
