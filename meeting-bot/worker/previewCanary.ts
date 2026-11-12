@@ -43,7 +43,7 @@ export async function verifyPreviewRequest(request:Request,env:CanaryEnv,now=Dat
 }
 export async function previewIngress(request:Request,env:CanaryEnv):Promise<Response>{
   const job=await verifyPreviewRequest(request.clone(),env);if(!job||!env.MEETING_BOT_CONTAINER)return new Response(null,{status:404});
-  const stub=env.MEETING_BOT_CONTAINER.get(env.MEETING_BOT_CONTAINER.idFromName('canary:'+job.id));
+  const stub=env.MEETING_BOT_CONTAINER.get(env.MEETING_BOT_CONTAINER.idFromName('canary:control'));
   const response=await stub.fetch(request);
   if(job.op!=='run')return response;
   const raw=await readBody(response);if(raw.length>2048)return Response.json({error:'canary_unavailable'},{status:503});
@@ -51,6 +51,7 @@ export async function previewIngress(request:Request,env:CanaryEnv):Promise<Resp
   return new Response(raw,{status:response.status,headers:{...headers,'content-type':'application/json','cache-control':'no-store'}});
 }
 type CanaryState={job:CanaryJob;callback:boolean;receipt?:CanaryReceipt};
+type CanaryHistory={job:CanaryJob;receipt:CanaryReceipt};
 /** Called inside the host's existing concurrency guard; long work is returned to run outside it so callbacks can enter. */
 export async function preparePreviewCanary(request:Request,env:CanaryEnv,state:DurableObjectState,options:CanaryOptions={}):Promise<Response|(()=>Promise<Response>)>{
   const job=await verifyPreviewRequest(request.clone(),env);if(!job||!state.container)return new Response(null,{status:404});
@@ -60,7 +61,16 @@ export async function preparePreviewCanary(request:Request,env:CanaryEnv,state:D
     if(!old.callback)await state.storage.put('preview-canary',{...old,callback:true});
     return Response.json({accepted:true});
   }
-  if(old)return old.job.nonce===job.nonce&&old.job.revision===job.revision&&old.receipt?Response.json(old.receipt,{status:old.receipt.state==='pass'?200:503}):Response.json({error:'canary_busy'},{status:409});
+  const history=(await state.storage.get<CanaryHistory[]>('preview-canary-history')??[]).filter(x=>x.job.created_ms+600000>Date.now());
+  const prior=history.find(x=>x.job.id===job.id);
+  if(prior)return prior.job.nonce===job.nonce&&prior.job.revision===job.revision&&prior.job.created_ms===job.created_ms?Response.json(prior.receipt,{status:prior.receipt.state==='pass'?200:503}):Response.json({error:'canary_conflict'},{status:409});
+  if(old){
+    if(old.job.id===job.id)return old.job.nonce===job.nonce&&old.job.revision===job.revision&&old.job.created_ms===job.created_ms&&old.receipt?Response.json(old.receipt,{status:old.receipt.state==='pass'?200:503}):Response.json({error:'canary_busy'},{status:409});
+    // One control object fences all canaries: a new ID cannot bypass unknown cleanup of the previous instance.
+    if(!old.receipt?.cleaned||history.length>=20)return Response.json({error:'canary_cleanup_unconfirmed'},{status:409});
+    history.push({job:old.job,receipt:old.receipt});await state.storage.put('preview-canary-history',history);
+    await state.storage.delete(['preview-canary','lease']);
+  }
   if(await state.storage.get('lease')||state.container.running)return Response.json({error:'canary_busy'},{status:409});
   await state.storage.put('preview-canary',{job,callback:false});
   // Existing host alarm reconciles this synthetic lease even if the request/instance dies.
@@ -96,16 +106,20 @@ async function drivePreviewCanary(job:CanaryJob,env:CanaryEnv,state:DurableObjec
     state:passed&&cleaned?'pass':'fail',stage:passed&&cleaned?'complete':stage,elapsed_ms:clock()-start,image_digest,cleaned};
   const current=await state.storage.get<CanaryState>('preview-canary');await state.storage.put('preview-canary',{job,callback:current?.callback===true,receipt});
   const lease=await state.storage.get<Record<string,unknown>>('lease');if(lease)await state.storage.put('lease',{...lease,stopped:true});
-  await state.storage.setAlarm(cleaned?job.created_ms+600000:Date.now()+30000);
+  const history=await state.storage.get<CanaryHistory[]>('preview-canary-history')??[];
+  await state.storage.setAlarm(cleaned?Math.min(job.created_ms+600000,...history.map(x=>x.job.created_ms+600000)):Date.now()+30000);
   return Response.json(receipt,{status:receipt.state==='pass'?200:503});
 }
 
 /** Alarm cleanup is independent of the admission flag. Only this synthetic lease may be removed. */
 export async function reconcilePreviewCanaryAlarm(state:DurableObjectState,now=Date.now()):Promise<boolean>{
-  const c=await state.storage.get<CanaryState>('preview-canary');if(!c)return false;
+  const c=await state.storage.get<CanaryState>('preview-canary'),prior=await state.storage.get<CanaryHistory[]>('preview-canary-history');
+  const history=(prior??[]).filter(x=>x.job.created_ms+600000>now);
+  if(prior){if(history.length)await state.storage.put('preview-canary-history',history);else await state.storage.delete('preview-canary-history');}
+  if(!c){if(prior){if(history.length)await state.storage.setAlarm(Math.min(...history.map(x=>x.job.created_ms+600000)));else await state.storage.deleteAlarm();return true;}return false;}
   const lease=await state.storage.get<Record<string,unknown>>('lease');
   if(lease?.fingerprint!=='preview-canary'||lease.uid!==c.job.id)throw Error('canary_lease_mismatch');
-  if(c.receipt?.cleaned&&now>=c.job.created_ms+600000){await state.storage.delete(['preview-canary','lease']);await state.storage.deleteAlarm();return true;}
+  if(c.receipt?.cleaned&&now>=c.job.created_ms+600000){await state.storage.delete(['preview-canary','lease']);if(history.length)await state.storage.setAlarm(Math.min(...history.map(x=>x.job.created_ms+600000)));else await state.storage.deleteAlarm();return true;}
   if(!c.receipt?.cleaned&&now>=Number(lease.deadline)){
     let cleaned=false;try{await state.container?.destroy();cleaned=Boolean(state.container);}catch{}
     const receipt:CanaryReceipt=c.receipt?{...c.receipt,cleaned}:{version:1,audience:'preview',script:'studioos-meeting-bot-preview',id:c.job.id,nonce:c.job.nonce,revision:c.job.revision,state:'fail',stage:'cleanup',elapsed_ms:Math.max(0,now-c.job.created_ms),image_digest:null,cleaned};
@@ -113,7 +127,7 @@ export async function reconcilePreviewCanaryAlarm(state:DurableObjectState,now=D
     await state.storage.put('lease',{...lease,stopped:true});
     await state.storage.setAlarm(cleaned?Math.max(now+1,c.job.created_ms+600000):now+30000);return true;
   }
-  await state.storage.setAlarm(c.receipt?.cleaned?c.job.created_ms+600000:Number(lease.deadline));return true;
+  await state.storage.setAlarm(Math.min(c.receipt?.cleaned?c.job.created_ms+600000:Number(lease.deadline),...history.map(x=>x.job.created_ms+600000)));return true;
 }
 export async function validPreviewReceipt(headers:Headers,raw:string,root:string,job:CanaryJob,now=Date.now()):Promise<CanaryReceipt|null>{
  try{const r=JSON.parse(raw) as CanaryReceipt,ts=headers.get('x-meeting-bot-timestamp')||'',sig=headers.get('x-meeting-bot-signature')||'';

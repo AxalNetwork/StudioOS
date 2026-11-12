@@ -33,6 +33,7 @@ test('existing preview host boots exact revision, receives a real signature/ack 
  const f=fixture(preparePreviewCanary,{realHost:true}),j=job(),r=await f.run(j),raw=await r.text();assert.equal(r.status,200);
  const receipt=await validPreviewReceipt(r.headers,raw,root,j);assert.equal(previewPromotionEligible(receipt),true);assert.equal(f.stats().starts,1);assert.equal(f.stats().callbacks,1);assert.equal(f.state.container.running,false);
  const replay=await f.run(j);assert.equal(replay.status,200);assert.equal(f.stats().starts,1,'run replay cannot allocate a second container');
+ assert.equal((await f.run({...j,created_ms:j.created_ms+1})).status,409,'replay cannot replace its creation timestamp');
  await reconcilePreviewCanaryAlarm(f.state,j.created_ms+600001);assert.equal(f.data.size,0);assert.equal(f.stats().alarm,null);
 });
 
@@ -79,4 +80,14 @@ test('mutations: audience, signature, callback persistence and stop acknowledgem
  ];
  try{for(const [label,before,after,journey] of changes){assert.ok(source.includes(before),label);const p=join(dir,label+'.ts');writeFileSync(p,source.replaceAll(before,after));await assert.rejects(journey(await import(pathToFileURL(p).href)),'must kill '+label);}}
  finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a new canary ID cannot bypass an unknown stop; acknowledged cleanup permits the next probe and replays stay cached',async()=>{
+ const f=fixture(preparePreviewCanary,{stopFails:true}),first=job();assert.equal((await f.run(first)).status,503);
+ const next={...job(),id:'00000000-0000-4000-8000-000000000002',nonce:'c'.repeat(32)};
+ assert.equal((await f.run(next)).status,409);assert.equal(f.stats().starts,1);
+ f.allowStop();await reconcilePreviewCanaryAlarm(f.state,first.created_ms+150000);
+ assert.equal((await f.run(next)).status,200);assert.equal(f.stats().starts,2);
+ const before=f.stats().starts;assert.equal((await f.run(first)).status,503);assert.equal(f.stats().starts,before);
+ await reconcilePreviewCanaryAlarm(f.state,next.created_ms+600001);assert.equal(f.data.size,0);
 });
