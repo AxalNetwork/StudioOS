@@ -196,6 +196,7 @@ export function meetingLinkProblem(provider, raw) {
   let url;
   try { url = new URL(text); } catch { return 'That is not a link.'; }
   if (url.protocol !== 'https:') return 'The link must start with https://.';
+  if (url.username || url.password) return 'Use a meeting link without a username or password.';
   const host = url.hostname.toLowerCase();
   const scheduled = MEETING_PROVIDERS.find((p) => p.key === provider);
   if (scheduled && !safeJoinUrl(text, provider)) return provider === 'zoom' ? 'A Zoom link is on zoom.us.' : `A ${scheduled.label} link is on meet.google.com.`;
@@ -257,6 +258,7 @@ export function meetingHref(provider, raw) {
   if (provider !== 'teams') return null;
   try {
     const u = new URL(String(raw || '').trim());
+    if (u.username || u.password) return null;
     const host = u.hostname.toLowerCase();
     return u.protocol === 'https:' && (host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft') ? u.toString() : null;
   } catch { return null; }

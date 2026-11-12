@@ -153,7 +153,8 @@ test('the page actually does the order its meta line claims', () => {
   // "Unopened first, oldest first within it" is a claim the instrument makes in
   // prose, so the page sorts rather than trusting whatever the read returned.
   const sort = between(zone, 'const ordered = view ===', 'const rowActions =');
-  assert.match(sort, /const au = a\.sent_at && !a\.opened_at \? 0 : 1;/, 'unopened rows no longer sort first');
+  // #5314: rows the client could have opened lead, then "Not recorded" rows.
+  assert.match(sort, /const au = a\.is_unopened === true \? 0 : \(a\.sent_at && !a\.opened_at \? 1 : 2\);/, 'unopened rows no longer sort first');
   assert.match(sort, /return au - bu \|\| \(b\.days_since_sent \?\? -1\) - \(a\.days_since_sent \?\? -1\);/,
     'the oldest is no longer first within the unopened rows');
   // `By client` IS THE ONE CHIP THAT REPLACES THE ORDERING, because that is
@@ -253,8 +254,11 @@ test('the draft chases what is unopened, and never implies the client ignored it
   assert.ok(entry.includes('never say or imply the client ignored it')
     || entry.includes('Never say or imply the client ignored it'),
     'the draft may now accuse the client of ignoring the work');
-  assert.ok(entry.includes('this product records no opens at all'),
+  // #5314 part 1: opens are recorded now, so the draft is told what an unopened row does mean.
+  assert.ok(entry.includes('has not opened the shared link here yet, not that they did not look'),
     'the draft is no longer told why an unopened row is not evidence of anything');
+  assert.ok(entry.includes("readStateFor({ ...r, opened_at: null }, tracking) === 'unopened'"),
+    'the gather chases a row whose open could never have been recorded');
   assert.ok(entry.includes('assign no blame'), 'the draft may now assign blame');
   assert.ok(entry.includes('d.sent_at IS NOT NULL AND d.opened_at IS NULL'),
     'the gather is no longer reading the unopened rows');
