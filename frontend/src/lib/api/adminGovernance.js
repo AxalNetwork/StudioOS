@@ -11,6 +11,7 @@ import { refusalError, request } from '../api.js';
  * relate(uid, { kind, ref }) -> { relation }. kind: 'governance' (a record's uid), 'template' (a library slug) or 'agreement' (a desk uid, part 19)
  * governing(kind, ref) -> { governing: Rel[] } (part 19: the records that govern a template or agreement)
  * markReviewed(uid, id, note) -> { relation }; dismissRelated(uid) -> { banner } (hides the banner for this admin only)
+ * unlinkRelated(uid, id, reason) -> { unlinked: { id, kind }, banner } (part 21: removes the reference only; reason 10 to 500 characters)
  * A Rel is { id, kind, ref, title, status, entity_key, category, restricted, missing, state, flag_version, flagged_at,
  * reviewed_version, reviewed_at, reviewed_by, review_note }; state is review_suggested, reviewed or not_affected.
  * update(uid, body) -> { document }. body: any of title, effective_date, confidential, template_slug, envelope_id, status
@@ -51,6 +52,8 @@ export const adminGovernanceApi = {
   governing: (kind, ref) => request(`${base}/governing?${new URLSearchParams({ kind, ref })}`),
   markReviewed: (uid, id, note = '') => request(`${doc(uid)}/related/${Number(id)}/reviewed`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   dismissRelated: (uid) => request(`${doc(uid)}/related/dismiss`, { method: 'POST' }),
+  // D4811 part 21: remove one link; neither document changes (POST /documents/:uid/related/:id/unlink).
+  unlinkRelated: (uid, id, reason) => request(`${doc(uid)}/related/${Number(id)}/unlink`, { method: 'POST', body: JSON.stringify({ reason }) }),
   update: (uid, body) => request(doc(uid), { method: 'PATCH', body: JSON.stringify(body) }),
   // D4811 part 12: a signed copy also sends signed_on, signatory and attest (CT-12 B).
   // D4811 part 20: and may name the counsel-approved version it is a copy of (copy_of).
