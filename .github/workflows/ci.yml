@@ -45,6 +45,10 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -66,6 +70,10 @@ jobs:
         working-directory: cloudflare-worker
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -150,8 +158,8 @@ jobs:
     # real hang still stops here.
     timeout-minutes: 40
     strategy:
-      # Every part reports, so one red part does not hide another.
-      fail-fast: false
+      # Queue entries cannot land after a failure. PRs and pushes report every part.
+      fail-fast: ${{ github.event_name == 'merge_group' }}
       matrix:
         part:
           - frontend-1-of-2
@@ -165,6 +173,10 @@ jobs:
           - rest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -195,6 +207,10 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - run: node scripts/test-drift-parts.mjs ${{ matrix.part }}
 
   gate:
@@ -319,6 +335,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check merge queue ref still exists
+        if: github.event_name == 'merge_group'
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/ci/queue-ref-alive.sh
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
@@ -580,4 +600,41 @@ jobs:
             pip-audit --strict --ignore-vuln PYSEC-2022-42969 -r requirements.txt
           else
             echo "no requirements.txt found, skipping"
+          fi
+
+  digest:
+    name: CI failure digest (#5619)
+    needs: [frontend, worker, suite, drift]
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        with:
+          node-version: '22'
+      - name: Publish from the base commit, when installed there
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -f scripts/ci-digest.mjs ]; then
+            node scripts/ci-digest.mjs
+          else
+            echo 'CI digest starts after #5619 merges onto the base branch.'
           fi
