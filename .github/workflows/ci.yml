@@ -420,17 +420,16 @@ jobs:
           cache: pip
         id: python
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Test the PyPI retry policy
+        run: python -m unittest discover -s scripts -p test_pip_audit_gate.py
+        id: pip_test
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Install pip-audit
         run: python -m pip install --upgrade pip pip-audit
         id: pip_install
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: pip-audit (audit requirements.txt only)
-        run: |
-          if [ -f requirements.txt ]; then
-            pip-audit --strict --ignore-vuln PYSEC-2022-42969 -r requirements.txt
-          else
-            echo "no requirements.txt found, skipping"
-          fi
+        run: python scripts/pip_audit_gate.py
         id: pip_audit
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Check the projection
@@ -479,6 +478,7 @@ jobs:
           FRONTEND_AUDIT: ${{ steps.frontend_audit.outcome }}
           WORKER_AUDIT: ${{ steps.worker_audit.outcome }}
           PYTHON: ${{ steps.python.outcome }}
+          PIP_TEST: ${{ steps.pip_test.outcome }}
           PIP_INSTALL: ${{ steps.pip_install.outcome }}
           PIP_AUDIT: ${{ steps.pip_audit.outcome }}
           ROUTING_CHECK: ${{ steps.routing_check.outcome }}
@@ -497,7 +497,7 @@ jobs:
             advisory=fail
           fi
           if [[ "$EVENT" != merge_group ]]; then
-            for outcome in "$FRONTEND_AUDIT" "$WORKER_AUDIT" "$PYTHON" "$PIP_INSTALL" "$PIP_AUDIT" \
+            for outcome in "$FRONTEND_AUDIT" "$WORKER_AUDIT" "$PYTHON" "$PIP_TEST" "$PIP_INSTALL" "$PIP_AUDIT" \
                            "$ROUTING_CHECK" "$ROUTING" "$AUTH" "$ROUTING_UPLOAD"; do
               if [[ "$outcome" != success ]]; then advisory=fail; fi
             done

@@ -53,7 +53,7 @@ const verdict = shell(fast, 'Report required and advisory results');
 const verdictDefaults = Object.fromEntries([
   'CHECKOUT', 'NODE', 'INSTALL_SCANNER', 'RANGE', 'SCAN', 'TRUSTED', 'MIGRATIONS',
   'DRIFT', 'WORKER_INSTALL', 'WORKER_TYPECHECK', 'FRONTEND_INSTALL', 'FRONTEND_BUILD',
-  'LFS_BASE', 'LFS', 'FRONTEND_AUDIT', 'WORKER_AUDIT', 'PYTHON', 'PIP_INSTALL',
+  'LFS_BASE', 'LFS', 'FRONTEND_AUDIT', 'WORKER_AUDIT', 'PYTHON', 'PIP_TEST', 'PIP_INSTALL',
   'PIP_AUDIT', 'ROUTING_CHECK', 'ROUTING', 'AUTH', 'ROUTING_UPLOAD',
 ].map((step) => [step, 'success']));
 
@@ -62,6 +62,7 @@ for (const [label, overrides, required, advisory] of [
   ['failed migration', { MIGRATIONS: 'failure' }, 'fail', 'pass'],
   ['missing drift result', { DRIFT: '' }, 'fail', 'pass'],
   ['failed audit', { WORKER_AUDIT: 'failure' }, 'pass', 'fail'],
+  ['failed PyPI retry fixtures', { PIP_TEST: 'failure' }, 'pass', 'fail'],
   ['failed LFS guard', { LFS: 'failure' }, 'pass', 'fail'],
   ['LFS skipped on a push', { EVENT: 'push', LFS_BASE: 'skipped', LFS: 'skipped' }, 'pass', 'pass'],
   ['advisory checks skipped in the queue', {

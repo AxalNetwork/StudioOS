@@ -25,6 +25,7 @@
  * basis points, or `hq_override`), and the weights used are frozen on the
  * snapshot.
  */
+import { decisionGuard, clearGuard } from './decisionBatch';
 import type { Env } from '../types';
 import { PricingError, activeModel } from './licencePricingStore';
 import { createSnapshot } from './licencePricingSnapshots';
@@ -353,10 +354,9 @@ export async function currentContract(env: Env, licenceUid: string): Promise<{ u
 }
 
 /**
- * The statements of one apply, for one batch: the decision first, then the
- * terms, then the review. EVERY ONE is guarded by the licence still being at
- * `expected_terms_revision` — the decision and review by an EXISTS, the terms
- * by their WHERE — so a stale editor's batch writes nothing at all.
+ * One atomic apply: the deciding INSERT checks terms, policy, territory and an
+ * optional open review. The immediate decision guard rolls back a loss before
+ * dependent terms/review writes, and clearGuard empties its transient row.
  */
 export function applyStatements(env: Env, a: {
   licence: LicenceRow; snap: LicenceSnapshot; input: ApplyInput; plan: ApplyPlan; actor: string; decisionUid: string; now: string;
@@ -373,7 +373,12 @@ export function applyStatements(env: Env, a: {
          licence_snapshot_uid, reason, terms_revision_before, terms_revision_after, pricing_review_on, contractual_change, agreement_acknowledged,
          contract_uid_at_decision, review_uid)
        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND terms_revision = ?)`,
+        WHERE EXISTS (SELECT 1 FROM territory_licences WHERE id = ? AND terms_revision = ?)
+          AND COALESCE((SELECT revision FROM licence_pricing_policies WHERE licence_uid = ?), 0) = ?
+          AND COALESCE((SELECT basis FROM licence_pricing_policies WHERE licence_uid = ?), 'primary_country') = ?
+          AND COALESCE((SELECT group_concat(country_code, ',') FROM
+            (SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code)), '') = ?
+          AND (? IS NULL OR EXISTS (SELECT 1 FROM licence_pricing_reviews WHERE uid = ? AND licence_uid = ? AND state = 'open'))`,
     ).bind(
       a.decisionUid, licence.uid, snap.lead_snapshot_uid, snap.currency,
       snap.recommended.initial_fee_cents, snap.recommended.annual_fee_cents, snap.recommended.royalty_bps, snap.recommended.minimum_royalty_cents, snap.recommended.regulatory_surcharge_cents,
@@ -381,8 +386,10 @@ export function applyStatements(env: Env, a: {
       plan.decision, plan.decision === 'overridden' ? input.override_reason : null, input.effective_from, a.now, a.actor,
       snap.uid, input.reason, rev, rev + 1, a.reviewOn, plan.contractual_change ? 1 : 0, input.acknowledge_agreement_mismatch ? 1 : 0,
       a.contractUid, input.review_uid,
-      licence.id, rev,
+      licence.id, rev, licence.uid, snap.policy_revision, licence.uid, snap.basis,
+      licence.id, snap.territory.join(','), input.review_uid, input.review_uid, licence.uid,
     ),
+    decisionGuard(env),
     // D4694's write: one literal UPDATE, guarded by the revision the editor read. Currency is the recommendation's
     // (the route refuses a licence held in another currency), so the figures and their unit move together.
     env.DB.prepare(
@@ -398,6 +405,7 @@ export function applyStatements(env: Env, a: {
         WHERE uid = ? AND licence_uid = ? AND state = 'open' AND EXISTS (SELECT 1 FROM licence_pricing_decisions WHERE uid = ?)`,
     ).bind(plan.decision === 'overridden' ? 'overridden' : 'applied', a.decisionUid, input.reason, a.now, a.actor, input.review_uid, licence.uid, a.decisionUid));
   }
+  stmts.push(clearGuard(env));
   return stmts;
 }
 

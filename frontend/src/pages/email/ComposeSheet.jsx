@@ -101,8 +101,8 @@ export default function ComposeSheet({ pack, refs, project = null, to, account, 
     setBusy(true); setError(null);
     try {
       const { nonce } = await api.confirmSend(account.uid);
-      const key = operation.current.keyFor([account.uid, edit.to.trim(), edit.subject, edit.body, draft.uid]);
-      const r = await api.send({ account_uid: account.uid, to: edit.to.trim(), subject: edit.subject, body: edit.body, draft_uid: draft.uid, operation_key: key, nonce });
+      const key = operation.current.keyFor([person.ref, account.uid, edit.to.trim(), edit.subject, edit.body, draft.uid]);
+      const r = await api.send({ person: person.ref, account_uid: account.uid, to: edit.to.trim(), subject: edit.subject, body: edit.body, draft_uid: draft.uid, operation_key: key, nonce });
       setConfirm(false);
       const out = readOutcome(r);
       if (out.state === 'accepted') { operation.current.forget(); onSent?.(out.sent); }

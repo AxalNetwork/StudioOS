@@ -131,15 +131,17 @@ jobs:
     needs: deploy
     if: needs.deploy.outputs.url != ''
     runs-on: ubuntu-latest
-    # Chromium's system libraries come from apt. On a slow Ubuntu mirror that
-    # download alone used the whole 15 minutes (run 40508033042, still fetching
-    # when the job was cancelled) while the two specs themselves finish in
-    # under a minute. 30 leaves room for a slow mirror.
+    # Use the same preinstalled Chromium and system libraries as the editor
+    # visual suite so the preview tests can start without Ubuntu mirrors.
+    container:
+      image: mcr.microsoft.com/playwright@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a # v1.56.1-noble
+      options: --user 1001
     timeout-minutes: 30
     permissions:
       contents: read
     env:
       PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.url }}
+      PW_CHROMIUM_PATH: /ms-playwright/chromium-1194/chrome-linux/chrome
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -152,8 +154,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Install Chromium for Playwright
-        run: npm --prefix frontend run test:e2e:install
+      - name: Verify the pinned Chromium
+        run: test -x "$PW_CHROMIUM_PATH" && "$PW_CHROMIUM_PATH" --version | grep -F '141.0.7390.37'
 
       - name: Build the generated modules (D5612)
         run: node scripts/build-generated.mjs

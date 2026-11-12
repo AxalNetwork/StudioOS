@@ -269,7 +269,7 @@ function DealCard({ deal, onOpen, onSpinout, draggable, onDragStart, onDragEnd, 
         <div className="absolute top-1 right-1 text-violet-500" title="Saving…"><Loader2 className="animate-spin" size={10} /></div>
       )}
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="font-semibold text-sm text-gray-900 truncate flex-1 dark:text-gray-100">{deal.name}</div>
+        <button type="button" aria-label={`Open ${deal.name}`} onClick={(e) => { e.stopPropagation(); onOpen(); }} className="font-semibold text-sm text-left text-gray-900 truncate flex-1 dark:text-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500">{deal.name}</button>
         {traction != null && <ScorePill score={traction} small />}
       </div>
       {deal.sector && <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">{deal.sector}</div>}
@@ -344,7 +344,7 @@ function DealVoteWidget({ dealId, liveTally }) {
       const next = await api.castVote(dealId, { vote_type, comment: comment || null, anonymous });
       setTally(next);
       setComment('');
-    } catch (e) { setErr(e.message); }
+    } catch { setErr('Your vote could not be recorded. Your comment is still here. Try again.'); }
     finally { setBusy(false); }
   };
 
@@ -395,6 +395,7 @@ function DealVoteWidget({ dealId, liveTally }) {
               onClick={(e) => { stop(e); cast(o.id); }}
               disabled={busy}
               title={o.label + (isMine ? ' (your vote)' : '')}
+              aria-label={o.label}
               className={`text-[10px] font-semibold py-1 rounded transition-colors disabled:opacity-50 ${bg} ${isMine ? `ring-1 ${ring}` : ''}`}
             >
               {o.short}
@@ -413,6 +414,7 @@ function DealVoteWidget({ dealId, liveTally }) {
           <input
             type="text"
             value={comment}
+            aria-label="Vote comment"
             onChange={e => setComment(e.target.value)}
             placeholder="Optional comment (sent with next vote)"
             className="w-full text-[10px] bg-white border border-gray-300 dark:border-gray-600 rounded px-2 py-1 focus:border-violet-400 focus:outline-none dark:bg-gray-900 dark:border-gray-700"
@@ -423,7 +425,7 @@ function DealVoteWidget({ dealId, liveTally }) {
           </label>
         </div>
       )}
-      {err && <div className="mt-1 text-[10px] text-red-600">{err}</div>}
+      {err && <div role="alert" className="mt-1 text-[10px] text-red-600">{err}</div>}
     </div>
   );
 }
@@ -727,19 +729,17 @@ function CreateModal({ onClose, onCreated }) {
     if (!form.name) { setErr('Name required'); return; }
     setBusy(true); setErr('');
     try { await api.pipelineCreateProject(form); onCreated(); }
-    catch (e) { setErr(e.message); setBusy(false); }
+    catch { setErr('The startup could not be created. Your entries are still here. Try again.'); setBusy(false); }
   };
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto dark:bg-gray-900" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between dark:border-gray-800"><h2 className="text-lg font-semibold">New Pipeline Startup</h2><button onClick={onClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:text-gray-100"><X size={18} /></button></div>
+    <Sheet title="New Pipeline Startup" width={560} testId="pipeline-create-sheet" onClose={onClose}>
         <div className="p-6 space-y-3">
           <Field label="Name *"><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={inputCls} /></Field>
           <Field label="Sector"><input value={form.sector} onChange={e => setForm({...form, sector: e.target.value})} className={inputCls} placeholder="fintech / saas / health / etc." /></Field>
           <Field label="Description"><textarea rows={2} value={form.description} onChange={e => setForm({...form, description: e.target.value})} className={inputCls} /></Field>
           <Field label="Problem"><textarea rows={2} value={form.problem_statement} onChange={e => setForm({...form, problem_statement: e.target.value})} className={inputCls} /></Field>
           <Field label="Solution"><textarea rows={2} value={form.solution} onChange={e => setForm({...form, solution: e.target.value})} className={inputCls} /></Field>
-          {err && <div className="text-xs text-red-600">{err}</div>}
+          {err && <div role="alert" className="text-xs text-red-600">{err}</div>}
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={onClose} className="text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:bg-gray-800 px-4 py-2 rounded-lg dark:text-gray-300">Cancel</button>
             <button onClick={submit} disabled={busy} className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg">
@@ -747,13 +747,12 @@ function CreateModal({ onClose, onCreated }) {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
 const inputCls = 'w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:border-violet-500 focus:outline-none';
-function Field({ label, children }) { return <div><label className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</label>{children}</div>; }
+function Field({ label, children }) { return <label className="block"><span className="text-xs text-gray-700 font-medium block mb-1 dark:text-gray-300">{label}</span>{children}</label>; }
 function KV({ k, v }) { return <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-2"><div className="text-[10px] uppercase text-gray-500 dark:text-gray-400">{k}</div><div className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">{String(v)}</div></div>; }
 function Empty({ text }) { return <div className="text-xs text-gray-500 dark:text-gray-400 py-6 text-center">{text}</div>; }
 function Loading({ text }) { return <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {text}</div>; }
