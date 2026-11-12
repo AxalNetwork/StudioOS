@@ -51,7 +51,7 @@ test('two failures in the same shard use the existing digest fingerprints; unkno
   const first = routeObservation(input(event('failure'))); const second = routeObservation({ ...input(event('failure')), previous: first.state, digestEnvelope: envelope('pr_failure', ['different-failure']) });
   assert.notEqual(first.state.fingerprint, second.state.fingerprint); assert.equal(second.policy.material, true); assert.equal(second.state.root, first.state.root);
   const repeated = routeObservation({ ...input(event('failure')), previous: first.state }); assert.equal(repeated.policy.material, false);
-  const mixed = routeObservation({ ...input(event('failure')), digestEnvelope: envelope('pr_failure', ['mixed'], { mixed: true }) }); assert.equal(mixed.evidence.cause, 'mixed_pr_and_shared');
+  const mixed = routeObservation({ ...input(event('failure')), digestEnvelope: envelope('pr_failure', ['mixed'], { mixed: true }) }); assert.equal(mixed.evidence.cause, 'mixed_pr_and_shared'); assert.equal(mixed.policy.cause, 'mixed_pr_and_shared');
   const unknown = routeObservation({ ...input(event('failure')), digestEnvelope: envelope('main_health_unknown') }); assert.equal(unknown.policy.disposition, 'unknown');
   const fork = routeObservation({ ...input(event('failure')), pr: { ...pr, fork: true }, digestEnvelope: null }); assert.equal(fork.policy.disposition, 'unknown'); assert.equal(fork.policy.mentionKey, null);
 });
@@ -62,7 +62,7 @@ test('released/expired/competing/multi-issue claims and case aliases do not gues
   assert.equal(ownership({ issues, claims: [claim(7, 's18', '18', new Date(now - 25 * 3600000))], pr, now }).kind, 'triage');
   assert.equal(ownership({ issues: [{ number: 7, labels: [] }], claims: [claim()], pr, now }).kind, 'triage');
   assert.equal(ownership({ issues: [...issues, { number: 8, labels: ['slot:S19'] }], claims: [claim(), claim(8, 's19', '19')], pr, now }).kind, 'triage');
-  const fallback = routeObservation({ ...input(event('failure')), issues: [], claims: [], allowMentions: true, mentionMap: {} }); assert.equal(fallback.policy.mentionKey, null);
+  const fallback = routeObservation({ ...input(event('failure')), issues: [], claims: [], allowMentions: true, mentionMap: {} }); assert.equal(fallback.policy.mentionKey, null); assert.equal(fallback.policy.githubOwner, 'author'); assert.equal(fallback.policy.nextStep, 'read_pr_owned_digest');
   const mapped = routeObservation({ ...input(event('failure')), allowMentions: true, mentionMap: { 'slot:S18': 'UOWNER' } }); assert.equal(mapped.policy.mentionKey, 'slot:S18');
   assert.equal(ownership({ pr: { author: 'not a login', branch: 'slot:S18', displayName: 'S18' }, now }).kind, 'triage');
 });

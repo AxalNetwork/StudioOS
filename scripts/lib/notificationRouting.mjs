@@ -44,11 +44,17 @@ export function routeObservation({ event, pr = null, issues = [], claims = [], r
   const owner = ownership({ issues, claims, pr, now });
   const policy = { schema: 1, role: event.visibility === 'restricted' || event.family === 'security' ? 'security' : 'activity', disposition: 'routine', material: false, subject, slot: owner.slot || null, revision: Date.parse(event.occurredAt || event.observedAt), mentionKey: null };
   const evidence = { schema: 1, event: event.key, owner: { kind: owner.kind, slot: owner.slot || null, login: owner.login || null, evidence: owner.evidence, problems: owner.problems }, nextStep: null, cause: null, requiredScope: 'unreadable', stale: false, incidentIssue: null, groupSha: null };
-  if (policy.role === 'security') return { policy, evidence, state: previous };
+  const finish = state => {
+    policy.nextStep = evidence.nextStep;
+    policy.cause = evidence.cause;
+    policy.githubOwner = owner.kind === 'github' ? owner.login : null;
+    return { policy, evidence, state };
+  };
+  if (policy.role === 'security') return finish(previous);
   if (!number && event.kind === 'merge_group') {
-    policy.disposition = 'unknown'; evidence.nextStep = 'confirm_queue_membership'; evidence.groupSha = sha(event.refs?.candidate); return { policy, evidence, state: previous };
+    policy.disposition = 'unknown'; evidence.nextStep = 'confirm_queue_membership'; evidence.groupSha = sha(event.refs?.candidate); return finish(previous);
   }
-  if (!number || !head) return { policy, evidence, state: previous };
+  if (!number || !head) return finish(previous);
   const root = `subject:${event.repository}:${subject}:prs`;
   const previousCurrent = previous?.head === head ? previous : null;
   const observedHead = sha(event.refs?.reviewed || event.refs?.head);
@@ -57,10 +63,10 @@ export function routeObservation({ event, pr = null, issues = [], claims = [], r
   const old = olderAttempt || observedHead && observedHead !== head || previous && Number.isFinite(policy.revision) && policy.revision < previous.revision;
   evidence.stale = Boolean(old);
   const state = { head, revision: Math.max(previous?.revision || 0, Number.isFinite(policy.revision) ? policy.revision : 0), root, threadExists: previous?.threadExists || false, fingerprint: previousCurrent?.fingerprint || null, disposition: previousCurrent?.disposition || 'routine', owner: owner.key, actionType: previousCurrent?.actionType || null, lastCI: priorCI || null, reviewRequest: previousCurrent?.reviewRequest || null, closed: pr.merged === true || pr.state === 'closed' };
-  if (old) return { policy, evidence, state: previous || state };
+  if (old) return finish(previous || state);
   policy.subject = subject;
   const reflect = disposition => { policy.role = 'prs'; policy.disposition = disposition; policy.material = true; state.threadExists = true; state.disposition = disposition; };
-  if (state.closed) { if (state.threadExists) reflect('routine'); evidence.nextStep = pr.merged ? 'observe_landed_sha_and_deploy_separately' : 'closed_without_merge'; return { policy, evidence, state }; }
+  if (state.closed) { if (state.threadExists) reflect('routine'); evidence.nextStep = pr.merged ? 'observe_landed_sha_and_deploy_separately' : 'closed_without_merge'; return finish(state); }
   if (['review_requested', 'ready_for_review', 'changes_requested', 'owner_decision_required'].includes(event.action) || event.state === 'changes_requested' || event.kind === 'pull_request' && pr.draft !== true && event.reviewers?.length > 0) {
     const targets = (event.reviewers || pr.requested_reviewers?.map(r => r.login) || []).map(login).filter(Boolean).sort();
     const request = JSON.stringify([head, event.state === 'changes_requested' || event.action === 'changes_requested' ? 'changes' : 'review', targets]);
@@ -111,7 +117,7 @@ export function routeObservation({ event, pr = null, issues = [], claims = [], r
     const key = reviewTarget ? `github:${reviewTarget}` : owner.kind === 'slot' ? `slot:${owner.slot}` : `github:${owner.login}`;
     if (/^(?:U|S)[A-Z0-9]{2,30}$/.test(mentionMap[key] || '')) policy.mentionKey = key;
   }
-  return { policy, evidence, state };
+  return finish(state);
 }
 export class RoutingHistory {
   constructor(store) { this.store = store; }
