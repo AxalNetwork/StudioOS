@@ -105,7 +105,7 @@ test('only complete executed same-attempt TAP recovers; partial verified failure
   for (const mutate of [x => x.blobs[0].tap += 'corrupt', x => x.blobs[0].manifest.sha256 = '0'.repeat(64), x => x.blobs[0].manifest.attempt++, x => x.blobs[0].manifest.exitCode = 1, x => x.blobs[0].manifest.sha = 'b'.repeat(40), x => x.jobs[0].steps = [], x => x.jobs[0].conclusion = 'failure', x => x.blobs.push(x.blobs[0])]) {
     const x = evidence(expected.map(p => blob(p))); mutate(x); const result = assessFutureClock(x); assert.equal(result.active, null, JSON.stringify(result)); assert.equal(result.complete, false);
   }
-  for (const incomplete of ['', 'not ok 1 - partial', tap(false).replace('1..1\n', ''), tap(false).replace('# fail 0\n', ''), tap(false) + tap(false), tap(false).replace('ok 1', 'ok 2'), tap(false).replace('# skipped 0', '# skipped 1')]) assert.equal(inspectTap(incomplete).state, 'unknown');
+  for (const incomplete of ['', 'not ok 1 - partial', tap(false).replace('1..1\n', ''), tap(false).replace('# fail 0\n', ''), tap(false) + tap(false), tap(false).replace('ok 1', 'ok 2'), tap(false).replace('# skipped 0', '# skipped 1'), tap(false).replace('ok 1', 'not ok 1'), tap(true).replace('not ok 1', 'ok 1'), tap(false).replace('# tests 1', '# tests 9007199254740992').replace('# pass 1', '# pass 9007199254740992')]) assert.equal(inspectTap(incomplete).state, 'unknown');
   assert.equal(inspectTap(tap(true)).state, 'failure');
 });
 test('producer records the actual child exit and digest atomically without swallowing clock verification', () => {

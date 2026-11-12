@@ -10,10 +10,12 @@ export function inspectTap(tap) {
   const summaries = lines.map(s => /^# (tests|pass|fail|cancelled|skipped|todo) (\d+)$/.exec(s)).filter(Boolean);
   const summary = name => { const all = summaries.filter(s => s[1] === name); return all.length === 1 ? Number(all[0][2]) : null; };
   const tests = summary('tests'), passed = summary('pass'), failed = summary('fail'), cancelled = summary('cancelled'), skipped = summary('skipped'), todo = summary('todo');
+  const failedRoots = lines.filter(s => /^not ok \d+ - /.test(s)).length;
   const planned = plans.length === 1 ? Number(plans[0].slice(3)) : null;
-  if (headers.length !== 1 || planned === null || planned < 1 || result.length !== planned || result.some((n, i) => n !== i + 1)
-      || [tests, passed, failed, cancelled, skipped, todo].some(n => n === null)
+  if (headers.length !== 1 || !Number.isSafeInteger(planned) || planned < 1 || result.length !== planned || result.some((n, i) => n !== i + 1)
+      || [tests, passed, failed, cancelled, skipped, todo].some(n => !Number.isSafeInteger(n))
       || tests < planned || passed + failed + cancelled + skipped + todo !== tests
+      || failedRoots > failed + cancelled || failed > 0 && !failedRoots
       || !lines.some(s => /^# duration_ms [\d.]+$/.test(s)) || lines.some(s => /^\s*Bail out!/.test(s))) return { state: 'unknown', code: 'tap_incomplete' };
   if (cancelled || skipped || todo) return { state: 'unknown', code: 'tests_not_executed', tests, failed };
   return { state: failed ? 'failure' : 'green', code: failed ? 'assertion_failure' : 'complete_green', tests, failed };
