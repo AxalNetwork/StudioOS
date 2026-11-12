@@ -370,6 +370,8 @@ export interface Env {
   AGENT_RUNTIME?: string;
   /** D4555 (#4555): `cloudflare_sdk` selects the Agent Skills SDK adapter on the run path, read only when ENVIRONMENT is `preview` (`skillEngineOf`). Declared nowhere in wrangler.toml. */
   AGENT_SKILL_RUNTIME?: string;
+  /** D4594 part 2 (#4594): `deterministic` answers every model call from a fixed stub, read only when ENVIRONMENT is `preview` (`inferenceStubOn`). Set only on the hosted Stage A throwaway Worker; declared nowhere in wrangler.toml. */
+  AGENT_INFERENCE_STUB?: string;
   /** D1528: the `agents` AI Gateway id agent runs pass. Unset = no gateway. Set only by `agentRun`. */
   AGENT_AI_GATEWAY?: string;
   /** D4557 (#4557): `on` with AGENT_COMPUTE_SECRET turns on agent compute jobs (`services/agents/compute.ts`); unset or anything else is off. Declared nowhere yet. */
