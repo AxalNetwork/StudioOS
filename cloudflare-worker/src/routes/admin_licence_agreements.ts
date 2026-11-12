@@ -157,8 +157,8 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     const slug = typeof b?.template_slug === 'string' ? b.template_slug.slice(0, 120) : '';
     const wrong = catalogRefusal(slug, kind, scope);
     if (wrong) return refuse(c, 422, 'wrong_template', wrong);
-    const packageVersion = b?.package_version == null ? null : Number(b.package_version);
-    if (packageVersion !== null && !(Number.isInteger(packageVersion) && packageVersion >= 1)) return refuse(c, 400, 'invalid_package_version', 'A package version is a whole number from 1.');
+    const requestedVersion = b?.package_version == null ? null : Number(b.package_version);
+    if (requestedVersion !== null && !(Number.isInteger(requestedVersion) && requestedVersion >= 1)) return refuse(c, 400, 'invalid_package_version', 'A package version is a whole number from 1.');
     const packageOfferUid = typeof b?.package_offer_uid === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(b.package_offer_uid) ? b.package_offer_uid : null;
 
     // The template: its CURRENT version, read now and frozen into the version. A slug HQ has not authored, or
@@ -169,19 +169,26 @@ r.post('/licences/:licenceUid/drafts', async (c) => {
     const blocked = templateUseRefusal(tpl);
     if (blocked) return refuse(c, 409, blocked.code, blocked.message, { template_slug: slug });
 
-    const [terr, seats, grant, signer] = await Promise.all([
+    const [terr, seats, grant, signer, pkg] = await Promise.all([
       c.env.DB.prepare('SELECT country_code FROM licence_territories WHERE licence_id = ? ORDER BY country_code').bind(licence.id).all<{ country_code: string }>(),
       c.env.DB.prepare('SELECT seat_type, seats_licensed FROM licence_seats WHERE licence_id = ? ORDER BY seat_type').bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
       scope.program_key
         ? c.env.DB.prepare('SELECT * FROM program_grants WHERE licence_id = ? AND program_key = ?').bind(licence.id, scope.program_key).first<Record<string, unknown>>()
         : Promise.resolve(null),
       signerOf(c.env, licence.id),
+      scope.package_key
+        ? c.env.DB.prepare(`SELECT name, version FROM program_packages WHERE package_key = ?1
+            AND ((?2 IS NULL AND status = 'active') OR (version = ?2 AND status IN ('active', 'retired')))`)
+            .bind(scope.package_key, requestedVersion).first<{ name: string; version: number }>()
+        : Promise.resolve(null),
     ]);
+    if (scope.package_key && !pkg) return refuse(c, 409, 'package_not_published', 'Choose a published version of this package before drafting its agreement.');
+    const packageVersion = pkg?.version ?? requestedVersion;
     let terms = null;
     try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
     const values = agreementMergeValues({
       licence, territories: (terr.results || []).map((t) => t.country_code), seats: seats.results || [], licenceTerms: terms,
-      grant: grant ?? null, program_key: scope.program_key, package_key: scope.package_key, package_version: packageVersion,
+      grant: grant ?? null, program_key: scope.program_key, package_key: scope.package_key, package_name: pkg?.name ?? null, package_version: packageVersion,
       signer: signer ? { name: signer.name, email: signer.email } : null, agreement: { kind, prepared_on: today() },
     });
     const { body, unresolved } = renderAgreement(tpl.body_md, values);
