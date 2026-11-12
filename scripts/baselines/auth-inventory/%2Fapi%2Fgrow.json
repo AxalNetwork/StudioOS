@@ -1,0 +1,7 @@
+{
+  "GET /api/grow/ads": {
+    "review": "optional_auth",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

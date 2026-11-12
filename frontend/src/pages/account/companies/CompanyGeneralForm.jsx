@@ -5,11 +5,14 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { useLeaveGuard } from '../../../lib/leaveGuard';
 import { useUpdateCompanyDetails } from '../../../contexts/ActiveCompanyContext';
 import {
-  CURRENCY_CODES, DESCRIPTION_MAX, LABELS, LEAVE_PROMPT, LOGO_HINT, PROSE_MAX, REGIONS, REVENUE_RANGES, SECTIONS, STAGES,
-  VERSION_CONFLICT, archivedLine, canEditCompany, changes, conflictLine, failedBeforeWriting, formOf, hasIntent, logoProblem,
-  problemOf, readOnlyReasonLine, rebaseOnConflict, reconcile, regionCodesIn, regionLabel, saveIntent, saveLine, shownLogo,
-  unsavedLine, versionOf,
+  DESCRIPTION_MAX, FIELD_HELP, LABELS, LEAVE_PROMPT, LOGO_HINT, PROSE_MAX, REGIONS, REVENUE_RANGES, SECTIONS, STAGES,
+  VERSION_CONFLICT, archivedLine, canEditCompany, changes, conflictLine, failedBeforeWriting, fieldProblems, formOf, hasIntent,
+  logoProblem, previewOf, problemOf, railStatus, rebaseOnConflict, reconcile, regionCodesIn, saveIntent,
+  saveLine, shownLogo, versionOf,
 } from './generalFormModel';
+import {
+  CurrencyCombobox, DescriptionField, FieldFrame, ProblemSummary, PublicPreview, UrlField,
+} from './CompanyGeneralFields.jsx';
 import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './portfolioUi.jsx';
 
 /**
@@ -17,6 +20,15 @@ import { CompanyMark, Failed, INK, MUTED, NotYours, PCard, Reading } from './por
  * "Save changes". It reads the page's one company read (`useCompanyDetail`,
  * #4964) and saves only what changed, for any company this member may edit.
  * #4201: the logo tile holds a picked or removed logo until the same Save.
+ *
+ * D4966 (#5312) rebuilds it to the v2 canvas: the four intent groups of
+ * `SECTIONS`, a save-status rail over `railStatus`'s twelve states, a problem
+ * summary that links to every bad field with each error beside its own field,
+ * the violet edge on a changed field, the currency as a searchable combobox,
+ * URL fields with Open and the normalisation shown before saving, and a preview
+ * of the Worker's PUBLIC fields only, marked when it includes unsaved changes.
+ * The save machinery underneath is unchanged: #4960 to #4964 own it and this
+ * rebuilds none of it.
  *
  * D4961: the fields and the pending logo commit as one request
  * (`logoApi.saveSettings`). A 4xx wrote nothing; any other failure re-reads
@@ -59,23 +71,34 @@ function Regions({ value, onChange, disabled, unmapped }) {
   );
 }
 
-function Field({ f, form, set, disabled, row }) {
+function Field({ f, form, set, disabled, row, dirty, error }) {
   const v = form[f];
   const id = `general-${f}`;
+  // D4966 (CS-15): the error and the help are addressed by the ids `FieldFrame`
+  // gives them, so a screen reader reads the problem with the field, not after it.
+  const aria = {
+    'aria-invalid': error ? 'true' : undefined,
+    'aria-describedby': [error ? `${id}-error` : null, FIELD_HELP[f] ? `${id}-help` : null].filter(Boolean).join(' ') || undefined,
+  };
   let input;
+  // CS-02: a changed field carries the violet edge on its own control.
+  const edge = dirty ? ' ring-2 ring-axal-violet/60' : '';
+  // D4966: the currency, the two links and the description are the v2 canvas's
+  // own controls (`CompanyGeneralFields.jsx`), each with its label, hint, help,
+  // error and the changed-field edge already wired.
+  if (f === 'default_currency') {
+    return <CurrencyCombobox value={v} stored={row?.default_currency || ''} disabled={disabled} dirty={dirty} error={error} onChange={(x) => set(f, x)} />;
+  }
+  if (f === 'website' || f === 'linkedin_url') {
+    return <UrlField field={f} value={v} disabled={disabled} dirty={dirty} error={error} onChange={(x) => set(f, x)} />;
+  }
+  if (f === 'description') {
+    return <DescriptionField value={v} disabled={disabled} dirty={dirty} error={error} max={DESCRIPTION_MAX} onChange={(x) => set(f, x)} />;
+  }
   if (f === 'stage') {
     input = (
-      <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)}>
+      <select id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)}>
         {STAGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-      </select>
-    );
-  } else if (f === 'default_currency') {
-    // An unrecorded currency is "Not recorded", never a guessed default; a stored code off the list is still shown.
-    const codes = v && !CURRENCY_CODES.includes(v) ? [v, ...CURRENCY_CODES] : CURRENCY_CODES;
-    input = (
-      <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} data-testid="general-default-currency">
-        <option value="" data-testid="general-default-currency-none">Not recorded</option>
-        {codes.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
     );
   } else if (f === 'region_codes') {
@@ -84,39 +107,28 @@ function Field({ f, form, set, disabled, row }) {
     // A band from the list; a value stored before the list is still shown, as itself, until it is changed.
     const legacy = v && !REVENUE_RANGES.some(([k]) => k === v);
     input = (
-      <select id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} data-testid="general-revenue-range">
+      <select id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} data-testid="general-revenue-range">
         <option value="">Not recorded</option>
         {legacy ? <option value={v}>{v}</option> : null}
         {REVENUE_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
     );
-  } else if (f === 'website' || f === 'linkedin_url') {
-    input = <input id={id} type="url" inputMode="url" autoComplete="url" className={INPUT} value={v} disabled={disabled}
-      placeholder={f === 'website' ? 'https://example.com' : 'https://www.linkedin.com/company/…'} onChange={(e) => set(f, e.target.value)} />;
   } else if (f === 'employee_count') {
-    input = <input id={id} type="number" min={0} step={1} inputMode="numeric" className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />;
+    input = <input id={id} type="number" min={0} step={1} inputMode="numeric" className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
   } else if (f === 'international_presence' || f === 'current_products' || f === 'expansion_goals') {
     input = (
       <>
-        <textarea id={id} className={`${INPUT} resize-y`} rows={2} maxLength={PROSE_MAX} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />
+        <textarea id={id} className={`${INPUT} resize-y${edge}`} rows={2} maxLength={PROSE_MAX} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />
         <span className={`${MUTED} text-[11.5px] tabular-nums`}>{v.length} / {PROSE_MAX}</span>
       </>
     );
-  } else if (f === 'description') {
-    input = (
-      <>
-        <textarea id={id} className={`${INPUT} resize-none`} rows={3} maxLength={DESCRIPTION_MAX} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />
-        <span className={`${MUTED} text-[11.5px] tabular-nums`}>{v.length} / {DESCRIPTION_MAX}</span>
-      </>
-    );
   } else {
-    input = <input id={id} className={INPUT} value={v} disabled={disabled} onChange={(e) => set(f, e.target.value)} />;
+    input = <input id={id} className={INPUT + edge} value={v} disabled={disabled} {...aria} onChange={(e) => set(f, e.target.value)} />;
   }
   return (
-    <label htmlFor={id} className="flex flex-col gap-1">
-      <span className={`text-[12px] font-semibold ${INK}`}>{LABELS[f]}{f === 'company_name' ? ' · required' : ''}</span>
-      {input}
-    </label>
+    <FieldFrame field={f} htmlFor={id} dirty={dirty} error={error}>
+      {() => input}
+    </FieldFrame>
   );
 }
 
@@ -178,6 +190,11 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
   // #4201: a picked or removed logo, held until Save: { upload: File, preview } | { remove: true } | null.
   const [logo, setLogo] = useState(null);
   const [logoError, setLogoError] = useState(null);
+  // D4966 (CS-03 C): the problem summary and the inline errors appear once the
+  // member has pressed Save, never on a form they have only just opened.
+  const [showProblems, setShowProblems] = useState(false);
+  // D4966 (CS-13 A): which group the phone's selector is showing.
+  const [group, setGroup] = useState('all');
   const holdLogo = useCallback((next) => {
     setLogo((was) => { if (was?.preview && typeof URL !== 'undefined') URL.revokeObjectURL?.(was.preview); return next; });
     setSave({ status: 'idle', message: '' });
@@ -205,6 +222,9 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
   useLeaveGuard(dirty, LEAVE_PROMPT);
 
   const set = useCallback((f, v) => { setForm((x) => ({ ...x, [f]: v })); setSave({ status: 'idle', message: '' }); }, []);
+  // A field just corrected should not keep its error while the member types; the
+  // summary comes back on the next Save if anything is still wrong.
+  useEffect(() => { if (showProblems && !problemOf(form, row)) setShowProblems(false); }, [form, row, showProblems]);
   const onPickLogo = (file) => {
     const why = logoProblem(file);
     setLogoError(why);
@@ -313,51 +333,76 @@ export default function CompanyGeneralForm({ uid, logoApi = companyLogoApi, read
   if (state.status === 'error') return <PCard title="General" testId="company-general"><Failed what="Settings" onRetry={() => detail.reload()} testId="company-general-unread" /></PCard>;
 
   const name = String(form.company_name || row.company_name || '').trim();
+  // D4966 (CS-03 C, CS-12, CS-01): every bad field, the rail's one line, and the
+  // preview of the public fields only. The summary shows only once the member
+  // has tried to save: a form opened on a company that is already short of a
+  // name must not greet them with an error they did not make.
+  const problems = fieldProblems(form, row);
+  const rail = railStatus({ canEdit, archived, row, status: save.status, message: save.message, problems: showProblems ? problems : [], patch, logo });
+  const preview = previewOf(row, form, logo, patch);
+  const span = (f) => ['description', 'international_presence', 'region_codes', 'current_products', 'expansion_goals'].includes(f);
+  const errorOf = (f) => (showProblems ? problems.find((pr) => pr.field === f)?.message ?? null : null);
+  const shown = SECTIONS.filter((sec) => group === 'all' || sec.key === group);
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
-      <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => { e.preventDefault(); if (dirty && !problem && !busy) onSave({ checkFirst: ['error', 'partly', 'unknown'].includes(save.status) && save.check !== false }); }}>
+      <form className="flex flex-col gap-4" data-testid="company-general-form" onSubmit={(e) => {
+        e.preventDefault();
+        setShowProblems(true);
+        if (dirty && !problem && !busy) onSave({ checkFirst: ['error', 'partly', 'unknown'].includes(save.status) && save.check !== false });
+      }}>
+        {/* D4966 (CS-05, CS-12): read-only and archived are two of the rail's twelve
+            states, and they are said here, where they always were. The save bar
+            below is the editor's; a company nobody may change shows no actions
+            (#4960's rule, which this keeps). */}
         {archived
-          ? <p className={`m-0 ${MUTED}`} data-testid="company-general-archived">{archivedLine(row.company_name)}</p>
-          : !canEdit && <p className={`m-0 ${MUTED}`} data-testid="company-general-read-only">{readOnlyReasonLine(row)}</p>}
+          ? <p className={`m-0 ${MUTED}`} role="status" data-rail-state={rail.state} data-testid="company-general-archived">{`${rail.line} — ${archivedLine(row.company_name)}`}</p>
+          : !canEdit && <p className={`m-0 ${MUTED}`} role="status" data-rail-state={rail.state} data-testid="company-general-read-only">{rail.line}</p>}
+        {/* CS-13 A: on a phone the four groups are a selector, so the form is not one long scroll. */}
+        <div className="lg:hidden" data-testid="company-general-group-picker">
+          <label htmlFor="company-general-group" className={`text-[12px] font-semibold ${INK}`}>Section</label>
+          <select id="company-general-group" className={INPUT} value={group} onChange={(e) => setGroup(e.target.value)}>
+            <option value="all">All sections</option>
+            {SECTIONS.map((sec) => <option key={sec.key} value={sec.key}>{sec.title}</option>)}
+          </select>
+        </div>
+        {showProblems ? <ProblemSummary problems={problems} /> : null}
         <LogoTile name={name} row={row} pending={logo} problem={logoError} disabled={!canEdit || busy}
           onPick={onPickLogo} onRemove={() => { setLogoError(null); holdLogo({ remove: true }); }} onUndo={() => { setLogoError(null); holdLogo(null); }} />
-        {SECTIONS.map((sec) => (
+        {shown.map((sec) => (
           <PCard key={sec.key} title={sec.title} testId={`general-section-${sec.key}`}>
             {sec.line && <p className={`m-0 mb-3 ${MUTED}`}>{sec.line}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               {sec.fields.map((f) => (
-                <div key={f} className={['description', 'international_presence', 'region_codes', 'current_products', 'expansion_goals'].includes(f) ? 'sm:col-span-2' : ''}>
-                  <Field f={f} form={form} set={set} row={row} disabled={!canEdit || busy} />
+                <div key={f} className={span(f) ? 'sm:col-span-2' : ''}>
+                  <Field f={f} form={form} set={set} row={row} disabled={!canEdit || busy} dirty={f in patch} error={errorOf(f)} />
                 </div>
               ))}
             </div>
           </PCard>
         ))}
+        {/* CS-12: the rail says one of twelve things; the four above are the
+            editor's. CS-13 C: the bar is the house's own sticky footer
+            (`sticky bottom-0 z-10`, as the checkout and decision bars are),
+            with 44px targets and the status on its own line below 1024px. */}
         {canEdit && (dirty || save.status !== 'idle') && (
-          <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900" data-testid="company-general-savebar">
-            <span className={`mr-auto ${MUTED}`} role="status" data-testid="company-general-status">
-              {save.status === 'conflict' ? <span data-testid="company-general-conflict">{save.message}</span>
-                : busy || ['saved', 'error', 'partly', 'unknown'].includes(save.status) ? (save.message || (save.status === 'saving' ? 'Saving…' : ''))
-                  : problem || unsavedLine(patch, logo)}
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-2 rounded-xl border border-axal-hairline bg-white/95 px-4 py-2.5 shadow-sm dark:border-gray-700 dark:bg-gray-900/95" data-testid="company-general-savebar">
+            <span className={`w-full lg:w-auto lg:mr-auto ${MUTED}`} role="status"
+              aria-live={rail.announce === 'none' ? 'off' : rail.announce === 'assertive' ? 'assertive' : 'polite'}
+              data-rail-state={rail.state} data-testid="company-general-status">
+              {save.status === 'conflict' ? <span data-testid="company-general-conflict">{rail.line}</span> : rail.line}
             </span>
-            {dirty && <button type="button" className={GHOST} onClick={onDiscard} disabled={busy} data-testid="company-general-discard">Discard</button>}
+            {dirty && <button type="button" className={`${GHOST} min-h-[44px]`} onClick={onDiscard} disabled={busy} data-testid="company-general-discard">Discard</button>}
             {dirty && (
-              <button type="submit" className={PRIMARY} disabled={!!problem || busy} data-testid="company-general-save">
+              <button type="submit" className={`${PRIMARY} min-h-[44px]`} disabled={busy} data-testid="company-general-save">
                 {save.status === 'saving' ? 'Saving…' : save.status === 'reconciling' ? 'Checking…' : ['error', 'partly', 'unknown'].includes(save.status) ? 'Try again' : 'Save changes'}
               </button>
             )}
           </div>
         )}
       </form>
-      <PCard title="Preview" testId="company-general-preview">
-        <p className={`m-0 mb-2 ${MUTED}`}>How {name || 'the company'} appears across the platform.</p>
-        <span className="flex items-center gap-2">
-          <CompanyMark name={name} size={28} logoUrl={shownLogo(row, logo)} />
-          <span className={`text-[13.5px] font-semibold ${INK}`}>{name || 'Untitled company'}</span>
-        </span>
-        {form.description && <p className={`m-0 mt-2 text-[12.5px] ${INK}`}>{form.description}</p>}
-        {regionCodesIn(form.region_codes).length > 0 && <p className={`m-0 mt-1 ${MUTED}`} data-testid="company-general-preview-regions">{regionCodesIn(form.region_codes).map(regionLabel).join(' · ')}</p>}
-      </PCard>
+      <div className="lg:sticky lg:top-4 lg:self-start">
+        <PublicPreview preview={preview} collapsible />
+      </div>
     </div>
   );
 }

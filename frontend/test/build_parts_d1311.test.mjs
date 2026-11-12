@@ -12,6 +12,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import { BUILD_PARTS, PartBoundary, builtParts, buildPartsMap } from '../src/pages/cycles/buildParts.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const read = (p) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 const text = (n) => n.childNodes?.length ? n.childNodes.map(text).join('') : n.textContent || '';
@@ -50,7 +51,7 @@ test('completed connector parts are mounted from the module registry', () => {
   assert.deepEqual(builtParts('company-creation').map(([k]) => k), ['github', 'vercel']);
   assert.deepEqual(builtParts('solution-design').map(([k]) => k), ['github', 'vercel', 'google', 'notion'], 'D1097\'s Runs on, From Google, then From Notion');
   // CycleRoute takes Build's parts from here, and from nowhere else.
-  assert.match(read('frontend/src/pages/cycles/CycleRoute.jsx'), /parts: toFnMap\(buildPartsMap\(\)\),/);
+  assert.match(cycleRouteText(), /parts: toFnMap\(buildPartsMap\(\)\),/);
 });
 
 async function mount(element) {

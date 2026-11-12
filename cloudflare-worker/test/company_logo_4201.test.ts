@@ -45,6 +45,8 @@ const ROLE: Record<number, string> = { [ADA]: 'founder', [BEN]: 'founder', [CY]:
 
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
+  // #5654: install the production decision CHECK used by profile/logo batches.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/202611071200_program_grant_revisions.sql', import.meta.url), 'utf8'), 'decision_guard'));
   for (const t of ['users', 'projects', 'company_profiles', 'user_company_links', 'activity_logs', 'incorporations']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M597); db.exec(M685); db.exec(M757); db.exec(M4201); db.exec(M4963);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');

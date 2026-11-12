@@ -1,0 +1,41 @@
+{
+  "GET /api/captable/access/shared/:token": {
+    "review": "no_gate_found",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+    "note": "A capability link: no sign-in by design; the signed token must agree with its stored row on venture and level, and its expiry, view limit and revocation hold. Forged, unstored, other-venture, cross-kind, spent and revoked tokens are refused 403/410 and log no open; only the owner mints or revokes."
+  },
+  "GET /api/captable/record/:projectId/closes/:closeUid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/captable/record/:projectId/export.csv": {
+    "review": "record_without_ownership_check",
+    "kind": "public_content",
+    "state": "unreviewed"
+  },
+  "GET /api/captable/record/:projectId/history": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/captable/scenarios/by-project/:projectId/today": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/captable/share/:token": {
+    "review": "record_without_ownership_check",
+    "kind": "link_token",
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_share_links_d4570.test.ts",
+    "note": "A capability link: no sign-in by design; the signed token, its stored hash, expiry, view limit and revocation are the gate. Forged, unstored, cross-kind, spent and revoked tokens are refused 403/410, count no view and name nothing; another founder or an admin cannot revoke it."
+  },
+  "POST /api/captable/scenarios/by-project/:projectId/simulate": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

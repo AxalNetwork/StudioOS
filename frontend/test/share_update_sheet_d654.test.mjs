@@ -137,7 +137,7 @@ test('a network recipient\'s page shows what the Worker sent: the asks, no metri
 test('Grow\'s header opens the sheet, and /updates/:uid is routed', () => {
   // Grow's header is the Grow cycle overview's primary action since the A5
   // desk retired (D661, #1474); a sent update opens its own page.
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = cycleRouteText();
   // D686 §5.1: at /grow/update over the page; a sent update replaces it with its page.
   assert.match(route, /action: \(q, open\) => \(\{ label: 'Share an update', href: `\/grow\/update\$\{q\}`, onOpen: open \}\)/);
   assert.match(route, /<ShareUpdateLightbox projectId=\{projectId\} onClose=\{onClose\} onSent=\{onDone\} asPage=\{asPage\} \/>/);
@@ -383,6 +383,7 @@ import UpdatesHistory, { updateTitle, updateLine } from '../src/pages/cycles/Upd
 import UpdateAskReplies from '../src/pages/cycles/UpdateAskReplies.jsx';
 import { networkRow } from '../src/pages/founder/SentUpdatePage.jsx';
 import { ventureRow } from '../src/pages/founder/ShareUpdateSheet.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 const ssr = (el) => renderToStaticMarkup(React.createElement(MemoryRouter, null, el));
 const SENT = { uid: 'u1', title: 'October 2026 update', period_start: '2026-10-01', period_end: '2026-10-31', sent_at: '2026-11-01T09:00:00Z', href: '/updates/u1',
   sent_to: { investors: 3, team: 2, network: 0 }, delivered: 5, opened: 4, asks: 2, replies: 1, asks_to_ask_again: 1 };
@@ -406,7 +407,7 @@ test('D686: the Updates history: rows, links only with href, the Ask again pill,
   assert.doesNotMatch(bad, /No update shared yet/);
   assert.match(ssr(React.createElement(UpdatesHistory, { updates: [], onShare: () => {} })), /No update shared yet[\s\S]*>Share an update</);
   assert.equal(ssr(React.createElement(UpdatesHistory, {})), '');
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = cycleRouteText();
   assert.match(route, /<UpdatesHistory updates=\{data\?\.parts\?\.updates\} reason=\{data\?\.parts\?\.updates_reason\} onShare=\{ctx\.openAction\} \/>\s*<DurabilityChecklist/);
 });
 
@@ -416,7 +417,7 @@ test('D686: Distribution and Partner network draw "From update asks" with a Lead
   assert.match(html, /<h2[^>]*>From update asks<\/h2>/);
   assert.match(renderedText(html), /Ana · 3 NovTalk to BoIn reply to: Intro to a bankLead/);
   assert.equal(ssr(React.createElement(UpdateAskReplies, { replies: [], pill: 'Lead' })), '');
-  const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
+  const route = cycleRouteText();
   // D840 part 3: each part now also draws its "From Mercury" beside the replies.
   assert.match(route, /<OverviewTab key=\{projectId\} projectId=\{projectId\} search=\{q\} refresh=\{reload\}>\{body\}<\/OverviewTab>/);
   assert.match(route, /'partner-network': \(data, ctx\) => \(<>\s*<UpdateAskReplies replies=\{data\?\.parts\?\.from_update_asks\} pill="Partner" \/>/);

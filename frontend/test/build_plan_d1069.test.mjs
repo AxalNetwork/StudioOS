@@ -20,6 +20,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import BuildPlan, { VerdictRecordWithPlan } from '../src/pages/cycles/BuildPlan.jsx';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 import {
   acceptAllLine, becauseChips, dayTime, decidedLine, editPayload, landsIn, moduleItems, planCounts, planScope, planSearch, sinceLine, ventureSearch, verdictState, writeRefusal,
 } from '../src/pages/cycles/buildPlanModel.js';
@@ -371,7 +372,7 @@ test('VB2a: the Verdict record says Plan the build with the plan\'s own count, a
 });
 
 test('wiring: CycleRoute hands the plan the viewer\'s role and Lab flag and draws the Verdict record with its panel; no browser pop-up', () => {
-  const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
+  const route = cycleRouteText();
   const at = route.indexOf('<BuildPlan tab={buildPlan}');
   assert.ok(at > 0);
   assert.ok(route.slice(at, route.indexOf('/>', at)).includes("role={user?.role ?? null} lab={user?.spinout_lab_active === 1 && user?.role !== 'admin'}"));

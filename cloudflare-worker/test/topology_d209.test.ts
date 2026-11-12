@@ -336,11 +336,11 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   assert.match(read('cloudflare-worker/src/routes/admin_deployments.ts'), /export const PROVISION_WORKFLOW = 'branch-provision\.yml';/);
 });
 
-test('by hand, npm run deploy migrates and then deploys HQ, and nothing deploys a branch', () => {
+test('by hand, npm run deploy dispatches the verified HQ release', () => {
   const root = JSON.parse(read('package.json')).scripts as Record<string, string>;
   const worker = JSON.parse(read('cloudflare-worker/package.json')).scripts as Record<string, string>;
-  assert.match(root.predeploy, /\bmigrate-d1\.mjs --remote\b/, 'predeploy applies the pending migrations');
-  assert.match(root.deploy, /wrangler deploy --config \.\.\/wrangler\.toml --env production/, 'deploy ships HQ');
+  assert.equal(root.deploy, 'gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main');
+  assert.equal(root.predeploy, undefined);
   assert.match(DEPLOY_BY_HAND, /npm run deploy/);
   assert.match(DEPLOY_BY_HAND, /migrations/);
   assert.match(DEPLOY_BY_HAND, /Nothing deploys a branch by hand\./);

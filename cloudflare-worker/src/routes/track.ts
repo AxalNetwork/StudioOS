@@ -28,6 +28,8 @@ import { ensureFunnelEventsSchema } from '../services/funnelEventsSchema';
 // Keep in sync with EVENTS in frontend/src/lib/funnel.js + documentation/architecture/ANALYTICS_FUNNEL.md.
 export const FUNNEL_EVENT_ALLOWLIST = new Set([
   'landing_view',
+  'pricing_view',
+  'pricing_plan_selected',
   'register_view',
   'register_form_start',
   'register_field_error',
@@ -55,6 +57,13 @@ const MAX_BATCH = 20;         // events per request
 const MAX_PROPS_JSON = 500;   // serialized props blob cap
 
 const ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+const PRICING_PLANS = new Map<string, ReadonlySet<string>>([
+  ['founder', new Set(['founder:free', 'founder:growth', 'founder:studio'])],
+  ['investor', new Set(['investor:free', 'investor:plus', 'investor:professional'])],
+  ['advisor', new Set(['advisor:free', 'advisor:pro'])],
+  ['operating-partner', new Set(['partner:free', 'partner:pro'])],
+]);
 
 export function clipStr(v: unknown, max: number): string | null {
   if (v == null) return null;
@@ -113,7 +122,20 @@ export function sanitizeEvent(raw: unknown): SanitizedEvent | null {
   };
 
   let props: string | null = null;
-  if (e.props && typeof e.props === 'object' && !Array.isArray(e.props)) {
+  if (event === 'pricing_view' || event === 'pricing_plan_selected') {
+    if (!e.props || typeof e.props !== 'object' || Array.isArray(e.props)) return null;
+    const { audience, plan, interval } = e.props as Record<string, unknown>;
+    const plans = typeof audience === 'string' ? PRICING_PLANS.get(audience) : undefined;
+    if (!plans) return null;
+    const billed = interval === 'monthly' || interval === 'yearly';
+    if (event === 'pricing_view') {
+      if (!billed) return null;
+      props = JSON.stringify({ audience, plan: null, interval });
+    } else {
+      if (typeof plan !== 'string' || !plans.has(plan) || (plan.endsWith(':free') ? interval != null : !billed)) return null;
+      props = JSON.stringify({ audience, plan, interval: interval ?? null });
+    }
+  } else if (e.props && typeof e.props === 'object' && !Array.isArray(e.props)) {
     try {
       const json = JSON.stringify(e.props);
       if (json && json !== '{}' && json.length <= MAX_PROPS_JSON) props = json;
