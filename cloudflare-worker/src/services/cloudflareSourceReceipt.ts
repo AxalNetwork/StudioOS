@@ -15,6 +15,7 @@ export const cfReceiptSchema = z.object({
   occurred_ms: ms, observed_ms: ms, count: z.number().int().nonnegative(), denominator: z.number().int().nonnegative().nullable(),
   window_start_ms: ms, window_end_ms: ms,
   versions: z.array(z.object({ id: uuid, weight: z.number().finite().min(0).max(100).nullable() }).strict()).max(10),
+  platform_episode: z.enum(['meeting_bot:start_failed','meeting_bot:unreported']).nullable().default(null),
   provider: z.enum(['none','zoom','google_meet','teams']).default('none'),
   source: z.enum(['wrangler','api','dashboard','rollback','unknown']),
   github: z.object({ run_id: z.number().int().positive(), attempt: z.number().int().positive(), sha: z.string().regex(/^[a-f0-9]{40}$/),
@@ -30,7 +31,7 @@ export async function cfHash(value: unknown): Promise<string> {
 }
 export function parseCfReceipt(value: unknown): CfReceipt {
   const r=cfReceiptSchema.parse(value);
-  if (r.audience !== cfAudience(r.script) || r.window_start_ms > r.window_end_ms || r.occurred_ms > r.observed_ms + 60000
+  if ((r.audience==='preview'&&r.platform_episode!==null) || r.audience !== cfAudience(r.script) || r.window_start_ms > r.window_end_ms || r.occurred_ms > r.observed_ms + 60000
     || (r.denominator !== null && r.count > r.denominator) || new Set(r.versions.map(v=>v.id)).size !== r.versions.length) throw Error('invalid_cf_receipt');
   return r;
 }
@@ -39,7 +40,7 @@ export function cfRoute(r: CfReceipt) {
   const destination=r.audience==='preview'?'preview':r.family==='deployment' && r.state==='observed' && r.github && r.code!=='version_uploaded'?'release':r.state==='firing'||r.state==='recovered'?'health':'activity';
   return { destination, labels: `[cf][${r.audience}][${r.script}][${r.component}][${r.state}]`,
     // #5667 alone creates a production rollout thread. An unattributed deployment never borrows a previous SHA's thread.
-    subject: r.family==='deployment' ? (r.github?.rollout_key || r.episode_key) : r.episode_key,
+    subject: r.family==='deployment' ? (r.github?.rollout_key || r.episode_key) : (r.platform_episode || r.episode_key),
     owner:r.owner, drilldown:'/hq/platform', receipt:r };
 }
 export type SourceCursor = { revision: number; through_ms: number; active_id: string | null; active_versions: string[] };
