@@ -10,7 +10,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { refuse } from '../util/refusal';
-import { SERVICE_LIMITS, boundedText, supportedCurrency, wholeCents } from '../services/advisorLimits';
+import { AdvisorValidationError, SERVICE_LIMITS, boundedText, supportedCurrency, wholeCents } from '../services/advisorLimits';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import { pageFacts, pageWindow } from '../services/listPage';
 import {
@@ -26,10 +26,30 @@ const advisors = new Hono<{ Bindings: Env }>();
 type ServiceRow = {
   id: number; uid: string; advisor_id: number; title: string; kind: string;
   duration_note: string | null; price_cents: number | null; currency: string;
-  scope: string | null; is_active: number; created_at: string; updated_at: string;
+  scope: string | null; is_active: number; publication_state: PublicationState;
+  created_at: string; updated_at: string;
 };
 
 const SERVICE_KINDS = ['fixed', 'package', 'retainer'];
+
+type PublicationState = 'draft' | 'published' | 'hidden';
+
+function publicationState(body: Record<string, unknown>): PublicationState | null {
+  if (!Object.hasOwn(body, 'publication_state')) return null;
+  const state = body.publication_state;
+  if (state === 'draft' || state === 'published' || state === 'hidden') return state;
+  throw new AdvisorValidationError('invalid_publication_state', 'Choose Draft, Published or Hidden.');
+}
+
+/** Booking availability comes from the advisor's existing booking links. */
+export async function publishedAdvisorServices(env: Env, advisorId: number) {
+  const { results = [] } = await env.DB.prepare(
+    `SELECT uid, title, kind, duration_note, price_cents, currency, scope FROM advisor_services
+      WHERE advisor_id = ? AND publication_state = 'published' AND is_active = 1
+      ORDER BY created_at DESC, id DESC`
+  ).bind(advisorId).all<Pick<ServiceRow, 'uid' | 'title' | 'kind' | 'duration_note' | 'price_cents' | 'currency' | 'scope'>>();
+  return results;
+}
 
 function serviceDto(r: ServiceRow, unitsSold: number | null = null): any {
   return {
@@ -40,7 +60,7 @@ function serviceDto(r: ServiceRow, unitsSold: number | null = null): any {
     // a confident 0 — CLAUDE.md's absent-is-not-empty rule.
     price_cents: r.price_cents ?? null,
     currency: r.currency,
-    scope: r.scope, is_active: !!r.is_active,
+    scope: r.scope, is_active: !!r.is_active, publication_state: r.publication_state,
     units_sold: unitsSold,
     created_at: r.created_at, updated_at: r.updated_at,
   };
@@ -59,13 +79,17 @@ advisors.get('/me/services', async (c) => {
     ).bind(m.id, w.limit, w.offset).all<ServiceRow>();
     const whole = await c.env.DB.prepare(
       `SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) AS live,
-              COALESCE(SUM(CASE WHEN price_cents IS NOT NULL THEN 1 ELSE 0 END), 0) AS priced
+              COALESCE(SUM(CASE WHEN price_cents IS NOT NULL THEN 1 ELSE 0 END), 0) AS priced,
+              COALESCE(SUM(CASE WHEN publication_state = 'published' THEN 1 ELSE 0 END), 0) AS published,
+              COALESCE(SUM(CASE WHEN publication_state = 'hidden' THEN 1 ELSE 0 END), 0) AS hidden
          FROM advisor_services WHERE advisor_id = ?`
-    ).bind(m.id).first<{ total: number; live: number; priced: number }>();
+    ).bind(m.id).first<{ total: number; live: number; priced: number; published: number; hidden: number }>();
     const items = rows.results || [];
     const total = Number(whole?.total) || 0;
     const live = Number(whole?.live) || 0;
     const priced = Number(whole?.priced) || 0;
+    const published = Number(whole?.published) || 0;
+    const hidden = Number(whole?.hidden) || 0;
 
     // `units_sold` STAYS NULL, and that is the honest answer rather than a
     // missing feature. Nothing links a booking to a service: `advisor_bookings`
@@ -78,6 +102,7 @@ advisors.get('/me/services', async (c) => {
       items: items.map((r) => serviceDto(r, null)),
       page: pageFacts(w, total, items.length),
       counts: { total, live, draft: total - live, priced, unpriced: total - priced },
+      publication_counts: { draft: total - published - hidden, published, hidden },
     });
   } catch (e) { return mapError(c, e); }
 });
@@ -87,6 +112,7 @@ advisors.post('/me/services', async (c) => {
     const user = await requireAuth(c);
     const m = await requireMyAdvisor(c, user);
     const body = await c.req.json().catch(() => ({} as any));
+    const state = publicationState(body);
     const title = boundedText('title', body.title, SERVICE_LIMITS.title);
     if (!title) return c.json({ detail: 'A service needs a title' }, 400);
     const kind = String(body.kind || 'fixed').trim();
@@ -107,10 +133,10 @@ advisors.post('/me/services', async (c) => {
     const r = await c.env.DB.prepare(
       `INSERT INTO advisor_services
          (uid, advisor_id, title, kind, duration_note, price_cents, currency,
-          scope, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          scope, is_active, publication_state, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(uid, m.id, title, kind, duration_note, price_cents, currency, scope,
-           body.is_active === false ? 0 : 1, now, now).run();
+           Number(state === null ? body.is_active !== false : state === 'published'), state ?? 'draft', now, now).run();
     const fresh = await c.env.DB.prepare('SELECT * FROM advisor_services WHERE id = ?')
       .bind((r as any).meta?.last_row_id).first<ServiceRow>();
     return c.json(serviceDto(fresh!));
@@ -146,6 +172,8 @@ advisors.patch('/me/services/:id', async (c) => {
     }
     const duration_note = has('duration_note') ? boundedText('duration_note', body.duration_note, SERVICE_LIMITS.duration_note) : null;
     const scope = has('scope') ? boundedText('scope', body.scope, SERVICE_LIMITS.scope) : null;
+    const state = publicationState(body);
+    const legacyActive = body.is_active == null ? null : Number(!!body.is_active);
     const revision = sentRevision(body);
     // D4674: ONE fixed statement that writes only the fields the body names
     // (CASE per column), so two edits to different fields of the same service
@@ -159,7 +187,10 @@ advisors.patch('/me/services/:id', async (c) => {
          price_cents = CASE WHEN ? = 1 THEN ? ELSE price_cents END,
          currency = CASE WHEN ? = 1 THEN ? ELSE currency END,
          scope = CASE WHEN ? = 1 THEN ? ELSE scope END,
-         is_active = CASE WHEN ? = 1 THEN ? ELSE is_active END,
+         is_active = CASE WHEN ? IS NOT NULL THEN ?
+                          WHEN publication_state = 'hidden' THEN 0 ELSE COALESCE(?, is_active) END,
+         publication_state = COALESCE(?, CASE WHEN publication_state = 'published' AND ? = 0
+                                            THEN 'hidden' ELSE publication_state END),
          updated_at = ?
        WHERE id = ? AND advisor_id = ? AND (? IS NULL OR updated_at = ?)`
     ).bind(
@@ -169,7 +200,7 @@ advisors.patch('/me/services/:id', async (c) => {
       has('price_cents') ? 1 : 0, price_cents,
       currency ? 1 : 0, currency,
       has('scope') ? 1 : 0, scope,
-      body.is_active == null ? 0 : 1, body.is_active ? 1 : 0,
+      state, Number(state === 'published'), legacyActive, state, legacyActive,
       nowIso(), row.id, m.id, revision, revision,
     ).run();
     if (Number((r as any).meta?.changes ?? 1) === 0) {
