@@ -1,0 +1,6 @@
+{
+  "liveIndexSql() @ routes/market_intel.ts": 2,
+  "liveRowSql() @ routes/market_intel.ts": 3,
+  "placeholders @ routes/market_intel.ts": 2,
+  "where @ routes/market_intel.ts": 1
+}

@@ -129,7 +129,7 @@ const SUITE_RUN = 'node scripts/test-drift-parts.mjs ${{ matrix.part }}';
 /** The ci.yml job that runs the suite, found by what it runs rather than by its key. */
 function suiteJob() {
   const runners = [...ciJobs].filter(([, lines]) =>
-    stepsOf(lines).some((s) => s.run === SUITE_RUN || s.run === 'npm run test:drift'),
+    stepsOf(lines).some((s) => s.run === SUITE_RUN || s.run === `${SUITE_RUN} --plan-file suite-plan.json` || s.run === 'npm run test:drift'),
   );
   assert.equal(
     runners.length,
@@ -161,9 +161,12 @@ test('the job relies on no key GitHub ignores for Copilot, and stays under its 5
   assert.ok(Number(timeout) >= 1 && Number(timeout) <= 59, `timeout-minutes is ${timeout}; GitHub caps this job at 59`);
 });
 
-test('every action the suite job uses is pinned to the same SHA here, and every pin is a full SHA', () => {
+test('suite setup actions use the same pins here; per-run artifact downloads stay in CI', () => {
   const suite = suiteJob();
-  const suiteUses = suite.steps.map((s) => s.uses).filter(Boolean);
+  const allSuiteUses = suite.steps.map((s) => s.uses).filter(Boolean);
+  for (const uses of allSuiteUses) assert.match(uses, /@[a-f0-9]{40}$/);
+  // The plan belongs to a CI run; Copilot setup only mirrors its environment.
+  const suiteUses = allSuiteUses.filter((u) => actionOf(u) !== 'actions/download-artifact');
   const setupUses = stepsOf(setupJobs.get(JOB)).map((s) => s.uses).filter(Boolean);
   // A floor, so the comparison cannot pass on two empty lists if the parser
   // stops finding `uses:` lines.

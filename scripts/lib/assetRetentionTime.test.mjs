@@ -126,9 +126,10 @@ test('#3591: the deploy workflow stamps the shipped build after wrangler deploy 
   assert.doesNotMatch(deploy.slice(step,stamp),/working-directory|if:|continue-on-error/,'from the repo root, and a failed stamp stops the cache save');
 });
 
-test('D1364: manual deployment records success before its live-check postdeploy', () => {
+test('D5501: a manual release uses the workflow that stamps and retains deployed assets', () => {
   const pkg=JSON.parse(fs.readFileSync(new URL('../../package.json',import.meta.url),'utf8'));
-  assert.equal(pkg.scripts.postdeploy,'node scripts/record-asset-deploy.mjs && node scripts/check-spa-live.mjs');
+  assert.deepEqual([pkg.scripts.deploy, pkg.scripts.postdeploy],
+    ['gh workflow run cloudflare-worker-deploy.yml --repo AxalNetwork/StudioOS --ref main', undefined]);
 });
 
 test('D1364: an identical rebuild keeps the served timestamp even if it is not deployed',()=>{

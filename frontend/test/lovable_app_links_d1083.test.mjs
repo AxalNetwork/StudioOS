@@ -4,12 +4,12 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/lovable_app_links_d1083.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installDocument } from './_contracts_dom.mjs';
 import FromLovable from '../src/pages/cycles/FromLovable.jsx';
 import { LOVABLE_WORDS, checkedAt, slotView } from '../src/pages/cycles/lovableAppLink.js';
+import { cycleRouteText } from './_cycleBands.mjs'; // D5615: CycleRoute.jsx and its cycle entries in defs/
 
 const h = React.createElement;
 
@@ -156,6 +156,6 @@ test('remove asks first and says nothing changes in Lovable; the experiment reco
     assert.deepEqual(f.calls, [['unlink', 'validate', 7, 5]]);
     assert.ok(m.by('lovable-5-empty'));
   } finally { await m.unmount(); }
-  const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
+  const route = cycleRouteText();
   assert.match(route, /experiments: \(read, ctx\) => <div className="space-y-3">[\s\S]*?<FromLovable part=\{read\.parts\.lovable\} cycle="validate" projectId=\{ctx\.projectId\} onRetry=\{ctx\.reload\} \/>/);
 });
