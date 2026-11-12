@@ -14,7 +14,7 @@
  *                                          Answers { ok, account } from the persisted row; 409 connection_changed when a newer
  *                                          connection was saved while this disconnect was in flight (#4654)
  *   POST   /send/confirm                   { account_uid } → a one-use nonce for the composer's pressed Send
- *   POST   /send                           { account_uid, to, subject, body, draft_uid?, nonce } → one `mail_sent` row
+ *   POST   /send                           { account_uid, to, subject, body, draft_uid?, person?, nonce } → one `mail_sent` row
  *                                          `intro_uid?` (D4329): the intro for an accepted introduction request;
  *                                          only its teammate may send it, and the send records it as made
  *                                          D4493: a sequence step's draft must be due, to that prospect, keep its
@@ -44,10 +44,11 @@ import {
   accountOf, accountView, ConnectionSuperseded, forget, issueNonce, listAccounts, markError, markExpired, markUsed, openCreds, persisted,
   saveAccount, spendOauthState, spendSendNonce, type AccountRow,
 } from '../services/mail/accounts';
+import { MailError, personRecord } from '../services/mail/contextPack';
 import { indexHmac } from '../services/columnCipher';
 import { configOf, customMcpEnabled, customRowFor, isConnectionUid } from '../integrations/customMcp';
 import { refuse } from '../util/refusal';
-import { admit, discard, fingerprintOf, opByKey, opByUid, opView, OP_KEY, settleTo, SENDS_PER_HOUR as OPS_PER_HOUR, type OpRow } from '../services/mail/sendOps';
+import { admit, discard, fingerprintOf, opByKey, opByUid, opView, OP_KEY, PENDING_STALE_SECONDS, settleTo, SENDS_PER_HOUR as OPS_PER_HOUR, type OpRow } from '../services/mail/sendOps';
 import { claimIntroDelivery, introForSend, introHeldBy, markMadeOnSend, RelationshipRefusal } from '../services/relationships';
 
 const mailAccounts = new Hono<{ Bindings: Env }>();
@@ -234,12 +235,14 @@ mailAccounts.post('/send/confirm', async (c) => {
 });
 
 /** The refs a draft quoted (D1341), the member's own draft only. Null when there is no such draft. */
-async function draftRefs(env: Env, user: User, uid: string): Promise<string[] | null> {
+async function draftRefs(env: Env, user: User, uid: string): Promise<{ refs: string[]; person: string } | null> {
   if (!/^[a-f0-9]{32}$/.test(uid)) return null;
-  const row = await env.DB.prepare('SELECT refs_json FROM mail_drafts WHERE uid = ? AND user_id = ?').bind(uid, user.id)
-    .first<{ refs_json: string }>().catch(() => null);
+  const row = await env.DB.prepare('SELECT refs_json, person_ref FROM mail_drafts WHERE uid = ? AND user_id = ?').bind(uid, user.id)
+    .first<{ refs_json: string; person_ref: string }>().catch(() => null);
   if (!row) return null;
-  try { const refs = JSON.parse(row.refs_json); return Array.isArray(refs) ? refs.map((r: any) => String(r?.ref ?? '')).filter(Boolean) : []; } catch { return []; }
+  let refs: string[] = [];
+  try { const raw = JSON.parse(row.refs_json); refs = Array.isArray(raw) ? raw.map((r: any) => String(r?.ref ?? '')).filter(Boolean) : []; } catch { /* no quoted refs */ }
+  return { refs, person: row.person_ref };
 }
 
 mailAccounts.post('/send', async (c) => {
@@ -256,11 +259,21 @@ mailAccounts.post('/send', async (c) => {
   if (!text.trim() || text.length > 20000) return refuse(c, 400, { code: 'body_invalid', message: 'Write the email before sending it.' });
   if (row.status !== 'active') return refuse(c, 409, { code: 'mailbox_expired', message: row.last_error || 'Reconnect this mailbox before sending from it.' });
   let refs: string[] = [];
+  let person: string | null = null;
+  // D4662: validate the explicit context through the record's own access gate, before any provider I/O.
+  if (b.person != null && b.person !== '') {
+    try { person = (await personRecord(c.env, user, b.person)).person.ref; } catch (e) {
+      if (e instanceof MailError) return refuse(c, e.status, { code: e.code, message: e.sentence });
+      throw e;
+    }
+  }
   const draftUid = b.draft_uid == null || b.draft_uid === '' ? null : String(b.draft_uid);
   if (draftUid) {
     const got = await draftRefs(c.env, user, draftUid);
     if (!got) return refuse(c, 404, { code: 'draft_not_found', message: 'Draft not found.' });
-    refs = got;
+    if (person && person !== got.person) return refuse(c, 409, { code: 'draft_person_mismatch', message: 'This draft belongs to a different conversation. Open it there before sending.' });
+    person ??= got.person;
+    refs = got.refs;
   }
   // D4329 (#4329): an intro written for an accepted introduction request. Checked before anything goes
   // out: only the teammate on that request, while it is accepted. The send then records it as made.
@@ -294,12 +307,12 @@ mailAccounts.post('/send', async (c) => {
   const rawKey = b.operation_key == null || b.operation_key === '' ? null : String(b.operation_key);
   if (rawKey !== null && !OP_KEY.test(rawKey)) return refuse(c, 400, { code: 'operation_key_invalid', message: 'The send could not be identified. Close the composer and try again.' });
   const opKey = rawKey ?? crypto.randomUUID().replace(/-/g, '');
-  const fingerprint = await fingerprintOf({ account_uid: row.uid, to, subject, body: text, draft_uid: draftUid, intro_uid: introUid });
+  const fingerprint = await fingerprintOf({ account_uid: row.uid, to, subject, body: text, draft_uid: draftUid, intro_uid: introUid, person: b.person ? person : null });
   const hash = await indexHmac(c.env, 'mail_sent', 'recipient', to);
   const log = (op: OpRow, messageId: string | null, error: string | null) => c.env.DB.prepare(
-    `INSERT INTO mail_sent (uid, user_id, account_id, recipient, recipient_hash, subject, provider_message_id, draft_uid, refs_json, sent_at, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO NOTHING`,
-  ).bind(op.uid, user.id, row.id, to, hash, subject, messageId, draftUid, JSON.stringify(refs), error ? null : new Date().toISOString(), error).run();
+    `INSERT INTO mail_sent (uid, user_id, account_id, recipient, recipient_hash, subject, provider_message_id, draft_uid, refs_json, sent_at, error, person_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uid) DO NOTHING`,
+  ).bind(op.uid, user.id, row.id, to, hash, subject, messageId, draftUid, JSON.stringify(refs), error ? null : new Date().toISOString(), error, person).run();
   /** What follows acceptance. None of it can change the outcome, and each step is safe to run again. */
   const reconcile = async (op: OpRow, messageId: string | null) => {
     const logged = await log(op, messageId, null).then(() => true).catch(() => false);
@@ -311,7 +324,7 @@ mailAccounts.post('/send', async (c) => {
   };
   const acceptedBody = async (op: OpRow, intro: IntroRecord | null) => ({
     operation: opView(op),
-    sent: { uid: op.uid, account_uid: row.uid, to, subject, provider_message_id: op.provider_message_id, draft_uid: draftUid, refs, intro_uid: introUid },
+    sent: { uid: op.uid, account_uid: row.uid, to, subject, provider_message_id: op.provider_message_id, draft_uid: draftUid, refs, person, intro_uid: introUid },
     ...(introUid ? { intro: intro ?? { uid: introUid, status: 'accepted', recorded: false } } : {}),
   });
 
@@ -449,29 +462,37 @@ mailAccounts.post('/send/operations/:uid/resolve', async (c) => {
 });
 
 // D1344 (#3552, EM7): the member's own sent log. A row names its recipient to the member who sent it
-// (D1340), the refs it quoted (`refs_json`), and the person of the draft it came from, if any.
+// (D1340), its immutable quoted refs and independent conversation association (D4662).
 const SENT_PAGE = 20;
+function sentStatus(r: { sent_at: string | null; operation_state: string | null; operation_updated_at: string | null }) {
+  if (r.operation_state === 'accepted') return 'sent';
+  if (r.operation_state === 'uncertain') return 'uncertain';
+  if (r.operation_state === 'pending') {
+    const at = Date.parse(`${r.operation_updated_at?.replace(' ', 'T')}Z`);
+    return at <= Date.now() - PENDING_STALE_SECONDS * 1000 ? 'uncertain' : 'pending';
+  }
+  return r.sent_at ? 'sent' : 'failed';
+}
 mailAccounts.get('/sent', async (c) => {
   const user = await member(c);
   if (user instanceof Response) return user;
-  const page = Math.max(1, Math.min(500, Number.parseInt(c.req.query('page') || '1', 10) || 1));
+  const page = Math.max(1, Math.min(Math.floor(Number.MAX_SAFE_INTEGER / SENT_PAGE), Number.parseInt(c.req.query('page') || '1', 10) || 1));
   const person = (c.req.query('person') || '').trim().slice(0, 90) || null;
   // Two fixed statements: with and without the person filter. Nothing is assembled.
   const total = person
     ? await c.env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM mail_sent s JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
-        WHERE s.user_id = ? AND d.person_ref = ?`,
+      `SELECT COUNT(*) AS n FROM mail_sent s WHERE s.user_id = ? AND s.person_ref = ?`,
     ).bind(user.id, person).first<{ n: number }>()
     : await c.env.DB.prepare('SELECT COUNT(*) AS n FROM mail_sent WHERE user_id = ?').bind(user.id).first<{ n: number }>();
   const { results } = person
     ? await c.env.DB.prepare(
-      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, d.person_ref
-         FROM mail_sent s JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
-        WHERE s.user_id = ? AND d.person_ref = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
+      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, s.person_ref, o.state AS operation_state, o.updated_at AS operation_updated_at
+         FROM mail_sent s LEFT JOIN mail_send_ops o ON o.uid = s.uid AND o.user_id = s.user_id
+        WHERE s.user_id = ? AND s.person_ref = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
     ).bind(user.id, person, SENT_PAGE, (page - 1) * SENT_PAGE).all<any>()
     : await c.env.DB.prepare(
-      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, d.person_ref
-         FROM mail_sent s LEFT JOIN mail_drafts d ON d.uid = s.draft_uid AND d.user_id = s.user_id
+      `SELECT s.uid, s.recipient, s.subject, s.sent_at, s.error, s.draft_uid, s.refs_json, s.created_at, s.person_ref, o.state AS operation_state, o.updated_at AS operation_updated_at
+         FROM mail_sent s LEFT JOIN mail_send_ops o ON o.uid = s.uid AND o.user_id = s.user_id
         WHERE s.user_id = ? ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
     ).bind(user.id, SENT_PAGE, (page - 1) * SENT_PAGE).all<any>();
   const quoted = (raw: unknown): string[] => {
@@ -481,8 +502,8 @@ mailAccounts.get('/sent', async (c) => {
     page, per_page: SENT_PAGE, total: Number(total?.n ?? 0),
     items: (results || []).map((r: any) => ({
       uid: r.uid, to: r.recipient, subject: r.subject, sent_at: r.sent_at, created_at: r.created_at,
-      // A row with no `sent_at` failed; its sentence is ours (D1340), never the provider's text.
-      status: r.sent_at ? 'sent' : 'failed', error: r.sent_at ? null : r.error,
+      // D4665: a lost provider response is unknown, never a definite failure.
+      status: sentStatus(r), error: sentStatus(r) === 'sent' ? null : r.error,
       draft_uid: r.draft_uid, person: r.person_ref ?? null, quoted: quoted(r.refs_json),
     })),
   });
