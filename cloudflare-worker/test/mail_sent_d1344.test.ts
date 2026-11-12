@@ -48,6 +48,8 @@ async function fixture() {
       i === 21 ? null : `2026-10-${String(1 + (i % 28)).padStart(2, '0')}T09:00:00Z`, i === 21 ? 'The mail server refused it. Nothing was sent.' : null, `2026-10-01 09:${String(i).padStart(2, '0')}:00`);
   }
   sent.run('o1', OTHER, 2, 'secret-recipient@example.invalid', 'ho', 'Not yours', null, '[]', '2026-10-05T09:00:00Z', null, '2026-10-05 09:00:00');
+  // D4662: fixtures represent sent records written with their own association.
+  db.exec(`UPDATE mail_sent SET person_ref = (SELECT d.person_ref FROM mail_drafts d WHERE d.uid = mail_sent.draft_uid AND d.user_id = mail_sent.user_id)`);
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development' };
   const app = new Hono<any>().route('/api/mail', mailAccounts).route('/api/mail', mailDrafts);
   app.onError((err, c) => c.json({ detail: err.message }, (AUTH_ERROR_STATUSES[err.message] || 500) as any));

@@ -206,7 +206,7 @@ test('the answer carries no draft text, no case input and no person', async () =
 });
 
 test('the Worker\'s source manifest equals the CI gate\'s on the committed library', async () => {
-  const { manifest } = await checkSourceCatalogue({ ...readSources(), generated: SKILL_LIBRARY, generatedFresh: true, taxonomy: TAXONOMY });
+  const { manifest } = await checkSourceCatalogue({ ...readSources(), generated: SKILL_LIBRARY, generatedSound: true, taxonomy: TAXONOMY });
   assert.deepEqual(await libraryManifest(new Set(TAXONOMY.keys()), SKILL_LIBRARY), manifest);
 });
 

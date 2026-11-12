@@ -80,6 +80,8 @@ jobs:
           cache: 'npm'
           cache-dependency-path: cloudflare-worker/package-lock.json
       - run: npm ci
+      - name: Build the generated modules (D5612)
+        run: node ../scripts/build-generated.mjs
       - name: TypeScript check
         # --no-install: fail loudly if `npm ci` didn't install the local
         # typescript, instead of silently fetching the unrelated `tsc` package.
@@ -350,6 +352,11 @@ jobs:
           mkdir -p "$trusted"
           guards=(scripts/migration-immutability-gate.mjs scripts/lib/migrationImmutability.mjs
             scripts/lfs-size-gate.mjs scripts/check-api-drift.mjs scripts/lib/apiModules.mjs scripts/lib/routeRegistry.mjs)
+          # D5612 adds a dependency to the archived drift checker. Older bases
+          # still use the standalone checkers and have no helper to archive.
+          if git cat-file -e "$BASE_SHA:scripts/lib/generatedOutput.mjs" 2>/dev/null; then
+            guards+=(scripts/lib/generatedOutput.mjs)
+          fi
           git archive "$BASE_SHA" "${guards[@]}" | tar -x -C "$trusted"
           ln -s "$GITHUB_WORKSPACE/frontend" "$trusted/frontend"
           ln -s "$GITHUB_WORKSPACE/cloudflare-worker" "$trusted/cloudflare-worker"
@@ -375,6 +382,12 @@ jobs:
         run: node "$RUNNER_TEMP/fast-guards/scripts/lfs-size-gate.mjs" --against="origin/$GITHUB_BASE_REF"
         id: lfs
         if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+      # D5612: the API index and route registry are built, not committed. The
+      # base's drift checker re-renders them from the folders and compares.
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
+        id: generated
+        if: ${{ !cancelled() }}
       - name: Run drift checker
         run: node "$RUNNER_TEMP/fast-guards/scripts/check-api-drift.mjs"
         id: drift
@@ -412,17 +425,16 @@ jobs:
           cache: pip
         id: python
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
+      - name: Test the PyPI retry policy
+        run: python -m unittest discover -s scripts -p test_pip_audit_gate.py
+        id: pip_test
+        if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Install pip-audit
         run: python -m pip install --upgrade pip pip-audit
         id: pip_install
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: pip-audit (audit requirements.txt only)
-        run: |
-          if [ -f requirements.txt ]; then
-            pip-audit --strict --ignore-vuln PYSEC-2022-42969 -r requirements.txt
-          else
-            echo "no requirements.txt found, skipping"
-          fi
+        run: python scripts/pip_audit_gate.py
         id: pip_audit
         if: ${{ !cancelled() && github.event_name != 'merge_group' }}
       - name: Check the projection
@@ -471,6 +483,7 @@ jobs:
           FRONTEND_AUDIT: ${{ steps.frontend_audit.outcome }}
           WORKER_AUDIT: ${{ steps.worker_audit.outcome }}
           PYTHON: ${{ steps.python.outcome }}
+          PIP_TEST: ${{ steps.pip_test.outcome }}
           PIP_INSTALL: ${{ steps.pip_install.outcome }}
           PIP_AUDIT: ${{ steps.pip_audit.outcome }}
           ROUTING_CHECK: ${{ steps.routing_check.outcome }}
@@ -489,7 +502,7 @@ jobs:
             advisory=fail
           fi
           if [[ "$EVENT" != merge_group ]]; then
-            for outcome in "$FRONTEND_AUDIT" "$WORKER_AUDIT" "$PYTHON" "$PIP_INSTALL" "$PIP_AUDIT" \
+            for outcome in "$FRONTEND_AUDIT" "$WORKER_AUDIT" "$PYTHON" "$PIP_TEST" "$PIP_INSTALL" "$PIP_AUDIT" \
                            "$ROUTING_CHECK" "$ROUTING" "$AUTH" "$ROUTING_UPLOAD"; do
               if [[ "$outcome" != success ]]; then advisory=fail; fi
             done
@@ -715,6 +728,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: '22'
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Run drift checker
         run: node scripts/check-api-drift.mjs
 

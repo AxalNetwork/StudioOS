@@ -293,3 +293,8 @@ D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, inde
 D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.
 
 D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback, host replay/cleanup and promotion guards without a customer meeting.
+| File | Guarantee |
+| --- | --- |
+| `mail_conversation_history_4662.test.ts` | D4662: validated durable sent identity and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with a non-delivering adapter. |
+| `platform_signal_summary_5672.test.ts` | D5672: synthetic authorization and unavailable-reader behavior. |
+| `security_triage_5680.test.ts` | D5680: synthetic authorization and unavailable-reader behavior. |

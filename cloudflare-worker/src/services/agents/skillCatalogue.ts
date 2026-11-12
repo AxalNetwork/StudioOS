@@ -6,8 +6,9 @@
  * and `checkDraft` for a definition, `checkCase` for a golden case (all through
  * `checkLibrary`), `draftHash` for content identity. This file adds only what a
  * single draft cannot know: that each file has its pair, that a case feeds only
- * the reads its skill lists, that the generated module matches the files, and
- * that the source and the store agree.
+ * the reads its skill lists, that the generated module is sound (D5612: built
+ * deterministically from the files, never committed), and that the source and
+ * the store agree.
  *
  * `checkSourceCatalogue` is pure: files and the taxonomy in, findings and a
  * manifest out (`scripts/check-skill-library.mjs` reads the repository and
@@ -79,10 +80,14 @@ export type SourceInput = {
   cases: Record<string, string>;
   /** `<slug>.json` → text, from `services/agents/skills/scenarios/` (D5336); none when absent. */
   scenarios?: Record<string, string>;
-  /** The generated module's entries as they are committed. */
+  /** The generated module's entries, as this run imports them. */
   generated: readonly LibraryEntry[];
-  /** Whether `render()` of the files equals the committed module. */
-  generatedFresh: boolean;
+  /**
+   * D5612: whether the generator is deterministic, git does not track its
+   * output (it is built before every build and test, never committed), and
+   * the module this run imports is its build of these files.
+   */
+  generatedSound: boolean;
   /** Active taxonomy slug → its category (migration 090). */
   taxonomy: ReadonlyMap<string, string>;
 };
@@ -172,7 +177,7 @@ export async function checkSourceCatalogue(src: SourceInput): Promise<{ findings
   }
 
   // 3. The generated module: checked, never written.
-  if (!src.generatedFresh) add({ file: 'skillLibrary.generated.ts', slug: null, field: null, case_id: null, rule: 'generated_stale', message: 'The generated module does not match the files.', remediation: 'Run node scripts/build-skill-library.mjs and commit the result; never edit it by hand.' });
+  if (!src.generatedSound) add({ file: 'skillLibrary.generated.ts', slug: null, field: null, case_id: null, rule: 'generated_unsound', message: 'The generated module is tracked by git, its generator is not deterministic, or it is not the build of these files.', remediation: 'Run node scripts/build-generated.mjs; never commit the module (D5612) and never edit it by hand.' });
   const gen = src.generated.map((e) => e.slug);
   if (JSON.stringify(gen) !== JSON.stringify([...gen].sort())) add({ file: 'skillLibrary.generated.ts', slug: null, field: null, case_id: null, rule: 'generated_order', message: 'The generated entries are not in slug order.', remediation: 'Rebuild with the script.' });
   for (const s of new Set(gen.filter((x, i) => gen.indexOf(x) !== i))) add({ file: 'skillLibrary.generated.ts', slug: s, field: null, case_id: null, rule: 'duplicate_slug', message: `${s} is in the generated module twice.`, remediation: 'Rebuild with the script.' });

@@ -90,7 +90,7 @@ test('the nightly job preloads libfaketime, proves the clock moved, then runs th
   assert.match(job, /needs: future-clock-plan/);
   assert.match(job, /--plan-file suite-plan\.json/);
   const check = job.indexOf('node scripts/future-clock-check.mjs');
-  const runPart = job.indexOf('node scripts/test-drift-parts.mjs');
+  const runPart = job.indexOf('node scripts/future-clock-producer.mjs');
   assert.ok(check > 0 && check < runPart, 'the clock is proved before any test runs');
   // The check is not swallowed: only the part's own exit is.
   assert.doesNotMatch(job, /future-clock-check\.mjs[^\n]*\|\| true/);

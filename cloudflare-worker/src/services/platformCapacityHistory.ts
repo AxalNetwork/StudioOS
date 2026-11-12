@@ -293,7 +293,22 @@ export async function sweepPlatformCapacity(env: Env, now: Date = new Date(), op
       { metric_key: a.key, stage, alert_id: id },
     );
   }
-  return { level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
+  // A disabled destination has no DB or network overhead. The source episode
+  // and HQ inbox are already committed before the independent delivery pass.
+  let delivery: 'checked' | 'unavailable' | undefined;
+  if (env.AXAL_SECTION_CAPACITY_SLACK_START_UTC) {
+    try {
+      const { deliverCapacityEpisodes } = await import('./sectionCapacityDelivery');
+      await deliverCapacityEpisodes(env, now);
+      delivery = 'checked';
+    } catch {
+      // One fixed diagnostic per scheduled pass. A missing migration or an
+      // invalid destination must not interrupt the existing capacity cron.
+      console.warn('[section-capacity-slack] delivery pass unavailable');
+      delivery = 'unavailable';
+    }
+  }
+  return { ...(delivery ? { section_delivery: delivery } : {}), level: report.level, snapshot_rows: written, actions: actions.filter((a) => a.kind !== 'touch').length, notified };
 }
 
 /** History for the trend view, with the D1 projection. An unreadable store says so; it is not an empty history. */

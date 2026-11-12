@@ -236,4 +236,8 @@ test('candidate, landed and requested deployment SHA roles remain distinct in ac
     const text = row(prepare({ ...event(1), refs: { [field]: 'c'.repeat(40) }, ids: { deployment: '60', prs: [] } }));
     assert.ok(text.includes(`${role}:cccccccccccc`)); assert.match(text, /https:\/\/api\.github\.com\/repos\/o\/r\/deployments\/60/);
   }
+  const refs = { head: 'a'.repeat(40), tested: 'b'.repeat(40), candidate: 'c'.repeat(40), landed: 'd'.repeat(40), deploymentTarget: 'e'.repeat(40) };
+  const text = row(prepare({ ...event(1), refs, ids: { check: '99', prs: ['3'] } }));
+  for (const value of ['head:aaaaaaaaaaaa', 'tested:bbbbbbbbbbbb', 'candidate:cccccccccccc', 'landed:dddddddddddd', 'deployment-target:eeeeeeeeeeee']) assert.ok(text.includes(value));
+  assert.match(text, /commit\/b{40}\/checks\?check_run_id=99/);
 });

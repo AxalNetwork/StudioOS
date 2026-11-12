@@ -33,7 +33,7 @@ const DAY = (v) => { const d = v ? new Date(`${String(v).replace(' ', 'T')}${/[z
 /** DL17a — Record a wire, for an Admin, behind the IC gate. Nothing moves money: it records that money arrived. */
 export function RecordWireDialog({ dealId, row, currency = 'USD', onClose, onRecorded }) {
   const [gate, setGate] = useState({ status: 'loading' });
-  const [amount, setAmount] = useState(() => { const c = wireCents(row); return c == null ? '' : toMajorString(c, currency) ?? ''; });
+  const [amount, setAmount] = useState(() => { const c = wireCents(row, currency); return c == null ? '' : toMajorString(c, currency) ?? ''; });
   const [reference, setReference] = useState('');
   const [verified, setVerified] = useState(false);
   const [note, setNote] = useState('');

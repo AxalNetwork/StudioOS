@@ -12,6 +12,16 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { planParts, assertExactOnce, newestMainArtifact } from './lib/shardPlan.mjs';
+import { buildGenerated } from './build-generated.mjs';
+
+// D5612 (#5612): a part runs `node --test` and `tsc` directly, so no npm
+// `pretest:*` hook builds the generated modules first; this does, once.
+// `--list` and `--plan` only name parts and files, and CI reads their stdout,
+// so they skip it (the generators print to stdout).
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url) && !['--list', '--plan'].includes(process.argv[2])) {
+  const generated = buildGenerated();
+  if (generated !== 0) process.exit(generated);
+}
 
 /** How many shards each long test script is cut into. */
 export const SHARDS = Object.freeze({

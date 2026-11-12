@@ -21,12 +21,10 @@ jobs:
   contracts:
     name: D696 record and persona contracts
     runs-on: ubuntu-latest
-    # The full drift suite alone runs about 26 minutes on a runner (2026-10-18),
-    # so 30 cut it off after the contracts, guards and build that precede it.
-    # By 2026-11-01 it ran 42 minutes (CI's own drift job, run 41336834876), so
-    # 45 cancelled this job after its contracts had passed. 90 matches CI's
-    # drift job (#3911); a real hang still stops at this bounded limit.
-    timeout-minutes: 90
+    # D5612: retain focused record/persona contracts, guards and the SPA build.
+    # ci.yml's required test:drift (full suite) owns complete sharded coverage.
+    # The duplicate unsharded suite exceeded this job's former 90-minute limit.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
@@ -37,6 +35,8 @@ jobs:
           npm ci --no-audit --no-fund
           npm ci --prefix frontend --no-audit --no-fund
           npm ci --prefix cloudflare-worker --no-audit --no-fund
+      - name: Build the generated modules (D5612)
+        run: node scripts/build-generated.mjs
       - name: Record and persona contracts with mutation restoration
         run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/record_page_d696.test.mjs frontend/test/persona_pdf_d696.test.mjs
       - name: Folder, decision and dark-mode guards
@@ -46,21 +46,3 @@ jobs:
           node scripts/check-dark-mode.mjs
       - name: Build the root SPA
         run: npm run build
-      # frontend/test/dr_second_copy_d4558.test.mjs (#4795) runs the real `age`
-      # and `age-keygen`, as ci.yml's drift job does; without them its nine
-      # tests fail here and only here (form-lightbox-contracts.yml does the same).
-      - name: Install age
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
-      - name: Full drift suite after build
-        run: |
-          set +e
-          npm run test:drift > drift.log 2>&1
-          drift_exit=$?
-          echo "EXIT=$drift_exit"
-          # The tail alone ends after the last test, so a failure in the middle was
-          # never named: print every failing test first, with its location (#4473).
-          if [ "$drift_exit" -ne 0 ]; then
-            echo "Failing tests:"; grep -nE -A6 '^not ok ' drift.log | grep -E "not ok|location:|error:" | head -n 120 || true
-            tail -n 160 drift.log
-          fi
-          exit "$drift_exit"

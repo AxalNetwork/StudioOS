@@ -82,6 +82,8 @@ and citations by number keep working.
 | `D5347.md` | Noindex registry routes are excluded from the sitemap while remaining crawlable. |
 | `D5299.md` | #5299 (revenue ledger 1/6 of #5038): append-only `financial_events`, ingested once from the Stripe webhook and HQ's refund route, attribution stamped and never guessed, one guarded reconciliation path, coverage start per source. |
 | `D5535.md` | Verify production queues before release mutations. |
+| `D4662.md` | Sent conversation identity and quotes survive draft deletion; selected threads refresh, expose older pages and preserve unreadable and uncertain outcomes. |
+| `D4705.md` | Studio Pipeline keyboard entry and creation recovery; synthetic call baseline and remaining partner/live checks. |
 | `D5532.md` | Measure production-shaped Worker startup and bind diagnostics to the release artifact. |
 | `D5501.md` | Gate production D1 and Worker publication on the exact verified main candidate. |
 | `D4710.md` | Mounted Delivery stale-edit/stale-send verification of merged revision handling; remaining 6/6 handoff scope. |
@@ -89,6 +91,8 @@ and citations by number keep working.
 | `D4836.md` | Offers programme-logo partial success/retry and safe failed-write recovery; remaining overlay work waits for #4844. |
 | `D5372.md` | Post-merge Codex review of #5113, #5140 and #4975: four deterministic findings with separate failing-test issues; programme-pricing controls clean. |
 | `D4818.md` | Prepared Portfolio v2 breakpoint/column rules, component contracts and interactive accessibility checklist; application hardening waits for #5311 PF-01 and the #4817 addendum. |
+| `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
+| `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
 - [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
 
@@ -96,4 +100,14 @@ and citations by number keep working.
 - [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
 
 - [D5675](D5675.md) — Isolated synthetic preview callback, normal promotion gate and urgent rollback handling (#5675).
+| `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
+| `D5666.md` | Observational session attribution and persistent PR/incident routing. |
+| `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
+| `D5664.md` | Independent signed metadata capture, immutable ledger and explicit source gaps. |
 | `D5665.md` | Durable itemized Slack delivery, destination registry and explicit receipts. |
+| `D5665-p2.md` | Preserve simultaneous head, tested, candidate, landed and deployment-target SHA roles in Slack records. |
+| `D5670.md` | Cloudflare source coverage, ownership and staged acceptance. |
+| `D5671.md` | Authenticated Cloudflare delivery and explicit route isolation. |
+| `D5672.md` | Existing platform signals and conservative incident attribution. |
+| `D5680.md` | Restricted operational security triage without public disclosure. |
+| `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
