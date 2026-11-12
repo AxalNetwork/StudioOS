@@ -55,7 +55,7 @@ function fixture(factory = createWorkspaceHost) {
 test('disabled pilot creates no provider resource; current policy, capacity and immutable image are mandatory', async () => {
   const f = fixture(); f.disabled(); refused(await f.create(), 'workspace_preview_disabled'); assert.equal(f.stats().starts, 0);
   for (const patch of [{ workload_class: 'coding_untrusted' }, { cpu: 2 }, { max_duration_s: 601 }, { checkpoint_manifest_ref: 'not-supported-yet' }]) {
-    const g = fixture(); refused(await g.host.create(specFixture(patch as any), 'executor.bootstrap')); assert.equal(g.stats().starts, 0);
+    const g = fixture(); refused(await g.host.create(specFixture({ workload_class: 'coding_trusted', ...patch } as any), 'executor.bootstrap')); assert.equal(g.stats().starts, 0);
   }
   const g = fixture(); g.caps.concurrency_max = null; refused(await g.create(), 'capability_denied'); assert.equal(g.stats().starts, 0);
   const h = fixture(); h.container.images.coding = 'registry.cloudflare.com/synthetic/coding@sha256:' + 'd'.repeat(64); refused(await h.create(), 'workspace_image_mismatch');
