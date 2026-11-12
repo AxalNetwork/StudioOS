@@ -19,7 +19,7 @@ import { publicPricingApi } from '../../lib/api/publicPricing';
 
 export const STEPS = (plan, lane) => [
   { key: 'account', title: 'Create your account', line: 'This is free. No payment is taken on this page.' },
-  { key: 'profile', title: 'Choose your profile', line: 'Plans belong to a profile: Founder, Investor, Advisor or Operating Partner. A plan can only be bought once your profile is chosen; until then Checkout asks you to choose it first. A new account is also reviewed before its workspace opens.' },
+  { key: 'profile', title: 'Membership review', line: 'The Axal team reviews your membership and enables your profile after you sign the agreement. You can buy a plan for that profile once it is enabled.' },
   plan
     ? { key: 'checkout', title: `Check out ${plan.name}`, line: plan.state === 'ready' ? `Payment starts only when you confirm on Stripe’s secure page, at the price Checkout shows then. ${plan.basis === 'billed every month' ? 'Charged each month.' : `Billed ${plan.basis.replace(/^.* billed /, '')}.`}` : 'Payment starts only when you confirm checkout.' }
     : { key: 'checkout', title: 'Pick a plan when you want one', line: 'Plans are optional. Payment starts only when you confirm checkout.' },

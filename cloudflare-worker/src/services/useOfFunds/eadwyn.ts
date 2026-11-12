@@ -1,5 +1,6 @@
 /** D1179: words over scoped records. No financial writer is imported here. */
 import type { Env } from '../../types';
+import { codeAmount } from '../../../../frontend/src/lib/money.js';
 import { planRead } from './read';
 import type { Scope } from './store';
 
@@ -11,11 +12,12 @@ export type ReadingItem = { text: string; citations: (Omit<ReadingSource, 'text'
 export type Material = { sources: ReadingSource[]; gaps: { label: string; state: string; reason: string }[] };
 const clean = (v: unknown) => typeof v === 'string' ? v.trim() : '';
 /** Source passages are readable words; internal row keys/IDs are not product copy. */
-function passage(value: any, currency = 'usd', key = ''): string {
+export function passage(value: any, currency = 'usd', key = ''): string {
   const label = (s: string) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_cents$|Cents$/,'').replaceAll('_',' ');
   if (value == null) return 'Not recorded';
-  if (typeof value === 'number') return /(?:_cents|Cents)$/.test(key)
-    ? `${currency.toUpperCase()} ${(value / 100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : String(value);
+  // D5373: a `*_cents` count is read at its currency's own decimals ("JPY 5,000", "KWD 1.250", "EUR 12,000.00"); a code the
+  // layer does not list names the stored count instead of a figure in a guessed currency.
+  if (typeof value === 'number') return /(?:_cents|Cents)$/.test(key) ? codeAmount(value, currency, { trimWhole: false }) ?? String(value) : String(value);
   if (typeof value !== 'object') return String(value);
   if (Array.isArray(value)) return value.length ? value.map(v => passage(v,currency,key)).join('\n') : 'None recorded';
   const money = typeof value.currency === 'string' ? value.currency : currency;

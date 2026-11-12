@@ -26,7 +26,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import Lightbox from '../../ui/Lightbox';
 import { Unreadable } from '../../ui';
 import { mailApi } from '../../lib/api/mail.js';
-import { draftChain, draftRowText, mailboxLine, MODULE_OF_KIND, networkCard, noPeopleState, peoplePane, quotedLine, recipientFor, sendingAccount, shareStatus, stateFor } from './emailModel.js';
+import { draftChain, draftRowText, mailboxLine, MODULE_OF_KIND, networkCard, noPeopleState, peoplePane, sentLine, recipientFor, sendingAccount, shareStatus, stateFor } from './emailModel.js';
 import { BODY, BTN, CARD, DANGER, ERROR, EYEBROW, H3, MUTED, PRIMARY, StateCard } from './emailParts.jsx';
 import ComposeSheet from './ComposeSheet.jsx';
 import ConnectPanel, { ConnectOutcome } from './ConnectPanel.jsx';
@@ -36,7 +36,7 @@ import { MessagesMovedNotice } from './MessagesRedirect.jsx';
 export default function EmailPage({ api = mailApi, userId }) {
   const { pathname } = useLocation();
   return <Frame><MessagesMovedNotice userId={userId}>{pathname.startsWith('/email/settings')
-    ? <EmailSettings api={api} /> : <EmailHome api={api} />}</MessagesMovedNotice></Frame>;
+    ? <EmailSettings api={api} /> : <EmailHome key={userId ?? 'current'} api={api} />}</MessagesMovedNotice></Frame>;
 }
 
 function Frame({ children }) {
@@ -159,18 +159,48 @@ function Person({ refId, api, account, shares, sharesRead, params, onCloseCompos
   const [failed, setFailed] = useState(null);
   const [off, setOff] = useState(new Set());
   const [sent, setSent] = useState(null);
+  const [sentRead, setSentRead] = useState('reading');
+  const sentSeq = useRef(0);
+  const draftSeq = useRef(0);
+  const contextSeq = useRef(0);
   const [drafts, setDrafts] = useState(null);
   const [composing, setComposing] = useState(params.get('compose') === '1');
   const [resume, setResume] = useState(null);
 
-  const load = useCallback(() => {
-    setFailed(null);
-    api.context(refId).then((p) => { setPack(p); setOff(new Set((p?.items ?? []).filter((i) => !i.selected).map((i) => i.ref))); })
-      .catch((e) => setFailed(e?.status === 404 ? 'not_found' : 'unreadable'));
-    api.sent(1, refId).then(setSent).catch(() => setSent(false));
-    api.drafts(refId).then((r) => setDrafts(r?.drafts ?? [])).catch(() => setDrafts(false));
+  // D4662: every refresh supersedes older pages. Cleanup also fences replies after a person/account switch.
+  const readSent = useCallback((page = 1) => {
+    const seq = ++sentSeq.current;
+    setSentRead('reading');
+    Promise.resolve().then(() => api.sent(page, refId)).then((r) => {
+      if (seq !== sentSeq.current) return;
+      setSent((old) => {
+        if (page === 1) return r;
+        const rows = new Map((old?.items ?? []).map((row) => [row.uid, row]));
+        for (const row of r.items) rows.set(row.uid, row);
+        return { ...r, items: [...rows.values()] };
+      });
+      setSentRead('ready');
+    }).catch(() => { if (seq === sentSeq.current) setSentRead('unreadable'); });
   }, [api, refId]);
-  useEffect(load, [load]);
+  const readDrafts = useCallback(() => {
+    const seq = ++draftSeq.current;
+    Promise.resolve().then(() => api.drafts(refId))
+      .then((r) => { if (seq === draftSeq.current) setDrafts(r?.drafts ?? []); })
+      .catch(() => { if (seq === draftSeq.current) setDrafts(false); });
+  }, [api, refId]);
+  const load = useCallback(() => {
+    const seq = ++contextSeq.current;
+    setFailed(null);
+    Promise.resolve().then(() => api.context(refId)).then((p) => {
+      if (seq !== contextSeq.current) return;
+      setPack(p); setOff(new Set((p?.items ?? []).filter((i) => !i.selected).map((i) => i.ref)));
+    }).catch((e) => { if (seq === contextSeq.current) setFailed(e?.status === 404 ? 'not_found' : 'unreadable'); });
+    readSent(); readDrafts();
+  }, [api, refId, readSent, readDrafts]);
+  useEffect(() => {
+    load();
+    return () => { sentSeq.current += 1; draftSeq.current += 1; contextSeq.current += 1; };
+  }, [load]);
 
   if (failed === 'not_found') return <div className="lg:col-span-2"><p className={`${CARD} ${BODY}`}>Record not found. It may have been removed, or it is not yours to read.</p></div>;
   if (failed) return <div className="lg:col-span-2"><Unreadable what="Unreadable: this person’s records" claim="Retry to read them." onRetry={load} /></div>;
@@ -187,7 +217,7 @@ function Person({ refId, api, account, shares, sharesRead, params, onCloseCompos
   const open = (uid) => { const chain = draftChain(drafts, uid); if (chain) { setResume(chain); setComposing(true); } };
   const closeComposer = () => {
     setComposing(false); setResume(null); onCloseCompose();
-    api.drafts(refId).then((r) => setDrafts(r?.drafts ?? [])).catch(() => setDrafts(false));
+    readDrafts();
   };
 
   return <>
@@ -199,7 +229,7 @@ function Person({ refId, api, account, shares, sharesRead, params, onCloseCompos
       </div>
       {person.kind === 'member' && <SharingCard sharing={sharing} name={person.name} api={api} onRetry={onRetryShares} onChanged={onShareChanged} />}
       {!to && person.kind !== 'member' && <StateCard state={stateFor('no_address', { name: person.name, module: MODULE_OF_KIND[person.kind] ?? 'their record' })} />}
-      <ThreadRows sent={sent} drafts={drafts} onOpen={open} />
+      <ThreadRows sent={sent} sentRead={sentRead} drafts={drafts} onOpen={open} onRetry={() => { readSent(); readDrafts(); }} onMore={() => readSent(sent.page + 1)} />
       {!account?.can_read && account && <p className={`text-[12px] ${MUTED}`}>Replies arrive in your mailbox, not here.</p>}
     </section>
 
@@ -216,27 +246,32 @@ function Person({ refId, api, account, shares, sharesRead, params, onCloseCompos
     </aside>
 
     {composing && !blocked && <ComposeSheet key={resume?.versions?.[resume.at]?.uid ?? 'new'} pack={pack} refs={refs} to={to} account={account} from={params.get('from')} api={api} resume={resume}
-      onClose={closeComposer} onSent={() => { setComposing(false); setResume(null); onSent(); }} />}
+      onClose={closeComposer} onSent={() => { setComposing(false); setResume(null); readSent(); readDrafts(); onSent(); }} />}
   </>;
 }
 
-function ThreadRows({ sent, drafts, onOpen }) {
-  if (sent === false || drafts === false) return <p className={ERROR} role="alert">What you sent this person could not be read. Try again.</p>;
-  if (sent === null || drafts === null) return <p className={MUTED}>Reading your emails…</p>;
-  if (!sent.items.length && !drafts.length) return <p className={BODY}>Nothing written to them yet.</p>;
-  return <ul className="flex flex-col gap-2">
-    {sent.items.map((r) => <li key={r.uid} className="rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-sent">
+function ThreadRows({ sent, sentRead, drafts, onOpen, onRetry, onMore }) {
+  const unreadable = sentRead === 'unreadable' || drafts === false;
+  return <>
+    {unreadable && <Unreadable what="Unreadable: this conversation’s history" claim="Retry to read the full history for this person." onRetry={onRetry} />}
+    {sentRead === 'reading' && <p className={MUTED} role="status">Reading your emails…</p>}
+    {sentRead === 'ready' && drafts !== null && drafts !== false && !sent?.items.length && !drafts.length && <p className={BODY}>Nothing written to them yet.</p>}
+    <ul className="flex flex-col gap-2">
+    {(sent?.items ?? []).map((r) => <li key={r.uid} className="rounded-axal-md border border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-sent">
       <div className="flex justify-between gap-2"><span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{r.subject}</span>
         <span className={`font-mono text-[11.5px] ${MUTED}`}>{String(r.sent_at ?? r.created_at ?? '').slice(0, 16).replace('T', ' · ')}</span></div>
-      <span className={`text-[12px] ${r.status === 'failed' ? 'text-red-700 dark:text-red-300' : MUTED}`}>{r.status === 'failed' ? `Not sent: ${r.error || 'the mail server refused it.'}` : quotedLine(r)}</span>
+      <span className={`text-[12px] ${r.status === 'failed' ? 'text-red-700 dark:text-red-300' : MUTED}`}>{sentLine(r)}</span>
     </li>)}
-    {drafts.map((d) => { const t = draftRowText(d); return <li key={d.uid} className="rounded-axal-md border border-dashed border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-draft">
+    {(Array.isArray(drafts) ? drafts : []).map((d) => { const t = draftRowText(d); return <li key={d.uid} className="rounded-axal-md border border-dashed border-axal-hairline p-3 dark:border-gray-700" data-testid="thread-draft">
       <span className={EYEBROW}>Draft · {String(d.created_at ?? '').slice(0, 10)}{t.edited ? ' · edited' : ''}</span>
       <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{t.subject}</p>
       <p className={`m-0 line-clamp-3 ${BODY}`}>{t.body}</p>
       <button type="button" className={`mt-2 ${BTN}`} onClick={() => onOpen?.(d.uid)} data-testid="thread-draft-open">Open draft</button>
     </li>; })}
-  </ul>;
+    </ul>
+    {sent && <p className={`text-[12px] ${MUTED}`} data-testid="thread-history-count">Showing {sent.items.length} of {sent.total} recorded sends{sentRead === 'unreadable' ? ' · history could not be refreshed' : ''}.</p>}
+    {sent && sent.page * sent.per_page < sent.total && <button type="button" className={BTN} disabled={sentRead === 'reading'} onClick={onMore} data-testid="thread-history-more">Load older emails</button>}
+  </>;
 }
 
 /** D4664 (finding 10): the thread's address line for a Network match, by what the shares read established. */

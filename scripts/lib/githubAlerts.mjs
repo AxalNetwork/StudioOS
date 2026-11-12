@@ -127,7 +127,7 @@ export function message(kind, action, facts = {}) {
     return `:warning: *Merge queue stalled.* Two different queue commits failed during ${facts.fingerprint}.${run}${issue}\nPause new queue entries until a queue CI run passes (D5604).`;
   }
   if (kind === 'future-clock') {
-    const text = facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
+    const text = Number.isSafeInteger(facts.failedCount) ? `:alarm_clock: *${facts.failedCount} verified test failures with the clock ${facts.days} days ahead.*${run}` : facts.failures?.names?.length ? futureClockMessage(facts) : `:alarm_clock: *Tests fail with the clock moved ahead.*${run}`;
     return `${text}${issue}`;
   }
   return '';

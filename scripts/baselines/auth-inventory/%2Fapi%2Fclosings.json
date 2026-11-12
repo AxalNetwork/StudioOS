@@ -1,0 +1,12 @@
+{
+  "GET /api/closings/company-receiving-accounts/:projectId": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "POST /api/closings/company-receiving-accounts/:projectId/reveal": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  }
+}

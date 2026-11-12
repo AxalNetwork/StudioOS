@@ -391,7 +391,7 @@ export function classify(route) {
 /**
  * The inventory: each route with its family (the path's first two segments),
  * method, path, file, line, gate, evidence, whether it writes, and why it needs
- * review (null when it does not). scripts/auth-inventory-ledger.json records
+ * review (null when it does not). scripts/baselines/auth-inventory/ records
  * what a person found for each route that needs review.
  */
 export function inventory(root) {

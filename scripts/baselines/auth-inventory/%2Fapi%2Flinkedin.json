@@ -1,0 +1,12 @@
+{
+  "GET /api/linkedin/imports/:uid": {
+    "review": "record_without_ownership_check",
+    "kind": "unclassified",
+    "state": "unreviewed"
+  },
+  "GET /api/linkedin/oauth/callback": {
+    "review": "no_gate_found",
+    "kind": "oauth_callback",
+    "state": "unreviewed"
+  }
+}

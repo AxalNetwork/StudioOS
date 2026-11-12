@@ -18,7 +18,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
-import { HOME_PATH, dollars, pct, shares, tabSearch } from './capTableModel';
+import { HOME_PATH, dollars, pct, shares, sourceCurrency, symbolOf, tabSearch } from './capTableModel';
 import { userFacingRaiseError, raiseValidationErrors } from '../../../lib/raiseErrors.js';
 
 export { foundersAfter, scenarioCard, scenarioCards } from './capTableModel';
@@ -346,14 +346,14 @@ const dayLabel = (v) => {
  * recorded, its foot saying why; nothing priced on record reads Not recorded
  * with that reason. Never 0, and never a wait: the figure is read.
  */
-export function todayPrice(read, onRecord = true) {
+export function todayPrice(read, onRecord = true, currency = 'USD') {
   if (!onRecord) return { text: NOT_RECORDED, note: null };
   if (!read || read.status === 'loading') return { text: 'Reading…', note: null };
   if (read.status !== 'ready') return { text: 'Could not be read', note: null };
   const t = read.data?.today;
   const p = t?.price;
   if (p && Number.isSafeInteger(p.micros) && p.micros > 0) {
-    return { text: `$${(p.micros / 1e6).toFixed(4)}`, note: ['On record', p.instrument, dayLabel(p.as_of)].filter(Boolean).join(' · ') };
+    return { text: `${symbolOf(currency)}${(p.micros / 1e6).toFixed(4)}`, note: ['On record', p.instrument, dayLabel(p.as_of)].filter(Boolean).join(' · ') };
   }
   return { text: NOT_RECORDED, note: t?.price_sentence || NO_PRICE };
 }
@@ -363,7 +363,7 @@ export function todayPrice(read, onRecord = true) {
  * the record for a scenario from Today, its own typed founders otherwise.
  * A group with no holder on either side is left out, never drawn as 0%.
  */
-export function beforeAfter(result, price = null) {
+export function beforeAfter(result, price = null, currency = 'USD') {
   const before = result?.founding;
   const after = lastLedger(result);
   const rows = [];
@@ -383,15 +383,15 @@ export function beforeAfter(result, price = null) {
   }
   const rounds = Array.isArray(result?.rounds) ? result.rounds : [];
   const last = rounds[rounds.length - 1];
-  rows.push({ key: 'price', label: 'Price per share', group: false, before: price?.text ?? NOT_RECORDED, note: price?.note ?? null, after: last ? `$${last.price_per_share.toFixed(4)}` : 'No round modelled', change: '—' });
-  rows.push({ key: 'post', label: 'Post-money', group: false, before: 'No round modelled', after: last ? dollars(last.post_money) : 'No round modelled', change: '—' });
+  rows.push({ key: 'price', label: 'Price per share', group: false, before: price?.text ?? NOT_RECORDED, note: price?.note ?? null, after: last ? `${symbolOf(currency)}${last.price_per_share.toFixed(4)}` : 'No round modelled', change: '—' });
+  rows.push({ key: 'post', label: 'Post-money', group: false, before: 'No round modelled', after: last ? dollars(last.post_money, currency) : 'No round modelled', change: '—' });
   return rows;
 }
 
 const BINDING = { cap: 'at the cap', discount: 'at the discount', none: 'at the round price' };
 
 /** What happens in each round (CT6), in plain words from the engine's numbers. */
-export function roundEvents(result) {
+export function roundEvents(result, currency = 'USD') {
   const rounds = Array.isArray(result?.rounds) ? result.rounds : [];
   return rounds.map((r, k) => {
     const prev = k ? rounds[k - 1].ledger : result?.founding || [];
@@ -403,9 +403,9 @@ export function roundEvents(result) {
       lines.push(`Option pool topped up by ${shares(r.top_up.shares)} shares, paid by ${r.top_up.payer === 'post_money' ? 'everyone, the new investors included' : 'the holders before the round'}`);
     }
     for (const c of r.conversions || []) {
-      lines.push(`${c.instrument === 'note' ? 'Note' : 'SAFE'} ${c.name} converts ${BINDING[c.binding] || BINDING.none}: ${shares(c.shares)} shares at $${c.price_per_share.toFixed(4)}`);
+      lines.push(`${c.instrument === 'note' ? 'Note' : 'SAFE'} ${c.name} converts ${BINDING[c.binding] || BINDING.none}: ${shares(c.shares)} shares at ${symbolOf(currency)}${c.price_per_share.toFixed(4)}`);
     }
-    if (now - before > 0) lines.push(`New money: ${shares(now - before)} ${r.name} preferred at $${r.price_per_share.toFixed(4)} for ${dollars(r.investment)}`);
+    if (now - before > 0) lines.push(`New money: ${shares(now - before)} ${r.name} preferred at ${symbolOf(currency)}${r.price_per_share.toFixed(4)} for ${dollars(r.investment, currency)}`);
     return { round: r.name, lines };
   });
 }
@@ -424,14 +424,15 @@ export const notModelled = (read) => (Array.isArray(read?.not_modelled) ? read.n
 
 // ─────────────────────────────────────────────────────────── the waterfall (CT9)
 
-/** "$29.07M" or "$950K", for chart labels; the tables keep whole dollars. */
-export function short(v) {
+/** "$29.07M" or "$950K", for chart labels; the tables keep whole major units. D5373: "EUR 29.07M" for any currency but USD. */
+export function short(v, currency = 'USD') {
   if (!isNum(v)) return NOT_RECORDED;
   const a = Math.abs(v);
-  if (a >= 1e9) return `$${+(v / 1e9).toFixed(2)}B`;
-  if (a >= 1e6) return `$${+(v / 1e6).toFixed(2)}M`;
-  if (a >= 1e3) return `$${+(v / 1e3).toFixed(1)}K`;
-  return `$${Math.round(v)}`;
+  const m = symbolOf(currency);
+  if (a >= 1e9) return `${m}${+(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `${m}${+(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `${m}${+(v / 1e3).toFixed(1)}K`;
+  return `${m}${Math.round(v)}`;
 }
 
 /** Each exit's waterfall, in order: `waterfalls`, else the single `waterfall`. */
@@ -449,7 +450,7 @@ const TAKES = {
 };
 
 /** One exit's waterfall as CT9's table: who takes the preference or converts, and the payout. */
-export function waterfallTable(wf, ledger) {
+export function waterfallTable(wf, ledger, currency = 'USD') {
   if (!wf) return null;
   const rows = (wf.rows || []).map((r) => {
     const g = groupOf(r.type);
@@ -457,16 +458,16 @@ export function waterfallTable(wf, ledger) {
     return {
       holder: r.holder,
       group: g.label,
-      preference: prefd ? `1× · ${dollars(r.preference)}` : r.type === 'options' ? 'None · options' : 'None · common',
+      preference: prefd ? `1× · ${dollars(r.preference, currency)}` : r.type === 'options' ? 'None · options' : 'None · common',
       takes: r.type === 'options' ? 'Exercise and take common' : TAKES[r.source] || r.source || NOT_RECORDED,
-      payout: dollars(r.payout),
+      payout: dollars(r.payout, currency),
     };
   });
   if ((ledger || []).some((h) => h?.type === 'option_pool' && h.shares > 0)) rows.push({ holder: 'Unallocated pool', group: 'Pool', preference: '—', takes: 'Takes no proceeds', payout: '—' });
   const total = wf.totals?.total_distributed;
   const foot = isNum(total) && Math.abs(total - wf.exit_value) < 0.01
-    ? `Payouts add up to the ${dollars(wf.exit_value)} exit.`
-    : `Payouts add up to ${dollars(total)} of the ${dollars(wf.exit_value)} exit.`;
+    ? `Payouts add up to the ${dollars(wf.exit_value, currency)} exit.`
+    : `Payouts add up to ${dollars(total, currency)} of the ${dollars(wf.exit_value, currency)} exit.`;
   return { exit: wf.exit_value, rows, foot };
 }
 
@@ -504,15 +505,15 @@ export function conversionPoints(wf) {
  * from the engine's numbers. No figure is written here that the engine did
  * not return; Eadwyn's own band reads the saved model (`raise/capital`).
  */
-export function roundReadBack(result) {
+export function roundReadBack(result, currency = 'USD') {
   const r = result?.rounds?.[0];
   if (!r) return null;
   const steps = [];
-  const price = `$${r.price_per_share.toFixed(4)}`;
-  steps.push(`Price: ${price} a share, the pre-money of ${dollars(r.pre_money)} spread over the ${shares(r.shares_pre)} shares before the round.`);
+  const price = `${symbolOf(currency)}${r.price_per_share.toFixed(4)}`;
+  steps.push(`Price: ${price} a share, the pre-money of ${dollars(r.pre_money, currency)} spread over the ${shares(r.shares_pre)} shares before the round.`);
   const label = `${r.name} Investors`;
   const bought = (r.ledger || []).filter((h) => h.holder === label).reduce((t, h) => t + h.shares, 0);
-  if (bought > 0) steps.push(`New money: ${dollars(r.investment)} at ${price} buys ${shares(bought)} new ${r.name} preferred.`);
+  if (bought > 0) steps.push(`New money: ${dollars(r.investment, currency)} at ${price} buys ${shares(bought)} new ${r.name} preferred.`);
   if (r.top_up?.shares > 0) {
     const pool = (r.ledger || []).filter((h) => h.type === 'option_pool').reduce((t, h) => t + (isNum(h.pct) ? h.pct : 0), 0);
     steps.push(r.top_up.payer === 'post_money'
@@ -529,7 +530,7 @@ export function roundReadBack(result) {
 }
 
 /** "Explain the order of payment" (CT9) at one exit, from that exit's waterfall. */
-export function paymentReadBack(wf) {
+export function paymentReadBack(wf, currency = 'USD') {
   if (!wf) return null;
   const { paidInFull, points } = conversionPoints(wf);
   const steps = [];
@@ -537,24 +538,24 @@ export function paymentReadBack(wf) {
   const cash = rows.filter((r) => r.source === 'purchase amount (SAFE liquidity)');
   if (cash.length || rows.some((r) => r.source === 'as-converted (SAFE liquidity)')) {
     steps.push('No round has priced the company yet, so each SAFE takes the more of its money back or what it would hold at its cap.');
-    if (cash.length) steps.push(`At a ${dollars(wf.exit_value)} exit, ${cash.map((r) => r.holder).join(', ')} take${cash.length === 1 ? 's' : ''} cash back: ${dollars(cash.reduce((t, r) => t + r.payout, 0))} in all.`);
-    else steps.push(`At a ${dollars(wf.exit_value)} exit every SAFE converts at its cap.`);
+    if (cash.length) steps.push(`At a ${dollars(wf.exit_value, currency)} exit, ${cash.map((r) => r.holder).join(', ')} take${cash.length === 1 ? 's' : ''} cash back: ${dollars(cash.reduce((t, r) => t + r.payout, 0), currency)} in all.`);
+    else steps.push(`At a ${dollars(wf.exit_value, currency)} exit every SAFE converts at its cap.`);
     steps.push('What is left is shared by ownership, leaving out the unallocated pool.');
     return { kind: 'payment', title: 'Explain the order of payment', steps };
   }
   if (paidInFull == null) {
-    steps.push(`No holder has a preference, so a ${dollars(wf.exit_value)} exit is shared by ownership, leaving out the unallocated pool.`);
+    steps.push(`No holder has a preference, so a ${dollars(wf.exit_value, currency)} exit is shared by ownership, leaving out the unallocated pool.`);
     return { kind: 'payment', title: 'Explain the order of payment', steps };
   }
-  steps.push(`First, each investor may take back what it put in: ${dollars(paidInFull)} in all, 1× and non-participating.`);
+  steps.push(`First, each investor may take back what it put in: ${dollars(paidInFull, currency)} in all, 1× and non-participating.`);
   const last = points[points.length - 1];
-  if (points.length > 1) steps.push(`Above ${short(points[0].at)}, ${points[0].holder} does better converting to common. Above ${short(last.at)}, every investor does.`);
-  else if (last) steps.push(`Above ${short(last.at)}, ${last.holder} does better converting to common.`);
+  if (points.length > 1) steps.push(`Above ${short(points[0].at, currency)}, ${points[0].holder} does better converting to common. Above ${short(last.at, currency)}, every investor does.`);
+  else if (last) steps.push(`Above ${short(last.at, currency)}, ${last.holder} does better converting to common.`);
   const taking = rows.filter((r) => r.source === '1x non-participating preference');
   steps.push(taking.length
-    ? `At a ${dollars(wf.exit_value)} exit, ${taking.map((r) => r.holder).join(', ')} take${taking.length === 1 ? 's' : ''} the preference; the rest is shared by ownership, leaving out the unallocated pool.`
-    : `At a ${dollars(wf.exit_value)} exit everyone converts, so the exit is shared by ownership, leaving out the unallocated pool.`);
-  if (last) steps.push(`Nothing records a seniority order between the investors. Above ${short(last.at)} it does not matter; below it, check the charter.`);
+    ? `At a ${dollars(wf.exit_value, currency)} exit, ${taking.map((r) => r.holder).join(', ')} take${taking.length === 1 ? 's' : ''} the preference; the rest is shared by ownership, leaving out the unallocated pool.`
+    : `At a ${dollars(wf.exit_value, currency)} exit everyone converts, so the exit is shared by ownership, leaving out the unallocated pool.`);
+  if (last) steps.push(`Nothing records a seniority order between the investors. Above ${short(last.at, currency)} it does not matter; below it, check the charter.`);
   return { kind: 'payment', title: 'Explain the order of payment', steps };
 }
 
@@ -581,8 +582,9 @@ export function compareExits(scenarios) {
  * `cols` are `{ name, result | null, status }`; a column whose run failed
  * says so in every row rather than drawing a figure.
  */
-export function compareRows(today, cols, price = null) {
-  const series = [{ result: today, today: true }, ...cols.map((c) => ({ result: c.result, status: c.status }))];
+export function compareRows(today, cols, price = null, currency = 'USD') {
+  // D5497: Today is the record (its currency); a column is in the record's currency only when it starts from Today, else USD.
+  const series = [{ result: today, today: true, code: sourceCurrency(true, currency) }, ...cols.map((c) => ({ result: c.result, status: c.status, code: sourceCurrency(!!c.fromToday, currency) }))];
   const cell = (s, fn) => (s.status && s.status !== 'ready' ? (s.status === 'loading' ? 'Reading…' : 'Could not be read') : s.result ? fn(s.result, s.today) : NOT_RECORDED);
   const groupPct = (types) => (r, isToday) => {
     const l = isToday ? r.founding : lastLedger(r) || r.founding;
@@ -601,8 +603,8 @@ export function compareRows(today, cols, price = null) {
   }
   for (const g of GROUPS.slice(1)) rows.push({ label: g.label, bold: true, cells: series.map((s) => cell(s, groupPct(g.types))) });
   const lastRound = (r) => (r.rounds || [])[(r.rounds || []).length - 1];
-  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? price?.text ?? NOT_RECORDED : lastRound(r) ? `$${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
-  rows.push({ label: 'Post-money', cells: series.map((s) => cell(s, (r, isToday) => (isToday || !lastRound(r) ? 'No round modelled' : dollars(lastRound(r).post_money)))) });
+  rows.push({ label: 'Price per share', cells: series.map((s) => cell(s, (r, isToday) => (isToday ? price?.text ?? NOT_RECORDED : lastRound(r) ? `${symbolOf(s.code)}${lastRound(r).price_per_share.toFixed(4)}` : 'No round modelled'))) });
+  rows.push({ label: 'Post-money', cells: series.map((s) => cell(s, (r, isToday) => (isToday || !lastRound(r) ? 'No round modelled' : dollars(lastRound(r).post_money, s.code)))) });
   for (const n of instruments) {
     rows.push({ label: `${n} · shares`, cells: series.map((s) => cell(s, (r, isToday) => {
       if (isToday) return NOT_CONVERTED;
@@ -639,17 +641,19 @@ export function founderPanels(cols) {
 }
 
 /** The exit waterfall across scenarios (CT7): one panel per exit, a stacked bar per scenario. */
-export function exitPanels(cols, exits) {
+export function exitPanels(cols, exits, currency = 'USD') {
   return exits.map((exit) => ({
     exit,
     rows: cols.map((c) => {
       const wf = waterfallsOf(c.result).find((w) => w.exit === exit)?.wf || null;
       const by = payoutByGroup(wf);
-      if (!by) return { label: c.short, value: 0, open: true, text: NOT_RECORDED, by: null };
+      const code = sourceCurrency(!!c.fromToday, currency);
+      if (!by) return { label: c.short, value: 0, open: true, text: NOT_RECORDED, by: null, currency: code };
       return {
         label: c.short,
+        currency: code,
         value: by.founders + by.investors + by.people,
-        text: `F ${short(by.founders)}`,
+        text: `F ${short(by.founders, code)}`,
         parts: [{ value: by.founders, tone: 'violet' }, { value: by.investors, tone: 'sky' }, { value: by.people, tone: 'muted' }],
         by,
       };
@@ -682,11 +686,12 @@ export function swipeCards(rows, cols) {
  * exit, and what founders, investors and employees take. An exit the engine
  * did not calculate says so in every cell, never $0.
  */
-export function exitTable(col, exits) {
+export function exitTable(col, exits, currency = 'USD') {
   const head = ['Exit', ...GROUPS.slice(0, 3).map((g) => g.label)];
+  const code = sourceCurrency(!!col?.fromToday, currency);
   const rows = exits.map((exit) => {
     const by = payoutByGroup(waterfallsOf(col?.result).find((w) => w.exit === exit)?.wf || null);
-    return { exit, cells: [dollars(exit), ...(by ? [by.founders, by.investors, by.people].map(dollars) : [NOT_RECORDED, NOT_RECORDED, NOT_RECORDED])] };
+    return { exit, cells: [dollars(exit, code), ...(by ? [by.founders, by.investors, by.people].map((v) => dollars(v, code)) : [NOT_RECORDED, NOT_RECORDED, NOT_RECORDED])] };
   });
   return { head, rows };
 }

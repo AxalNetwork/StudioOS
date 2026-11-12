@@ -37,6 +37,7 @@ also exercises a `project_id` deep link.
 | `learning_studio_stream_copy_integration_4742.test.mjs` | #4742: Copy to Stream wired into the Studio (button, banner, refusal in the route's own words, never `e.message`), a verified `stream_uid` drawing "Stream · Ready", and MemberProgram's Join reading only the route's structured refusal. |
 | `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
 | `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
+| `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
 
 ## Conventions
 
@@ -167,6 +168,7 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `dashboard_lazy_panels_d4574.test.mjs` | D4574 (#4574 H6): the Studio radar and Product testing panels mount through their lazy boundaries, the imports stay dynamic, and `/studio` keeps its route and mounts. |
 | `cycle_route_lazy_steps_d4574.test.mjs` | D4574 (#4574 H5): `lazyStep` draws its skeleton then the step, a failed chunk reaches the error boundary as a chunk error, every lazy step is a dynamic import of a module that still exports it, and the cycle routes and render sites are unchanged. |
 | `_cycleSteps.mjs` | D4574 (#4574 H5): loads every module CycleRoute names through `lazyStep` (read from its source) before a suite mounts CycleRoute, so a fixed-tick settle sees the step as the browser does once its chunk has arrived. |
+| `hub_freeze_5615.test.mjs` | D5615: every name in the five hub files is on `scripts/hub-freeze.json`; a new `api` key, `app.route(…)`, import or advisors registration fails naming the entry and its `HUBS.md` section; a removal passes with no list edit; `CycleRoute.jsx` holds no cycle entry. |
 
 - `network_reads_d4464.test.mjs` — Network book filter query arguments and the relationship summary client (#4464).
 
@@ -179,3 +181,12 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 `venture_context_5074.test.mjs` checks D5074: every venture alias resolves to one context, the one `?project_id=` form, legacy redirects keeping the query and hash, the Data room on the shared context only, and its controls drawn from the Worker's capabilities. `_data_room_capabilities.mjs` holds those capability maps for fixtures; the Worker's `data_room_capabilities_5074.test.ts` pins them to `cloudflare-worker/src/services/dataRoomCapabilities.ts`.
 
 `raise_refused_no_data_5079.test.mjs` checks D5079: a refused authoritative read ends the rendering of authoritative data for that Raise tool. It mounts the real `CycleRoute` on a stubbed Worker whose module read succeeds while the tool's own read answers 403, and pins that the Cap table, Data room and Capital relationships pages then draw the tool's refusal and none of the module's card, records, Add, counts, Eadwyn bands or Evidence block — while an empty read still draws all of them, a 500 is still a failure and not a refusal, a Data room `summary` answer says it is not the room rather than drawing nothing, Capital relationships no longer calls a refusal unreadable, and the Cap table withholds its tool bar and Record an issuance and offers an admin the reason-gated door. Each guarded line is broken on disk and the file re-run in a child process filtered to the tests that must then fail, because the refusal travels from a tool's read through `CycleRoute` into the module page.
+
+`pipeline_accessibility_4705.test.mjs` checks native studio deal entry, shared creation-sheet semantics, associated fields, fixed failure copy, retained drafts and a synthetic API-call baseline (D4705).
+`delivery_stale_writes_4710.test.mjs` mounts all four Delivery zones through stale-edit refusals, preserving drafts and revision-aware retries; a stale Mark sent never claims success or retries on reload (D4710).
+| `offers_logos_4836.test.mjs` | D4836: programme persistence, original-target logo-only retry/removal, refresh failure, overlapping/late operations, file associations and focus recovery. |
+
+| `notification_routing_5666.test.mjs` | D5666: lifecycle, shared incidents, claim ambiguity, required-check cutover and SQLite rollback/replay. |
+| `health_alert_repair_5663.test.mjs` | D5663: health episode concurrency, crash/retry and future-clock evidence regressions. |
+| `engineering_events_5664.test.mjs` | D5664: signed metadata ingress, immutable attempts, capped REST reconciliation and Workers SQLite restart. |
+| `engineering_slack_5665.test.mjs` | D5665: fake Slack busy lifecycle, item receipts, privacy, pacing, retry and Workers restart. |
