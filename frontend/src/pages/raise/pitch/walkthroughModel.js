@@ -12,6 +12,7 @@
 import { presentHref } from './presentExportModel.js';
 import { aiTokens, refusalOf } from './newDeckModel.js';
 import { clock } from './rehearseModel.js';
+import { NOT_RECORDED } from '../../../lib/absence.js';
 
 export { clock };
 
@@ -19,7 +20,8 @@ export const RECORD = 'Record';
 export const RECORD_TITLE = 'Record a pitch';
 /** pd36's line under Attach. Owner decision W = A: a take is kept until its maker deletes it. */
 export const STORED = 'Stored with your deck; delete it any time.';
-export const NOT_RECORDED = 'Not recorded';
+// The one definition (absence_helpers_single_definition): imported, never re-declared.
+export { NOT_RECORDED };
 export const RECORDING = 'Recording';
 export const READING = 'Reading your walkthrough…';
 export const UNREADABLE = 'Your walkthrough could not be read.';
