@@ -79,6 +79,13 @@ const MOVED = {
   '/admin?tab=personas': '/admin/persona-segments',
 };
 for (const list of [PLATFORM, CONTENT]) for (const p of list) if (MOVED[p[1]]) p[1] = MOVED[p[1]];
+// D4860 part 5 (#4860, findings 12 and 13) — the same fifteen, grouped by
+// domain in the overview's Detailed consoles order: Overview, then
+// Infrastructure, Payments, AI, Integrations, Controls and Product.
+const DOMAIN_ORDER = ['Overview', 'Monitoring', 'Topology', 'Storage', 'Meeting bots', 'Payments', 'Bank accounts', 'Promo codes',
+  'AI allowances', 'AI usage', 'Scoring', 'Telegram', 'Switches', 'Product testing', 'Decks'];
+assert.deepEqual([...PLATFORM.map(([l]) => l)].sort(), [...DOMAIN_ORDER].sort(), 'the regrouping added or dropped an item');
+PLATFORM.sort((a, b) => DOMAIN_ORDER.indexOf(a[0]) - DOMAIN_ORDER.indexOf(b[0]));
 // D981 (#2376) — #2375's Licences strip: the ledger and Program grants.
 const LICENCES = [['Ledger', '/admin/licences'], ['Program access by licence', '/admin/licences/programs']];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
