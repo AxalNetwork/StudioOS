@@ -66,6 +66,8 @@ import { Coverage } from './licences/Coverage';
 import { Detail } from './licences/LicenceDetail';
 import { CountsAndNeeds, LedgerTable } from './licences/LedgerTable';
 import { CoverageLine, LedgerZero, SeatUtilisation } from './licences/LedgerZero';
+import { FamilyChips, RegistryLedger } from './licences/RegistryLedger';
+import { familyFromParam, familyToParam } from './licenceRegistryModel';
 
 // #4707 — re-exported for the tests and pages that import it from here.
 export { TerritoryEditor } from './licences/TerritoryEditor';
@@ -115,6 +117,13 @@ export default function AdminLicences() {
     }, { replace });
   }, [setParams]);
   const setKindFilter = (k) => setParam({ kind: k });
+  // D5060 (#5060, part 3) — the licence family (board L36). Operator / territory is this ledger; All and the four
+  // user families are the registry (`licences/RegistryLedger.jsx`). `?holder=` narrows the registry to one holder.
+  const family = familyFromParam(params.get('family'));
+  const holderParam = params.get('holder');
+  const [holderName, setHolderName] = useState(null);
+  const [familyCounts, setFamilyCounts] = useState(null);
+  const setFamily = (k) => setParam({ family: familyToParam(k), holder: null });
   // D4819 — the status filter runs on the server (`?status=`); the Needs HQ
   // items filter the loaded rows (`?needs=`). Both are in the URL, so a
   // filtered ledger is a link.
@@ -295,9 +304,38 @@ export default function AdminLicences() {
   }
 
 
-  if (!data) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
   // D775 (#2101): H1 drew no rail. Licences is HQ-only (`hqOnly`), so the rail is HQ's.
   const rail = <WorkerRail workspace="Licences" role="super_admin" note="Eadwyn reads the licence ledger on this page and changes nothing in it." data-testid="hq-licences-rail" />;
+  // D5060 — every family but Operator / territory is the registry, which this page's own reads do not feed.
+  const familyChips = <FamilyChips family={family} counts={familyCounts} onChange={setFamily} />;
+  if (family !== 'operator' && !wanted) {
+    return (
+      <RailFrame rail={rail} data-testid="hq-licences-page">
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <header>
+            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Licences</h1>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">HQ’s record of every licence family: operator and territory licences, and the Founder, Investor, Operating Partner and Advisor licences held by people and entities.</p>
+          </header>
+          {familyChips}
+          <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="registry-tools">
+            <input
+              type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search licences or holders" aria-label="Search licences or holders" data-testid="registry-search"
+              className="min-h-[32px] w-full max-w-sm rounded-md border border-gray-300 px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <RegistryLedger
+            family={family} query={search}
+            holder={holderParam ? { param: holderParam, name: holderName } : null}
+            onHolder={(param, name) => { setHolderName(name); setParam({ holder: param }); }}
+            onClearHolder={() => { setHolderName(null); setParam({ holder: null }); }}
+            onCounts={setFamilyCounts}
+          />
+        </div>
+      </RailFrame>
+    );
+  }
+  if (!data) return <div className="p-6 text-sm text-gray-500">Loading…</div>;
   // D4819 — one title. The HQ strip above already says Licences › Ledger, so
   // the old "Territory licences" heading repeated it.
   const title = <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Licences</h1>;
@@ -430,6 +468,7 @@ export default function AdminLicences() {
           </button>
         </header>
         {createForm}
+        {familyChips}
         {notFound && (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="licence-not-found">
             That licence is not in the ledger.
@@ -469,6 +508,7 @@ export default function AdminLicences() {
         </div>
       </header>
       {createForm}
+      {familyChips}
       {notFound && (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" data-testid="licence-not-found">
           That licence is not in the ledger, or the search, kind or status shown hides it.
