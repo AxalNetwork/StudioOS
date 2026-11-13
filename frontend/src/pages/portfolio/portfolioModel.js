@@ -16,7 +16,7 @@
  * with the reason. Where it failed, "Unreadable". A measured zero stays 0.
  */
 
-import { NOT_RECORDED } from '../../lib/absence';
+import { NOT_RECORDED, titleCase } from '../../lib/absence';
 
 export { NOT_RECORDED };
 export const UNREADABLE = 'Unreadable';
@@ -88,6 +88,7 @@ export const SHAPES = {
   updates: (v) => Array.isArray(v.items),
   support: (v) => 'totals' in v,
   compliance: (v) => Array.isArray(v.companies),
+  chases: (v) => Array.isArray(v.items),
 };
 
 /* ------------------------------------------------------------- performance */
@@ -851,4 +852,184 @@ export function cohortsOf(positions) {
     atCost: c.atCost,
   }));
   return { state: 'ok', rows, undated };
+}
+
+/* ------------------------------------------------------- reports (PF-04) */
+
+const QUARTER_LABEL = /^(\d{4})-Q([1-4])$/;
+const MONTH_LABEL = /^(\d{4})-(0[1-9]|1[0-2])$/;
+
+/** A stored period as people say it: `2026-Q3` → Q3 2026, `2026-09` → Sep 2026; anything else as stored, null when none. */
+export function periodName(label) {
+  const s = String(label ?? '').trim();
+  let m = QUARTER_LABEL.exec(s);
+  if (m) return `Q${m[2]} ${m[1]}`;
+  m = MONTH_LABEL.exec(s);
+  if (m) return `${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
+  return s || null;
+}
+
+/**
+ * Whether an update's stored period speaks for the obligation's period, by
+ * the Worker's own rule (`periodCounts`, D1057): the same label, or, at the
+ * quarterly cadence, a month inside the quarter.
+ */
+export function periodCovers(cadence, period, stored) {
+  const due = String(period ?? '').trim();
+  const s = String(stored ?? '').trim();
+  if (!due || !s) return false;
+  if (cadence === 'monthly') return MONTH_LABEL.test(s) && s === due;
+  if (s === due) return QUARTER_LABEL.test(s);
+  const m = MONTH_LABEL.exec(s);
+  return Boolean(m) && `${m[1]}-Q${Math.floor((Number(m[2]) - 1) / 3) + 1}` === due;
+}
+
+/** Why an obligation shows no due date: the cadence read records none, so no overdue days are counted. */
+export const NO_DUE_DATE = 'The reporting cadence records no due date for this period, so no days overdue are counted.';
+
+const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+const keyWords = (key) => titleCase(key) || NOT_RECORDED;
+
+/** The required KPIs of the set. `required` is an integer: 1 required, 0 optional, NULL unrecorded (neither). */
+export function requiredKpisOf(kpiSet) {
+  return (Array.isArray(kpiSet) ? kpiSet : []).filter((r) => r && r.required != null && Number(r.required) === 1);
+}
+
+/** Each required KPI against one update: `{ key, name, carried }`. A key present with a blank value is not carried. */
+export function requiredAgainst(kpiSet, update) {
+  const kpis = update?.kpis && typeof update.kpis === 'object' ? update.kpis : {};
+  return requiredKpisOf(kpiSet).map((r) => ({ key: r.kpi_key, name: r.name || keyWords(r.kpi_key), carried: !blank(kpis[r.kpi_key]) }));
+}
+
+/**
+ * What is missing for one obligation: `{ state, text }`, state 'ok',
+ * 'missing', 'not_measured', 'unreadable' or 'loading'. The required set is
+ * measured only against an update that speaks for the period: a newer or an
+ * older one is not read as this period's.
+ */
+export function missingFor(reporting, update, compliance, updates) {
+  if (reporting.state === 'loading' || updates.state === 'loading') return { state: 'loading' };
+  if (reporting.state === 'Unreadable') return { state: 'unreadable', text: UNREADABLE };
+  const period = periodName(reporting.period);
+  if (reporting.state === 'Not received' || reporting.state === 'Due') {
+    return { state: 'missing', text: `The ${period || 'period'} update` };
+  }
+  if (reporting.state !== 'Received') return { state: 'not_measured', text: NOT_RECORDED };
+  if (updates.state !== 'ok') return { state: 'unreadable', text: UNREADABLE };
+  const c = compliance.value;
+  if (!update || !periodCovers(c.cadence, reporting.period, update.period)) {
+    return { state: 'not_measured', text: `Not measured: the latest update readable here is ${update?.period ? `for ${periodName(update.period)}` : 'for no stated period'}` };
+  }
+  const required = requiredAgainst(c.kpi_set, update);
+  if (!required.length) return { state: 'ok', text: 'No KPI is required at this cadence' };
+  const gone = required.filter((r) => !r.carried);
+  if (!gone.length) return { state: 'ok', text: 'No required KPI missing' };
+  return { state: 'missing', text: gone.length === required.length ? `All ${required.length} required KPIs` : gone.map((r) => r.name).join(', ') };
+}
+
+/** One company's chases from the chase log, newest first: `{ state, date, count, items }`. */
+export function lastChaseOf(projectId, chases) {
+  if (chases.state === 'loading') return { state: 'loading' };
+  if (chases.state !== 'ok') return { state: 'unreadable' };
+  const mine = chases.value.items.filter((x) => Number(x.project_id) === Number(projectId) && x.created_at)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  if (!mine.length) return { state: 'none', count: 0, items: [] };
+  return {
+    state: 'ok',
+    date: day(mine[0].created_at),
+    count: mine.length,
+    items: mine.map((x, i) => ({ key: x.uid || `${x.created_at}-${i}`, date: day(x.created_at), by: x.chased_by_name || null })),
+  };
+}
+
+/**
+ * PF-04's obligations inbox: one row per company in the reporting population
+ * (`kpi-compliance`'s companies, the caller's book) for the period the Worker
+ * measured, companies that have not reported first. A name the reporting read
+ * does not carry comes from the positions read. No row carries a due date:
+ * the cadence read records none (`NO_DUE_DATE`), so no overdue days are
+ * computed.
+ */
+export function obligationRowsOf(reads) {
+  const { compliance, updates, positions, chases } = reads;
+  if (compliance.state !== 'ok') return { state: compliance.state, rows: [] };
+  const c = compliance.value;
+  const posItems = positions.state === 'ok' ? positions.value.items : [];
+  const latest = updates.state === 'ok' ? updates.value.items : [];
+  const rows = c.companies.map((co) => {
+    const pid = Number(co.project_id);
+    const pos = posItems.find((p) => Number(p.project_id) === pid) || null;
+    const update = latest.find((u) => Number(u.project_id) === pid) || null;
+    const reporting = reportingFor({ project_id: pid }, compliance);
+    return {
+      key: String(pid),
+      projectId: pid,
+      uid: co.project_uid || pos?.project?.uid || null,
+      name: co.name || pos?.project?.name || `Startup ${pid}`,
+      period: periodName(reporting.period),
+      reporting,
+      reported: co.reported === true,
+      received: day(co.last_reported_at),
+      update,
+      missing: missingFor(reporting, update, compliance, updates),
+      chase: lastChaseOf(pid, chases),
+    };
+  }).sort((a, b) => Number(a.reported) - Number(b.reported) || a.name.localeCompare(b.name));
+  return {
+    state: 'ok',
+    rows,
+    period: periodName(c.population?.period ?? c.period ?? null),
+    cadence: c.cadence || null,
+    inProgress: c.period_in_progress === true,
+    until: day(c.period_until),
+  };
+}
+
+/** One recorded figure in its unit (`usd`, `pct`, `months`, `count`); null when there is no number. */
+export function figureValue(value, unit) {
+  if (!isNum(value)) return null;
+  const v = Number(value);
+  if (unit === 'usd') return money(v);
+  if (unit === 'pct') return `${Math.round(v * 10) / 10}%`;
+  if (unit === 'months') return `${Math.round(v * 10) / 10} ${v === 1 ? 'month' : 'months'}`;
+  return v.toLocaleString('en-US');
+}
+
+const SOURCE_NAMES = { typed: 'Typed by the founder', manual: 'Typed by the founder', stripe: 'Stripe', mercury: 'Mercury' };
+
+/** A figure's stored source in words; null when none is stored. */
+export function sourceName(source) {
+  const s = String(source ?? '').trim();
+  if (!s) return null;
+  return SOURCE_NAMES[s.toLowerCase()] || keyWords(s);
+}
+
+/**
+ * The report detail's fields (PF-04b): each sourced figure the update carries,
+ * with its source and date, or the founders' reason it is absent; then each
+ * value typed into the update's KPI form that no figure covers, formatted by
+ * `format(key, value)`. A blank is Not recorded with its reason, never 0.
+ */
+export function reportFieldsOf(update, format = (k, v) => String(v)) {
+  if (!update) return [];
+  const figures = (Array.isArray(update.figures) ? update.figures : []).map((f) => ({
+    key: f.key,
+    label: f.label || keyWords(f.key),
+    value: f.value == null ? null : figureValue(f.value, f.unit),
+    reason: f.value == null ? (f.reason || NOT_RECORDED) : null,
+    source: f.value == null ? null : sourceName(f.source),
+    asOf: f.value == null ? null : day(f.as_of),
+  }));
+  const covered = new Set(figures.map((f) => f.key));
+  const typed = Object.entries(update.kpis && typeof update.kpis === 'object' ? update.kpis : {})
+    .filter(([k]) => !covered.has(k))
+    .map(([k, v]) => ({
+      key: k,
+      label: keyWords(k),
+      value: blank(v) ? null : format(k, v),
+      reason: blank(v) ? 'Left blank in the update' : null,
+      source: blank(v) ? null : 'Typed in the update',
+      asOf: null,
+    }));
+  return [...figures, ...typed];
 }
