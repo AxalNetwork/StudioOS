@@ -186,4 +186,4 @@ export const FINDING_ERRORS = {
   text_unchanged: 'The edit is the same as Eadwyn’s words. Use Accept instead.',
   nothing_to_interpret: 'That Ask answer has no words to decide on.',
 };
-export const findingError = (err, fallback) => FINDING_ERRORS[err?.code] || FINDING_ERRORS[err?.message] || err?.message || fallback;
+export const findingError = (err, fallback) => FINDING_ERRORS[err?.code] || err?.message || fallback;
