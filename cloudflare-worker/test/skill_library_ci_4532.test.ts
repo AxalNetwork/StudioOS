@@ -22,7 +22,7 @@ import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { checkSourceCatalogue, persistedManifest, reconcile, summary, type Finding } from '../src/services/agents/skillCatalogue.ts';
 import { seedLibrary } from '../src/services/agents/skillLibrarySeed.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');

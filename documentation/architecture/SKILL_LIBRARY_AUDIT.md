@@ -12,9 +12,9 @@ generated file, D1 row, permission, publication or production setting.
   this document says "present", it means present in the repository.
 - **Deployed catalogue (D5335, #5335):** the store side is measured by the
   read-only route `GET /api/admin/ai-agents/skills/library/reconcile`. Its
-  first production totals are **pending** until a Super Admin opens that route
-  once on production after the deploy and pastes the class totals on #5335.
-  §10 holds them, under "First production result".
+  first production run was read by a Super Admin at 2026-11-13 06:29 UTC.
+  The class totals are in §10, under "First production result". They are
+  totals and a date only, with no skill content.
 - **Companion contract:** `SKILL_LIBRARY_CONTRACT.md` (#4530) is the v1 source
   and golden-case contract. This audit does not restate it; it checks the code
   against it.
@@ -259,11 +259,18 @@ totals, never draft or case text, and repairs nothing. Its JSON is also a valid
 
 #### First production result
 
-<!-- D5335: fill in from the totals the Super Admin pastes on #5335 after the first production run. Totals and date only, never content. -->
+The owner opened the route once on production and gave the totals and `read_at` on #5335. Only those are recorded here, never skill content.
 
 | Read at (UTC) | exact | source_only | persisted_only | content_drift | case_drift | missing_case | duplicate_identity | invalid_reference |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **pending** — the route's first production run (owner step on #5335) | — | — | — | — | — | — | — | — |
+| 2026-11-13 06:29:15 | 0 | 112 | 110 | 70 | 0 | 0 | 0 | 0 |
+
+How to read it:
+- **The source has 182 skills.** 112 are not in D1, and 70 are in D1 with different content. None matches exactly.
+- **D1 holds 180 HQ rows.** 70 share a slug with a source and 110 share none.
+- **Every one of the 180 is a draft at version 0.** No HQ skill has a published version on production, so no agent pin rests on any of them, and no repair reaches a running agent.
+- **The 110 `persisted_only` rows** have uids and slugs that appear nowhere in the repository or its history. They were written to D1 outside the source seed. This audit does not say by whom, and does not judge them.
+- **`case_drift` and `missing_case` are 0.** Every drifted skill's source case is among its live cases, so the drift is in the definition, not the cases.
 
 #### Each non-exact class: D4532's disposition and its follow-up
 
@@ -304,7 +311,7 @@ Findings 3 and 4 now have D5334 regressions.
 | Numeric, structural, evidence assertions | missing | #4531 |
 | Model-judged rubric | missing | #4531, after deterministic assertions |
 | CI command with per-file errors and a summary | partial (tests and `--check` exist) | #4532 |
-| Source ↔ D1 reconciliation | present: #4532 (CI, `--persisted`), D5335 (read-only production route); first totals pending | owner step on #5335 |
+| Source ↔ D1 reconciliation | present: #4532 (CI, `--persisted`), D5335 (read-only production route); first production totals recorded 2026-11-13 (§10) | the dispositions in §10 |
 | Stable case ids, multi-case sources | present (D5336, #5336) | — |
 | Release evidence | unclear | #4533 |
 | Campaign traversal past 20 skills | present (D4668) | — |

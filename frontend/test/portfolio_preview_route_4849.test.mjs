@@ -40,9 +40,11 @@ const INVESTOR = { id: 9503, role: 'investor', email: 'investor@p4849.test', nam
 const STUDIO = '[data-testid="text-investor-studio-title"]';
 /** What each Portfolio address reads as its page heading. */
 const PORTFOLIO_ROUTES = {
-  '/portfolio': 'Know how my investments are doing',
-  '/portfolio/health': 'Know how my investments are doing',
-  '/portfolio/positions': 'Positions book',
+  // D4817 part 1 (#5311): the Overview is the Portfolio v2 frame's, headed "Portfolio".
+  '/portfolio': 'Portfolio',
+  '/portfolio/health': 'Portfolio',
+  // D4817 part 2 (#5311): Positions draws in the same frame, headed "Portfolio" (its tab is the title).
+  '/portfolio/positions': 'Portfolio',
   '/portfolio/updates': 'Updates & KPI collection',
   '/portfolio/performance': 'Portfolio',
   '/portfolio/value-add': 'Value-add desk',

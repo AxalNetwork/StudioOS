@@ -11,13 +11,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillLifecycle.ts';
 import { JUDGE_VERSION, missingDataMiss, numberMiss, statements } from '../src/services/agents/skillAssertions.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 
 const BOARD = SKILL_LIBRARY.find((e) => e.slug === 'board-meeting-brief')!.cases[0].expect as unknown as CaseExpect;
 const verdict = (e: CaseExpect, out: string) => judge(e, out).result;
 
 test('the demonstrated regression: an unrelated "Not recorded" does not cover runway', () => {
-  assert.equal(JUDGE_VERSION, 3, "slice 2 (judge version 3) leaves this rule as it was");
+  assert.equal(JUDGE_VERSION, 4, "slice 2 (judge version 3) and part 4 (version 4) leave this rule as it was");
   assert.deepEqual(BOARD.must_say_not_recorded, ['runway'], 'the committed case is the one the issue names');
   const r = judge(BOARD, 'There are 37 paying customers. Delaware franchise tax is on the agenda. Runway is 12 months. Churn is Not recorded.');
   assert.deepEqual(r, { result: 'fail', detail: 'It did not say runway is not recorded.' });

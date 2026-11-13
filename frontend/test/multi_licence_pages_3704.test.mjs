@@ -31,8 +31,9 @@ const propsOf = (node) => Object.entries(node).find(([k]) => k.startsWith('__rea
 globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
 const quiet = console.error;
 
-async function mount(element) {
+async function mount(element, { seed } = {}) {
   const restore = installDocument();
+  seed?.();
   console.error = () => {};
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -45,6 +46,8 @@ async function mount(element) {
     titles: () => nodes().filter((n) => n.tagName === 'H2' && String(propsOf(n)['data-testid'] || '').startsWith('licence-block-title-')).map(textOf),
     testIds: () => nodes().map((n) => propsOf(n)['data-testid']).filter(Boolean),
     buttons: () => nodes().filter((n) => n.tagName === 'BUTTON').map((n) => textOf(n).trim()),
+    // Every link to the signed-in application (the hero, the Apply section and the closing apply band).
+    applyLinks: () => nodes().filter((n) => n.tagName === 'A' && propsOf(n).href === '/spinout-lab/apply').map((n) => textOf(n).trim()),
     async unmount() { await act(async () => root.unmount()); console.error = quiet; restore(); },
   };
 }
@@ -295,4 +298,185 @@ test('embedded suppresses only the page-owning chrome of each home', () => {
   assert.match(partner, /\{!embedded && <h1 data-testid="text-partner-studio-title">Studio<\/h1>\}/);
   assert.match(partner, /const Root = embedded \? 'section' : 'main';/);
   assert.match(src('pages/founder/FounderStudioHome.jsx'), /if \(phone && embedded\) \{/);
+});
+
+/* ------------------------------------- D4623 part 2: the Lab block is not the investor view */
+
+// The real SpinoutLabPage, inside the real block page, for a member whose PRIMARY role is Investor. The overview's
+// call to action is read from what React drew: Apply (`apply-cta-sub`) or the LP section (`link-lp-workspace`).
+async function mountRealLab(licences, primary) {
+  const { default: SpinoutLabPage } = await import('../src/pages/SpinoutLabPage.jsx');
+  const { AuthProvider } = await import('../src/hooks/useAuthSync.jsx');
+  const session = { id: 41, role: primary, name: 'Test Member', licences };
+  const before = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    asked.push(path);
+    // A member who has not applied: the overview, with its call to action.
+    if (/\/spinout-lab\/state\b/.test(path)) return new Response(JSON.stringify({ active: false, admitted: false, is_incorporated: false, application: null }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
+  };
+  const s = stubs();
+  const pages = { lab: SpinoutLabPage, investor: s.make('investor') };
+  const page = await mount(
+    React.createElement(AuthProvider, null, React.createElement(MultiLicenceSpinoutLab, { licences, activeRole: primary, pages })),
+    { seed: () => localStorage.setItem('user', JSON.stringify(session)) },
+  );
+  return {
+    page, s, asked,
+    async unmount() { await page.unmount(); globalThis.fetch = before; },
+  };
+}
+
+// D4623 part 3 (owner decision 2026-11-13): Apply shows only for a Founder holder or an exploring account, the two
+// POST /api/spinout-lab/apply accepts. Advisor or Operating Partner without Founder: the Lab block, no Apply, no LP.
+for (const [licence, title] of [['advisor', 'Advisor'], ['partner', 'Operating Partner']]) {
+  test(`D4623 part 3: Investor-primary with ${title} (no Founder) gets the Lab block without Apply, and without the LP section`, async () => {
+    const lab = await mountRealLab(['investor', licence], 'investor');
+    try {
+      assert.deepEqual(lab.page.titles(), ['Investor', title]);
+      const ids = lab.page.testIds();
+      assert.ok(lab.asked.some((u) => /\/spinout-lab\/state/.test(u)), 'the Lab page read its state');
+      assert.ok(!ids.includes('apply-cta-sub'), 'no Apply section the server would refuse');
+      assert.deepEqual(lab.page.applyLinks(), [], 'no Apply link anywhere in the Lab block: hero, section or band');
+      assert.ok(!/How to apply/.test(lab.page.text()), 'the closing apply band is not drawn');
+      assert.ok(!ids.includes('link-lp-workspace'), 'the Lab block does not repeat the LP section');
+      assert.ok(!/Back the graduates\./.test(lab.page.text()));
+      assert.ok(/Download the programme brief/.test(lab.page.text()), 'the rest of the Lab overview is still drawn');
+      assert.ok(ids.includes('stub-investor'), 'the Investor block is drawn beside it');
+    } finally { await lab.unmount(); }
+  });
+}
+
+test('D4623 part 2/3: Investor-primary with Founder gets Apply in the Lab block', async () => {
+  const lab = await mountRealLab(['investor', 'founder'], 'investor');
+  try {
+    assert.deepEqual(lab.page.titles(), ['Founder', 'Investor']);
+    assert.ok(lab.page.testIds().includes('apply-cta-sub'));
+    assert.equal(lab.page.applyLinks().length, 3, 'the hero, the Apply section and the apply band');
+    assert.ok(!lab.page.testIds().includes('link-lp-workspace'));
+  } finally { await lab.unmount(); }
+});
+
+test('D4623 part 2: only the Lab block is told it is not the investor view; one licence keeps the page\'s own rule', async () => {
+  // Read what the block page hands each page.
+  let page;
+  const seen = [];
+  const rec = (name) => function Rec(props) { seen.push({ name, props }); return React.createElement('div', null, name); };
+  for (const licences of [['investor', 'advisor'], ['investor', 'partner'], ['founder', 'investor'], ['advisor', 'partner'], ['founder', 'advisor']]) {
+    seen.length = 0;
+    page = await mount(React.createElement(MultiLicenceSpinoutLab, { licences, activeRole: licences[0], pages: { lab: rec('lab'), investor: rec('investor') } }));
+    try {
+      const labProps = seen.find((m) => m.name === 'lab').props;
+      assert.equal(labProps.investorView, false, `${licences}: the Lab block is not the investor view`);
+      assert.equal(labProps.canApply, licences.includes('founder'), `${licences}: Apply only with Founder held`);
+      const inv = seen.find((m) => m.name === 'investor');
+      if (inv) assert.deepEqual(inv.props, {}, 'the Investor block is handed nothing new');
+    } finally { await page.unmount(); }
+  }
+  // A single licence (and so an admin preview or an impersonation, which the route never sends here with two) passes
+  // nothing: SpinoutLabPage keeps `user.role === 'investor'`.
+  for (const licence of ['founder', 'advisor', 'partner', 'investor']) {
+    seen.length = 0;
+    page = await mount(React.createElement(MultiLicenceSpinoutLab, { licences: [licence], activeRole: licence, pages: { lab: rec('lab'), investor: rec('investor') } }));
+    try {
+      assert.equal(seen.length > 0, true);
+      for (const m of seen) assert.deepEqual(m.props, {}, `${licence}: today's page, with no investorView and no canApply`);
+    } finally { await page.unmount(); }
+  }
+  const labPage = src('pages/SpinoutLabPage.jsx');
+  assert.match(labPage, /export default function SpinoutLabPage\(\{ investorView, canApply \} = \{\}\)/);
+  assert.match(labPage, /investorView=\{investorView \?\? user\?\.role === 'investor'\}/, 'undefined keeps the primary-role rule');
+  assert.match(labPage, /canApply=\{canApply \?\? canApplyToLab\(user\)\}/, 'undefined reads the apply rule from the session');
+  // The route still renders SpinoutLabPage bare for every session that is not a multi-licence member's own.
+  assert.match(app, /: effectiveRole === 'investor'\s*\?\s*<SpinoutLabInvestorPage \/>\s*:\s*<SpinoutLabPage \/>\)/);
+});
+
+test('D4623 part 2: an Investor-only member is unchanged: the sales page alone, no Lab page, no Apply', async () => {
+  const { s, labRequests, el } = labWith(['investor']);
+  const page = await mount(el);
+  try {
+    assert.deepEqual(s.mounted.names(), ['investor']);
+    assert.deepEqual(labRequests, []);
+    assert.ok(!page.testIds().includes('apply-cta-sub'));
+    assert.deepEqual(page.applyLinks(), []);
+  } finally { await page.unmount(); }
+});
+
+test('D4623 part 2/3: SpinoutLabPage on its own: investor gets the LP section, Founder and exploring get Apply, Advisor and Operating Partner neither', async () => {
+  // The route's bare <SpinoutLabPage /> (an admin preview, an impersonation, a signed-in single licence) passes no investorView.
+  const { default: SpinoutLabPage } = await import('../src/pages/SpinoutLabPage.jsx');
+  const { AuthProvider } = await import('../src/hooks/useAuthSync.jsx');
+  const before = globalThis.fetch;
+  globalThis.fetch = async (url) => (/\/spinout-lab\/state\b/.test(String(url))
+    ? new Response(JSON.stringify({ active: false, admitted: false, is_incorporated: false, application: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    : new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } }));
+  try {
+    // [role, licences, LP section, Apply]. Part 3: a single-licence Advisor or Operating Partner was offered an Apply
+    // the server refuses; now neither is offered one. An exploring account holds no licence and may apply.
+    for (const [role, licences, lp, apply] of [
+      ['investor', ['investor'], true, false],
+      ['founder', ['founder'], false, true],
+      ['advisor', ['advisor'], false, false],
+      ['partner', ['partner'], false, false],
+      ['exploring', [], false, true],
+    ]) {
+      const session = { id: 51, role, name: 'Test Member', licences };
+      const page = await mount(React.createElement(AuthProvider, null, React.createElement(SpinoutLabPage)), { seed: () => localStorage.setItem('user', JSON.stringify(session)) });
+      try {
+        assert.equal(page.testIds().includes('link-lp-workspace'), lp, `${role}: LP section`);
+        assert.equal(page.testIds().includes('apply-cta-sub'), apply, `${role}: Apply section`);
+        assert.equal(page.applyLinks().length, apply ? 3 : 0, `${role}: Apply links (hero, section, band)`);
+      } finally { await page.unmount(); }
+    }
+  } finally { globalThis.fetch = before; }
+});
+
+/* ------------------------- D4623 part 2: the Investor block's own reads, and their failures */
+
+async function studioWithNetwork(licences, answer) {
+  const before = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    asked.push(path);
+    const [status, body] = answer(path) || [404, { detail: 'Not found' }];
+    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  };
+  const { s, el } = studioWith(licences);
+  const page = await mount(el);
+  return { s, page, asked, async unmount() { await page.unmount(); globalThis.fetch = before; } };
+}
+
+test('D4623 part 2: the Investor block asks for the investor figures of its own licence (?licence=investor)', async () => {
+  const summary = { quick_stats: { ai_score_avg: 75 }, proprietary_deal_flow_summary: { total: 5 }, role_view: 'investor' };
+  const run = await studioWithNetwork(['founder', 'investor'], (path) => (/\/dashboard\?licence=investor$/.test(path) ? [200, summary] : null));
+  try {
+    assert.ok(run.asked.some((u) => /\/dashboard\?licence=investor$/.test(u)), 'the summary is read with the investor lens');
+    assert.ok(!run.asked.some((u) => /\/dashboard$/.test(u)), 'never the primary licence\'s summary');
+    const inv = run.s.mounted.last('investor');
+    assert.equal(inv.dashboard.quick_stats.ai_score_avg, 75);
+    assert.equal(inv.dashboard.proprietary_deal_flow_summary.total, 5);
+    assert.equal(inv.dashboardUnavailable, '');
+  } finally { await run.unmount(); }
+  // A single-licence Studio is Dashboard, which keeps asking for the primary licence's summary.
+  assert.match(src('pages/Dashboard.jsx'), /api\.getDashboard\(fresh\)/);
+});
+
+test('D4623 part 2: the summary read failing leaves the lifecycle and every other block drawn', async () => {
+  const lifecycle = { stages: [{ id: 'watching', label: 'Watching', count: 2 }], counts: { watching: 2 } };
+  const run = await studioWithNetwork(['founder', 'investor', 'advisor'], (path) => (
+    /\/dashboard\?licence=investor$/.test(path) ? [503, { error: 'unreadable', detail: 'secret-detail-summary' }]
+      : /\/dashboard\/investor-lifecycle$/.test(path) ? [200, lifecycle] : null));
+  try {
+    assert.deepEqual(run.page.titles(), ['Founder', 'Investor', 'Advisor']);
+    for (const id of ['stub-founder', 'stub-investor', 'stub-advisor']) assert.ok(run.page.testIds().includes(id), id);
+    const inv = run.s.mounted.last('investor');
+    assert.equal(inv.dashboard, null, 'the failed summary is null, not a payload of zeros');
+    assert.match(inv.dashboardUnavailable, /^The deal-flow summary could not be read\./);
+    assert.ok(!/secret-detail/.test(inv.dashboardUnavailable));
+    assert.deepEqual(inv.lifecycle, lifecycle, 'the lifecycle read answered on its own');
+    assert.ok(!run.page.testIds().some((t) => t.startsWith('licence-block-failed-')), 'a failed read is not a failed block');
+  } finally { await run.unmount(); }
 });

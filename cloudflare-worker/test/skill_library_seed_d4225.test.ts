@@ -20,7 +20,7 @@ import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { areaAndLevel, mount } from '../src/routes/admin_hq_skills.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY, assetsForSkillLibrary } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { areaOf, checkLibrary, readLibrarySkill } from '../src/services/agents/skillLibrarySeed.ts';
 
 const sql = (f: string) => readFileSync(new URL(`../sql/${f}`, import.meta.url), 'utf8');
@@ -47,7 +47,7 @@ function world() {
   user.run(SUPER, 'u-super', 'super@example.test', 'Sue Super');
   user.run(ADMIN, 'u-admin', 'admin@example.test', 'Ada Admin');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
-  const env: any = { DB, JWT_SECRET: 'd4225-fixture-only-secret', ENVIRONMENT: 'development' };
+  const env: any = { DB, ASSETS: assetsForSkillLibrary(), JWT_SECRET: 'd4225-fixture-only-secret', ENVIRONMENT: 'development' };
   return { db, env };
 }
 type W = ReturnType<typeof world>;
@@ -76,7 +76,7 @@ const n = (w: W, q: string) => (w.db.prepare(q).get() as { n: number }).n;
 test('every library file passes the store\'s own draft and case checks', () => {
   const tax = new Set(sql('migrations/090_seed_skills_values_taxonomy.sql').match(/\('([a-z_]+)',/g)!.map((m) => m.slice(2, -2)));
   assert.ok(SKILL_LIBRARY.length >= 70, `${SKILL_LIBRARY.length} skills`);
-  for (const x of checkLibrary(tax)) assert.ok(x.ok, `${x.entry.slug}: ${x.ok ? '' : `${x.code} ${x.message}`}`);
+  for (const x of checkLibrary(tax, SKILL_LIBRARY)) assert.ok(x.ok, `${x.entry.slug}: ${x.ok ? '' : `${x.code} ${x.message}`}`);
   for (const e of SKILL_LIBRARY) assert.ok(readLibrarySkill(e.skill_md), `${e.slug}: does not parse`);
 });
 
@@ -173,7 +173,7 @@ test('D5334: source, seed and HQ list use the same primary tag area and that tag
   const w = world();
   const rows = w.db.prepare('SELECT slug, category_slug AS category FROM skills WHERE is_active = 1').all() as Array<{ slug: string; category: string }>;
   const category = new Map(rows.map((row) => [row.slug, row.category]));
-  const checked = checkLibrary(new Set(category.keys()));
+  const checked = checkLibrary(new Set(category.keys()), SKILL_LIBRARY);
   for (const item of checked) {
     assert.equal(item.ok, true, item.entry.slug);
     if (!item.ok) continue;

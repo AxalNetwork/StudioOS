@@ -16,10 +16,19 @@
  * Content strip, so the strip has to be literal. This list is what the row
  * highlight, the palette and the guard read, and the guard holds the chrome's
  * literal sequence equal to it.
+ *
+ * D4860 part 5 (#4860, findings 12 and 13). The Platform strip is grouped by
+ * domain: an item's third field names its group, and `HqSubNavStrip` draws a
+ * group's name before its first item. Two of Platform's consoles keep
+ * addresses outside `/admin/platform` (Monitoring, Telegram): they belong to
+ * Platform's row, and the strip says where they live (`outsidePlatform`)
+ * rather than moving them. Integration keys stays an HQ row of its own (the
+ * owner's ruling of 2026-10-20), so it is not in the strip; the overview's
+ * Detailed consoles link to it across HQ.
  */
 import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
 
-const strip = (pairs) => pairs.map(([label, route]) => ({ label, route }));
+const strip = (rows) => rows.map(([label, route, group]) => (group ? { label, route, group } : { label, route }));
 
 export const HQ_STRIPS = {
   // D981 (#2376): the ledger and Program grants, #2375's "Ledger · Program grants";
@@ -28,27 +37,30 @@ export const HQ_STRIPS = {
     ['Ledger', '/admin/licences'],
     ['Program access by licence', '/admin/licences/programs'],
   ]),
+  // D4860 part 5 (#4860, findings 12 and 13): grouped by domain, in the
+  // groups and order of the overview's Detailed consoles (`CONSOLE_GROUPS`,
+  // canvas PL-07), so Platform has one map. Overview leads, ungrouped.
   Platform: strip([
     ['Overview', '/admin/platform'],
-    ['Switches', '/admin/platform/switches'],
-    ['Topology', '/admin/platform/topology'],
-    ['AI allowances', '/admin/platform/allowances'],
-    ['AI usage', '/admin/platform/ai-usage'],
+    ['Monitoring', '/monitoring', 'Infrastructure'],
+    ['Topology', '/admin/platform/topology', 'Infrastructure'],
     // D1172 (#3085, STG20): what members store, totals only.
-    ['Storage', '/admin/platform/storage'],
-    // D938 (#2743): the four left the Admin Console for Platform's own addresses.
-    ['Payments', '/admin/platform/payments'],
-    ['Bank accounts', '/admin/platform/bank-accounts'],
-    ['Product testing', '/admin/platform/product-testing'],
-    // D1253 (#2428): the venture scorecard's model, indices and fairness check.
-    ['Scoring', '/admin/platform/scoring'],
-    ['Promo codes', '/admin/platform/promo-codes'],
-    // D4155 (#4155): HQ › Decks, the deck studio's admin screens.
-    ['Decks', '/admin/platform/decks'],
+    ['Storage', '/admin/platform/storage', 'Infrastructure'],
     // #3588: the meeting-bot runs and Diagnose Eadwyn AI had no strip link, only a card the owner could not find.
-    ['Meeting bots', '/admin/platform/meeting-bots'],
-    ['Monitoring', '/monitoring'],
-    ['Telegram', '/admin/telegram'],
+    ['Meeting bots', '/admin/platform/meeting-bots', 'Infrastructure'],
+    // D938 (#2743): Payments, Bank accounts, Product testing and Promo codes left the Admin Console for Platform's own addresses.
+    ['Payments', '/admin/platform/payments', 'Payments'],
+    ['Bank accounts', '/admin/platform/bank-accounts', 'Payments'],
+    ['Promo codes', '/admin/platform/promo-codes', 'Payments'],
+    ['AI allowances', '/admin/platform/allowances', 'AI'],
+    ['AI usage', '/admin/platform/ai-usage', 'AI'],
+    // D1253 (#2428): the venture scorecard's model, indices and fairness check.
+    ['Scoring', '/admin/platform/scoring', 'AI'],
+    ['Telegram', '/admin/telegram', 'Integrations'],
+    ['Switches', '/admin/platform/switches', 'Controls'],
+    ['Product testing', '/admin/platform/product-testing', 'Product'],
+    // D4155 (#4155): HQ › Decks, the deck studio's admin screens.
+    ['Decks', '/admin/platform/decks', 'Product'],
   ]),
   Content: strip([
     ['Overview', '/admin/content'],
@@ -102,4 +114,33 @@ export function stripItemFor(pathname) {
 export function hqRowFor(pathname) {
   const row = stripFor(pathname);
   return row ? (HQ_ROW_ROUTE[row] ?? null) : null;
+}
+
+/** Platform's own address family. */
+export const PLATFORM_HOME = '/admin/platform';
+
+/**
+ * Whether a console lives outside Platform's address family (D4860 part 5,
+ * finding 13): Monitoring and Telegram on the strip, Integration keys,
+ * Licences or Security from the overview. One rule, read by the strip and the
+ * overview's Detailed consoles, so the two say the same thing.
+ */
+export function outsidePlatform(route) {
+  const path = String(route).split('?')[0].split('#')[0];
+  return !owns(PLATFORM_HOME, path);
+}
+
+/**
+ * The group a strip item opens, or null: the item's group when it differs
+ * from the item before it in its strip. `HqSubNavStrip` draws it before the
+ * item, so the literal links in App.jsx stay links and nothing else.
+ */
+export function stripGroupStart(route) {
+  for (const items of Object.values(HQ_STRIPS)) {
+    const i = items.findIndex((x) => x.route === route);
+    if (i < 0) continue;
+    const g = items[i].group || null;
+    return g && g !== (items[i - 1]?.group || null) ? g : null;
+  }
+  return null;
 }

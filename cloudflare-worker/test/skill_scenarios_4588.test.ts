@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { checkCase, judge, type CaseExpect } from '../src/services/agents/skillLifecycle.ts';
 import { READ_KEYS } from '../src/services/agents/catalogue.ts';
 import { FIRST_TEN_SLUGS } from '../src/services/agents/skillInputs.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { assertionItems, incorrectText, type Pack } from '../src/services/agents/skillScenarios.ts';
 
 const DIR = join(process.cwd(), 'cloudflare-worker/src/services/agents/skills');

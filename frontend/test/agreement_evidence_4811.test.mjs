@@ -20,6 +20,8 @@ test('mounted: nothing is sent until every field is given; then the evidence is 
   let attached = 0;
   const view = await mountContracts(React.createElement(AttachEvidence, { row, onClose() {}, onAttached: () => { attached += 1; } }));
   try {
+    // D4811 part 22: the agreement is "marked executed"; the copy is what was signed.
+    assert.match(view.text(), /This agreement is marked executed but nothing shows it was signed\./);
     await view.click('Attach evidence');
     assert.match(view.text(), /Choose the signed PDF\./);
     const file = view.nodes().find((n) => n.tagName === 'INPUT' && view.props(n)?.type === 'file');

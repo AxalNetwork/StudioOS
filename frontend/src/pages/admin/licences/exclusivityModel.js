@@ -37,6 +37,16 @@ const METRIC_LABELS = { qualifying_revenue_cents: 'Revenue', cohorts: 'Cohorts',
 const money = (cents, currency) => codeAmount(Number(cents), currency, { locale: undefined });
 const figure = (metric, v, currency) => (v === null || v === undefined ? NOT_RECORDED : metric === 'qualifying_revenue_cents' ? money(v, currency) : Number(v).toLocaleString());
 
+/**
+ * D5019 part 2 — the operating licence's minimum, beside its fee and royalty: the terms schedule's Minimum
+ * Guarantee (§4.4). Not recorded when the schedule has none, Unreadable when it could not be read; never 0.
+ */
+export function minimumText(operating) {
+  const m = operating?.minimum_guarantee_cents;
+  if (m === 'unreadable') return 'Unreadable';
+  return Number.isSafeInteger(m) && m >= 0 ? money(m, operating.currency) : NOT_RECORDED;
+}
+
 /** One target year as the panel lists it. An unmeasured target reads Not recorded, never 0. */
 export function yearLine(p, currency) {
   return {

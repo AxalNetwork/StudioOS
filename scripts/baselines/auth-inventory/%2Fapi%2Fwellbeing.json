@@ -7,6 +7,8 @@
   "GET /api/wellbeing/resources/:uid/file": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "A published resource's file is for any signed-in member; a draft's is for an admin only, and every other account gets the same 404 a missing file gets with no object opened. No credentials or a disabled account get 401."
   }
 }

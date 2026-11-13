@@ -67,6 +67,7 @@ and citations by number keep working.
 | `D4706.md` | Deployment identity kept apart from its attempts, a compare-and-set retry, reconcile for an unknown dispatch, and the shared mutation outcome (#4706). |
 | `D4589.md` | Validate next-action policy shared by the desktop overview and the phone root (#4589). |
 | `D4617.md` | Billing and connector partial-read states, shared invalidation and safe actions. |
+| `D4618.md` | Account regressions: an interaction or concurrency test for each #4615–#4617 repair, each mutation-checked (part of #4618). |
 | `D5365.md` | Portfolio failure/empty separation, KPI units, member-facing copy, formatted alert dates, and safe error banners (#5365). |
 | `D5355.md` | Zero-row retirement of the pre-firm commitment compatibility branch and assignment promise (#5355). |
 | `D5357.md` | Deal-flow Days and Owner cells distinguish an unreadable flow from a recorded absence (#5357). |
@@ -97,6 +98,12 @@ and citations by number keep working.
 | `D5611.md` | Runner benchmark preparation, verified list prices, retained A-then-B decision and unmeasured lane evidence. |
 | `D5623.md` | Stay-native decision, throughput/binary-bisection model, strict observation trigger and vendor no-bypass findings. |
 
+- [D5673](D5673.md) — Four-script Cloudflare deployment/version source evidence and reconciliation (#5673).
+
+- [D5676](D5676.md) — Independent archive loss detection, conditional retry and owned canary metadata (#5676).
+- [D5674](D5674.md) — Recording source stages, shared HQ causes and qualified recovery (#5674).
+
+- [D5675](D5675.md) — Isolated synthetic preview callback, normal promotion gate and urgent rollback handling (#5675).
 | `D5602.md` | Advisory PR scan scope, retained main finding fingerprints, one redacted shared incident and permission/rollback boundaries. |
 | `D5666.md` | Observational session attribution and persistent PR/incident routing. |
 | `D5663.md` | Verified future-clock evidence and persistent health delivery intent. |
@@ -110,3 +117,4 @@ and citations by number keep working.
 | `D5664-p2.md` | Deduplicate terminal CI endpoint timestamp differences while retaining source evidence and distinct attempts/results. |
 | `D5721.md` | Census public Help for every signed-in rail profile without changing routing or authorization. |
 | `D4557-p2.md` | Bounded general compute host with canonical grants; hosted activation remains owner-gated. |
+| `D5035.md` | HQ Support’s durable recent decisions, branch delivery outcomes, manual resend and regression coverage. |

@@ -31,6 +31,8 @@ import { WALKTHROUGH_CAPTIONS } from '../src/services/ai/speechJobs.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
+import { CONTRACTS } from '../src/contracts/index.ts';
+import { contractErrors } from '../src/contracts/validate.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -210,7 +212,11 @@ test('5. attach to a live link of this version; another member never reads the t
   const on = await call(db, FILES, 'PUT', `/${DECK}/recordings/links/501`, { attach: true });
   assert.deepEqual([on.status, on.body.links], [200, [501]]);
   assert.equal((await call(db, FILES, 'PUT', `/${DECK}/recordings/links/502`, { attach: true })).status, 404, 'another version\'s link');
-  assert.deepEqual((await call(db, FILES, 'GET', `/${DECK}/recordings`)).body.links, [501]);
+  const read = await call(db, FILES, 'GET', `/${DECK}/recordings`);
+  assert.deepEqual(read.body.links, [501]);
+  // D4599 part 2: the adapter's `walkthrough` passes this reply through; it matches its contract, recorded and null cards alike.
+  assert.deepEqual([read.body.recorded, read.body.cards.map((x: any) => (x ? x.card : null))], [1, [1, null, null]]);
+  assert.deepEqual(contractErrors(JSON.parse(readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/contracts', CONTRACTS.walkthrough.schema), 'utf8')), read.body), []);
   assert.deepEqual((await call(db, FILES, 'PUT', `/${DECK}/recordings/links/501`, { attach: false })).body.links, []);
   assert.ok([403, 404].includes((await call(db, FILES, 'GET', `/${DECK}/recordings`, undefined, { user: OTHER })).status));
   assert.equal((await call(db, FILES, 'POST', `/${DECK}/recordings`, take(4))).status, 400, 'card 4 of 3');

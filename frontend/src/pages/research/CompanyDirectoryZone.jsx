@@ -15,7 +15,11 @@
 // Departures from the canvas: no public top bar and no "Sign in" (the page is
 // signed-in, inside `WorkspaceShell`); the app's type, not Space Grotesk; the
 // coverage strip has no "as of" date because the API reports none per field.
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+//
+// D5157 part 3 (#5157, RS-04 A): in the founder shell, the one with My
+// Research, each row has Add to research and a checkbox; a selection kept
+// across pages leads to Add to research or Compare N (`AddToResearch.jsx`).
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Card } from '../../ui';
@@ -25,8 +29,10 @@ import {
   COVERAGE_LABELS, DIRECTORY_SORTS, EMPTY_FILTERS, HAS_OPTIONS, NOT_RECORDED, PAGE_SIZES,
   activeFilters, companyHref, directoryParams, employees, lastRound, latestOnly, listState, pageList, pageWindow, withoutFilter,
 } from '../../lib/companyDirectoryView.js';
+import { canAddToResearch } from './researchComparisons.js';
 
 const CompetitorAnalysis = lazy(() => import('../../components/CompetitorAnalysis'));
+const AddToResearch = lazy(() => import('./AddToResearch.jsx'));
 
 const field = 'w-full rounded-lg border border-axal-hairline bg-white px-3 py-2 text-[12.5px] text-axal-ink focus:border-violet-500 focus:outline-none dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100';
 const label = 'mb-1 block text-[11px] font-bold text-axal-muted';
@@ -145,21 +151,28 @@ function Cell({ children, sub }) {
 
 const muted = <span className="text-axal-faint">{NOT_RECORDED}</span>;
 
-/** The results table. A missing value reads "Not recorded", never a dash or a zero. */
-export function DirectoryTable({ items, coverage }) {
+/**
+ * The results table. A missing value reads "Not recorded", never a dash or a
+ * zero. `pick` (D5157, the founder shell only) adds a checkbox and Add to
+ * research to each row: `{ selected: Map(uid → name), toggle(row), onAdd(row) }`.
+ */
+export function DirectoryTable({ items, coverage, pick = null }) {
   const navigate = useNavigate();
+  const stop = (e) => e.stopPropagation();
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[920px] text-left text-[12px]">
           <thead className="bg-axal-ground text-[10px] font-extrabold uppercase tracking-[.08em] text-axal-faint dark:bg-gray-950">
             <tr>
+              {pick ? <th className="px-4 py-2.5"><span className="sr-only">Select</span></th> : null}
               <th className="px-4 py-2.5">Company</th>
               <th className="px-4 py-2.5">Sector label</th>
               <th className="px-4 py-2.5">Country</th>
               <th className="px-4 py-2.5">Founded</th>
               <th className="px-4 py-2.5">Last round{coverage ? <div className="font-semibold normal-case tracking-normal">recorded for {coverage.fields?.last_round ?? 0}</div> : null}</th>
               <th className="px-4 py-2.5">Employees{coverage ? <div className="font-semibold normal-case tracking-normal">recorded for {coverage.fields?.headcount ?? 0}</div> : null}</th>
+              {pick ? <th className="px-4 py-2.5"><span className="sr-only">Research</span></th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-axal-hairline dark:divide-gray-800">
@@ -169,7 +182,13 @@ export function DirectoryTable({ items, coverage }) {
               return (
                 <tr key={x.uid} role="link" tabIndex={0} onClick={() => navigate(companyHref(x.uid))}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(companyHref(x.uid)); } }}
-                  className="cursor-pointer hover:bg-violet-50/40 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-500 dark:hover:bg-violet-950/10">
+                  className={`cursor-pointer hover:bg-violet-50/40 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-500 dark:hover:bg-violet-950/10 ${pick?.selected.has(x.uid) ? 'bg-violet-50/70 dark:bg-violet-950/20' : ''}`}>
+                  {pick ? (
+                    <td className="px-4 py-3" onClick={stop} onKeyDown={stop}>
+                      <input type="checkbox" checked={pick.selected.has(x.uid)} onChange={() => pick.toggle(x)} aria-label={`Select ${x.name}`}
+                        className="h-4 w-4" data-testid={`pick-company-${x.uid}`} />
+                    </td>
+                  ) : null}
                   <td className="px-4 py-3">
                     <Link to={companyHref(x.uid)} onClick={(e) => e.stopPropagation()} className="font-semibold text-axal-violet underline dark:text-violet-300">{x.name}</Link>
                     {x.website ? <div className="mt-0.5 max-w-[320px] truncate text-[11px] text-axal-faint">{x.website}</div> : null}
@@ -180,6 +199,12 @@ export function DirectoryTable({ items, coverage }) {
                   <td className="px-4 py-3 font-mono text-axal-muted">{x.founded_year ?? muted}</td>
                   <td className="px-4 py-3 text-axal-ink dark:text-gray-100">{round ? <Cell sub={round.detail}>{round.amount}</Cell> : muted}</td>
                   <td className="px-4 py-3 text-axal-ink dark:text-gray-100">{staff ? <Cell sub={staff.growth}>{staff.count}</Cell> : muted}</td>
+                  {pick ? (
+                    <td className="px-4 py-3 text-right" onClick={stop} onKeyDown={stop}>
+                      <button type="button" onClick={() => pick.onAdd(x)} data-testid={`button-add-to-research-${x.uid}`}
+                        className="whitespace-nowrap rounded-lg px-2 py-1 text-[12px] font-semibold text-axal-violet underline hover:bg-violet-50 dark:text-violet-300 dark:hover:bg-violet-950/30">Add to research</button>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
@@ -214,7 +239,7 @@ export function Pager({ total, limit, offset, onPage }) {
  * The results: loading, unreadable, no result, or the count line, table and
  * pager. Search and filters stay usable in every state.
  */
-export function DirectoryResults({ state, data, filters, onChange, onRetry }) {
+export function DirectoryResults({ state, data, filters, onChange, onRetry, pick = null }) {
   if (state === 'loading') {
     return <Card data-testid="company-results-loading"><p className="text-[12.5px] text-axal-muted">Loading companies…</p><p className="mt-1 text-[11px] text-axal-faint">No count is shown until the read answers.</p></Card>;
   }
@@ -261,9 +286,25 @@ export function DirectoryResults({ state, data, filters, onChange, onRetry }) {
           </select>
         </label>
       </div>
-      <DirectoryTable items={data.items} coverage={data.coverage} />
+      <DirectoryTable items={data.items} coverage={data.coverage} pick={pick} />
       <Pager total={data.total} limit={data.limit} offset={data.offset} onPage={(page) => onChange({ ...filters, page })} />
     </section>
+  );
+}
+
+/** RS-04 A's selection bar: N selected, Add to research, Compare N (two or more). */
+export function SelectionBar({ count, opener, compareOpener, onClear, onAdd, onCompare }) {
+  return (
+    <div role="region" aria-label="Selected companies" data-testid="company-selection"
+      className="sticky bottom-3 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-axal-hairline bg-white px-3 py-2 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+      <span className="text-[12.5px] text-axal-ink dark:text-gray-100"><b>{count}</b> selected</span>
+      <button type="button" onClick={onClear} className="min-h-[44px] rounded-lg px-2 text-[12px] font-semibold text-axal-muted underline sm:min-h-[32px] dark:text-gray-400">Clear</button>
+      <button type="button" ref={opener} onClick={onAdd} data-testid="button-selection-add"
+        className="min-h-[44px] rounded-lg border border-axal-hairline px-3 text-[12px] font-semibold text-axal-ink sm:min-h-[32px] dark:border-gray-700 dark:text-gray-100">Add to research</button>
+      <button type="button" ref={compareOpener} onClick={onCompare} disabled={count < 2} data-testid="button-selection-compare"
+        title={count < 2 ? 'Select two or more companies to compare' : undefined}
+        className="min-h-[44px] rounded-lg bg-violet-700 px-3 text-[12px] font-semibold text-white hover:bg-violet-800 disabled:opacity-50 sm:min-h-[32px] dark:bg-violet-600 dark:hover:bg-violet-500">Compare {count}</button>
+    </div>
   );
 }
 
@@ -300,12 +341,31 @@ function Directory({ role, zoneActions, initial, onTotal }) {
   useEffect(() => { load(); }, [load]);
 
   const state = listState(read);
+  // D5157: the selection is kept across pages and filters, by uid with its name.
+  const [selected, setSelected] = useState(() => new Map());
+  const [panel, setPanel] = useState(null);
+  const opener = useRef(null);
+  const compareOpener = useRef(null);
+  const pick = canAddToResearch(role) ? {
+    selected,
+    toggle: (x) => setSelected((m) => { const next = new Map(m); if (next.has(x.uid)) next.delete(x.uid); else next.set(x.uid, x.name); return next; }),
+    // A row's own button is the opener the panel returns focus to.
+    onAdd: (x) => setPanel({ mode: 'add', items: [{ uid: x.uid, name: x.name }], back: null }),
+  } : null;
+  const chosen = [...selected].map(([uid, name]) => ({ uid, name }));
   return (
     <>
       {zoneActions ? <ZoneToolbar role={role} className="mb-3" actions={zoneActions(read.data?.items || [])} /> : null}
       <CoverageCard coverage={shape?.coverage} />
       <DirectoryFilters filters={filters} facets={shape?.facets} onChange={setFilters} open={open} onToggle={() => setOpen((o) => !o)} />
-      <DirectoryResults state={state} data={read.data} filters={filters} onChange={setFilters} onRetry={load} />
+      <DirectoryResults state={state} data={read.data} filters={filters} onChange={setFilters} onRetry={load} pick={pick} />
+      {pick && chosen.length ? <SelectionBar count={chosen.length} opener={opener} compareOpener={compareOpener} onClear={() => setSelected(new Map())}
+        onAdd={() => setPanel({ mode: 'add', items: chosen, back: opener })} onCompare={() => setPanel({ mode: 'compare', items: chosen, back: compareOpener })} /> : null}
+      {panel ? (
+        <Suspense fallback={null}>
+          <AddToResearch kind="company" items={panel.items} mode={panel.mode} returnFocusTo={panel.back || undefined} onClose={() => setPanel(null)} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

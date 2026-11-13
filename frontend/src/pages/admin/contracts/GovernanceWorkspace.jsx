@@ -102,7 +102,7 @@ export default function GovernanceWorkspace({ uid, categories = [], entities = [
         {/* D4811 part 16: the legal-review record (CT-08), bound to the reviewed version's hash. */}
         {tab === 'legal-review' && <LegalReviewPanel kind="governance" refId={uid} />}
         {tab === 'activity' && <ActivityTab uid={uid} />}
-        {tab === 'related' && <RelatedDocuments uid={uid} read={related} entities={entities} onChanged={() => setRelRev((n) => n + 1)}
+        {tab === 'related' && <RelatedDocuments uid={uid} read={related} entities={entities} recordTitle={d.title} onChanged={() => setRelRev((n) => n + 1)}
           affectedOnly={params.get('affected') === '1'} onShowAll={() => go('related')} />}
       </div>
     </>}</ReadState>

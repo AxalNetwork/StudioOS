@@ -31,6 +31,21 @@ export function parseAmount(text, currency) {
 export const STATUS_WORDS = Object.freeze({ issued: 'Issued', paid: 'Paid', void: 'Void' });
 export const STATUS_TONE = Object.freeze({ issued: 'warn', paid: 'ok', void: 'neutral' });
 
+/**
+ * D5036 part 2 (#5036) — the status an invoice is drawn with. Overdue on the Worker's own rule (`isOverdue`,
+ * services/licenceFeeReceivables.ts): not void, a balance left, and the due date before `today` (a UTC day), with
+ * how many days past due. Otherwise the invoice's own status. A void invoice is never overdue.
+ */
+export function invoiceStatus(inv, today) {
+  const owed = inv.status === 'void' ? 0 : Math.max(0, Number(inv.amount_cents) - Number(inv.paid_cents));
+  const due = /^\d{4}-\d{2}-\d{2}/.test(String(inv.due_at || '')) ? String(inv.due_at).slice(0, 10) : '';
+  if (owed > 0 && due && /^\d{4}-\d{2}-\d{2}$/.test(String(today || '')) && due < today) {
+    const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${due}T00:00:00Z`)) / 86_400_000);
+    return { word: 'Overdue', tone: 'danger', overdue: true, days };
+  }
+  return { word: STATUS_WORDS[inv.status] || inv.status, tone: STATUS_TONE[inv.status] || 'neutral', overdue: false, days: 0 };
+}
+
 /** The line above the list: the fee and the anniversary, or why nothing can be invoiced. */
 export function feeLine(read) {
   if (!read || typeof read !== 'object') return null;

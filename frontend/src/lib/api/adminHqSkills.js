@@ -11,6 +11,7 @@
 //   D4537: each row also has slug, roles: [{ key, label }], tools: [name]
 //   GET  /admin/ai-agents/skills/library            D4225: the source library files → { skills: [{ slug, name, area, level, cases,
 //                                                        check: { ok } | { ok: false, code, message }, in_store: status | null }] }
+//                                                    D4574 H3: 503 library_unreadable when the library's static asset cannot be read
 //   GET  /admin/ai-agents/skills/:uid               → { skill, review: { open, approved, history }, cases, evals, versions, retired }
 //                                                    D4533 (B1): versions[].release_note, the publisher's note, null when none was written
 //   GET  /admin/ai-agents/skills/:uid/diff?from=vN&to=draft|vM → { from, to, frontmatter: [{ field, from, to }], steps: [{ op, text }] }

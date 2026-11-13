@@ -178,7 +178,7 @@ defaults to `[]`; at least one phrase across all three lists is required. A
 phrase is a non-empty string up to 200 characters, with at most 20 per list.
 `output` is required and must match the skill output in source CI.
 
-Evaluation is deterministic and case-insensitive (judge version 3, #4531,
+Evaluation is deterministic and case-insensitive (judge version 4, #4531,
 `services/agents/skillAssertions.ts`; D4531 has the full accepted forms):
 
 - `must_include` must appear and `must_not_include` must not (substrings).
@@ -222,7 +222,12 @@ Evaluation is deterministic and case-insensitive (judge version 3, #4531,
   [...] }`. A statement states a claim when it is not conditional and names
   the subject, then the object, as whole words; a negation before the object
   negates it. A required claim must be affirmed and never negated; a
-  forbidden one must never be affirmed.
+  forbidden one must never be affirmed. Version 4 (D4531 part 4) adds two
+  optional fields to a claim: `because` (the same statement gives the reason
+  after a cause marker such as `because`, `since` or `due to`, after the
+  object or before the subject) and, on a required claim only,
+  `conditional: true` (the claim is affirmed in a conditional statement and
+  in no other).
 - `output_schema` (optional): `{ "format": "json", "schema": {...} }`, only
   for a case whose output is a typed artifact. The whole output (an object or
   array) or its one ```` ```json ```` fence must parse and meet a closed
@@ -257,7 +262,13 @@ proposal under the names above (`evidence`, `refusal`, `structure`, `claims`,
 provenance fields, `evaluation_type`, adversarial
 scenario metadata and the named judge rubric. Case-level identity is
 implemented differently, by D5336 (`case_id` + `revision`, above). The shapes
-below are the old proposal and are not accepted as written.
+below are the old proposal and are not accepted as written. The judge rubric is
+built beside the cases rather than inside `expect` (D4531 part 5,
+`services/agents/skillRubric.ts`): a pinned judge model scores a synthetic
+golden case's output from 1 to 5, each result keeps the score, the rubric
+version and the judge model but never the output, and no rubric result counts
+toward the 9-of-10 publish bar until HQ's calibration labels agree and the
+owner turns it on.
 
 ```json
 {

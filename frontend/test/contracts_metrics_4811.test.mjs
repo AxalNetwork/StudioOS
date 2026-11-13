@@ -42,7 +42,7 @@ test('the six cells, in the canvas order, each with the filter that opens its re
   assert.equal(c.restricted.also.to, '/admin/contracts/governance?records=restricted');
   assert.deepEqual(c.executed.lines, ['40 this year · 9 this month', '2 with no signature date']);
   assert.deepEqual(c.stalled.lines, ['sent over 30 days ago', '3 sends not recorded, so not judged'], 'an unrecorded send is named, not counted as fresh');
-  assert.deepEqual(c.repair.lines, ['2 signed rows with no evidence · 5 unlinked recipients']);
+  assert.deepEqual(c.repair.lines, ['2 rows marked executed with no evidence · 5 unlinked recipients']);
 });
 
 test('unknown is not zero: an unreturned strip, an unreadable part, governance on a branch', () => {

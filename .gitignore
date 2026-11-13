@@ -139,6 +139,8 @@ documentation/architecture/AUTH_INVENTORY.json
 cloudflare-worker/src/routes/_registry.ts
 frontend/src/lib/apiModules.generated.js
 cloudflare-worker/src/services/agents/skillLibrary.generated.ts
+# D4574 H3 (#4574): the skill library's entries, the static asset the same generator writes beside it.
+frontend/public/skill-library/
 
 # #4591: written by scripts/schema-rehearsal.mjs for its throwaway databases, deleted when it ends.
 wrangler.rehearsal.*.toml

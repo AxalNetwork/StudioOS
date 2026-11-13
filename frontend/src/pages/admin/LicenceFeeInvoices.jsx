@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { licenceFeeInvoicesApi } from '../../lib/api/licenceFeeInvoices';
 import { Pill } from '../../ui';
-import { STATUS_TONE, STATUS_WORDS, feeLine, money, paidLine, parseAmount } from './licenceFeeInvoicesModel';
+import { feeLine, invoiceStatus, money, paidLine, parseAmount } from './licenceFeeInvoicesModel';
 import { toMajorString } from '../../lib/money.js';
 
 /**
@@ -11,7 +11,8 @@ import { toMajorString } from '../../lib/money.js';
  * restyles it from board L9 if needed. Issuing and recording ask for a recent
  * sign-in, which `lib/api.js` prompts for.
  */
-export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesApi }) {
+// `today` (a UTC day) is the Worker's own clock for Overdue (D5036); a test passes it.
+export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesApi, today = new Date().toISOString().slice(0, 10) }) {
   const [read, setRead] = useState({ status: 'loading', data: null, message: '' });
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState(null);
@@ -71,7 +72,7 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
             </tr>
           </thead>
           <tbody>
-            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} licence={licence} api={api} busy={busy} act={act} />)}
+            {invoices.map((inv) => <InvoiceRow key={inv.uid} inv={inv} licence={licence} api={api} busy={busy} act={act} today={today} />)}
           </tbody>
         </table>
       )}
@@ -79,7 +80,8 @@ export default function LicenceFeeInvoices({ licence, api = licenceFeeInvoicesAp
   );
 }
 
-function InvoiceRow({ inv, licence, api, busy, act }) {
+function InvoiceRow({ inv, licence, api, busy, act, today }) {
+  const status = invoiceStatus(inv, today);
   const [mode, setMode] = useState(null);
   const [amount, setAmount] = useState(inv.paid_cents > 0 ? toMajorString(inv.paid_cents, inv.currency) ?? '' : '');
   const [note, setNote] = useState('');
@@ -98,7 +100,7 @@ function InvoiceRow({ inv, licence, api, busy, act }) {
         <td className="py-1.5 pr-3">{inv.due_at}</td>
         <td className="py-1.5 pr-3 text-right font-mono">{money(inv.amount_cents, inv.currency)}</td>
         <td className="py-1.5 pr-3">{paidLine(inv)}</td>
-        <td className="py-1.5 pr-3"><Pill tone={STATUS_TONE[inv.status] || 'neutral'}>{STATUS_WORDS[inv.status] || inv.status}</Pill></td>
+        <td className="py-1.5 pr-3"><Pill tone={status.tone}>{status.word}</Pill>{status.overdue && <div className="text-[11px] text-red-700 dark:text-red-300" data-testid="fee-invoice-overdue">{status.days} {status.days === 1 ? 'day' : 'days'} past due</div>}</td>
         <td className="py-1.5">
           {inv.pdf_url && <button type="button" className="mr-2 underline" disabled={busy} onClick={download} data-testid="fee-invoice-pdf">PDF</button>}
           {inv.status !== 'void' && <button type="button" className="mr-2 underline" onClick={() => setMode(mode === 'pay' ? null : 'pay')} data-testid="fee-invoice-record">Record payment</button>}

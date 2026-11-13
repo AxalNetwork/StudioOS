@@ -219,7 +219,7 @@ function ResultBody({ action, outcome, rowsById }) {
               <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[12.5px]" data-testid={`action-row-${row.id}`} data-outcome={row.outcome}>
                 <span className="min-w-0">
                   <b className="text-axal-ink dark:text-white">{s ? `${s.name} · ${s.device}` : `Session ${row.id}`}</b>
-                  <small className="block text-axal-faint dark:text-gray-400">
+                  <small className="block text-axal-muted dark:text-gray-400">
                     session {row.id}
                     {row.outcome === 'already_revoked' ? ' · had already been revoked — nothing changed' : ''}
                     {row.outcome === 'not_found' ? ' · no session holds this id — nothing changed' : ''}
@@ -337,7 +337,7 @@ export default function AccessActionDialog({
           <ScopeBox title={copy.scope.title} items={copy.scope.items} danger={copy.scope.danger} testid="action-scope" />
           <YouAffected affected={copy.you.affected} text={copy.you.text} />
           <ReasonField id={`${id}-reason`} value={reason} onChange={setReason} error={reasonError} placeholder={copy.placeholder} />
-          <p className="text-[11.5px] text-axal-faint dark:text-gray-400" data-testid="action-write-bar">{WRITE_BAR}</p>
+          <p className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="action-write-bar">{WRITE_BAR}</p>
         </>
       )}
       {step === 2 && (

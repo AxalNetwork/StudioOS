@@ -240,8 +240,9 @@ The incident's severity depends on what the request log shows:
 
 - **high:** the webhook refused `WEBHOOK_FAILURE_STREAK` deliveries in a row;
 - **critical:** it refused `WEBHOOK_FAILURE_CRITICAL` in a row;
-- **low:** nothing has been delivered for `WEBHOOK_SILENCE_HOURS` while Stripe
-  is configured. A quiet store can be legitimate.
+- **low:** nothing has been delivered for `WEBHOOK_SILENCE_HOURS` (24 h, the
+  same threshold the Platform overview reads as Stale) while Stripe is
+  configured. A quiet store can be legitimate.
 
 Steps:
 

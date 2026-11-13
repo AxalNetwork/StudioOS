@@ -43,9 +43,13 @@ case and the seed imports each as its own case, by `case_id` + `revision`;
 ## How the library reaches the store (D4225)
 
 The Worker reads no file at run time. `node scripts/build-skill-library.mjs`
-embeds every file here in `../skillLibrary.generated.ts`, which is never edited
-by hand and never committed (D5612): it is gitignored, and
-`scripts/build-generated.mjs` writes it before every build, typecheck and test.
+builds every file here into two outputs, never edited by hand and never
+committed (D5612): they are gitignored, and `scripts/build-generated.mjs` writes
+them before every build, typecheck and test. Since D4574 H3 (#4574) the
+entries are not in the Worker script: `../skillLibrary.generated.ts` is the
+index (slugs, digest, asset path), and the entries are the static asset
+`frontend/public/skill-library/library-<digest16>.json`, which the library
+routes read through the assets binding (`../skillLibraryAsset.ts`).
 
 `POST /api/admin/ai-agents/skills/library/seed { reason }` (Super Admin) creates
 each skill not yet in the store as an Axal **draft** with its golden case. It

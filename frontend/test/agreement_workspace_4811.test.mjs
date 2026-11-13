@@ -61,7 +61,7 @@ test('mounted: the workspace reads the agreement; each tab says what is recorded
     const header = view.nodes().find((n) => n.tagName === 'HEADER' && walk(n).includes('Subscription Booklet & LPA'));
     assert.match(walk(header), /Sent \d+ \w+ 2026 · Awaiting signature/, 'the header states where it stands');
     assert.match(text, /Unlinked recipient/);
-    assert.match(text, /Signed.*Not recorded.*No signature date is recorded\./);
+    assert.match(text, /Executed.*Not recorded.*No signature date is recorded\./, 'D4811 part 22: the date fact reads Executed');
     assert.match(text, /Last legal review.*Not recorded/);
     const link = view.nodes().find((n) => n.tagName === 'A' && walk(n) === 'Resend or void in the panel');
     assert.equal(view.props(link).href, '/admin/contracts?agreement=env-1');
