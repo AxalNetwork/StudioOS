@@ -63,8 +63,8 @@ test('2. on the local D1 every Build read answers exactly as on node:sqlite, and
  * 100 records after the fix; before it the two pages read 558 and 684 and the overview 1,408.
  */
 const BUDGET: Array<[string, number]> = [
-  // #5291: 1307 → 1308, the connector pages read (connectorPages.ts) now carries TikTok.
-  [`/api/cycles/build/overview?project=${PROJECT}`, 1308],
+  // The connector catalogue adds one row per provider: TikTok (#5291), then Facebook (#5292).
+  [`/api/cycles/build/overview?project=${PROJECT}`, 1309],
   [`/api/cycles/build/modules/prototype-mvp?project=${PROJECT}`, 307],
   [`/api/cycles/build/modules/product-roadmap?project=${PROJECT}`, 482],
   [`/api/cycles/build/modules/prototype-mvp?filter=state%3Adone&project=${PROJECT}`, 308],
