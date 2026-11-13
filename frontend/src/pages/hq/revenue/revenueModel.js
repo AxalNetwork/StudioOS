@@ -253,6 +253,40 @@ export function ledgerPosition(summary) {
   };
 }
 
+/**
+ * D5036 part 2 (#5036) — the Revenue streams licence row's Invoiced and Collected for one currency, read from the
+ * same `licence_invoices` the executive summary draws (D5082): the invoices issued in the period, in that currency
+ * only, never summed across currencies. Before the Worker sends the field both stay Not recorded and the row is
+ * "Run-rate only"; an unreadable ledger is Unavailable, never 0; a currency the readable ledger holds no invoice in
+ * is a measured zero in that currency.
+ */
+export function licenceStreamCells(summary, currency) {
+  const nr = { state: 'not_recorded', text: null };
+  const inv = isReady(summary) ? summary.licence_invoices : null;
+  if (!inv || typeof inv !== 'object') return { invoiced: nr, collected: nr, coverage: 'run_rate_only' };
+  if (!inv.available) {
+    const u = { state: 'unavailable', text: null };
+    return { invoiced: u, collected: u, coverage: 'ledger_unavailable' };
+  }
+  const cur = currencyCode(currency) || UNRECORDED_CURRENCY;
+  const p = (Array.isArray(inv.by_currency) ? inv.by_currency : []).find((r) => (currencyCode(r.currency) || UNRECORDED_CURRENCY) === cur);
+  const zero = { state: 'zero', text: money(0, cur) };
+  return {
+    invoiced: p ? moneyFigure(p.invoiced_cents, cur) : zero,
+    collected: p ? moneyFigure(p.collected_cents, cur) : zero,
+    invoices: p ? finite(p.invoices) : 0,
+    coverage: 'invoiced',
+  };
+}
+
+/** The currencies the period's licence invoices hold that no run-rate row does, so none of them goes undrawn. */
+export function invoiceOnlyCurrencies(summary, runRateCurrencies) {
+  const inv = isReady(summary) ? summary.licence_invoices : null;
+  if (!inv?.available || !Array.isArray(inv.by_currency)) return [];
+  const have = new Set((runRateCurrencies || []).map((c) => currencyCode(c) || UNRECORDED_CURRENCY));
+  return [...new Set(inv.by_currency.map((r) => currencyCode(r.currency) || UNRECORDED_CURRENCY))].filter((c) => !have.has(c)).sort();
+}
+
 /** The ledger's one explanation once it is read: licence fees only, and what is still outside it. */
 export function ledgerReason(position) {
   const gaps = [];
