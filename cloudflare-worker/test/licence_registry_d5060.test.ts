@@ -251,9 +251,15 @@ test('6. Not recorded and Unreadable are said, never zero or none', async () => 
   assert.equal(founder.programs.available, false);
   assert.equal(founder.programs.state, 'not_recorded');
   assert.match(founder.programs.reason, /#5059/);
+  db.exec(`INSERT INTO program_licence_rules
+    (uid, program_key, licence_type, version, eligible, agreement_required, effective_from, reason, origin)
+    VALUES ('fixture-learning', 'learning', 'founder', 1, 1, 0, '2026-01-01', 'Registry test fixture.', 'hq')`);
   const detail = await ok(db, '/api/admin/licence-registry/ulic_5_founder');
-  assert.equal(detail.programs.state, 'not_recorded');
-  assert.equal(detail.overview.entitlements.state, 'not_recorded');
+  assert.equal(detail.programs.available, true);
+  const learning = detail.programs.items.find((program: any) => program.program_key === 'learning');
+  assert.ok(learning, 'the registry detail reads the Founder licence’s program rules');
+  assert.equal(learning.granted, false);
+  assert.deepEqual(detail.overview.entitlements, detail.programs);
   assert.equal(detail.billing.state, 'not_recorded');
   assert.deepEqual(detail.history, { available: true, items: [] });
 

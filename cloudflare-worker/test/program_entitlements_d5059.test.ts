@@ -25,6 +25,12 @@ import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { mount as entitlementsMount } from '../src/routes/admin_program_entitlements.ts';
+import { mount as memberEntitlementsMount } from '../src/routes/member_program_entitlements.ts';
+import mentorCohorts from '../src/routes/advisors_cohorts.ts';
+import investorCohorts from '../src/routes/investor_cohorts.ts';
+import referEarn from '../src/routes/refer_earn.ts';
+import learningPrograms from '../src/routes/learning_programs.ts';
+import spinoutLab from '../src/routes/spinout_lab.ts';
 import programGrantsRouter from '../src/routes/admin_program_grants.ts';
 import { transitionLicence } from '../src/services/userLicences.ts';
 import {
@@ -67,7 +73,13 @@ function fixture() {
   const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
   const app = new Hono<any>();
   app.route(entitlementsMount.path, entitlementsMount.router);
+  app.route(memberEntitlementsMount.path, memberEntitlementsMount.router);
   app.route('/api/admin/program-grants', programGrantsRouter);
+  app.route('/api/learning', learningPrograms);
+  app.route('/api/advisors', mentorCohorts);
+  app.route('/api/investor-cohorts', investorCohorts);
+  app.route('/api/refer-earn', referEarn);
+  app.route('/api/spinout-lab', spinoutLab);
   async function call(who: number, method: string, path: string, body?: unknown) {
     const token = await new SignJWT({ user_id: who, jti: `s-${who}` }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(SECRET));
@@ -78,12 +90,12 @@ function fixture() {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }, env));
       let json: any = null; try { json = await res.json(); } catch { json = null; }
-      return { status: res.status, body: json };
+      return { status: res.status, body: json, cacheControl: res.headers.get('cache-control') };
     } finally { [console.warn, console.error, console.info] = saved; }
   }
   const one = (sql: string, ...a: any[]) => ({ ...(db.prepare(sql).get(...a) as any) });
   const all = (sql: string, ...a: any[]) => (db.prepare(sql).all(...a) as any[]).map((r) => ({ ...r }));
-  return { db, env, call, one, all };
+  return { db, env, app, call, one, all };
 }
 
 const prog = (read: { programs: any[] }, key: string) => read.programs.find((p) => p.program_key === key);
@@ -360,4 +372,70 @@ test('territory program grants are untouched and keep working', async () => {
   assert.deepEqual(after.body.grants, before.body.grants);
   // And the territory licence is never read as a user licence source.
   assert.equal((await call(SUPER, 'GET', '/api/admin/program-entitlements/licences/tl_fr')).status, 404);
+});
+
+test('members read only their own program access and the public source fields', async () => {
+  const { app, db, env, call } = fixture();
+  const url = '/api/member/program-entitlements';
+  grantRow(db, 'member-learning', FOUNDER, 'learning');
+  grantRow(db, 'member-lab', FOUNDER, 'spinout-lab');
+  const anonymous = await withThrownResponses(() => app.request(url, {}, env));
+  assert.equal(anonymous.status, 401);
+
+  const read = await call(FOUNDER, 'GET', `${url}?user_id=${MULTI}`);
+  assert.equal(read.status, 200);
+  assert.equal(read.cacheControl, 'private, no-store');
+  assert.deepEqual(Object.keys(read.body).sort(), ['licences', 'on', 'programs']);
+  assert.deepEqual(read.body.licences, [{
+    uid: 'ul_f10', licence_ref: 'UL-FND-0010', licence_type: 'founder',
+    licence_type_label: 'Founder', status: 'active', valid_source: true,
+  }]);
+  const learning = prog(read.body, 'learning');
+  assert.equal(learning.in_force, true);
+  assert.equal(learning.grant, undefined);
+  assert.equal(learning.in_force_via, 'ul_f10');
+  assert.deepEqual(learning.sources, [{
+    licence_uid: 'ul_f10', licence_ref: 'UL-FND-0010', licence_type: 'founder',
+    licence_type_label: 'Founder', status: 'active', agreement: 'not_required', legally_ready: true,
+  }]);
+  const lab = prog(read.body, 'spinout-lab');
+  assert.equal(lab.in_force, false);
+  assert.equal(lab.sources[0].agreement, 'missing');
+  assert.equal(lab.blockers[0].code, 'agreement_missing');
+  assert.equal((await call(FOUNDER, 'GET', `${url}/${MULTI}`)).status, 404);
+});
+
+test('opt-in entry checks block a new enrolment and Lab start until the program is in force', async () => {
+  const { db, env, call } = fixture();
+  const enrol = '/api/learning/programs/course-1/enrol';
+  const lab = '/api/spinout-lab/start';
+  db.prepare("INSERT INTO learning_programs (uid, name, enrolment, status, created_by) VALUES ('course-1', 'Course', 'open', 'published', ?)").run(SUPER);
+  env.PROGRAM_ENTITLEMENT_ENFORCEMENT = 'true';
+  assert.equal((await call(FOUNDER, 'POST', enrol)).body.error, 'program_entitlement_required');
+  assert.equal((await call(FOUNDER, 'POST', lab)).body.error, 'program_entitlement_required');
+  grantRow(db, 'gate-learning', FOUNDER, 'learning');
+  grantRow(db, 'gate-lab', FOUNDER, 'spinout-lab');
+  assert.equal((await call(FOUNDER, 'POST', lab)).body.error, 'program_entitlement_required', 'Lab still needs the executed agreement');
+  assert.equal((await call(FOUNDER, 'POST', enrol)).status, 201);
+
+  executed(db, 'gate-lab-agreement', 'ul_f10', 'spinout-lab');
+  const admitted = await call(FOUNDER, 'POST', lab);
+  assert.equal(admitted.status, 403, 'the Lab’s own admission check still applies');
+  assert.equal(admitted.body.code, 'lab_not_admitted');
+});
+
+test('HQ applies the shared member gate to cohort and referral entry points', async () => {
+  const { db, env, call } = fixture();
+  db.prepare("UPDATE users SET role = 'investor', kyc_status = 'approved' WHERE id = ?").run(FOUNDER);
+  env.PROGRAM_ENTITLEMENT_ENFORCEMENT = 'true';
+  for (const [method, path] of [
+    ['GET', '/api/advisors/me/cohort'],
+    ['GET', '/api/investor-cohorts/me'],
+    ['POST', '/api/refer-earn/submissions'],
+    ['POST', '/api/refer-earn/submissions/import'],
+  ]) {
+    const response = await call(FOUNDER, method, path);
+    assert.equal(response.status, 403, path);
+    assert.equal(response.body.error, 'program_entitlement_required', path);
+  }
 });

@@ -6,7 +6,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env, User } from '../types';
 import { requireAuth, requireAdmin, requireBranchNotSuspended, isSuperAdmin } from '../auth';
-import { programRefusal } from '../services/programEnforcement';
+import { memberProgramRefusal, programRefusal } from '../services/programEnforcement';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import {
   ensureReferralSubmissionsSchema,
@@ -162,6 +162,8 @@ refer.get('/submissions', async (c) => {
 
 refer.post('/submissions', async (c) => {
   const user = await requireAuth(c);
+  const denied = await memberProgramRefusal(c, user.id, 'refer-and-earn');
+  if (denied) return denied;
   await ensureReferralSubmissionsSchema(c.env);
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
 
@@ -224,6 +226,8 @@ refer.post('/submissions/:uid/context', async (c) => {
  */
 refer.post('/submissions/import', async (c) => {
   const user = await requireAuth(c);
+  const denied = await memberProgramRefusal(c, user.id, 'refer-and-earn');
+  if (denied) return denied;
   await ensureReferralSubmissionsSchema(c.env);
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
   const category = isCategory(body.category) ? body.category : 'startup';
