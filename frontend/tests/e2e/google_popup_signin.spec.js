@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { requirePreview } from './_helpers.js';
+import { isolatePreviewTraffic, requirePreview } from './_helpers.js';
 
 /**
  * D722 — "Continue with Google" through Google's own window on /login.
@@ -50,7 +50,7 @@ const SIGNED_IN = {
   new_signup: false,
 };
 
-async function stubGoogle(page, { mode = 'code', config = 'on', popupAnswer = null, startDelayMs = 0 } = {}) {
+async function stubGoogle(page, { mode = 'code', config = 'on', popupAnswer = null, startGate } = {}) {
   const seen = { popup: [], start: 0 };
   await page.addInitScript((m) => { window.__gisMode = m; }, mode);
   await page.route(GIS_SRC, (route) => route.fulfill({ contentType: 'text/javascript', body: FAKE_GIS }));
@@ -78,7 +78,7 @@ async function stubGoogle(page, { mode = 'code', config = 'on', popupAnswer = nu
   // never leaves the preview, and count the call.
   await page.route('**/api/auth/google/start**', async (route) => {
     seen.start += 1;
-    if (startDelayMs) await new Promise((r) => setTimeout(r, startDelayMs));
+    if (startGate) await startGate;
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ url: '/e2e-google-redirect' }) });
   });
   await page.route((url) => url.pathname === '/e2e-google-redirect' || url.pathname === '/studio', (route) =>
@@ -94,11 +94,15 @@ async function gisLoaded(page) {
 }
 
 test.describe('Continue with Google opens Google’s window on /login (D722)', () => {
-  test.beforeEach(() => requirePreview(test));
+  test.use({ serviceWorkers: 'block' });
+  test.beforeEach(async ({ context, baseURL }) => {
+    requirePreview(test);
+    await isolatePreviewTraffic(context, baseURL);
+  });
 
   test('a code from the window signs in and lands on /studio, with the header and the state cookie on the POST', async ({ page }) => {
     const seen = await stubGoogle(page, { mode: 'code' });
-    await page.goto('/login');
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await gisLoaded(page);
     await page.getByTestId('login-google').click();
     await page.waitForURL((url) => url.pathname === '/studio', { timeout: 10_000 });
@@ -123,7 +127,7 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
 
   test('the page hands Google the sign-in scope in popup mode, with the attempt’s state', async ({ page }) => {
     await stubGoogle(page, { mode: 'closed' });
-    await page.goto('/login');
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await gisLoaded(page);
     await page.getByTestId('login-google').click();
     await expect(page.getByText('Google sign-in was cancelled. Nothing was changed.')).toBeVisible();
@@ -137,17 +141,21 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
   });
 
   test('a window blocked inside requestCode() continues in this tab: "Redirecting…", locked, one /start', async ({ page }) => {
-    // /start is held for a moment, so the button can be read while it waits.
-    const seen = await stubGoogle(page, { mode: 'blocked', startDelayMs: 1_500 });
-    await page.goto('/login');
+    // Keep /start pending until the test has observed the in-flight UI.
+    const { promise: startGate, resolve: releaseStart } = Promise.withResolvers();
+    const seen = await stubGoogle(page, { mode: 'blocked', startGate });
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await gisLoaded(page);
     const start = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/auth/google/start', { timeout: 10_000 });
     const button = page.getByTestId('login-google');
-    await button.click();
-    await start;
-    await expect(button, 'the fallback’s stage was overwritten by "Waiting for Google…"').toHaveText(/Redirecting…/);
-    await expect(button, 'a second press could start a second attempt').toBeDisabled();
-    await expect(page.getByText('Your browser blocked the Google window, so Google is opening in this tab.')).toBeVisible();
+    try {
+      await Promise.all([button.click(), start]);
+      await expect(button, 'the fallback’s stage was overwritten by "Waiting for Google…"').toHaveText(/Redirecting…/);
+      await expect(button, 'a second press could start a second attempt').toBeDisabled();
+      await expect(page.getByText('Your browser blocked the Google window, so Google is opening in this tab.')).toBeVisible();
+    } finally {
+      releaseStart();
+    }
     await page.waitForURL((url) => url.pathname === '/e2e-google-redirect', { timeout: 10_000 });
     expect(seen.start).toBe(1);
     expect(seen.popup.length).toBe(0);
@@ -162,7 +170,7 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
         body: JSON.stringify({ detail: 'Rate limit exceeded for google_popup bucket. Try again in 60 seconds.', bucket: 'google_popup', limit: 60, retry_after: 60 }),
       },
     });
-    await page.goto('/login');
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await gisLoaded(page);
     await page.getByTestId('login-google').click();
     await page.waitForURL((url) => url.pathname === '/e2e-google-redirect', { timeout: 10_000 });
@@ -172,7 +180,7 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
 
   test('a typed address is the login hint, and the expected_email of the next attempt', async ({ page }) => {
     const seen = await stubGoogle(page, { mode: 'closed' });
-    await page.goto('/login');
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await page.getByPlaceholder('you@company.com').fill('e2e.google@example.test');
     await gisLoaded(page);
     const button = page.getByTestId('login-google');
@@ -191,13 +199,14 @@ test.describe('Continue with Google opens Google’s window on /login (D722)', (
 
   test('a config that fails still shows the button, and the click redirects', async ({ page }) => {
     const seen = await stubGoogle(page, { config: 'fail' });
-    const asked = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/auth/google/config', { timeout: 10_000 });
-    await page.goto('/login');
     const button = page.getByTestId('login-google');
+    const [config] = await Promise.all([
+      page.waitForResponse((r) => new URL(r.url()).pathname === '/api/auth/google/config', { timeout: 10_000 }),
+      page.goto('/login', { waitUntil: 'domcontentloaded' }).then(() => button.hover()),
+    ]);
     await expect(button).toBeVisible();
     await expect(button).toHaveText(/Continue with Google/);
-    await button.hover();
-    expect((await asked).status()).toBe(500);
+    expect(config.status()).toBe(500);
     expect(await page.evaluate(() => typeof window.google), 'Google’s library was loaded although the config failed').toBe('undefined');
     await button.click();
     await page.waitForURL((url) => url.pathname === '/e2e-google-redirect', { timeout: 10_000 });
