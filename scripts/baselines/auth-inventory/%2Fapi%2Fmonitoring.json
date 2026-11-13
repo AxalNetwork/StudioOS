@@ -2,6 +2,8 @@
   "GET /api/monitoring/analytics/download/:token": {
     "review": "no_gate_found",
     "kind": "link_token",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_exports_downloads_d4570.test.ts",
+    "note": "The analytics token (HMAC, expiry) is the credential. A forged, expired or tampered token, the print and source tokens and any session with no token get the same 403 with no object opened. A publication token passes the signature test and names no object (404): hardening item in D4570-p5."
   }
 }

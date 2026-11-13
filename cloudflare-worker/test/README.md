@@ -39,6 +39,13 @@ the real Worker on the migrated schema, as every account that is not a party, an
 party and no credentials: refused, nothing of the record named, and no row, copy mapping or audit row changed and no
 call made to the calendar provider. A non-party gets the same status and body as for a missing id on every one of them.
 
+`authz_exports_downloads_d4570.test.ts` (#4570, D4570 part 5) asks ten export and download routes through the real
+Worker on the migrated schema: the competitor and deck-review exports, a wellbeing resource's file, a webinar's
+calendar entry, both calendar feeds, and the deck print, publication, analytics and video source links. Every
+non-party, a removed enrolment, a disabled owner, no credentials, a session without a token and a forged, tampered,
+expired, replaced, wrong-scope or other-route token are refused alike, with nothing named, no row changed and no stored
+object opened; the rightful party then gets each file.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
