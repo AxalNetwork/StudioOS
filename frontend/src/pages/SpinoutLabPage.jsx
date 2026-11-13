@@ -9,6 +9,7 @@ import SpinoutLabWorkspace from "./SpinoutLabWorkspace";
 import LabIntro from "../components/spinout/LabIntro";
 import { ApplicationStatusCard } from "../components/spinout/ApplicationStatus";
 import { applicantFromLegacy } from "../lib/applicationLifecycle";
+import { resolveHeldLicences } from "../lib/activeRole";
 import { Unreadable } from "../ui";
 // The facts both surfaces read. They live in lib/ rather than here because
 // this file imports the marketing page and the marketing page renders the
@@ -306,7 +307,7 @@ export function CongratulationsScreen({ cohort, onStart, starting, startError })
  * Lock/Unlock icons in the pipeline block this replaced, no caller passed it,
  * and the admin journey preview drives `SpinoutLabWorkspace` instead.
  */
-export function Dashboard({ state, investorView = false }) {
+export function Dashboard({ state, investorView = false, canApply = true }) {
   // The one thing the signed-in surface can honestly preselect. The answer
   // comes from the member's own application row (`spinout_applications
   // .incorporated`), not from `users.is_incorporated` — that flag means
@@ -329,6 +330,7 @@ export function Dashboard({ state, investorView = false }) {
         surface="app"
         cohort={cohort}
         applyHref={LAB_APPLY_HREF_SIGNED_IN}
+        canApply={canApply}
         track={track}
         onTrack={setTrack}
         jurisdiction={jurisdiction}
@@ -357,9 +359,11 @@ export function Dashboard({ state, investorView = false }) {
               applicant={state?.applicant ?? applicantFromLegacy(state?.application)}
               company={state?.application?.company_name || null}
             />
-            {String(state?.application?.status || '').toLowerCase() === 'pending'
+            {/* D4623 part 3: Apply is offered only to a viewer the apply
+                endpoint accepts. With none, no line stands in its place. */}
+            {canApply && (String(state?.application?.status || '').toLowerCase() === 'pending'
               ? null
-              : <ApplyCtaSection applyHref="/spinout-lab/apply" />}
+              : <ApplyCtaSection applyHref="/spinout-lab/apply" />)}
           </>
         )}
       </LabIntro>
@@ -374,8 +378,21 @@ export function Dashboard({ state, investorView = false }) {
  * investor's: it offers Apply, not the LP section a second time. Left
  * undefined (a single-licence member, an admin preview, an impersonation), the
  * rule is today's: the primary role, `user.role === 'investor'`.
+ *
+ * `canApply` (D4623 part 3, owner decision 2026-11-13): Apply is offered only
+ * to a Founder holder or an exploring account, the two the apply endpoint
+ * accepts (`holdsLicence(user, 'founder') || user.role === 'exploring'` in
+ * `POST /api/spinout-lab/apply`). The multi-licence Lab block passes it from
+ * the licences it was drawn for. Left undefined, the page reads the same rule
+ * from the session's held licences (`resolveHeldLicences`, the source the
+ * block page's licences come from), so a single-licence Advisor or Operating
+ * Partner is no longer offered an Apply the server refuses.
  */
-export default function SpinoutLabPage({ investorView } = {}) {
+function canApplyToLab(user) {
+  return resolveHeldLicences({ user }).includes('founder') || user?.role === 'exploring';
+}
+
+export default function SpinoutLabPage({ investorView, canApply } = {}) {
   const { user, refresh } = useAuth();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -489,5 +506,11 @@ export default function SpinoutLabPage({ investorView } = {}) {
   // Everyone else (not applied / application pending) sees the program
   // overview with the Apply CTA — except investors, whose route into the
   // program is the LP fund, not a cohort application.
-  return <Dashboard state={state || {}} investorView={investorView ?? user?.role === 'investor'} />;
+  return (
+    <Dashboard
+      state={state || {}}
+      investorView={investorView ?? user?.role === 'investor'}
+      canApply={canApply ?? canApplyToLab(user)}
+    />
+  );
 }
