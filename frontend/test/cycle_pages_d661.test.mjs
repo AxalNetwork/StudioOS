@@ -333,7 +333,9 @@ test('every overview: question, outcome, action, four figures and one card per m
   for (const [cycle, names] of Object.entries(MODULES)) {
     const out = html(h(CycleOverview, { cycle, data: OVERVIEWS[cycle], action: { href: `/${cycle}/act` } }), `/${cycle}`);
     const t = text(out);
-    assert.ok(t.includes(CYCLES[cycle].question), cycle);
+    // Grow's approved header now names the active area; the new root separately
+    // renders its question and has its own representative-state tests.
+    assert.ok(t.includes(cycle === 'grow' ? 'Grow · Overview' : CYCLES[cycle].question), cycle);
     assert.ok(t.includes(CYCLES[cycle].outcome), cycle);
     assert.match(out, new RegExp(`data-testid="cycle-action"[^>]*>${CYCLES[cycle].action}<`));
     assert.equal((out.match(/data-testid="cycle-figure-/g) || []).length, 4);
@@ -415,7 +417,8 @@ test('EVERY MODULE RENDERS FROM THE SHARED READ: all 26 module pages, with their
       assert.deepEqual(kinds(out), c.series.map((s) => s.kind), `${name} draws its series in order`);
       assert.ok(t.includes(`What ${name} shows.`) && t.includes(`${name} · at a glance`) && !t.includes(`Next: Next step for ${name}.`), name);
       assert.ok(t.includes(`${name} one`) && t.includes(`${name} two`), `${name} lists its records`);
-      assert.match(out, new RegExp(`aria-current="page"[^>]*>${name.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
+      const currentLabel = cycle === 'grow' ? ({ 'product-improvement': 'Customers', distribution: 'Distribution', 'revenue-and-traction': 'Focus', 'team-expansion': 'Talent', 'partner-network': 'Partnerships', 'market-expansion': 'Markets', 'durable-company-building': 'Company' }[c.slug] || name) : name;
+      assert.match(out, new RegExp(`aria-current="page"[^>]*>${currentLabel.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}<`), `${name} is the current tab`);
       n += 1;
     }
   }

@@ -109,11 +109,12 @@ export default {
     },
     {
       id: 'grow',
-      title: 'Grow: focus, talent, customers and launch',
+      title: 'Grow: focus, attention and operating workspaces',
       roles: ['admin', 'founder'],
-      overview: 'The current Grow workspace has separate Focus, Talent, Customers, Partnerships and Launch routes, with reporting routes available to certain additional roles.',
+      overview: 'The Grow overview puts the selected venture’s focus and recorded next actions before its operating workspaces. Overview, Focus, Customers, Distribution, Talent, Partnerships, Markets and Company share one navigation vocabulary; Reporting is a utility.',
       howto: [
-        'Prerequisite: open the correct venture at /grow and record the current growth goal.',
+        'Open the correct venture at /grow. Needs your attention ranks recorded setup gaps, source problems and pending work; a failed read is not treated as an empty record.',
+        'Use the primary action to set the focus metric, record its first value or review growth. Share an update remains available separately.',
         'Open /grow/focus to agree on the most important objective; then use /grow/talent for team capacity and /grow/customers for customer progress.',
         'Track partner work at /grow/partnerships and the current milestones at /grow/launch. Use /build/brand for brand work where that page is available.',
         'Use /grow/reporting to inspect available growth reporting. Reporting access may extend to advisor or partner roles, but editing is more restricted.',

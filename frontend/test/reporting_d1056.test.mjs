@@ -98,7 +98,11 @@ test('mounted desk: History from the Durable company-building read beside part 2
     assert.ok(t.byId('reporting-empty'), 'no duty yet: the empty state, never "nothing due"');
     assert.ok(!/\b0 (due|late|duties)\b/.test(t.text(t.container)), 'no zero is claimed');
     const tabs = t.walk(t.byId('cycle-tabs')).filter((n) => n.tagName === 'A');
-    assert.equal(t.props(tabs.find((n) => t.text(n) === 'Reporting'))['aria-current'], 'page');
+    assert.equal(tabs.some((n) => t.text(n) === 'Reporting'), false, 'Reporting is outside the operating areas');
+    const utility = t.walk(t.container).find((n) => t.props(n)['aria-label'] === 'Reporting utility');
+    assert.equal(t.props(utility)['aria-current'], 'page');
+    assert.equal(t.props(utility).href, '/grow/reporting?project_id=7');
+    assert.match(t.text(t.byId('cycle-header')), /Grow · Reporting/);
     assert.equal(t.props(t.byId('reporting-tab-duties')).href, '/grow/reporting/duties?project_id=7');
     await act(async () => t.root.render(h(MemoryRouter, { key: 'duties', initialEntries: ['/grow/reporting/duties'] },
       h(ReportingDesk, { tab: 'duties', projectId: 7, search: '?project_id=7', cards: [] }))));

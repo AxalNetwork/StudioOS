@@ -85,6 +85,7 @@ import { campaign, campaignCreatives, putCampaignCreative, campaigns, createCamp
 import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
+import { growAttention, unreadableGrowAttention } from '../services/growAttention';
 import { hasRecords } from '../services/records';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { publishPart } from '../services/publishSources';
@@ -150,7 +151,10 @@ r.get('/overview', async (c) => {
     const [figures, cards] = await Promise.all([growFigures(x), Promise.all(GROW_MODULES.map((m) => cardFor(x, m.slug)))]);
     // D1333 (#3481): Publish to… from Overview, and what was published from here.
     const publish = await publishPart(c.env, user as User, await isSupportSession(c), pid, 'overview');
-    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, ...(await growPhone(x, user, figures, cards)) });
+    let attention;
+    try { attention = await growAttention(x, !(await isSupportSession(c)) && await writes(c, user, pid), { user, figures, cards }); }
+    catch { console.warn('[cycle_grow] attention availability unreadable'); attention = unreadableGrowAttention(x); }
+    return c.json({ cycle: 'grow', question: GROW_QUESTION, figures, cards, publish, attention, ...(await growPhone(x, user, figures, cards)) });
   } catch (e) { return fail(c, e); }
 });
 

@@ -410,7 +410,7 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     if (creates && searchParams.get('new') === '1') setCreating(true);
   }, [creates, searchParams]);
   const name = cycleOf(cycle)?.name || 'Validate';
-  const moduleName = slug ? (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
+  const moduleName = slug ? def?.moduleName?.(slug) || (def?.modules || []).find((m) => m.slug === slug)?.name || null : null;
   const [fillsOn] = useAssistMode(name);
   const q = projectId ? `?project_id=${projectId}` : '';
   const navigate = useNavigate();
@@ -843,7 +843,11 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
     // D703 decision 1: below 1024px the root is the phone page, in place of
     // the overview and `AlsoIn`, never beside them. Both read the same overview.
     const overviewState = projectStatus === 'unreadable' ? 'unreadable' : overviewStatus;
-    body = phone ? (
+    body = def?.Overview ? <>
+      <def.Overview raw={rawOverview} data={overview} status={overviewState} search={q} action={action} message={overviewMessage} readOnly={Boolean(narrativeAdmin || supportOpen)} onRetry={() => setReload((n) => n + 1)}
+        more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null} />
+      {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
+    </> : phone ? (
       <PhoneCycleRoot cycle={cycle} raw={rawOverview} status={overviewState} search={q} projectId={projectId} message={overviewMessage}
         openAction={openAction} onChanged={() => setReload((n) => n + 1)} onRetry={() => setReload((n) => n + 1)} />
     ) : (
@@ -863,12 +867,9 @@ export default function CycleRoute({ cycle, tab = null, campaignNew = false, lig
             : cycle === 'validate' && rawOverview ? <ValidateNextAction raw={rawOverview} search={q} openAction={openAction} /> : null}
           // D1146 (#3032, RD12): Validate's header chip, the stored band, opening Fundraising readiness.
           chip={cycle === 'validate' && projectId ? <PmfChip projectId={projectId} search={q} /> : null}
-          // D1321 (#3482): Publish to… from Grow's overview, on part 2's gate (D1333's `publish`).
-          more={cycle === 'grow' && projectId ? <PublishTo part={rawOverview?.publish} projectId={projectId} module="overview" /> : null}
           // D1466 (RO00): Raise's header Ask, beside Build your deck.
           ask={cycle === 'raise' && projectId ? <RaiseAsk /> : null}
         />
-        {cycle === 'grow' && <PublishedFromHere part={rawOverview?.publish} />}
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
         <AlsoIn role="founder" row={name} />
