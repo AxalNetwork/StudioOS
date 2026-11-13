@@ -5,7 +5,7 @@ import { LensNavLink } from './lens';
 import { projectSearch } from '../pages/cycles/founderToolNavigation';
 
 /** A zone's route; the Overview item of an opt-in `row` (#4834) is the bucket root. */
-const zonePath = (bucket, zone) => (zone.root ? bucket.prefix : shellZonePath(bucket, zone));
+const zonePath = (bucket, zone) => (zone.to || (zone.root ? bucket.prefix : shellZonePath(bucket, zone)));
 
 /**
  * The zone row — the pill strip under a workspace heading.
@@ -49,18 +49,24 @@ const zonePath = (bucket, zone) => (zone.root ? bucket.prefix : shellZonePath(bu
  * first under that label, current on the root; `row.order` is the canvas's
  * slug order; `row.scroll` keeps the row on one line that scrolls sideways
  * below 1024px instead of wrapping, with 44px targets there.
+ *
+ * D4817 part 1 (#5311): `row.extra` adds items that are routes of the bucket
+ * without being zones of it (`{ slug, label, to }`), placed by `row.order`.
+ * Portfolio's local navigation names Performance beside its three zones, and
+ * Performance is not a sidebar zone; nothing else passes it.
  */
 export default function ZoneNav({ bucket, role = 'founder', activeSlug, className = '', row = null }) {
   const location = useLocation();
   if (!bucket || !bucket.zones?.length) return null;
 
   const accent = ACCENT[role] || ACCENT.founder;
+  const zones = row?.extra?.length ? [...bucket.zones, ...row.extra] : bucket.zones;
   const active = activeSlug === undefined
     ? zoneForPath(bucket, location.pathname)
-    : (activeSlug === null ? null : bucket.zones.find((z) => z.slug === activeSlug) || null);
+    : (activeSlug === null ? null : zones.find((z) => z.slug === activeSlug) || null);
   const ordered = row?.order
-    ? [...bucket.zones].sort((a, b) => row.order.indexOf(a.slug) - row.order.indexOf(b.slug))
-    : bucket.zones;
+    ? [...zones].sort((a, b) => row.order.indexOf(a.slug) - row.order.indexOf(b.slug))
+    : zones;
   const items = row?.overview
     ? [{ slug: 'overview', label: row.overview, root: true }, ...ordered]
     : ordered;

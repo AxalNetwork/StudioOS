@@ -1,199 +1,307 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+/**
+ * D4817 part 1 (#5311, canvas PF-01): the investor's Portfolio Overview, in
+ * the shared Portfolio frame (`../portfolio/PortfolioFrame.jsx`).
+ *
+ * The decision order is the canvas's: performance with its basis and as-of
+ * date, then Needs attention backed by evidence, then the Reporting and
+ * Value-add summaries, then the dense company table where the name is the
+ * link. Every read stands alone: a failed source labels its own panel
+ * Unreadable with a Retry, and the panels beside it keep their figures.
+ * A failed positions read never looks like an empty book (#5365 F-01), and a
+ * Worker `detail` never reaches the page (F-26).
+ */
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowUpRight, Inbox, RefreshCw, TrendingDown, TrendingUp, UsersRound } from 'lucide-react';
+import { ArrowUpRight, RefreshCw, Search } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
-import ZoneNav from '../../workspaces/ZoneNav';
 import { ZoneHeaderTools } from '../../workspaces/ZoneHeader';
 import AlsoIn from '../../workspaces/AlsoIn';
-import { bucketForPath } from '../../workspaces/shellConfig';
-import './investorPortfolioCanvas.css';
 import { titleCase } from '../../lib/absence';
 import { ACCOUNT_LINK } from '../account/companies/companiesModel.js';
-import { kpiValue } from './InvestorPortfolioUpdates';
+import PortfolioFrame from '../portfolio/PortfolioFrame';
+import { usePortfolioReads } from '../portfolio/usePortfolioReads';
+import {
+  AttentionItem, BasisStrip, FinancialMetric, HealthStatus, MetricValue, ObligationStatus, SourceFailure, SummaryTile,
+} from '../portfolio/PortfolioParts';
+import {
+  HEALTH, NOT_RECORDED, SHAPES, attentionOf, companyRowsOf, filterRows, performanceOf, reportingSummaryOf, valueAddSummaryOf,
+} from '../portfolio/portfolioModel';
 
-const money = (value) => {
-  if (value == null || value === '' || !Number.isFinite(Number(value))) return 'Not recorded';
-  return Number(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'code', minimumFractionDigits: 0 });
-};
-const multiple = (value) => (value == null ? '—' : `${Number(value).toFixed(2)}x`);
-const ownership = (value) => (value == null ? '—' : `${Number(value).toFixed(1)}%`);
 const label = (value) => titleCase(value) || 'Unknown';
+const ATTENTION_PREVIEW = 5;
 
-function Skeleton() {
-  return <div className="i4-skeleton" aria-busy="true"><i /><i /><i /><i /><i /></div>;
+const SOURCES = {
+  positions: { call: () => api.positionsList(), shape: SHAPES.positions },
+  analytics: { call: () => api.positionsAnalytics(), shape: SHAPES.analytics },
+  health: { call: () => api.portfolioHealthList({}), shape: SHAPES.health },
+  updates: { call: () => api.portfolioUpdatesLatest(), shape: SHAPES.updates },
+  support: { call: () => api.portfolioSupportList(), shape: SHAPES.support },
+  compliance: { call: () => api.positionsKpiCompliance(), shape: SHAPES.compliance },
+};
+
+const SOURCE_NAMES = { analytics: 'Performance', health: 'Health', updates: 'Founder updates', support: 'Support', compliance: 'Reporting' };
+
+function Skeleton({ rows = 3 }) {
+  return <div className="pf-skeleton" aria-busy="true" aria-label="Reading">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>;
+}
+
+/** Performance: NAV with mark coverage, the multiples with definitions, and the basis strip. */
+function Performance({ perf, onRetry, loading }) {
+  if (loading) return <section className="pf-card"><Skeleton rows={2} /></section>;
+  const failed = perf.nav.state === 'unreadable';
+  return (
+    <section className="pf-perf" aria-labelledby="pf-perf-title" data-testid="portfolio-performance">
+      <div className="pf-hero">
+        <span className="pf-eyebrow" id="pf-perf-title">Net asset value · gross</span>
+        <b data-testid="metric-nav"><MetricValue metric={perf.nav} /></b>
+        {failed ? (
+          <SourceFailure what="Performance" claim="No figure is shown in its place." onRetry={onRetry} testid="status-portfolio-performance-unreadable" retryTestid="button-retry-portfolio-performance" />
+        ) : (
+          <>
+            {perf.nav.state === 'not_recorded' ? <span className="pf-sub">{perf.nav.reason}</span> : null}
+            {perf.coverage ? <span className="pf-sub" data-testid="portfolio-mark-coverage">{perf.coverage}</span> : null}
+            {perf.atCost.map((t) => <span key={t} className="pf-sub">{t}.</span>)}
+          </>
+        )}
+      </div>
+      <div className="pf-mults">
+        {perf.multiples.map((m) => <FinancialMetric key={m.key} metric={m} />)}
+        {perf.flows.map((m) => <FinancialMetric key={m.key} metric={m} />)}
+        <div className="pf-metric" data-testid="metric-companies">
+          <small>Companies</small>
+          <b>{perf.companies ? perf.companies.value : <MetricValue metric={{ state: failed ? 'unreadable' : 'not_recorded', value: NOT_RECORDED }} />}</b>
+          {perf.companies?.note ? <em>{perf.companies.note}</em> : null}
+        </div>
+      </div>
+      <BasisStrip items={perf.basis} methodologyTo="/portfolio/performance" />
+    </section>
+  );
+}
+
+/** Needs attention: the evidence-backed queue, most urgent first. */
+function NeedsAttention({ attention, reads, retry }) {
+  const [all, setAll] = useState(false);
+  const loading = reads.positions.state === 'loading';
+  let body;
+  if (loading) body = <Skeleton />;
+  else if (attention.state !== 'ok') {
+    body = <p className="pf-note">The queue is built from the positions, which could not be read. Nothing is listed in its place.</p>;
+  } else if (attention.items.length === 0) {
+    body = attention.missing.length
+      ? <p className="pf-note" data-testid="attention-empty-partial">No evidence in the sources that answered. The {attention.missing.join(', ')} read failed, so this is not a claim that nothing needs attention.</p>
+      : <p className="pf-note" data-testid="attention-empty">Nothing in the recorded health, reporting, runway or marks needs attention.</p>;
+  } else {
+    const shown = all ? attention.items : attention.items.slice(0, ATTENTION_PREVIEW);
+    body = (
+      <>
+        <ol className="pf-attn">{shown.map((item) => <AttentionItem key={item.key} item={item} />)}</ol>
+        {attention.items.length > ATTENTION_PREVIEW ? (
+          <button type="button" className="pf-link-button" onClick={() => setAll((v) => !v)} aria-expanded={all} data-testid="button-attention-all">
+            {all ? 'Show fewer' : `Show all ${attention.items.length}`}
+          </button>
+        ) : null}
+      </>
+    );
+  }
+  const missing = attention.missing || [];
+  return (
+    <section className="pf-card" aria-labelledby="pf-attn-title" data-testid="portfolio-attention">
+      <div className="pf-card-head">
+        <h2 id="pf-attn-title">Needs attention</h2>
+        {attention.state === 'ok' && attention.items.length ? <span className="pf-sm">{attention.items.length} {attention.items.length === 1 ? 'company' : 'companies'} · evidence-backed · most urgent first</span> : null}
+      </div>
+      {missing.length && attention.state === 'ok' && attention.items.length ? (
+        <p className="pf-partial" data-testid="attention-partial">The {missing.join(', ')} read failed, so evidence from {missing.length === 1 ? 'that source is' : 'those sources is'} missing below.
+          {' '}<button type="button" className="pf-link-button" onClick={() => ['health', 'compliance', 'updates'].forEach((k) => reads[k].state === 'unreadable' && retry(k))}>Retry</button></p>
+      ) : null}
+      {body}
+      <p className="pf-foot">Health never reads Healthy when evidence is missing or a read failed. Each line names its source and date.</p>
+    </section>
+  );
+}
+
+function ReportingCard({ summary, onRetry }) {
+  let figures;
+  if (summary.state === 'loading') figures = <Skeleton rows={1} />;
+  else if (summary.state !== 'ok') figures = <SourceFailure what="Reporting" claim="This is not a claim that any company is late." onRetry={onRetry} testid="status-portfolio-reporting-unreadable" />;
+  else if (summary.total === 0) figures = <p className="pf-note" data-testid="portfolio-reporting-empty">No company is in the reporting population{summary.period ? ` for ${summary.period}` : ''}.</p>;
+  else {
+    figures = (
+      <div className="pf-tiles" data-testid="portfolio-reporting-figures">
+        <SummaryTile label="Received" value={`${summary.received} of ${summary.total}`} />
+        <SummaryTile label={summary.inProgress ? 'Outstanding' : 'Not received'} value={String(summary.outstanding)} tone={summary.outstanding && !summary.inProgress ? 'late' : null} />
+        <SummaryTile label="Period" value={summary.period || NOT_RECORDED} note={summary.period ? (summary.inProgress ? 'In progress' : 'Complete') : null} />
+      </div>
+    );
+  }
+  return (
+    <section className="pf-card" id="portfolio-updates" aria-labelledby="pf-rep-title">
+      <div className="pf-card-head">
+        <h2 id="pf-rep-title">Reporting{summary.period ? ` · ${summary.period}` : ''}</h2>
+        <Link className="pf-btn is-quiet" to="/portfolio/updates" data-testid="link-investor-updates-detail">Open Reports <ArrowUpRight size={13} aria-hidden="true" /></Link>
+      </div>
+      {figures}
+      {summary.state === 'ok' && summary.total > 0 ? (
+        <p className="pf-sm" data-testid="portfolio-reporting-line">{summary.received} of {summary.total} portfolio companies reported for {summary.period}{summary.inProgress ? ' (in progress)' : ''}</p>
+      ) : null}
+      {summary.updatesState === 'unreadable' ? <p className="pf-note">Founder updates could not be read; recent submissions are not listed.</p> : null}
+      {summary.submissions?.length ? (
+        <ul className="pf-hist" aria-label="Recent submissions">{summary.submissions.map((s) => <li key={s.key}><span>{s.date || NOT_RECORDED}</span>{s.text}</li>)}</ul>
+      ) : summary.updatesState === 'ok' ? <p className="pf-note">No founder update has been submitted yet.</p> : null}
+    </section>
+  );
+}
+
+function ValueAddCard({ summary, onRetry }) {
+  let figures;
+  if (summary.state === 'loading') figures = <Skeleton rows={1} />;
+  else if (summary.state !== 'ok') figures = <SourceFailure what="Support" claim="This is not a claim that no support was given." onRetry={onRetry} testid="status-portfolio-support-unreadable" />;
+  else {
+    figures = (
+      <div className="pf-tiles" data-testid="portfolio-support-figures">
+        <SummaryTile label="Open commitments" value={String(summary.open ?? NOT_RECORDED)} note="Promised, not yet delivered" />
+        <SummaryTile label="Delivered" value={String(summary.delivered ?? NOT_RECORDED)} note="Every recorded entry" />
+        <SummaryTile label="No support recorded" value={summary.untouched == null ? NOT_RECORDED : String(summary.untouched)} note={summary.inBook != null ? `${summary.supported} of ${summary.inBook} companies supported` : null} />
+      </div>
+    );
+  }
+  return (
+    <section className="pf-card" id="portfolio-value-add" aria-labelledby="pf-va-title">
+      <div className="pf-card-head">
+        <h2 id="pf-va-title">Value-add</h2>
+        <Link className="pf-btn is-quiet" to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open Value-add <ArrowUpRight size={13} aria-hidden="true" /></Link>
+      </div>
+      {figures}
+      <p className="pf-foot">Meetings resulting from introductions: <span className="pf-not-recorded">{NOT_RECORDED}</span> — the support ledger records promised and delivered work, not meeting outcomes.</p>
+    </section>
+  );
+}
+
+const HEALTH_FILTERS = ['all', ...HEALTH];
+
+function CompanyTable({ rows, positionsState, onRetry }) {
+  const [query, setQuery] = useState('');
+  const [health, setHealth] = useState('all');
+  if (positionsState === 'loading') return <section className="pf-card"><Skeleton rows={4} /></section>;
+  if (positionsState !== 'ok') {
+    return (
+      <section className="pf-card" id="portfolio-positions" aria-labelledby="pf-co-title">
+        <div className="pf-card-head"><h2 id="pf-co-title">Portfolio companies</h2></div>
+        <div className="pf-failure" role="alert" data-testid="status-investor-portfolio-error">
+          <span>Positions could not be read.</span>
+          <button type="button" onClick={onRetry} data-testid="button-retry-investor-portfolio">Retry</button>
+        </div>
+      </section>
+    );
+  }
+  const shown = filterRows(rows, { query, health });
+  return (
+    <section className="pf-card pf-table-card" id="portfolio-positions" aria-labelledby="pf-co-title">
+      <div className="pf-card-head">
+        <h2 id="pf-co-title">Portfolio companies</h2>
+        <div className="pf-tools">
+          <label className="pf-search"><Search size={13} aria-hidden="true" /><span className="pf-sr">Search companies</span>
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search companies" data-testid="input-portfolio-search" />
+          </label>
+          <label className="pf-select"><span className="pf-sr">Health</span>
+            <select value={health} onChange={(e) => setHealth(e.target.value)} data-testid="select-portfolio-health">
+              {HEALTH_FILTERS.map((h) => <option key={h} value={h}>{h === 'all' ? 'Health: all' : `Health: ${h}`}</option>)}
+            </select>
+          </label>
+          <Link className="pf-btn is-quiet" to="/portfolio/positions" data-testid="link-investor-positions-detail">Open Positions <ArrowUpRight size={13} aria-hidden="true" /></Link>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="pf-note" data-testid="portfolio-no-positions">No position is recorded for this investor account yet. Positions appear here once a confirmed commitment is recorded.</p>
+      ) : (
+        <div className="pf-table-wrap">
+          <table className="pf-table">
+            <caption>{shown.length} of {rows.length} {rows.length === 1 ? 'company' : 'companies'} · sorted by health, then invested · values gross</caption>
+            <thead><tr>
+              <th scope="col">Company</th><th scope="col">Sector · stage</th><th scope="col" className="n">Invested</th><th scope="col" className="n">Latest FMV</th>
+              <th scope="col" className="n">Ownership</th><th scope="col" className="n">MOIC</th><th scope="col">Reporting</th><th scope="col">Health</th><th scope="col">Last update</th>
+            </tr></thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={r.key} data-testid={`row-investor-position-${r.key}`}>
+                  <th scope="row" data-label="Company">{r.uid ? <Link className="pf-co" to={`/portfolio/companies/${encodeURIComponent(r.uid)}`}>{r.name}</Link> : <span className="pf-co">{r.name}</span>}</th>
+                  <td data-label="Sector · stage">{r.sector ? label(r.sector) : <span className="pf-not-recorded">{NOT_RECORDED}</span>}{r.stage ? <small>{label(r.stage)}</small> : null}</td>
+                  <td className="n" data-label="Invested">{r.invested || <span className="pf-not-recorded">{NOT_RECORDED}</span>}</td>
+                  <td className="n" data-label="Latest FMV">{r.fmv ? <>{r.fmv}{r.markDate ? <small>{r.markDate}</small> : null}</>
+                    : <><span className="pf-not-recorded">{r.markReason ? 'Mark not usable' : 'No mark recorded'}</span>{r.atCost ? <small>At cost {r.atCost} for NAV</small> : null}</>}</td>
+                  <td className="n" data-label="Ownership">{r.ownership || <span className="pf-not-recorded">{NOT_RECORDED}</span>}</td>
+                  <td className={`n${r.below ? ' is-below' : ''}`} data-label="MOIC">{r.moic || <span className="pf-not-recorded">{NOT_RECORDED}</span>}{r.moic && r.moicAtCost ? <small>At cost</small> : null}</td>
+                  <td data-label="Reporting"><ObligationStatus reporting={r.reporting} /></td>
+                  <td data-label="Health"><HealthStatus health={r.health} /></td>
+                  <td data-label="Last update">{r.lastUpdate || <span className="pf-not-recorded">{r.reporting.state === 'Unreadable' ? 'Unreadable' : NOT_RECORDED}</span>}</td>
+                </tr>
+              ))}
+              {shown.length === 0 ? <tr><td colSpan={9} className="pf-note">No company matches these filters.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="pf-foot">Ownership is read from each founder’s cap table. This view never edits it.</p>
+    </section>
+  );
 }
 
 export default function InvestorPortfolioCanvas() {
-  const [state, setState] = useState({
-    loading: true, error: '', positions: [], analytics: null, health: null, updates: [], support: null, compliance: null,
-    unavailable: { analytics: false, health: false, updates: false, support: false, compliance: false },
-  });
-
-  const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
-    try {
-      const positionsResult = await api.positionsList();
-      const optional = await Promise.allSettled([
-        api.positionsAnalytics(),
-        api.portfolioHealthList({}),
-        api.portfolioUpdatesLatest(),
-        api.portfolioSupportList(),
-        api.positionsKpiCompliance(),
-      ]);
-      const value = (index, fallback) => optional[index].status === 'fulfilled' ? optional[index].value : fallback;
-      const analyticsResult = value(0, null);
-      const healthResult = value(1, null);
-      const updatesResult = value(2, { items: [] });
-      const supportResult = value(3, null);
-      const complianceResult = value(4, null);
-      setState({
-        loading: false,
-        error: '',
-        positions: Array.isArray(positionsResult?.items) ? positionsResult.items : [],
-        analytics: analyticsResult,
-        health: healthResult,
-        updates: Array.isArray(updatesResult?.items) ? updatesResult.items : [],
-        support: supportResult?.totals ?? null,
-        compliance: complianceResult,
-        unavailable: {
-          analytics: optional[0].status === 'rejected',
-          health: optional[1].status === 'rejected',
-          updates: optional[2].status === 'rejected',
-          support: optional[3].status === 'rejected',
-          compliance: optional[4].status === 'rejected',
-        },
-      });
-    } catch (error) {
-      setState((current) => ({ ...current, loading: false, error: true }));
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const reportingByProject = useMemo(
-    () => new Map((state.compliance?.companies || []).map((item) => [String(item.project_id), item.reported])),
-    [state.compliance],
-  );
-  const rows = useMemo(() => state.positions.map((position) => {
-    const health = state.health?.items?.find((item) => item.project_id === position.project_id);
-    return { ...position, health, reported: reportingByProject.get(String(position.project_id)) };
-  }), [state.positions, state.health, reportingByProject]);
-  const units = new Map((state.compliance?.kpi_set || []).map((rule) => [rule.kpi_key, rule.unit]));
-  const latestUpdate = state.updates[0];
-  const reportingPeriod = state.compliance?.population?.period ?? state.compliance?.period;
-  const reportingSummary = reportingPeriod && Number.isInteger(state.compliance?.reported_count) && Number.isInteger(state.compliance?.total_count)
-    ? `${state.compliance.reported_count} of ${state.compliance.total_count} portfolio companies reported for ${reportingPeriod}${state.compliance.period_in_progress ? ' (in progress)' : ''}`
-    : 'Reporting completion unavailable';
-  const interventionCount = state.health?.totals?.intervention;
-  const healthyCount = state.health?.totals?.green;
-  const unmeasured = state.health?.totals?.not_measured;
-  const healthUnavailable = state.unavailable.health || !Number.isInteger(interventionCount) || !Number.isInteger(healthyCount);
-  const healthStatus = healthUnavailable ? 'Health signals are unavailable.'
-    : `${interventionCount} flagged for attention${Number.isInteger(unmeasured) ? ` · ${unmeasured} without a measurement` : ''}`;
-  const hasPartialFailure = Object.values(state.unavailable).some(Boolean);
-  const statCards = [
-    { label: 'NAV · gross', value: state.unavailable.analytics ? 'Unavailable' : money(state.analytics?.nav), note: 'Residual value of the portfolio positions', delta: state.analytics?.as_of ? `As of ${state.analytics.as_of}` : 'Latest recorded marks and cost basis' },
-    { label: 'TVPI · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.tvpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : 'Total value / paid-in', delta: 'Gross of fees and carry' },
-    { label: 'MOIC · gross', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.moic), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.paid_in)} invested`, delta: 'Marked value + realised' },
-    { label: 'DPI', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.dpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.distributed)} realised`, delta: 'Cash returned' },
-    { label: 'RVPI', value: state.unavailable.analytics ? 'Unavailable' : multiple(state.analytics?.rvpi), note: state.unavailable.analytics ? 'Analytics source unavailable' : `${money(state.analytics?.nav)} held`, delta: 'Residual value' },
-  ];
+  const { reads, retry, reload } = usePortfolioReads(SOURCES);
+  const perf = useMemo(() => performanceOf(reads.analytics, reads.positions), [reads.analytics, reads.positions]);
+  const attention = useMemo(() => attentionOf(reads), [reads]);
+  const rows = useMemo(() => companyRowsOf(reads), [reads]);
+  const reporting = useMemo(() => reportingSummaryOf(reads.compliance, reads.updates), [reads.compliance, reads.updates]);
+  const support = useMemo(() => valueAddSummaryOf(reads.support), [reads.support]);
+  const failed = Object.entries(SOURCE_NAMES).filter(([k]) => reads[k].state === 'unreadable').map(([, n]) => n);
+  const positionCount = reads.positions.state === 'ok' ? reads.positions.value.items.length : null;
 
   return (
-    <div className="i4-shell">
-    <main className="i4-portfolio" data-testid="investor-portfolio-canvas">
-      <header className="i4-heading">
-        <div>
-          <h1>Know how my investments are doing</h1>
-          <p>Portfolio positions visible to this investor account, with reporting and support for the companies you can access.</p>
-          {/* D1413 (#3696 Q1): the same companies can sit in your account's Portfolio; each links to the other. */}
-          <Link to={ACCOUNT_LINK.to} className="i4-primary-link" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
-        </div>
-        {/* D1424 (#3700): the root has no primary; Ask stays gated (ProfileHeaderAsk). */}
-        <ZoneHeaderTools role="investor"><button type="button" className="i4-icon-button" onClick={load} data-testid="button-refresh-investor-portfolio" aria-label="Refresh direct book"><RefreshCw size={15} /></button></ZoneHeaderTools>
-      </header>
-
-      {/* This row used to be hand-rolled, and its "Positions" pill linked
-          /portfolio/health — the page it was already on — while the actual
-          positions book at /portfolio/positions was reachable only from a
-          "View dilution" link further down. ZoneNav takes all three targets
-          from the shell config. `activeSlug={null}`: the overview sits above
-          the zones, so no pill is current here. */}
-      <ZoneNav bucket={bucketForPath('investor', '/portfolio')} role="investor" activeSlug={null} className="my-3.5" />
-
-      {state.error && <div className="i4-error" data-testid="status-investor-portfolio-error"><span>Positions could not be read.</span><button type="button" onClick={load} data-testid="button-retry-investor-portfolio">Retry</button></div>}
-      {hasPartialFailure && <div className="i4-partial" data-testid="status-investor-portfolio-partial">Some portfolio sources are temporarily unavailable. Affected sections are labelled below.</div>}
-      {state.loading ? <Skeleton /> : state.error ? null : (
-        <>
-          <section className="i4-stats" aria-label="Direct book performance">
-            {statCards.map((stat) => <article key={stat.label} className="i4-stat"><div><span>{stat.label}</span><b>{stat.value}</b><small>{stat.note}</small></div><em>{stat.delta}</em></article>)}
-          </section>
-
-          <section className="i4-card i4-positions" id="portfolio-positions">
-            <div className="i4-section-head"><div><h2>Positions</h2><p>{rows.length} companies{state.analytics?.as_of ? ` · marks as of ${state.analytics.as_of}` : ''}</p></div><Link to="/portfolio/positions" data-testid="link-investor-positions-detail">View dilution <ArrowUpRight size={13} /></Link></div>
-            {rows.length === 0 ? <div className="i4-empty">No direct positions have been recorded. Position records will appear here when they are available to this investor role.</div> : (
-              <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Invested</th><th>Own %</th><th>FMV</th><th>Multiple</th><th>Reporting</th></tr></thead><tbody>
-                {rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-position-${row.project_id}`}>
-                  <td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{[row.project?.sector, row.project?.stage].filter(Boolean).join(' · ')}</small></td>
-                  <td>{money(row.total_invested)}</td><td>{ownership(row.latest_ownership_pct)}</td><td>{money(row.fmv)}</td>
-                  <td className={row.multiple != null && Number(row.multiple) < 1 ? 'i4-down' : 'i4-up'}>{multiple(row.multiple)}{row.unmarked && <small>At cost</small>}</td>
-                   <td>{state.unavailable.compliance || row.reported == null
-                     ? <span className="i4-report">Unavailable</span>
-                     : <span className={`i4-report ${row.reported ? 'is-current' : 'is-missing'}`}>{row.reported ? 'Current' : 'Due'}</span>}</td>
-                </tr>)}
-              </tbody></table></div>
-            )}
-            <p className="i4-seam-note"><span>Founder record</span> Ownership is read from each founder’s cap table. This investor view never edits it; changes remain attributable to the company record.</p>
-          </section>
-
-          <section className="i4-lower">
-            <article className="i4-card i4-updates" id="portfolio-updates">
-               <div className="i4-section-head"><div><h2>Updates &amp; KPI collection</h2><p>{reportingSummary}</p></div><Link to="/portfolio/updates" data-testid="link-investor-updates-detail">Open updates <ArrowUpRight size={13} /></Link></div>
-               {state.unavailable.updates ? <div className="i4-empty"><Inbox size={16} /> Founder updates are temporarily unavailable. No empty-reporting claim is being made.</div> : latestUpdate ? <div className="i4-update"><div className="i4-proposal">Founder update</div><h3>{latestUpdate.title}</h3><p>{latestUpdate.project?.name || `Startup ${latestUpdate.project_id}`}{latestUpdate.period ? ` · ${latestUpdate.period}` : ''}</p><div className="i4-kpis">{Object.entries(latestUpdate.kpis || {}).slice(0, 4).map(([key, value]) => <div key={key}><span>{label(key)}</span><b>{kpiValue(key, value, units)}</b></div>)}</div><Link to="/portfolio/updates" className="i4-primary-link" data-testid="link-review-latest-founder-update">Review source update</Link></div> : <div className="i4-empty"><Inbox size={16} /> No founder update is available yet. Incoming reports retain their source when published.</div>}
-               <div className="i4-health-line"><Activity size={14} /><span>{healthStatus}</span><button type="button" onClick={load} data-testid="button-refresh-investor-health">Refresh signals</button></div>
-            </article>
-            <article className="i4-card i4-value-add" id="portfolio-value-add">
-            <div className="i4-section-head"><div><h2>Value-add desk</h2><p>Support recorded against this investor relationship</p></div><Link to="/portfolio/value-add" data-testid="link-investor-value-add-detail">Open desk <ArrowUpRight size={13} /></Link></div>
-               <div className="i4-value-row"><UsersRound size={15} /><div><b>Support delivered</b><p>{state.support ? `${state.support.companies_supported} of ${state.support.companies_in_book} companies in the support ledger` : 'Support totals unavailable'}</p></div><strong>{state.support?.delivered ?? 'Unavailable'}</strong></div>
-               <div className="i4-value-row"><TrendingUp size={15} /><div><b>Portfolio health</b><p>{healthUnavailable ? 'Health source unavailable' : 'Healthy in the latest recorded snapshots'}</p></div><strong>{healthUnavailable ? 'Unavailable' : healthyCount}</strong></div>
-               <div className="i4-value-row"><TrendingDown size={15} /><div><b>Needs attention</b><p>{healthStatus}</p></div><strong>{healthUnavailable ? 'Unavailable' : interventionCount}</strong></div>
-              <p className="i4-seam-note">Support given is kept beside the position it serves. Founder-facing records remain distinct.</p>
-            </article>
-          </section>
-        </>
+    <PortfolioFrame
+      tab={null}
+      testid="investor-portfolio-canvas"
+      context={perf.asOf ? `Gross of fees and carry · ${perf.asOf.replace(/^As of/, 'as of')}` : null}
+      tools={(
+        // The root has no primary; Ask stays gated (ProfileHeaderAsk).
+        <ZoneHeaderTools role="investor">
+          <Link to={ACCOUNT_LINK.to} className="pf-btn is-quiet" data-testid="link-account-portfolio">{ACCOUNT_LINK.label}</Link>
+          <button type="button" className="pf-icon-button" onClick={reload} data-testid="button-refresh-investor-portfolio" aria-label="Refresh Portfolio"><RefreshCw size={15} aria-hidden="true" /></button>
+        </ZoneHeaderTools>
       )}
-      {state.analytics?.unmarked_position_count > 0 && (
-        <div className="i4-coverage" data-testid="investor-portfolio-mark-coverage">
-          {state.analytics.unmarked_position_count} of {state.analytics.position_count} positions have no valuation mark and are carried at cost
-          {state.analytics.mark_coverage != null ? ` · ${Math.round(state.analytics.mark_coverage * 100)}% mark coverage` : ''}.
-        </div>
+      notice={failed.length ? (
+        <p className="pf-partial" data-testid="status-investor-portfolio-partial">{failed.join(', ')} could not be read. Each affected panel says so; the others are current.</p>
+      ) : null}
+      rail={(
+        <WorkerRail
+          workspace="Portfolio"
+          role="investor"
+          className="pf-rail"
+          data-testid="investor-portfolio-rail"
+          stance="Manual"
+          note="Tables, updates, health sweeps and portfolio tools work without AI. Returns are computed from recorded positions, marks and distributions. Missing values stay blank rather than being estimated."
+          coverage={[
+            positionCount == null ? 'Positions unreadable' : `${positionCount} position${positionCount === 1 ? '' : 's'} readable`,
+            reads.analytics.state === 'unreadable' ? 'Return analytics unreadable' : perf.asOf || 'Mark date not recorded',
+          ]}
+          coverageNote="Updates and cap-table ownership stay linked to the company records they came from."
+          unavailable={[
+            ['Valuation marks', 'A position without a recorded mark is carried at cost when its cost is known.'],
+            ['Outbound', 'Nothing is sent to a founder from this page.'],
+          ]}
+          action={<Link to="/portfolio/performance" data-testid="link-rail-portfolio-performance">Open performance methodology <ArrowUpRight size={13} /></Link>}
+        />
       )}
+    >
+      <Performance perf={perf} loading={reads.analytics.state === 'loading'} onRetry={() => retry('analytics')} />
+      <NeedsAttention attention={attention} reads={reads} retry={retry} />
+      <div className="pf-two">
+        <ReportingCard summary={reporting} onRetry={() => retry('compliance')} />
+        <ValueAddCard summary={support} onRetry={() => retry('support')} />
+      </div>
+      <CompanyTable rows={rows || []} positionsState={reads.positions.state} onRetry={() => retry('positions')} />
       <AlsoIn role="investor" row="Portfolio" />
-      <footer className="i4-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</footer>
-    </main>
-    {/* The zone row above covers Positions, Updates and Value-add.
-        /portfolio/performance is not a zone of the Portfolio bucket, so the
-        rail keeps the only door to it. */}
-    <WorkerRail
-      workspace="Portfolio"
-      role="investor"
-      className="i4-rail"
-      data-testid="investor-portfolio-rail"
-      stance="Manual"
-      note="Tables, updates, health sweeps and portfolio tools work without AI. Returns are computed from recorded positions, marks and distributions. Missing values stay blank rather than being estimated."
-      coverage={[
-        `${rows.length} position${rows.length === 1 ? '' : 's'} readable`,
-        state.unavailable.analytics ? 'Return analytics unavailable'
-          : state.analytics?.as_of ? `Marks as of ${state.analytics.as_of}` : 'Mark date not recorded',
-      ]}
-      coverageNote="Updates and cap-table ownership stay linked to the company records they came from."
-      unavailable={[
-        ['Valuation marks', 'A position without a recorded mark is carried at cost when its cost is known.'],
-        ['Outbound', 'Nothing is sent to a founder from this page.'],
-      ]}
-      action={<Link to="/portfolio/performance" data-testid="link-rail-portfolio-performance">Open performance methodology <ArrowUpRight size={13} /></Link>}
-    />
-    </div>
+      <p className="pf-boundary">Investor workspace. Data shown is governed by your existing access and permissions.</p>
+    </PortfolioFrame>
   );
 }
