@@ -367,6 +367,16 @@ const REFUSALS = {
 export const rosterRefusal = (e) => wordsFor(REFUSALS, e, 'That change was not saved.');
 /** SA5's columns. */
 export const COMPANY_COLUMNS = ['Skill', 'Company', 'Author', 'Area', 'Tools', 'Status'];
+/**
+ * D4538 part 3: a company skill's lineage in the moderation queue, as one line. Null for a standalone skill
+ * (`based_on: null`); "Base not readable" when the Worker could not read the HQ base, never a guessed name.
+ */
+export const BASE_UNREADABLE = 'Base not readable';
+export function lineageLine(basedOn) {
+  if (!basedOn) return null;
+  if (basedOn.base_readable !== true || !basedOn.name || basedOn.version == null) return BASE_UNREADABLE;
+  return `Based on ${basedOn.name} v${basedOn.version}`;
+}
 /** SA7's columns. */
 export const RUN_COLUMNS = ['Time', 'Agent', 'Skills', 'Team', 'Model', 'Tokens', 'Cost', 'Status', 'Proposal'];
 /** SA8's columns. */
