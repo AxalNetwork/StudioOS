@@ -15,7 +15,8 @@ import { Link } from 'react-router-dom';
 import { adminLicenceAgreementsApi } from '../../../lib/api/adminLicenceAgreements.js';
 import { adminLicenceAgreementPoliciesApi } from '../../../lib/api/adminLicenceAgreementPolicies.js';
 import { reportError } from '../../../lib/log';
-import { usePhoneWidth } from '../../../ui';
+import { ReasonDialog } from '../grants/GrantDialogs';
+import { Lightbox, usePhoneWidth } from '../../../ui';
 import {
   DOC_STATE_WORD, SIGNAL_WORD, gateWord, historyLine, legalSignals, packageReadiness, programsReadiness, strategyWord,
 } from '../../../lib/licenceLegalReadiness.js';
@@ -72,7 +73,87 @@ export function ReadFailed({ text, onRetry, testId }) {
   );
 }
 
-function PackageAgreement({ pkg, legalRead, retry }) {
+function AgreementAction({ document, licenceUid, packageOfferUid, onChanged }) {
+  const [stage, setStage] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [failure, setFailure] = useState(null);
+  const row = document.row;
+  const reviewable = row && ['draft', 'ready'].includes(row.status);
+  const preparable = document.kind !== 'program_schedule' && document.state === 'not_prepared';
+  if (!reviewable && !preparable) return null;
+
+  async function review() {
+    setStage('review');
+    setFailure(null);
+    setPreview(null);
+    try {
+      setPreview(await adminLicenceAgreementsApi.preview(row.uid));
+    } catch (error) {
+      reportError('licence_agreement_preview_failed', error);
+      setFailure('The agreement preview could not be read.');
+    }
+  }
+
+  async function prepare(reason) {
+    const { items } = await adminLicenceAgreementsApi.templates();
+    const template = items.find((item) => item.kinds.includes(document.kind)
+      && (document.package_key ? item.package_key === document.package_key : item.program_key === document.program_key));
+    if (!template?.authored) throw new Error(template?.refusal || 'No template is available for this agreement.');
+    const out = await adminLicenceAgreementsApi.draft(licenceUid, {
+      agreement_kind: document.kind,
+      program_key: document.kind.startsWith('program_') ? document.program_key : undefined,
+      package_key: document.package_key,
+      addendum_key: document.kind === 'package_addendum' ? document.slot_key.split(':').at(-1) : undefined,
+      package_offer_uid: document.package_key ? packageOfferUid : undefined,
+      template_slug: template.slug,
+      reason,
+    });
+    return out;
+  }
+
+  function changed() {
+    setStage(null);
+    onChanged();
+  }
+
+  return (
+    <>
+      <button type="button" className={GHOST} onClick={reviewable ? review : () => setStage('prepare')}>
+        {reviewable ? 'Review agreement' : 'Prepare agreement'}
+      </button>
+      {stage === 'prepare' && (
+        <ReasonDialog title="Prepare agreement" button="Prepare" run={prepare}
+          onClose={() => setStage(null)} onDone={changed} testId="licence-agreement-prepare" />
+      )}
+      {stage === 'review' && (
+        <Lightbox title="Review agreement" label="Review agreement" onClose={() => setStage(null)} width={740}
+          footer={preview?.readiness?.ready && preview.body_matches === true ? (
+            <button type="button" className={GHOST} onClick={() => setStage('send')}>Send agreement</button>
+          ) : null}>
+          {failure && <p role="alert">{failure}</p>}
+          {!failure && !preview && <p role="status">Reading agreement…</p>}
+          {preview && (
+            <>
+              <h3 className={H2}>{preview.title || 'Agreement preview'}</h3>
+              {preview.body_matches !== true && <p role="alert">The stored text could not be verified.</p>}
+              {preview.readiness?.counsel_review?.required && <p>{preview.readiness.counsel_review.reason}</p>}
+              {!!preview.readiness?.missing_signatory_fields?.length && <p>Missing signatory fields · {preview.readiness.missing_signatory_fields.join(', ')}</p>}
+              {!!preview.readiness?.unresolved_fields?.length && <p>Unresolved fields · {preview.readiness.unresolved_fields.join(', ')}</p>}
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-sm">{preview.body_md}</pre>
+            </>
+          )}
+        </Lightbox>
+      )}
+      {stage === 'send' && (
+        <ReasonDialog title="Send agreement for signature" button="Send for signature"
+          run={(reason) => adminLicenceAgreementsApi.send(row.uid, { revision: preview.revision, reason })}
+          onClose={() => setStage('review')} onDone={changed} testId="licence-agreement-send" />
+      )}
+    </>
+  );
+}
+
+function PackageAgreement({ pkg, legalRead, retry, action }) {
   return (
     <section className={`${CARD} flex flex-col gap-2`} data-testid="licence-package-agreement">
       <span className={EYE}>2 · Axal VC package agreement</span>
@@ -98,6 +179,7 @@ function PackageAgreement({ pkg, legalRead, retry }) {
               <span className="flex flex-wrap items-center gap-2">
                 <StatePill state={pkg.master.state} testId="licence-package-master-state" />
                 {pkg.master.row ? <Link className={LINK} to={pkg.master.href} data-testid="licence-package-master-link">Open in Contracts ›</Link> : null}
+                {action({ ...pkg.master, kind: 'package_master', package_key: pkg.key })}
               </span>
             ) : <StatePill state="not_applicable" label={pkg.strategy === 'none' ? 'No agreement required' : 'No master agreement · per program'} testId="licence-package-master-state" />}
           </div>
@@ -117,7 +199,7 @@ function PackageAgreement({ pkg, legalRead, retry }) {
   );
 }
 
-function ProgramAgreements({ programs, legalRead, agreementsRead, retryLegal, retryAgreements, licenceUid }) {
+function ProgramAgreements({ programs, legalRead, agreementsRead, retryLegal, retryAgreements, licenceUid, action }) {
   const phone = usePhoneWidth();
   const rows = programs.filter((p) => p.status !== 'not_granted');
   return (
@@ -138,6 +220,7 @@ function ProgramAgreements({ programs, legalRead, agreementsRead, retryLegal, re
               <span className="flex flex-wrap items-center gap-2">
                 <StatePill state={d ? d.state : p.agreementState} />
                 {d && (d.row || d.executed_agreement_uid || d.in_flight_agreement_uid) ? <Link className={LINK} to={d.href}>Open in Contracts ›</Link> : null}
+                {d && action({ ...d, program_key: p.programKey })}
               </span>
             </li>
           )))}
@@ -166,7 +249,8 @@ function ProgramAgreements({ programs, legalRead, agreementsRead, retryLegal, re
                       {d && (d.row || d.executed_agreement_uid || d.in_flight_agreement_uid) ? <Link className={LINK} to={d.href} data-testid={`licence-program-link-${p.programKey}-${d.kind}`}>Open in Contracts ›</Link>
                         : d && d.kind === 'program_schedule' && d.state === 'not_prepared'
                           ? <Link className={LINK} to={`/admin/licences/programs/studio/${encodeURIComponent(licenceUid)}`}>Send from Program access</Link>
-                          : d && d.state === 'not_prepared' ? <span className={SUB}>No version yet</span> : null}
+                          : null}
+                      {d && d.kind !== 'package_master' && action({ ...d, program_key: p.programKey })}
                     </td>
                   </tr>
                 ));
@@ -266,11 +350,16 @@ export default function LicenceAgreements({ licence }) {
   const programs = useMemo(() => programsReadiness(legal, ctx), [legal, agreementsRead.data, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const pkg = useMemo(() => (legal ? packageReadiness(legal, ctx) : { recorded: false }), [legal, agreementsRead.data, uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const signals = useMemo(() => (legal ? legalSignals(legal, ctx) : []), [legal, agreementsRead.data, uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const action = (document) => agreementsRead.status === 'ready' ? (
+    <AgreementAction key={document.row?.uid ?? document.slot_key ?? document.kind} document={document} licenceUid={uid}
+      packageOfferUid={legal?.holdings?.find((h) => h.scope_kind === 'package' && h.scope_key === document.package_key && h.current)?.package_offer_uid}
+      onChanged={() => { retryAgreements(); retryLegal(); }} />
+  ) : null;
   return (
     <div className="mt-5 flex flex-col gap-4" data-testid="licence-agreements">
       <NeedsHq signals={signals} legalRead={legalRead} agreementsRead={agreementsRead} />
-      <PackageAgreement pkg={pkg} legalRead={legalRead} retry={retryLegal} />
-      <ProgramAgreements programs={programs} legalRead={legalRead} agreementsRead={agreementsRead} retryLegal={retryLegal} retryAgreements={retryAgreements} licenceUid={uid} />
+      <PackageAgreement pkg={pkg} legalRead={legalRead} retry={retryLegal} action={action} />
+      <ProgramAgreements programs={programs} legalRead={legalRead} agreementsRead={agreementsRead} retryLegal={retryLegal} retryAgreements={retryAgreements} licenceUid={uid} action={action} />
       <Readiness pkg={pkg} legalRead={legalRead} />
       <LegalHistory licenceUid={uid} />
     </div>

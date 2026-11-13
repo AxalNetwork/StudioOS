@@ -67,10 +67,10 @@ const never = () => new Promise(() => {});
 function stubFetch(answers = {}) {
   const real = globalThis.fetch;
   const calls = [];
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init) => {
     const path = String(url);
     calls.push(path);
-    for (const [k, v] of Object.entries(answers)) if (path.includes(k)) return v();
+    for (const [k, v] of Object.entries(answers)) if (path.includes(k)) return v(init);
     if (path.endsWith(`/api/admin/licence-agreement-policies/licences/${LIC}`)) return json(LEGAL);
     if (path.endsWith(`/api/admin/licence-agreements/licences/${LIC}`)) return json(AGREEMENTS);
     if (path.endsWith(`/api/admin/licence-agreement-policies/licences/${LIC}/history`)) return json({ items: [] });
@@ -246,4 +246,22 @@ test('mounted: a licence\'s "Open in Contracts" address lands on the Agreements 
     assert.equal(list[1][0].agreement_type, 'program_licence');
     assert.equal(list[1][0].program, 'referral-partners');
   } finally { await view.unmount(); Object.assign(api, originals); Object.assign(contractsApi, contractOriginals); }
+});
+
+test('HQ reviews the stored agreement before sending its reviewed revision with a reason', async () => {
+  let sent;
+  const view = await mount(React.createElement(LicenceAgreements, { licence: { uid: LIC } }), {
+    '/ag4/preview': () => json({ revision: 7, title: 'Referral agreement', body_md: 'The stored agreement text.',
+      body_matches: true, readiness: { ready: true } }),
+    '/ag4/send': (init) => { sent = { method: init.method, ...JSON.parse(init.body) }; return json({}); },
+  });
+  try {
+    await view.click('Review agreement');
+    assert.match(view.text(), /The stored agreement text/);
+    assert.equal(sent, undefined);
+    await view.click('Send agreement');
+    await view.fill('Reason', 'Approved by the legal team.');
+    await view.click('Send for signature');
+    assert.deepEqual(sent, { method: 'POST', revision: 7, reason: 'Approved by the legal team.' });
+  } finally { await view.unmount(); }
 });

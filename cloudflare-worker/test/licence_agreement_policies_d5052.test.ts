@@ -26,7 +26,7 @@ import policiesRoute from '../src/routes/admin_licence_agreement_policies.ts';
 import contractsRoute from '../src/routes/admin_contracts.ts';
 import { onAgreementEnvelopeCompleted } from '../src/services/programAgreements.ts';
 import { programCopy, studioPrograms, parseProgramCopy } from '../src/services/licencePrograms.ts';
-import { requirementFor, programLegalStatus, gateSyncStatements, readLicenceLegal } from '../src/services/agreementPolicies.ts';
+import { requirementFor, programLegalStatus, gateSyncStatements, ledgerLegalSignals, readLicenceLegal } from '../src/services/agreementPolicies.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { loadSchema } from './_schema_once.mjs';
@@ -469,4 +469,19 @@ test('the studio agreement read is scoped and exposes a completed PDF through th
   assert.deepEqual(Object.keys(executed.body.agreements[0]).sort(), [
     'agreement_kind', 'effective_from', 'package_key', 'program_key', 'signed_at', 'signed_envelope_id', 'status', 'uid',
   ]);
+});
+
+test('ledger readiness reports missing, prepared and sent agreements on the correct licence', async () => {
+  const db = fixture();
+  const env = { DB: d1Over(db) } as any;
+  const licence = { id: 1, uid: LIC, licence_ref: 'AXL-001', brand_name: 'Studio North', kind: 'subsidiary', status: 'active', renews_on: null };
+  const read = () => ledgerLegalSignals(env, [licence, { ...licence, id: 2, uid: 'other' }]);
+  assert.equal((await policy(db, 'program', 'learning', { strategy: 'per_program', legal_gate: 'required_before_in_force' })).status, 201);
+  assert.equal((await grant(db, 'learning')).status, 201);
+  assert.deepEqual([...await read()], [[LIC, ['not_prepared']], ['other', []]]);
+  const prepared = await draft(db, LEARNING_LICENCE);
+  assert.equal(prepared.status, 201);
+  assert.deepEqual((await read()).get(LIC), ['awaiting_send']);
+  assert.equal((await send(db, prepared.body.agreement.uid, prepared.body.agreement.revision)).status, 200);
+  assert.deepEqual((await read()).get(LIC), ['awaiting_signature']);
 });
