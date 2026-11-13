@@ -87,7 +87,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByTestId('grow-overview-focus')).toContainText('$0');
     await expect(page.getByTestId('cycle-action')).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Share an update', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Ask Eadwyn/ })).toHaveCount(0);
+    await expect(page.getByTestId('grow-overview-v2').getByRole('button', { name: /^Ask Eadwyn/ })).toHaveCount(0);
     await expect(page.getByTestId('grow-setup')).toHaveCount(0);
     await expect(page.getByTestId('grow-attention')).toContainText('Read only');
   });
