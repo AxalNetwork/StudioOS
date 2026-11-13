@@ -785,12 +785,16 @@ integrations.delete('/:uid', async (c) => {
     catch { return c.json({ error: 'google_revocation_failed' }, 503); }
     return c.json({ ok: true });
   }
+  if (row.provider_key === 'facebook' && (await selectJwt(c))?.payload.impersonated_by) {
+    return c.json({ error: 'support_session_refused' }, 403);
+  }
 
   const impl = getProviderImpl(row.provider_key);
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
     catch (e) {
       if (row.provider_key === 'tiktok') return c.json({ error: 'tiktok_revocation_failed' }, 503);
+      if (row.provider_key === 'facebook') return c.json({ error: 'facebook_revocation_failed' }, 503);
       console.warn('[integrations] provider disconnect threw:', (e as Error).message);
     }
   } else {
@@ -1092,6 +1096,7 @@ async function actionHandler(c: Context<{ Bindings: Env }>) {
     const out = await impl.action(c, user, row, name, body);
     return c.json({ ok: true, action: name, result: out });
   } catch (e) {
+    if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
     const msg = (e as Error).message || 'action failed';
     await logEvent(c.env, {
       integration_id: row.id, user_id: user.id, provider_key: row.provider_key,

@@ -59,6 +59,12 @@ credentials into an issue. See §7 before any general-availability PR.
 2. **The Meta app.** developers.facebook.com → My Apps → Create app, type
    Business, linked to that portfolio.
    - Add the products WhatsApp and Facebook Login for Business.
+   - For Facebook Pages, create a separate Login for Business user-token
+     configuration with `pages_show_list`, `pages_read_engagement`, and
+     `read_insights`. Set its ID as `FACEBOOK_LOGIN_CONFIG_ID`.
+     Register `/api/integrations/oauth/facebook/callback` on the configured OAuth
+     callback origin and `https://axal.vc/api/meta/data-deletion` as the data
+     deletion callback. Set `FACEBOOK_APP_APPROVED=1` after Meta App Review.
    - App settings → Basic: icon, privacy policy URL, terms URL, data deletion
      instructions URL, category.
    - App Domains: `axal.vc` and `app.axal.vc`.

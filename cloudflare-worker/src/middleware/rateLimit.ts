@@ -547,6 +547,13 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'POST' && p === '/api/track',
     scope: 'ip',
   },
+  {
+    name: 'meta_data_deletion',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'POST' && p === '/api/meta/data-deletion',
+    scope: 'ip',
+  },
   // 1000 req/min global burst protection
   {
     name: 'global',
