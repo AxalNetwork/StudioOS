@@ -295,3 +295,4 @@ D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter
 | `mail_conversation_history_4662.test.ts` | D4662: validated durable sent identity and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with a non-delivering adapter. |
 | `platform_signal_summary_5672.test.ts` | D5672: synthetic authorization and unavailable-reader behavior. |
 | `security_triage_5680.test.ts` | D5680: synthetic authorization and unavailable-reader behavior. |
+| `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |
