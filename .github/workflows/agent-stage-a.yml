@@ -12,6 +12,9 @@ name: Agent Stage A (hosted lifecycle, stubbed inference)
 #   `isolated` → the Workflow path and the manual sponsor run, each accepted
 #   by the synthetic sponsor → reconcile holds, usage and proposals → check
 #   the ceilings → delete everything, pass or fail.
+#   D4594 part 4: before reconciling, S1's #4555 pass runs a pinned skill three
+#   times on the manual path: legacy, then AGENT_SKILL_RUNTIME = cloudflare_sdk
+#   (a redeploy that changes only that line), then legacy again.
 #
 # NEVER PRODUCTION. The config is flat (no [env.*], so the top-level axal.vc
 # routes cannot be inherited), has no route, cron, browser or service, and
