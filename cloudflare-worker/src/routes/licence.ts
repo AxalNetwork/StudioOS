@@ -39,7 +39,9 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { branchOf } from '../util/branch';
 import { hydrate, type LicenceRow } from './admin_licences';
-import { nowIso } from './_t13t14t15_helpers';
+import { mapError, nowIso } from './_t13t14t15_helpers';
+import { esignEnvelopeScope } from '../services/tenancyScope';
+import { readLicenceLegal } from '../services/agreementPolicies';
 // D197 — the host the licence's own admin binds. The validator, the two
 // records and the resolver check all live in the service so this router and
 // HQ's strip cannot derive them differently.
@@ -1166,6 +1168,43 @@ r.get('/mine/contract', async (c) => {
   if ('refusal' in own) return own.refusal;
   if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
   return c.json(await licenseeContracts(c.env, own.licence, own.user.id));
+});
+
+// D5051 — legal readiness for the licence the caller administers.
+r.get('/mine/program-agreements', async (c) => {
+  try {
+    const own = await ownLicenceForAccount(c);
+    c.header('Cache-Control', 'private, no-store');
+    if ('refusal' in own) return own.refusal;
+    if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
+    const legal = await readLicenceLegal(c.env, own.licence, nowIso().slice(0, 10));
+    const visibleRows = legal.rows.filter((row) => ['sent', 'partially_signed', 'executed', 'superseded'].includes(row.status));
+    const signedUuids = visibleRows.filter((row) => row.signed_at && row.envelope_uuid).map((row) => row.envelope_uuid);
+    const scope = esignEnvelopeScope(own.user);
+    const signedEnvelopes = signedUuids.length ? await c.env.DB.prepare(
+      `SELECT e.id, e.envelope_uuid FROM esign_envelopes e
+        WHERE e.envelope_uuid IN (SELECT value FROM json_each(?))
+          AND e.status = 'completed' AND e.signed_r2_key LIKE 'esign/signed/%' AND ${scope.sql}`,
+    ).bind(JSON.stringify(signedUuids), ...scope.binds).all<{ id: number; envelope_uuid: string }>() : null;
+    const downloadIds = new Map(signedEnvelopes?.results.map(({ envelope_uuid, id }) => [envelope_uuid, id]));
+    return c.json({
+      programs: legal.programs
+        .filter((p) => p.status !== 'draft')
+        .map(({ program_key, status, word, legally_in_force, requirement, missing }) => ({
+          program_key,
+          status,
+          word,
+          legally_in_force,
+          policy_recorded: requirement.basis !== 'not_recorded',
+          waiting_on: requirement.documents.filter((d) => missing.includes(d.slot_key)).map((d) => d.label),
+        })),
+      agreements: visibleRows.map(({ uid, agreement_kind, program_key, package_key, status, signed_at, effective_from, envelope_uuid }) =>
+        ({ uid, agreement_kind, program_key, package_key, status, signed_at, effective_from,
+          signed_envelope_id: signed_at && envelope_uuid ? downloadIds.get(envelope_uuid) ?? null : null })),
+    });
+  } catch (error) {
+    return mapError(c, error);
+  }
 });
 
 // GET /api/licence/mine/contract/:uid/pdf — one of the contracts above, printed

@@ -19,6 +19,7 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
+import licenceRoute from '../src/routes/licence.ts';
 import grantsRoute from '../src/routes/admin_program_grants.ts';
 import agreementsRoute from '../src/routes/admin_licence_agreements.ts';
 import policiesRoute from '../src/routes/admin_licence_agreement_policies.ts';
@@ -80,12 +81,13 @@ function fixture() {
 }
 
 const app = new Hono<any>();
+app.route('/api/licence', licenceRoute);
 app.route('/api/admin/program-grants', grantsRoute);
 app.route('/api/admin/licence-agreements', agreementsRoute);
 app.route('/api/admin/licence-agreement-policies', policiesRoute);
 app.route('/api/admin/contracts', contractsRoute);
-async function call(db: DatabaseSync, method: string, path: string, body?: unknown) {
-  const token = await new SignJWT({ user_id: SUPER, role: 'admin', jti: `totp-${SUPER}` }).setProtectedHeader({ alg: 'HS256' })
+async function call(db: DatabaseSync, method: string, path: string, body?: unknown, userId = SUPER) {
+  const token = await new SignJWT(userId === SUPER ? { user_id: SUPER, role: 'admin', jti: `totp-${SUPER}` } : { user_id: userId }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const saved = [console.warn, console.error, console.log]; console.warn = () => {}; console.error = () => {}; console.log = () => {};
   try {
@@ -436,4 +438,35 @@ test('requirementFor reads only current holdings: a superseded package no longer
   assert.equal(r.package_key, 'venture_building');
   assert.equal(r.documents[0].package_key, 'venture_building', 'a superseded package decided the master');
   assert.equal(requirementFor('learning', [pkg('core_network', '2026-11-01T00:00:00Z')]).basis, 'not_recorded');
+});
+
+test('the studio agreement read is scoped and exposes a completed PDF through the existing e-sign route', async () => {
+  const db = fixture();
+  assert.equal((await policy(db, 'program', 'learning', { strategy: 'per_program', legal_gate: 'required_before_in_force' })).status, 201);
+  assert.equal((await grant(db, 'learning')).status, 201);
+  const url = '/api/licence/mine/program-agreements';
+  const read = () => call(db, 'GET', `${url}?licence_uid=unrelated`, undefined, SIGNER);
+  assert.equal((await call(db, 'GET', url)).status, 404, 'an HQ account without licence membership has no studio read');
+  const prepared = await draft(db, LEARNING_LICENCE);
+  assert.equal(prepared.status, 201);
+  assert.deepEqual((await read()).body.agreements, [], 'the studio cannot read an HQ draft');
+
+  const { uid, revision } = prepared.body.agreement;
+  assert.equal((await send(db, uid, revision)).status, 200);
+  const awaiting = await read();
+  assert.equal(awaiting.status, 200);
+  assert.deepEqual(awaiting.body.programs.map((p: any) => [p.status, p.waiting_on]), [
+    ['awaiting_signature', ['Program licence agreement']],
+  ]);
+  assert.equal(awaiting.body.agreements[0].signed_envelope_id, null);
+
+  const { envelope_uuid } = version(db, uid);
+  await sign(db, envelope_uuid, 'a'.repeat(64));
+  db.prepare("UPDATE esign_envelopes SET signed_r2_key = 'esign/signed/example.pdf' WHERE envelope_uuid = ?").run(envelope_uuid);
+  const executed = await read();
+  assert.equal(executed.body.programs[0].legally_in_force, true);
+  assert.ok(executed.body.agreements[0].signed_envelope_id > 0);
+  assert.deepEqual(Object.keys(executed.body.agreements[0]).sort(), [
+    'agreement_kind', 'effective_from', 'package_key', 'program_key', 'signed_at', 'signed_envelope_id', 'status', 'uid',
+  ]);
 });
