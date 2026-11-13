@@ -2,6 +2,8 @@
   "GET /api/orders/:order_ref/invoice": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Only the buyer (user_id = caller) gets the PDF. A co-founder, every non-party, an admin and the Super Admin get the same 404 a missing order gets, with no file named; no credentials or a disabled buyer get 401."
   }
 }

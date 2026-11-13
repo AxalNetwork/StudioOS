@@ -12,7 +12,8 @@ import {
   readingIsStale,
 } from '../src/services/marketReadingRead.ts';
 
-const routes = readFileSync(new URL('../src/routes/research.ts', import.meta.url), 'utf8');
+// #4574 part 8: these routes moved, byte for byte, out of `research.ts`.
+const routes = readFileSync(new URL('../src/routes/research_client_prep.ts', import.meta.url), 'utf8');
 
 const NOW = Date.parse('2026-09-21T00:00:00Z');
 

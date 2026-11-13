@@ -46,6 +46,13 @@ non-party, a removed enrolment, a disabled owner, no credentials, a session with
 expired, replaced, wrong-scope or other-route token are refused alike, with nothing named, no row changed and no stored
 object opened; the rightful party then gets each file.
 
+`authz_money_d4570.test.ts` (#4570, D4570 part 6) asks ten money routes through the real Worker on the migrated
+schema: a company's receiving instructions and their reveal, a session charge on both mounts, an engagement invoice
+and its mark-paid, an order's invoice PDF, a saved card's detach, an LPA signature and the retired commitment
+withdraw. Every non-party, a co-founder, a withdrawn investor, another LP in the same fund, an LP without KYC, an
+admin where the record is a member's, a support session, a disabled party and no credentials are refused, with nothing
+named, no row changed, no reveal recorded and no charge or detach sent; the rightful party then gets each answer.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.

@@ -5,7 +5,7 @@ export function evaluatePlatform(input,policy,now) {
   const unknown=reason=>({state:'unknown',reason});
   if(!sensors.has(input?.kind)||input.script!=='studioos'||!number(now)||policy?.approved!==true||!number(policy.maxAgeMs)||!number(input.observedAt)||input.observedAt>now||now-input.observedAt>policy.maxAgeMs||input.available!==true)return unknown('telemetry_unavailable');
   if(input.maintenance===true)return input.maintenanceVerified===true?{state:'maintenance',reason:'approved_maintenance'}:unknown('maintenance_unverified');
-  let breach=false,reason='healthy';
+  let breach,reason;
   if(['http','runtime'].includes(input.kind)){
     if(!number(input.total)||!number(input.failures)||input.failures>input.total||!number(policy.minimumSamples)||policy.minimumSamples<1||!number(policy.rate)||policy.rate<=0||policy.rate>1)return unknown('invalid_denominator');
     // Adaptive COUNT estimates are not the number of source samples supporting a rate.

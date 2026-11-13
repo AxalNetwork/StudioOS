@@ -27,7 +27,8 @@ import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const WORKER = read('cloudflare-worker/src/routes/research.ts');
+// #4574 part 8: these routes moved, byte for byte, out of `research.ts`.
+const WORKER = read('cloudflare-worker/src/routes/research_client_prep.ts');
 const MIGRATION = read('cloudflare-worker/sql/migrations/222_research_brief_notes.sql');
 const PAGE = codeOnly(read('frontend/src/pages/research/ClientPrepZone.jsx'));
 const PARTNER_FILTERS = codeOnly(read('frontend/src/workspaces/partnerZoneFilters.js'));

@@ -146,3 +146,5 @@ frontend/public/skill-library/
 wrangler.rehearsal.*.toml
 agent-compute/worker-configuration.d.ts
 agent-compute/__pycache__/
+# D4594 part 3: hosted Stage A's throwaway Worker config, written and deleted by scripts/agent-stage-a.mjs.
+wrangler.s4594.*.toml

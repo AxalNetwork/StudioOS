@@ -98,7 +98,7 @@ test('the history was already served to this reader before the button existed', 
   assert.ok(at > 0, 'the per-project read is gone');
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
   assert.match(handler, /canViewLpData\(user\)/, 'the per-project read changed its gate');
-  assert.match(handler, /FROM portfolio_marks WHERE project_id = \?/,
+  assert.match(handler, /FROM portfolio_marks\s+WHERE project_id = \?/,
     'the per-project read no longer returns the mark history');
   assert.match(handler, /as_of_date, fmv, post_money, event, basis, source, note/,
     'the per-project read stopped returning the columns this panel shows');
@@ -232,10 +232,16 @@ test('an empty accessible set reads as empty, never as every row', () => {
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
   assert.match(handler, /canViewLpData\(user\)/, 'the marks route lost its gate');
   // D1057: positions read the held scope (the relationship scope narrowed to confirmed commitments).
-  assert.match(handler, /investorHeldProjectIds\(/, 'the marks route is not scoped');
-  assert.match(handler, /projectIds != null && projectIds\.length === 0/,
+  // D4636 part 3: the handler reads it through `positionScope`, which adds the
+  // companies the caller reaches only as GP of record.
+  assert.match(handler, /positionScope\(c, user\)/, 'the marks route is not scoped');
+  const scopeAt = POSITIONS.indexOf('async function positionScope(');
+  assert.ok(scopeAt >= 0, 'positionScope is gone');
+  assert.match(POSITIONS.slice(scopeAt, POSITIONS.indexOf('\n}\n', scopeAt)), /investorHeldProjectIds\(/,
+    'positionScope no longer reads the held scope');
+  assert.match(handler, /scope\.held != null && scope\.held\.length === 0 && scope\.gpOnly\.length === 0/,
     'an empty accessible set is not short-circuited, so it would read as unscoped');
-  const guardAt = handler.indexOf('projectIds.length === 0');
+  const guardAt = handler.indexOf('scope.held.length === 0');
   assert.ok(guardAt > 0 && guardAt < handler.indexOf('FROM portfolio_marks'),
     'the empty-set guard runs after the query rather than before it');
   // Same short-circuit in the AI gather, for the same reason.

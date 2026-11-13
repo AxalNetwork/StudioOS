@@ -2,7 +2,9 @@
   "DELETE /api/payments/methods/:id": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Only the holder of the card's Stripe customer detaches it: the card is read from Stripe and its customer compared with the caller's before any detach. Another founder, a co-founder, an investor, a partner, an admin and the Super Admin get 404 and no detach is sent; a caller with no customer never reaches Stripe; no credentials or a disabled holder get 401."
   },
   "GET /api/payments/config": {
     "review": "no_gate_found",

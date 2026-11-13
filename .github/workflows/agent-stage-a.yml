@@ -1,0 +1,87 @@
+name: Agent Stage A (hosted lifecycle, stubbed inference)
+
+# #4594 (audit R2-11), D4594 parts 2 and 3. Owner-approved 2026-11-12:
+# decision 1 = A (a throwaway, dispatch-only run) and 2 = A (the ceilings).
+#
+# One real agent lifecycle on a throwaway Worker, `studioos-s4594-<run>` on
+# workers.dev, over its own D1, KV, queues and DLQs, Workflow, R2 buckets and
+# Durable Object namespaces:
+#
+#   create → provision (migrate-d1 --rehearsal) → seed the #4566 fixtures →
+#   deploy the derived, route-free config → the #4566 preflight must answer
+#   `isolated` → the Workflow path and the manual sponsor run, each accepted
+#   by the synthetic sponsor → reconcile holds, usage and proposals → check
+#   the ceilings → delete everything, pass or fail.
+#
+# NEVER PRODUCTION. The config is flat (no [env.*], so the top-level axal.vc
+# routes cannot be inherited), has no route, cron, browser or service, and
+# `checkFlat` refuses it if it names any production identity. Inference is
+# the D4594 part 2 stub (`AGENT_INFERENCE_STUB = "deterministic"`, honoured
+# only by a preview Worker). Production stays AGENT_ENGINE=off and
+# AGENT_AUTONOMY=manual; nothing here changes either.
+#
+# CEILINGS (owner decision 2 = A): one lifecycle per path, $0 model spend,
+# 60 minutes, at most 1,000 rows added by the agent phase. A ceiling that
+# cannot be read stops the run.
+#
+# DISPATCH ONLY. No schedule and no push trigger: each run creates and
+# deletes account resources, so each is a decision.
+#
+# Its result is HOSTED PLATFORM WITH STUB. It is not provider readiness
+# (#4556) and not a production observation.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: agent-stage-a
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  stage-a:
+    name: one hosted lifecycle per path, then teardown
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            cloudflare-worker/package-lock.json
+
+      - name: Install Worker dependencies
+        run: npm ci --prefix cloudflare-worker
+
+      # Secrets are scoped to this one step. The script deletes everything it
+      # created from its own `finally`, so a failed step still cleans up.
+      - name: Stage A
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/agent-stage-a.mjs --run "a${GITHUB_RUN_ID}" --summary "$RUNNER_TEMP/agent-stage-a.json"
+
+      - name: Summary (counts, states and timings only)
+        if: always()
+        run: |
+          f="$RUNNER_TEMP/agent-stage-a.json"
+          if [ -f "$f" ]; then
+            { echo '## Agent Stage A (#4594) — HOSTED PLATFORM WITH STUB'; echo; echo '```json'; cat "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No summary was written; the script failed before it could write one.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agent-stage-a-summary
+          path: ${{ runner.temp }}/agent-stage-a.json
+          if-no-files-found: warn
+          retention-days: 90
