@@ -26,8 +26,10 @@ import {
   STATUS, SEVERITY_SYM, signals, platformHealth, healthLine, attention, unknownSignals,
   coverage, activity, switchRows, webhookHealth, keyLevels, channelState, utcStamp,
   CONSOLE_GROUPS, PREVIEW_CONSOLES, WEBHOOK_SILENCE_HOURS, WEBHOOK_CRITICAL_RUN, WEBHOOK_REFUSED_RUN, DLQ_HIGH, CATALOG_STALE_DAYS, stampDate,
-  KEY_EXPIRY_WARN_DAYS, expirySummary, detectedIncidents,
+  KEY_EXPIRY_WARN_DAYS, expirySummary, detectedIncidents, consoleState,
 } from './platformOverviewModel';
+import { outsidePlatform } from '../../lib/hqStrips';
+import { ElsewhereInHq } from '../../components/HqSubNavStrip';
 
 const TONE = {
   ok: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
@@ -613,12 +615,12 @@ export function OperationalActivity({ events, loading }) {
 
 /* ── 6 · Detailed consoles ───────────────────────────────────────────── */
 
-export function ConsoleGroups({ sigs }) {
+export function ConsoleGroups({ sigs, summaryDown = false }) {
   return (
     <section aria-labelledby="dc-h" data-testid="hq-console-groups">
       <div className="mb-2 flex items-baseline gap-3">
         <h2 id="dc-h" className="text-[14.5px] font-extrabold tracking-tight text-axal-ink dark:text-white">Detailed consoles</h2>
-        <span className="text-[11px] text-axal-faint">grouped by domain</span>
+        <span className="text-[11px] text-axal-faint">grouped by domain, across HQ</span>
       </div>
       <nav aria-labelledby="dc-h" className="grid gap-3 sm:grid-cols-2">
         {CONSOLE_GROUPS.map(([group, links]) => (
@@ -626,13 +628,12 @@ export function ConsoleGroups({ sigs }) {
             <h3 className="text-[12px] font-extrabold uppercase tracking-[.06em] text-axal-faint">{group}</h3>
             <ul className="mt-1">
               {links.map(([label, to, k]) => {
-                const s = k ? sigs.find((x) => x.key === k) : null;
-                const showState = s && !['Healthy', 'Reading'].includes(s.status);
+                const state = consoleState(sigs, k, { summaryDown });
                 return (
                   <li key={to + label}>
                     <Link to={to} className={`flex min-h-[32px] items-center justify-between gap-2 border-t border-axal-hairline py-1 text-[12px] font-semibold text-axal-ink first:border-t-0 dark:border-gray-800 dark:text-white ${FOCUS}`}>
-                      <span>{label}</span>
-                      {showState ? <Status s={s.status} /> : <span aria-hidden="true" className="text-axal-faint">›</span>}
+                      <span>{label}{outsidePlatform(to) && <ElsewhereInHq to={to} />}</span>
+                      {state ? <Status s={state} /> : <span aria-hidden="true" className="text-axal-faint">›</span>}
                     </Link>
                   </li>
                 );
@@ -682,7 +683,7 @@ export default function PlatformOverview({ data, deps, traffic, build, observed,
       <Incidents data={data} loading={loading} UNAVAILABLE={UNAVAILABLE} />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
         <OperationalActivity events={activity({ data, deps, UNAVAILABLE })} loading={loading} />
-        <ConsoleGroups sigs={sigs} />
+        <ConsoleGroups sigs={sigs} summaryDown={data === UNAVAILABLE} />
       </div>
       <p className="text-[11px] text-axal-faint">The detail every block summarises follows below, one zone per store.</p>
     </div>

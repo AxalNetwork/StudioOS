@@ -1247,21 +1247,22 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     <>
       {hqStrip === 'Platform' && (
         <HqSubNavStrip label="Platform">
+          {/* D4860 part 5: grouped by domain; HqSubNavStrip draws each group's name from HQ_STRIPS. */}
           <StripLink to="/admin/platform">Overview</StripLink>
-          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/platform/topology">Topology</StripLink>
-          <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
-          <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
           <StripLink to="/admin/platform/storage">Storage</StripLink>
+          <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
           <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin/platform/bank-accounts">Bank accounts</StripLink>
-          <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
-          <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/platform/promo-codes">Promo codes</StripLink>
-          <StripLink to="/admin/platform/decks">Decks</StripLink>
-          <StripLink to="/admin/platform/meeting-bots">Meeting bots</StripLink>
-          <StripLink to="/monitoring">Monitoring</StripLink>
+          <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
+          <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
+          <StripLink to="/admin/platform/scoring">Scoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
+          <StripLink to="/admin/platform/switches">Switches</StripLink>
+          <StripLink to="/admin/platform/product-testing">Product testing</StripLink>
+          <StripLink to="/admin/platform/decks">Decks</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Licences' && (
