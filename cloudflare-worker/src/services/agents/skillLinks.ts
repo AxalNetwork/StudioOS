@@ -38,6 +38,8 @@ export type SkillRow = {
   current_version: number; created_by: number; updated_by: number | null; created_at: string; updated_at: string;
   /** D4533: the draft's declared model set (sorted JSON ids); null or absent means the default set. */
   required_models_json?: string | null;
+  /** D4538 part 2: an extension's lineage (migration 202611130253); null or absent on a standalone skill. */
+  based_on_skill_uid?: string | null; based_on_version?: number | null; fork_reason?: string | null;
 };
 export type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;

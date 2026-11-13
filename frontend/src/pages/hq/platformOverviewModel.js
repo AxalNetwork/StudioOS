@@ -752,3 +752,38 @@ export const CONSOLE_GROUPS = [
 export const PREVIEW_CONSOLES = [
   ['Event syndication', '/admin/platform/event-syndication', 'Not built yet: nothing posts. Listed here so nobody relies on it.'],
 ];
+
+/* ── one console's state, for the overview and the HQ strip (D4860 part 5) ── */
+
+/**
+ * The state a link to a console carries (PL-07: "each link carrying its live
+ * state where one applies"), read off the signal the console remediates. A
+ * Healthy or still-reading signal draws no state, as on the canvas. A signal
+ * the reads could not produce because the summary did not answer is Unknown,
+ * never blank: blank next to a link would read as healthy.
+ */
+export function consoleState(sigs, key, { summaryDown = false } = {}) {
+  if (!key) return null;
+  const s = sigs.find((x) => x.key === key);
+  if (!s) return summaryDown ? 'Unknown' : null;
+  return ['Healthy', 'Reading'].includes(s.status) ? null : s.status;
+}
+
+/**
+ * What the HQ Platform strip draws (D4860 part 5, finding 13), from the same
+ * reads the overview makes and through the same rule: `signals`, folded with
+ * the Worker's detected incidents, then `platformHealth`. Overview carries the
+ * overall state, always, so the strip never leaves health unsaid; every other
+ * item carries its console's state from `CONSOLE_GROUPS`, the overview's own
+ * map, so a link never reads one way in the strip and another on the page.
+ */
+export function stripStates({ data, deps, traffic, now, observed, UNAVAILABLE }) {
+  const sigs = signals({ data, deps, traffic, now, observed, UNAVAILABLE });
+  const summaryDown = data === UNAVAILABLE;
+  const health = platformHealth(sigs, { summaryDown, loading: data === null });
+  const byRoute = { '/admin/platform': health.state };
+  for (const [, links] of CONSOLE_GROUPS) {
+    for (const [, to, key] of links) if (key) byRoute[to] = consoleState(sigs, key, { summaryDown });
+  }
+  return { health, byRoute };
+}

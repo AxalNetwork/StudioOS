@@ -28,7 +28,7 @@ import { stripForeignKeys, tableFromBaseline } from './_baseline.mjs';
 import { AI_LOG_SCHEMA } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { mount } from '../src/routes/admin_hq_skills.ts';
-import { SKILL_LIBRARY } from '../src/services/agents/skillLibrary.generated.ts';
+import { SKILL_LIBRARY, assetsForSkillLibrary } from './_skill_library.ts'; // D4574 H3: the entries are a static asset
 import { seedLibrary, readLibrarySkill } from '../src/services/agents/skillLibrarySeed.ts';
 import { RECONCILE_CLASSES, checkSourceCatalogue, libraryManifest, persistedFromJson } from '../src/services/agents/skillCatalogue.ts';
 import { readSources, taxonomyFromSeed } from '../../scripts/check-skill-library.mjs';
@@ -50,7 +50,7 @@ function world() {
   user.run(ADMIN, 'u-admin-5335', 'admin@example.test', 'Ada Admin');
   db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
   db.exec("INSERT INTO company_profiles (id, uid, company_name) VALUES (7, 'co-7', 'Acme')");
-  const env: any = { DB, JWT_SECRET: 'd5335-fixture-only-secret', ENVIRONMENT: 'development' };
+  const env: any = { DB, ASSETS: assetsForSkillLibrary(), JWT_SECRET: 'd5335-fixture-only-secret', ENVIRONMENT: 'development' };
   return { db, env };
 }
 type W = ReturnType<typeof world>;

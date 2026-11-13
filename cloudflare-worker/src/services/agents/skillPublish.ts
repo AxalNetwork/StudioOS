@@ -61,6 +61,12 @@ export function releaseNoteOf(raw: unknown): { ok: true; note: string | null } |
   return { ok: true, note: note || null };
 }
 
+const INSERT_VERSION = `INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by, evidence_json, release_note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+/** D4538 part 2: the same row for an extension, with the HQ base version it was built from. */
+const INSERT_EXTENSION_VERSION = `INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by, evidence_json, release_note, based_on_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
 export type PublishResult =
   | { ok: true; version: number; skill_md: string; manifest: ReturnType<typeof manifestOf> | null; freshness: ReleaseDecision | null }
   | { ok: false; status: number; code: string; message: string; extra?: Record<string, unknown> };
@@ -82,14 +88,16 @@ export async function publishDraft(env: Env, s: SkillRow, user: User, reason: st
     manifest = manifestOf(evidence, version);
   }
   const md = toSkillMd(checked.draft, version);
+  const basedOn = s.scope === 'company' && s.based_on_skill_uid ? s.based_on_version ?? null : null;
   // The version row and the pointer land together, or neither does; the
   // `current_version = ?` guard refuses a concurrent publish of the same number.
   const res = await env.DB.batch([
     env.DB.prepare(`UPDATE agent_skills SET status = 'published', current_version = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND current_version = ?`).bind(version, user.id, s.id, s.current_version),
-    env.DB.prepare(`INSERT INTO agent_skill_versions (skill_id, version, skill_md, name, purpose, steps_json, allowed_tools_json, output_kind, taxonomy_json, roles_json, published_by, evidence_json, release_note)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
-      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id, manifest ? JSON.stringify(manifest) : null, releaseNote),
+    // D4538 part 2: an extension's version records the HQ base it was built from, in its own INSERT; a standalone
+    // skill's INSERT is unchanged (and names no column a database without migration 202611130253 lacks).
+    env.DB.prepare(basedOn != null ? INSERT_EXTENSION_VERSION : INSERT_VERSION).bind(s.id, version, md, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind,
+      JSON.stringify(checked.draft.tags), JSON.stringify(checked.draft.roles), user.id, manifest ? JSON.stringify(manifest) : null, releaseNote, ...(basedOn != null ? [basedOn] : [])),
     // D4121: what the version adds to a run that uses it: its prompt, as the run path joins it.
     env.DB.prepare('INSERT OR REPLACE INTO agent_skill_version_costs (skill_id, version, context_tokens) VALUES (?, ?, ?)').bind(s.id, version, contextTokensOf({
       version, name: d.name, purpose: d.purpose, steps_json: JSON.stringify(d.steps), allowed_tools_json: JSON.stringify(d.tools),

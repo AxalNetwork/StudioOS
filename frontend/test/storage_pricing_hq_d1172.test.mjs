@@ -212,10 +212,10 @@ test('rendered HQ page: totals, both charts and the table; no member or file is 
   }
 });
 
-test('the route is HQ-only, on the Platform strip after AI usage; a studio admin reads STG14a’s card', () => {
+test('the route is HQ-only, on the Platform strip under Infrastructure (D4860 part 5); a studio admin reads STG14a’s card', () => {
   const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /<Route path="\/admin\/platform\/storage" element=\{guard\(\['admin'\], hqOnly\(<HqPlatformStoragePage \/>\)\)\} \/>/);
-  assert.match(app, /AI usage<\/StripLink>\s*<StripLink to="\/admin\/platform\/storage">Storage<\/StripLink>/);
+  assert.match(app, /Topology<\/StripLink>\s*<StripLink to="\/admin\/platform\/storage">Storage<\/StripLink>/);
   assert.match(hqLine('/admin/platform/storage'), /^Platform storage is for HQ\. Studio admins see their own storage in Account\./);
   assert.deepEqual(hqLinks('/admin/platform/storage')[0], { label: 'Your own storage', href: '/account/usage/storage', primary: true });
   assert.doesNotMatch(hqLine('/admin/platform/ai-usage'), /storage/);
