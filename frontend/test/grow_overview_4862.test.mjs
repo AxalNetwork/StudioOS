@@ -81,3 +81,12 @@ test('read-only viewers can inspect evidence and navigation without operating or
   assert.match(html, /\$0/);
   assert.doesNotMatch(html, /Share an update|Publish to…|data-testid="cycle-action"|data-testid="grow-attention-set_focus"/);
 });
+
+test('a missing optional Share action does not blank recorded evidence or attention', () => {
+  for (const action of [null, undefined]) {
+    const html = render(active, { action });
+    assert.match(html, /Needs your attention/);
+    assert.match(html, /\$0/);
+    assert.doesNotMatch(html, /Share an update/);
+  }
+});

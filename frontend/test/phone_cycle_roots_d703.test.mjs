@@ -26,7 +26,7 @@ import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import { PHONE_QUERY } from '../src/workspaces/lens.jsx';
 import { phoneFocus, phoneIndex, phoneMeter, thenText } from '../src/pages/cycles/validatePhone.js';
 import WorkerRail from '../src/ui/WorkerRail.jsx';
-import { __resetEadwynPanelForTest, useEadwynPanel } from '../src/ui/eadwynPanel.js';
+import { __resetEadwynPanelForTest, useEadwynPanel, useAskRail } from '../src/ui/eadwynPanel.js';
 import { __resetAssistModeForTest } from '../src/hooks/useAssistMode.js';
 import { __resetRailPrefsSyncForTest } from '../src/ui/railModelChoice.js';
 import ViewModeContext from '../src/contexts/ViewModeContext.js';
@@ -116,6 +116,8 @@ function stubReads() {
 function resetStores() { __resetEadwynPanelForTest(); __resetAssistModeForTest(); __resetRailPrefsSyncForTest(); }
 
 function PanelProbe({ out }) { out.panel = useEadwynPanel(); return null; }
+/** The shared HeaderAsk follows the rail's availability, as on the real Grow page. */
+function GrowAskRail({ serves }) { useAskRail(serves, 'Founder · Grow · Overview', 'Grow · Overview'); return null; }
 
 /** Mount the root through the stub DOM, inside `CycleRoute`'s founder rail when `shellRole` is given. */
 async function mount(props, { shellRole = null } = {}) {
@@ -379,6 +381,8 @@ test('14: the root has no md: rule and reads no width of its own; every light cl
 
 /** `CycleRoute` at `/<cycle>?project_id=3`, the overview read stubbed with `READS[cycle]`, at phone width or not. */
 async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] } = {}) {
+  // Grow V2 is a lazy cycle-owned overview on both widths (#4862).
+  if (cycle === 'grow') await import('../src/pages/cycles/GrowOverview.jsx');
   resetStores();
   const restore = installDocument();
   const unstub = stubReads();
@@ -394,7 +398,7 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
   };
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
-  const page = h(MemoryRouter, { initialEntries: [`/${cycle}${Q}`] }, h(Routes, null, h(Route, { path: `/${cycle}`, element: h(CycleRoute, { cycle }) })));
+  const page = h(MemoryRouter, { initialEntries: [`/${cycle}${Q}`] }, cycle === 'grow' ? h(GrowAskRail, { serves: shellRole === 'founder' }) : null, h(Routes, null, h(Route, { path: `/${cycle}`, element: h(CycleRoute, { cycle }) })));
   await act(async () => { root.render(shellRole ? h(ViewModeContext.Provider, { value: { shellRole } }, page) : page); });
   await act(async () => { for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -408,12 +412,18 @@ async function mountRoute(cycle, { phone, shellRole = null, read = READS[cycle] 
 const ALSO_IN_ID = { validate: 'also-in-validate', build: 'also-in-build', raise: 'also-in-raise', grow: 'also-in-grow' };
 
 for (const cycle of Object.keys(READS)) {
-  test(`1 (route): below 1024px /${cycle} draws the ${NAMES[cycle]} root alone; at 1024px the overview and "Also in", and no root`, async () => {
+  test(cycle === 'grow' ? '#4862 (route): Grow uses one attention overview at both widths, with no legacy root or directory' : `1 (route): below 1024px /${cycle} draws the ${NAMES[cycle]} root alone; at 1024px the overview and "Also in", and no root`, async () => {
     const phone = await mountRoute(cycle, { phone: true });
     try {
       const ids = phone.ids();
-      assert.equal(phone.all('phone-root').length, 1, 'the root, once');
-      assert.ok(ids.includes('phone-focus-cta') && ids.includes('phone-index'), 'drawn from the overview read');
+      if (cycle === 'grow') {
+        assert.equal(phone.all('grow-overview-v2').length, 1);
+        assert.ok(ids.includes('grow-attention'));
+        assert.ok(!ids.includes('phone-root') && !ids.includes('phone-index'));
+      } else {
+        assert.equal(phone.all('phone-root').length, 1, 'the root, once');
+        assert.ok(ids.includes('phone-focus-cta') && ids.includes('phone-index'), 'drawn from the overview read');
+      }
       for (const desktop of ['cycle-overview', 'cycle-figures', 'cycle-cards', ALSO_IN_ID[cycle]]) {
         assert.ok(!ids.includes(desktop), `${desktop} is not drawn below 1024px`);
       }
@@ -422,8 +432,13 @@ for (const cycle of Object.keys(READS)) {
     const desk = await mountRoute(cycle, { phone: false });
     try {
       const ids = desk.ids();
-      assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
-      assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
+      if (cycle === 'grow') {
+        assert.equal(desk.all('grow-overview-v2').length, 1);
+        assert.ok(ids.includes('grow-attention') && !ids.includes('cycle-overview'));
+      } else {
+        assert.ok(ids.includes('cycle-overview'), 'the desktop overview');
+        assert.equal(ids.includes(ALSO_IN_ID[cycle]), ALSO[cycle].length > 0, '"Also in", where the map lists pages');
+      }
       assert.ok(!ids.includes('phone-root') && !ids.includes('phone-focus'), 'no root at 1024px');
     } finally { await desk.unmount(); }
   });
@@ -432,9 +447,9 @@ for (const cycle of Object.keys(READS)) {
 test('4 (route): through CycleRoute a founder gets exactly one "Open Eadwyn for this page" button on the root; an admin shell gets none', async () => {
   for (const cycle of ['validate', 'grow']) {
     const founder = await mountRoute(cycle, { phone: true, shellRole: 'founder' });
-    try { assert.equal(founder.all('button-eadwyn-open').length, 1, `${cycle}: one`); } finally { await founder.unmount(); }
+    try { assert.equal(founder.all(cycle === 'grow' ? 'header-ask' : 'button-eadwyn-open').length, 1, `${cycle}: one`); } finally { await founder.unmount(); }
     const admin = await mountRoute(cycle, { phone: true, shellRole: 'admin' });
-    try { assert.equal(admin.all('button-eadwyn-open').length, 0, `${cycle}: none`); } finally { await admin.unmount(); }
+    try { assert.equal(admin.all(cycle === 'grow' ? 'header-ask' : 'button-eadwyn-open').length, 0, `${cycle}: none`); } finally { await admin.unmount(); }
   }
   // A partner-shaped Validate read: the route draws the Worker's six rows, and adds no Verdict.
   const partner = await mountRoute('validate', { phone: true, read: { ...READS.validate, index: READS.validate.index.filter((r) => r.key !== 'verdict') } });
@@ -449,7 +464,8 @@ test('14 (PR 1): ValidatePhoneFocus is gone; the route\'s phone branch reads use
   const route = readFileSync('frontend/src/pages/cycles/CycleRoute.jsx', 'utf8');
   assert.doesNotMatch(route, /ValidatePhoneFocus/);
   assert.match(route, /const phone = usePhoneWidth\(\);/);
-  assert.match(route, /body = phone \? \(\n\s+<PhoneCycleRoot /, 'the root replaces the overview below 1024px');
+  assert.match(route, /body = def\?\.Overview \?/, 'a cycle-owned overview can serve both widths');
+  assert.match(route, /<\/> : phone \? \(\n\s+<PhoneCycleRoot /, 'other cycles retain their phone root below 1024px');
   const overview = readFileSync('frontend/src/pages/cycles/CycleOverview.jsx', 'utf8');
   const header = overview.slice(overview.indexOf('export function CycleHeader'), overview.indexOf('export default function'));
   assert.ok(header.length > 0);

@@ -41,6 +41,7 @@ for (const width of [1440, 390]) {
     const state = { mode: 'sparse' };
     const { m } = await start(page, request, width, state);
     await expect(page.getByTestId('cycle-action')).toHaveText('Set focus metric');
+    await expect(page.getByRole('button', { name: /^Ask Eadwyn/ })).toHaveCount(1);
     await expect(page.getByTestId('cycle-action')).toHaveAttribute('href', `/grow/focus?project_id=${m.oneClick.projectId}`);
     await expect(page.getByTestId('grow-attention-set_focus')).toBeInViewport();
     await expect(page.getByTestId('grow-setup')).toContainText('Choose primary growth metric');
@@ -86,6 +87,7 @@ for (const width of [1440, 390]) {
     await expect(page.getByTestId('grow-overview-focus')).toContainText('$0');
     await expect(page.getByTestId('cycle-action')).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Share an update', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Ask Eadwyn/ })).toHaveCount(0);
     await expect(page.getByTestId('grow-setup')).toHaveCount(0);
     await expect(page.getByTestId('grow-attention')).toContainText('Read only');
   });
