@@ -456,3 +456,20 @@ test('pd35: switched off, no Walkthrough column; unreadable, "Could not be read"
     assert.match(bad.text('investor-link-walkthrough-11'), /Attached · 1 slide\b/);
   } finally { await bad.close(); }
 });
+
+test('pd35: a failed attach shows the Worker\'s own refusal sentence, and never a raw error (D5070)', async () => {
+  // Mutation checked: `e.message` shown for any status → the 500's raw text appears; the helper dropped → the 409 sentence is lost.
+  const v = await mount(h(InvestorLinksTable, { deck: DECK, projectId: 5 }), {
+    'GET /api/decks/6/investor-links': () => json({ links: [LINK(), LINK({ id: 12, investor: { label: '[Ola Angel]' } })] }),
+    'GET /api/decks/6/recordings': () => LIST([TAKE(), null, null], []),
+    'PUT /api/decks/6/recordings/links/11': () => json({ code: 'nothing_recorded', message: 'Record at least one card before attaching the walkthrough.' }, 409),
+    'PUT /api/decks/6/recordings/links/12': () => json({ error: 'SQLITE_BUSY: database is locked at worker.js:1:999' }, 500),
+  });
+  try {
+    await v.click('investor-link-attach-11');
+    assert.match(v.text('investor-link-walkthrough-11'), /Record at least one card before attaching the walkthrough\./);
+    await v.click('investor-link-attach-12');
+    assert.match(v.text('investor-link-walkthrough-12'), /The walkthrough could not be changed\. Try again\./);
+    assert.doesNotMatch(v.text('investor-links'), /SQLITE|worker\.js/);
+  } finally { await v.close(); }
+});

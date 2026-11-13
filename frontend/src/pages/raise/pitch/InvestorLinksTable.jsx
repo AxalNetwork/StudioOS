@@ -4,6 +4,7 @@ import * as v2 from './deckV2Adapter.js';
 import { deckUpdateReuseApi } from '../../../lib/api/deckUpdateReuse.js';
 import { deckSlideAnalyticsApi } from '../../../lib/api/deckSlideAnalytics.js';
 import { deckRecordingsApi } from '../../../lib/api/deckRecordings.js';
+import { userFacingRaiseError } from '../../../lib/raiseErrors.js';
 import { recordHref, walkthroughCell, walkthroughOf } from './walkthroughModel.js';
 import ViewerAnalyticsSheet from './ViewerAnalyticsSheet.jsx';
 import { OFF_KEEPS, SWITCH_FAILED, TIME_PER_SLIDE, analyticsCellWords } from './slideAnalyticsModel.js';
@@ -170,7 +171,8 @@ export default function InvestorLinksTable({ deck, projectId = null, refreshKey 
       const res = await deckRecordingsApi.attach(deck.id, r.id, on);
       setWalk((w) => (w?.available ? { ...w, value: { ...w.value, links: Array.isArray(res?.links) ? res.links : w.value?.links } } : w));
     } catch (e) {
-      setAttachFailed({ id: r.id, message: (Number(e?.status) === 409 && typeof e?.message === 'string' && e.message) || WALKTHROUGH_FAILED });
+      // D5070: the Worker's own coded refusal sentence (409 `nothing_recorded`) survives; anything else is the fixed line.
+      setAttachFailed({ id: r.id, message: userFacingRaiseError(e, { fallback: WALKTHROUGH_FAILED, scope: 'raise:pitch:walkthrough-attach' }) });
     } finally { setAttaching(null); }
   };
   // Drawn while it is read, when it is on, and when it could not be read; not drawn while HQ has it off.
