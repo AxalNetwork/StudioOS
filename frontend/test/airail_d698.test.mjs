@@ -320,7 +320,7 @@ test('10 · crumbs come from the provider, a record view adds its title, and cle
 
 test('10 · CycleRoute provides the cycle and, on a module route, the module, around its frame', () => {
   const src = codeOnly(read('frontend/src/pages/cycles/CycleRoute.jsx'));
-  assert.match(src, /const moduleName = slug \? \(cycle === 'grow' \? growArea\(slug\)\?\.name : null\) \|\| \(def\?\.modules \|\| \[\]\)\.find\(\(m\) => m\.slug === slug\)\?\.name \|\| null : null;/);
+  assert.match(src, /const moduleName = slug \? def\?\.moduleName\?\.\(slug\) \|\| \(def\?\.modules \|\| \[\]\)\.find\(\(m\) => m\.slug === slug\)\?\.name \|\| null : null;/);
   assert.match(src, /<RailCrumbsProvider section=\{name\} module=\{moduleName\}>\s*<RailFrame rail=\{rail\}/);
   assert.match(src, /<\/RailFrame>\s*<\/RailCrumbsProvider>/);
   // The props validate_fills_the_blanks matches stay in their order.
