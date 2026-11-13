@@ -68,6 +68,7 @@ export const CONTRACTS = Object.freeze({
   typedTables: { issue: 3787, route: 'GET /api/decks/:id/typed-values', schema: 'deckTypedTables.schema.json' },
   unseenBatches: { issue: 3879, route: 'GET /api/decks/:id/batches?state=done&unseen=1', schema: 'deckUnseenBatches.schema.json' },
   ventureElements: { issue: 3781, route: 'GET /api/decks/:id/venture-elements(/:element)', schema: 'deckVentureElements.schema.json' },
+  walkthrough: { issue: 3837, route: 'GET /api/decks/:id/recordings', schema: 'deckWalkthrough.schema.json' },
   withdrawInvestorLink: { issue: 3812, route: 'POST /api/decks/:id/investor-links/:shareId/withdraw', schema: 'deckWithdrawInvestorLink.schema.json' },
 });
 
