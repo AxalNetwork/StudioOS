@@ -122,3 +122,4 @@ and citations by number keep working.
 | `D4862-p2.md` | Focus-first Grow overview, recorded attention and one taxonomy over existing routes (#4862). |
 
 | `D5218-p2.md` | Mount actual template and saved-version previews in New Deck and Gallery (#5218). |
+| `D5512.md` | Homepage module-count contrast and keyboard focus restoration for the public Network menu. |
