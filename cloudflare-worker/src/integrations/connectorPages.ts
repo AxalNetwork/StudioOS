@@ -202,6 +202,16 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  facebook: {
+    tagline: 'Connect the Facebook Pages you manage.',
+    long_description: ['Sign in with Facebook and choose the Pages for this company. Grow imports are planned separately.'],
+    tools: [], prompts: [], prompts_reason: notRead('Facebook'), made_by: AXAL,
+    never_does: ['StudioOS does not publish or comment on Facebook.'],
+    service: { name: 'Facebook', href: 'https://www.facebook.com' },
+    sign_in: { kind: 'oauth', label: 'Continue with Facebook', key_help_href: null },
+    endpoints: { sign_in: 'https://www.facebook.com/v26.0/dialog/oauth', api: 'https://graph.facebook.com' },
+    added: '2026-11', links: { ...NO_LINKS, developer_docs: 'https://developers.facebook.com/docs/pages-api/' }, verified_on: null,
+  },
   tiktok: {
     tagline: 'Connect your TikTok account with read-only access.',
     long_description: ['Sign in with TikTok to grant access to your basic profile, audience counts and public videos. This release connects your account. Grow imports come later.'],

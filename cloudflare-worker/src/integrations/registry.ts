@@ -24,6 +24,7 @@ import { NOTION_FEEDS } from './notionFeeds';
 import { POSTHOG_FEEDS } from './posthogFeeds';
 import { BEEHIIV_BUILT_FEEDS } from './beehiivFeeds';
 import { TIKTOK_READ_SCOPES } from './tiktokOAuth';
+import { FACEBOOK_READ_SCOPES } from './facebookScopes';
 import { TIKTOK_FEEDS } from './tiktokFeeds';
 import { vercelPulls, vercelFedModules } from './vercelFeeds';
 import { VERCEL_READ_SCOPES } from '../services/vercel/api';
@@ -625,6 +626,13 @@ export const REGISTRY: ProviderDescriptor[] = [
   // D2407 (#2407 parts 1–2): a founder's own Beehiiv newsletter, read only, signed in through Beehiiv's MCP server (D1080).
   // Beta until the owner's first live connection verifies every UNVERIFIED fact in D2407.md.
   {
+    key: 'facebook', display_name: 'Facebook', integration_type: 'data_feed',
+    description: 'Connect Facebook Pages you manage with read-only access.',
+    status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
+    audience_rule: 'venture', icon: 'Globe', oauth_scopes: [...FACEBOOK_READ_SCOPES],
+    docs_url: 'https://developers.facebook.com/documentation/facebook-login/facebook-login-for-business',
+  },
+  {
     key: 'tiktok', display_name: 'TikTok', integration_type: 'data_feed',
     description: 'Connect your TikTok account with read-only access to profile and public video figures.',
     status: 'beta', tier: 'free', auth_type: 'oauth2', capabilities: ['Read-only'],
@@ -643,6 +651,8 @@ export const REGISTRY: ProviderDescriptor[] = [
 // Calendar connections are read from calendar.ts; they do not create a second
 // integrations row or a second OAuth flow.
 export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
+  facebook: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [],
+    permissions: ['List the Pages you manage.', 'Read Page engagement and insights.'] },
   tiktok: { category: 'Social', verified: false, pulls: [], sends: [], feeds: [...TIKTOK_FEEDS],
     permissions: ['Read your basic TikTok profile.', 'Read your TikTok audience counts.', 'Read your public TikTok videos.'] },
   lovable: { category: 'Design and build', verified: false, pulls: lovablePulls(), sends: [], feeds: lovableFedModules(), permissions: [] },
