@@ -74,6 +74,9 @@ class Component extends DCLogic {
       ['ADPW-24', 'Authority model', 'The four checks shown separately for every actor, the approvals that are different acts and what each never implies, and the rules: no platform admin for brokers, information barriers, plans are not eligibility.', [W('ADPW24')]],
       ['ADPW-25', 'Contract handoff', 'Send to Contracts names the legal party, project, revision, representative and counterparty, and checks authority again at send and sign. Blocked with an unauthorized signatory; after a project move the signed agreement keeps its legal party.', [C('ADPW25', false, 1300, 520)]],
       ['ADPW-26', 'Gated workflows', 'Debt or private credit, secondary transfers, and continuation, M&A and feeders: visible, never selectable, with what must exist first.', [C('ADPW26', false, 1200, 300)]],
+      ['ADPW-27', 'Scoring & evidence', 'Inputs used by the collector, provenance, coverage and freshness, conflicting or restricted sources, repair links and separate package attachments.', [W('ADPW27')]],
+      ['ADPW-28', 'Risk & disclosures', 'Material risks, evidence confidence, control maturity, residual downside, scenarios, conflicts and the exact disclosure version awaiting review.', [W('ADPW28')]],
+      ['ADPW-29', 'Fund Admin Risk', 'Exposure and look-through, liquidity and call coverage, leverage, valuation uncertainty, conflicts and breaches. Links to the issuer, deal and approved LP reporting.', [W('ADPW29')]],
       ['ADPW-17', 'Handoff', 'What was checked on main, backend required per package (ADP-01 to ADP-04) and the packages the amendments add, the policy decisions pending the owner, the deviations from the first canvas, frontend-only work, reused components and accessibility.', [W('ADPW17')]]
 ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
     return { boards };

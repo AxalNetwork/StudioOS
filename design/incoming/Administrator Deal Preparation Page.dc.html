@@ -1094,7 +1094,7 @@ body{margin:0}
 </helmet>
 <div dangerouslySetInnerHTML="{{ html }}"></div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "ADPW01", "options": ["ADPW00", "ADPW01", "ADPW01B", "ADPW01C", "ADPW02", "ADPW02B", "ADPW03", "ADPW03B", "ADPW04", "ADPW04B", "ADPW05", "ADPW05B", "ADPW05C", "ADPW06", "ADPW06B", "ADPW07", "ADPW07B", "ADPW08", "ADPW08B", "ADPW09", "ADPW10", "ADPW10B", "ADPW10C", "ADPW11", "ADPW11B", "ADPW12", "ADPW12B", "ADPW13", "ADPW13B", "ADPW14", "ADPW14B", "ADPW15A", "ADPW15B", "ADPW15C", "ADPW15D", "ADPW15E", "ADPW15F", "ADPW15T", "ADPW16", "ADPW16B", "ADPW16C", "ADPW16D", "ADPW15G", "ADPW18", "ADPW19", "ADPW20", "ADPW21", "ADPW22", "ADPW23", "ADPW23B", "ADPW23C", "ADPW23D", "ADPW24", "ADPW25", "ADPW26", "ADPW17"]}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview": {"width": "1440px", "height": "900px"}, "board": {"editor": "enum", "default": "ADPW01", "options": ["ADPW00", "ADPW01", "ADPW01B", "ADPW01C", "ADPW02", "ADPW02B", "ADPW03", "ADPW03B", "ADPW04", "ADPW04B", "ADPW05", "ADPW05B", "ADPW05C", "ADPW06", "ADPW06B", "ADPW07", "ADPW07B", "ADPW08", "ADPW08B", "ADPW09", "ADPW10", "ADPW10B", "ADPW10C", "ADPW11", "ADPW11B", "ADPW12", "ADPW12B", "ADPW13", "ADPW13B", "ADPW14", "ADPW14B", "ADPW15A", "ADPW15B", "ADPW15C", "ADPW15D", "ADPW15E", "ADPW15F", "ADPW15T", "ADPW16", "ADPW16B", "ADPW16C", "ADPW16D", "ADPW15G", "ADPW18", "ADPW19", "ADPW20", "ADPW21", "ADPW22", "ADPW23", "ADPW23B", "ADPW23C", "ADPW23D", "ADPW24", "ADPW25", "ADPW26", "ADPW27", "ADPW28", "ADPW29", "ADPW17"]}}'>
 class Component extends DCLogic {
   renderVals() {
     const B = this.props.board || 'ADPW01';
@@ -1632,6 +1632,36 @@ class Component extends DCLogic {
         ['Continuation, M&amp;A, feeders', 'Later. Their legal and accounting requirements are not scoped.']
       ].map(x => '<div class="adp-oc"><div class="adp-och"><b>' + x[0] + '</b>' + chip('rf', 'Not available') + '</div><p>' + x[1] + '</p><p class="foot">Shown so nobody looks for it elsewhere; never selectable. ' + ann('capability gate') + '</p></div>')) + '</div>', 1200),
 
+      ADPW27: () => doc(head('ADPW-27', 'Scoring & evidence', 'Northwind Labs, Inc. · Grid Sentinel · private revision 3')
+        + sec('Inputs used by the scorecard', tbl(['Input', 'Source and version', 'State', 'Repair'], [
+          ['Revenue', src('c', 'Finance connector · 10 Nov') + ' · model v2', 'Current', 'Open recorded metric'],
+          ['Cash runway', src('r', 'Cash forecast · 3 Nov') + ' · model v2', chip('stale'), 'Refresh forecast'],
+          ['Customer retention', src('d', 'Cohort export · revision 4'), 'Sources disagree', 'Compare source records'],
+          ['Founder references', chip('rf'), chip('rf'), 'Ask the evidence owner for access'],
+          ['Fund leverage', chip('na'), chip('na'), 'Applies to fund transactions'],
+          ['Market evidence', chip('nr'), chip('nr'), 'Record an approved source']
+        ]))
+        + sec('Package attachments', '<p>Investment memo v3 and the customer interviews are selected for this package. The scoring collector has not read them.</p>')
+        + sec('Model output', '<p>Read the canonical scorecard for the recorded result. Correct inputs in their source records.</p>' + ann('collector integration and source scope · ADP-03'))),
+
+      ADPW28: () => doc(head('ADPW-28', 'Risk & disclosures', 'Northwind Labs, Inc. · Grid Sentinel · private revision 3')
+        + sec('Material risks', tbl(['Exposure', 'Evidence and confidence', 'Control and residual downside', 'Owner and review'], [
+          ['Customer concentration', src('r', 'Revenue report · 10 Nov') + ' · confidence recorded', 'Diversification is proposed. Loss of the largest customer remains material.', 'Admin A · review due'],
+          ['Runway in a delayed close', 'Scenario · funding arrives one quarter late', 'Cost reduction is proposed. The scenario has no tested mitigation.', 'Admin B · scenario pending'],
+          ['Related-party contract', chip('un'), 'Conflict review outstanding', 'Open the conflict record']
+        ]))
+        + sec('Disclosure review', '<p>Known fact: one customer represents a material share of revenue. Scenario: a delayed close may require spending reductions.</p><p>Disclosure v2 applies to Northwind Labs, Inc., Seed offering, private revision 3. Materiality decision and reviewer are pending.</p>' + chip('rf', 'Required disclosure review pending') + pol('Publishing remains unavailable until required approvals are recorded'))),
+
+      ADPW29: () => doc(head('ADPW-29', 'Fund Admin · Risk', 'Axal Fund II · illustrative portfolio exposure')
+        + sec('Portfolio exposures', tbl(['Risk view', 'Canonical record', 'Follow-up'], [
+          ['Concentration and look-through', 'Positions and underlying investments', 'Open fund positions'],
+          ['Liquidity and call coverage', 'Calls, receipts and cash obligations', 'Open capital activity'],
+          ['Leverage and covenants', chip('nr'), 'Open facility records'],
+          ['Valuation uncertainty', chip('stale', 'Valuation review due'), 'Open valuation'],
+          ['Conflicts and breaches', chip('un'), 'Retry the risk read']
+        ]))
+        + sec('Linked records', '<p>Open the Northwind co-investment deal and issuer for the underlying exposure. Use approved LP updates for external reporting.</p>' + ann('scope-preserving links to canonical Fund Admin records'))),
+
       ADPW17: () => doc(head('ADPW-17', 'Handoff · backend fit, policy and components', 'What each board depends on. Draw-only items wait for the named package; nothing here changes permissions, publication or production.')
         + sec('Checked on main', '<p class="adp-why"><code>routes/deals.ts</code> <code>POST /api/deals/draft</code> (admin-only; refuses any currency but USD with <code>currency_not_supported</code>; creates the deal directly, with no private preparation or revision). <code>DraftDealModal</code> in <code>pages/investor/dealflow/StudioParts.jsx</code> holds the form in React state only. <code>services/dealTransitions.ts</code>: round stage is <code>deals.status</code> (applied, scored, active, funded, rejected), shown as Sourced to Closing by <code>lib/dealFlow.js</code>; <code>writeFields</code> writes terms with no expected revision. <code>services/approvalSources.ts</code> has lanes but no deal-preparation lane. No <code>/admin/deals</code> route or screen exists.</p>')
         + sec('Backend required', tbl(['Package', 'What the boards need', 'Boards'], [
@@ -1657,6 +1687,11 @@ class Component extends DCLogic {
         + sec('Policy decisions pending the owner', '<ul class="adp-bl"><li>' + pol('Who may approve and who may publish') + ' The boards draw a separate reviewer who is not the author. With no recorded policy, Approve and Publish are unavailable (ADPW-08B); there is no self-approval fallback.</li><li>' + pol('Marketplace teaser') + ' Drawn as not permitted until a policy allows broader discoverability.</li><li>' + pol('Publish and notify') + ' Notification is opt-in on the confirmation; the default is Publish only.</li></ul>')
         + sec('Frontend only', '<ul class="adp-bl"><li>The queue layout, views, filters and pagination over the list read</li><li>The three indicators and the persistent version label</li><li>Section tabs and deep links; the readiness sidebar layout</li><li>Save status, unsaved-leave guard, conflict compare (once the save reply carries the conflict)</li><li>Preview banner and the absence of action controls in preview</li><li>Phone cards and sheets, tablet layout, dark tokens</li></ul>')
         + sec('Components reused', tbl(['Component', 'From'], [['Admin shell, sidebar, ⌘K, scope chip', 'Existing Admin/HQ shell'], ['State chips, Retry, Partial banner', 'Platform States (D5129)'], ['Stage label', '<code>lib/dealFlow.js</code>'], ['Approvals link and lane', 'Approvals v2 (D4814)'], ['Deal header and terms facts', 'Deals v2 (D4815)'], ['Eadwyn rail', 'Shared rail (#5130), not redrawn']]))
+        + sec('Scoring, risk and disclosure addendum', tbl(['Board', 'Canonical owner', 'Implementation dependency'], [
+          ['ADPW-27 Scoring &amp; evidence', 'Raise Evidence and the scoring collectors', 'ADP-03 maps which inputs actually reach a collector, including provenance and access.'],
+          ['ADPW-28 Risk &amp; disclosures', 'Deal or project risk and the revision-bound disclosure', 'ADP-03 gathers facts and evidence. ADP-04 checks the required disclosure approval on release.'],
+          ['ADPW-29 Fund Admin Risk', 'Fund Admin exposures, positions, calls and receipts', 'Link back to the deal, project and issuer and forward to approved LP updates.']
+        ]))
         + sec('Accessibility', '<ul class="adp-bl"><li>One h1 per page; section tabs are links with <code>aria-current</code></li><li>Save, conflict and error states are announced (<code>role=status</code>/<code>alert</code>)</li><li>Dialogs trap and restore focus; Publish is never the initial focus</li><li>No colour-only state: every chip has a glyph and a word</li><li>44 px targets on phone; keyboard and touch parity</li></ul>'))
     };
     const html = (STATES[B] || STATES.ADPW01)();
