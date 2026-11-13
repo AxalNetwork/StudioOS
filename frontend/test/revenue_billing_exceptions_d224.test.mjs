@@ -96,7 +96,9 @@ test('LTV and token margin per branch are not exceptions, and are not drawn here
 test('empty: both stores answered with nothing, and the page says so rather than drawing zeros it did not measure', () => {
   const h = render({ refunds: EMPTY_REFUNDS, disputes: { ok: true, disputes: [] } });
   const t = text(h);
-  assert.match(t, /No refund was issued through HQ in the last 30 days and no dispute is open/);
+  // D5083: the empty state is one operator line; the windows (Live, Last 30 days) stay on the counts above it.
+  assert.match(t, /No billing exceptions/);
+  assert.match(t, /Open disputes Live[\s\S]{0,40}Zero[\s\S]{0,80}Refunds through HQ Last 30 days/);
   // A measured zero is drawn as Zero, with its mark, because both reads answered.
   assert.equal((h.match(/data-value-state="zero"/g) || []).length, 2, 'both counts are measured zeros');
   assert.doesNotMatch(t, /could not be read/);
@@ -109,7 +111,7 @@ test('unreadable refunds: the block says so, and the disputes still draw', () =>
   assert.match(t, /The refunds HQ issued could not be read\. This is not a claim that none were issued\./);
   assert.match(t, /Refunds through HQ Last 30 days[\s\S]{0,60}Unavailable/, 'a failed read drew a figure');
   assert.match(t, /Open disputes Live[\s\S]{0,60} 2 /, 'one failed read blanked the other block');
-  assert.doesNotMatch(t, /No refund was issued/, 'a failed read was drawn as an empty one');
+  assert.doesNotMatch(t, /No billing exceptions/, 'a failed read was drawn as an empty one');
 });
 
 test('unreadable disputes: the block says so, and the refunds still draw', () => {
@@ -119,7 +121,7 @@ test('unreadable disputes: the block says so, and the refunds still draw', () =>
   assert.match(t, /Open disputes could not be read\. This is not a claim that there are none\./);
   assert.match(t, /Open disputes Live[\s\S]{0,60}Unavailable/);
   assert.match(t, /Refunds through HQ Last 30 days[\s\S]{0,60} 2 /);
-  assert.doesNotMatch(t, /no dispute is open/);
+  assert.doesNotMatch(t, /No billing exceptions/, 'a failed read was drawn as an empty one');
 });
 
 test('loading: nothing is drawn as a figure while the reads are out, and loading is not Not recorded', () => {
@@ -127,7 +129,7 @@ test('loading: nothing is drawn as a figure while the reads are out, and loading
   const t = text(h);
   assert.equal((h.match(/data-value-state="loading"/g) || []).length >= 2, true, 'both counts are drawn as loading');
   assert.doesNotMatch(t, /Not recorded|Unavailable/, 'a read still out is drawn as a figure that does not exist');
-  assert.doesNotMatch(t, /could not be read|No refund was issued/);
+  assert.doesNotMatch(t, /could not be read|No billing exceptions/);
 });
 
 test('a refunds store that answers unavailable shows its own reason', () => {
