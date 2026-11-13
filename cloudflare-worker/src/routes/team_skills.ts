@@ -39,6 +39,20 @@
  *   POST /skills/:uid/assign             { agent_uids }: pins the current version; partial, { added, refused }
  *   GET  /:scope/:id/coverage            per axis, the team's people's highest level and its agents'
  *
+ * D4538 part 2 (#4538): company extensions, forks with provenance (decisions/D4538.md, D4538-p2.md).
+ *   POST /skills/:uid/extend             :uid an HQ skill; { company, reason, version?, name? }: a new company DRAFT
+ *                                        copied from that exact published HQ version, recording `based_on` and the
+ *                                        reason. The HQ skill is only read. 201 { skill, base }. Refusals: 404
+ *                                        `not_found` (skill or company), 422 `base_not_hq`, 403 `not_editor`, 400
+ *                                        `fork_reason_invalid` | `version_invalid`, 422 `version_not_published`, 409
+ *                                        `base_retired` | `base_suspended` | `slug_taken`, and `checkDraft`'s codes.
+ *   GET  /skills/:uid/base               a company skill's lineage: null for a standalone skill; else the exact base
+ *                                        version's parts, the HQ skill's current version, `base_update_available`
+ *                                        (a newer published HQ version, never applied), and a per-field three-way
+ *                                        comparison (old base, new base, the company's latest) naming conflicts.
+ *   PATCH /skills/:uid on an extension   its tools stay within its base version's (422 `tool_not_in_base`).
+ *   Every card carries `based_on: { skill_uid, version } | null`.
+ *
  * GATES.
  *  - Read: an HQ skill is readable by every member; a company skill only by
  *    that company's members (`user_company_links`) and HQ's admins. A draft
@@ -98,6 +112,8 @@ type SkillRow = {
   steps_json: string; allowed_tools_json: string; output_kind: OutputKind; status: 'draft' | 'published' | 'retired';
   current_version: number; created_by: number; updated_by: number | null; created_at: string; updated_at: string;
   required_models_json?: string | null;
+  /** D4538 part 2: an extension's lineage; null (or absent before migration 202611130253) on a standalone skill. */
+  based_on_skill_uid?: string | null; based_on_version?: number | null; fork_reason?: string | null;
 };
 type VersionRow = {
   skill_id: number; version: number; skill_md: string; name: string; purpose: string; steps_json: string;
@@ -206,6 +222,8 @@ function skillCard(s: SkillRow, tax: Taxonomy, authorName: string, shown: Parts,
     readiness: extra.readiness,
     draft_hash: draft ? extra.draft_hash : null,
     run_cost: null,
+    // D4538 part 2: the HQ skill and exact version an extension was forked from; null for a standalone skill.
+    based_on: s.based_on_skill_uid ? { skill_uid: s.based_on_skill_uid, version: s.based_on_version ?? null } : null,
     ...(draft ? { draft: partsDto(draft, tax) } : {}),
   };
 }
@@ -375,10 +393,10 @@ function writeDraftStatements(env: Env, skillId: number, d: SkillDraft) {
  * `company_skill_draft_*`. The draft is mutable and is not a history; the record is who saved which definition hash,
  * before and after. A save that changes nothing writes no row.
  */
-async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string) {
+async function auditDraft(env: Env, user: User, s: { uid: string; name: string; scope: 'hq' | 'company'; company_id: number | null }, act: 'created' | 'saved', before: string | null, after: string, extra: Record<string, unknown> = {}) {
   await logAdminAction(env, user.id, user.email, `${s.scope === 'hq' ? 'agent_skill' : 'company_skill'}_draft_${act}`, {
     skill_uid: s.uid, skill_name: s.name, ...(s.scope === 'company' ? { company_id: s.company_id } : {}),
-    before: before ? { definition_hash: before } : null, after: { definition_hash: after },
+    before: before ? { definition_hash: before } : null, after: { definition_hash: after }, ...extra,
   });
 }
 
@@ -505,6 +523,13 @@ router.patch('/skills/:uid', async (c) => {
     const checked = checkDraft(merged, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
     if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
     const d = checked.draft;
+    // D4538 part 2: an extension's tools stay within its base version's; a fork can narrow them, never widen them.
+    if (s.scope === 'company' && s.based_on_skill_uid) {
+      const base = await baseOf(c.env, s);
+      if (!base?.version) return say(c, 409, 'base_unreadable', 'The Axal skill this extension is based on could not be read, so its tools cannot be checked. Nothing was saved.');
+      const outside = d.tools.find((t) => !versionParts(base.version!).tools.includes(t));
+      if (outside) return say(c, 422, 'tool_not_in_base', `${toolLabel(outside)} is not a tool of the Axal skill this extends, so it cannot be added here. An extension can use its base's tools or fewer.`, { tool: { key: outside, label: toolLabel(outside) } });
+    }
     try {
       await c.env.DB.batch([
         // D5325: the batch is one transaction; its first statement fails it unless the draft is still what was read.
@@ -541,6 +566,126 @@ router.post('/skills/:uid/publish', async (c) => {
   const tax = await taxonomy(c.env);
   // D4533: an HQ publish answers the decision it was let through on (`freshness`), and null for a company skill.
   return c.json({ skill: { ...(await cardOf(c.env, (await skillByUid(c.env, s.uid))!, user, tax, '')), skill_md: done.skill_md }, freshness: done.freshness });
+});
+
+// ── Company extensions: forks with provenance (D4538 part 2) ───────────────
+
+/** Longest fork reason, once trimmed (the column's CHECK says the same). */
+const FORK_REASON_MAX = 300;
+const PART_FIELDS = ['name', 'purpose', 'steps', 'tools', 'output_kind', 'tags', 'roles'] as const;
+type PartField = typeof PART_FIELDS[number];
+
+type HqBase = { row: Pick<SkillRow, 'id' | 'uid' | 'name' | 'status' | 'current_version'>; version: VersionRow | null };
+
+/**
+ * An extension's HQ base and the exact version it was forked from. The uid is looked up within `scope = 'hq'` only,
+ * so a lineage column can never lead to another company's skill. Null when the HQ row cannot be found.
+ */
+async function baseOf(env: Env, s: SkillRow): Promise<HqBase | null> {
+  if (!s.based_on_skill_uid || s.based_on_version == null) return null;
+  const row = await env.DB.prepare(`SELECT id, uid, name, status, current_version FROM agent_skills WHERE uid = ? AND scope = 'hq'`)
+    .bind(s.based_on_skill_uid).first<HqBase['row']>();
+  if (!row) return null;
+  return { row, version: await versionOf(env, row.id, s.based_on_version) };
+}
+
+/** A part as one comparable value: a field "changed" when this differs. */
+const partKey = (p: Parts, f: PartField) => JSON.stringify(f === 'tags' ? p.tags.map((t) => [t.slug, t.level]) : p[f]);
+
+/**
+ * D4538's three-way comparison, field by field: the base the company forked from, the HQ skill's newest published
+ * version, and the company's latest. A field is a `conflict` when both sides changed it and differently. Read only:
+ * nothing is merged here (rebase and fork-again are not built, D4538-p2.md).
+ */
+function threeWay(oldBase: Parts, newBase: Parts | null, company: Parts) {
+  return PART_FIELDS.map((field) => {
+    const o = partKey(oldBase, field), n = newBase ? partKey(newBase, field) : o, mine = partKey(company, field);
+    const companyChanged = mine !== o, baseChanged = n !== o;
+    return { field, company_changed: companyChanged, base_changed: baseChanged, conflict: companyChanged && baseChanged && mine !== n };
+  });
+}
+
+router.post('/skills/:uid/extend', async (c) => {
+  const user = await requireAuth(c);
+  const base = await skillByUid(c.env, c.req.param('uid'));
+  if (!base || !(await mayRead(c.env, base, user))) return noSkill(c);
+  if (base.scope !== 'hq') return say(c, 422, 'base_not_hq', 'Only an Axal skill can be extended. A company skill is edited in place.');
+  const b = await readBody(c);
+  if (!b) return say(c, 400, 'body_invalid', 'Send the extension as a JSON object.');
+  const company = await companyByUid(c.env, typeof b.company === 'string' ? b.company : undefined);
+  if (!company || company.archived_at || !(await isMember(c.env, company.id, user))) return say(c, 404, 'not_found', 'There is no such company.');
+  // The company's editors write its skills (`canEditAsMember`); HQ's admins moderate and never write one (D4161).
+  if (!(await canEditAsMember(c.env, company, user))) return say(c, 403, 'not_editor', 'Only the company\'s editors write its skills.');
+  const reason = typeof b.reason === 'string' ? b.reason.replace(/\r\n?/g, '\n').trim() : '';
+  if (!reason || reason.length > FORK_REASON_MAX) return say(c, 400, 'fork_reason_invalid', `Say why your company is extending this skill, in up to ${FORK_REASON_MAX} characters.`);
+  if (b.version !== undefined && (!Number.isSafeInteger(b.version) || b.version < 1)) return say(c, 400, 'version_invalid', 'Name the published version to extend as a whole number.');
+  const version: number = b.version ?? base.current_version;
+  const v = version >= 1 && version <= base.current_version ? await versionOf(c.env, base.id, version) : null;
+  if (!v) return say(c, 422, 'version_not_published', 'Only a published version of an Axal skill can be extended.');
+  if (base.status === 'retired') return say(c, 409, 'base_retired', 'This Axal skill is retired, so it cannot be extended.');
+  if (await skillRunRefusal(c.env, base.id, version)) return say(c, 409, 'base_suspended', 'This version of the Axal skill is suspended, so it cannot be extended.');
+  // The copy is the exact version's parts; only the name may differ, so the company can extend one skill twice.
+  const parts = versionParts(v);
+  const fields = { ...parts, name: b.name !== undefined ? b.name : parts.name };
+  const checked = checkDraft(fields, { taxonomy: (await taxonomy(c.env)).slugs, roleKeys: ROLE_KEYS });
+  if (!checked.ok) return say(c, 400, checked.code, checked.message, checked.tool ? { tool: checked.tool } : undefined);
+  const d = checked.draft;
+  const clash = await c.env.DB.prepare(`SELECT 1 AS ok FROM agent_skills WHERE scope = 'company' AND IFNULL(company_id, 0) = ? AND slug = ?`)
+    .bind(company.id, d.slug).first();
+  if (clash) return say(c, 409, 'slug_taken', 'Your company already has a skill with this short name. Give the extension another name.');
+  const uid = newUid();
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO agent_skills (uid, scope, company_id, slug, name, purpose, steps_json, allowed_tools_json, output_kind, created_by, updated_by,
+       based_on_skill_uid, based_on_version, fork_reason)
+     VALUES (?, 'company', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  ).bind(uid, company.id, d.slug, d.name, d.purpose, JSON.stringify(d.steps), JSON.stringify(d.tools), d.output_kind, user.id, user.id,
+    base.uid, version, reason).first<{ id: number }>();
+  await c.env.DB.batch(writeDraftStatements(c.env, Number(inserted!.id), d));
+  const s = (await skillByUid(c.env, uid))!;
+  // The existing company-skill write audit (D4533 F1), with where the draft came from and why.
+  await auditDraft(c.env, user, s, 'created', null, await draftHash(d), { based_on: { skill_uid: base.uid, version }, fork_reason: reason });
+  const tax = await taxonomy(c.env);
+  return c.json({
+    skill: await cardOf(c.env, s, user, tax, company.company_name),
+    base: { uid: base.uid, name: base.name, version, current_version: base.current_version },
+  }, 201);
+});
+
+router.get('/skills/:uid/base', async (c) => {
+  const user = await requireAuth(c);
+  const s = await skillByUid(c.env, c.req.param('uid'));
+  if (!s || !(await mayRead(c.env, s, user))) return noSkill(c);
+  // A standalone skill (every HQ skill, and every company skill not made by /extend) has no base.
+  if (s.scope !== 'company' || !s.based_on_skill_uid || s.based_on_version == null) return c.json({ lineage: null });
+  const tax = await taxonomy(c.env);
+  const base = await baseOf(c.env, s);
+  const history = await all<{ version: number; based_on_version: number | null }>(c.env,
+    'SELECT version, based_on_version FROM agent_skill_versions WHERE skill_id = ? ORDER BY version DESC', s.id);
+  const lineage = { based_on: { skill_uid: s.based_on_skill_uid, version: s.based_on_version }, reason: s.fork_reason ?? null, versions: history };
+  // The HQ row or its version could not be read: say so, never guess an answer (the screen's "Unreadable").
+  if (!base?.version) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
+  const retired = base.row.status === 'retired';
+  const updateAvailable = !retired && base.row.current_version > s.based_on_version;
+  const newest = updateAvailable ? await versionOf(c.env, base.row.id, base.row.current_version) : null;
+  if (updateAvailable && !newest) return c.json({ lineage: { ...lineage, base: null, base_update_available: null, fields: null } });
+  // The company's side: its latest published version, else its draft (only its writers can read an unpublished skill).
+  const current = s.current_version > 0 ? await versionOf(c.env, s.id, s.current_version) : null;
+  const companyParts = current ? versionParts(current) : await draftParts(c.env, s);
+  const oldBase = versionParts(base.version);
+  return c.json({
+    lineage: {
+      ...lineage,
+      base: {
+        uid: base.row.uid, name: base.row.name, status: base.row.status, current_version: base.row.current_version,
+        retired, suspended: !!(await skillRunRefusal(c.env, base.row.id, base.row.current_version)),
+        version: { version: s.based_on_version, ...partsDto(oldBase, tax) },
+        newest: newest ? { version: newest.version, ...partsDto(versionParts(newest), tax) } : null,
+      },
+      base_update_available: updateAvailable,
+      company: { side: current ? 'version' : 'draft', version: current ? current.version : null },
+      fields: threeWay(oldBase, newest ? versionParts(newest) : null, companyParts),
+    },
+  });
 });
 
 // ── An agent's skills (A2, #3956) ───────────────────────────────────────────
