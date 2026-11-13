@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { Hono } from 'hono';
 import advisors from '../src/routes/advisors.ts';
+import { mount as profileDraftMount } from '../src/routes/advisors_profile_draft.ts';
+import { attachRouteRegistry } from '../src/util/routeRegistry.ts';
 import { attestationMailer, claimSha256, consentState, maskEmail, newCode } from '../src/services/advisorProofAttestation.ts';
 
 const SQL = resolve(dirname(fileURLToPath(import.meta.url)), '../sql');
@@ -47,7 +50,7 @@ function fixture() {
     CREATE TABLE advisor_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, slot_id INTEGER NOT NULL,
       advisor_id INTEGER NOT NULL, founder_user_id INTEGER NOT NULL, topic TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'pending',
       cancel_reason TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`);
-  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication', '202611041822_account_licences']) db.exec(migration(m));
+  for (const m of ['201_advisors_table_in_ledger', '202_advisor_profile_fields', '203_advisor_services', '204_advisor_proof', '202611062216_advisor_proof_attestation', '202611121435_5315_cancel_proof_request', '202611121442_5315_publish_confirmed_proof', '202611121446_5315_service_publication', '202611121450_5315_advisor_profile_drafts', '202611041822_account_licences']) db.exec(migration(m));
   const u = db.prepare('INSERT INTO users (id, role, advisor_id, name, email) VALUES (?,?,?,?,?)');
   u.run(ADA, 'advisor', 1, 'Ada', 'ada@example.com');
   u.run(FOUNDER, 'founder', null, 'Fran', 'fran@example.com');
@@ -59,12 +62,18 @@ function fixture() {
   return { db, env: { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any };
 }
 
+const app = new Hono();
+const registry = attachRouteRegistry(app, [{ file: 'advisors_profile_draft.ts', mount: profileDraftMount }]);
+app.route('/api/advisors', advisors);
+app.route('/api/mentors', advisors);
+registry.mountRemaining();
+
 const jwt = (id: number, role: string) => new SignJWT({ user_id: id, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
 async function call(env: any, method: string, path: string, who: [number, string] | null, body?: unknown) {
   const headers: Record<string, string> = {};
   if (who) headers.Authorization = `Bearer ${await jwt(who[0], who[1])}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await advisors.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env, { waitUntil() {}, passThroughOnException() {} } as any);
+  const res = await app.request(path.startsWith('/api/') ? path : '/api/advisors' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env, { waitUntil() {}, passThroughOnException() {} } as any);
   return { status: res.status, body: await res.json().catch(() => null) as any, headers: res.headers };
 }
 const ada: [number, string] = [ADA, 'advisor'];
@@ -396,4 +405,51 @@ test('only published services appear publicly and hiding is reversible', async (
   await call(env, 'PATCH', path, ada, { is_active: false });
   assert.deepEqual(await publicServices(), []);
   assert.equal(db.prepare('SELECT publication_state FROM advisor_services WHERE id = ?').get(create.body.id)?.publication_state, 'hidden');
+});
+
+test('profile drafts remain private and publish exactly the selected revision', async () => {
+  const { env, db } = fixture();
+  const path = '/api/mentors/me/profile-draft';
+  db.prepare('UPDATE advisors SET bio = ? WHERE id = 1').run('Published bio');
+  assert.deepEqual((await call(env, 'GET', path, ada)).body, { draft: null });
+  const save = await call(env, 'PATCH', path, ada, { display_name: 'Private name', bio: null });
+  assert.equal(save.status, 200, JSON.stringify(save.body));
+  assert.equal(save.body.draft.profile.display_name, 'Private name');
+  assert.equal(save.body.draft.profile.bio, null);
+  assert.equal((await call(env, 'GET', '/adv-1', null)).body.display_name, 'Ada');
+  assert.equal((await call(env, 'GET', '/adv-1', null)).body.bio, 'Published bio');
+
+  const update = await call(env, 'PATCH', path, ada, {
+    revision: save.body.draft.revision, headline: 'New headline',
+  });
+  assert.equal(update.status, 200);
+  assert.equal(update.body.draft.profile.display_name, 'Private name');
+  assert.equal(update.body.draft.profile.bio, null);
+  const old = await call(env, 'POST', `${path}/publish`, ada, { revision: save.body.draft.revision });
+  assert.deepEqual([old.status, old.body.error], [409, 'profile_draft_conflict']);
+  const publish = await call(env, 'POST', `${path}/publish`, ada, { revision: update.body.draft.revision });
+  assert.equal(publish.status, 200, JSON.stringify(publish.body));
+  const publicProfile = (await call(env, 'GET', '/adv-1', null)).body;
+  assert.deepEqual([publicProfile.display_name, publicProfile.bio, publicProfile.headline], ['Private name', null, 'New headline']);
+  assert.deepEqual((await call(env, 'GET', path, ada)).body, { draft: null });
+  assert.doesNotMatch(JSON.stringify(publicProfile), /base_revision|fields_json|publish_requested_at/);
+});
+
+test('a draft based on an older public revision stays private and can be discarded', async () => {
+  const { env, db } = fixture();
+  const path = '/me/profile-draft';
+  db.prepare('INSERT INTO advisors (id, uid, user_id, display_name, email) VALUES (?,?,?,?,?)')
+    .run(2, 'adv-2', DUAL, 'Dee', 'dee@example.com');
+  const other: [number, string] = [DUAL, 'founder'];
+  const save = await call(env, 'PATCH', path, ada, { display_name: 'Old draft' });
+  const revision = save.body.draft.revision;
+  assert.deepEqual((await call(env, 'GET', path, other)).body, { draft: null });
+  assert.equal((await call(env, 'POST', `${path}/publish`, other, { revision })).status, 409);
+  assert.equal((await call(env, 'POST', '/me', ada, { display_name: 'New public name' })).status, 200);
+  assert.equal((await call(env, 'GET', path, ada)).body.draft.stale, true);
+  const refused = await call(env, 'POST', `${path}/publish`, ada, { revision });
+  assert.deepEqual([refused.status, refused.body.error], [409, 'profile_draft_stale']);
+  assert.equal((await call(env, 'GET', '/adv-1', null)).body.display_name, 'New public name');
+  assert.deepEqual((await call(env, 'DELETE', path, ada, { revision })).body, { draft: null });
+  assert.deepEqual((await call(env, 'GET', path, ada)).body, { draft: null });
 });

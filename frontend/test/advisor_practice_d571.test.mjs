@@ -5,8 +5,8 @@
  *
  * Fixtures are built in the shape the Worker routes send, and the first tests
  * hold them to it: each fixture's keys are read against the DTO in
- * `cloudflare-worker/src/routes/advisors.ts` or `advisor_grants.ts`, so a
- * fixture cannot carry a field no route returns. The components are then
+ * the advisor routes, the shared advisor profile service or the grants router,
+ * so a fixture cannot carry a field no route returns. The components are then
  * rendered from those fixtures, in every state.
  *
  * Run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/advisor_practice_d571.test.mjs
@@ -47,6 +47,7 @@ const text = (el) => html(el).replace(/<[^>]+>/g, ' ').replace(/&#x27;|&rsquo;|â
 
 // #4715: the advisor router is advisors.ts plus the route modules it mounts.
 const ADVISORS = advisorRoutesSource();
+const PROFILE = read('cloudflare-worker/src/services/advisorProfile.ts');
 const GRANTS = read('cloudflare-worker/src/routes/advisor_grants.ts');
 const API = read('frontend/src/lib/api.js');
 const APP = read('frontend/src/App.jsx');
@@ -72,8 +73,8 @@ const DELIVERABLE_KEYS = keysBetween(ADVISORS, 'const items = (rows.results || [
 const TYPE_KEYS = keysBetween(ADVISORS, 'function sessionTypeDto(r: SessionTypeRow): any {\n  return {', '\n  };');
 const LINK_KEYS = keysBetween(ADVISORS, 'function bookingLinkDto(r: BookingLinkRow): any {\n  return {', '\n  };');
 const ADVISOR_KEYS = new Set([
-  ...keysBetween(ADVISORS, 'function advisorDto(m: AdvisorRow): any {\n  return {', '...advisorProfileDto(m),'),
-  ...keysBetween(ADVISORS, 'function advisorProfileDto(m: AdvisorRow): any {\n  return {', '\n  };'),
+  ...keysBetween(PROFILE, 'function advisorDto(m: AdvisorRow): any {\n  return {', '...advisorProfileDto(m),'),
+  ...keysBetween(PROFILE, 'function advisorProfileDto(m: AdvisorRow): any {\n  return {', '\n  };'),
 ]);
 const SHARED_KEYS = keysBetween(GRANTS.slice(GRANTS.indexOf("grants.get('/shared/list'")),
   'items: (rows.results || []).map((r: any) => ({', '\n    })),');
