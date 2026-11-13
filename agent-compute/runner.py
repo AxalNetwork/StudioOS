@@ -14,7 +14,7 @@ import select
 import stat
 import time
 import zipfile
-import xml.etree.ElementTree as xml
+from defusedxml import ElementTree as xml
 from pathlib import Path
 
 MIB = 1024 * 1024
@@ -88,7 +88,7 @@ def check_office(data):
                     if total > EXPANDED_CAP:
                         raise Refused("archive_expansion")
                     joined = (tail + chunk).replace(b"\x00", b"").upper()
-                    if entry.filename.lower().endswith((".xml", ".rels")) and (b"<!DOCTYPE" in joined or b"<!ENTITY" in joined):
+                    if b"<!DOCTYPE" in joined or b"<!ENTITY" in joined:
                         raise Refused("xml_entities")
                     tail = chunk[-48:]
         if "[Content_Types].xml" not in names:
@@ -165,7 +165,7 @@ def values(name, data):
         return [page.extract_text()[:100000] for page in book.pages]
     if suffix == "docx":
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            document = xml.fromstring(archive.read("word/document.xml"))
+            document = xml.fromstring(archive.read("word/document.xml"), forbid_dtd=True)
         paragraphs = [part for part in document.iter() if part.tag.rsplit("}", 1)[-1] == "p"]
         if len(paragraphs) > 10000:
             raise Refused("document_pages")
@@ -176,7 +176,7 @@ def values(name, data):
             slides = sorted((name for name in archive.namelist() if re.fullmatch(r"ppt/slides/slide[0-9]+\.xml", name)), key=lambda name: int(re.search(r"slide([0-9]+)\.xml", name).group(1)))
             if len(slides) > 256:
                 raise Refused("document_pages")
-            return [[part.text or "" for part in xml.fromstring(archive.read(name)).iter() if part.tag.rsplit("}", 1)[-1] == "t"] for name in slides]
+            return [[part.text or "" for part in xml.fromstring(archive.read(name), forbid_dtd=True).iter() if part.tag.rsplit("}", 1)[-1] == "t"] for name in slides]
     raise Refused("input_type")
 
 

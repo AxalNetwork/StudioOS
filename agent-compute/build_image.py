@@ -3,7 +3,9 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import shutil
+import tempfile
 import ssl
 import subprocess
 import tarfile
@@ -17,13 +19,35 @@ if certificate.exists():
     environment["PIP_CERT"] = str(certificate)
 subprocess.run(["python", "-m", "pip", "install", "--no-cache-dir", "--only-binary=:all:", "--require-hashes", "-r", str(source / "requirements.txt")], env=environment, check=True)
 context = ssl.create_default_context(cafile=str(certificate) if certificate.exists() else None)
-with urllib.request.urlopen(lock["zlib"]["url"], context=context) as response:
+if lock["zlib"]["url"] != "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz" or lock["zlib"]["version"] != "1.4":
+    raise RuntimeError("zlib source URL is not the reviewed immutable release")
+with urllib.request.urlopen("https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz", context=context) as response:
     compressed = response.read(5 * 1024 * 1024)
 if hashlib.sha256(compressed).hexdigest() != lock["zlib"]["sha256"]:
     raise RuntimeError("zlib source digest mismatch")
+destination = Path(tempfile.mkdtemp(prefix="agent-compute-zlib-", dir="/tmp"))
+expected_root = "zlib-" + lock["zlib"]["version"]
 with tarfile.open(fileobj=io.BytesIO(compressed)) as archive:
-    archive.extractall("/tmp/zlib-source", filter="data")
-directory = Path("/tmp/zlib-source") / ("zlib-" + lock["zlib"]["version"])
+    count, expanded = 0, 0
+    for member in archive:
+        name = PurePosixPath(member.name)
+        count += 1; expanded += member.size
+        if (count > 2000 or expanded > 64 * 1024 * 1024 or name.is_absolute() or not name.parts
+                or name.parts[0] != expected_root or ".." in name.parts or "\\" in member.name):
+            raise RuntimeError("zlib source archive refused")
+        target = destination.joinpath(*name.parts)
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif member.isfile():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            stream = archive.extractfile(member)
+            if stream is None: raise RuntimeError("zlib source file missing")
+            with stream, target.open("xb") as output:
+                shutil.copyfileobj(stream, output)
+            target.chmod(member.mode & 0o755)
+        else:
+            raise RuntimeError("zlib source links and special files are refused")
+directory = destination / expected_root
 subprocess.run(["./configure", "--prefix=/usr/local"], cwd=directory, check=True)
 subprocess.run(["make", "-j2"], cwd=directory, check=True)
 subprocess.run(["make", "install"], cwd=directory, check=True)

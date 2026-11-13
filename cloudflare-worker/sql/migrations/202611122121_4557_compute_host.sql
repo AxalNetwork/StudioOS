@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS agent_compute_executions (
 );
 CREATE TABLE IF NOT EXISTS agent_compute_run_requests (
   run_uid TEXT PRIMARY KEY REFERENCES agent_task_runs(uid) ON DELETE CASCADE,
-  request_uid TEXT NOT NULL REFERENCES agent_compute_requests(uid) ON DELETE CASCADE
+  request_uid TEXT REFERENCES agent_compute_requests(uid) ON DELETE SET NULL
 );
 CREATE TABLE IF NOT EXISTS agent_compute_objects (
   uid TEXT PRIMARY KEY,

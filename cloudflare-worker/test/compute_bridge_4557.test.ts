@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { computeWorld } from './_compute_world_4557.ts';
 import { AGENT, ADMIN, SPONSOR, STRANGER, PROJECT, loopDeps } from './_agent_engine_fixture.ts';
-import { createComputeRequest, uploadComputeInput, readyComputeRequest, dispatchCompute, cancelComputeRun, computeInternal, authorizeCompute, eraseComputeData, sweepComputeObjects } from '../src/services/agents/computeBridge.ts';
+import { createComputeRequest, computeRunRequested, uploadComputeInput, readyComputeRequest, dispatchCompute, cancelComputeRun, computeInternal, authorizeCompute, eraseComputeData, sweepComputeObjects } from '../src/services/agents/computeBridge.ts';
 import { runTaskLoop, load, runStep } from '../src/agents/loop.ts';
 import { createJob } from '../src/services/agents/compute.ts';
 import { computeTarget } from '../src/services/agents/computeHost.ts';
@@ -281,5 +281,20 @@ test('artifact delivery requires its owner and the original company, including f
     for (const id of [STRANGER, ADMIN]) assert.equal((await download(id)).status, 404);
     w.db.prepare('UPDATE projects SET company_id = NULL WHERE id = ?').run(PROJECT);
     assert.equal((await download(SPONSOR)).status, 404);
+  } finally { w.close(); }
+});
+
+
+test('request erasure preserves the compute-mode fence until the run itself is erased', async () => {
+  const w = await computeWorld();
+  try {
+    const { runUid } = await prepare(w); await load(loopDeps(w, noModel), runUid); await dispatchCompute(w.env, runUid);
+    await eraseComputeData(w.env, { userId: SPONSOR });
+    assert.equal(await computeRunRequested(w.env, runUid), true);
+    assert.equal((w.db.prepare('SELECT request_uid FROM agent_compute_run_requests WHERE run_uid = ?').get(runUid) as any).request_uid, null);
+    let modelCalls = 0;
+    const outcome = await runStep(loopDeps(w, async () => { modelCalls++; throw Error('erased_compute_must_not_use_a_model'); }), runUid);
+    assert.equal(outcome.go, false); assert.equal(modelCalls, 0);
+    assert.equal((outcome as any).status, 'failed');
   } finally { w.close(); }
 });

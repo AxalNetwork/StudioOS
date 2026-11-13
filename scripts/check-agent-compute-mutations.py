@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 
 TS = [
+ ('cloudflare-worker/sql/migrations/202611122121_4557_compute_host.sql', 'request_uid TEXT REFERENCES agent_compute_requests(uid) ON DELETE SET NULL', 'request_uid TEXT REFERENCES agent_compute_requests(uid) ON DELETE CASCADE', 'request erasure preserves'),
  ('cloudflare-worker/src/routes/agent_compute.ts', 'AND o.owner_user_id = ?', 'AND ? IS NOT NULL', 'artifact delivery'),
  ('cloudflare-worker/src/routes/agent_compute.ts', "(scope.kind === 'company' ? scope.id : scope.company_id) !== spec.company_id", 'false', 'artifact delivery'),
  ('cloudflare-worker/src/routes/agent_compute.ts', 'if (error instanceof Error && AUTH_ERROR_STATUSES[error.message]) throw error;', 'void error;', 'every signed-in route refuses'),
@@ -38,13 +39,15 @@ TS = [
  ('cloudflare-worker/src/services/agents/computeBridge.ts', 'if (!computeConfigured(env))', 'if (false)', 'disabling compute'),
 ]
 PYTHON = [
+ ('forbid_dtd=True', 'forbid_dtd=False', 'test_independent_xml_parser'),
  ('".." not in value', 'True', 'test_names'),
  ('request["operation"] not in operations[workload]', 'False', 'test_names'),
  ('or size > INPUT_CAP', 'or False', 'test_names'),
  ('if (entry.filename in names', 'if (False', 'test_archive_paths'),
  ('if len(entries) > ENTRY_CAP:', 'if False:', 'test_archive_expansion'),
  ('if entry.file_size > EXPANDED_CAP or entry.file_size > max(1, entry.compress_size) * 100:', 'if False:', 'test_archive_expansion'),
- ('if entry.filename.lower().endswith((".xml", ".rels"))', 'if False', 'test_archive_expansion'),
+ ('if b"<!DOCTYPE" in joined or b"<!ENTITY" in joined:', 'if False:', 'test_archive_expansion'),
+ ('if b"<!DOCTYPE" in joined or b"<!ENTITY" in joined:', 'if entry.filename.lower().endswith((".xml", ".rels")) and (b"<!DOCTYPE" in joined or b"<!ENTITY" in joined):', 'test_archive_expansion'),
  ('if len(output) > LIMITS[workload][3]:', 'if False:', 'test_output'),
  ('if depth > 32:', 'if False:', 'test_output'),
  ('if not math.isfinite(number):', 'if False:', 'test_output'),
@@ -72,12 +75,18 @@ def main():
         copy = Path(directory); copy.chmod(0o755)
         for name in ['cloudflare-worker/src', 'cloudflare-worker/test', 'cloudflare-worker/sql', 'agent-compute']:
             shutil.copytree(root / name, copy / name, ignore=shutil.ignore_patterns('node_modules', '__pycache__'))
-        for name in ['scripts', 'frontend', 'meeting-bot', 'node_modules', 'cloudflare-worker/node_modules', 'cloudflare-worker/ai-workers']:
+        for name in ['scripts', 'frontend', 'meeting-bot', 'cloudflare-worker/node_modules', 'cloudflare-worker/ai-workers']:
             (copy / name).symlink_to((root / name).resolve(), target_is_directory=True)
+        # Schema fixtures need an isolated cache: a killed mutant must not leave
+        # a lock in another worktree's shared dependency cache.
+        dependencies = copy / 'node_modules'; dependencies.mkdir()
+        for dependency in (root / 'node_modules').iterdir():
+            if dependency.name != '.cache':
+                (dependencies / dependency.name).symlink_to(dependency.resolve(), target_is_directory=dependency.is_dir())
         tests = sorted(str(path.relative_to(copy)) for path in (copy / 'cloudflare-worker/test').glob('compute_*4557.test.ts')) + ['cloudflare-worker/test/authz_sweep_d4570.test.ts']
         command = [args.node, '--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--test', '--test-concurrency=2']
         def run_ts(pattern=None):
-            result = subprocess.run(command + (['--test-name-pattern', pattern] if pattern else []) + tests, cwd=copy, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(command + (['--test-name-pattern', pattern] if pattern else []) + tests, cwd=copy, capture_output=True, text=True, timeout=180)
             return result.returncode, result.stdout + result.stderr
         code, log = run_ts()
         if code: raise RuntimeError('Unmutated Worker controls failed:\n' + log[:5000])

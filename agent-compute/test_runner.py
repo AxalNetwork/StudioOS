@@ -99,6 +99,9 @@ class RunnerAcceptance(unittest.TestCase):
                 book.writestr('[Content_Types].xml', '<types/>'); book.writestr('word/document.xml', data)
             with self.assertRaisesRegex(runner.Refused, 'xml_entities'):
                 runner.check_office(stream.getvalue())
+            hidden = archive([('[Content_Types].xml', '<types/>'), ('custom-part.data', '<!DOCTYPE x><part/>')])
+            with self.assertRaisesRegex(runner.Refused, 'xml_entities'):
+                runner.check_office(hidden)
 
     def test_output_and_document_depth_caps(self):
         with patch.dict(runner.LIMITS, python=(60, 120, 512, 2)):
@@ -141,6 +144,18 @@ class RunnerAcceptance(unittest.TestCase):
                 self.assertEqual(result['artifacts'], [])
                 self.assertLess(result['wall_ms'], 6000)
         self.assertEqual(multiprocessing.active_children(), [])
+
+    def test_independent_xml_parser_refuses_dtd_without_the_package_preflight(self):
+        for suffix, member, data in [
+            ('docx', 'word/document.xml', '<!DOCTYPE doc><doc><p><t>Hello</t></p></doc>'),
+            ('pptx', 'ppt/slides/slide1.xml', '<!DOCTYPE slide><slide><t>Hello</t></slide>'),
+        ]:
+            payload = archive([('[Content_Types].xml', '<types/>'), (member, data)])
+            # Trusted fault injection tests the parser independently of ZIP validation.
+            with patch.object(runner, 'check_office', lambda _: None):
+                result = runner.run_job(request('sample.' + suffix, payload, 'document_convert', 'extract'))
+            self.assertEqual(result['outcome'], 'failed')
+            self.assertEqual(result['artifacts'], [])
 
     def test_runtime_is_nonroot_and_has_no_tools_or_credentials(self):
         self.assertEqual(os.getuid(), 10001)
