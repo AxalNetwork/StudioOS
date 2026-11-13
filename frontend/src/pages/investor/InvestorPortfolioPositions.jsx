@@ -32,7 +32,7 @@ import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import FromMercury from './FromMercury';
 import PortfolioFrame from '../portfolio/PortfolioFrame';
 import { usePortfolioReads } from '../portfolio/usePortfolioReads';
-import { HealthStatus, ObligationStatus, SourceFailure } from '../portfolio/PortfolioParts';
+import { HealthStatus, ObligationStatus, Skeleton, SourceFailure } from '../portfolio/PortfolioParts';
 import {
   NOT_RECORDED, SHAPES, ageWords, attentionOf, attentionRulesOf, basisLabel, day, filterRegister, markCountsOf, markHistoryOf,
   markReference, money, registerRowsOf, registerTotalOf,
@@ -62,10 +62,6 @@ const REGISTER_FILTERS = {
   marked: (r) => r.below,
   stage: (r, stage) => stage === 'all' || r.stage === stage,
 };
-
-function Skeleton({ rows = 3 }) {
-  return <div className="pf-skeleton" aria-busy="true" aria-label="Reading">{Array.from({ length: rows }, (_, i) => <i key={i} />)}</div>;
-}
 
 const NotRecorded = ({ children = NOT_RECORDED, title }) => <span className="pf-not-recorded" title={title}>{children}</span>;
 
