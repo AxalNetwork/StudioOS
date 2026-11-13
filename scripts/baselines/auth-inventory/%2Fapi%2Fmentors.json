@@ -39,7 +39,9 @@
   "POST /api/mentors/bookings/:id/pay": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "The legacy mount of POST /api/advisors/bookings/:id/pay, the same router: only the booking's founder reaches the billing checks; everyone else gets the 404 a missing booking gets and no payment provider is called; no credentials or a disabled founder get 401."
   },
   "POST /api/mentors/me/cohort/:cycleId/guidance": {
     "review": "record_without_ownership_check",

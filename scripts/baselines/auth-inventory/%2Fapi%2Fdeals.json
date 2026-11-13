@@ -37,6 +37,8 @@
   "POST /api/deals/:id/commitments/:uid/withdraw": {
     "review": "record_without_ownership_check",
     "kind": "unclassified",
-    "state": "unreviewed"
+    "state": "verified",
+    "test": "cloudflare-worker/test/authz_money_d4570.test.ts",
+    "note": "Retired (D4632): it changes nothing for anyone. Every investor, the commitment's own included, an admin and the Super Admin get 410; a founder, a partner and an advisor get 403; no credentials or a disabled investor get 401; every commitment is unchanged."
   }
 }

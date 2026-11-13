@@ -48,6 +48,10 @@ regexes = [
   # locally minted JWTs. It is no deployed credential. Pin the literal rather
   # than exempting the test file or rewriting published branch history.
   '''\bsynthetic-d1135-secret\b''',
+  # D4570-p6 (#4570): the Stripe key in the money authz suite is a fixture;
+  # every Stripe call in that suite goes to an in-test fake. Pinned as the
+  # literal, as D1135 is, rather than rewriting the PR branch's history.
+  '''\bsk_test_d4570_fixture\b''',
 
   # Tailwind / Vite generated content hashes that look like secrets but aren't.
   '''[a-f0-9]{8}\.(js|css|woff2?)''',
