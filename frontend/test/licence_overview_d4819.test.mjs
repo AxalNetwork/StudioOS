@@ -21,6 +21,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { Detail } from '../src/pages/admin/licences/LicenceDetail.jsx';
 import { deepLinkTarget } from '../src/pages/admin/licences/LicenceDeepLink.jsx';
@@ -242,7 +243,8 @@ async function mount(handle, startTab = DEFAULT_TAB) {
     return h(Detail, { uid: 'lic_fr', held: new Map(), tab, onTab: (t) => { tabs.push(t); setTab(t); } });
   }
   const rootNode = createRoot(container);
-  await act(async () => rootNode.render(h(Host)));
+  // D5051: the Agreement section links to Contracts, so Detail renders inside a router, as it does in the app.
+  await act(async () => rootNode.render(h(MemoryRouter, null, h(Host))));
   const flush = () => act(async () => { for (let i = 0; i < 16; i += 1) await new Promise((r) => setTimeout(r, 0)); });
   await flush();
   const text = (n) => (n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(text).join('') : n?.textContent || '');

@@ -17,6 +17,9 @@ studio's side is the Programs tab of its licence page,
 - `StudioView.jsx` — GR3 at `/admin/licences/programs/studio/:uid`: one
   studio's tiles, its programs with their acts, its partner deal types (D986),
   its requests and its recent changes, and Download CSV.
+- `ProgramLegalAccess.jsx` — D5051 (#5051): on the one-studio view, Commercial grant · Agreement · In force
+  per program (L34), granted-but-not-in-force rows highlighted with what they wait on. Reads the D5052 and
+  D5048 licence reads.
 - `RequestsView.jsx` — GR5 at `/requests`: every studio's requests, Answer
   and Finish grant.
 - `DefaultsView.jsx` — GR6 at `/defaults`: the terms new grants start from,

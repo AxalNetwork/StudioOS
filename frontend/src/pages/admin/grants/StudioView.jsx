@@ -9,6 +9,7 @@ import { AnswerDialog, GrantLightbox, ReasonDialog } from './GrantDialogs';
 import { StudioPricing } from './ProgramPricing';
 import { programPricingApi } from '../../../lib/api/programPricing.js';
 import { Tile } from './GridView';
+import ProgramLegalAccess from './ProgramLegalAccess';
 import {
   FROZEN_LINE, GRANTS_PATH, NOT_RECORDED, dayWord, historyRow, requestRow, studioCsv, studioRows, studioTiles,
 } from './grantsModel';
@@ -177,6 +178,8 @@ export default function StudioView({ uid, requests, reloadAll }) {
           <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="studio-tiles">
             {tiles.map((t) => <Tile key={t.key} t={t} testId={`studio-tile-${t.key}`} />)}
           </div>
+          {/* D5051 (L34): Commercial grant · Agreement · In force, apart from the commercial table below. */}
+          <ProgramLegalAccess uid={uid} />
           {defaults.status === 'error' ? <BlockUnreadable text="The default terms could not be read, so whether a grant is on its own terms is unknown." onRetry={reloadDefaults} testId="studio-defaults-unreadable" /> : null}
           {requests.status === 'error' ? <p className={`m-0 ${SUB}`} data-testid="studio-requests-unread">Requests could not be read, so a requested program shows as not granted here until they are.</p> : null}
           <div className="grid grid-cols-12 gap-3.5">
