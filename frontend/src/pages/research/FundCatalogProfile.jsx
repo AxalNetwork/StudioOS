@@ -7,6 +7,8 @@ import { researchFundsApi } from '../../lib/api/researchFunds.js';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import EuroTechFundHistoryChart from './EuroTechFundHistoryChart';
 import { FundDetails, UnreadableBadge } from './FundDirectory';
+import ResearchActions from './ResearchActions.jsx';
+import { canAddToResearch } from './researchComparisons.js';
 
 /**
  * `/research/funds/catalog/:id` — one fund from the public directory (D535,
@@ -46,7 +48,7 @@ const GHOST = 'inline-flex items-center gap-1 rounded-lg border border-axal-hair
  * `fund` is { loading, error, status, data }; `list` is the founder's own
  * shortlist read, { loading, error, existing }.
  */
-export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {} }) {
+export function FundCatalogView({ fund, list = { loading: false, error: null, existing: null }, onAdd = null, adding = false, notice = null, onRetry = () => {}, research = null }) {
   // The directory is the Funds page's second tab (D593); `/research/funds`
   // alone opens My funds.
   const back = (
@@ -106,6 +108,8 @@ export function FundCatalogView({ fund, list = { loading: false, error: null, ex
           <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-axal-ink dark:text-gray-100">{item.name}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* D5157 part 3 (RS-05 B): Add to my research and Compare, in the founder shell. */}
+          {research ? research(item) : null}
           {list.loading && <span className="text-[12px] text-axal-muted">Checking your list…</span>}
           {!list.loading && list.error && (
             <span className="flex items-center gap-2 text-[12px] text-axal-muted"><UnreadableBadge /> Your list could not be read, so this page cannot tell whether the fund is on it.</span>
@@ -189,7 +193,8 @@ export default function FundCatalogProfile({ role = 'founder' }) {
       title={name || 'Fund profile'}
       activeSlug="funds"
     >
-      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load} />
+      <FundCatalogView fund={fund} list={list} onAdd={add} adding={adding} notice={notice} onRetry={load}
+        research={canAddToResearch(role) ? (item) => <ResearchActions kind="fund" item={{ uid: item.uid || id, name: item.name }} addLabel="Add to my research" /> : null} />
     </WorkspaceShell>
   );
 }

@@ -59,8 +59,9 @@ export async function load(url, context, nextLoad) {
     // bundles an imported `.json`. Only that file, so no other JSON changes.
     // D1541 — the deck icon set's names (`services/decks/iconNames.json`), the same way (D4574 H3: its nodes are a static asset, not an import).
     // D1612 part D (#3954) — the starter skills' golden cases (`services/agents/skills/cases/*.json`).
+    // D4531 part 5 — the scenario packs (`services/agents/skills/scenarios/*.json`), the rubric's calibration items.
     if (u.pathname.endsWith('/services/ai/railMatrix.json') || u.pathname.endsWith('/services/decks/iconNames.json')
-      || /\/services\/agents\/skills\/cases\/[a-z0-9-]+\.json$/.test(u.pathname)) {
+      || /\/services\/agents\/skills\/(?:cases|scenarios)\/[a-z0-9-]+\.json$/.test(u.pathname)) {
       const text = readFileSync(fileURLToPath(new URL(u.pathname, 'file://')), 'utf8');
       return { format: 'module', source: `export default ${text};`, shortCircuit: true };
     }

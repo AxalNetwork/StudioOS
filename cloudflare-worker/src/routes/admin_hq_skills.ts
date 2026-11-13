@@ -14,6 +14,9 @@
  *                                    { report_version, scope: 'hq', read_at, totals: { <class>: n }, skills: [{ slug, class,
  *                                    disposition, source_hash, persisted_hash, published_version }], manifest: [persisted, hashes only] };
  *                                    audited (`agent_skill_library_reconciled`, the totals only)
+ *                                    D4574 H3: all three read the entries from a static asset; where it cannot be read
+ *                                    each answers 503 `library_unreadable` (seed after its 400 `reason_required`), writing
+ *                                    and auditing nothing
  *   GET  /:uid                       one skill: its draft, status, review, golden cases and results, versions, retirement,
  *                                    and `reviewers`: the other active Super Admins who can be asked ({ uid, name }; null when unread)
  *                                    D4533: `models` (the required set and its source), `freshness` (the release decision
@@ -86,7 +89,8 @@ import { compareResults, type ResultRow } from '../services/agents/skillEvalComp
 import { areaOf, checkLibrary, nameOfSlug, readLibrarySkill, seedLibrary } from '../services/agents/skillLibrarySeed';
 import type { Tag } from '../services/agents/skills';
 import { ROLES } from '../services/agents/catalogue';
-import { SKILL_LIBRARY } from '../services/agents/skillLibrary.generated';
+import { SKILL_LIBRARY_SLUGS } from '../services/agents/skillLibrary.generated';
+import { LIBRARY_UNREADABLE, loadSkillLibrary } from '../services/agents/skillLibraryAsset';
 import { catalogueCoverage, type AdoptionRow, type CoverageRow } from '../services/agents/skillCoverage';
 import { currentResults, readinessOf, reviewHistory } from '../services/agents/skillReadiness';
 import { libraryManifest, persistedManifest, reconcile, reconcileReport } from '../services/agents/skillCatalogue';
@@ -265,7 +269,7 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
       JOIN team_agents a ON a.id = l.agent_id AND a.status <> 'removed'`).first<AdoptionRow>(),
   ]);
   return catalogueCoverage(rows.results ?? [], {
-    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY.map((e) => e.slug),
+    category, roleKeys: ROLES.map((r) => r.key), librarySlugs: SKILL_LIBRARY_SLUGS,
     adoption: adoption ?? { links: 0, agents: 0, behind_current: 0, published_without_links: 0 },
     draftsWithoutCurrentEvaluation,
   });
@@ -274,9 +278,12 @@ async function libraryCoverage(env: Env, category: ReadonlyMap<string, string>, 
 // D4225 (#4225): the "From Axal" library. Before `/:uid`, so `library` is never read as a skill uid.
 adminHqSkills.get('/library', async (c) => {
   await requireSuperAdmin(c);
+  // D4574 H3: the entries are a static asset; unreadable is said, never answered as an empty library.
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
   const tax = await taxonomyMaps(c.env);
   const present = new Map(((await c.env.DB.prepare("SELECT slug, status FROM agent_skills WHERE scope = 'hq' AND company_id IS NULL").all<{ slug: string; status: string }>()).results ?? []).map((r) => [r.slug, r.status]));
-  const skills = checkLibrary(new Set(tax.category.keys())).map((x) => {
+  const skills = checkLibrary(new Set(tax.category.keys()), entries).map((x) => {
     const raw = readLibrarySkill(x.entry.skill_md);
     const tags = (raw?.tags as Array<{ slug: string; level: string }> | undefined) ?? [];
     const { area, level } = areaOf(tags, (s) => tax.category.get(s) ?? null);
@@ -294,7 +301,9 @@ adminHqSkills.post('/library/seed', async (c) => {
   const b = await body(c);
   const reason = typeof b.reason === 'string' ? b.reason.trim() : '';
   if (!reason) return say(c, 400, 'reason_required', 'Say why the library is being seeded.');
-  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500));
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
+  const lines = await seedLibrary(c.env, Number(admin.id), reason.slice(0, 500), entries);
   return c.json({ seeded: lines, created: lines.filter((l) => l.outcome === 'created').length, refused: lines.filter((l) => l.outcome === 'refused').length });
 });
 
@@ -302,9 +311,11 @@ adminHqSkills.post('/library/seed', async (c) => {
 // identities and classes, never their text; company skills are outside `persistedManifest`. It repairs nothing.
 adminHqSkills.get('/library/reconcile', async (c) => {
   const admin = await requireSuperAdmin(c);
+  const entries = await loadSkillLibrary(c.env);
+  if (!entries) return say(c, 503, LIBRARY_UNREADABLE.code, LIBRARY_UNREADABLE.message);
   const tax = await taxonomyMaps(c.env);
   const persisted = await persistedManifest(c.env);
-  const source = await libraryManifest(new Set(tax.category.keys()), SKILL_LIBRARY);
+  const source = await libraryManifest(new Set(tax.category.keys()), entries);
   const report = reconcileReport(reconcile(source, persisted), persisted);
   await logAdminAction(c.env, admin.id, admin.email, 'agent_skill_library_reconciled', { scope: 'hq', skills: report.skills.length, totals: report.totals });
   return c.json({ report_version: report.report_version, scope: report.scope, read_at: new Date().toISOString(), totals: report.totals, skills: report.skills, manifest: report.manifest });

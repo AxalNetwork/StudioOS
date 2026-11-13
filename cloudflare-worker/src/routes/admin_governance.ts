@@ -14,6 +14,7 @@
  *   GET   /api/admin/governance/governing?kind=template|agreement&ref=… → { governing: [...] }   D4811 part 19
  *   POST  /api/admin/governance/documents/:uid/related/:id/reviewed { note? } → { relation }
  *   POST  /api/admin/governance/documents/:uid/related/dismiss → { banner }   hides the banner for this admin only
+ *   POST  /api/admin/governance/documents/:uid/related/:id/unlink { reason } → { unlinked: { id, kind }, banner }   D4811 part 21
  *   PATCH /api/admin/governance/documents/:uid      { title?, effective_date?, status?, confidential?, template_slug?, envelope_id? } → { document }
  *         D4811 part 6: status executed or archived also needs { reason, confirm: 'EXECUTED'|'ARCHIVE' } and a recent step-up;
  *         executed needs { evidence: { kind: 'version', version } | { kind: 'envelope' } } (`services/governanceHighRisk.ts`).
@@ -44,7 +45,9 @@ import {
 } from '../services/governance';
 import { entityAttention, groupOf, type DocFacts } from '../services/governanceAttention';
 import { GOVERNANCE_ACTIONS, eventOf } from '../services/governanceActivity';
-import { bannerOf, baselineVersion, flagOf, isRelationKind, noteOf, triggerVersion, type RelationRow } from '../services/governanceRelations';
+import {
+  bannerOf, baselineVersion, flagOf, isRelationKind, noteOf, triggerVersion, unlinkReasonOf, UNLINK_REASON_MAX, UNLINK_REASON_MIN, type RelationRow,
+} from '../services/governanceRelations';
 import { confirmationOf, evidenceOf, isHighRisk } from '../services/governanceHighRisk';
 import { refuse } from '../util/refusal';
 import type { RouteMount } from '../util/routeRegistry';
@@ -320,6 +323,43 @@ governance.post('/documents/:uid/related/:id/reviewed', async (c) => {
   await audit(c, user, 'governance_relation_reviewed', { uid: doc.uid, entity: doc.entity_key, category: doc.category, kind: row.dependent_kind, relation: id, version: row.flag_version });
   const saved = await c.env.DB.prepare(`SELECT r.*, u.name AS reviewer_name FROM governance_relations r LEFT JOIN users u ON u.id = r.reviewed_by WHERE r.id = ?`).bind(id).first<any>();
   return c.json({ relation: await relationView(c, saved, superAdmin, 'dependant') });
+});
+
+/**
+ * D4811 part 21 — POST /documents/:uid/related/:id/unlink { reason }: removes
+ * one link (CT-11; part 8 had no unlink). The same access as linking: the
+ * governing record must be one this admin may open, and a dependant they may
+ * not open (a confidential record, for anyone but the Super Admin) answers
+ * exactly as a link that does not exist. A reason of 10 to 500 characters is
+ * kept in the audit row. Neither document is rewritten: only the reference
+ * row goes, with the review state it carried. The audit rows of its linking
+ * and reviews stay, so the Activity tab keeps that history; banner dismissals
+ * are per record and version, not per link, so they stay too.
+ */
+governance.post('/documents/:uid/related/:id/unlink', async (c) => {
+  const { user, superAdmin } = await hq(c);
+  const doc = await visible(c, superAdmin);
+  if (doc instanceof Response) return doc;
+  const id = Number(c.req.param('id'));
+  const missing = () => refuse(c, 404, { code: 'relation_not_found', message: 'That related document is not linked to this record. Nothing was removed.' });
+  if (!Number.isSafeInteger(id) || id < 1) return missing();
+  const row = await c.env.DB.prepare('SELECT * FROM governance_relations WHERE id = ? AND governing_uid = ?').bind(id, doc.uid).first<any>();
+  if (!row) return missing();
+  // A dependant this admin may not open is not one they can unlink: the same answer as no link at all.
+  if ((await relationView(c, row, superAdmin, 'dependant')).restricted) return missing();
+  const b = await c.req.json().catch(() => ({} as any));
+  const reason = unlinkReasonOf(b?.reason);
+  if (!reason) return refuse(c, 422, { code: 'reason_required', message: `Say why, in ${UNLINK_REASON_MIN} to ${UNLINK_REASON_MAX} characters. It is kept in the audit log. Nothing was removed.` });
+  const versions = await readVersions(c.env, doc.uid);
+  const res = await c.env.DB.prepare('DELETE FROM governance_relations WHERE id = ? AND governing_uid = ?').bind(id, doc.uid).run();
+  if (!Number(res.meta?.changes ?? 0)) return missing();
+  await audit(c, user, 'governance_relation_unlinked', {
+    uid: doc.uid, entity: doc.entity_key, category: doc.category, kind: row.dependent_kind, ref: row.dependent_ref, relation: id,
+    version: versions[0]?.version ?? null, flag_version: row.flag_version ?? null, reviewed_version: row.reviewed_version ?? null, reason,
+  });
+  const own = (await c.env.DB.prepare('SELECT flag_version, reviewed_version FROM governance_relations WHERE governing_uid = ?').bind(doc.uid).all<any>()).results || [];
+  const dismissal = await c.env.DB.prepare('SELECT flag_version FROM governance_relation_dismissals WHERE user_id = ? AND governing_uid = ?').bind(Number(user.id), doc.uid).first<{ flag_version: number }>();
+  return c.json({ unlinked: { id, kind: row.dependent_kind }, banner: bannerOf(own, dismissal?.flag_version ?? null) });
 });
 
 governance.patch('/documents/:uid', async (c) => {

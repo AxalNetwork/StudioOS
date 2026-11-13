@@ -9,9 +9,10 @@
  * receiving are different events, and a route that reported them as one would
  * make an unreachable branch look like a decision that never happened — so an
  * operator would enter it again. The decision is stored unconditionally; the
- * push result rides beside it in `pushed`, exactly as D111's promo ceiling
- * does. This is also why `answerEscalation` in `hqOps.ts` does not push: the
- * op owns the ledger, the route owns the delivery.
+ * push result rides beside it in `pushed`. HQ stores the latest attempt's
+ * outcome, reason and time on that decision (migration 288). A resend keeps
+ * its original text, status, author and decision time. HQ-tier requests use
+ * the raiser's local bell instead and have no branch push.
  *
  * WHY THIS IS NOT IN `admin_hq.ts`. That endpoint builds H1's payload — one
  * read, computed per request, storing nothing. These are writes across a tier
@@ -22,7 +23,7 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import {
-  answerEscalation, listEscalations, licenceKindsByCode, escalationKindsFor,
+  answerEscalation, listEscalations, licenceKindsByCode, escalationKindsFor, type EscalationAnswer,
   ESCALATION_KINDS, ESCALATION_STATUSES, HQ_TIER_CODE,
 } from '../rpc/hqOps';
 import { withRequestView, isProgramRequestKind } from '../services/escalationRequests';
@@ -34,15 +35,15 @@ const r = new Hono<{ Bindings: Env }>();
 
 const str = (v: unknown, max = 500): string => String(v ?? '').trim().slice(0, max);
 
-type Pushed = { ok: boolean; reason?: string };
+type Pushed = { ok: boolean | null; reason?: string };
 
 /**
  * Send a decision that is already stored. The payload is the caller's; this
  * does not read a new answer off a request (D243).
  */
 export async function deliverAnswer(
-  env: Env, branchCode: string, answer: Record<string, unknown>,
-): Promise<Pushed> {
+  env: Env, branchCode: string, answer: Omit<EscalationAnswer, 'pushed_at' | 'answered_at'> & { answered_at: string | null },
+): Promise<Pushed & { push_at: string }> {
   let pushed: Pushed = {
     ok: false,
     reason: `No branch Worker is bound for ${branchCode}, so the decision is recorded `
@@ -55,21 +56,26 @@ export async function deliverAnswer(
         ...answer,
         pushed_at: new Date().toISOString(),
       });
-      pushed = res && typeof res === 'object' && 'ok' in res
-        ? res as Pushed
-        : { ok: true };
+      pushed = typeof res?.ok === 'boolean'
+        ? { ok: res.ok, ...(typeof res.reason === 'string' ? { reason: res.reason } : {}) }
+        : { ok: null, reason: 'The branch returned no delivery acknowledgement.' };
     } catch (e) {
-      pushed = { ok: false, reason: `The branch did not accept the decision: ${(e as Error).message}` };
+      const detail = e instanceof Error ? e.message : '';
+      pushed = { ok: null, reason: detail ? `The branch did not confirm receipt: ${detail}` : 'The branch did not confirm receipt.' };
     }
   }
+  // A replacement decision clears its delivery fields. A late reply to the
+  // previous decision may describe that attempt, but cannot mark the new one.
+  const pushAt = new Date().toISOString();
   await env.DB.prepare(
-    `UPDATE hq_escalations SET push_ok = ?, push_reason = ?, push_at = ?, updated_at = ? WHERE uid = ?`,
+    `UPDATE hq_escalations SET push_ok = ?, push_reason = ?, push_at = ?, updated_at = ?
+      WHERE uid = ? AND answered_at IS ? AND answer = ? AND status = ?
+        AND COALESCE(NULLIF(answered_by_name, ''), 'Axal VC HQ') = ?`,
   ).bind(
-    pushed.ok ? 1 : 0,
+    pushed.ok === null ? null : Number(pushed.ok),
     pushed.ok ? null : (pushed.reason || null),
-    new Date().toISOString(),
-    new Date().toISOString(),
-    String(answer.hq_uid ?? ''),
+    pushAt, pushAt,
+    answer.hq_uid, answer.answered_at, answer.answer, answer.status, answer.answered_by_name || 'Axal VC HQ',
   ).run();
   mirrorBranchAction(
     env,
@@ -77,7 +83,7 @@ export async function deliverAnswer(
     !binding ? 'not_deployed' : (pushed.ok ? 'ok' : 'failed'),
     branchCode,
   );
-  return pushed;
+  return { ...pushed, push_at: pushAt };
 }
 
 /**

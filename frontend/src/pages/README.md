@@ -66,6 +66,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`, `usageModel.js` and `connectorsModel.js`. Connectors (D651) replaced the Integrations page. Documented in `scripts/check-folder-docs.mjs` and in its own README. |
 | `profile/` | The founder's profile pages (D702): You, Your venture, What others see and Visibility, at `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`, for founders only, with their shared frame and pure model. Documented in its own README. |
 | `cycles/` | The four cycle overviews and their module pages (D661), drawn from #1469's shared read: the model, the SVG charts, the overview and the module page. Not mounted until each cycle's read lands. Start at `cycles/README.md`. |
+| `portfolio/` | D4817 part 1 (#5311): the Portfolio v2 frame every Portfolio board draws in (local navigation, basis context, document title, rail slot), the shared metric, attention and reporting-obligation parts, and their pure model. PF-01's Overview is `investor/InvestorPortfolioCanvas.jsx`. Start at `portfolio/README.md`. |
 
 ## Rules
 

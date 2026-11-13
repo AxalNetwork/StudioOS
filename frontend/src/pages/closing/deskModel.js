@@ -17,6 +17,7 @@
  */
 import { DESK_PATH, STEPS, daysLeft, SOON_DAYS } from './closingModel.js';
 import { formatMinorOrCount } from '../../lib/money.js';
+import { closingPaperLifecycle } from '../../lib/contractLifecycle.js';
 
 export { DESK_PATH, STEPS, SOON_DAYS };
 
@@ -202,16 +203,13 @@ export function awaitingRelease(envelopes) {
     && e.stages.some((s) => s.state === 'awaiting_release'));
 }
 
-/** A line's paper in one phrase, from its staged envelopes, newest first. */
+/**
+ * A line's paper in one phrase, from its staged envelopes, newest first, in
+ * the agreement lifecycle's words (D4811 part 22: "Executed", "Sent · awaiting
+ * signature · 1 of 2 signed"). `closingPaperLifecycle` holds the rule.
+ */
 export function paperWord(envelopes) {
-  const list = (Array.isArray(envelopes) ? envelopes : []).filter((e) => !e?.voided);
-  if (!list.length) return 'No paper sent';
-  const e = list[0];
-  if (e.complete) return 'Signed';
-  if (e.stages?.some((s) => s.state === 'declined')) return 'Declined';
-  if (e.stages?.some((s) => s.state === 'awaiting_release')) return 'Waiting for Axal’s countersign';
-  const done = (e.stages || []).filter((s) => s.state === 'signed').length;
-  return `Signing · ${done} of ${(e.stages || []).length} signed`;
+  return closingPaperLifecycle(envelopes).text;
 }
 
 // ───────────────────────────────────────────────────────────── CP5: choose the route

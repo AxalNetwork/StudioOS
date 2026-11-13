@@ -51,7 +51,7 @@ export function metricCells(stats) {
     library('legal_review', 'Legal review required', a.legal_review, null),
     library('restricted', 'Restricted', a.restricted, 'confidential or blocked'),
     { key: 'repair', label: 'Data repair required', value: a.repair?.count ?? null, unknown: a.repair == null ? 'unreadable' : null,
-      lines: a.repair ? [`${plural(Number(a.repair.evidence), 'signed row')} with no evidence · ${plural(Number(a.repair.unlinked), 'unlinked recipient')}`] : [],
+      lines: a.repair ? [`${plural(Number(a.repair.evidence), 'row marked executed', 'rows marked executed')} with no evidence · ${plural(Number(a.repair.unlinked), 'unlinked recipient')}`] : [],
       drill: { kind: 'filter', filters: { attention: 'repair' } } },
   ];
 }
@@ -59,6 +59,6 @@ export function metricCells(stats) {
 /** What an active `?attention=` filter is called above the list, or null. */
 export const ATTENTION_LABELS = Object.freeze({
   awaiting: 'Awaiting signature', executed: 'Executed', stalled: 'Stalled: sent over 30 days ago',
-  repair: 'Data repair required', repair_evidence: 'Marked signed with no execution evidence', repair_unlinked: 'Unlinked recipients',
+  repair: 'Data repair required', repair_evidence: 'Marked executed with no execution evidence', repair_unlinked: 'Unlinked recipients',
 });
 export const attentionLabel = (key) => ATTENTION_LABELS[key] || null;

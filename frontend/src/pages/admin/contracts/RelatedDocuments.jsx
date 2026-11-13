@@ -5,6 +5,7 @@ import { contractsApi } from '../../../lib/api/contracts';
 import { reportError } from '../../../lib/log';
 import { useRead, ReadState, button, card, input, date } from './parts';
 import { statusLabel } from './governanceModel';
+import UnlinkRelation from './UnlinkRelation';
 
 /**
  * D4811 (#4811) part 8 — a governance record's related documents (board
@@ -72,7 +73,7 @@ export function RelatedBanner({ uid, banner, onReview, onDismissed }) {
   </div>;
 }
 
-export default function RelatedDocuments({ uid, read, onChanged, entities = [], affectedOnly = false, onShowAll }) {
+export default function RelatedDocuments({ uid, read, onChanged, entities = [], affectedOnly = false, onShowAll, recordTitle = null }) {
   const data = read.data;
   const dependants = data?.dependants || [];
   const shown = affectedOnly ? dependants.filter((r) => r.state === 'review_suggested') : dependants;
@@ -86,7 +87,7 @@ export default function RelatedDocuments({ uid, read, onChanged, entities = [], 
         {affectedOnly && <p className="border-b border-axal-hairline p-3 text-[12px]">Showing: may require review ({shown.length}). <button type="button" className="underline" onClick={onShowAll}>Show all related documents</button></p>}
         {dependants.length === 0
           ? <p className="p-3 text-[12.5px] text-axal-muted">No document is linked to this record yet. Link the records and templates it governs below; nothing is inferred from titles.</p>
-          : <ol aria-label="Documents this record governs" className="divide-y divide-axal-hairline">{shown.map((r) => <RelationRow key={r.id} uid={uid} r={r} onChanged={onChanged} />)}</ol>}
+          : <ol aria-label="Documents this record governs" className="divide-y divide-axal-hairline">{shown.map((r) => <RelationRow key={r.id} uid={uid} r={r} onChanged={onChanged} recordTitle={recordTitle} />)}</ol>}
         <p className="border-t border-axal-hairline p-3 text-[11px] text-axal-muted">Related documents are never rewritten automatically. Marking one as reviewed records who checked it against which version of this record.</p>
       </section>
       <section aria-labelledby="rel-up" className={card}>
@@ -104,8 +105,9 @@ export default function RelatedDocuments({ uid, read, onChanged, entities = [], 
   </div>;
 }
 
-function RelationRow({ uid, r, onChanged }) {
+function RelationRow({ uid, r, onChanged, recordTitle }) {
   const [open, setOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -142,6 +144,9 @@ function RelationRow({ uid, r, onChanged }) {
       </div>
       : <button type="button" className={`${button} min-h-[44px] md:min-h-0`} aria-label={`Mark ${title} reviewed`} onClick={() => setOpen(true)}>Mark reviewed…</button>)}
     {r.state === 'review_suggested' && r.restricted && <p className="text-[11px] text-axal-muted">Only the Super Admin can open it, so only they can mark it reviewed.</p>}
+    {/* D4811 part 21: Unlink removes the reference only. A restricted row is the Super Admin's to unlink, so it offers none here. */}
+    {!r.restricted && <button type="button" className={`${button} min-h-[44px] md:min-h-0`} aria-label={`Unlink ${title}`} onClick={() => setUnlinking(true)}>Unlink…</button>}
+    {unlinking && <UnlinkRelation uid={uid} recordTitle={recordTitle} r={r} title={title} onClose={() => setUnlinking(false)} onUnlinked={onChanged} />}
     {error && <p role="alert" className="text-[11px] text-red-700 dark:text-red-300">{error}</p>}
   </li>;
 }

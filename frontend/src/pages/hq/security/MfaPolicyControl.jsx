@@ -81,11 +81,11 @@ export default function MfaPolicyControl({ policy, unavailable, isSuper, onSet, 
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <b className="text-[12.5px] text-axal-ink dark:text-white">Require MFA for admins</b>
-          {view.badge ? <StatusBadge state={view.badge} label={view.word} /> : <span className="text-[11px] text-axal-faint dark:text-gray-400">{view.word}</span>}
+          {view.badge ? <StatusBadge state={view.badge} label={view.word} /> : <span className="text-[11px] text-axal-muted dark:text-gray-400">{view.word}</span>}
         </div>
         <p className="mt-0.5 text-[12px] text-axal-muted dark:text-gray-300" data-testid="mfa-policy-text">{view.text}</p>
         {known && changed && (
-          <p className="text-[11px] text-axal-faint dark:text-gray-400">Last changed {changed}{policy?.updated_by ? ` by ${policy.updated_by}` : ''}.</p>
+          <p className="text-[11px] text-axal-muted dark:text-gray-400">Last changed {changed}{policy?.updated_by ? ` by ${policy.updated_by}` : ''}.</p>
         )}
       </div>
       <span className="shrink-0">
@@ -123,7 +123,7 @@ export default function MfaPolicyControl({ policy, unavailable, isSuper, onSet, 
                 onChange={(v) => setDialog({ ...dialog, reason: v, error: null })}
                 error={dialog.error}
               />
-              <p className="text-[11.5px] text-axal-faint dark:text-gray-400">{WRITE_BAR}</p>
+              <p className="text-[11.5px] text-axal-muted dark:text-gray-400">{WRITE_BAR}</p>
             </>
           )}
           {dialog.step === 2 && (

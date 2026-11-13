@@ -52,7 +52,7 @@ export function ActionRequiredList({ model, onRetry, mfaSlot = null }) {
     >
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="security-ar-h" className="text-[15px] font-extrabold tracking-tight">Action required</h2>
-        <span className="text-[11.5px] text-axal-faint" data-testid="security-action-required-sub">{sub}</span>
+        <span className="text-[11.5px] text-axal-muted" data-testid="security-action-required-sub">{sub}</span>
       </div>
       {findings.length > 0 ? (
         <ol className="divide-y divide-axal-hairline dark:divide-gray-800">
@@ -65,7 +65,7 @@ export function ActionRequiredList({ model, onRetry, mfaSlot = null }) {
                 {/* D5249 — the finding's secondary control: the policy's own state, from the server. */}
                 {f.id === 'mfa-gap' && mfaSlot}
               </div>
-              <span className="shrink-0 font-mono text-[11px] text-axal-faint sm:w-40 sm:text-right">
+              <span className="shrink-0 font-mono text-[11px] text-axal-muted sm:w-40 sm:text-right">
                 {f.when}<br />{f.where}
               </span>
               <span className="shrink-0"><FindingAction finding={f} onRetry={onRetry} /></span>
@@ -86,13 +86,13 @@ export function CheckedAndClear({ items }) {
     <section aria-labelledby="security-clear-h" className="space-y-2" data-testid="security-checked-clear">
       <h2 id="security-clear-h" className="text-[13px] font-extrabold tracking-tight">Checked and clear</h2>
       {items.length === 0 ? (
-        <p className="text-[12px] text-axal-faint">No check has come back clear yet.</p>
+        <p className="text-[12px] text-axal-muted">No check has come back clear yet.</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {items.map((c) => (
             <li key={c.id} className="rounded-lg border border-axal-hairline bg-white px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-900" data-testid={`security-clear-${c.id}`}>
               <StatusBadge state={c.state} label={c.label} />
-              <div className="mt-1 text-[10.5px] text-axal-faint">{c.evidence}</div>
+              <div className="mt-1 text-[10.5px] text-axal-muted">{c.evidence}</div>
             </li>
           ))}
         </ul>
@@ -106,7 +106,7 @@ export function StatusByArea({ areas }) {
     <section aria-labelledby="security-areas-h" className="space-y-2" data-testid="security-areas">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="security-areas-h" className="text-[15px] font-extrabold tracking-tight">Status by area</h2>
-        <span className="text-[11.5px] text-axal-faint">No overall score: each area reports its own evidence.</span>
+        <span className="text-[11.5px] text-axal-muted">No overall score: each area reports its own evidence.</span>
       </div>
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {areas.map((a) => (
@@ -119,10 +119,10 @@ export function StatusByArea({ areas }) {
             >
               <span className="flex flex-wrap items-center justify-between gap-1.5">
                 <b className="text-[12.5px] text-axal-ink dark:text-white">{a.title}</b>
-                {a.state ? <StatusBadge state={a.state} /> : <span className="text-[11px] text-axal-faint">Reading…</span>}
+                {a.state ? <StatusBadge state={a.state} /> : <span className="text-[11px] text-axal-muted">Reading…</span>}
               </span>
               <span className="text-[12px] text-axal-muted">{a.fact}</span>
-              {a.freshness && <span className="text-[10.5px] text-axal-faint">{a.freshness}</span>}
+              {a.freshness && <span className="text-[10.5px] text-axal-muted">{a.freshness}</span>}
             </Link>
           </li>
         ))}
@@ -145,12 +145,12 @@ export function RecentEvents({ recent, onRetry, filterLabel }) {
         <Link to={tabHref('events')} className="text-[12px] font-bold text-violet-700 hover:text-violet-800 dark:text-violet-300 dark:hover:text-violet-200">Open Events</Link>
       </div>
       {r.filtered && (
-        <p className="mb-2 text-[11.5px] text-axal-faint" data-testid="security-recent-filtered">
+        <p className="mb-2 text-[11.5px] text-axal-muted" data-testid="security-recent-filtered">
           Narrowed in Events{filterLabel ? ` (${filterLabel})` : ''}: these are the newest matching rows, not the newest rows.
         </p>
       )}
       {r.partial && (
-        <p className="mb-2 text-[11.5px] text-axal-faint" data-testid="security-recent-partial">
+        <p className="mb-2 text-[11.5px] text-axal-muted" data-testid="security-recent-partial">
           A source could not be read, so rows from it may be missing here.
         </p>
       )}
@@ -174,10 +174,10 @@ export function RecentEvents({ recent, onRetry, filterLabel }) {
               <span className="shrink-0 sm:w-28"><StatusBadge state={e.state} label={e.word} /></span>
               <div className="min-w-0 flex-1">
                 <div className="text-[13px] font-bold text-axal-ink dark:text-white">{e.label}</div>
-                <div className="truncate font-mono text-[11px] text-axal-faint" title={e.raw}>{e.raw}</div>
+                <div className="truncate font-mono text-[11px] text-axal-muted" title={e.raw}>{e.raw}</div>
               </div>
               <span className="shrink-0 text-[11.5px] text-axal-muted dark:text-gray-300 sm:w-44 sm:text-right">
-                {e.actor || 'An unnamed actor'}<br /><span className="font-mono text-[11px] text-axal-faint">{e.at}</span>
+                {e.actor || 'An unnamed actor'}<br /><span className="font-mono text-[11px] text-axal-muted">{e.at}</span>
               </span>
             </li>
           ))}

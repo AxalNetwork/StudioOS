@@ -5,6 +5,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { Unrecorded } from '../../../ui';
@@ -106,6 +107,8 @@ export function ContractStep({ licence, onSaved }) {
 
   return (
     <div data-testid="licence-contract-step" className="space-y-4">
+      {/* D5051 (L33): the first of the Agreement section's three blocks. */}
+      <span className="block text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">1 · Territory licence agreement</span>
       {!data.contracts_available && (
         <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
           {data.contracts_reason}
@@ -123,6 +126,17 @@ export function ContractStep({ licence, onSaved }) {
               : current.status === 'void'
                 ? 'bg-gray-100 text-gray-600 border-gray-200'
                 : 'bg-indigo-50 text-indigo-700 border-indigo-200'}>{current.status}</Chip>
+            {/* D5051: the one canonical record in Contracts. A sent contract IS its envelope's row (D5050 §1);
+                an unsent one is a row of its own there, found by its licence. */}
+            <Link
+              to={current.envelope_uid
+                ? `/admin/contracts/agreements/doc/${encodeURIComponent(current.envelope_uid)}`
+                : `/admin/contracts?licence=${encodeURIComponent(licence.uid)}&agreement_type=territory_licence`}
+              className="ml-auto text-xs font-semibold text-indigo-700 hover:underline dark:text-indigo-300"
+              data-testid="licence-contract-open"
+            >
+              Open in Contracts ›
+            </Link>
           </div>
           <div className="mt-1 text-xs text-gray-500">
             Instantiated {String(current.created_at || '').slice(0, 10)} from{' '}
@@ -215,6 +229,10 @@ export function ContractStep({ licence, onSaved }) {
         <div className="text-xs text-gray-500">
           {superseded.length} superseded {superseded.length === 1 ? 'contract' : 'contracts'} kept:
           a re-issue supersedes, it never overwrites.
+          <span className="block" data-testid="licence-contract-history">
+            History: {[...(data.contracts || [])].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+              .map((k, i) => `v${i + 1} ${k.superseded_at ? 'superseded' : k.status}`).reverse().join(' · ')}
+          </span>
         </div>
       )}
     </div>

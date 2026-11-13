@@ -24,7 +24,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { loadSchema } from './_schema_once.mjs';
 import {
   buildHealth, CRON_FAILURE_STREAK, detectIncidents, DLQ_HIGH, healthStateOf, readCronStreaks, readTelemetryHealth,
-  readWebhookHealth, REMEDIATION, TELEMETRY_LAST_OK_KEY, WEBHOOK_FAILURE_CRITICAL, WEBHOOK_FAILURE_STREAK, type HealthInput,
+  readWebhookHealth, REMEDIATION, TELEMETRY_LAST_OK_KEY, WEBHOOK_FAILURE_CRITICAL, WEBHOOK_FAILURE_STREAK, WEBHOOK_SILENCE_HOURS, type HealthInput,
 } from '../src/services/platformHealth.ts';
 import { readPlatformSummary } from '../src/services/platformSummary.ts';
 import { STRIPE_WEBHOOK_PATH } from '../src/services/stripeWebhookDeliveries.ts';
@@ -160,6 +160,11 @@ test('webhook silence is a low note only while Stripe is configured, and does no
   assert.deepEqual(buildHealth(healthy({ webhook: quiet, stripe_configured: false })).detected, []);
   const never = buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: null } }));
   assert.match(never.detected[0].title, /ever been logged/);
+  // #4860 Q4 = B: the threshold is 24 h, as the overview's. Thirty hours silent is noted; twenty is not.
+  assert.equal(WEBHOOK_SILENCE_HOURS, 24);
+  const at = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+  assert.deepEqual(buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: at(30) } })).detected.map((i) => i.key), ['webhook:silence']);
+  assert.deepEqual(buildHealth(healthy({ webhook: { ...quiet, last_delivery_at: at(20) } })).detected, []);
 });
 
 // ── cron ──────────────────────────────────────────────────────────────────

@@ -39,6 +39,13 @@ the real Worker on the migrated schema, as every account that is not a party, an
 party and no credentials: refused, nothing of the record named, and no row, copy mapping or audit row changed and no
 call made to the calendar provider. A non-party gets the same status and body as for a missing id on every one of them.
 
+`authz_exports_downloads_d4570.test.ts` (#4570, D4570 part 5) asks ten export and download routes through the real
+Worker on the migrated schema: the competitor and deck-review exports, a wellbeing resource's file, a webinar's
+calendar entry, both calendar feeds, and the deck print, publication, analytics and video source links. Every
+non-party, a removed enrolment, a disabled owner, no credentials, a session without a token and a forged, tampered,
+expired, replaced, wrong-scope or other-route token are refused alike, with nothing named, no row changed and no stored
+object opened; the rightful party then gets each file.
+
 `bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
 masked resolver previews and source add validation over the real migrations,
 with all network access refused.
@@ -286,11 +293,20 @@ D5074 (#5074): `data_room_capabilities_5074.test.ts` holds the Data room read's 
 
 D5065 (#5065): `build_systems_states_d5065.test.ts` holds Operating Systems to one connection-state model — the shared state module in `src/services` — across the module read and the one-record read: active, error, revoked, disabled, an unrecognised status, a kind that maps nothing, and Workspace. It pins that a mapped connection is never "Not connected", that no record's pill, State fact and subtitle can disagree, that the primary action is Manage for a healthy system, Reconnect for a failing or disconnected one and Choose connector for an unmapped kind, that Workspace names the sync and sync-log fields that do not apply instead of reading as a missing row, and that another member's private connector name stays private in every state. Its mutation section breaks each guarded line on disk and re-runs this file in a child process filtered to the tests that must then fail, because the record read reaches the Build record specs through the cycle-records route and only a real import of the mutated tree exercises it; the source is restored in a `finally`. It also pins the SPA's tile map in `frontend/src/pages/cycles/CycleCharts.jsx` to the Worker's states, because a state with no tile of its own is drawn as Not connected.
 D4647 (#4647): `portfolio_reporting_period_d4647.test.ts` pins the SPA's quarter-end default, `frontend/src/lib/reportingPeriod.js`, to the Worker — to `portfolioMetrics.ts`'s `completedPeriod` for which quarter and to `fundReportBuild.ts`'s `lastClosedQuarter` for its last day — every month across a leap year and two year boundaries, so the page cannot drift from either. It also holds the civil-date behaviour, because the old default read a local midnight and printed its UTC instant, which is the day before the quarter end for every reader east of UTC.
+
+D5673: `cloudflare_sources_5673.test.ts` covers paginated provider metadata, real SQLite replay/CAS and protected source reads.
+
+D5676: `cloudflare_archive_5676.test.ts` covers conditional archive replay, independent SQLite/R2 metadata checks, silent consumer/canary loss and guard mutations.
+D5674: `cloudflare_bot_5674.test.ts` checks content-free stage routing, existing episode keys and evidence-qualified recovery.
+
+D5675: `cloudflare_preview_5675.test.ts` exercises signed preview-only callback, host replay/cleanup and promotion guards without a customer meeting.
 | `_workspace_fake_5565.ts` | D5565: synthetic specification, atomic memory store and faultable fake executor; tests only. |
 | `workspace_contract_5565.test.ts` | D5565: strict contract, capability/location refusals, fake lifecycle and deterministic lease/replay/revocation/generation/cleanup mutations. |
 | `workspace_security_5567.test.ts` | D5567: actual WebCrypto, scope/revocation/replay/provenance/network/object/region/key refusal matrix and five mutation journeys; synthetic only. |
+| `venture_git_installation_5569.test.ts` | D5569: local migration, venture scope, revocation and disabled publisher contract over SQLite. |
 | File | Guarantee |
 | --- | --- |
 | `mail_conversation_history_4662.test.ts` | D4662: validated durable sent identity and quote snapshots, draft deletion, migration backfill, tied pages and uncertain outcomes with a non-delivering adapter. |
 | `platform_signal_summary_5672.test.ts` | D5672: synthetic authorization and unavailable-reader behavior. |
 | `security_triage_5680.test.ts` | D5680: synthetic authorization and unavailable-reader behavior. |
+| `account_concurrency_4618.test.ts` | D4618: two privacy, category or public-profile saves naming one revision sent together (one lands, one 409 that wrote nothing), and two revokes of one session (revoked and counted once, the second already revoked). |

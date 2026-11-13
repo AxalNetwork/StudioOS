@@ -18,6 +18,7 @@
  */
 import { STEPS, daysLeft } from './closingModel.js';
 import { lineStatus, moneyCents, routeWord } from './deskModel.js';
+import { closingPaperLifecycle } from '../../lib/contractLifecycle.js';
 
 export { STEPS };
 
@@ -118,12 +119,14 @@ export function paperPhrase(line, envelopes) {
   if (line?.commitment_id == null) return 'No paper for a prospect line';
   if (envelopes === null) return 'Could not be read';
   if (envelopes === undefined) return 'Reading the paper…';
-  const env = liveEnvelope(envelopes);
-  if (!env) return 'No paper sent';
-  if (env.complete) return env.countersign ? 'Countersigned' : 'Signed';
-  if (env.stages?.some((s) => s.state === 'declined')) return 'Declined';
-  if (env.stages?.some((s) => s.state === 'awaiting_release')) return 'Waiting for Axal’s countersign';
-  return 'Paper sent';
+  // D4811 part 22: the paper reads in the agreement lifecycle's words, as on the admin desk.
+  return closingPaperLifecycle(envelopes).text;
+}
+
+/** The paper's lifecycle pill for a line, or null where `paperPhrase` says why there is none (D4811 part 22). */
+export function paperState(line, envelopes) {
+  if (line?.commitment_id == null || !Array.isArray(envelopes)) return null;
+  return closingPaperLifecycle(envelopes);
 }
 
 /** The lines the room draws: words for status, route, paper, next, and the line's own figure. */
@@ -140,6 +143,7 @@ export function roomLines(closing, papers, viewer, names = {}) {
       amount: moneyCents(l.amount_cents, l.currency || currency),
       status: lineStatus(l.status),
       paper: paperPhrase(l, envelopes),
+      paperState: paperState(l, envelopes),
       next: nextOnLine(l, envelopes, closing, viewer, names),
       evidence: Array.isArray(l.evidence) ? l.evidence : [],
       withdrawn: l.status === 'withdrawn',
@@ -190,7 +194,7 @@ export function stepStrip(closing, papers) {
 
 /**
  * The tiles. Committed is the round's total (every line not withdrawn, which
- * every reader sees); Signed counts the viewer's lines whose paper is signed,
+ * every reader sees); Executed (D4811 part 22) counts the viewer's lines whose paper is executed,
  * or null when a paper read failed; Received sums received lines only.
  */
 export function roomTiles(closing, papers, now = new Date()) {

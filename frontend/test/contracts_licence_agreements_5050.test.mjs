@@ -11,12 +11,14 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { readFileSync } from 'node:fs';
-import { AgreementContextCell } from '../src/pages/admin/contracts/AgreementList.jsx';
+import { AgreementContextCell, LegalStateWord } from '../src/pages/admin/contracts/AgreementList.jsx';
 import {
   AGREEMENT_TYPE_OPTIONS, LEGAL_STATUS_OPTIONS, PACKAGE_OPTIONS, PROGRAM_OPTIONS, agreementContextLine, agreementTemplateLine,
 } from '../src/lib/contractAgreements.js';
 
 const render = (agreement) => renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(AgreementContextCell, { agreement })));
+// D5050 part 2 (CT-18): the legal-state word sits beside the lifecycle pill, not in the context cell.
+const word = (agreement) => renderToStaticMarkup(React.createElement(LegalStateWord, { agreement })).replace(/<\/p>$/, '');
 const schedule = {
   agreement_type: 'program_schedule_addendum', agreement_type_label: 'Program schedule / addendum', licence_uid: 'lic_1', licence_ref: 'AXL-001',
   territory: ['FR'], program_name: 'Spin-Out Lab', package_name: null, package_version: null, template_slug: 'program_schedule', template_version: null,
@@ -31,27 +33,27 @@ const packageDraft = {
 };
 
 test('D5050 a row carries its licence, territory and program without being opened', () => {
-  assert.equal(agreementContextLine(schedule), 'Program schedule / addendum · AXL-001 · FR · Spin-Out Lab');
-  assert.equal(agreementContextLine(packageDraft), 'Package agreement · AXL-001 · FR · Venture Building · v2');
+  // Part 2 (CT-18): territory · licence · package and version · program; the type is the row's own line.
+  assert.equal(agreementContextLine(schedule), 'FR · AXL-001 · Spin-Out Lab');
+  assert.equal(agreementContextLine(packageDraft), 'FR · AXL-001 · Venture Building v2');
   assert.equal(agreementTemplateLine(packageDraft), 'package_venture_building_master v3');
   assert.equal(agreementContextLine(null), null);
   const html = render(schedule);
-  assert.match(html, /Program schedule \/ addendum · AXL-001 · FR · Spin-Out Lab/);
+  assert.match(html, /FR · AXL-001 · Spin-Out Lab/);
   assert.match(html, /href="\/admin\/licences\/lic_1"[^>]*>Open licence/);
   assert.match(html, /href="\/admin\/licences\/programs\/studio\/lic_1"[^>]*>Open Program access/);
-  assert.match(html, /<span class="font-semibold">Executed<\/span>/);
-  assert.doesNotMatch(html, /history/);
+  assert.match(word(schedule), /legal state · <b[^>]*>executed<\/b>$/);
 });
 
 test('D5050 a draft reads Draft and says it has no document; a package with no page says Not recorded', () => {
   const html = render(packageDraft);
-  assert.match(html, /<span class="font-semibold">Draft<\/span>/);
+  assert.match(word(packageDraft), /legal state · <b[^>]*>draft<\/b>/);
   assert.match(html, /Not sent: there is no envelope or signed document yet\./);
-  assert.match(html, /Not recorded.*no package page yet/s);
+  assert.match(html, /Open package context: .*Not recorded.*no package page yet/s);
   assert.doesNotMatch(html, /Open Program access/);
   assert.doesNotMatch(html, /Executed/);
   // A superseded version is history.
-  assert.match(render({ ...schedule, legal_status: 'superseded', legal_status_label: 'Superseded', is_current: false }), /Superseded<\/span> · history/);
+  assert.match(word({ ...schedule, legal_status: 'superseded', legal_status_label: 'Superseded', is_current: false }), /superseded<\/b> · history/);
   assert.equal(render(null), '');
 });
 

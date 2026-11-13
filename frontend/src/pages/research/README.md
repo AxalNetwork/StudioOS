@@ -37,6 +37,12 @@ zones: one record each, reached from a zone's list.
 | `companyCandidateRead.js` | The readings that page and its tests share. |
 | `CompanyDirectoryZone.jsx` | `/research/companies`. The company directory, searched, filtered, sorted and paged on the Worker (D534); it prints the API's total, coverage and facet counts, never a count of its own. A Saved analyses tab holds the competitor analyses and is where `/build/competitors` lands. |
 | `CompanyProfile.jsx` | `/research/companies/company/:uid`. One directory company: metrics with source and date or Not recorded, market context, same-label competitors, funds by focus and HQ, signals, and the sources table. Each read fails on its own. |
+| `ProjectFindings.jsx` | D5157 part 2: a Research Project's Findings tab (`/research/projects/:uid/findings`, RS-02 C) and the Overview's Most recent findings. Source fact, Eadwyn interpretation and Your conclusion as words; Accept / Edit / Discard on Eadwyn's words from the project's Ask answers; the citation panel with the recorded passage, a bottom sheet on a phone. An unreadable read is Unavailable, never empty. |
+| `researchFindings.js` | The readings that tab and card share: kind and state words, chip counts with discarded kept apart, the badge (absent, never 0, on a failed read), the citation panel's lines and the forms' checks and bodies. |
+| `ProjectComparisons.jsx` | D5157 part 3: a Research Project's Comparisons tab (`/research/projects/:uid/comparisons`, RS-02 D). The project's companies and funds with Compare and Remove, and each comparison as a table with row headers, each value with its source and date, Not recorded with the reason and Unreadable apart; cards on a phone. An unreadable read is Unavailable, never empty. |
+| `researchComparisons.js` | The readings that tab and the Add to research panel share: cells, columns that left the directory, the badge (absent, never 0, on a failed read), refusal words and which shells may add to research. |
+| `AddToResearch.jsx` | D5157 part 3: the Add to research and Compare panel (RS-04, RS-05), the shared `Sheet`: pick one of your active projects or start one, then keep the companies or funds there or open a comparison of them. |
+| `ResearchActions.jsx` | D5157 part 3: a company or fund profile's Add to research and Compare buttons, which open that panel. |
 
 The workspace chrome — crumb, zone pills, company chip — lives in
 `frontend/src/workspaces/WorkspaceShell.jsx`, not in these files. A fit score

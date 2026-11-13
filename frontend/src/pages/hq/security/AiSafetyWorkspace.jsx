@@ -41,7 +41,7 @@ function Block({ id, title, state, label, children, testid }) {
   );
 }
 
-const Reading = () => <p className="text-[12px] text-axal-faint dark:text-gray-400">Reading…</p>;
+const Reading = () => <p className="text-[12px] text-axal-muted dark:text-gray-400">Reading…</p>;
 const Unread = ({ reason }) => <p className="text-[12px] text-axal-muted dark:text-gray-300">{reason} This is not a zero.</p>;
 
 export default function AiSafetyWorkspace({ block, unreadable, onRetry, children }) {
@@ -93,7 +93,7 @@ export default function AiSafetyWorkspace({ block, unreadable, onRetry, children
                   <Frac x={d.blocked} n={d.checks} line="guard checks blocked the input before it reached the model" testid="ai-blocked-frac" />
                   <Frac x={d.withheld} n={d.checks} line="guard checks withheld the output from the user" testid="ai-withheld-frac" />
                   {d.unavailableGuard > 0 && <p className="text-[12px] text-axal-muted dark:text-gray-300">{d.unavailableGuard} calls ran while the guard was unavailable.</p>}
-                  {d.legacy && <p className="text-[11.5px] text-axal-faint dark:text-gray-400">Legacy chat audit, counted apart: {d.legacy.blocked} turns blocked, {d.legacy.flagged} flagged.</p>}
+                  {d.legacy && <p className="text-[11.5px] text-axal-muted dark:text-gray-400">Legacy chat audit, counted apart: {d.legacy.blocked} turns blocked, {d.legacy.flagged} flagged.</p>}
                 </>
               )}
             </Block>
@@ -120,7 +120,7 @@ export default function AiSafetyWorkspace({ block, unreadable, onRetry, children
           <section aria-labelledby="ai-recent-h" className={`${CARD} flex flex-col gap-2`} data-testid="ai-recent">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="ai-recent-h" className="text-[14px] font-extrabold tracking-tight text-axal-ink dark:text-white">Recent guard verdicts</h2>
-              {recent.rows && <span className="text-[12px] text-axal-faint dark:text-gray-400">newest {recent.rows.length} in {recent.windowDays || days} days</span>}
+              {recent.rows && <span className="text-[12px] text-axal-muted dark:text-gray-400">newest {recent.rows.length} in {recent.windowDays || days} days</span>}
             </div>
             {recent.state === 'pending' && <Reading />}
             {recent.state === 'unavailable' && <Unread reason={recent.reason} />}

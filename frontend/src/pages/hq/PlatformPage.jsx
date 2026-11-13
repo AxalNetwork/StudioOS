@@ -66,6 +66,7 @@ import HeaderAsk from '../../ui/HeaderAsk.jsx';
 import PlatformOverview, { VersionContext } from './PlatformOverview';
 import { channelState, keyLevel, webhookHealth, KEY_LEVEL, keyExpiry, keyExpiryText, keyLastUsedText, KEY_EXPIRY_WARN_DAYS } from './platformOverviewModel';
 import { platformBuildApi } from '../../lib/api/platformBuild.js';
+import { publishPlatformReads } from '../../lib/platformStrip';
 import { GUIDE_PREFIX } from '../../lib/integrationKeys';
 import { plainStripeAmount } from '../../lib/money';
 
@@ -1114,6 +1115,13 @@ export default function PlatformPage() {
     });
   }, [seen]);
   useEffect(() => { loadTraffic(); }, [loadTraffic]);
+
+  // D4860 part 5 — the HQ strip shows this page's own reading, so the
+  // overview's health and the strip's Overview state are one judgement of one
+  // set of reads, and the strip makes no request of its own here.
+  useEffect(() => {
+    publishPlatformReads({ data, deps, traffic, UNAVAILABLE, at: observed.summary });
+  }, [data, deps, traffic, observed.summary]);
 
   // D4860 — the commit and environment for the header. Its own read: a build
   // route that does not answer empties only the version context.

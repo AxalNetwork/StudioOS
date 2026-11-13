@@ -27,3 +27,10 @@ test('D944: a missing physical table inside a CTE remains a reference and fails 
   assert.deepEqual(referencedTables(sql),['missing_physical_store']);
   const db=new DatabaseSync(':memory:');assert.throws(()=>db.prepare(sql),/no such table/);db.close();
 });
+
+test('trigger UPDATE OF columns are excluded while body table references remain', () => {
+  const sql = `CREATE TRIGGER withdrawal AFTER UPDATE OF consent_given, withdrawn_at ON consents
+    BEGIN UPDATE missing_proof_store SET published_consent_id = NULL; END`;
+  assert.deepEqual(referencedTables(sql), ['missing_proof_store']);
+  assert.deepEqual(referencedTables('UPDATE of SET enabled = 1'), ['of']);
+});

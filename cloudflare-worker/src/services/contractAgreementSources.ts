@@ -374,7 +374,8 @@ export async function loadLicenceAgreementContexts(sql: Sql): Promise<AgreementC
 
 /** The query filters this file adds to `GET /api/admin/contracts`, validated; null fields filter nothing. */
 export type AgreementFilters = {
-  agreement_type: AgreementType | null;
+  /** D5050 part 2: one type or several (`agreement_type=package,program_licence`), so one view isolates the package and program agreements together. */
+  agreement_type: AgreementType[] | null;
   agreement_status: LegalStatus | null;
   licence: string | null;
   program: string | null;
@@ -396,15 +397,16 @@ const COUNTRY = /^[A-Z]{2}$/;
 /** The filters from a query, or the name of the first one that is not a value the registry knows. */
 export function agreementFilters(q: Record<string, string | undefined>): { ok: true; filters: AgreementFilters } | { ok: false; field: string } {
   const pick = (k: string) => (q[k] ?? '').trim() || null;
+  const types = pick('agreement_type');
   const f: AgreementFilters = {
-    agreement_type: pick('agreement_type') as AgreementType | null,
+    agreement_type: types ? [...new Set(types.split(',').map((t) => t.trim()))] as AgreementType[] : null,
     agreement_status: pick('agreement_status') as LegalStatus | null,
     licence: pick('licence'), program: pick('program'), package: pick('package'),
     signed_from: pick('signed_from'), signed_to: pick('signed_to'),
     licence_family: pick('licence_family'), licence_type: pick('licence_type'), holder: pick('holder'),
     territory: pick('territory')?.toUpperCase() ?? null,
   };
-  if (f.agreement_type && !(AGREEMENT_TYPES as readonly string[]).includes(f.agreement_type)) return { ok: false, field: 'agreement_type' };
+  if (f.agreement_type && f.agreement_type.some((t) => !(AGREEMENT_TYPES as readonly string[]).includes(t))) return { ok: false, field: 'agreement_type' };
   if (f.agreement_status && !(LEGAL_STATUSES as readonly string[]).includes(f.agreement_status)) return { ok: false, field: 'agreement_status' };
   if (f.licence && !LICENCE.test(f.licence)) return { ok: false, field: 'licence' };
   if (f.program && !KEY.test(f.program)) return { ok: false, field: 'program' };
@@ -434,7 +436,7 @@ export function matchesAgreementFilters(a: AgreementContext | null | undefined, 
     && !f.licence_family && !f.licence_type && !f.holder && !f.territory;
   if (onlyDates) return true;
   if (!a) return false;
-  if (f.agreement_type && a.agreement_type !== f.agreement_type) return false;
+  if (f.agreement_type && !f.agreement_type.includes(a.agreement_type)) return false;
   if (f.agreement_status && a.legal_status !== f.agreement_status) return false;
   if (f.licence && a.licence_uid !== f.licence && (a.licence_ref ?? '').toLowerCase() !== f.licence.toLowerCase()) return false;
   if (f.program && a.program_key !== f.program) return false;

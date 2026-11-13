@@ -38,6 +38,7 @@ also exercises a `project_id` deep link.
 | `restore_d1_d5337.test.mjs` | D5337: `scripts/restore-d1.sh` run against a fake `wrangler` whose target is real SQLite: a clean chunked restore, every target and backup refusal, a failed chunk, differing row counts, the independent copy with real `age`, one shared path with the drill, and the runbook's reasons. |
 | `_dr_fakes.mjs` | D5337: the `age` key pair and the fake `aws` store the D1 recovery tests share (moved from `dr_second_copy_d4558.test.mjs`). |
 | `email_conversation_history_4662.test.mjs` | D4662: mounted person-bearing manual/AI sends, completion refresh, paging, retries, uid reconciliation and late person/account replies. |
+| `account_regressions_4618.test.mjs` | D4618: the real Account page (and auto-reload card, `useConnectors`) with `fetch` stubbed and answered late: overlapping privacy, category and public-profile saves, session rows by status, Display name, the shared billing overview and its invalidation, degraded card reads, either auto-reload read order, pack retry, and a failed connection list. |
 
 ## Conventions
 
@@ -197,3 +198,4 @@ D1123 extends the Lab desks, overview and operations tests for Formation scope, 
 | `restricted_transport_5680.test.mjs` | D5680: synthetic external/unknown-sharing, membership and privacy refusal before publication. |
 | `rail_public_help_5721.test.mjs` | D5721: public Help's signed-in rail audiences, page keys and exact route boundary. |
 | `_cloudflare_delivery_worker_5720.mjs` | D5720: static local Workers fixture with clock and receipt-key data bindings. |
+| `hq_support_focus_5035.test.mjs` | D5035: the mounted HQ Support sheet returns keyboard focus to its opener, the next escalation, or the Queue link when the last item is decided. |

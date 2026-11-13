@@ -2946,7 +2946,12 @@ export const api = {
   networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
 
-  getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
+  // D4623 part 2: `licence` 'investor' asks for the investor figures of a held licence that is not the
+  // primary one (the multi-licence Studio's Investor block). Omitted, the payload is the primary licence's.
+  getDashboard: (fresh = false, licence = '') => {
+    const query = [fresh ? 'fresh=1' : '', licence ? `licence=${encodeURIComponent(licence)}` : ''].filter(Boolean).join('&');
+    return request('/dashboard' + (query ? `?${query}` : ''));
+  },
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
   investorLifecycle: () => request('/dashboard/investor-lifecycle'),
 
@@ -5013,7 +5018,9 @@ export const api = {
   portfolioUpdateCreate: (data) => request('/portfolio-updates', { method: 'POST', body: JSON.stringify(data) }),
 
   // ---------- Cap Table / Ownership (Support) ----------
-  positionsList: () => request('/positions'),
+  // D4644: the list honours `as_of` as the analytics read does (PF-02's
+  // "Read the book as of"); without one it reads the latest marks.
+  positionsList: (asOf) => request(`/positions${asOf ? `?as_of=${encodeURIComponent(asOf)}` : ''}`),
   portfolioUpdatesLatest: () => request('/portfolio-updates/latest'),
   // Canvas IP1's `Mark history`. Every marking event across the accessible
   // book in one call — the per-project read already returned this history, but

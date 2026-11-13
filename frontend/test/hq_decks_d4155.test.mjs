@@ -32,11 +32,12 @@ test('six tabs at their own addresses, each an HQ-only route', () => {
   assert.equal(viewFor('/admin/platform/decks/nope'), 'reports');
 });
 
-test('Decks joins the Platform strip after Promo codes, in the list and in the chrome', () => {
+test('Decks is on the Platform strip, last of Product (D4860 part 5 grouped it), in the list and in the chrome', () => {
   const labels = HQ_STRIPS.Platform.map((i) => i.label);
-  assert.equal(labels[labels.indexOf('Promo codes') + 1], 'Decks');
+  assert.equal(labels[labels.indexOf('Product testing') + 1], 'Decks');
+  assert.equal(HQ_STRIPS.Platform.find((i) => i.label === 'Decks').group, 'Product');
   assert.equal(stripFor('/admin/platform/decks/flags'), 'Platform');
-  assert.match(read('App.jsx'), /<StripLink to="\/admin\/platform\/promo-codes">Promo codes<\/StripLink>\n\s+<StripLink to="\/admin\/platform\/decks">Decks<\/StripLink>/);
+  assert.match(read('App.jsx'), /<StripLink to="\/admin\/platform\/product-testing">Product testing<\/StripLink>\n\s+<StripLink to="\/admin\/platform\/decks">Decks<\/StripLink>/);
 });
 
 test('each build task names its issue, and only a landed one is live', () => {

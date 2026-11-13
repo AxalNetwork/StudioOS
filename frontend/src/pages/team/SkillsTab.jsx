@@ -275,7 +275,7 @@ export function SkillPage({ block, agentsBlock, backTo, onBack, onAssign, onRetr
             {versions.length ? versions.map((v) => (
               <div key={v.version} className="flex gap-2.5 border-t border-axal-hairline py-1.5 text-[12.5px] first-of-type:border-t-0 dark:border-gray-800">
                 <span className="w-7 font-mono font-semibold text-axal-ink dark:text-gray-100">v{v.version}</span>
-                <span className="min-w-0 flex-1 text-axal-ink dark:text-gray-300">{v.note || '—'}</span>
+                <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-axal-ink dark:text-gray-300" data-testid="skill-version-note">{v.note || <Unrecorded />}</span>
                 <span className={MONO}>{day(v.published_at) || ''}</span>
               </div>
             )) : <p className={`m-0 mt-1 ${MUTED}`}>Not published yet.</p>}
