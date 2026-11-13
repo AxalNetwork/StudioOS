@@ -8,7 +8,7 @@ import * as agents from './agentsAdapter.js';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_TEXT, EYEBROW, FIELD, HonestBlock, MONO, MUTED } from './teamUi.jsx';
 import { AgentRadar, CostExplainer, RunCostLine, SkillRow, TaxChips } from './SkillParts.jsx';
 import {
-  LEVELS, OUTPUT_KINDS, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, scopeLine,
+  LEVELS, OUTPUT_KINDS, RELEASE_NOTE_MAX, assignGroups, assignRows, blockedWords, costChangeWords, directory, parseSkillMd, previewRadar, problemWords, radarVector, releaseNoteBody, scopeLine,
 } from './skillsModel.js';
 
 /**
@@ -351,6 +351,7 @@ export function NewSkillSheet({ scope, onClose, onSaved }) {
   const [outputKind, setOutputKind] = useState('draft');
   const [outputLabel, setOutputLabel] = useState('');
   const [markdown, setMarkdown] = useState('');
+  const [releaseNote, setReleaseNote] = useState('');
   const [refusal, setRefusal] = useState('');
   const [busy, setBusy] = useState(false);
   const [tools, setTools] = useState(null);
@@ -366,6 +367,9 @@ export function NewSkillSheet({ scope, onClose, onSaved }) {
     taxonomy: tags.map((t) => ({ skill_slug: t.skill_slug, level: t.level })), tools: [], output_kind: outputKind, output_label: outputLabel.trim() || null,
   });
   const save = async (publish) => {
+    // D4533 B1: an over-long note is told before anything is saved, so no draft is left behind by a refused publish.
+    const note = publish ? releaseNoteBody(releaseNote) : { ok: true, note: null };
+    if (!note.ok) { setRefusal(note.problem); return; }
     setRefusal(''); setBusy(true);
     try {
       if (mode === 'paste') {
@@ -377,7 +381,7 @@ export function NewSkillSheet({ scope, onClose, onSaved }) {
       const out = await agents.createSkill(kind, id, body());
       if (!out.available) { setRefusal(out.reason); return; }
       if (publish && out.value?.skill?.uid) {
-        const pub = await agents.publishSkill(out.value.skill.uid, {});
+        const pub = await agents.publishSkill(out.value.skill.uid, { releaseNote: note.note });
         if (!pub.available) { setRefusal(`Saved as a draft. It could not be published: ${pub.reason}`); return; }
         onSaved?.(pub.value?.skill || out.value.skill);
         return;
@@ -428,6 +432,9 @@ export function NewSkillSheet({ scope, onClose, onSaved }) {
             </label>
             <label className="flex flex-col gap-1"><span className={MUTED}>What it proposes, in words (optional)</span>
               <input className={FIELD} value={outputLabel} onChange={(e) => setOutputLabel(e.target.value)} maxLength={120} placeholder="An update draft in Grow › Updates" />
+            </label>
+            <label className="flex flex-col gap-1"><span className={MUTED}>Release note · optional, kept with the version if you publish</span>
+              <textarea className={`${FIELD} h-20 py-2`} value={releaseNote} onChange={(e) => setReleaseNote(e.target.value)} maxLength={RELEASE_NOTE_MAX} data-testid="new-skill-release-note" />
             </label>
             <span className={MUTED}>Publishing makes a new version. Agents pinned to an older version show “Update available”.</span>
           </>
