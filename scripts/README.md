@@ -98,6 +98,9 @@ represents a bug that reached production once:
 | `verify-production-candidate.mjs` | D5501: require the exact main SHA and its six trusted Actions check results. |
 | `prepare-production-worker.sh` | D5501: make and profile the production-shaped Worker bundle before writes. |
 | `check-decision-appends.mjs` | D6466 (#6466): a change that appends a section to a decision file already on its base. A `D<n>.md` or `D<n>-p<k>.md` there fails when it gains a `##`/`###` heading or more than 10 lines; it names the `D<n>-p<k>.md` to write instead (D5615). Typo and link fixes pass; a file the change creates passes. On a pull request it reads the merge commit's first parent, which a shallow checkout still names; a base it cannot resolve exits 2, never a pass; a push says it skipped. |
+| `ci/scanner-acquisition.mjs` | D5531: pinned archive acquisition, verified offline copies, bounded release retries and job-private scanner extraction. |
+| `ci/install-scanner.mjs` | D5531: trusted-base CLI for scanner metadata and installation, with no version or URL override. |
+| `ci/scanner-tools.json` | D5531: reviewed release URLs, exact versions and SHA256 pins for the supported Linux x64 runner. |
 
 ## The one rule that needed a linter
 
