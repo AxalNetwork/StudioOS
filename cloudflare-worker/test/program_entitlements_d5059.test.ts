@@ -25,6 +25,7 @@ import { loadSchema, SCHEMA_OPTIONS } from './_schema_once.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { mount as entitlementsMount } from '../src/routes/admin_program_entitlements.ts';
+import { mount as memberEntitlementsMount } from '../src/routes/member_program_entitlements.ts';
 import programGrantsRouter from '../src/routes/admin_program_grants.ts';
 import { transitionLicence } from '../src/services/userLicences.ts';
 import {
@@ -67,6 +68,7 @@ function fixture() {
   const env = { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any;
   const app = new Hono<any>();
   app.route(entitlementsMount.path, entitlementsMount.router);
+  app.route(memberEntitlementsMount.path, memberEntitlementsMount.router);
   app.route('/api/admin/program-grants', programGrantsRouter);
   async function call(who: number, method: string, path: string, body?: unknown) {
     const token = await new SignJWT({ user_id: who, jti: `s-${who}` }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
@@ -78,12 +80,12 @@ function fixture() {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }, env));
       let json: any = null; try { json = await res.json(); } catch { json = null; }
-      return { status: res.status, body: json };
+      return { status: res.status, body: json, cacheControl: res.headers.get('cache-control') };
     } finally { [console.warn, console.error, console.info] = saved; }
   }
   const one = (sql: string, ...a: any[]) => ({ ...(db.prepare(sql).get(...a) as any) });
   const all = (sql: string, ...a: any[]) => (db.prepare(sql).all(...a) as any[]).map((r) => ({ ...r }));
-  return { db, env, call, one, all };
+  return { db, env, app, call, one, all };
 }
 
 const prog = (read: { programs: any[] }, key: string) => read.programs.find((p) => p.program_key === key);
@@ -360,4 +362,35 @@ test('territory program grants are untouched and keep working', async () => {
   assert.deepEqual(after.body.grants, before.body.grants);
   // And the territory licence is never read as a user licence source.
   assert.equal((await call(SUPER, 'GET', '/api/admin/program-entitlements/licences/tl_fr')).status, 404);
+});
+
+test('members read only their own program access and the public source fields', async () => {
+  const { app, db, env, call } = fixture();
+  const url = '/api/member/program-entitlements';
+  grantRow(db, 'member-learning', FOUNDER, 'learning');
+  grantRow(db, 'member-lab', FOUNDER, 'spinout-lab');
+  const anonymous = await withThrownResponses(() => app.request(url, {}, env));
+  assert.equal(anonymous.status, 401);
+
+  const read = await call(FOUNDER, 'GET', `${url}?user_id=${MULTI}`);
+  assert.equal(read.status, 200);
+  assert.equal(read.cacheControl, 'private, no-store');
+  assert.deepEqual(Object.keys(read.body).sort(), ['licences', 'on', 'programs']);
+  assert.deepEqual(read.body.licences, [{
+    uid: 'ul_f10', licence_ref: 'UL-FND-0010', licence_type: 'founder',
+    licence_type_label: 'Founder', status: 'active', valid_source: true,
+  }]);
+  const learning = prog(read.body, 'learning');
+  assert.equal(learning.in_force, true);
+  assert.equal(learning.grant, undefined);
+  assert.equal(learning.in_force_via, 'ul_f10');
+  assert.deepEqual(learning.sources, [{
+    licence_uid: 'ul_f10', licence_ref: 'UL-FND-0010', licence_type: 'founder',
+    licence_type_label: 'Founder', status: 'active', agreement: 'not_required', legally_ready: true,
+  }]);
+  const lab = prog(read.body, 'spinout-lab');
+  assert.equal(lab.in_force, false);
+  assert.equal(lab.sources[0].agreement, 'missing');
+  assert.equal(lab.blockers[0].code, 'agreement_missing');
+  assert.equal((await call(FOUNDER, 'GET', `${url}/${MULTI}`)).status, 404);
 });
