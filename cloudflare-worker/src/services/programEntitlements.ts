@@ -289,7 +289,7 @@ async function accountOf(env: Env, userId: number): Promise<Account | null> {
 }
 
 /** Every account in `userIds`, evaluated together: four statements whatever the number of accounts. */
-async function evaluateMany(env: Env, userIds: number[], day: string) {
+export async function evaluateMany(env: Env, userIds: number[], day: string) {
   const [licences, rules, grants, name] = await Promise.all([heldLicencesOf(env, userIds), readRules(env), grantsOf(env, userIds), programNames(env)]);
   const agreements = await readAgreements(env, licences.map((l) => l.uid));
   const by = new Map<number, Entitlement[]>();

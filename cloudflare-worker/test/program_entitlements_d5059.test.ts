@@ -439,3 +439,58 @@ test('HQ applies the shared member gate to cohort and referral entry points', as
     assert.equal(response.body.error, 'program_entitlement_required', path);
   }
 });
+
+test('HQ reconciliation pages distinct participants, distinguishes blockers and never writes grants', async () => {
+  const { db, call, one } = fixture();
+  const endpoint = '/api/admin/program-entitlements/reconciliation';
+  const insertCourse = db.prepare("INSERT INTO learning_programs (id, uid, name, status, created_by) VALUES (?, ?, ?, 'published', ?)");
+  insertCourse.run(101, 'course-a', 'Course A', SUPER);
+  insertCourse.run(102, 'course-b', 'Course B', SUPER);
+  const enrol = db.prepare("INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, status) VALUES (?, ?, ?, 'active')");
+  enrol.run(101, FOUNDER, SUPER);
+  enrol.run(102, FOUNDER, SUPER);
+  enrol.run(101, MULTI, SUPER);
+  enrol.run(101, ROLE_ONLY, SUPER);
+  grantRow(db, 'keep-paused', MULTI, 'learning', 'paused');
+  assert.equal((await call(FOUNDER, 'GET', `${endpoint}?program=learning`)).status, 403);
+  const first = await call(SUPER, 'GET', `${endpoint}?program=learning&limit=1`);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.cacheControl, 'private, no-store');
+  assert.equal(first.body.next_after, FOUNDER);
+  assert.deepEqual(first.body.items, [{
+    user_id: FOUNDER, disposition: 'review_grant', grant_state: null, grant_revision: 0,
+    source_licences: ['ul_f10'], blockers: ['not_granted'],
+  }]);
+  const rest = await call(SUPER, 'GET', `${endpoint}?program=learning&after=${FOUNDER}`);
+  assert.equal(rest.body.next_after, null);
+  assert.deepEqual(rest.body.items.map((item: any) => [item.user_id, item.disposition, item.grant_state]), [
+    [MULTI, 'preserve_grant_decision', 'paused'], [ROLE_ONLY, 'review_licence', null],
+  ]);
+  assert.equal(one('SELECT COUNT(*) AS n FROM user_program_grants').n, 1);
+  assert.equal(one('SELECT COUNT(*) AS n FROM user_program_grant_events').n, 0);
+
+  db.prepare("INSERT INTO spinout_lab_enrollments (user_id, kind) VALUES (?, 'legacy')").run(FOUNDER);
+  grantRow(db, 'lab-awaiting-legal', FOUNDER, 'spinout-lab');
+  const lab = await call(SUPER, 'GET', `${endpoint}?program=spinout-lab`);
+  assert.equal(lab.body.items[0].disposition, 'review_agreement');
+  assert.deepEqual(lab.body.items[0].blockers, ['agreement_missing']);
+  executed(db, 'lab-reconciled-agreement', 'ul_f10', 'spinout-lab');
+  assert.equal((await call(SUPER, 'GET', `${endpoint}?program=spinout-lab`)).body.items[0].disposition, 'in_force');
+
+  db.prepare("INSERT INTO referral_submissions (uid, referrer_user_id, referred_name) VALUES ('ref-fixture', ?, 'Fixture')").run(FOUNDER);
+  assert.equal((await call(SUPER, 'GET', `${endpoint}?program=refer-and-earn`)).body.items[0].disposition, 'review_activity');
+
+  const keys = ['spinout-lab', 'investor-cohorts', 'mentor-cohorts', 'perks', 'refer-and-earn', 'referral-partners', 'influencer', 'product-testing'];
+  for (const key of keys) {
+    const response = await call(SUPER, 'GET', `${endpoint}?program=${key}`);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  }
+  assert.equal((await call(SUPER, 'GET', `${endpoint}?program=ai-native-venture`)).body.error, 'evidence_not_mapped');
+  assert.equal((await call(SUPER, 'GET', `${endpoint}?program=learning&limit=201`)).status, 400);
+  assert.equal((await call(SUPER, 'GET', `${endpoint}?program=learning&after=1e3`)).status, 400);
+  db.exec('ALTER TABLE learning_enrollments RENAME TO broken_evidence');
+  const unreadable = await call(SUPER, 'GET', `${endpoint}?program=learning`);
+  assert.equal(unreadable.status, 503);
+  assert.equal(unreadable.body.error, 'reconciliation_unavailable');
+  assert.doesNotMatch(JSON.stringify(unreadable.body), /learning_enrollments/);
+});
