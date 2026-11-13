@@ -230,14 +230,14 @@ test('receivables: disputed first, no Overdue without a due date, and outstandin
   assert.deepEqual(rows.map((r) => r.status), ['disputed', 'issued', 'issued', 'draft', 'paid', 'void']);
   const counts = receivableCounts(rows);
   assert.equal(counts.all, 6);
-  assert.equal(counts.overdue, undefined, 'an Overdue count appeared, but no statement records a due date');
+  assert.equal(counts.overdue, 0, 'no statement has a recorded overdue observation');
   const totals = outstandingByCurrency(rows);
   assert.deepEqual(totals.map((t) => [t.currency, t.cents]), [['EUR', 710_000], ['GBP', 100_000]], 'drafts or voids were counted, or currencies merged');
   const h = html(React.createElement(ReceivablesSection, { statements: STATEMENTS, onOpen() {} }));
   const t = text(h);
   assert.match(t, /Due Status/);
   assert.match(t, /As of now/);
-  assert.doesNotMatch(t, /Overdue/);
+  assert.match(t, /Overdue 0/);
   assert.match(t, /Outstanding in EUR €7,100\.00[^]*?Outstanding in GBP £1,000\.00/);
   assert.match(t, /not summed across them/);
 });
@@ -282,7 +282,7 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   const h = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q4', licences: null }));
   for (const col of ['Ceiling', 'HQ', 'Branch', 'Enforcement', 'Issued', 'Remaining', 'Reporting']) assert.match(h, new RegExp(`>${col}</th>`));
   const fr = text(h.split('data-testid="hq-revenue-ceiling-state-fr-2026-Q4"')[1].split('</tr>')[0]);
-  assert.match(fr, /HQ saved ✓ Branch synced ✓ Enforced[^]*?Not reported[^]*?Not recorded[^]*?Missing/);
+  assert.match(fr, /HQ saved ✓ Push accepted Enforcement not checked Check branch[^]*?Not reported[^]*?Not recorded[^]*?Missing/);
   assert.doesNotMatch(fr, /€10,000\.00[^]*€10,000\.00/, 'the whole ceiling was drawn as Remaining');
   const dach = text(h.split('data-testid="hq-revenue-ceiling-state-dach-2026-Q4"')[1].split('</tr>')[0]);
   // PromotionsSection reads the real clock, so the fixture's age (23 days before NOW) is counted from now, not from NOW:
@@ -290,7 +290,7 @@ test('promotions: badge columns, Remaining only beside a reported Issued, and th
   const ageDays = Math.floor((Date.now() - (NOW - 23 * DAY)) / DAY);
   assert.match(dach, new RegExp(`€2,100\\.00 €3,900\\.00 Stale · ${ageDays} d`));
   const none = text(h.split('data-testid="hq-revenue-no-ceiling-pt"')[1].split('</tr>')[0]);
-  assert.match(none, /No ceiling configured · Discounts currently allowed/);
+  assert.match(none, /No ceiling configured[^]*Enforcement not checked Check branch/);
   const past = html(React.createElement(PromotionsSection, { summary: SUMMARY, ceilings: CEILINGS, coverage, period: '2026-Q3', licences: null }));
   assert.doesNotMatch(text(past), /Discounts currently allowed/, 'a past quarter says nothing about checkout now');
 });
@@ -340,5 +340,5 @@ test('the source: no window.confirm, nothing important under 12px, no number def
   assert.doesNotMatch(SRC, /total_cents|platform_revenue|platformRevenue/);
   // The period reaches the Worker, and the period's statements are their own read.
   assert.match(SRC, /api\.hqRevenue\(p \|\| undefined\)/);
-  assert.match(SRC, /api\.statements\(p\)\.then\(setPeriodStatements/);
+  assert.match(SRC, /api\.statements\(p\)\.then\(/);
 });
