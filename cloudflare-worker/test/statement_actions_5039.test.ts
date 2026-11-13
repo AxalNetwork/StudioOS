@@ -511,6 +511,15 @@ test('history is permission-gated, scoped and paged; unreadable is never an empt
   assert.equal(a.items[0].actor_user_id, HOLDER);
   assert.equal('idempotency_key' in a.items[0], false);
   assert.equal(a.items.some((x: any) => x.action === 'set_due_date'), false);
+  // Corruption in the final returned receipt must be Unreadable, not a 400
+  // blaming the caller, a partial empty success, or a skipped cursor row.
+  const boundary = a.items[a.items.length - 1];
+  for (const response of ['{', 'null', '{}']) {
+    t.db.prepare('UPDATE subsidiary_statement_actions SET response_json = ? WHERE uid = ?').run(response, boundary.uid);
+    const broken = await t.call('/statements/st_issued/actions');
+    assert.equal(broken.status, 500);
+    assert.equal(Array.isArray(broken.body.items), false);
+  }
   t.db.exec('DROP TABLE subsidiary_statement_actions');
   assert.equal((await t.call('/statements/st_issued/actions')).status, 500);
 });

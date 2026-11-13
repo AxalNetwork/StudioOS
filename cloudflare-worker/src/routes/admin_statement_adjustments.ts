@@ -97,9 +97,18 @@ r.get('/statements/:uid/actions', async (c) => {
       FROM subsidiary_statement_actions WHERE statement_uid = ? AND id < ? ORDER BY id DESC LIMIT 26`)
       .bind(uid, cursor).all<any>();
     const items = (rows.results || []).slice(0, 25).map(({ response_json, ...row }) => {
-      const receipt = JSON.parse(response_json);
+      let receipt;
+      try {
+        receipt = JSON.parse(response_json);
+        if (!receipt || typeof receipt !== 'object' || !receipt.before || !receipt.after) throw new Error('Invalid receipt');
+      } catch {
+        // The read is unreadable, not an empty history or a malformed client request.
+        throw new Error('SQLITE_ERROR: stored statement receipt is unreadable');
+      }
       return { ...row, before: receipt.before, after: receipt.after };
     });
+    // The extra 26th row proves another page exists. The cursor stays at the
+    // last RETURNED row: using the sentinel with `id < cursor` would skip it.
     return c.json({ available: true, items, next_cursor: rows.results.length > 25 ? String(items[items.length - 1].id) : null });
   } catch (e) { return mapError(c, e); }
 });
