@@ -244,8 +244,8 @@ test('fit no longer becomes available through a saved view, a room or a primary 
 test('fit follows the current founder relationship for an investor with both licences', async () => {
   const w = world();
   try {
+    w.db.exec(read('../sql/migrations/202611041822_account_licences.sql'));
     w.db.exec(`
-      INSERT INTO founders (id, name, email) VALUES (70, 'Synthetic founder', 'founder70@example.test');
       UPDATE projects SET founder_id = 70 WHERE id = 10;
       UPDATE users SET founder_id = 70 WHERE id = 1;
       INSERT INTO account_licences (user_id, licence, source) VALUES (1, 'founder', 'test');
