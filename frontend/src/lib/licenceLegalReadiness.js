@@ -124,6 +124,7 @@ export function programReadiness(program, { licenceUid, agreements = null, repla
       word: DOC_STATE_WORD[state],
       kindWord: DOC_KIND_WORD[d.kind] || d.label,
       row,
+      inFlightRow: byUid.get(d.in_flight_agreement_uid) || null,
       version: versionOf(row, rows),
       effective: state === 'executed' || state === 'replacement_required' ? day(row?.effective_from || row?.signed_at) : null,
       signedOnGrant: state === 'executed' && !d.executed_agreement_uid,
@@ -195,6 +196,7 @@ export function packageReadiness(legal, { licenceUid, agreements = null }) {
         : 'not_prepared';
     master = {
       state, word: DOC_STATE_WORD[state], row, version: versionOf(row, rows),
+      inFlightRow: rows.find((r) => r.slot_key === 'package_master' && r.package_key === pkg.scope_key && IN_FLIGHT.includes(r.status)) || null,
       effective: state === 'executed' || state === 'replacement_required' ? day(row?.effective_from || row?.signed_at) : null,
       href: contractsHref({ row, licenceUid, kind: 'package_master', packageKey: pkg.scope_key }),
     };

@@ -13,6 +13,7 @@
  * agreement's state, the branch's sync, the licence's invoices). It is said
  * as that, never as 0 and never as None.
  */
+import { SIGNAL_WORD } from '../../lib/licenceLegalReadiness';
 import { daysTo } from '../../lib/notices';
 
 /** How near a renewal has to be before it needs HQ: the canvas's "renew in the next 90 days". */
@@ -106,10 +107,16 @@ export function attentionCell(l, read) {
 
 /**
  * The Needs HQ items the reads can compute, each a filter of the table. The
- * three the canvas also draws (agreements incomplete, branch out of sync,
- * overdue invoice) need reads the ledger does not make; `NOT_INSTRUMENTED`
- * names them so the page says so instead of showing a 0.
+ * ledger also names branch sync and overdue invoices as not instrumented.
  */
+const LEGAL_NEEDS = Object.entries(SIGNAL_WORD).map(([signal, title]) => ({
+  key: `legal_${signal}`,
+  title,
+  label: (n) => `${title} · ${n}`,
+  matches: (licence) => licence.legal_signals?.includes(signal) === true,
+  legal: true,
+}));
+
 export const NEEDS = Object.freeze([
   {
     key: 'requests',
@@ -123,9 +130,10 @@ export const NEEDS = Object.freeze([
     label: (n) => `${n} ${n === 1 ? 'renewal' : 'renewals'} approaching`,
     matches: (l) => renewalApproaching(l),
   },
+  ...LEGAL_NEEDS,
 ]);
 export const NEED_KEYS = Object.freeze(NEEDS.map((n) => n.key));
-export const NOT_INSTRUMENTED = Object.freeze(['Agreements incomplete', 'Branch out of sync', 'Overdue invoices']);
+export const NOT_INSTRUMENTED = Object.freeze(['Branch out of sync', 'Overdue invoices']);
 
 /** The `?needs=` value as the list of keys it names, in NEEDS order; anything unknown is dropped. */
 export function needsFromParam(param) {
@@ -146,6 +154,9 @@ export function needsSummary(rows, reads) {
     if (n.key === 'requests') {
       if (list.some((l) => reads?.[l.uid] && !reads[l.uid].ok)) return { key: n.key, state: 'unavailable', label: `${n.title} · Unavailable` };
       if (list.some((l) => !reads?.[l.uid])) return { key: n.key, state: 'reading', label: `${n.title} · Reading…` };
+    }
+    if (n.legal && list.some((l) => !Array.isArray(l.legal_signals))) {
+      return { key: n.key, state: 'unavailable', label: `${n.title} · Unavailable` };
     }
     const count = list.filter((l) => n.matches(l, reads?.[l.uid])).length;
     return count

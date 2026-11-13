@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Download, FileSignature, Loader2 } from 'lucide-react';
 import { licenceAccountApi } from '../../../lib/api/licenceAccount';
+import { DOC_KIND_WORD, packageName, programName } from '../../../lib/licenceLegalReadiness';
 import { reportError } from '../../../lib/log';
 import { NOT_RECORDED, bodyBlocks, contractSteps, contractSummary, day, sectionIndex } from './licenceTabsModel';
 
@@ -162,6 +163,103 @@ export function ContractView({ answer }) {
   );
 }
 
+const AGREEMENT_STATUS = {
+  sent: 'Awaiting signature',
+  partially_signed: 'Partially signed',
+  executed: 'Executed',
+  superseded: 'Superseded',
+};
+
+function SignedAgreementDownload({ envelopeId }) {
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function download() {
+    setFailed(false);
+    setPending(true);
+    try {
+      const { blob, filename } = await licenceAccountApi.signedProgramAgreementPdfBlob(envelopeId);
+      saveBlob(blob, filename);
+    } catch (error) {
+      reportError('licence_program_agreement_download_failed', error);
+      setFailed(true);
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div className="mt-2">
+      <button type="button" className={BTN} disabled={pending} onClick={download}>
+        <Download size={14} aria-hidden="true" /> {pending ? 'Downloading…' : 'Download signed PDF'}
+      </button>
+      {failed && <p role="alert" className="mt-1 text-red-600 dark:text-red-400">The signed PDF could not be downloaded. Try again.</p>}
+    </div>
+  );
+}
+
+function ProgramAgreements() {
+  const [answer, setAnswer] = useState(undefined);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    licenceAccountApi.programAgreements()
+      .then((data) => { if (active) setAnswer(data); })
+      .catch((error) => {
+        if (!active) return;
+        reportError('licence_program_agreements_load_failed', error);
+        setAnswer(null);
+      });
+    return () => { active = false; };
+  }, [attempt]);
+
+  return (
+    <section className={CARD} aria-labelledby="program-agreements-heading">
+      <h2 id="program-agreements-heading" className="text-base font-semibold">Program agreements</h2>
+      {answer === undefined && <p role="status" className="mt-2 text-sm text-gray-500">Loading program agreements…</p>}
+      {answer === null && (
+        <div className="mt-2 flex items-center gap-3">
+          <p className="text-sm text-gray-600 dark:text-gray-400">Program agreements could not be read.</p>
+          <button type="button" className={BTN} onClick={() => { setAnswer(undefined); setAttempt((n) => n + 1); }}>Try again</button>
+        </div>
+      )}
+      {answer?.reason && <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{answer.reason}</p>}
+      {answer?.programs && (
+        <div className="mt-2 space-y-4 text-sm">
+          <p className="text-gray-600 dark:text-gray-400">A grant records your commercial access. A program is in force when the grant and its legal requirements are in effect.</p>
+          {answer.programs.length > 0 && (
+            <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+              {answer.programs.map((program) => (
+                <li key={program.program_key} className="py-2">
+                  <span className="font-medium">{programName(program.program_key)}</span>
+                  <span className="ml-2 text-gray-600 dark:text-gray-400">{program.word}</span>
+                  {program.waiting_on.length > 0 && <p className="text-gray-600 dark:text-gray-400">Waiting on {program.waiting_on.join(', ')}</p>}
+                  {!program.policy_recorded && <p className="text-gray-600 dark:text-gray-400">Agreement policy not recorded</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {answer.agreements.length > 0 ? (
+            <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+              {answer.agreements.map((agreement) => (
+                <li key={agreement.uid} className="py-2">
+                  <span className="font-medium">{DOC_KIND_WORD[agreement.agreement_kind]}</span>
+                  {agreement.program_key && <span> · {programName(agreement.program_key)}</span>}
+                  {agreement.package_key && <span> · {packageName(agreement.package_key)}</span>}
+                  <p className="text-gray-600 dark:text-gray-400">
+                    {AGREEMENT_STATUS[agreement.status]}
+                    {agreement.signed_at && ` · Signed ${day(agreement.signed_at)}`}
+                    {agreement.effective_from && ` · Effective ${day(agreement.effective_from)}`}
+                  </p>
+                  {agreement.signed_envelope_id && <SignedAgreementDownload envelopeId={agreement.signed_envelope_id} />}
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-gray-600 dark:text-gray-400">No program agreements have been sent.</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ContractTab() {
   const [answer, setAnswer] = useState(undefined);
   const load = useCallback(() => {
@@ -170,7 +268,12 @@ export default function ContractTab() {
       .catch((e) => { reportError('licence_contract_load_failed', e); setAnswer(null); });
   }, []);
   useEffect(load, [load]);
-  if (answer === undefined) return <p className="text-sm text-gray-500">Loading…</p>;
-  if (answer === null) return <p className="text-sm text-red-600">Your contract could not be read. Nothing here is a statement that you have none.</p>;
-  return <ContractView answer={answer} />;
+  return (
+    <div className="space-y-4">
+      {answer === undefined && <p className="text-sm text-gray-500">Loading…</p>}
+      {answer === null && <p className="text-sm text-red-600">Your contract could not be read. Nothing here is a statement that you have none.</p>}
+      {answer && <ContractView answer={answer} />}
+      <ProgramAgreements />
+    </div>
+  );
 }
