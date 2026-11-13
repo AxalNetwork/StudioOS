@@ -41,16 +41,18 @@ test('a failed positions read replaces the Overview book and never exposes the W
   } finally { await view.close(); }
 });
 
-test('optional Overview failures label their figures Unavailable rather than zero or a dash', async () => {
+test('optional Overview failures label their own panels Unreadable rather than zero or a dash', async () => {
+  // D4817 part 1 (#5311): PF-01 replaced this page; the finding's test moved with it.
   const view = await mount(InvestorPortfolioCanvas, ({ path }) => path === '/api/positions'
     ? json({ items: [{ project_id: 7, project: { name: 'Northwind' }, total_invested: 100 }] })
     : path.startsWith('/api/') ? json({ detail: 'down' }, 500) : json({}));
   try {
     const words = view.text();
-    assert.match(words, /TVPI · grossUnavailableAnalytics source unavailable/);
-    assert.match(words, /Support deliveredSupport totals unavailableUnavailable/);
-    assert.match(words, /Portfolio healthHealth source unavailableUnavailable/);
-    assert.doesNotMatch(words, /0 currently healthy|0 recorded · 0 accepted/);
+    assert.match(words, /TVPIUnreadablePerformance could not be read\./);
+    assert.match(words, /Support could not be read\. This is not a claim that no support was given\./);
+    assert.match(words, /Reporting could not be read\. This is not a claim that any company is late\./);
+    assert.match(words, /Northwind.*\$100.*Unreadable.*Unreadable/);
+    assert.doesNotMatch(words, /0 currently healthy|0 recorded · 0 accepted|TVPI0|Received0|\bdown\b/);
   } finally { await view.close(); }
 });
 
@@ -73,10 +75,10 @@ test('the overview uses the reporting population and full support totals indepen
   });
   try {
     const words = view.text();
-    assert.match(words, /NAV · grossUSD\s1,234\.56/);
+    assert.match(words, /Net asset value · gross\$1,234\.56/);
     assert.match(words, /1 of 2 portfolio companies reported for 2026-Q3/);
-    assert.match(words, /Latest visible update.*Headcount0.*Revenue€12\.34.*RunwayNot recorded/);
-    assert.match(words, /Support delivered2 of 3 companies in the support ledger412/);
+    assert.match(words, /Delivered412/);
+    assert.match(words, /2 of 3 companies supported/);
   } finally { await view.close(); }
 });
 
@@ -111,6 +113,7 @@ test('KPI kinds and alert dates keep their member-facing units and separators', 
 test('investor-visible copy carries no issue, decision or canvas identifiers', () => {
   const files = [
     'InvestorPortfolioCanvas.jsx', 'InvestorPortfolioPositions.jsx', 'InvestorPortfolioUpdates.jsx', 'FromMercury.jsx',
+    '../portfolio/PortfolioFrame.jsx', '../portfolio/PortfolioParts.jsx', '../portfolio/portfolioModel.js',
   ].map((name) => codeOnly(readFileSync(new URL(`../src/pages/investor/${name}`, import.meta.url), 'utf8'))).join('\n');
   const rendered = files.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
   assert.doesNotMatch(rendered, /\bIP[12]\b|\bD\d{3,5}\b|#\d{3,5}\b|asked on|Two rule sets, and only one|What this book will not do/);
