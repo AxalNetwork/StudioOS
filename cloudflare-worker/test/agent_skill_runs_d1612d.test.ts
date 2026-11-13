@@ -180,10 +180,12 @@ test('D5334: a pass on v1 followed by a fail on v2 is compare evidence, not a v2
   const starter = starterCase('board-meeting-brief')!;
   const { caseSha } = await import('../src/services/agents/skillLifecycle.ts');
   const { compareResults } = await import('../src/services/agents/skillEvalCompare.ts');
+  const { JUDGE_VERSION } = await import('../src/services/agents/skillAssertions.ts');
+  // The v1 row was judged by the current evaluator, so the pair compares like with like.
   w.db.prepare(`INSERT INTO agent_skill_version_evals
       (skill_id, version, case_key, case_name, model_id, result, run_by, evaluator_version, case_sha256)
-      VALUES (1, 1, ?, ?, ?, 'pass', ?, 3, ?)`)
-    .run(starter.key, starter.name, RUN_MODEL, SUPER, await caseSha(starter));
+      VALUES (1, 1, ?, ?, ?, 'pass', ?, ?, ?)`)
+    .run(starter.key, starter.name, RUN_MODEL, SUPER, JUDGE_VERSION, await caseSha(starter));
   const told: any[] = [];
   w.env.RATE_LIMITS = { get: async () => null, put: async () => {} };
   const result = await evaluatePublished(w.env, SUPER, [RUN_MODEL], {
