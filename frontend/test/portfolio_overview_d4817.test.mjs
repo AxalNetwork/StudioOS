@@ -142,10 +142,11 @@ test('1. populated: performance with basis and as-of, evidence-backed attention,
     assert.match(attention, /2 companies · evidence-backed · most urgent first/);
     assert.ok(attention.indexOf('Northwind Labs') < attention.indexOf('Kite Systems'));
     assert.doesNotMatch(attention, /Lumen Robotics/);
-    assert.equal(view.text('attention-2'),
-      'Northwind LabsAttentionHealthAttention in the snapshot of 6 Nov 2026 · flagged for interventionRunway4.8 months · founder update · 2026-Q2'
-      + 'Report2026-Q3 not received · last reported 12 Jul 2026MarkLatest mark below cost · 0.80× · 31 Mar 2026'
-      + 'MarkLatest mark 31 Mar 2026, older than two quartersOpen Northwind Labs');
+    assert.equal(view.text('attention-2'), [
+      'Northwind LabsAttentionHealthAttention in the snapshot of 6 Nov 2026 · flagged for interventionRunway4.8 months · founder update · 2026-Q2',
+      'Report2026-Q3 not received · last reported 12 Jul 2026MarkLatest mark below cost · 0.80× · 31 Mar 2026',
+      'MarkLatest mark 31 Mar 2026, older than two quartersOpen Northwind Labs',
+    ].join(''));
     assert.match(view.text('attention-3'), /Kite SystemsNot recordedHealthNo health snapshot is recorded for this company\..*MarkNo mark recorded · carried at cost \$1,000,000/);
     // Summaries.
     assert.match(view.text('portfolio-reporting-figures'), /^Received2 of 3Not received1Period2026-Q3Complete$/);
