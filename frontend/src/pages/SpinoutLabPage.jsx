@@ -367,7 +367,15 @@ export function Dashboard({ state, investorView = false }) {
   );
 }
 
-export default function SpinoutLabPage() {
+/**
+ * `investorView` (D4623 part 2): the multi-licence Lab block passes `false`.
+ * That block is drawn for the Founder, Advisor and Operating Partner licences,
+ * and Investor has a block of its own, so inside it the overview is never the
+ * investor's: it offers Apply, not the LP section a second time. Left
+ * undefined (a single-licence member, an admin preview, an impersonation), the
+ * rule is today's: the primary role, `user.role === 'investor'`.
+ */
+export default function SpinoutLabPage({ investorView } = {}) {
   const { user, refresh } = useAuth();
   const [state, setState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -481,5 +489,5 @@ export default function SpinoutLabPage() {
   // Everyone else (not applied / application pending) sees the program
   // overview with the Apply CTA — except investors, whose route into the
   // program is the LP fund, not a cohort application.
-  return <Dashboard state={state || {}} investorView={user?.role === 'investor'} />;
+  return <Dashboard state={state || {}} investorView={investorView ?? user?.role === 'investor'} />;
 }
