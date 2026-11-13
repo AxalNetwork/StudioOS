@@ -144,7 +144,7 @@ export async function dispatchCompute(env: ComputeEnv, runUid: string): Promise<
   if (request.status !== 'ready') throw computeFailure('compute_inputs_incomplete');
   const { agent, scope } = await computeTask(env, run.task_id);
   const companyId = scope.kind === 'company' ? scope.id : scope.company_id;
-  if (!companyId || agent.sponsor_user_id !== request.requested_by_user_id) throw computeFailure('compute_scope_refused');
+  if (!companyId || (scope.kind === 'project' && run.admitted_company_id !== companyId) || agent.sponsor_user_id !== request.requested_by_user_id) throw computeFailure('compute_scope_refused');
   const policy = computePolicy(env)!, limits = LIMITS[request.workload];
   if (policy.template.max_cost_microusd < policy.job_cost_ceiling_microusd[request.workload]) throw computeFailure('compute_cost_limit', 422);
   const candidate = trustedWorkspaceSpec({ ...policy.template, version: 1, tenant_id: companyId, company_id: companyId,
@@ -195,6 +195,7 @@ export async function authorizeCompute(env: ComputeEnv, jobUid: string, raw: unk
     allowed = !!user && agent.status === 'active' && agent.sponsor_user_id === user.id && !!run && run.status === 'running'
       && run.agent_id === agent.id && run.task_id === task.id && task.status === 'in_progress'
       && scope.kind === job.scope_kind && scope.id === Number(job.scope_id)
+      && (scope.kind !== 'project' || run.admitted_company_id === admission.spec.company_id)
       && (scope.kind === 'company' ? scope.id : scope.company_id) === admission.spec.company_id
       && await canRead(env, scope, user) && !await haltedAll(env) && !['off', 'paused'].includes(await engineMode(env));
   }

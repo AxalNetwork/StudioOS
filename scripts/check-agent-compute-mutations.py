@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 
 TS = [
+ ('cloudflare-worker/src/services/agents/computeBridge.ts', "(scope.kind === 'project' && run.admitted_company_id !== companyId)", 'false', 'transfer before dispatch'),
+ ('cloudflare-worker/src/services/agents/computeBridge.ts', "(scope.kind !== 'project' || run.admitted_company_id === admission.spec.company_id)", 'true', 'canonical authorization binds'),
  ('.github/workflows/agent-compute-image.yml', 'contents: read', 'contents: read\n  packages: write', 'general compute deploys'),
  ('.github/workflows/agent-compute-image.yml', '--dry-run --containers-rollout none', '--containers-rollout none', 'general compute deploys'),
  ('.github/workflows/agent-compute-preview.yml', "github.ref == 'refs/heads/main'", 'true', 'general compute deploys'),

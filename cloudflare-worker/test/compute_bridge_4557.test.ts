@@ -298,3 +298,29 @@ test('request erasure preserves the compute-mode fence until the run itself is e
     assert.equal((outcome as any).status, 'failed');
   } finally { w.close(); }
 });
+
+
+test('a project company transfer before dispatch refuses the admitted run before creating a job', async () => {
+  const w = await computeWorld();
+  try {
+    const { runUid } = await prepare(w); await load(loopDeps(w, noModel), runUid);
+    w.db.prepare("INSERT INTO company_profiles (id, uid, company_name) VALUES (2, 'compute-transfer-company', 'Other company')").run();
+    w.db.prepare('UPDATE projects SET company_id = 2 WHERE id = ?').run(PROJECT);
+    await assert.rejects(dispatchCompute(w.env, runUid));
+    assert.equal((w.db.prepare('SELECT COUNT(*) AS n FROM agent_compute_jobs').get() as any).n, 0);
+    assert.equal(w.stats.starts, 0);
+  } finally { w.close(); }
+});
+
+
+test('canonical authorization binds the admission company even if the live project still matches the signed spec', async () => {
+  const w = await computeWorld();
+  try {
+    const { runUid } = await prepare(w); await load(loopDeps(w, noModel), runUid); await dispatchCompute(w.env, runUid);
+    const meta = w.db.prepare('SELECT e.* FROM agent_compute_executions e JOIN agent_compute_jobs j ON j.uid = e.job_uid WHERE j.run_uid = ?').get(runUid) as any;
+    const admission = { job_uid: meta.job_uid, spec: JSON.parse(meta.spec_json), sponsor: JSON.parse(meta.sponsor_json) };
+    w.db.prepare("INSERT INTO company_profiles (id, uid, company_name) VALUES (2, 'compute-admission-company', 'Other company')").run();
+    w.db.prepare('UPDATE agent_task_runs SET admitted_company_id = 2 WHERE uid = ?').run(runUid);
+    assert.equal((await authorizeCompute(w.env, meta.job_uid, admission)).allowed, false);
+  } finally { w.close(); }
+});
