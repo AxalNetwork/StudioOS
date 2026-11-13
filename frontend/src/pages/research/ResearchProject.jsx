@@ -10,9 +10,13 @@
  * passages used, where each source came from), Add evidence from the Library,
  * and Archive through Scope → Review → Result.
  *
- * WHAT IS NOT, and says so: Findings, Comparisons and the Brief have no store
- * yet, so their tabs are not links and the Overview's findings card reads Not
- * recorded. Key questions are not stored, so no "2 of 5" is drawn.
+ * Part 2 (D5157-p2): the Findings tab (`/research/projects/:uid/findings`,
+ * `ProjectFindings.jsx`) and the Overview's Most recent findings, both from
+ * one read of the findings store.
+ *
+ * WHAT IS NOT, and says so: Comparisons and the Brief have no store yet, so
+ * their tabs are not links. Key questions are not stored, so no "2 of 5" is
+ * drawn.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -25,6 +29,9 @@ import { researchProjectsApi } from '../../lib/api/researchProjects.js';
 import { shortDate } from './researchHome.js';
 import { NOT_RECORDED } from './researchStates.js';
 import { useProjectRead } from './MyResearch.jsx';
+import { ProjectFindings, RecentFindingsCard } from './ProjectFindings.jsx';
+import { researchProjectFindingsApi } from '../../lib/api/researchProjectFindings.js';
+import { findingsBadge } from './researchFindings.js';
 import {
   LIMITS, NOT_STORED, PROJECT_TABS, archiveScope, draftBody, draftErrors, evidenceRows, progressFractions, statusOf,
 } from './researchProjects.js';
@@ -36,12 +43,13 @@ const H2 = 'text-[14px] font-extrabold text-axal-ink dark:text-white';
 const MUTED = 'text-[12.5px] text-axal-muted dark:text-gray-400';
 const mark = (s) => <><span aria-hidden="true">{s.glyph}</span> {s.label}</>;
 
-function Tabs({ uid, current, evidenceCount }) {
+function Tabs({ uid, current, evidenceCount, findingsCount }) {
   return (
     <nav aria-label="Project" className="flex flex-wrap gap-1 border-b border-axal-hairline dark:border-gray-800" data-testid="project-tabs">
       {PROJECT_TABS.map((t) => {
         const base = 'inline-flex min-h-[44px] items-center gap-1.5 px-3 text-[13px] font-bold sm:min-h-[36px]';
-        const badge = t.slug === 'evidence' && evidenceCount != null ? <span className="rounded-full bg-axal-ground px-1.5 text-[11px] dark:bg-gray-800">{evidenceCount}</span> : null;
+        const count = t.slug === 'evidence' ? evidenceCount : t.slug === 'findings' ? findingsCount : null;
+        const badge = count != null ? <span className="rounded-full bg-axal-ground px-1.5 text-[11px] dark:bg-gray-800" data-testid={`project-tab-count-${t.slug}`}>{count}</span> : null;
         if (!t.built) {
           return <span key={t.slug} aria-disabled="true" title={NOT_STORED.tab} className={`${base} cursor-not-allowed text-axal-faint dark:text-gray-600`} data-testid={`project-tab-${t.slug}`}>{t.label}</span>;
         }
@@ -108,7 +116,7 @@ function EditProject({ item, onSaved, onCancel }) {
 /** A stored text, or Not recorded — never an empty line. */
 const Text = ({ value, testid }) => (value ? <span data-testid={testid}>{value}</span> : <span data-testid={testid}><Unrecorded /></span>);
 
-function Overview({ data, archived, onSaved }) {
+function Overview({ data, archived, onSaved, findings, retryFindings }) {
   const item = data.item;
   const [editing, setEditing] = useState(false);
   const progress = progressFractions(data);
@@ -158,10 +166,7 @@ function Overview({ data, archived, onSaved }) {
           </ul>
         ) : <p className={MUTED} data-testid="project-ask-empty">No Ask session or answer is kept with this project yet.</p>}
       </section>
-      <section className={`${CARD} lg:col-span-5`} data-testid="project-findings">
-        <h2 className={H2}>Most recent findings</h2>
-        <p className={MUTED}><Unrecorded /> · {NOT_STORED.findings}</p>
-      </section>
+      <RecentFindingsCard projectUid={item.uid} read={findings} retry={retryFindings} className="lg:col-span-5" />
     </div>
   );
 }
@@ -336,6 +341,8 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
   const navigate = useNavigate();
   const [version, setVersion] = useState(0);
   const [read, retry] = useProjectRead(() => researchProjectsApi.read(uid), `${uid}:${version}`);
+  // Part 2: the findings are read once for the tab, its badge and the Overview card.
+  const [findings, retryFindings] = useProjectRead(() => researchProjectFindingsApi.list(uid), `${uid}:${version}`);
   const [adding, setAdding] = useState(() => new URLSearchParams(location.search).get('add') === '1');
   const [archiving, setArchiving] = useState(false);
   const [restoreFailure, setRestoreFailure] = useState(null);
@@ -387,10 +394,10 @@ export default function ResearchProject({ role = 'founder', tab = 'overview' }) 
             </div>
             {archived ? <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12.5px] text-axal-muted dark:border-gray-700 dark:bg-gray-950 dark:text-gray-300" data-testid="project-archived-note">Archived {shortDate(item.archived_at)}. This project is read-only until you restore it.</p> : null}
             {restoreFailure ? <p role="alert" className="text-[12.5px] font-semibold text-red-700 dark:text-red-300">{restoreFailure}</p> : null}
-            <Tabs uid={item.uid} current={tab} evidenceCount={(data.evidence || []).length} />
-            {tab === 'evidence'
-              ? <Evidence data={data} archived={archived} adding={adding} setAdding={setAdding} onChanged={reload} />
-              : <Overview data={data} archived={archived} onSaved={reload} />}
+            <Tabs uid={item.uid} current={tab} evidenceCount={(data.evidence || []).length} findingsCount={findingsBadge(findings)} />
+            {tab === 'evidence' ? <Evidence data={data} archived={archived} adding={adding} setAdding={setAdding} onChanged={reload} /> : null}
+            {tab === 'findings' ? <ProjectFindings projectUid={item.uid} read={findings} retry={retryFindings} archived={archived} onChanged={reload} /> : null}
+            {tab !== 'evidence' && tab !== 'findings' ? <Overview data={data} archived={archived} onSaved={reload} findings={findings} retryFindings={retryFindings} /> : null}
             {archiving ? <ArchiveDialog data={data} onClose={() => setArchiving(false)} onArchived={() => navigate('/research/projects')} /> : null}
           </>
         ) : null}

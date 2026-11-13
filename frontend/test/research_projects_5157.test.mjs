@@ -14,6 +14,7 @@ import ResearchProject from '../src/pages/research/ResearchProject.jsx';
 import { newResearchHref } from '../src/pages/founder/FounderResearchDesk.jsx';
 import { api } from '../src/lib/api.js';
 import { researchProjectsApi } from '../src/lib/api/researchProjects.js';
+import { researchProjectFindingsApi } from '../src/lib/api/researchProjectFindings.js';
 import {
   PROJECT_TABS, archiveScope, draftBody, draftErrors, evidenceLine, evidenceOrigin, evidenceRows, newFromSearch,
   progressFractions, projectList, recentProjects,
@@ -66,7 +67,7 @@ test('evidence rows keep index state and answerability apart and name where each
   const progress = progressFractions(READ);
   assert.deepEqual(progress.answerable, { n: 1, of: 2 });
   assert.equal(progress.keyQuestions.state, 'not_recorded');
-  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence']);
+  assert.deepEqual(PROJECT_TABS.filter((t) => t.built).map((t) => t.slug), ['overview', 'evidence', 'findings']);
 });
 
 test('the form: question required, title optional on create, empty text clears on edit', () => {
@@ -143,6 +144,8 @@ function mountProject(path, over = {}) {
   const restore = stubProjects({ read: async () => READ, ...over });
   const realDocs = api.research.documents;
   const realCols = api.research.collections;
+  const realFindings = researchProjectFindingsApi.list;
+  researchProjectFindingsApi.list = async () => ({ items: [], proposals: [], passages: [], evidence: [] });
   api.research.documents = async () => ({ items: [] });
   api.research.collections = async () => ({ items: [] });
   const tree = h(Routes, null,
@@ -150,19 +153,19 @@ function mountProject(path, over = {}) {
     h(Route, { path: '/research/projects/:uid', element: h(ResearchProject, { tab: 'overview' }) }),
     h(Route, { path: '/research/projects/:uid/evidence', element: h(ResearchProject, { tab: 'evidence' }) }));
   return mountContracts(tree, path, { id: 1, role: 'founder' }).then((m) => ({
-    m, restore() { restore(); api.research.documents = realDocs; api.research.collections = realCols; },
+    m, restore() { restore(); api.research.documents = realDocs; api.research.collections = realCols; researchProjectFindingsApi.list = realFindings; },
   }));
 }
 
-test('Overview: unwritten fields read Not recorded; findings and key questions are not stored', async () => {
+test('Overview: unwritten fields read Not recorded; key questions are not stored; findings read their store (part 2)', async () => {
   const { m, restore } = await mountProject('/research/projects/p1');
   try {
     await settle(m);
     assert.match(textOf(byTid(m, 'project-objective-text')), /Not recorded/);
     assert.match(textOf(byTid(m, 'project-scope')), /EU-27/);
     assert.match(textOf(byTid(m, 'project-progress-answerable')), /1\s*of 2/);
-    assert.match(textOf(byTid(m, 'project-findings')), /Not recorded.*Findings are not stored yet/);
-    assert.equal(m.props(byTid(m, 'project-tab-findings'))['aria-disabled'], 'true');
+    assert.match(textOf(byTid(m, 'project-findings')), /No findings kept yet/);
+    assert.equal(m.props(byTid(m, 'project-tab-findings'))['aria-disabled'], undefined);
   } finally { await m.unmount(); restore(); }
 });
 

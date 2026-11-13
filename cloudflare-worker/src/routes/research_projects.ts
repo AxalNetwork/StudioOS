@@ -51,7 +51,7 @@ const LIST_SCOPES = new Set(['active', 'archived', 'all']);
 
 const newUid = () => crypto.randomUUID().replace(/-/g, '');
 /** The caller's own project by uid, or null: another owner's reads as none. */
-async function checkProjectOwner(env: Env, uid: string, userId: number) {
+export async function checkProjectOwner(env: Env, uid: string, userId: number) {
   return env.DB.prepare(
     `SELECT id, uid, title, question, objective, scope, exclusions, status, archived_at, created_at, updated_at
        FROM research_projects WHERE uid = ? AND owner_user_id = ?`
