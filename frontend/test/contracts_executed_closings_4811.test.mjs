@@ -111,7 +111,8 @@ test('never Executed without the Worker\'s own `complete`, never Prepared, and n
   assert.notEqual(closingPaperLifecycle([allSigned]).key, 'executed');
   const none = closingPaperLifecycle([]);
   assert.deepEqual([none.key, none.badge, none.text], ['none', null, 'No paper sent']);
-  assert.deepEqual(closingPaperLifecycle(null), none, 'an unread list is not given a state either');
+  // D4811 part 24: an unread list is not given a state, and is not "No paper sent" either: it reads Unreadable.
+  assert.deepEqual(closingPaperLifecycle(null), { key: 'unreadable', badge: null, detail: 'Unreadable', text: 'Unreadable' });
   const every = [[], [env()], [env({ complete: true })], [env({ voided: true })], [env({ stages: [stage(1, 'company', 'sent')] })],
     [env({ stages: [stage(1, 'company', 'declined')] })], [env({ stages: [stage(1, 'company', 'void')] })]];
   for (const e of every) assert.notEqual(closingPaperLifecycle(e).badge?.key, 'prepared', 'no closing store records a paper before it is generated');

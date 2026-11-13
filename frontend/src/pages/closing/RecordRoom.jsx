@@ -20,7 +20,7 @@ import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
 import { reportingApi } from '../../lib/api/reporting';
 import { Unreadable, Unrecorded, usePhoneWidth } from '../../ui';
 import { BTN } from '../account/AccountCenter';
-import { closingHrefFor, moneyCents } from './deskModel';
+import { closingHrefFor, envelopesOf, moneyCents } from './deskModel';
 import { SyndicatePanel } from './RoutePanels';
 import PaperState from './PaperState';
 import { CaptableDialog, MatchDialog, PaymentDrawer, ReceiptDrawer, SignDrawer } from './RoomDialogs';
@@ -58,7 +58,8 @@ function usePapers(lines) {
     setPapers({});
     for (const [uid, id] of ids) {
       stagedSigningApi.line(id).then(
-        (r) => { if (live) setPapers((p) => ({ ...p, [uid]: Array.isArray(r?.envelopes) ? r.envelopes : [] })); },
+        // D4811 part 24: an answer with no list could not be read; it is never "No paper sent".
+        (r) => { if (live) setPapers((p) => ({ ...p, [uid]: envelopesOf(r) })); },
         () => { if (live) setPapers((p) => ({ ...p, [uid]: null })); },
       );
     }

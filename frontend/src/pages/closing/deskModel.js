@@ -207,10 +207,26 @@ export function awaitingRelease(envelopes) {
  * A line's paper in one phrase, from its staged envelopes, newest first, in
  * the agreement lifecycle's words (D4811 part 22: "Executed", "Sent · awaiting
  * signature · 1 of 2 signed"). `closingPaperLifecycle` holds the rule.
+ * Undefined is a read still under way ("Reading…"); null, a failed read ("Unreadable").
  */
 export function paperWord(envelopes) {
+  if (envelopes === undefined) return 'Reading…';
   return closingPaperLifecycle(envelopes).text;
 }
+
+/**
+ * D4811 part 24: the envelopes a dialog reads for one line, from the desk's
+ * per-line read (`{ status, envelopes }`): undefined while it is read, null
+ * when it failed, so a failed read never reads "No paper sent".
+ */
+export function paperEnvelopes(entry) {
+  if (!entry || entry.status === 'loading') return undefined;
+  if (entry.status === 'error') return null;
+  return entry.envelopes;
+}
+
+/** A line read's envelopes, or null when the answer carries no list (read as Unreadable, never as no paper). */
+export const envelopesOf = (answer) => (Array.isArray(answer?.envelopes) ? answer.envelopes : null);
 
 // ───────────────────────────────────────────────────────────── CP5: choose the route
 
