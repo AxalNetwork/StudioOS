@@ -26,6 +26,9 @@ import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { mount as entitlementsMount } from '../src/routes/admin_program_entitlements.ts';
 import { mount as memberEntitlementsMount } from '../src/routes/member_program_entitlements.ts';
+import mentorCohorts from '../src/routes/advisors_cohorts.ts';
+import investorCohorts from '../src/routes/investor_cohorts.ts';
+import referEarn from '../src/routes/refer_earn.ts';
 import learningPrograms from '../src/routes/learning_programs.ts';
 import spinoutLab from '../src/routes/spinout_lab.ts';
 import programGrantsRouter from '../src/routes/admin_program_grants.ts';
@@ -73,6 +76,9 @@ function fixture() {
   app.route(memberEntitlementsMount.path, memberEntitlementsMount.router);
   app.route('/api/admin/program-grants', programGrantsRouter);
   app.route('/api/learning', learningPrograms);
+  app.route('/api/advisors', mentorCohorts);
+  app.route('/api/investor-cohorts', investorCohorts);
+  app.route('/api/refer-earn', referEarn);
   app.route('/api/spinout-lab', spinoutLab);
   async function call(who: number, method: string, path: string, body?: unknown) {
     const token = await new SignJWT({ user_id: who, jti: `s-${who}` }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
@@ -416,4 +422,20 @@ test('opt-in entry checks block a new enrolment and Lab start until the program 
   const admitted = await call(FOUNDER, 'POST', lab);
   assert.equal(admitted.status, 403, 'the Lab’s own admission check still applies');
   assert.equal(admitted.body.code, 'lab_not_admitted');
+});
+
+test('HQ applies the shared member gate to cohort and referral entry points', async () => {
+  const { db, env, call } = fixture();
+  db.prepare("UPDATE users SET role = 'investor', kyc_status = 'approved' WHERE id = ?").run(FOUNDER);
+  env.PROGRAM_ENTITLEMENT_ENFORCEMENT = 'true';
+  for (const [method, path] of [
+    ['GET', '/api/advisors/me/cohort'],
+    ['GET', '/api/investor-cohorts/me'],
+    ['POST', '/api/refer-earn/submissions'],
+    ['POST', '/api/refer-earn/submissions/import'],
+  ]) {
+    const response = await call(FOUNDER, method, path);
+    assert.equal(response.status, 403, path);
+    assert.equal(response.body.error, 'program_entitlement_required', path);
+  }
 });

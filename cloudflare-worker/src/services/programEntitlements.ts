@@ -25,6 +25,7 @@
  *
  * TERRITORY PROGRAM GRANTS (`program_grants`, D982) are not read or written here: they are what HQ grants a studio.
  */
+import { branchOf } from '../util/branch';
 import type { Env } from '../types';
 import { ACCESS_STATUSES, USER_LICENCE_TYPES, type UserLicenceStatus, type UserLicenceType } from './userLicences';
 import { PROGRAMS } from './programGrants';
@@ -310,7 +311,7 @@ const licenceView = (l: HeldLicence) => ({
  * Rollout is explicit because the policy seed only creates eligibility rules.
  */
 export async function checkMemberProgramEntry(env: Env, userId: number, programKey: string) {
-  if (env.PROGRAM_ENTITLEMENT_ENFORCEMENT !== 'true') return 'allowed';
+  if (env.PROGRAM_ENTITLEMENT_ENFORCEMENT !== 'true' || branchOf(env)) return 'allowed';
   try {
     const day = todayUtc();
     const [licences, rules, grants] = await Promise.all([heldLicencesOf(env, [userId]), readRules(env), grantsOf(env, [userId])]);
