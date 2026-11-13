@@ -235,3 +235,11 @@ test('HQ records a licence rule for a program loaded from the catalogue', async 
     });
   } finally { await v.unmount(); s.restore(); }
 });
+
+test('the Account card keeps an incomplete response from crashing the profile', async () => {
+  const s = stub({ '/api/member/program-entitlements': () => json({}) });
+  const view = await render(h(AccountProgramAccess), '/account');
+  try {
+    assert.match(view.of('account-program-access'), /could not be read|unreadable/i);
+  } finally { await view.unmount(); s.restore(); }
+});

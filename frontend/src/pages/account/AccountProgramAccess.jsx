@@ -14,16 +14,18 @@ const STATUS = {
 
 export default function AccountProgramAccess() {
   const read = useAccountRead(programEntitlementsApi.mine);
+  const programs = read.data?.programs;
+  const invalid = read.status === 'ready' && !Array.isArray(programs);
   return (
     <PanelCard title="Program access" data-testid="account-program-access">
       {read.status === 'loading' && <Skeleton.Text lines={2} />}
-      {read.status === 'unreadable' && <Unreadable what="Your program access" onRetry={read.reload} />}
-      {read.data?.programs.length === 0 && (
+      {(read.status === 'unreadable' || invalid) && <Unreadable what="Your program access" onRetry={read.reload} />}
+      {!invalid && programs?.length === 0 && (
         <p className="text-sm text-axal-muted dark:text-gray-400">No program access is recorded for your account.</p>
       )}
-      {read.data?.programs.length > 0 && (
+      {!invalid && programs?.length > 0 && (
         <ul className="divide-y divide-axal-hairline text-sm dark:divide-gray-800">
-          {read.data.programs.map((program) => (
+          {programs.map((program) => (
             <li key={program.program_key} className="space-y-1 py-3 first:pt-0 last:pb-0">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <h3 className="font-semibold">{program.program_name}</h3>
